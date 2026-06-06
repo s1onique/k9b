@@ -1,74 +1,316 @@
 /**
- * Rose Theme - Advisory Sections
+ * Rose Theme - Advisory and Deterministic Checks
  * 
- * Phase: Rose Polishing (Production Quality)
+ * Phase: Rose Contrast Rescue Pass
  * 
- * Rose palette: muted mauve borders, plum text, muted rose accents
+ * Owned surfaces: provider advisory, cluster cards, deterministic checks empty state
  */
 
-/* Top concerns section */
-[data-theme="rose-pine"] .advisory-concerns-section {
-  border-left-color: rgba(144, 132, 156, 0.4);
+/* ==========================================================================
+   Provider Advisory - Summary Strip
+   ========================================================================== */
+
+/* Advisory summary strip - large header block (dark/grey inherited fix) */
+[data-theme="rose-pine"] .advisory-summary-strip {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
 }
 
-[data-theme="rose-pine"] .advisory-concern-row {
-  color: #575279;
-  border-bottom-color: rgba(144, 132, 156, 0.15);
+/* ==========================================================================
+   Provider Metric Tiles
+   ========================================================================== */
+
+/* Provider metric tiles - readable on Rose surface */
+[data-theme="rose-pine"] .provider-metric {
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
 }
 
-/* Evidence gaps section */
-[data-theme="rose-pine"] .advisory-gaps-section {
-  border-left-color: rgba(144, 132, 156, 0.4);
+[data-theme="rose-pine"] .provider-metric__value {
+  color: var(--rose-text-primary);
+  font-size: 1.55rem;
+  font-weight: 800;
 }
 
-[data-theme="rose-pine"] .advisory-gap-row {
-  color: #575279;
+[data-theme="rose-pine"] .provider-metric__label {
+  color: var(--rose-text-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-[data-theme="rose-pine"] .advisory-gap-marker {
-  color: #9890a9;
+/* Provider metric variants - Rose-adapted */
+[data-theme="rose-pine"] .provider-metric--clusters {
+  background: rgba(40, 105, 131, 0.08);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: var(--rose-accent-primary);
 }
 
-/* Next checks section - priority readability */
-[data-theme="rose-pine"] .advisory-next-checks-section {
-  border-left-color: rgba(144, 132, 156, 0.4);
+[data-theme="rose-pine"] .provider-metric--concerns {
+  background: rgba(180, 99, 122, 0.08);
+  border-color: rgba(180, 99, 122, 0.3);
+  color: var(--rose-accent-danger);
 }
 
-[data-theme="rose-pine"] .advisory-check-row {
-  border-bottom-color: rgba(144, 132, 156, 0.15);
+[data-theme="rose-pine"] .provider-metric--checks {
+  background: rgba(40, 105, 131, 0.08);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: var(--rose-accent-primary);
 }
 
-[data-theme="rose-pine"] .advisory-check-intent {
-  color: #575279;
+[data-theme="rose-pine"] .provider-metric--gaps {
+  background: rgba(180, 99, 122, 0.1);
+  border-color: rgba(180, 99, 122, 0.35);
+  color: var(--rose-accent-danger);
 }
 
-[data-theme="rose-pine"] .advisory-check-cluster {
-  background: rgba(144, 132, 156, 0.15);
-  color: #797593;
+/* ==========================================================================
+   Advisory Chips and Tags
+   ========================================================================== */
+
+/* Advisory chips - readable variants */
+[data-theme="rose-pine"] .advisory-chip {
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+  color: var(--rose-text-secondary);
+}
+
+[data-theme="rose-pine"] .advisory-chip--concern {
+  background: rgba(180, 99, 122, 0.1);
+  border-color: rgba(180, 99, 122, 0.35);
+  color: var(--rose-accent-danger);
+}
+
+[data-theme="rose-pine"] .advisory-chip--focus {
+  background: rgba(144, 132, 156, 0.12);
   border-color: rgba(144, 132, 156, 0.35);
+  color: var(--rose-text-accent);
 }
 
-[data-theme="rose-pine"] .advisory-check-cmd {
-  background: rgba(242, 233, 225, 0.8);
-  color: #575279;
-  border-color: rgba(144, 132, 156, 0.25);
+/* Advisory tag - concern tag in strip */
+[data-theme="rose-pine"] .advisory-tag {
+  background: rgba(40, 105, 131, 0.08);
+  border-color: rgba(40, 105, 131, 0.35);
+  color: var(--rose-accent-primary);
 }
 
-/* Focus guidance section */
-[data-theme="rose-pine"] .advisory-focus-notes-section {
-  border-left-color: rgba(144, 132, 156, 0.35);
-}
-
-[data-theme="rose-pine"] .advisory-focus-note-row {
-  color: #797593;
-}
-
-/* Runs list detached mode notice */
-[data-theme="rose-pine"] .runs-detached-notice {
+/* Advisory hint badge - focus hint */
+[data-theme="rose-pine"] .advisory-hint-badge {
   background: rgba(144, 132, 156, 0.1);
   border-color: rgba(144, 132, 156, 0.3);
+  color: var(--rose-text-accent);
 }
 
-[data-theme="rose-pine"] .runs-detached-notice .muted {
-  color: #797593;
+/* Advisory provider label */
+[data-theme="rose-pine"] .advisory-provider-label {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-subtle);
+  color: var(--rose-text-muted);
+}
+
+/* ==========================================================================
+   Collapsible Summary
+   ========================================================================== */
+
+/* Collapsible summary - readable toggle */
+[data-theme="rose-pine"] .advisory-summary-collapsible summary {
+  color: var(--rose-text-secondary);
+  font-size: 0.75rem;
+}
+
+/* Review enrichment in collapsible context */
+[data-theme="rose-pine"] .advisory-summary-collapsible .review-enrichment-summary {
+  background: var(--rose-surface-cream);
+  color: var(--rose-text-primary);
+  border-color: var(--rose-border-subtle);
+}
+
+/* ==========================================================================
+   Cluster Overview Cards
+   ========================================================================== */
+
+[data-theme="rose-pine"] .advisory-cluster-card {
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .advisory-cluster-card:hover {
+  border-color: var(--rose-border-emphasis);
+  background: var(--rose-surface-cream);
+}
+
+[data-theme="rose-pine"] .advisory-cluster-rank {
+  background: rgba(40, 105, 131, 0.12);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: var(--rose-accent-primary);
+}
+
+[data-theme="rose-pine"] .advisory-cluster-name {
+  color: var(--rose-text-primary);
+  font-weight: 600;
+}
+
+[data-theme="rose-pine"] .advisory-cluster-concern {
+  color: var(--rose-text-muted);
+}
+
+[data-theme="rose-pine"] .advisory-cluster-focus {
+  color: var(--rose-text-accent);
+}
+
+/* ==========================================================================
+   Advisory Metric Values/Labels
+   ========================================================================== */
+
+[data-theme="rose-pine"] .advisory-metric-value {
+  color: var(--rose-text-primary);
+}
+
+[data-theme="rose-pine"] .advisory-metric-label {
+  color: var(--rose-text-muted);
+}
+
+/* ==========================================================================
+   Deterministic Checks Empty State
+   ========================================================================== */
+
+/* Deterministic next checks panel */
+[data-theme="rose-pine"] .deterministic-next-checks-panel {
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+}
+
+/* Next check plan card - Rose warm surface */
+[data-theme="rose-pine"] .next-check-plan-card {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .next-check-plan-meta strong {
+  color: var(--rose-text-primary);
+}
+
+[data-theme="rose-pine"] .next-check-plan-flags {
+  color: var(--rose-text-muted);
+}
+
+/* Plan gating, normalization */
+[data-theme="rose-pine"] .plan-gating {
+  color: var(--rose-text-muted);
+}
+
+[data-theme="rose-pine"] .plan-normalization {
+  color: var(--rose-text-secondary);
+}
+
+[data-theme="rose-pine"] .plan-stale-note {
+  color: var(--rose-text-muted);
+}
+
+/* ==========================================================================
+   Empty State
+   ========================================================================== */
+
+[data-theme="rose-pine"] .empty-state {
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .empty-state__message {
+  color: var(--rose-text-secondary);
+}
+
+[data-theme="rose-pine"] .empty-state__title {
+  color: var(--rose-text-primary);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Review Enrichment Panel
+   ========================================================================== */
+
+[data-theme="rose-pine"] .review-enrichment {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .review-enrichment-summary {
+  color: var(--rose-text-primary);
+}
+
+[data-theme="rose-pine"] .review-enrichment-grid strong {
+  color: var(--rose-text-primary);
+}
+
+[data-theme="rose-pine"] .review-enrichment-item ul {
+  color: var(--rose-text-secondary);
+}
+
+/* ==========================================================================
+   Queue and Execution
+   ========================================================================== */
+
+/* Queue explanation block */
+[data-theme="rose-pine"] .queue-explanation-block {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .queue-explanation-actions__label {
+  color: var(--rose-text-muted);
+}
+
+/* Execution history filters */
+[data-theme="rose-pine"] .execution-history-filters {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .filter-label,
+[data-theme="rose-pine"] .filter-count {
+  color: var(--rose-text-muted);
+}
+
+/* ==========================================================================
+   Cluster Detail
+   ========================================================================== */
+
+[data-theme="rose-pine"] .cluster-detail-panel {
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .cluster-summary-card {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .cluster-summary-card strong {
+  color: var(--rose-text-primary);
+}
+
+[data-theme="rose-pine"] .cluster-detail-body {
+  color: var(--rose-text-primary);
+}
+
+/* ==========================================================================
+   Recommended Action
+   ========================================================================== */
+
+[data-theme="rose-pine"] .recommended-action {
+  background: rgba(234, 157, 52, 0.08);
+  border-color: rgba(234, 157, 52, 0.3);
+}
+
+[data-theme="rose-pine"] .recommended-action p {
+  color: var(--rose-text-primary);
+}
+
+/* ==========================================================================
+   Cluster Assessment
+   ========================================================================== */
+
+[data-theme="rose-pine"] .cluster-assessment {
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
 }

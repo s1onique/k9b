@@ -1,0 +1,169 @@
+/**
+ * Rose Theme - Alertmanager Sources
+ * 
+ * Phase: Rose Contrast Rescue Pass
+ * 
+ * Owned surfaces: Alertmanager sources table, state pills, action buttons
+ * 
+ * This file provides explicit Rose theme overrides for the Alertmanager
+ * sources table, fixing the yellow/white-on-yellow issues from inherited
+ * dark theme styling.
+ */
+
+/* ==========================================================================
+   Summary Row
+   ========================================================================== */
+
+[data-theme="rose-pine"] .alertmanager-sources-summary {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+}
+
+/* Metric value - readable plum */
+[data-theme="rose-pine"] .alertmanager-sources-metric-value {
+  color: var(--rose-text-primary);
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+/* Metric label - muted mauve */
+[data-theme="rose-pine"] .alertmanager-sources-metric-label {
+  color: var(--rose-text-muted);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ==========================================================================
+   Main Table
+   ========================================================================== */
+
+/* Table wrapper - warm paper background */
+[data-theme="rose-pine"] .alertmanager-sources-table-wrapper {
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+}
+
+/* Main table - warm paper */
+[data-theme="rose-pine"] .alertmanager-sources-table {
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+}
+
+/* Table header - cream background, readable mauve text */
+[data-theme="rose-pine"] .alertmanager-sources-table th {
+  background: var(--rose-surface-cream);
+  color: var(--rose-text-secondary);
+  border-bottom-color: var(--rose-border-default);
+  font-size: 0.62rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* Table cells - plum text, NO yellow/white-on-yellow */
+[data-theme="rose-pine"] .alertmanager-sources-table td {
+  color: var(--rose-text-primary);
+  border-bottom-color: var(--rose-border-subtle);
+  font-size: 0.85rem;
+}
+
+/* Table row hover - mauve tint */
+[data-theme="rose-pine"] .alertmanager-sources-table tbody tr:hover {
+  background: rgba(144, 132, 156, 0.12);
+}
+
+/* ==========================================================================
+   State Pills - Rose Palette Variants
+   ========================================================================== */
+
+/* State - healthy (forest green) */
+[data-theme="rose-pine"] .alertmanager-source-healthy,
+[data-theme="rose-pine"] .alertmanager-source-state-pill-healthy {
+  background: rgba(45, 106, 79, 0.15);
+  color: var(--rose-accent-success);
+}
+
+/* State - caution (amber) */
+[data-theme="rose-pine"] .alertmanager-source-caution,
+[data-theme="rose-pine"] .alertmanager-source-state-pill-caution {
+  background: rgba(180, 83, 9, 0.12);
+  color: var(--rose-accent-warning);
+}
+
+/* State - warning (muted rose) */
+[data-theme="rose-pine"] .alertmanager-source-warning,
+[data-theme="rose-pine"] .alertmanager-source-state-pill-warning {
+  background: rgba(155, 44, 74, 0.12);
+  color: var(--rose-accent-danger);
+}
+
+/* State - muted (mauve-gray) */
+[data-theme="rose-pine"] .alertmanager-source-muted,
+[data-theme="rose-pine"] .alertmanager-source-state-pill-muted {
+  background: rgba(144, 132, 156, 0.1);
+  color: var(--rose-text-muted);
+}
+
+/* State - default (teal) */
+[data-theme="rose-pine"] .alertmanager-source-default,
+[data-theme="rose-pine"] .alertmanager-source-state-pill-default {
+  background: rgba(40, 105, 131, 0.12);
+  color: var(--rose-accent-primary);
+}
+
+/* ==========================================================================
+   Column Content
+   ========================================================================== */
+
+/* Endpoint code badge - warm cream, readable plum text */
+[data-theme="rose-pine"] .alertmanager-source-endpoint-code {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-subtle);
+  color: var(--rose-text-primary);
+}
+
+/* Origin, namespace, provenance - readable secondary */
+[data-theme="rose-pine"] .alertmanager-source-origin,
+[data-theme="rose-pine"] .alertmanager-source-namespace,
+[data-theme="rose-pine"] .alertmanager-source-provenance,
+[data-theme="rose-pine"] .alertmanager-source-version {
+  color: var(--rose-text-secondary);
+}
+
+/* Error text - rose danger (no yellow) */
+[data-theme="rose-pine"] .alertmanager-source-error-text {
+  color: var(--rose-accent-danger);
+}
+
+/* ==========================================================================
+   Action Buttons
+   ========================================================================== */
+
+/* Action buttons - Rose themed, readable */
+[data-theme="rose-pine"] .alertmanager-action-btn {
+  background: var(--rose-surface-ivory);
+  border-color: var(--rose-border-default);
+  color: var(--rose-text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+[data-theme="rose-pine"] .alertmanager-action-btn:hover {
+  background: rgba(40, 105, 131, 0.1);
+  border-color: rgba(40, 105, 131, 0.4);
+  color: var(--rose-accent-primary);
+}
+
+[data-theme="rose-pine"] .alertmanager-action-btn:disabled {
+  opacity: 0.5;
+  color: var(--rose-text-muted);
+}
+
+/* Action error/success feedback */
+[data-theme="rose-pine"] .alertmanager-source-action-error {
+  color: var(--rose-accent-danger);
+}
+
+[data-theme="rose-pine"] .alertmanager-source-action-success {
+  color: var(--rose-accent-success);
+}

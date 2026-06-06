@@ -1,0 +1,120 @@
+/**
+ * Rose Theme - Run Summary and Metric Cards
+ * 
+ * Phase: Rose Contrast Rescue Pass
+ * 
+ * Owned surfaces: run summary, metric cards, fleet metrics, recency pills
+ */
+
+/* ==========================================================================
+   Run Summary Metric Cards
+   ========================================================================== */
+
+/* Run stat card - Rose warm surface */
+[data-theme="rose-pine"] .run-stat-card {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .run-stat-card strong {
+  color: var(--rose-text-primary);
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+[data-theme="rose-pine"] .run-stat-card span {
+  color: var(--rose-text-muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/* Run duration summary */
+[data-theme="rose-pine"] .run-duration-summary {
+  color: var(--rose-text-muted);
+}
+
+/* ==========================================================================
+   Fleet Metrics
+   ========================================================================== */
+
+[data-theme="rose-pine"] .fleet-metrics article {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+}
+
+/* ==========================================================================
+   Recency Pills
+   ========================================================================== */
+
+[data-theme="rose-pine"] .recency-pill {
+  background: rgba(40, 105, 131, 0.12);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: var(--rose-accent-primary);
+}
+
+[data-theme="rose-pine"] .recency-pill.stale {
+  background: rgba(155, 44, 74, 0.12);
+  border-color: rgba(155, 44, 74, 0.3);
+  color: var(--rose-accent-danger);
+}
+
+/* ==========================================================================
+   Run Summary CTA Buttons
+   ========================================================================== */
+
+[data-theme="rose-pine"] .run-summary-cta {
+  background: rgba(40, 105, 131, 0.15);
+  border-color: rgba(40, 105, 131, 0.4);
+  color: var(--rose-accent-primary);
+}
+
+[data-theme="rose-pine"] .run-summary-cta:hover {
+  background: rgba(40, 105, 131, 0.22);
+}
+
+[data-theme="rose-pine"] .run-summary-cta-secondary {
+  background: transparent;
+  border-color: var(--rose-border-default);
+  color: var(--rose-text-secondary);
+}
+
+[data-theme="rose-pine"] .run-summary-cta-secondary:hover {
+  background: rgba(40, 105, 131, 0.08);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: var(--rose-accent-primary);
+}
+
+/* ==========================================================================
+   Run Summary Next Checks
+   ========================================================================== */
+
+[data-theme="rose-pine"] .run-summary-next-checks {
+  border-top-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .run-summary-next-checks-button {
+  background: rgba(40, 105, 131, 0.15);
+  color: var(--rose-accent-primary);
+}
+
+[data-theme="rose-pine"] .run-summary-next-checks-button:disabled {
+  opacity: 0.4;
+  background: rgba(144, 132, 156, 0.15);
+  color: var(--rose-text-muted);
+}
+
+/* ==========================================================================
+   Tabs
+   ========================================================================== */
+
+[data-theme="rose-pine"] .tab {
+  background: rgba(144, 132, 156, 0.1);
+  color: var(--rose-text-secondary);
+}
+
+[data-theme="rose-pine"] .tab.active {
+  background: rgba(40, 105, 131, 0.15);
+  border-color: rgba(40, 105, 131, 0.4);
+  color: var(--rose-accent-primary);
+}

@@ -1,0 +1,44 @@
+/**
+ * Rose Theme - LLM Activity and Misc Components
+ * 
+ * Phase: Rose Contrast Rescue Pass
+ * 
+ * Owned surfaces: LLM activity table, notification table
+ */
+
+/* ==========================================================================
+   LLM Activity Table
+   ========================================================================== */
+
+[data-theme="rose-pine"] .llm-activity-table th {
+  color: var(--rose-text-secondary);
+  background: var(--rose-surface-cream);
+}
+
+[data-theme="rose-pine"] .llm-activity-table td {
+  color: var(--rose-text-primary);
+}
+
+[data-theme="rose-pine"] .llm-activity-table td strong {
+  color: var(--rose-text-primary);
+}
+
+/* ==========================================================================
+   Notification Table
+   ========================================================================== */
+
+/* Notification history table - Rose palette */
+[data-theme="rose-pine"] .notification-table th {
+  background: var(--rose-surface-cream);
+  color: var(--rose-text-secondary);
+  border-bottom-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .notification-table td {
+  color: var(--rose-text-primary);
+  border-bottom-color: var(--rose-border-subtle);
+}
+
+[data-theme="rose-pine"] .notification-table tbody tr:hover {
+  background: rgba(144, 132, 156, 0.12);
+}

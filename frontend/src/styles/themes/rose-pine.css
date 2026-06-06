@@ -2,6 +2,20 @@
  * Rose Pine Theme Package
  * 
  * Imports all rose-pine theme split files in correct cascade order.
+ * 
+ * Cascade order (first-loaded files are overridden by later ones):
+ * 1. tokens.css - Rose palette variables and base tokens
+ * 2. tables.css - Table element styling
+ * 3. inputs.css - Form inputs and buttons
+ * 4. status-pills.css - Status badges and pills
+ * 5. cards-panels.css - Cards, panels, and containers
+ * 6. advisory.css - Provider advisory, cluster cards, deterministic checks
+ * 7. artifacts.css - Links, artifact chips, and artifacts
+ * 8. shell.css - Header, selected run bar, navigation (contrast rescue)
+ * 9. runs.css - Recent runs, runs table, execute buttons (contrast rescue)
+ * 10. run-summary.css - Run summary, metric cards, tabs (contrast rescue)
+ * 11. alertmanager.css - Alertmanager sources table (contrast rescue)
+ * 12. misc.css - LLM activity, notification table (contrast rescue)
  */
 
 @import url('./rose-pine/tokens.css');
@@ -11,3 +25,8 @@
 @import url('./rose-pine/cards-panels.css');
 @import url('./rose-pine/advisory.css');
 @import url('./rose-pine/artifacts.css');
+@import url('./rose-pine/shell.css');
+@import url('./rose-pine/runs.css');
+@import url('./rose-pine/run-summary.css');
+@import url('./rose-pine/alertmanager.css');
+@import url('./rose-pine/misc.css');

@@ -1,0 +1,115 @@
+/**
+ * Rose Theme - Shell and Navigation
+ * 
+ * Phase: Rose Contrast Rescue Pass
+ * 
+ * Owned surfaces: header, selected run bar, navigation, utility text
+ */
+
+/* ==========================================================================
+   Header / Selected Run Bar
+   ========================================================================== */
+
+/* Run summary header - warm cream, readable hierarchy */
+[data-theme="rose-pine"] .run-summary-header {
+  background: var(--rose-surface-cream);
+  border-bottom: 1px solid var(--rose-border-default);
+}
+
+/* Run summary kicker - uppercase label */
+[data-theme="rose-pine"] .run-summary-kicker {
+  color: var(--rose-accent-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* Run summary title - primary text, readable */
+[data-theme="rose-pine"] .run-summary-title {
+  color: var(--rose-text-primary);
+  font-size: clamp(1.35rem, 1.55vw, 1.7rem);
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+/* Run summary collector - secondary text */
+[data-theme="rose-pine"] .run-summary-collector {
+  color: var(--rose-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* Run summary time - secondary text */
+[data-theme="rose-pine"] .run-summary-time {
+  color: var(--rose-text-muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* Run summary meta row */
+[data-theme="rose-pine"] .run-summary-meta {
+  color: var(--rose-text-muted);
+  font-size: 0.9rem;
+}
+
+/* ==========================================================================
+   Navigation (cockpit-nav)
+   ========================================================================== */
+
+/* Cockpit navigation bar - warm cream background */
+[data-theme="rose-pine"] .cockpit-nav {
+  background: var(--rose-surface-warm);
+  border-color: var(--rose-border-default);
+}
+
+/* Nav item - readable plum text */
+[data-theme="rose-pine"] .cockpit-nav__item {
+  color: var(--rose-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+/* Nav item hover - rose accent */
+[data-theme="rose-pine"] .cockpit-nav__item:hover {
+  background: rgba(40, 105, 131, 0.1);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: var(--rose-accent-primary);
+}
+
+/* Nav item active - rose accent with border */
+[data-theme="rose-pine"] .cockpit-nav__item--active {
+  background: rgba(40, 105, 131, 0.15);
+  border-color: rgba(40, 105, 131, 0.4);
+  color: var(--rose-accent-primary);
+  font-weight: 600;
+}
+
+/* Nav label - muted mauve */
+[data-theme="rose-pine"] .cockpit-nav__label {
+  color: var(--rose-text-muted);
+}
+
+/* Nav icon */
+[data-theme="rose-pine"] .cockpit-nav__icon {
+  color: var(--rose-text-muted);
+}
+
+/* ==========================================================================
+   Utility Text Classes
+   ========================================================================== */
+
+[data-theme="rose-pine"] .muted {
+  color: var(--rose-text-muted);
+}
+
+[data-theme="rose-pine"] .eyebrow {
+  color: var(--rose-text-accent);
+  opacity: 0.9;
+}
+
+[data-theme="rose-pine"] .tiny {
+  color: var(--rose-text-muted);
+}

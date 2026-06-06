@@ -1,0 +1,132 @@
+/**
+ * Rose Theme - Runs and Recent Runs
+ * 
+ * Phase: Rose Contrast Rescue Pass
+ * 
+ * Owned surfaces: recent runs, runs table, run filters, execute buttons
+ */
+
+/* ==========================================================================
+   Recent Runs
+   ========================================================================== */
+
+/* Run cell ID - readable, not washed out */
+[data-theme="rose-pine"] .run-cell-id {
+  color: var(--rose-text-primary);
+  font-weight: 500;
+}
+
+/* Run cell main text */
+[data-theme="rose-pine"] .run-cell-main {
+  color: var(--rose-text-primary);
+}
+
+/* Run timestamp recency - muted but readable */
+[data-theme="rose-pine"] .run-cell-timestamp .recency,
+[data-theme="rose-pine"] .run-cell-timestamp .absolute {
+  color: var(--rose-text-muted);
+}
+
+/* Recent runs list container - warm cream */
+[data-theme="rose-pine"] .recent-runs-list {
+  background: var(--rose-surface-cream);
+  border-color: var(--rose-border-default);
+}
+
+/* Recent runs item - readable text */
+[data-theme="rose-pine"] .recent-runs-item {
+  color: var(--rose-text-primary);
+  border-bottom-color: var(--rose-border-subtle);
+}
+
+/* Recent runs item hover - subtle mauve tint */
+[data-theme="rose-pine"] .recent-runs-item:hover {
+  background: rgba(144, 132, 156, 0.15);
+}
+
+/* Recent runs selected item - Rose-tinted, NOT cyan */
+[data-theme="rose-pine"] .recent-runs-item.selected {
+  background: rgba(40, 105, 131, 0.12);
+  border-color: rgba(40, 105, 131, 0.35);
+  border-left: 3px solid rgba(40, 105, 131, 0.5);
+}
+
+/* Recent runs label - primary text */
+[data-theme="rose-pine"] .recent-runs-label {
+  color: var(--rose-text-primary);
+  font-weight: 600;
+}
+
+/* Recent runs timestamp - muted */
+[data-theme="rose-pine"] .recent-runs-time {
+  color: var(--rose-text-muted);
+  font-size: 0.85rem;
+}
+
+/* Filter pills in recent runs */
+[data-theme="rose-pine"] .runs-filter-select {
+  background: var(--rose-surface-ivory);
+  border-color: rgba(144, 132, 156, 0.5);
+  color: var(--rose-text-primary);
+}
+
+/* ==========================================================================
+   Runs Table
+   ========================================================================== */
+
+/* Runs table selected row - Rose-tinted, NOT cyan */
+[data-theme="rose-pine"] .runs-table tbody tr.run-row-selected {
+  background: rgba(40, 105, 131, 0.12);
+  border-left: 3px solid rgba(40, 105, 131, 0.5);
+}
+
+/* ==========================================================================
+   Run Row Actions
+   ========================================================================== */
+
+[data-theme="rose-pine"] .run-row-actions .action-primary {
+  color: var(--rose-text-primary);
+}
+
+[data-theme="rose-pine"] .run-row-actions .action-secondary {
+  color: var(--rose-text-secondary);
+}
+
+[data-theme="rose-pine"] .run-row-actions .action-tertiary {
+  color: var(--rose-text-muted);
+}
+
+/* Execution error in runs */
+[data-theme="rose-pine"] .runs-execution-error {
+  color: var(--rose-accent-danger);
+}
+
+/* Runs detached notice */
+[data-theme="rose-pine"] .runs-detached-notice {
+  background: rgba(144, 132, 156, 0.1);
+  border-color: var(--rose-border-default);
+}
+
+[data-theme="rose-pine"] .runs-detached-notice .muted {
+  color: var(--rose-text-secondary);
+}
+
+/* ==========================================================================
+   Execute / Action Buttons
+   ========================================================================== */
+
+/* Execute button - Rose-themed primary */
+[data-theme="rose-pine"] .run-action-cell .btn-primary,
+[data-theme="rose-pine"] .run-action-cell button[class*='primary'],
+[data-theme="rose-pine"] .execute-btn {
+  background: rgba(40, 105, 131, 0.15);
+  border-color: rgba(40, 105, 131, 0.5);
+  color: var(--rose-accent-primary);
+  font-weight: 600;
+}
+
+[data-theme="rose-pine"] .run-action-cell .btn-primary:hover,
+[data-theme="rose-pine"] .execute-btn:hover {
+  background: rgba(40, 105, 131, 0.22);
+  color: var(--rose-accent-primary);
+}
