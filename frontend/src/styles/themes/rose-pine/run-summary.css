@@ -24,15 +24,15 @@
 }
 
 [data-theme="rose-pine"] .run-stat-card span {
-  color: var(--rose-text-muted);
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
+  color: var(--rose-text-secondary-readable);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
 }
 
-/* Run duration summary */
+/* Run duration summary - secondary readable */
 [data-theme="rose-pine"] .run-duration-summary {
-  color: var(--rose-text-muted);
+  color: var(--rose-text-secondary-readable);
 }
 
 /* ==========================================================================
@@ -110,12 +110,13 @@
    ========================================================================== */
 
 [data-theme="rose-pine"] .tab {
-  background: rgba(168, 145, 165, 0.1);
-  color: var(--rose-text-secondary);
+  background: rgba(168, 145, 165, 0.12);
+  color: var(--rose-text-secondary-readable);
 }
 
 [data-theme="rose-pine"] .tab.active {
-  background: rgba(155, 114, 146, 0.18);
-  border-color: rgba(155, 114, 146, 0.45);
+  background: rgba(155, 114, 146, 0.2);
+  border-color: rgba(155, 114, 146, 0.5);
   color: var(--rose-identity-secondary);
+  font-weight: 600;
 }

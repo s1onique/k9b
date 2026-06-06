@@ -29,6 +29,18 @@
   --rose-text-muted: #9890a9;
   --rose-text-accent: #907aa9;
   
+  /* High-contrast text tokens for readable content */
+  --rose-text-strong: #4a4563;           /* stronger plum for important content */
+  --rose-text-body: #575279;             /* readable body text (same as primary) */
+  --rose-text-secondary-readable: #6e6585; /* stronger secondary text for IDs/timestamps */
+  --rose-muted-label: #9890a9;           /* for decorative labels only */
+  
+  /* Midnight (aubergine) high-contrast text tokens */
+  --rose-midnight-text-strong: rgba(248, 238, 235, 0.95);   /* near-ivory on aubergine */
+  --rose-midnight-text-body: rgba(230, 220, 240, 0.92);     /* readable body on aubergine */
+  --rose-midnight-muted-readable: rgba(200, 190, 210, 0.85); /* readable muted on aubergine */
+  --rose-button-text: var(--rose-identity-secondary);       /* readable button text */
+  
   /* Rose-tinted borders - dusty rose/mauve, not grey */
   --rose-border-default: rgba(168, 145, 165, 0.45);
   --rose-border-subtle: rgba(168, 145, 165, 0.3);

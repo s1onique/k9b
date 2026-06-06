@@ -15,18 +15,18 @@
    Midnight Rose (Aubergine/Plum) Command/Action Cards
    ========================================================================== */
 
-/* Worklist summary - deep aubergine with readable text */
+/* Worklist summary - deep aubergine with high-contrast text */
 [data-theme="rose-pine"] .worklist-summary {
   background: var(--rose-midnight-surface);
   border-color: var(--rose-midnight-border);
 }
 
 [data-theme="rose-pine"] .worklist-stat {
-  color: var(--rose-midnight-muted);
+  color: var(--rose-midnight-muted-readable);
 }
 
 [data-theme="rose-pine"] .worklist-stat strong {
-  color: var(--rose-midnight-text);
+  color: var(--rose-midnight-text-strong);
 }
 
 [data-theme="rose-pine"] .worklist-stat-completed strong {
@@ -63,9 +63,10 @@
   color: rgba(200, 190, 210, 0.9);
 }
 
-/* Worklist title - primary readable */
+/* Worklist title - high-contrast near-ivory */
 [data-theme="rose-pine"] .worklist-title {
-  color: var(--rose-midnight-text);
+  color: var(--rose-midnight-text-strong);
+  font-weight: 600;
 }
 
 /* Worklist command section - slightly lighter for readability */
@@ -74,30 +75,30 @@
   border-color: var(--rose-midnight-border);
 }
 
-/* Worklist command text - readable on midnight */
+/* Worklist command text - high-contrast on midnight */
 [data-theme="rose-pine"] .worklist-command {
-  color: var(--rose-midnight-text);
+  color: var(--rose-midnight-text-body);
 }
 
-/* Worklist no-command - muted but visible */
+/* Worklist no-command - readable muted */
 [data-theme="rose-pine"] .worklist-no-command {
-  color: var(--rose-midnight-muted);
+  color: var(--rose-midnight-muted-readable);
 }
 
-/* Worklist labels - visible secondary */
+/* Worklist labels - readable muted on midnight */
 [data-theme="rose-pine"] .worklist-target-label,
 [data-theme="rose-pine"] .worklist-reason-label,
 [data-theme="rose-pine"] .worklist-evidence-label,
 [data-theme="rose-pine"] .worklist-safety-label {
-  color: var(--rose-midnight-muted);
+  color: var(--rose-midnight-muted-readable);
 }
 
-/* Worklist values - readable secondary */
+/* Worklist values - readable body text on midnight */
 [data-theme="rose-pine"] .worklist-target-value,
 [data-theme="rose-pine"] .worklist-reason-value,
 [data-theme="rose-pine"] .worklist-evidence-value,
 [data-theme="rose-pine"] .worklist-safety-value {
-  color: rgba(200, 190, 210, 0.9);
+  color: var(--rose-midnight-text-body);
 }
 
 /* Worklist state badges - Rose palette on midnight */
@@ -131,7 +132,7 @@
 
 [data-theme="rose-pine"] .worklist-state-not-required,
 [data-theme="rose-pine"] .worklist-state-unexecuted {
-  background: rgba(144, 132, 156, 0.15);
-  color: rgba(180, 170, 190, 0.8);
-  border-color: rgba(144, 132, 156, 0.3);
+  background: rgba(144, 132, 156, 0.18);
+  color: rgba(200, 190, 210, 0.85);
+  border-color: rgba(144, 132, 156, 0.4);
 }

@@ -28,7 +28,7 @@
 
 [data-theme="rose-pine"] .runs-table .run-cell-timestamp .recency,
 [data-theme="rose-pine"] .runs-table .run-cell-timestamp .absolute {
-  color: var(--rose-text-muted);
+  color: var(--rose-text-secondary-readable);
 }
 
 /* Rose-tinted selected row - NOT teal/cyan */

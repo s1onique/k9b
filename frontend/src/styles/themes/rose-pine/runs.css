@@ -11,10 +11,10 @@
    Recent Runs
    ========================================================================== */
 
-/* Run cell ID - readable, not washed out */
+/* Run cell ID - readable, strong plum */
 [data-theme="rose-pine"] .run-cell-id {
-  color: var(--rose-text-primary);
-  font-weight: 500;
+  color: var(--rose-text-strong);
+  font-weight: 600;
 }
 
 /* Run cell main text */
@@ -22,10 +22,10 @@
   color: var(--rose-text-primary);
 }
 
-/* Run timestamp recency - muted but readable */
+/* Run timestamp recency - secondary readable, not muted */
 [data-theme="rose-pine"] .run-cell-timestamp .recency,
 [data-theme="rose-pine"] .run-cell-timestamp .absolute {
-  color: var(--rose-text-muted);
+  color: var(--rose-text-secondary-readable);
 }
 
 /* Recent runs list container - blush ivory */
@@ -58,17 +58,18 @@
   font-weight: 600;
 }
 
-/* Recent runs timestamp - muted */
+/* Recent runs timestamp - secondary readable */
 [data-theme="rose-pine"] .recent-runs-time {
-  color: var(--rose-text-muted);
+  color: var(--rose-text-secondary-readable);
   font-size: 0.85rem;
 }
 
-/* Filter pills in recent runs */
+/* Filter pills in recent runs - readable, interactive */
 [data-theme="rose-pine"] .runs-filter-select {
   background: var(--rose-surface-ivory);
   border-color: var(--rose-border-default);
-  color: var(--rose-text-primary);
+  color: var(--rose-text-strong);
+  font-weight: 500;
 }
 
 /* ==========================================================================

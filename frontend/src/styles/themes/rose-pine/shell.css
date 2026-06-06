@@ -42,28 +42,28 @@
   text-transform: uppercase;
 }
 
-/* Run summary time - secondary but readable */
+/* Run summary time - secondary readable */
 [data-theme="rose-pine"] .run-summary-time {
-  color: var(--rose-text-secondary);
+  color: var(--rose-text-secondary-readable);
   font-size: 0.95rem;
   font-weight: 600;
 }
 
 /* Run summary meta row - secondary readable */
 [data-theme="rose-pine"] .run-summary-meta {
-  color: var(--rose-text-secondary);
+  color: var(--rose-text-secondary-readable);
   font-size: 0.9rem;
 }
 
-/* Run ID in header - primary readable, not muted */
+/* Run ID in header - strong plum, readable */
 [data-theme="rose-pine"] .run-summary-run-id {
-  color: var(--rose-text-primary);
-  font-weight: 500;
+  color: var(--rose-text-strong);
+  font-weight: 600;
 }
 
-/* Captured timestamp - secondary readable */
+/* Captured timestamp - readable secondary, not muted */
 [data-theme="rose-pine"] .run-summary-captured {
-  color: var(--rose-text-secondary);
+  color: var(--rose-text-secondary-readable);
 }
 
 /* Selected run bar - visible metadata */
@@ -73,13 +73,13 @@
   color: var(--rose-text-secondary);
 }
 
-/* Disabled controls - visible but clearly inactive */
+/* Disabled controls - visible but clearly inactive (legible) */
 [data-theme="rose-pine"] .run-summary-cta:disabled,
 [data-theme="rose-pine"] .run-summary-next-checks-button:disabled {
-  opacity: 0.5;
-  background: rgba(144, 132, 156, 0.12);
-  border-color: rgba(144, 132, 156, 0.25);
-  color: var(--rose-text-muted);
+  opacity: 0.55;
+  background: rgba(144, 132, 156, 0.15);
+  border-color: rgba(144, 132, 156, 0.35);
+  color: var(--rose-text-secondary-readable);
 }
 
 /* ==========================================================================

@@ -18,32 +18,32 @@
 }
 
 [data-theme="rose-pine"] .proposal-rationale {
-  color: var(--rose-midnight-text);
+  color: var(--rose-midnight-text-body);
 }
 
 /* ==========================================================================
    Proposal Controls
    ========================================================================== */
 
-/* Proposal controls - Rose form elements */
+/* Proposal controls - readable form elements */
 [data-theme="rose-pine"] .proposal-controls label {
-  color: var(--rose-midnight-muted);
+  color: var(--rose-midnight-muted-readable);
 }
 
 [data-theme="rose-pine"] .proposal-controls select,
 [data-theme="rose-pine"] .proposal-controls input {
   background: rgba(68, 48, 72, 0.7);
   border-color: var(--rose-midnight-border);
-  color: var(--rose-midnight-text);
+  color: var(--rose-midnight-text-body);
 }
 
 /* ==========================================================================
    Proposal Row Actions
    ========================================================================== */
 
-/* Proposal row actions - visible secondary */
+/* Proposal row actions - readable secondary */
 [data-theme="rose-pine"] .proposal-row-actions {
-  color: var(--rose-midnight-muted);
+  color: var(--rose-midnight-muted-readable);
 }
 
 /* ==========================================================================
@@ -57,7 +57,7 @@
 }
 
 [data-theme="rose-pine"] .finding-card header strong {
-  color: var(--rose-midnight-text);
+  color: var(--rose-midnight-text-strong);
 }
 
 /* ==========================================================================
@@ -71,7 +71,7 @@
 }
 
 [data-theme="rose-pine"] .evidence-details summary {
-  color: var(--rose-midnight-muted);
+  color: var(--rose-midnight-muted-readable);
 }
 
 /* ==========================================================================
