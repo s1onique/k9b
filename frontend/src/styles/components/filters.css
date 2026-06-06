@@ -155,3 +155,9 @@
 [data-theme="solarized-light"] .runs-filter-select {
   background: rgba(253, 246, 227, 0.95);
 }
+
+/* ==========================================================================
+   Theme Overrides - Rose Pine (DELEGATED)
+   Rose theme overrides live in themes/rose-pine/filters.css
+   Kept here as tombstone to prevent merge conflicts during transition
+   ========================================================================== */

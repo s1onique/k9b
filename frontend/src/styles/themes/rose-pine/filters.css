@@ -1,0 +1,70 @@
+/**
+ * Rose Theme - Filter Pills
+ * 
+ * Phase: Rose Contrast Rescue Pass
+ * 
+ * Owned surfaces: runs-filter buttons, filter counts, filter select
+ */
+
+/* ==========================================================================
+   Runs Filter Buttons - Rose-tinted interactive chips
+   ========================================================================== */
+
+/* Rose Pine theme - filter buttons: blush/mauve, NOT grey/disabled */
+[data-theme="rose-pine"] .runs-filter-button {
+  background: rgba(168, 145, 165, 0.12);
+  border-color: rgba(168, 145, 165, 0.4);
+  color: var(--rose-text-secondary);
+}
+
+[data-theme="rose-pine"] .runs-filter-button:hover {
+  background: rgba(155, 114, 146, 0.15);
+  border-color: rgba(155, 114, 146, 0.5);
+  color: var(--rose-identity-secondary);
+}
+
+/* Active filter button - stronger rose fill, readable text */
+[data-theme="rose-pine"] .runs-filter-button.active {
+  background: rgba(155, 114, 146, 0.2);
+  border-color: rgba(155, 114, 146, 0.55);
+  color: var(--rose-identity-secondary);
+  font-weight: 600;
+}
+
+/* Filter count indicator - readable on Rose palette */
+[data-theme="rose-pine"] .runs-filter-count {
+  color: var(--rose-text-muted);
+  font-size: 0.7rem;
+}
+
+/* Active filter chip count - readable plum, not muted */
+[data-theme="rose-pine"] .runs-filter-button.active .runs-filter-count {
+  color: var(--rose-identity-secondary);
+}
+
+/* Filter label text */
+[data-theme="rose-pine"] .runs-filter-label {
+  color: var(--rose-text-secondary);
+}
+
+/* Filter summary text */
+[data-theme="rose-pine"] .runs-filter-summary {
+  font-size: 0.75rem;
+  color: var(--rose-text-secondary-readable);
+  padding-left: 0.15rem;
+}
+
+/* ==========================================================================
+   Runs Filter Select - Rose-tinted dropdown
+   ========================================================================== */
+
+/* Rose Pine theme - filter select */
+[data-theme="rose-pine"] .runs-filter-select {
+  background: rgba(255, 252, 249, 0.97);
+  border-color: rgba(168, 145, 165, 0.45);
+  color: var(--rose-text-primary);
+}
+
+[data-theme="rose-pine"] .runs-filter-select:hover {
+  border-color: rgba(155, 114, 146, 0.6);
+}

@@ -13,12 +13,13 @@
  * 7. artifacts.css - Links, artifact chips, and artifacts
  * 8. shell.css - Header, selected run bar, navigation (contrast rescue)
  * 9. runs.css - Recent runs, runs table, execute buttons (contrast rescue)
- * 10. run-summary.css - Run summary, metric cards, tabs (contrast rescue)
- * 11. alertmanager.css - Alertmanager sources table (contrast rescue)
- * 12. advisory-lower-sections.css - Advisory lower sections
- * 13. proposals.css - Proposal list and findings
- * 14. worklist.css - Worklist command cards (midnight rose design treatment)
- * 15. misc.css - LLM activity, notification table (contrast rescue)
+ * 10. filters.css - Runs filter buttons and selects (contrast rescue)
+ * 11. run-summary.css - Run summary, metric cards, tabs (contrast rescue)
+ * 12. alertmanager.css - Alertmanager sources table (contrast rescue)
+ * 13. advisory-lower-sections.css - Advisory lower sections
+ * 14. proposals.css - Proposal list and findings
+ * 15. worklist.css - Worklist command cards (midnight rose design treatment)
+ * 16. misc.css - LLM activity, notification table (contrast rescue)
  */
 
 @import url('./rose-pine/tokens.css');
@@ -30,6 +31,7 @@
 @import url('./rose-pine/artifacts.css');
 @import url('./rose-pine/shell.css');
 @import url('./rose-pine/runs.css');
+@import url('./rose-pine/filters.css');
 @import url('./rose-pine/run-summary.css');
 @import url('./rose-pine/alertmanager.css');
 @import url('./rose-pine/advisory-lower-sections.css');

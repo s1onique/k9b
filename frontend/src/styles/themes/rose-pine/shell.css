@@ -73,6 +73,67 @@
   color: var(--rose-text-secondary);
 }
 
+/* Hero run identity in header - readable metadata hierarchy */
+[data-theme="rose-pine"] .hero-run-identity .hero-run-id {
+  color: var(--rose-text-strong);
+  font-weight: 600;
+}
+
+[data-theme="rose-pine"] .hero-run-identity .hero-run-captured {
+  color: var(--rose-text-secondary-readable);
+  font-size: 0.9rem;
+}
+
+[data-theme="rose-pine"] .hero-run-identity .hero-run-latest-hint {
+  color: var(--rose-text-secondary-readable);
+  font-size: 0.8rem;
+}
+
+[data-theme="rose-pine"] .hero-run-identity .hero-run-title strong {
+  color: var(--rose-text-primary);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* Run badge - readable on cream */
+[data-theme="rose-pine"] .run-badge {
+  color: var(--rose-identity-secondary);
+  font-weight: 600;
+}
+
+[data-theme="rose-pine"] .run-badge--latest {
+  background: rgba(155, 114, 146, 0.15);
+  border-color: rgba(155, 114, 146, 0.4);
+}
+
+[data-theme="rose-pine"] .run-badge--past {
+  background: rgba(168, 145, 165, 0.12);
+  border-color: rgba(168, 145, 165, 0.35);
+}
+
+/* Freshness indicator - readable labels */
+[data-theme="rose-pine"] .freshness-indicator__label {
+  color: var(--rose-text-secondary-readable);
+  font-weight: 500;
+}
+
+/* Disabled header controls - Rose-colored, NOT cyan */
+[data-theme="rose-pine"] .refresh-controls button:disabled {
+  opacity: 0.65;
+  background: rgba(144, 132, 156, 0.12);
+  border-color: rgba(144, 132, 156, 0.35);
+  color: var(--rose-text-secondary-readable);
+  cursor: not-allowed;
+}
+
+[data-theme="rose-pine"] .demo-entry-button:disabled {
+  opacity: 0.65;
+  background: rgba(144, 132, 156, 0.12);
+  border-color: rgba(144, 132, 156, 0.35);
+  color: var(--rose-text-secondary-readable);
+  cursor: not-allowed;
+}
+
 /* Disabled controls - visible but clearly inactive (legible) */
 [data-theme="rose-pine"] .run-summary-cta:disabled,
 [data-theme="rose-pine"] .run-summary-next-checks-button:disabled {
