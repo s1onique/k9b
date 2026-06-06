@@ -1,0 +1,447 @@
+/**
+ * Runtime Status Component Styles
+ *
+ * Styles for compact runtime status section showing:
+ * - Log window counts (ERROR + WARNING) for backend and scheduler pods
+ * - PVC storage usage with progress bar
+ *
+ * CSS Ownership:
+ * - .runtime-status-summary        → Root container
+ * - .runtime-status-header         → Header with icon + title
+ * - .runtime-status-icon           → Visual anchor icon
+ * - .runtime-status-content        → Content container
+ * - .runtime-status-section        → Section wrapper
+ * - .runtime-status-section-title  → Section heading
+ * - .runtime-status-log-counts     → Log counts container
+ * - .runtime-status-pvc            → PVC section container
+ *
+ * - .log-counts                    → Log count item base
+ * - .log-counts-header             → Pod name + status row
+ * - .log-counts-pod-name           → Pod name label
+ * - .log-counts-status             → Status text
+ * - .log-counts--ok                → OK state (no errors/warnings)
+ * - .log-counts--warning           → Warning state
+ * - .log-counts--error             → Error state
+ * - .log-counts--unavailable       → Unavailable state
+ * - .log-counts-unavailable-label  → "unavailable" label
+ *
+ * - .pvc-usage-bar                 → PVC usage bar container
+ * - .pvc-usage-header              → PVC name + percent header
+ * - .pvc-usage-name                → PVC name
+ * - .pvc-usage-percent             → Percentage display
+ * - .pvc-usage-track               → Progress bar track
+ * - .pvc-usage-fill                → Progress bar fill
+ * - .pvc-usage-details             → Used/free/capacity details
+ * - .pvc-usage-used                → Used space label
+ * - .pvc-usage-free                → Free space label
+ * - .pvc-usage-capacity            → Total capacity label
+ * - .pvc-usage-separator           → Detail separator
+ * - .pvc-usage-warning             → High usage warning
+ * - .pvc-usage-warning-icon       → Warning icon
+ * - .pvc-usage-warning-text       → Warning text
+ * - .pvc-usage-bar--high          → High usage modifier
+ * - .pvc-usage-bar--unavailable   → Unavailable modifier
+ * - .pvc-usage-track--empty       → Empty track modifier
+ * - .pvc-usage-fill--unavailable  → Unavailable fill modifier
+ * - .pvc-usage-unavailable-text    → Unavailable text
+ *
+ * Theme overrides:
+ * - [data-theme="solarized-light"] .runtime-status-summary
+ * - [data-theme="solarized-light"] .log-counts--unavailable
+ * - [data-theme="solarized-light"] .pvc-usage-bar
+ *
+ * Dependencies:
+ * - tokens.css (for --color-* tokens)
+ * - themes.css (for theme variable values)
+ */
+
+/* ==========================================================================
+   Runtime Status Summary Container
+   ========================================================================== */
+
+.runtime-status-summary {
+  background: var(--color-card-bg, rgba(15, 23, 42, 0.85));
+  border: 1px solid var(--color-card-border, rgba(148, 163, 184, 0.2));
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.runtime-status-summary--loading {
+  opacity: 0.7;
+}
+
+.runtime-status-summary--error {
+  border-color: var(--color-state-danger-border, rgba(248, 113, 113, 0.35));
+}
+
+/* ==========================================================================
+   Header
+   ========================================================================== */
+
+.runtime-status-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.runtime-status-header h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #e2e8f0);
+  margin: 0;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.runtime-status-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.35rem;
+  background: var(--color-accent-primary, rgba(56, 189, 248, 0.15));
+  color: var(--color-accent-primary-text, #bae6fd);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Content
+   ========================================================================== */
+
+.runtime-status-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.runtime-status-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.runtime-status-section-title {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  margin: 0;
+}
+
+.runtime-status-log-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.runtime-status-pvc {
+  /* PVC section container */
+}
+
+/* ==========================================================================
+   Loading State
+   ========================================================================== */
+
+.runtime-status-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 0;
+}
+
+.runtime-status-loading .loading-text {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+}
+
+/* ==========================================================================
+   Log Counts
+   ========================================================================== */
+
+.log-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 0.4rem;
+}
+
+.log-counts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.log-counts-pod-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #f8fafc);
+  text-transform: capitalize;
+}
+
+.log-counts-status {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #e2e8f0);
+}
+
+/* Severity variants */
+.log-counts--ok .log-counts-status {
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+}
+
+.log-counts--warning .log-counts-status {
+  color: var(--color-state-warning-text, #fde047);
+}
+
+.log-counts--error .log-counts-status {
+  color: var(--color-state-danger-text, #fecaca);
+}
+
+/* Unavailable state */
+.log-counts--unavailable {
+  opacity: 0.6;
+}
+
+.log-counts--unavailable .log-counts-status {
+  display: none;
+}
+
+.log-counts-unavailable-label {
+  font-size: 0.7rem;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.6));
+  font-style: italic;
+}
+
+/* ==========================================================================
+   PVC Usage Bar
+   ========================================================================== */
+
+.pvc-usage-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  border-radius: 0.5rem;
+}
+
+.pvc-usage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pvc-usage-name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-primary, #f8fafc);
+}
+
+.pvc-usage-percent {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-accent-primary-text, #bae6fd);
+}
+
+/* Progress track */
+.pvc-usage-track {
+  height: 0.4rem;
+  background: var(--color-bg-elevated, rgba(30, 41, 59, 0.8));
+  border-radius: 0.2rem;
+  overflow: hidden;
+}
+
+.pvc-usage-track--empty {
+  background: var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+}
+
+/* Progress fill */
+.pvc-usage-fill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--color-accent-primary, #38bdf8) 0%,
+    var(--color-accent-primary, #38bdf8) 100%
+  );
+  border-radius: 0.2rem;
+  transition: width 0.3s ease;
+}
+
+.pvc-usage-fill--unavailable {
+  background: var(--color-border-subtle, rgba(148, 163, 184, 0.3));
+}
+
+/* Details row */
+.pvc-usage-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.65rem;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+}
+
+.pvc-usage-separator {
+  color: var(--color-border-subtle, rgba(148, 163, 184, 0.4));
+}
+
+/* Unavailable state */
+.pvc-usage-bar--unavailable {
+  opacity: 0.6;
+}
+
+.pvc-usage-unavailable-text {
+  font-size: 0.7rem;
+  font-style: italic;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.6));
+}
+
+/* High usage warning */
+.pvc-usage-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--color-state-warning-bg, rgba(251, 191, 36, 0.15));
+  border: 1px solid var(--color-state-warning-border, rgba(251, 191, 36, 0.35));
+  border-radius: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.pvc-usage-warning-icon {
+  font-size: 0.75rem;
+}
+
+.pvc-usage-warning-text {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-state-warning-text, #fde047);
+}
+
+.pvc-usage-bar--high {
+  border-color: var(--color-state-warning-border, rgba(251, 191, 36, 0.35));
+}
+
+.pvc-usage-bar--high .pvc-usage-percent {
+  color: var(--color-state-warning-text, #fde047);
+}
+
+.pvc-usage-bar--high .pvc-usage-fill {
+  background: linear-gradient(
+    90deg,
+    var(--color-state-warning, #fbbf24) 0%,
+    var(--color-state-danger, #f87171) 100%
+  );
+}
+
+/* ==========================================================================
+   Solarized Light Theme Overrides
+   ========================================================================== */
+
+[data-theme="solarized-light"] .runtime-status-summary {
+  background: var(--color-card-bg, rgba(238, 232, 213, 0.92));
+  border-color: var(--color-card-border, rgba(147, 161, 161, 0.3));
+}
+
+[data-theme="solarized-light"] .runtime-status-header h3 {
+  color: var(--color-text-secondary, #586e75);
+}
+
+[data-theme="solarized-light"] .runtime-status-icon {
+  background: rgba(38, 139, 210, 0.15);
+  color: var(--color-accent-primary-text, #268bd2);
+}
+
+[data-theme="solarized-light"] .runtime-status-section-title {
+  color: var(--color-text-muted, #657b83);
+}
+
+[data-theme="solarized-light"] .log-counts {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .log-counts-pod-name {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .log-counts-status {
+  color: var(--color-text-secondary, #586e75);
+}
+
+[data-theme="solarized-light"] .log-counts--warning .log-counts-status {
+  color: var(--color-state-warning-text, #b58900);
+}
+
+[data-theme="solarized-light"] .log-counts--error .log-counts-status {
+  color: var(--color-state-danger-text, #dc322f);
+}
+
+[data-theme="solarized-light"] .log-counts--unavailable {
+  opacity: 0.5;
+}
+
+[data-theme="solarized-light"] .log-counts-unavailable-label {
+  color: var(--color-text-muted, #839496);
+}
+
+[data-theme="solarized-light"] .pvc-usage-bar {
+  background: rgba(238, 232, 213, 0.8);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .pvc-usage-name {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .pvc-usage-percent {
+  color: var(--color-accent-primary-text, #268bd2);
+}
+
+[data-theme="solarized-light"] .pvc-usage-track {
+  background: rgba(238, 232, 213, 0.5);
+}
+
+[data-theme="solarized-light"] .pvc-usage-track--empty {
+  background: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .pvc-usage-details {
+  color: var(--color-text-muted, #657b83);
+}
+
+[data-theme="solarized-light"] .pvc-usage-separator {
+  color: rgba(147, 161, 161, 0.4);
+}
+
+[data-theme="solarized-light"] .pvc-usage-unavailable-text {
+  color: var(--color-text-muted, #839496);
+}
+
+[data-theme="solarized-light"] .pvc-usage-warning {
+  background: rgba(181, 137, 0, 0.15);
+  border-color: rgba(181, 137, 0, 0.45);
+}
+
+[data-theme="solarized-light"] .pvc-usage-warning-text {
+  color: var(--color-state-warning-text, #b58900);
+}
+
+[data-theme="solarized-light"] .pvc-usage-bar--high {
+  border-color: rgba(181, 137, 0, 0.45);
+}
+
+[data-theme="solarized-light"] .pvc-usage-bar--high .pvc-usage-percent {
+  color: var(--color-state-warning-text, #b58900);
+}

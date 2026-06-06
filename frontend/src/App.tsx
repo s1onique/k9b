@@ -47,6 +47,8 @@ import { AppDemoShellOverlay } from "./app/AppDemoShellOverlay";
 import { useAppRunSummaryProps } from "./app/useAppRunSummaryProps";
 import { useAppClusterFocusHandler } from "./app/useAppClusterFocusHandler";
 import { useAppDemoShellOverlayProps } from "./app/useAppDemoShellOverlayProps";
+import { RuntimeStatusSummary } from "./components/runtime-status";
+import { useRuntimeStatus } from "./hooks/useRuntimeStatus";
 import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
 import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLaneProps";
 import { useManualExecutionController } from "./app/manualExecution";
@@ -688,6 +690,9 @@ const App = () => {
     onFocusClusterForNextChecks: runSummaryLoadedProps.onFocusClusterForNextChecks,
   });
 
+  // Runtime status - extract props for the runtime status summary section
+  const { runtimeStatus, isLoading: runtimeStatusLoading, isError: runtimeStatusError } = useRuntimeStatus();
+
   // Extract diagnose panels props
   const diagnosePanelsProps = useAppDiagnosePanelsProps({
     run,
@@ -734,6 +739,12 @@ const App = () => {
         onClusterSelect={handleClusterSelection}
       />
       <ClusterDetailSection {...clusterDetailSectionProps} />
+      {/* Runtime status summary - shows log counts and PVC usage */}
+      <RuntimeStatusSummary
+        runtimeStatus={runtimeStatus}
+        isLoading={runtimeStatusLoading}
+        isError={runtimeStatusError}
+      />
     <WorkflowLaneHeader type="improve" />
       <AppProposalsSection {...proposalSectionProps} />
       <AppImprovePanels run={run} />

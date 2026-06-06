@@ -486,6 +486,13 @@ export const submitAlertmanagerRelevanceFeedback = async (
   return (await response.json()) as AlertmanagerRelevanceFeedbackResponse;
 };
 
+// Runtime status types
+export type RuntimeStatusPayload = import("./components/runtime-status/runtimeStatusTypes").RuntimeStatusPayload;
+
+// Fetch runtime status (log windows + PVC usage)
+export const fetchRuntimeStatus = (): Promise<RuntimeStatusPayload> =>
+  fetchJson<RuntimeStatusPayload>("/api/runtime-status");
+
 // Debug diagnostics types
 export type DebugDiagnosticsEnabledResponse = {
   debugExecutionDiagnosticsEnabled: boolean;

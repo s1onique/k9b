@@ -49,6 +49,17 @@ __all__ = [
 ]
 
 
+def handle_runtime_status_route(handler: HealthUIRequestHandler) -> None:
+    """Handle GET /api/runtime-status route.
+
+    Args:
+        handler: The HTTP request handler instance
+    """
+    from .api_runtime_status import handle_runtime_status_route as _handle
+
+    _handle(handler)
+
+
 def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     """Handle API GET requests (read-only endpoints).
 
@@ -78,6 +89,11 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     if route == "/api/runs":
         # Delegate to extraction module for artifact-read isolation
         handle_runs_list_route(handler, query)
+        return
+
+    if route == "/api/runtime-status":
+        # Runtime status does not need run context - handles its own route
+        handle_runtime_status_route(handler)
         return
 
     if route == "/api/notifications":
