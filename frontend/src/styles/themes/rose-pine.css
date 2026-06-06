@@ -15,7 +15,10 @@
  * 9. runs.css - Recent runs, runs table, execute buttons (contrast rescue)
  * 10. run-summary.css - Run summary, metric cards, tabs (contrast rescue)
  * 11. alertmanager.css - Alertmanager sources table (contrast rescue)
- * 12. misc.css - LLM activity, notification table (contrast rescue)
+ * 12. advisory-lower-sections.css - Advisory lower sections
+ * 13. proposals.css - Proposal list and findings
+ * 14. worklist.css - Worklist command cards (midnight rose design treatment)
+ * 15. misc.css - LLM activity, notification table (contrast rescue)
  */
 
 @import url('./rose-pine/tokens.css');
@@ -29,4 +32,7 @@
 @import url('./rose-pine/runs.css');
 @import url('./rose-pine/run-summary.css');
 @import url('./rose-pine/alertmanager.css');
+@import url('./rose-pine/advisory-lower-sections.css');
+@import url('./rose-pine/proposals.css');
+@import url('./rose-pine/worklist.css');
 @import url('./rose-pine/misc.css');

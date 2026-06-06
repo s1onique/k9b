@@ -1,0 +1,134 @@
+/**
+ * Rose Theme - Proposal List and Findings
+ * 
+ * Phase: Rose Final Polish Pass
+ * 
+ * Design rule: Proposal/action cards use midnight-rose surfaces intentionally.
+ * Owned surfaces: proposal rows, finding cards, confidence badges
+ */
+
+/* ==========================================================================
+   Proposal Row - Midnight Rose Treatment
+   ========================================================================== */
+
+/* Proposal row - midnight rose with readable content */
+[data-theme="rose-pine"] .proposal-row {
+  background: rgba(40, 30, 55, 0.75);
+  border-color: rgba(144, 132, 156, 0.3);
+}
+
+[data-theme="rose-pine"] .proposal-rationale {
+  color: rgba(242, 233, 225, 0.85);
+}
+
+/* ==========================================================================
+   Proposal Controls
+   ========================================================================== */
+
+/* Proposal controls - Rose form elements */
+[data-theme="rose-pine"] .proposal-controls label {
+  color: rgba(144, 132, 156, 0.85);
+}
+
+[data-theme="rose-pine"] .proposal-controls select,
+[data-theme="rose-pine"] .proposal-controls input {
+  background: rgba(40, 30, 55, 0.7);
+  border-color: rgba(144, 132, 156, 0.4);
+  color: rgba(242, 233, 225, 0.9);
+}
+
+/* ==========================================================================
+   Proposal Row Actions
+   ========================================================================== */
+
+/* Proposal row actions - visible secondary */
+[data-theme="rose-pine"] .proposal-row-actions {
+  color: rgba(144, 132, 156, 0.8);
+}
+
+/* ==========================================================================
+   Finding Card - Midnight Rose
+   ========================================================================== */
+
+/* Finding card - midnight rose */
+[data-theme="rose-pine"] .finding-card {
+  background: rgba(40, 30, 55, 0.75);
+  border-color: rgba(144, 132, 156, 0.3);
+}
+
+[data-theme="rose-pine"] .finding-card header strong {
+  color: rgba(242, 233, 225, 0.9);
+}
+
+/* ==========================================================================
+   Evidence Details
+   ========================================================================== */
+
+/* Evidence details - midnight rose section */
+[data-theme="rose-pine"] .evidence-details {
+  background: rgba(40, 30, 55, 0.6);
+  border-color: rgba(144, 132, 156, 0.25);
+}
+
+[data-theme="rose-pine"] .evidence-details summary {
+  color: rgba(144, 132, 156, 0.85);
+}
+
+/* ==========================================================================
+   Lifecycle & Confidence Indicators
+   ========================================================================== */
+
+/* Lifecycle chip - Rose accent on midnight */
+[data-theme="rose-pine"] .lifecycle-chip {
+  background: rgba(40, 105, 131, 0.15);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: rgba(144, 200, 220, 0.9);
+}
+
+/* Confidence badge - Rose palette on midnight */
+[data-theme="rose-pine"] .confidence-badge {
+  background: rgba(40, 105, 131, 0.15);
+  border-color: rgba(40, 105, 131, 0.3);
+  color: rgba(144, 200, 220, 0.9);
+}
+
+[data-theme="rose-pine"] .confidence-badge.level-critical,
+[data-theme="rose-pine"] .confidence-badge.level-high {
+  background: rgba(180, 99, 122, 0.15);
+  border-color: rgba(180, 99, 122, 0.3);
+  color: rgba(248, 180, 180, 0.9);
+}
+
+[data-theme="rose-pine"] .confidence-badge.level-medium {
+  background: rgba(181, 137, 0, 0.15);
+  border-color: rgba(181, 137, 0, 0.3);
+  color: #fde047;
+}
+
+[data-theme="rose-pine"] .confidence-badge.level-low {
+  background: rgba(86, 148, 127, 0.15);
+  border-color: rgba(86, 148, 127, 0.3);
+  color: #86efac;
+}
+
+[data-theme="rose-pine"] .confidence-badge.level-default {
+  background: rgba(144, 132, 156, 0.12);
+  border-color: rgba(144, 132, 156, 0.25);
+  color: rgba(180, 170, 190, 0.8);
+}
+
+/* ==========================================================================
+   Artifact Chip
+   ========================================================================== */
+
+/* Artifact chip - Rose accent on midnight */
+[data-theme="rose-pine"] .artifact-chip {
+  background: rgba(40, 105, 131, 0.12);
+  border-color: rgba(40, 105, 131, 0.35);
+  color: rgba(144, 200, 220, 0.9);
+}
+
+[data-theme="rose-pine"] .artifact-chip:hover {
+  background: rgba(40, 105, 131, 0.2);
+  color: rgba(144, 200, 220, 1);
+}

@@ -287,6 +287,8 @@
   font-size: 0.7rem;
 }
 
+/* Rose theme overrides moved to: themes/rose-pine/worklist.css */
+
 /* Solarized Light theme overrides */
 [data-theme="solarized-light"] .worklist-summary {
   background: rgba(238, 232, 213, 0.8);

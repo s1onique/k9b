@@ -1,0 +1,149 @@
+/**
+ * Rose Theme - Advisory Lower Sections
+ * 
+ * Phase: Rose Final Polish Pass
+ * 
+ * Owned surfaces: Top concerns, Evidence gaps, Next checks, Focus guidance
+ */
+
+/* ==========================================================================
+   Advisory Lower Sections Container
+   ========================================================================== */
+
+/* Advisory lower sections container - Rose warm surface */
+[data-theme="rose-pine"] .advisory-lower-sections {
+  background: rgba(242, 233, 225, 0.5);
+}
+
+/* Lower section base - Rose ivory background */
+[data-theme="rose-pine"] .advisory-lower-section {
+  background: rgba(255, 250, 243, 0.9);
+  border-color: rgba(144, 132, 156, 0.35);
+}
+
+/* Section labels - readable secondary, eyebrow style */
+[data-theme="rose-pine"] .advisory-lower-section-label {
+  color: #797593;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Top Concerns Section
+   ========================================================================== */
+
+/* Top concerns section - Rose border accent */
+[data-theme="rose-pine"] .advisory-concerns-section {
+  border-left-color: rgba(40, 105, 131, 0.5);
+}
+
+/* Concerns row text - primary readable, NOT muted */
+[data-theme="rose-pine"] .advisory-concern-row {
+  color: #575279;
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   Evidence Gaps Section
+   ========================================================================== */
+
+/* Evidence gaps section - Rose border accent */
+[data-theme="rose-pine"] .advisory-gaps-section {
+  border-left-color: rgba(40, 105, 131, 0.5);
+}
+
+/* Gap row text - primary readable, NOT muted */
+[data-theme="rose-pine"] .advisory-gap-row {
+  color: #575279;
+}
+
+/* Gap marker - visible secondary */
+[data-theme="rose-pine"] .advisory-gap-marker {
+  color: #797593;
+}
+
+/* ==========================================================================
+   Next Checks Section
+   ========================================================================== */
+
+/* Next checks section - Rose border accent */
+[data-theme="rose-pine"] .advisory-next-checks-section {
+  border-left-color: rgba(40, 105, 131, 0.5);
+}
+
+/* Check row - subtle separator */
+[data-theme="rose-pine"] .advisory-check-row {
+  border-bottom-color: rgba(144, 132, 156, 0.2);
+}
+
+/* Check intent text - primary readable, NOT muted */
+[data-theme="rose-pine"] .advisory-check-intent {
+  color: #575279;
+  font-weight: 500;
+}
+
+/* Check cluster tag - Rose palette */
+[data-theme="rose-pine"] .advisory-check-cluster {
+  background: rgba(40, 105, 131, 0.1);
+  color: #1d4e5f;
+  border-color: rgba(40, 105, 131, 0.3);
+}
+
+/* Check command - Rose warm background, readable text */
+[data-theme="rose-pine"] .advisory-check-cmd {
+  background: rgba(242, 233, 225, 0.9);
+  border-color: rgba(144, 132, 156, 0.35);
+  color: #575279;
+}
+
+/* ==========================================================================
+   Focus Guidance Section
+   ========================================================================== */
+
+/* Focus guidance section - Rose palette */
+[data-theme="rose-pine"] .advisory-focus-notes-section {
+  border-left-color: rgba(144, 132, 156, 0.5);
+}
+
+/* Focus note row - secondary but readable */
+[data-theme="rose-pine"] .advisory-focus-note-row {
+  color: #797593;
+}
+
+/* ==========================================================================
+   Alert Evidence Section
+   ========================================================================== */
+
+/* Alert evidence section - Rose purple adaptation */
+[data-theme="rose-pine"] .advisory-alert-evidence-section {
+  border-left-color: rgba(144, 100, 170, 0.5);
+}
+
+[data-theme="rose-pine"] .advisory-alert-evidence-label {
+  color: #907aa9;
+}
+
+[data-theme="rose-pine"] .advisory-alert-evidence-disclaimer {
+  color: rgba(144, 116, 168, 0.8);
+}
+
+[data-theme="rose-pine"] .advisory-alert-evidence-row {
+  background: rgba(144, 132, 156, 0.08);
+}
+
+[data-theme="rose-pine"] .advisory-alert-evidence-cluster {
+  color: #575279;
+}
+
+[data-theme="rose-pine"] .advisory-alert-evidence-used-for {
+  background: rgba(144, 132, 156, 0.12);
+  color: #907aa9;
+}
+
+[data-theme="rose-pine"] .advisory-alert-evidence-dimension {
+  color: #797593;
+  background: rgba(144, 132, 156, 0.12);
+}
+
+[data-theme="rose-pine"] .advisory-alert-evidence-reason {
+  color: #797593;
+}

@@ -1,0 +1,135 @@
+/**
+ * Rose Theme - Worklist Cards (Midnight Rose Design Treatment)
+ * 
+ * Phase: Rose Final Polish Pass
+ * 
+ * Design rule: Rose uses light surfaces by default; 
+ * executable/queue/action cards use midnight-rose surfaces.
+ * These are intentionally dark to signal "command/queue/action" status.
+ * 
+ * Owned surfaces: worklist summary, worklist items, state badges
+ */
+
+/* ==========================================================================
+   Midnight Rose Command/Action Cards
+   ========================================================================== */
+
+/* Worklist summary - midnight rose with readable text */
+[data-theme="rose-pine"] .worklist-summary {
+  background: rgba(40, 30, 55, 0.85);
+  border-color: rgba(144, 132, 156, 0.3);
+}
+
+[data-theme="rose-pine"] .worklist-stat {
+  color: rgba(144, 132, 156, 0.9);
+}
+
+[data-theme="rose-pine"] .worklist-stat strong {
+  color: rgba(242, 233, 225, 0.95);
+}
+
+[data-theme="rose-pine"] .worklist-stat-completed strong {
+  color: #86efac;
+}
+
+[data-theme="rose-pine"] .worklist-stat-pending strong {
+  color: rgba(144, 200, 220, 0.9);
+}
+
+[data-theme="rose-pine"] .worklist-stat-blocked strong {
+  color: #fde047;
+}
+
+/* Worklist item - midnight rose with readable content */
+[data-theme="rose-pine"] .worklist-item {
+  background: rgba(40, 30, 55, 0.75);
+  border-color: rgba(144, 132, 156, 0.25);
+}
+
+[data-theme="rose-pine"] .worklist-item:hover {
+  border-color: rgba(144, 132, 156, 0.4);
+}
+
+/* Worklist rank - visible accent */
+[data-theme="rose-pine"] .worklist-rank {
+  color: rgba(144, 200, 220, 0.9);
+}
+
+/* Worklist workstream badge - muted rose */
+[data-theme="rose-pine"] .worklist-workstream-badge {
+  background: rgba(144, 132, 156, 0.2);
+  color: rgba(200, 190, 210, 0.85);
+}
+
+/* Worklist title - primary readable */
+[data-theme="rose-pine"] .worklist-title {
+  color: rgba(242, 233, 225, 0.9);
+}
+
+/* Worklist command section - slightly lighter than card for readability */
+[data-theme="rose-pine"] .worklist-command-section {
+  background: rgba(40, 30, 55, 0.6);
+  border-color: rgba(144, 132, 156, 0.25);
+}
+
+/* Worklist command text - readable on midnight rose */
+[data-theme="rose-pine"] .worklist-command {
+  color: rgba(242, 233, 225, 0.85);
+}
+
+/* Worklist no-command - muted but visible */
+[data-theme="rose-pine"] .worklist-no-command {
+  color: rgba(144, 132, 156, 0.7);
+}
+
+/* Worklist labels - visible secondary */
+[data-theme="rose-pine"] .worklist-target-label,
+[data-theme="rose-pine"] .worklist-reason-label,
+[data-theme="rose-pine"] .worklist-evidence-label,
+[data-theme="rose-pine"] .worklist-safety-label {
+  color: rgba(144, 132, 156, 0.75);
+}
+
+/* Worklist values - readable secondary */
+[data-theme="rose-pine"] .worklist-target-value,
+[data-theme="rose-pine"] .worklist-reason-value,
+[data-theme="rose-pine"] .worklist-evidence-value,
+[data-theme="rose-pine"] .worklist-safety-value {
+  color: rgba(200, 190, 210, 0.9);
+}
+
+/* Worklist state badges - Rose palette on midnight */
+[data-theme="rose-pine"] .worklist-state-approval-required {
+  background: rgba(181, 137, 0, 0.2);
+  color: #fde047;
+  border-color: rgba(181, 137, 0, 0.4);
+}
+
+[data-theme="rose-pine"] .worklist-state-approved,
+[data-theme="rose-pine"] .worklist-state-executed-success,
+[data-theme="rose-pine"] .worklist-state-useful {
+  background: rgba(33, 132, 62, 0.2);
+  color: #86efac;
+  border-color: rgba(33, 132, 62, 0.4);
+}
+
+[data-theme="rose-pine"] .worklist-state-executed-failed,
+[data-theme="rose-pine"] .worklist-state-noisy,
+[data-theme="rose-pine"] .worklist-state-empty {
+  background: rgba(220, 50, 47, 0.2);
+  color: #fecaca;
+  border-color: rgba(220, 50, 47, 0.4);
+}
+
+[data-theme="rose-pine"] .worklist-state-partial {
+  background: rgba(181, 137, 0, 0.2);
+  color: #fde047;
+  border-color: rgba(181, 137, 0, 0.4);
+}
+
+[data-theme="rose-pine"] .worklist-state-not-required,
+[data-theme="rose-pine"] .worklist-state-unexecuted {
+  background: rgba(144, 132, 156, 0.15);
+  color: rgba(180, 170, 190, 0.8);
+  border-color: rgba(144, 132, 156, 0.3);
+}

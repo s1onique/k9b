@@ -105,3 +105,135 @@
 [data-theme="rose-pine"] .filter-select:focus {
   border-color: #286983;
 }
+
+/* ==========================================================================
+   ROSE PINE BUTTON SYSTEM
+   Normalized Rose button states - coherent across Rose theme
+   ========================================================================== */
+
+/* 
+ * Rose button system:
+ * - Primary action: deep teal (#1d4e5f) on light tint
+ * - Secondary action: muted mauve (#797593) outline
+ * - Disabled: visible but clearly inactive
+ * - Dark-card action: lighter variant for midnight-rose contexts
+ */
+
+/* Primary button - Rose deep teal */
+[data-theme="rose-pine"] .btn-primary,
+[data-theme="rose-pine"] button[class*='primary'],
+[data-theme="rose-pine"] .btn:not([class*='secondary']):not([class*='danger']):not([class*='success']) {
+  background: rgba(40, 105, 131, 0.15);
+  border-color: rgba(40, 105, 131, 0.5);
+  color: #1d4e5f;
+  font-weight: 600;
+}
+
+[data-theme="rose-pine"] .btn-primary:hover,
+[data-theme="rose-pine"] button[class*='primary']:hover,
+[data-theme="rose-pine"] .btn:not([class*='secondary']):not([class*='danger']):not([class*='success']):hover {
+  background: rgba(40, 105, 131, 0.22);
+  border-color: rgba(40, 105, 131, 0.6);
+  color: #1d4e5f;
+}
+
+/* Secondary button - muted mauve outline */
+[data-theme="rose-pine"] .btn-secondary,
+[data-theme="rose-pine"] button[class*='secondary'],
+[data-theme="rose-pine"] a.btn {
+  background: transparent;
+  border-color: rgba(144, 132, 156, 0.4);
+  color: #797593;
+}
+
+[data-theme="rose-pine"] .btn-secondary:hover,
+[data-theme="rose-pine"] button[class*='secondary']:hover,
+[data-theme="rose-pine"] a.btn:hover {
+  background: rgba(144, 132, 156, 0.1);
+  border-color: rgba(144, 132, 156, 0.5);
+  color: #575279;
+}
+
+/* Danger button - muted rose */
+[data-theme="rose-pine"] .btn-danger,
+[data-theme="rose-pine"] button[class*='danger'] {
+  background: rgba(180, 99, 122, 0.12);
+  border-color: rgba(180, 99, 122, 0.4);
+  color: #9b2c4a;
+}
+
+[data-theme="rose-pine"] .btn-danger:hover,
+[data-theme="rose-pine"] button[class*='danger']:hover {
+  background: rgba(180, 99, 122, 0.18);
+  color: #9b2c4a;
+}
+
+/* Success button - forest green */
+[data-theme="rose-pine"] .btn-success,
+[data-theme="rose-pine"] button[class*='success'] {
+  background: rgba(86, 148, 127, 0.12);
+  border-color: rgba(86, 148, 127, 0.4);
+  color: #2d6a4f;
+}
+
+[data-theme="rose-pine"] .btn-success:hover,
+[data-theme="rose-pine"] button[class*='success']:hover {
+  background: rgba(86, 148, 127, 0.18);
+  color: #2d6a4f;
+}
+
+/* Disabled button - visible but inactive */
+[data-theme="rose-pine"] .btn:disabled,
+[data-theme="rose-pine"] button:disabled,
+[data-theme="rose-pine"] .btn.disabled {
+  opacity: 0.45;
+  background: rgba(144, 132, 156, 0.1);
+  border-color: rgba(144, 132, 156, 0.25);
+  color: #9890a9;
+  cursor: not-allowed;
+}
+
+/* Dark-card action buttons (for midnight-rose contexts) - lighter variant */
+[data-theme="rose-pine"] .worklist-item .btn-primary,
+[data-theme="rose-pine"] .proposal-row .btn-primary,
+[data-theme="rose-pine"] .worklist-item button[class*='primary'],
+[data-theme="rose-pine"] .proposal-row button[class*='primary'] {
+  background: rgba(144, 200, 220, 0.15);
+  border-color: rgba(144, 200, 220, 0.4);
+  color: rgba(144, 200, 220, 0.9);
+}
+
+[data-theme="rose-pine"] .worklist-item .btn-primary:hover,
+[data-theme="rose-pine"] .proposal-row .btn-primary:hover,
+[data-theme="rose-pine"] .worklist-item button[class*='primary']:hover,
+[data-theme="rose-pine"] .proposal-row button[class*='primary']:hover {
+  background: rgba(144, 200, 220, 0.22);
+  color: rgba(144, 200, 220, 1);
+}
+
+[data-theme="rose-pine"] .worklist-item .btn-secondary,
+[data-theme="rose-pine"] .proposal-row .btn-secondary,
+[data-theme="rose-pine"] .worklist-item button[class*='secondary'],
+[data-theme="rose-pine"] .proposal-row button[class*='secondary'] {
+  background: transparent;
+  border-color: rgba(144, 132, 156, 0.35);
+  color: rgba(180, 170, 190, 0.75);
+}
+
+[data-theme="rose-pine"] .worklist-item .btn-secondary:hover,
+[data-theme="rose-pine"] .proposal-row .btn-secondary:hover,
+[data-theme="rose-pine"] .worklist-item button[class*='secondary']:hover,
+[data-theme="rose-pine"] .proposal-row button[class*='secondary']:hover {
+  background: rgba(144, 132, 156, 0.15);
+  border-color: rgba(144, 132, 156, 0.45);
+  color: rgba(200, 190, 210, 0.9);
+}
+
+/* Focus states - Rose teal ring */
+[data-theme="rose-pine"] .btn:focus-visible,
+[data-theme="rose-pine"] button:focus-visible,
+[data-theme="rose-pine"] select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(40, 105, 131, 0.25);
+  border-color: rgba(40, 105, 131, 0.6);
+}
