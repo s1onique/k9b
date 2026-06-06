@@ -117,6 +117,26 @@
   font-weight: 500;
 }
 
+/* Active/Enabled header controls - Rose identity, NOT cyan ghost */
+[data-theme="rose-pine"] .refresh-controls button:not(:disabled),
+[data-theme="rose-pine"] .demo-entry-button:not(:disabled) {
+  opacity: 1;
+  background: rgba(155, 114, 146, 0.18);
+  border-color: rgba(155, 114, 146, 0.55);
+  color: var(--rose-identity-secondary);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+[data-theme="rose-pine"] .refresh-controls button:not(:disabled):hover,
+[data-theme="rose-pine"] .demo-entry-button:not(:disabled):hover {
+  background: rgba(155, 114, 146, 0.26);
+  border-color: rgba(155, 114, 146, 0.7);
+  color: var(--rose-text-strong);
+}
+
 /* Disabled header controls - Mauve/Rose, NOT cyan */
 [data-theme="rose-pine"] .refresh-controls button:disabled {
   opacity: 0.7;
