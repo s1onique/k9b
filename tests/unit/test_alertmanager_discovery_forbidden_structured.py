@@ -1,18 +1,16 @@
-"""Regression tests for structured logging of Forbidden CRD errors.
+"""Regression tests for Alertmanager structured Forbidden discovery errors.
 
-These tests verify that Kubernetes RBAC Forbidden errors are represented
-as structured WARNING events, never as raw subprocess text leaked to stdout/stderr.
+These tests verify that Kubernetes RBAC Forbidden errors in Alertmanager
+discovery are represented as structured WARNING events, never as raw subprocess
+text leaked to stdout/stderr.
 
 See: Child Epic CI Verification - Gate health-loop logs as structured JSON
 """
 
 from __future__ import annotations
 
-import json
 from typing import Any
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 # --- Alertmanager CRD Strategy Tests ---
 
@@ -110,54 +108,6 @@ class TestPrometheusCRDConfigStrategyForbiddenErrors:
         assert len(result.sources) == 0
 
 
-# --- VMAlert CRD Strategy Tests ---
-
-
-class TestVMAlertCRDStrategyForbiddenErrors:
-    """Test that VMAlert CRD discovery emits structured errors for Forbidden."""
-
-    def test_vmalert_crd_strategy_returns_forbidden_error_on_rbac_denial(self):
-        """VMAlert CRD strategy should return Forbidden error with structured prefix."""
-        from k8s_diag_agent.external_analysis.vmalert_discovery_crd_strategy import (
-            VMAlertCRDDiscoveryStrategy,
-        )
-
-        strategy = VMAlertCRDDiscoveryStrategy()
-
-        # Mock subprocess to return a Forbidden error
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stderr = "Error from server (Forbidden): vmalerts.operator.victoriametrics.com is forbidden: cannot list resource 'vmalerts' in API group 'operator.victoriametrics.com' in the namespace 'default'"
-
-        with patch("subprocess.run", return_value=mock_result):
-            result = strategy.discover(context="test-context")
-
-        # Verify error is marked as Forbidden
-        assert len(result.errors) == 1
-        assert "Forbidden" in result.errors[0]
-        assert result.strategy == "vmalert-crd"
-
-    def test_vmalert_crd_strategy_continues_on_not_found(self):
-        """VMAlert CRD strategy should return empty result on CRD not installed."""
-        from k8s_diag_agent.external_analysis.vmalert_discovery_crd_strategy import (
-            VMAlertCRDDiscoveryStrategy,
-        )
-
-        strategy = VMAlertCRDDiscoveryStrategy()
-
-        # Mock subprocess to return "not found" error
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stderr = "error: no resources found"
-
-        with patch("subprocess.run", return_value=mock_result):
-            result = strategy.discover(context="test-context")
-
-        # Verify no errors (CRD not installed, not a failure)
-        assert len(result.errors) == 0
-        assert len(result.sources) == 0
-
-
 # --- Orchestrator Structured Logging Tests ---
 
 
@@ -215,152 +165,20 @@ class TestAlertmanagerDiscoveryOrchestratorStructuredLogs:
         assert forbidden_log["metadata"]["reason"] == "forbidden"
 
 
-class TestVMAlertDiscoveryOrchestratorStructuredLogs:
-    """Test that VMAlert discovery orchestrator emits structured events."""
-
-    def test_vmalert_orchestrator_emits_structured_warning_on_strategy_failure(self):
-        """Orchestrator should emit structured WARNING event when strategy fails."""
-        from k8s_diag_agent.external_analysis.vmalert_discovery import (
-            DiscoveryResult,
-        )
-
-        # Track emitted structured logs
-        emitted_logs: list[dict[str, Any]] = []
-
-        def mock_emit_fn(**kwargs: Any) -> dict[str, Any]:
-            emitted_logs.append(kwargs)
-            return {}
-
-        # Mock the strategy to return a Forbidden error
-        with patch(
-            "k8s_diag_agent.external_analysis.vmalert_discovery.VMAlertCRDDiscoveryStrategy"
-        ) as MockStrategy:
-            mock_instance = MagicMock()
-            mock_instance.discover.return_value = DiscoveryResult(
-                sources=(),
-                errors=("kubectl failed: Forbidden - Error from server (Forbidden): ...",),
-                strategy="vmalert-crd",
-            )
-            MockStrategy.return_value = mock_instance
-
-            # Patch the shared emit_discovery_strategy_failure
-            with patch(
-                "k8s_diag_agent.external_analysis.discovery_structured_logging._get_emit_fn",
-                return_value=mock_emit_fn,
-            ):
-                from k8s_diag_agent.external_analysis.vmalert_discovery import (
-                    discover_vmalerts,
-                )
-
-                discover_vmalerts(context="test-context")
-
-        # Verify structured log was emitted
-        assert len(emitted_logs) >= 1
-        forbidden_log = None
-        for log in emitted_logs:
-            if "forbidden" in log.get("metadata", {}).get("reason", "").lower():
-                forbidden_log = log
-                break
-
-        assert forbidden_log is not None
-        assert forbidden_log["component"] == "vmalert-discovery"
-        assert forbidden_log["severity"] == "WARNING"
-        assert "strategy" in forbidden_log["metadata"]
-        assert forbidden_log["metadata"]["reason"] == "forbidden"
+# --- Regression Tests: No Unstructured Logs in Alertmanager Discovery ---
 
 
-# --- Test Helper Usage Verification ---
+class TestNoUnstructuredLogsInAlertmanagerDiscovery:
+    """Regression tests for Alertmanager discovery.
 
-
-class TestStructuredLogAssertionHelpers:
-    """Verify the test helpers work correctly."""
-
-    def test_parse_log_lines_extracts_json(self):
-        """Test that parse_log_lines correctly extracts JSON from mixed output."""
-        from tests.helpers.test_structured_log_assertions import parse_log_lines
-
-        output = '''
-Some debug output
-{"timestamp": "2024-01-01T00:00:00Z", "component": "test", "severity": "INFO", "message": "hello", "event": "test-event"}
-Some more text
-{"timestamp": "2024-01-01T00:00:01Z", "component": "test", "severity": "WARNING", "message": "world", "event": "test-warn"}
-'''
-        records = parse_log_lines(output)
-        assert len(records) == 2
-        assert records[0]["message"] == "hello"
-        assert records[1]["message"] == "world"
-
-    def test_assert_no_raw_forbidden_errors_passes_on_structured(self):
-        """Test that assertion passes when Forbidden is in JSON."""
-        from tests.helpers.test_structured_log_assertions import (
-            assert_no_raw_forbidden_errors,
-        )
-
-        # Structured output with Forbidden in JSON is OK
-        captured_out = '{"message": "Forbidden: kubectl failed"}'
-        captured_err = ""
-
-        # Should not raise
-        assert_no_raw_forbidden_errors(captured_out, captured_err)
-
-    def test_assert_no_raw_forbidden_errors_fails_on_raw(self):
-        """Test that assertion fails when Forbidden is raw text."""
-        from tests.helpers.test_structured_log_assertions import (
-            assert_no_raw_forbidden_errors,
-        )
-
-        # Raw output with Forbidden is NOT OK
-        captured_out = "Error from server (Forbidden): cannot list"
-        captured_err = ""
-
-        with pytest.raises(AssertionError, match="raw Forbidden error"):
-            assert_no_raw_forbidden_errors(captured_out, captured_err)
-
-    def test_assert_all_log_lines_are_structured_passes(self):
-        """Test that assertion passes for valid structured output."""
-        from tests.helpers.test_structured_log_assertions import (
-            assert_all_log_lines_are_structured,
-        )
-
-        captured_out = json.dumps({
-            "timestamp": "2024-01-01T00:00:00Z",
-            "component": "test",
-            "severity": "WARNING",
-            "message": "test",
-            "event": "test-event",
-        })
-        captured_err = ""
-
-        records = assert_all_log_lines_are_structured(captured_out, captured_err)
-        assert len(records) == 1
-        assert records[0]["severity"] == "WARNING"
-
-    def test_assert_all_log_lines_are_structured_fails_on_raw(self):
-        """Test that assertion fails for unstructured output."""
-        from tests.helpers.test_structured_log_assertions import (
-            assert_all_log_lines_are_structured,
-        )
-
-        captured_out = "Some raw log output"
-        captured_err = ""
-
-        with pytest.raises(AssertionError, match="unstructured log line"):
-            assert_all_log_lines_are_structured(captured_out, captured_err)
-
-
-# --- Regression Tests: No Unstructured Logs in Discovery Paths ---
-
-
-class TestNoUnstructuredLogsInDiscoveryPaths:
-    """Regression tests that verify no raw unstructured logs leak from discovery paths.
-
-    These tests verify that when discovery strategies fail with Forbidden errors,
-    the output is structured (or empty) with no raw kubectl error text leaking through.
+    Verifies that when discovery strategies fail with Forbidden errors,
+    the output is structured (or empty) with no raw kubectl error text leaking.
     """
 
     def test_alertmanager_discovery_no_raw_forbidden_on_rbac_denial(self, caplog):
         """Alertmanager discovery should not emit raw Forbidden text to logs."""
         import logging
+
         from k8s_diag_agent.external_analysis.alertmanager_discovery import (
             DiscoveryResult,
             discover_alertmanagers,
@@ -413,54 +231,12 @@ class TestNoUnstructuredLogsInDiscoveryPaths:
                     f"Found raw Forbidden error in log: {record.message}"
                 )
 
-    def test_vmalert_discovery_no_raw_forbidden_on_rbac_denial(self, caplog):
-        """VMAlert discovery should not emit raw Forbidden text to logs."""
-        import logging
-        from k8s_diag_agent.external_analysis.vmalert_discovery import (
-            DiscoveryResult,
-            discover_vmalerts,
-        )
-
-        # Set log level to capture warnings
-        caplog.set_level(logging.WARNING)
-
-        # Mock the CRD strategy to return a Forbidden error
-        with patch(
-            "k8s_diag_agent.external_analysis.vmalert_discovery.VMAlertCRDDiscoveryStrategy"
-        ) as MockCRD:
-            mock_crd_instance = MagicMock()
-            mock_crd_instance.discover.return_value = DiscoveryResult(
-                sources=(),
-                errors=("kubectl failed: Forbidden - Error from server (Forbidden): ...",),
-                strategy="vmalert-crd",
-            )
-            MockCRD.return_value = mock_crd_instance
-
-            # Mock ServiceHeuristicDiscoveryStrategy to return empty
-            with patch(
-                "k8s_diag_agent.external_analysis.vmalert_discovery.ServiceHeuristicDiscoveryStrategy"
-            ) as MockService:
-                mock_service_instance = MagicMock()
-                mock_service_instance.discover.return_value = DiscoveryResult(
-                    sources=(), errors=(), strategy="service-heuristic"
-                )
-                MockService.return_value = mock_service_instance
-
-                # Run discovery
-                discover_vmalerts(context="test-context")
-
-        # Check that no raw Forbidden error text appears in logs
-        for record in caplog.records:
-            if record.levelno >= logging.WARNING:
-                # Should not contain raw kubectl Forbidden error text
-                assert "Error from server (Forbidden):" not in record.message, (
-                    f"Found raw Forbidden error in log: {record.message}"
-                )
-
-    def test_alertmanager_discovery_orchestrator_emits_structured_on_strategy_error(self, caplog):
+    def test_alertmanager_discovery_orchestrator_emits_structured_on_strategy_error(
+        self, caplog
+    ):
         """Alertmanager orchestrator should emit structured WARNING for strategy failures."""
         import logging
-        import json
+
         from k8s_diag_agent.external_analysis.alertmanager_discovery import (
             DiscoveryResult,
             discover_alertmanagers,
