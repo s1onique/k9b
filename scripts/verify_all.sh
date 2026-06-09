@@ -400,6 +400,7 @@ _run_python_lane() {
     _run_and_record "python" "llm-evidence-boundaries" "Verifying LLM evidence boundaries" "$PYTHON" scripts/verify_llm_evidence_boundaries.py
     _run_and_record "python" "llm-semantic-injection" "Verifying semantic injection detection" "$PYTHON" scripts/verify_llm_semantic_injection_detection.py
     _run_and_record "python" "discovery-logging-hygiene" "Verifying discovery strategy logging hygiene" "$PYTHON" scripts/verify_discovery_logging_hygiene.py
+    _run_and_record "python" "next-check-sanitization" "Verifying next-check sanitization hygiene" "$PYTHON" scripts/verify_next_check_sanitization_hygiene.py
     _run_and_record "python" "llm-friendly" "Checking file sizes for LLM-friendly limits" "$PYTHON" scripts/check_llm_friendly_files.py --quiet
     _run_and_record "python" "ruff-lint" "Running Ruff lint" "$PYTHON" -m ruff check src tests
     _run_and_record "python" "structured-output" "Verifying health-loop structured output hygiene" bash "$SCRIPT_DIR/verify_health_loop_structured_output.sh"

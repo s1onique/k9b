@@ -240,7 +240,7 @@ class TestProjectionLevelSanitization(unittest.TestCase):
         This tests the actual projection behavior: rawOutput, errorSummary,
         and error fields should not contain raw sentinels.
         """
-        from k8s_diag_agent.security import sanitize_execution_output, sanitize_exception_message
+        from k8s_diag_agent.security import sanitize_exception_message, sanitize_execution_output
 
         # Sentinel values that should NEVER appear in output
         sentinels = [
