@@ -77,5 +77,41 @@ def emit_discovery_strategy_failure(
             metadata=metadata,
         )
     except Exception:
-        # Structured logging failure is non-fatal - callers use module logger as fallback
+        # Deliberately do not interpolate exception text.
+        # Structured logging failures are non-fatal - do not leak exception details.
+        pass
+
+
+def safe_emit_discovery_failure(
+    component: str,
+    strategy_name: str,
+    errors: tuple[str, ...],
+    cluster_context: str | None = None,
+) -> None:
+    """Safely emit discovery strategy failure without leaking sensitive error text.
+
+    This wrapper ensures that structured logging failures cannot leak raw
+    kubectl/Forbidden/cluster error text through fallback exception paths.
+
+    The function silently suppresses emitter failures and does NOT log exception
+    text or raw error payloads. This prevents information disclosure when the
+    structured logging system itself fails.
+
+    Args:
+        component: The component name (e.g., "alertmanager-discovery")
+        strategy_name: The discovery strategy that failed
+        errors: Tuple of error strings from the strategy
+        cluster_context: Optional cluster context for context tagging
+    """
+    try:
+        emit_discovery_strategy_failure(
+            component=component,
+            strategy_name=strategy_name,
+            errors=errors,
+            cluster_context=cluster_context,
+        )
+    except Exception:
+        # Deliberately do not interpolate exception text.
+        # This prevents leaking sensitive data like Forbidden errors
+        # when the structured logging system itself fails.
         pass

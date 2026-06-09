@@ -145,13 +145,13 @@ class CRDDiscoveryStrategy(DiscoveryStrategy):
 
         except subprocess.TimeoutExpired:
             errors.append("kubectl get alertmanagers timed out")
-            _logger.warning("Alertmanager CRD discovery timed out")
+            # Do NOT emit unstructured warning - orchestrator handles structured event
         except FileNotFoundError:
             errors.append("kubectl not found in PATH")
-            _logger.warning("kubectl not found in PATH for Alertmanager CRD discovery")
+            # Do NOT emit unstructured warning - orchestrator handles structured event
         except json.JSONDecodeError as exc:
             errors.append(f"Failed to parse kubectl output: {exc}")
-            _logger.warning("Failed to parse Alertmanager CRD discovery output: %s", exc)
+            # Do NOT emit unstructured warning - orchestrator handles structured event
 
         return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
 
@@ -250,13 +250,13 @@ class PrometheusCRDConfigDiscoveryStrategy(DiscoveryStrategy):
 
         except subprocess.TimeoutExpired:
             errors.append("kubectl get prometheuses timed out")
-            _logger.warning("Prometheus CRD config discovery timed out")
+            # Do NOT emit unstructured warning - orchestrator handles structured event
         except FileNotFoundError:
             errors.append("kubectl not found in PATH")
-            _logger.warning("kubectl not found in PATH for Prometheus CRD config discovery")
+            # Do NOT emit unstructured warning - orchestrator handles structured event
         except json.JSONDecodeError as exc:
             errors.append(f"Failed to parse kubectl output: {exc}")
-            _logger.warning("Failed to parse Prometheus CRD config discovery output: %s", exc)
+            # Do NOT emit unstructured warning - orchestrator handles structured event
 
         return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
 

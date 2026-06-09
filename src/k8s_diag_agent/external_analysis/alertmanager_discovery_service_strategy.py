@@ -63,7 +63,7 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
 
             if result.returncode != 0:
                 errors.append(f"kubectl get svc failed: {result.stderr[:200]}")
-                _logger.warning("Service heuristic discovery failed: %s", errors[-1])
+                # Do NOT emit unstructured warning - orchestrator handles structured event
                 return DiscoveryResult(sources=(), errors=tuple(errors), strategy=self.name)
 
             data = json.loads(result.stdout)
@@ -116,13 +116,13 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
 
         except subprocess.TimeoutExpired:
             errors.append("Service/pod discovery timed out")
-            _logger.warning("Service heuristic discovery timed out")
+            # Do NOT emit unstructured warning - orchestrator handles structured event
         except FileNotFoundError:
             errors.append("kubectl not found in PATH")
-            _logger.warning("kubectl not found in PATH for service heuristic discovery")
+            # Do NOT emit unstructured warning - orchestrator handles structured event
         except json.JSONDecodeError as exc:
             errors.append(f"Failed to parse service heuristic output: {exc}")
-            _logger.warning("Failed to parse service heuristic discovery output: %s", exc)
+            # Do NOT emit unstructured warning - orchestrator handles structured event
 
         return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
 

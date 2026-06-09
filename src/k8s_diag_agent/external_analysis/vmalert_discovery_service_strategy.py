@@ -92,7 +92,7 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
                     _logger.debug("vmalert service discovery: no services found")
                     return DiscoveryResult(sources=(), errors=(), strategy=self.name)
                 errors.append(f"kubectl get svc failed: {result.stderr[:200]}")
-                _logger.warning("vmalert service heuristic discovery failed: %s", errors[-1])
+                # Do NOT emit unstructured warning - orchestrator handles structured event
                 return DiscoveryResult(sources=(), errors=tuple(errors), strategy=self.name)
 
             data = json.loads(result.stdout)
@@ -115,13 +115,13 @@ class ServiceHeuristicDiscoveryStrategy(DiscoveryStrategy):
 
         except subprocess.TimeoutExpired:
             errors.append("vmalert service discovery timed out")
-            _logger.warning("vmalert service heuristic discovery timed out")
+            # Do NOT emit unstructured warning - orchestrator handles structured event
         except FileNotFoundError:
             errors.append("kubectl not found in PATH")
-            _logger.warning("kubectl not found in PATH for vmalert service heuristic discovery")
+            # Do NOT emit unstructured warning - orchestrator handles structured event
         except json.JSONDecodeError as exc:
             errors.append(f"Failed to parse kubectl output: {exc}")
-            _logger.warning("Failed to parse vmalert service heuristic output: %s", exc)
+            # Do NOT emit unstructured warning - orchestrator handles structured event
 
         return DiscoveryResult(sources=tuple(sources), errors=tuple(errors), strategy=self.name)
 
