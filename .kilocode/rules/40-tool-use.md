@@ -20,6 +20,7 @@ Use this together with:
 - `docs/doctrine/seed_rules.md` — operational rules
 - `docs/doctrine/path-security-doctrine.md` — path traversal prevention
 - `docs/doctrine/llm-friendly-files.md` — file size limits
+- `docs/doctrine/discovery_logging_hygiene.md` — discovery logging hygiene
 - `docs/doctrine/bug-fossils.md` — bug regression (planned)
 - `docs/doctrine/executable-claims.md` — claim standards (planned)
 - `docs/doctrine/testing-doctrine.md` — test guidance (planned)

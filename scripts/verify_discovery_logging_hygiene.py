@@ -306,6 +306,7 @@ def main() -> int:
         print("  2. exc_info=True - exception traceback logging leaks data")
         print("  3. stderr in logger call - raw stderr interpolation leaks data")
         print()
+        print("See: docs/doctrine/discovery_logging_hygiene.md")
         print("Use structured logging via discovery_structured_logging module.")
         return 1
     else:

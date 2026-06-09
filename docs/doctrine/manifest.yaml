@@ -141,6 +141,21 @@ doctrines:
     manual_only: true
     notes: Guidance only - prevents theme tokens and raw colors in component CSS.
 
+  - id: discovery-logging-hygiene
+    title: Discovery Logging Hygiene
+    file: docs/doctrine/discovery_logging_hygiene.md
+    applies_to:
+      - discovery-strategy
+      - discovery-fallback
+      - logging-hygiene
+    agent_rules:
+      - .kilocode/rules/40-tool-use.md
+    required_checks:
+      - run verify_discovery_logging_hygiene.py gate
+      - no forbidden patterns in discovery strategy files
+    manual_only: false
+    notes: Enforced via scripts/verify_discovery_logging_hygiene.py.
+
   # Planned doctrines (files to be created):
   - id: operator-path-truth
     title: Operator Path Truth
