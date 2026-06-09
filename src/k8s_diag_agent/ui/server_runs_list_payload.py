@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
 
+from ..security import sanitize_exception_message
 from ..structured_logging import emit_structured_log
 from .api import build_runs_list
 from .server_artifact_reads import _has_batch_eligibility_index
@@ -202,7 +203,7 @@ def build_runs_list_payload(
                 "include_expensive": include_expensive,
             },
         )
-        payload = {"runs": [], "error": str(exc)}
+        payload = {"runs": [], "error": sanitize_exception_message(exc)}
     timings["payload_build_ms"] = (time.perf_counter() - payload_build_start) * 1000
 
     serialize_start = time.perf_counter()
