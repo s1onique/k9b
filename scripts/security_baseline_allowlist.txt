@@ -82,4 +82,5 @@ ui/server_next_check_execution.py execute_manual_next_check manual execution fal
 ui/server_next_check_execution.py handle_next_check_execution execution endpoint catch-all boundary - HTTP endpoint error isolation, no credential exposure
 
 # === Discovery Structured Logging ===
-external_analysis/discovery_structured_logging.py emit_discovery_strategy_failure structured logging fallback - non-fatal fallback for log emission failures, preserves error diagnostics
+external_analysis/discovery_structured_logging.py emit_discovery_strategy_failure structured logging fallback - bounded fallback with sanitized DEBUG diagnostic, test-covered, returns bool
+external_analysis/discovery_structured_logging.py safe_emit_discovery_failure structured logging wrapper fallback - non-fatal wrapper, inner emit already sanitized

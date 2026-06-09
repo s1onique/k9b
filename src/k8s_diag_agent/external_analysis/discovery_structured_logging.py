@@ -7,6 +7,7 @@ structured logging implementation.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -15,6 +16,9 @@ if TYPE_CHECKING:
 
 # Lazily initialized emit function to avoid circular imports
 _log_emit_fn: Callable[..., dict[str, Any]] | None = None
+
+# Module logger for fallback diagnostics
+_logger = logging.getLogger(__name__)
 
 
 def _get_emit_fn() -> Callable[..., dict[str, Any]]:
@@ -35,7 +39,7 @@ def emit_discovery_strategy_failure(
     strategy_name: str,
     errors: tuple[str, ...],
     cluster_context: str | None = None,
-) -> None:
+) -> bool:
     """Emit a structured WARNING event for discovery strategy failures.
 
     This function detects Forbidden RBAC errors and marks them as such
@@ -47,9 +51,13 @@ def emit_discovery_strategy_failure(
         strategy_name: The discovery strategy that failed
         errors: Tuple of error strings from the strategy
         cluster_context: Optional cluster context for context tagging
+
+    Returns:
+        True if structured emission succeeded, False otherwise.
+        When emission fails, discovery callers continue safely.
     """
     if not errors:
-        return
+        return False
 
     # Determine if this is a Forbidden RBAC error
     # Forbidden errors indicate degraded discovery capability, not complete failure
@@ -76,10 +84,18 @@ def emit_discovery_strategy_failure(
             severity="WARNING",
             metadata=metadata,
         )
-    except Exception:
-        # Deliberately do not interpolate exception text.
-        # Structured logging failures are non-fatal - do not leak exception details.
-        pass
+        return True
+    except Exception as exc:
+        # Bounded fallback: emit sanitized DEBUG diagnostic.
+        # Do NOT interpolate raw error strings, exception repr, or Forbidden text.
+        _logger.debug(
+            "Discovery structured log emission failed for component=%s strategy=%s error_count=%s exception_type=%s",
+            component,
+            strategy_name,
+            len(errors),
+            type(exc).__name__,
+        )
+        return False
 
 
 def safe_emit_discovery_failure(
@@ -111,7 +127,7 @@ def safe_emit_discovery_failure(
             cluster_context=cluster_context,
         )
     except Exception:
-        # Deliberately do not interpolate exception text.
-        # This prevents leaking sensitive data like Forbidden errors
-        # when the structured logging system itself fails.
+        # Bounded fallback: catch any exception from emit_discovery_strategy_failure
+        # to ensure discovery callers never fail due to structured log emission.
+        # The inner emit already sanitized its fallback, so no raw text to leak here.
         pass
