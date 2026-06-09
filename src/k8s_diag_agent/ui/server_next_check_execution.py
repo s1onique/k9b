@@ -17,6 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..security import sanitize_exception_message, sanitize_execution_output
+
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
 
@@ -321,13 +323,21 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
         handler._send_json(error_payload, 400)
         return
     except Exception as exc:
-        handler._send_json({"error": f"Execution failed: {exc}"}, 500)
+        # Sanitize exception message to prevent raw traceback/leakage
+        sanitized_error = sanitize_exception_message(exc)
+        handler._send_json({"error": f"Execution failed: {sanitized_error}"}, 500)
         return
     artifact_path = relative_path(handler.runs_dir, artifact.artifact_path)
 
     execution_state = determine_execution_state_from_artifact(artifact)
     approval_status = str(candidate.get("approvalStatus") or candidate.get("approvalState") or "not-required")
     outcome_status = _derive_outcome_status(approval_status, execution_state)
+
+    # Sanitize raw output and error summary to prevent credential/exception leakage
+    sanitized_raw_output, sanitized_error_summary = sanitize_execution_output(
+        artifact.raw_output,
+        artifact.error_summary,
+    )
 
     response_payload = {
         "status": artifact.status.value,
@@ -337,8 +347,9 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
         "command": artifact.payload.get("command") if isinstance(artifact.payload, Mapping) else None,
         "targetCluster": target_cluster,
         "planCandidateIndex": candidate_index,
-        "rawOutput": artifact.raw_output,
-        "errorSummary": artifact.error_summary,
+        # Use sanitized output to prevent credential/exception leakage
+        "rawOutput": sanitized_raw_output,
+        "errorSummary": sanitized_error_summary,
         "timedOut": artifact.timed_out,
         "stdoutTruncated": artifact.stdout_truncated,
         "stderrTruncated": artifact.stderr_truncated,

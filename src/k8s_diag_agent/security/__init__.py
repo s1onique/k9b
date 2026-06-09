@@ -25,6 +25,8 @@ from .path_validation import (
     validate_safe_path_id,
 )
 from .sanitizer import (
+    sanitize_exception_message,
+    sanitize_execution_output,
     sanitize_log_entry,
     sanitize_payload,
     sanitize_prompt,

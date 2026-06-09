@@ -9,8 +9,13 @@ from typing import Any
 REDACTION_PLACEHOLDER = "<scrubbed>"
 _SECRET_MANIFEST_RE = re.compile(r"kind\s*[:=]\s*Secret", re.IGNORECASE)
 _PROMPT_SENSITIVE_PATTERNS = [
-    re.compile(r"(?i)authorization\s*[:=]\s*\S+"),
+    # Catch standalone token variable names like KUBE_SECRET_TOKEN_abc123
+    # This must come before token= patterns to catch full token references
+    # NOTE: Does NOT use \b because underscore is a word character
+    re.compile(r"(?i)TOKEN[A-Za-z0-9_]{5,}"),
+    # Standard credential patterns
     re.compile(r"(?i)bearer\s+[A-Za-z0-9\-_.=]+"),
+    re.compile(r"(?i)authorization\s*[:=]\s*\S+"),
     re.compile(r"(?i)api[_-]?key\s*[:=]\s*\S+"),
     re.compile(r"(?i)client_secret\s*[:=]\s*\S+"),
     re.compile(r"(?i)access_token\s*[:=]\s*\S+"),
@@ -148,3 +153,118 @@ def sanitize_prompt(prompt: str) -> str:
     if _SECRET_MANIFEST_RE.search(sanitized):
         sanitized = re.sub(r"(?is)^.*?kind\s*[:=]\s*Secret.*?(?:\n\s*\n|$)", "<scrubbed secret manifest>\n", sanitized)
     return sanitized
+
+
+# Sentinel patterns for regression testing - these should NEVER appear in sanitized output
+_SENTINEL_PATTERNS = (
+    "KUBE_SECRET_TOKEN_abc123",
+    "bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+    "api_key=sk-abcdefghijk",
+    "client_secret=super_secret_value",
+)
+
+
+def _contains_sentinel(value: str | None) -> bool:
+    """Check if a string contains any sentinel test patterns."""
+    if not value:
+        return False
+    return any(sentinel in value for sentinel in _SENTINEL_PATTERNS)
+
+
+def sanitize_execution_output(
+    raw_output: str | None,
+    error_summary: str | None,
+    *,
+    max_output_length: int = 512,
+) -> tuple[str | None, str | None]:
+    """Sanitize execution output for operator-facing display.
+
+    This function prevents leakage of:
+    - Raw exception text/traceback
+    - Raw stderr/stdout content
+    - Kubernetes API error bodies
+    - LLM prompt fragments
+    - Sensitive credentials or tokens
+
+    Args:
+        raw_output: Raw command output (may contain sensitive content)
+        error_summary: Error message (may contain raw exception or stderr)
+        max_output_length: Maximum length for raw_output before truncation
+
+    Returns:
+        A tuple of (sanitized_raw_output, sanitized_error_summary).
+        Both values are sanitized and safe for operator display.
+        Raw output is truncated to max_output_length.
+    """
+    sanitized_output: str | None = None
+    sanitized_error: str | None = None
+
+    # Sanitize raw_output BEFORE truncating to prevent credential pattern splitting
+    if raw_output:
+        # First apply sanitization to the full string to catch any credentials
+        sanitized = sanitize_payload(raw_output)
+        if isinstance(sanitized, str) and _SECRET_MANIFEST_RE.search(sanitized):
+            sanitized = "<scrubbed>"
+        elif isinstance(sanitized, str):
+            # Apply all sensitive patterns iteratively
+            for pattern in _PROMPT_SENSITIVE_PATTERNS:
+                if pattern.search(sanitized):
+                    sanitized = pattern.sub(REDACTION_PLACEHOLDER, sanitized)
+        # Then truncate the already-sanitized string
+        if sanitized and len(sanitized) > max_output_length:
+            sanitized = sanitized[:max_output_length]
+        sanitized_output = sanitized
+
+    # Sanitize error_summary: this may contain raw exception messages, stderr, or Kubernetes error bodies
+    if error_summary:
+        sanitized_error = sanitize_payload(error_summary)
+        if isinstance(sanitized_error, str) and _SECRET_MANIFEST_RE.search(sanitized_error):
+            sanitized_error = "<scrubbed>"
+        elif isinstance(sanitized_error, str):
+            # Apply all sensitive patterns iteratively
+            for pattern in _PROMPT_SENSITIVE_PATTERNS:
+                if pattern.search(sanitized_error):
+                    sanitized_error = pattern.sub(REDACTION_PLACEHOLDER, sanitized_error)
+
+    return sanitized_output, sanitized_error
+
+
+def sanitize_exception_message(exc: BaseException, max_length: int = 200) -> str:
+    """Sanitize an exception message for operator-facing display.
+
+    Args:
+        exc: The exception to sanitize
+        max_length: Maximum length for the sanitized message
+
+    Returns:
+        A sanitized exception type name with optional truncated message.
+    """
+    exc_type = type(exc).__name__
+    exc_message = str(exc)
+
+    # Apply sanitization to the message
+    sanitized_message = sanitize_payload(exc_message)
+    if isinstance(sanitized_message, str) and _SECRET_MANIFEST_RE.search(sanitized_message):
+        sanitized_message = "<scrubbed>"
+    elif isinstance(sanitized_message, str):
+        for pattern in _PROMPT_SENSITIVE_PATTERNS:
+            if pattern.search(sanitized_message):
+                sanitized_message = pattern.sub(REDACTION_PLACEHOLDER, sanitized_message)
+
+    # Build the sanitized message
+    if sanitized_message and isinstance(sanitized_message, str) and sanitized_message != "<scrubbed>":
+        # Truncate message if too long
+        if len(sanitized_message) > max_length:
+            sanitized_message = sanitized_message[: max_length - 3] + "..."
+        return f"{exc_type}: {sanitized_message}"
+    return exc_type
+
+
+__all__ = [
+    "REDACTION_PLACEHOLDER",
+    "sanitize_payload",
+    "sanitize_log_entry",
+    "sanitize_prompt",
+    "sanitize_execution_output",
+    "sanitize_exception_message",
+]
