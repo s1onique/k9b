@@ -316,7 +316,8 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
             target_cluster=target_cluster,
         )
     except ManualNextCheckError as exc:
-        error_payload: dict[str, object] = {"error": sanitize_exception_message(exc)}
+        from ..security import sanitize_exception_message as _sanitize
+        error_payload: dict[str, object] = {"error": _sanitize(exc)}
         blocking_reason = getattr(exc, "blocking_reason", None)
         if blocking_reason is not None:
             error_payload["blockingReason"] = blocking_reason.value
