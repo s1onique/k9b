@@ -1,14 +1,6 @@
-# DockerHub Publishing (Optional Future Release Mechanics)
+# Harbor Publishing
 
-**Status:** This document describes DockerHub publishing workflow. It is **not required for the current rolling beta consumption path**.
-
-**Current beta consumption model:**
-- Clone/pull the repository for the latest version
-- Install the Helm chart from local checkout: `helm install infra-k9b ./charts/k9b`
-- Build images locally or provide explicit image overrides
-- Public Docker image availability is optional future release mechanics
-
-This repository uses GitHub Actions to build and push Docker images to DockerHub when secrets are configured.
+This repository uses GitHub Actions to build and push Docker images and Helm charts to the Harbor registry at `registry.spbnix.com`.
 
 ## Verification Gate
 
@@ -18,7 +10,7 @@ Before any Docker image is built or pushed, the workflow runs `./scripts/verify_
 
 If verification fails:
 - No Docker images are built
-- No images are pushed to DockerHub
+- No images are pushed to Harbor
 - The workflow exits with failure
 
 ## GitHub Actions Secrets Required
@@ -27,32 +19,35 @@ Before the workflow can push images, add these secrets to your GitHub repository
 
 | Secret | Description |
 |--------|-------------|
-| `DOCKERHUB_USERNAME` | Your DockerHub username or organization name |
-| `DOCKERHUB_TOKEN` | DockerHub access token (not your password) |
+| `HARBOR_USERNAME` | Your Harbor username |
+| `HARBOR_TOKEN` | Harbor access token (preferably a robot-account token with push access) |
 
-To create a DockerHub access token:
-1. Go to DockerHub → Account Settings → Security → Access Tokens
-2. Create a new token with at least "Read, Write, Delete" permissions
+**Note:** `HARBOR_TOKEN` should preferably be a Harbor robot-account token with push access to the target Harbor project.
+
+## Registry Configuration
+
+| Setting | Value |
+|---------|-------|
+| Registry | `registry.spbnix.com` |
+| Harbor Project | `gitinsky` |
 
 ## Image Names
 
-| Image | DockerHub URL | Status |
-|-------|---------------|--------|
-| Backend | `docker.io/gitinsky/k9b-backend` | **Requires secrets to publish** |
-| Frontend (Node) | `docker.io/gitinsky/k9b-frontend` | **Requires secrets to publish** |
+| Image | Harbor URL |
+|-------|------------|
+| Backend | `registry.spbnix.com/gitinsky/k9b-backend` |
+| Frontend (Node) | `registry.spbnix.com/gitinsky/k9b-frontend` |
 
-**Namespace:** `gitinsky`
+## Helm Chart
 
-**Note:** Images are not currently published. DockerHub publishing is optional future release mechanics. The workflow requires:
-- `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets to be configured in GitHub
-- Image tags are derived from Git commit SHA (e.g., `4344ab1`)
+| Artifact | Harbor OCI URL |
+|----------|----------------|
+| Helm chart | `oci://registry.spbnix.com/gitinsky/k9b:<version>` |
 
-Before publishing images (optional):
-1. Configure GitHub secrets (`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`)
-2. Trigger the workflow via `workflow_dispatch` or push to `main`
-3. Verify images are accessible: `docker pull docker.io/gitinsky/k9b-backend:<tag>`
-
-**For the supported beta path, use local Helm chart installation instead.**
+Install published chart:
+```bash
+helm install infra-k9b oci://registry.spbnix.com/gitinsky/k9b --version <version>
+```
 
 ## Trigger Events
 
@@ -70,10 +65,10 @@ Manual runs (`workflow_dispatch`) are **publishing runs** because the workflow p
 
 To trigger manually:
 ```bash
-gh workflow run dockerhub.yml
+gh workflow run harbor.yml
 ```
 
-Or via GitHub Actions UI: Repository → Actions → Build and Push to DockerHub → Run workflow
+Or via GitHub Actions UI: Repository → Actions → Build and Push to Harbor → Run workflow
 
 ## Image Tags Produced
 
@@ -81,8 +76,8 @@ All images are tagged with the short Git commit SHA only:
 - `{COMMIT_SHORT_SHA}` - e.g., `4344ab1`
 
 Example image tags:
-- `docker.io/gitinsky/k9b-backend:4344ab1`
-- `docker.io/gitinsky/k9b-frontend:4344ab1`
+- `registry.spbnix.com/gitinsky/k9b-backend:4344ab1`
+- `registry.spbnix.com/gitinsky/k9b-frontend:4344ab1`
 
 ### On `pull_request` (build only)
 - `{sha}` - short Git commit SHA (not pushed)
@@ -93,15 +88,18 @@ Example image tags:
 ### Manual `workflow_dispatch` runs
 - `{sha}` - short Git commit SHA
 
-## Workflow File
+## Workflow Files
 
-The workflow is defined in `.github/workflows/dockerhub.yml`.
+| Workflow | Purpose |
+|----------|---------|
+| `.github/workflows/harbor.yml` | Build and push container images to Harbor |
+| `.github/workflows/helm-chart.yml` | Build and push Helm chart to Harbor OCI |
 
 ## Workflow Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     dockerhub.yml                          │
+│                     harbor.yml                              │
 │                                                             │
 │  ┌─────────┐                                                │
 │  │ verify  │ ── runs ./scripts/verify_all.sh ───────────────│
@@ -115,7 +113,7 @@ The workflow is defined in `.github/workflows/dockerhub.yml`.
 │  └───────────┘    └───────────┘   └───────────────┘        │
 │       │                 │                                │
 │       ▼                 ▼                                │
-│  DockerHub push    DockerHub push                        │
+│  Harbor push      Harbor push                            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -132,4 +130,5 @@ Both images are built for:
 - **Verification gate runs before any Docker operations** - ensures code quality before shipping
 - Images are **never** pushed from `pull_request` events (untrusted context)
 - Credentials are stored as GitHub Actions secrets, never in code
-- DockerHub login only runs when push is enabled (not on PR builds)
+- Harbor login only runs when push is enabled (not on PR builds)
+- **Use a Harbor robot-account token** for `HARBOR_TOKEN` to limit access scope

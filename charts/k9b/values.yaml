@@ -3,11 +3,11 @@
 
 image:
   backend:
-    repository: docker.io/gitinsky/k9b-backend
+    repository: registry.spbnix.com/gitinsky/k9b-backend
     tag: ecacd81
     pullPolicy: IfNotPresent
   frontend:
-    repository: docker.io/gitinsky/k9b-frontend
+    repository: registry.spbnix.com/gitinsky/k9b-frontend
     tag: ecacd81
     pullPolicy: IfNotPresent
 

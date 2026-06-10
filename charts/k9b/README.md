@@ -46,7 +46,7 @@ helm template infra-k9b ./charts/k9b
 - Install the Helm chart from local checkout
 - Build images locally or provide explicit image overrides
 
-**Note:** The default `values.yaml` references `docker.io/gitinsky/k9b-backend:ecacd81` and `docker.io/gitinsky/k9b-frontend:ecacd81`. These images are **not currently published**. Override using `--set` flags or use docker-compose for local development.
+**Note:** The default `values.yaml` references Harbor images at `registry.spbnix.com/gitinsky/k9b-backend` and `registry.spbnix.com/gitinsky/k9b-frontend`. Images are published via GitHub Actions. Override using `--set` flags or use docker-compose for local development.
 
 **For local development with docker-compose:**
 ```bash
@@ -62,7 +62,7 @@ helm install infra-k9b ./charts/k9b -n k9b \
   --set image.frontend.tag=ecacd81
 ```
 
-**Public Docker image availability is optional future release mechanics.** DockerHub publishing requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` GitHub secrets.
+**Images are published to Harbor.** Harbor publishing requires `HARBOR_USERNAME` and `HARBOR_TOKEN` GitHub secrets. See [docs/harbor-publishing.md](../../docs/harbor-publishing.md) for workflow details.
 
 ### Upgrade the Chart
 
@@ -98,9 +98,9 @@ helm uninstall infra-k9b -n k9b
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `image.backend.repository` | Backend/scheduler image repository | `docker.io/gitinsky/k9b-backend` |
+| `image.backend.repository` | Backend/scheduler image repository | `registry.spbnix.com/gitinsky/k9b-backend` |
 | `image.backend.tag` | Backend/scheduler image tag | `ecacd81` |
-| `image.frontend.repository` | Frontend image repository | `docker.io/gitinsky/k9b-frontend` |
+| `image.frontend.repository` | Frontend image repository | `registry.spbnix.com/gitinsky/k9b-frontend` |
 | `image.frontend.tag` | Frontend image tag | `ecacd81` |
 | `image.*.pullPolicy` | Image pull policy | `IfNotPresent` |
 
@@ -127,7 +127,7 @@ helm uninstall infra-k9b -n k9b
 
 #### Image Entrypoint Dispatch
 
-The published backend image (`docker.io/gitinsky/k9b-backend`) uses an entrypoint dispatcher script (`/app/docker-entrypoint.sh`) that expects the first argument to be a service name (`backend` or `scheduler`). The script dispatches to the appropriate startup script based on the first argument.
+The published backend image (`registry.spbnix.com/gitinsky/k9b-backend`) uses an entrypoint dispatcher script (`/app/docker-entrypoint.sh`) that expects the first argument to be a service name (`backend` or `scheduler`). The script dispatches to the appropriate startup script based on the first argument.
 
 **Default scheduler invocation:**
 

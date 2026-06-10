@@ -25,6 +25,10 @@ on:
         type: string
 
 env:
+  # Harbor registry configuration
+  REGISTRY: registry.spbnix.com
+  HARBOR_PROJECT: gitinsky
+  CHART_NAME: k9b
   CHART_DIR: charts/k9b
 
 jobs:
@@ -88,7 +92,7 @@ jobs:
           retention-days: 5
 
   publish:
-    name: Publish Helm Chart to DockerHub OCI
+    name: Publish Helm Chart to Harbor OCI
     runs-on: ubuntu-latest
     needs: [verify, package]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
@@ -101,44 +105,33 @@ jobs:
         with:
           version: '3.14.0'
 
-      - name: Validate DockerHub configuration
+      - name: Validate Harbor configuration
         run: |
-          echo "Validating DockerHub configuration..."
-          
-          # Check DOCKERHUB_ORG is set and not placeholder
-          if [[ -z "${{ vars.DOCKERHUB_ORG }}" ]]; then
-            echo "ERROR: DOCKERHUB_ORG GitHub variable is not set."
-            echo "Please set DOCKERHUB_ORG in repository settings -> Variables and secrets -> Variables"
-            exit 1
-          fi
-          
-          if [[ "${{ vars.DOCKERHUB_ORG }}" == "your-org" ]]; then
-            echo "ERROR: DOCKERHUB_ORG is set to placeholder 'your-org'."
-            echo "Please set DOCKERHUB_ORG to your actual Docker Hub organization name."
-            exit 1
-          fi
+          echo "Validating Harbor configuration..."
           
           # Check required secrets
-          if [[ -z "${{ secrets.DOCKERHUB_USERNAME }}" ]]; then
-            echo "ERROR: DOCKERHUB_USERNAME secret is not set."
-            echo "Please add DOCKERHUB_USERNAME in repository settings -> Variables and secrets -> Secrets"
+          if [[ -z "${{ secrets.HARBOR_USERNAME }}" ]]; then
+            echo "ERROR: HARBOR_USERNAME secret is not set."
+            echo "Please add HARBOR_USERNAME in repository settings -> Variables and secrets -> Secrets"
             exit 1
           fi
           
-          if [[ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]]; then
-            echo "ERROR: DOCKERHUB_TOKEN secret is not set."
-            echo "Please add DOCKERHUB_TOKEN in repository settings -> Variables and secrets -> Secrets"
+          if [[ -z "${{ secrets.HARBOR_TOKEN }}" ]]; then
+            echo "ERROR: HARBOR_TOKEN secret is not set."
+            echo "Please add HARBOR_TOKEN in repository settings -> Variables and secrets -> Secrets"
             exit 1
           fi
           
-          echo "✓ DOCKERHUB_ORG=${{ vars.DOCKERHUB_ORG }}"
-          echo "✓ Docker Hub secrets configured"
+          echo "✓ REGISTRY=$REGISTRY"
+          echo "✓ HARBOR_PROJECT=$HARBOR_PROJECT"
+          echo "✓ Harbor secrets configured (HARBOR_USERNAME, HARBOR_TOKEN)"
 
-      - name: Log in to DockerHub
-        uses: docker/login-action@v3
+      - name: Log in to Harbor
+        uses: docker/login-action@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_TOKEN }}
 
       - name: Download package artifact
         uses: actions/download-artifact@v4
@@ -146,13 +139,12 @@ jobs:
           name: helm-chart-${{ needs.package.outputs.chart_version }}
           path: dist/
 
-      - name: Push chart to DockerHub OCI
+      - name: Push chart to Harbor OCI
         run: |
           PACKAGE_FILE=$(ls dist/*.tgz)
           CHART_VERSION=${{ needs.package.outputs.chart_version }}
-          DOCKERHUB_ORG="${{ vars.DOCKERHUB_ORG }}"
-          PUSH_TARGET="oci://registry-1.docker.io/${DOCKERHUB_ORG}"
-          RESOLVED_IMAGE="registry-1.docker.io/${DOCKERHUB_ORG}/k9b:${CHART_VERSION}"
+          PUSH_TARGET="oci://${REGISTRY}/${HARBOR_PROJECT}"
+          RESOLVED_IMAGE="${REGISTRY}/${HARBOR_PROJECT}/${CHART_NAME}:${CHART_VERSION}"
           
           echo "Pushing Helm chart package: $PACKAGE_FILE"
           echo "Resolved push target: ${PUSH_TARGET}"

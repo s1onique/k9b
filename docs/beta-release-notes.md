@@ -187,7 +187,7 @@ The scheduler writes structured JSON events to stdout/stderr and maintains `runs
 
 ### Docker Image Access
 
-**Important:** Public Docker images are not currently published. The Helm chart defaults reference `docker.io/gitinsky/k9b-backend:ecacd81` and `docker.io/gitinsky/k9b-frontend:ecacd81`, but these images require GitHub secrets to publish. For the supported beta consumption path, see "Local Helm Chart Installation" below.
+**Images are published to Harbor.** The Helm chart defaults reference Harbor images at `registry.spbnix.com/gitinsky/k9b-backend` and `registry.spbnix.com/gitinsky/k9b-frontend`. See [docs/harbor-publishing.md](harbor-publishing.md) for workflow details.
 
 **For local development:**
 ```bash
@@ -206,9 +206,9 @@ helm install infra-k9b ./charts/k9b -n k9b --create-namespace \
   --set image.frontend.tag=ecacd81
 ```
 
-**To publish images to DockerHub:**
-1. Configure GitHub secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
-2. See [docs/dockerhub-publishing.md](dockerhub-publishing.md) for workflow details
+**To publish images to Harbor:**
+1. Configure GitHub secrets: `HARBOR_USERNAME`, `HARBOR_TOKEN`
+2. See [docs/harbor-publishing.md](harbor-publishing.md) for workflow details
 
 ### Helm Chart Installation
 
@@ -217,7 +217,7 @@ The Helm chart is installable from local checkout:
 helm install infra-k9b ./charts/k9b -n k9b --create-namespace
 ```
 
-Chart publication to DockerHub OCI registry requires `DOCKERHUB_ORG` variable and secrets. See [charts/k9b/README.md](../charts/k9b/README.md) for details.
+Chart publication to Harbor OCI registry requires `HARBOR_USERNAME` and `HARBOR_TOKEN` secrets. See [charts/k9b/README.md](../charts/k9b/README.md) for details.
 
 ---
 

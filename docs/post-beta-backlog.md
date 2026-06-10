@@ -26,7 +26,7 @@ Two release blockers were identified for beta package publication/distribution r
 | Item | Owner/Area | Evidence | Impact | Recommended Next Action |
 |------|-----------|----------|--------|------------------------|
 | | ~~GitLab CI verify lane missing~~ | CI/deploy | ~~`.gitlab/ci/` directory does not exist~~ | ~~No CI gate for merge requests~~ | **RESOLVED:** GitHub Actions `.github/workflows/verify.yml` added (2026-05-13). Runs on PRs to all branches and main. No secrets required. |
-| Image publish verification | Packaging | Images reference `docker.io/gitinsky/k9b-*` but workflow requires secrets to publish | Beta package consumers cannot pull images until secrets are configured | **RESOLVED:** Documentation corrected to state images are local/build-only until secrets configured. Helm chart installable from local checkout. |
+| Image publish verification | Packaging | Historical state: images referenced `docker.io/gitinsky/k9b-*` and workflow required Docker Hub secrets to publish | Beta package consumers could not pull images | **RESOLVED:** Images now published to Harbor (`registry.spbnix.com`). Workflow migrated from Docker Hub to Harbor. See `docs/harbor-publishing.md`. |
 
 ---
 
@@ -109,7 +109,7 @@ Deferred strict gates, release mechanics, and image publish/access verification.
 | **Full gate CI timeouts** | Implemented | `scripts/verify_all.sh` runs all lanes; no documented full-gate timeout; parallel lane execution may cause long runs |
 | **Image tag public accessibility** | **Resolved** | Images are not published; rolling beta consumes from local checkout. DockerHub publishing is optional future release mechanics. See docs/beta-release-notes.md. |
 | **Public tag/version check** | Not required | Rolling beta does not require a fixed GitHub version tag. Consumption path is local checkout + local Helm chart. |
-| **Chart/package publishing** | Documented | Helm chart is installable from local checkout. Publication to DockerHub OCI registry requires `DOCKERHUB_ORG` variable and `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` secrets. |
+| **Chart/package publishing** | Documented | Helm chart is installable from local checkout. Publication to Harbor OCI registry requires `HARBOR_USERNAME` and `HARBOR_TOKEN` secrets. |
 | **Helm values schema validation** | Basic | `helm lint charts/k9b` runs; full values schema validation (JSON Schema in `values.schema.json`) not present |
 | **GitHub release creation** | Not required | Rolling beta does not require a GitHub release. Distribution is via repository + local Helm chart. |
 | **Verification gate in CI** | Implemented | `.github/workflows/verify.yml` added (2026-05-13); mirrors `scripts/verify_all.sh`; runs on PRs and main push; no secrets required |
