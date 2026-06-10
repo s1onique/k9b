@@ -27,7 +27,7 @@ on:
 env:
   # Harbor registry configuration
   REGISTRY: registry.spbnix.com
-  HARBOR_PROJECT: gitinsky
+  HARBOR_PROJECT: k9b
   CHART_NAME: k9b
   CHART_DIR: charts/k9b
 

@@ -15,7 +15,7 @@ on:
 env:
   # Harbor registry configuration
   REGISTRY: registry.spbnix.com
-  HARBOR_PROJECT: gitinsky
+  HARBOR_PROJECT: k9b
   BACKEND_IMAGE_NAME: k9b-backend
   FRONTEND_IMAGE_NAME: k9b-frontend
 
