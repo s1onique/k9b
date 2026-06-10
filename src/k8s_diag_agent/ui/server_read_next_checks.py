@@ -66,6 +66,8 @@ def _find_next_check_plan(
                         artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
                         _scan_plan_artifacts.append(artifact_data)
             except (OSError, json.JSONDecodeError) as exc:
+                from ..security import sanitize_exception_message
+                sanitized_error = sanitize_exception_message(exc)
                 logger.warning(
                     "Skipped malformed next-check-plan artifact: %s",
                     artifact_file.name,
@@ -73,7 +75,7 @@ def _find_next_check_plan(
                         "run_id": run_id,
                         "artifact_kind": "next-check-plan",
                         "scan_name": "_find_next_check_plan",
-                        "error": str(exc),
+                        "error": sanitized_error,
                     },
                     exc_info=True,
                 )

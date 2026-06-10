@@ -123,17 +123,19 @@ def handle_deterministic_promotion(handler: HealthUIRequestHandler) -> None:
             summary=summary,
         )
     except (FileExistsError, OSError) as exc:
+        from ..security import sanitize_exception_message
+        sanitized_error = sanitize_exception_message(exc)
         logger.error(
             "Failed to persist deterministic promotion artifact",
             extra={
                 "run_id": context.run.run_id,
                 "candidate_id": candidate_id,
                 "cluster_label": cluster_label,
-                "error": str(exc),
+                "error": sanitized_error,
             },
             exc_info=True,
         )
-        handler._send_json({"error": f"Unable to persist promotion: {exc}"}, 500)
+        handler._send_json({"error": f"Unable to persist promotion: {sanitized_error}"}, 500)
         return
     response = {
         "status": "success",

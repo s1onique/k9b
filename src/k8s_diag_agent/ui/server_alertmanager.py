@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..security import sanitize_exception_message
+
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
 
@@ -196,10 +198,10 @@ def handle_alertmanager_source_action(
                 "source_id": source_key,
                 "cluster_label": cluster_label,
                 "action": action.value,
-                "error": str(exc),
+                "error": sanitize_exception_message(exc),
             },
         )
-        handler._send_json({"error": f"Failed to persist override: {exc}"}, 500)
+        handler._send_json({"error": f"Failed to persist override: {sanitize_exception_message(exc)}"}, 500)
         return
 
     # Also write to the durable cross-run registry for cross-run persistence
@@ -271,7 +273,7 @@ def handle_alertmanager_source_action(
                 "source_id": source_key,
                 "cluster_label": cluster_label,
                 "action": action.value,
-                "error": str(exc),
+                "error": sanitize_exception_message(exc),
             },
         )
 
@@ -318,7 +320,7 @@ def handle_alertmanager_source_action(
                 "source_id": source_key,
                 "cluster_label": cluster_label,
                 "action": action.value,
-                "error": str(exc),
+                "error": sanitize_exception_message(exc),
             },
         )
 

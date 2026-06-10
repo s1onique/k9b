@@ -169,6 +169,8 @@ def _scan_external_analysis(
                 "skip_reason": artifact_data.get("skip_reason"),
             })
         except (OSError, json.JSONDecodeError) as exc:
+            from ..security import sanitize_exception_message
+
             logger.warning(
                 "Skipped malformed external-analysis artifact: %s",
                 artifact_file.name,
@@ -176,7 +178,7 @@ def _scan_external_analysis(
                     "run_id": run_id,
                     "artifact_kind": "external-analysis",
                     "scan_name": "_scan_external_analysis",
-                    "error": str(exc),
+                    "error": sanitize_exception_message(exc),
                 },
                 exc_info=True,
             )
@@ -218,6 +220,8 @@ def _load_notifications_for_run(
                 "artifact_path": str(notif_file.relative_to(notifications_dir.parent)),
             })
         except (OSError, json.JSONDecodeError) as exc:
+            from ..security import sanitize_exception_message
+
             logger.warning(
                 "Skipped malformed notification artifact: %s",
                 notif_file.name,
@@ -225,7 +229,7 @@ def _load_notifications_for_run(
                     "run_id": run_id,
                     "artifact_kind": "notification",
                     "scan_name": "_load_notifications_for_run",
-                    "error": str(exc),
+                    "error": sanitize_exception_message(exc),
                 },
                 exc_info=True,
             )
@@ -340,6 +344,8 @@ def _build_run_artifact_index(
             # Other artifact types are kept in artifacts list but not indexed by purpose
 
         except (OSError, json.JSONDecodeError) as exc:
+            from ..security import sanitize_exception_message
+
             logger.warning(
                 "Skipped malformed artifact in index scan: %s",
                 artifact_file.name,
@@ -347,7 +353,7 @@ def _build_run_artifact_index(
                     "run_id": run_id,
                     "artifact_kind": "external-analysis",
                     "scan_name": "_build_run_artifact_index",
-                    "error": str(exc),
+                    "error": sanitize_exception_message(exc),
                 },
                 exc_info=True,
             )

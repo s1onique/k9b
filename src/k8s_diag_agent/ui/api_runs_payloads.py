@@ -269,12 +269,13 @@ def build_runs_list(
             except (OSError, json.JSONDecodeError, ValueError) as exc:
                 timings_index["path_strategy"] = "index_batch_eligibility_fallback"
                 timings_index["fallback_reason"] = "invalid_json"
+                from ..security import sanitize_exception_message
                 logger.debug(
                     "Batch eligibility index path rejected: invalid JSON",
                     extra={
                         "path_strategy": timings_index["path_strategy"],
                         "fallback_reason": timings_index["fallback_reason"],
-                        "error": str(exc),
+                        "error": sanitize_exception_message(exc),
                     },
                 )
         else:

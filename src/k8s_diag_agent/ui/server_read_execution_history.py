@@ -139,6 +139,8 @@ def _build_execution_history(
                         artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
                         _scan_execution_artifacts.append(artifact_data)
             except (OSError, json.JSONDecodeError) as exc:
+                from ..security import sanitize_exception_message
+                sanitized_error = sanitize_exception_message(exc)
                 logger.warning(
                     "Skipped malformed next-check-execution artifact: %s",
                     artifact_file.name,
@@ -146,7 +148,7 @@ def _build_execution_history(
                         "run_id": run_id,
                         "artifact_kind": "next-check-execution",
                         "scan_name": "_build_execution_history",
-                        "error": str(exc),
+                        "error": sanitized_error,
                     },
                     exc_info=True,
                 )

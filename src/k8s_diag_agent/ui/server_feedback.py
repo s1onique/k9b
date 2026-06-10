@@ -186,13 +186,15 @@ def handle_usefulness_feedback(handler: HealthUIRequestHandler) -> None:
     try:
         review_path.write_text(json.dumps(review_artifact, indent=2), encoding="utf-8")
     except OSError as exc:
+        from ..security import sanitize_exception_message
+        sanitized_error = sanitize_exception_message(exc)
         logger.error(
             "Unable to persist usefulness review artifact",
             extra={
                 "review_filename": review_filename,
                 "source_artifact_rel": artifact_path_rel,
                 "usefulness_class": usefulness_class.value,
-                "error": str(exc),
+                "error": sanitized_error,
             },
             exc_info=True,
         )
@@ -355,13 +357,15 @@ def handle_alertmanager_relevance_feedback(handler: HealthUIRequestHandler) -> N
     try:
         review_path.write_text(json.dumps(review_artifact, indent=2), encoding="utf-8")
     except OSError as exc:
+        from ..security import sanitize_exception_message
+        sanitized_error = sanitize_exception_message(exc)
         logger.error(
             "Unable to persist alertmanager relevance review artifact",
             extra={
                 "review_filename": review_filename,
                 "source_artifact_rel": artifact_path_rel,
                 "alertmanager_relevance": relevance.value,
-                "error": str(exc),
+                "error": sanitized_error,
             },
             exc_info=True,
         )

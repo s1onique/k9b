@@ -86,6 +86,8 @@ def _load_alertmanager_review_artifacts(
                 reviews_by_source[source_artifact] = review_data
 
         except (OSError, json.JSONDecodeError) as exc:
+            from ..security import sanitize_exception_message
+            sanitized_error = sanitize_exception_message(exc)
             logger.warning(
                 "Skipped malformed Alertmanager review artifact: %s",
                 review_file.name,
@@ -93,7 +95,7 @@ def _load_alertmanager_review_artifacts(
                     "run_id": run_id,
                     "artifact_kind": "alertmanager-review",
                     "scan_name": "_load_alertmanager_review_artifacts",
-                    "error": str(exc),
+                    "error": sanitized_error,
                 },
                 exc_info=True,
             )
@@ -250,6 +252,8 @@ def _build_clusters_and_drilldown_availability(
                         "timestamp": df_data.get("timestamp"),
                     }
             except (OSError, json.JSONDecodeError) as exc:
+                from ..security import sanitize_exception_message
+                sanitized_error = sanitize_exception_message(exc)
                 logger.warning(
                     "Skipped malformed drilldown artifact: %s",
                     df.name,
@@ -257,7 +261,7 @@ def _build_clusters_and_drilldown_availability(
                         "run_id": run_id,
                         "artifact_kind": "drilldown",
                         "scan_name": "_build_clusters_and_drilldown_availability",
-                        "error": str(exc),
+                        "error": sanitized_error,
                     },
                     exc_info=True,
                 )

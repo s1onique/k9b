@@ -67,6 +67,8 @@ def _find_review_enrichment(
                         artifact_data["artifact_path"] = str(artifact_file.relative_to(external_analysis_dir.parent))
                         _scan_artifacts.append(artifact_data)
             except (OSError, json.JSONDecodeError) as exc:
+                from ..security import sanitize_exception_message
+                sanitized_error = sanitize_exception_message(exc)
                 logger.warning(
                     "Skipped malformed review-enrichment artifact: %s",
                     artifact_file.name,
@@ -74,7 +76,7 @@ def _find_review_enrichment(
                         "run_id": run_id,
                         "artifact_kind": "review-enrichment",
                         "scan_name": "_find_review_enrichment",
-                        "error": str(exc),
+                        "error": sanitized_error,
                     },
                     exc_info=True,
                 )
@@ -294,6 +296,8 @@ def _build_llm_stats_for_run(
                 if isinstance(artifact_data, dict):
                     _scan_llm_artifacts.append(artifact_data)
             except (OSError, json.JSONDecodeError) as exc:
+                from ..security import sanitize_exception_message
+                sanitized_error = sanitize_exception_message(exc)
                 logger.warning(
                     "Skipped malformed artifact in llm_stats scan: %s",
                     artifact_file.name,
@@ -301,7 +305,7 @@ def _build_llm_stats_for_run(
                         "run_id": run_id,
                         "artifact_kind": "external-analysis",
                         "scan_name": "_build_llm_stats_for_run",
-                        "error": str(exc),
+                        "error": sanitized_error,
                     },
                     exc_info=True,
                 )

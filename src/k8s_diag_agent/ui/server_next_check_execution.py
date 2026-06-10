@@ -379,12 +379,14 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
                 response_payload["packRefreshStatus"] = refresh_status.value
                 response_payload["packRefreshWarning"] = refresh_warning
             except (OSError, json.JSONDecodeError, TypeError) as exc:
+                from ..security import sanitize_exception_message
+                sanitized_error = sanitize_exception_message(exc)
                 logger.warning(
                     "Failed to persist pack refresh status to artifact",
                     extra={
                         "artifact": artifact_path_obj.name,
                         "run_id": context.run.run_id,
-                        "error": str(exc),
+                        "error": sanitized_error,
                     },
                 )
 
@@ -452,6 +454,8 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
             extra={"ui_index": str(ui_index_path), "run_id": context.run.run_id, "history_count": len(history_list)},
         )
     except (OSError, json.JSONDecodeError, ValueError) as exc:
+        from ..security import sanitize_exception_message
+        sanitized_error = sanitize_exception_message(exc)
         # Fallback: attempt touch-only invalidation to signal UI refresh needed
         logger.warning(
             "Failed to persist execution history to ui-index.json, falling back to touch-only invalidation",
@@ -459,7 +463,7 @@ def handle_next_check_execution(handler: HealthUIRequestHandler) -> None:
                 "ui_index": ui_index_path.name,
                 "run_id": context.run.run_id,
                 "candidate_index": candidate_index,
-                "error": str(exc),
+                "error": sanitized_error,
             },
             exc_info=True,
         )

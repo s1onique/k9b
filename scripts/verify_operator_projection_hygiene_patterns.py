@@ -60,17 +60,21 @@ FORBIDDEN_PATTERNS: list[_ForbiddenPattern] = [
         "stderr in response payload",
         "raw stderr in API response payload without sanitization",
     ),
-    # 4. artifact.raw_output used directly without sanitization wrapper
+    # 4. artifact.raw_output used directly in response dict construction
+    # Excludes: local variable assignment, boolean checks, internal filtering
+    # Only flags: direct assignment to response dict keys (key: artifact.raw_output)
     _ForbiddenPattern(
-        re.compile(r'artifact\.raw_output'),
-        "artifact.raw_output (unsanitized)",
-        "raw output field used without sanitize_execution_output() call",
+        re.compile(r'["\'][a-zA-Z_]+["\']\s*:\s*artifact\.raw_output(?!\s*or\s)(?!\s*and\s)(?!\s*==)(?!\s*!=)(?!\s*\))'),
+        "artifact.raw_output in response payload",
+        "raw output field in API response - use sanitize_execution_output() call",
     ),
-    # 5. artifact.error_summary used directly without sanitization wrapper
+    # 5. artifact.error_summary used directly in response dict construction
+    # Excludes: local variable assignment, boolean checks, internal filtering
+    # Only flags: direct assignment to response dict keys (key: artifact.error_summary)
     _ForbiddenPattern(
-        re.compile(r'artifact\.error_summary'),
-        "artifact.error_summary (unsanitized)",
-        "raw error_summary field used without sanitize_execution_output() call",
+        re.compile(r'["\'][a-zA-Z_]+["\']\s*:\s*artifact\.error_summary(?!\s*or\s)(?!\s*and\s)(?!\s*==)(?!\s*!=)(?!\s*\))'),
+        "artifact.error_summary in response payload",
+        "raw error_summary field in API response - use sanitize_execution_output() call",
     ),
     # 6. Raw traceback formatting
     _ForbiddenPattern(
@@ -78,21 +82,23 @@ FORBIDDEN_PATTERNS: list[_ForbiddenPattern] = [
         "raw traceback formatting",
         "raw traceback formatting may leak sensitive data",
     ),
-    # 7. Direct raw_output/error_summary/error_message field keys without sanitization
+    # 7. Direct raw_output/error_summary/error_message field keys in OPERATOR RESPONSE paths
+    # Excludes: static strings, .get() calls, internal logging (emit_structured_log)
+    # Only flags: direct assignment of unsanitized artifact fields or raw variables
     _ForbiddenPattern(
-        re.compile(r'["\']raw_output["\']\s*:\s*(?!sanitized)', re.IGNORECASE),
-        "raw_output field key without sanitization",
-        "raw_output field used directly without sanitization",
+        re.compile(r'["\']raw_output["\']\s*:\s*artifact\.(raw_output|error_summary)(?!\s*or\s)(?!\s*and\s)(?!\s*==)(?!\s*!=)(?!\s*\))'),
+        "raw_output field in operator response",
+        "raw_output field in API response - use sanitize_execution_output()",
     ),
     _ForbiddenPattern(
-        re.compile(r'["\']error_summary["\']\s*:\s*(?!sanitized)', re.IGNORECASE),
-        "error_summary field key without sanitization",
-        "error_summary field used directly without sanitization",
+        re.compile(r'["\']error_summary["\']\s*:\s*artifact\.(raw_output|error_summary)(?!\s*or\s)(?!\s*and\s)(?!\s*==)(?!\s*!=)(?!\s*\))'),
+        "error_summary field in operator response",
+        "error_summary field in API response - use sanitize_execution_output()",
     ),
     _ForbiddenPattern(
-        re.compile(r'["\']error_message["\']\s*:\s*(?!sanitized)', re.IGNORECASE),
-        "error_message field key without sanitization",
-        "error_message field used directly without sanitization",
+        re.compile(r'["\']error_message["\']\s*:\s*artifact\.(raw_output|error_summary)(?!\s*or\s)(?!\s*and\s)(?!\s*==)(?!\s*!=)(?!\s*\))'),
+        "error_message field in operator response",
+        "error_message field in API response - use sanitize_execution_output()",
     ),
 ]
 

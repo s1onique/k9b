@@ -313,10 +313,12 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
 
             payload = file_payload
         except Exception as exc:
+            from ..security import sanitize_exception_message
+
             logger.warning("Failed to build notifications payload", extra={"error": str(exc)})
             payload = {
                 "notifications": [],
-                "error": str(exc),
+                "error": sanitize_exception_message(exc),
                 "path_strategy": path_strategy,
                 "fallback_reason": fallback_reason or "exception",
                 "notification_files_considered": notification_files_considered,

@@ -164,6 +164,8 @@ def handle_next_check_approval(handler: HealthUIRequestHandler) -> None:
             target_cluster=request_cluster,
         )
     except (FileExistsError, OSError) as exc:
+        from ..security import sanitize_exception_message
+        sanitized_error = sanitize_exception_message(exc)
         logger.error(
             "Failed to persist approval artifact",
             extra={
@@ -171,11 +173,11 @@ def handle_next_check_approval(handler: HealthUIRequestHandler) -> None:
                 "candidate_id": candidate_id_value,
                 "candidate_index": candidate_index,
                 "cluster_label": request_cluster,
-                "error": str(exc),
+                "error": sanitized_error,
             },
             exc_info=True,
         )
-        handler._send_json({"error": f"Approval failed: {exc}"}, 500)
+        handler._send_json({"error": f"Approval failed: {sanitized_error}"}, 500)
         return
     artifact_path = relative_path(handler.runs_dir, artifact.artifact_path)
     response = {

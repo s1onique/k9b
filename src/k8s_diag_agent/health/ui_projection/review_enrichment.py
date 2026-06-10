@@ -20,6 +20,7 @@ from ...external_analysis.config import (
     ExternalAnalysisSettings,
     ReviewEnrichmentPolicy,
 )
+from ...security import sanitize_execution_output
 from ...security.deanonymization import deanonymize_review_enrichment, deanonymize_text, safe_alias_mapping
 from ..ui_shared import _relative_path
 
@@ -93,6 +94,11 @@ def _serialize_review_enrichment(
     # Extract alertmanager evidence references from merged payload
     alertmanager_refs = payload.get("alertmanagerEvidenceReferences") or payload.get("alertmanager_evidence_references")
 
+    # Sanitize error_summary to prevent credential/exception leakage in operator-facing UI
+    sanitized_error_summary, _ = sanitize_execution_output(
+        artifact.error_summary,
+        artifact.raw_output,
+    )
     result: dict[str, object] = {
         "status": artifact.status.value,
         "provider": artifact.provider,
@@ -104,7 +110,7 @@ def _serialize_review_enrichment(
         "nextChecks": _list_from("nextChecks", "next_checks"),
         "focusNotes": _list_from("focusNotes", "focus_notes", "caveats", "proposal_caveats"),
         "artifactPath": _relative_path(root_dir, artifact.artifact_path),
-        "errorSummary": artifact.error_summary,
+        "errorSummary": sanitized_error_summary,
         "skipReason": artifact.skip_reason,
     }
     if alertmanager_refs is not None:

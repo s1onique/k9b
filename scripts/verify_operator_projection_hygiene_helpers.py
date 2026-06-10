@@ -83,7 +83,7 @@ def check_file_for_patterns(
                 # Special handling for artifact.raw_output and artifact.error_summary:
                 # Check if the surrounding context contains a sanitization call
                 # If so, this is an allowed usage (arguments to sanitize_* functions)
-                if name in ("artifact.raw_output (unsanitized)", "artifact.error_summary (unsanitized)"):
+                if "artifact.raw_output" in name or "artifact.error_summary" in name:
                     if _has_allowed_sanitization(lines, line_num):
                         continue  # Skip this match - it's used as argument to sanitization
                 
@@ -308,10 +308,9 @@ def test_function(artifact, exc):
         )
         
         expected_counts = {
-            # str(exc) detected once as raw violation in response dict
             "str(exc) in response payload": 1,
-            "artifact.raw_output (unsanitized)": 1,
-            "artifact.error_summary (unsanitized)": 1,
+            "artifact.raw_output in response payload": 1,
+            "artifact.error_summary in response payload": 1,
             "exc_info=True in response path": 1,
             "stdout in response payload": 1,
             "stderr in response payload": 1,
