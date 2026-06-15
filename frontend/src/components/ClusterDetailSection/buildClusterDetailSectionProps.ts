@@ -33,6 +33,18 @@ export function buildClusterDetailSectionProps({
   clusterDetail,
   fleet,
 }: BuildClusterDetailSectionPropsArgs): ClusterDetailSectionDisplayProps {
+  // Null guard: return safe defaults when fleet is not available
+  if (!fleet) {
+    return {
+      selectedCluster: null,
+      clusterTriggerReason: "Loading cluster data…",
+      drilldownSummary: "Drilldown data pending",
+      recencyTimestamp: "Awaiting run",
+      clusterFresh: true,
+      clusterRecency: null,
+    };
+  }
+
   // Derive selectedCluster from fleet
   const selectedCluster = fleet.clusters.find(
     (cluster) => cluster.label === selectedClusterLabel,

@@ -479,18 +479,16 @@ const App = () => {
   // Hooks must always be called in the same order before any conditional returns.
   const { runtimeStatus, isLoading: runtimeStatusLoading, isError: runtimeStatusError } = useRuntimeStatus();
 
-  // Progressive loading: only wait for CRITICAL data (fleet + proposals).
-  // Run detail is non-critical - shell renders immediately, run panels show local loading.
-  if (!fleet || !proposals) {
-    return (
-      <div className="app-shell loading">
-        <div>
-          <p>Loading operator data…</p>
-          {error && <div className="alert">{error}</div>}
-        </div>
-      </div>
-    );
-  }
+  // =============================================================================
+  // FIX: Move ALL prop-derivation hooks before the loading guard.
+  //
+  // Previously, these hooks were called AFTER the early return, causing React #310:
+  // "Rendered fewer hooks on first render, more hooks on later render."
+  //
+  // Progressive loading: fleet/proposals are critical - shell renders when available.
+  // Run detail is non-critical - run-dependent panels show local loading placeholders.
+  // We use conditional rendering in JSX instead of early return to preserve hook order.
+  // =============================================================================
 
   // Extract cluster detail section props
   const clusterDetailSectionProps = useAppClusterDetailSectionProps({
@@ -714,42 +712,55 @@ const App = () => {
     artifactUrl,
   });
 
+  // Loading guard: check critical data availability AFTER all hooks
+  // Use conditional rendering in JSX instead of early return to preserve hook order
+  const isCriticalDataLoading = !fleet || !proposals;
+
   return (
     <div className="app-shell">
-      <AppHeader {...appHeaderProps} />
-      <AppNavigation run={run} />
-      {error && <div className="alert">{error}</div>}
-      <RecentRunsPanel {...recentRunsPanelProps} />
-      <AppRunSummarySection
-        run={run}
-        runOwnedPanelState={runOwnedPanelState}
-        loadedProps={runSummaryLoadedProps}
-        unavailableProps={runSummaryUnavailableProps}
-      />
-      <WorkflowLaneHeader type="diagnose" />
-      <AppDiagnosePanels {...diagnosePanelsProps} />
-      <VmAlertPanels
-        vmalertSources={run?.vmalertSources}
-        vmalertRuleState={run?.vmalertRuleState}
-      />
-      <WorkNextChecksLane {...workNextChecksLaneProps} />
-      <AppFleetSection
-        fleet={fleet}
-        selectedClusterLabel={selectedClusterLabel}
-        highlightedClusterLabel={highlightedClusterLabel}
-        onClusterSelect={handleClusterSelection}
-      />
-      <ClusterDetailSection {...clusterDetailSectionProps} />
-      {/* Runtime status summary - shows log counts and PVC usage */}
-      <RuntimeStatusSummary
-        runtimeStatus={runtimeStatus}
-        isLoading={runtimeStatusLoading}
-        isError={runtimeStatusError}
-      />
-    <WorkflowLaneHeader type="improve" />
-      <AppProposalsSection {...proposalSectionProps} />
-      <AppImprovePanels run={run} />
-      <AppDemoShellOverlay {...demoShellOverlayProps} />
+      {isCriticalDataLoading ? (
+        <div>
+          <p>Loading operator data…</p>
+          {error && <div className="alert">{error}</div>}
+        </div>
+      ) : (
+        <>
+          <AppHeader {...appHeaderProps} />
+          <AppNavigation run={run} />
+          {error && <div className="alert">{error}</div>}
+          <RecentRunsPanel {...recentRunsPanelProps} />
+          <AppRunSummarySection
+            run={run}
+            runOwnedPanelState={runOwnedPanelState}
+            loadedProps={runSummaryLoadedProps}
+            unavailableProps={runSummaryUnavailableProps}
+          />
+          <WorkflowLaneHeader type="diagnose" />
+          <AppDiagnosePanels {...diagnosePanelsProps} />
+          <VmAlertPanels
+            vmalertSources={run?.vmalertSources}
+            vmalertRuleState={run?.vmalertRuleState}
+          />
+          <WorkNextChecksLane {...workNextChecksLaneProps} />
+          <AppFleetSection
+            fleet={fleet}
+            selectedClusterLabel={selectedClusterLabel}
+            highlightedClusterLabel={highlightedClusterLabel}
+            onClusterSelect={handleClusterSelection}
+          />
+          <ClusterDetailSection {...clusterDetailSectionProps} />
+          {/* Runtime status summary - shows log counts and PVC usage */}
+          <RuntimeStatusSummary
+            runtimeStatus={runtimeStatus}
+            isLoading={runtimeStatusLoading}
+            isError={runtimeStatusError}
+          />
+          <WorkflowLaneHeader type="improve" />
+          <AppProposalsSection {...proposalSectionProps} />
+          <AppImprovePanels run={run} />
+          <AppDemoShellOverlay {...demoShellOverlayProps} />
+        </>
+      )}
     </div>
   );
 };

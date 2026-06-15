@@ -50,6 +50,16 @@ export function buildRunSummaryProps({
   fleet,
   headerStats,
 }: BuildRunSummaryPropsArgs): RunSummaryPropsModel {
+  // Null guard: return safe defaults when fleet is not available
+  if (!fleet) {
+    return {
+      runStatsSummary: "",
+      runSummaryStats: [],
+      degradedCount: 0,
+      hasDegradedClusters: false,
+    };
+  }
+
   // Degraded cluster count from fleet rating counts
   const degradedCount =
     fleet.fleetStatus.ratingCounts.find((entry) => entry.rating.toLowerCase() === "degraded")

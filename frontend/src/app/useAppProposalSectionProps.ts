@@ -18,8 +18,8 @@ import type { ProposalEntry, ProposalStatus } from "../types";
 export type SortKey = "proposalId" | "confidence" | "status";
 
 export interface UseAppProposalSectionPropsArgs {
-  /** Proposals payload with list and metadata */
-  proposals: { proposals: ProposalEntry[] };
+  /** Proposals payload with list and metadata (may be null during initial load) */
+  proposals: { proposals: ProposalEntry[] } | null;
   /** Current status filter value */
   statusFilter: string;
   /** Current sort key */
@@ -59,7 +59,7 @@ export function useAppProposalSectionProps({
   handleToggleProposal,
 }: UseAppProposalSectionPropsArgs): AppProposalsSectionProps {
   return {
-    proposals: proposals.proposals,
+    proposals: proposals?.proposals ?? [],
     statusFilter,
     sortKey,
     searchText,
