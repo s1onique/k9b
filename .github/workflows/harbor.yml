@@ -51,7 +51,8 @@ jobs:
         run: ./scripts/verify_all.sh
 
   build-push:
-    runs-on: ubuntu-latest
+    # Harbor resolves to internal SPbNIX names during OCI pushes; publish jobs must run inside SPbNIX infrastructure.
+    runs-on: spbnix-k8s
     needs: verify
     permissions:
       contents: read
@@ -101,7 +102,8 @@ jobs:
 
   # Frontend image build (separate job for clarity and future extensibility)
   frontend:
-    runs-on: ubuntu-latest
+    # Harbor resolves to internal SPbNIX names during OCI pushes; publish jobs must run inside SPbNIX infrastructure.
+    runs-on: spbnix-k8s
     needs: verify
     permissions:
       contents: read

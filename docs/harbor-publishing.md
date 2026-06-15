@@ -132,3 +132,15 @@ Both images are built for:
 - Credentials are stored as GitHub Actions secrets, never in code
 - Harbor login only runs when push is enabled (not on PR builds)
 - **Use a Harbor robot-account token** for `HARBOR_TOKEN` to limit access scope
+
+## GitHub Actions Runner Configuration
+
+Publish jobs (`build-push` and `frontend` in `harbor.yml`, `publish` in `helm-chart.yml`) run on the self-hosted Kubernetes runner (`spbnix-k8s`) because Harbor resolves to internal SPbNIX/private DNS names during OCI push operations. GitHub-hosted runners cannot resolve these internal addresses.
+
+| Job | Runner | Reason |
+|-----|--------|--------|
+| `verify` | `ubuntu-latest` (GitHub-hosted) | Public verification, no Harbor access required |
+| `package` | `ubuntu-latest` (GitHub-hosted) | Helm chart packaging only |
+| `build-push` | `spbnix-k8s` (self-hosted) | Internal Harbor DNS required |
+| `frontend` | `spbnix-k8s` (self-hosted) | Internal Harbor DNS required |
+| `publish` | `spbnix-k8s` (self-hosted) | Internal Harbor OCI push required |
