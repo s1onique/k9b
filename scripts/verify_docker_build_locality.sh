@@ -111,8 +111,8 @@ EOF
 EOF
 
     test3_passed=false
-    if grep -qE "setup-qemu-action" "${TEST_DIR}/workflow.missing-override.yml" 2>/dev/null; then
-        if ! grep -qE "image:.*binfmt" "${TEST_DIR}/workflow.missing-override.yml" 2>/dev/null; then
+    if grep -qE "uses:[[:space:]]+docker/setup-qemu-action@v[0-9]+" "${TEST_DIR}/workflow.missing-override.yml" 2>/dev/null; then
+        if ! grep -qE "^[[:space:]]*image:.*binfmt" "${TEST_DIR}/workflow.missing-override.yml" 2>/dev/null; then
             test3_passed=true
         fi
     fi
@@ -210,8 +210,8 @@ EOF
 EOF
 
     test7_passed=false
-    if grep -qE "setup-buildx-action" "${TEST_DIR}/workflow.buildx-no-override.yml" 2>/dev/null; then
-        if ! grep -qE "image=${PROXY_CACHE_HOST}/dockerhub-cache/moby/buildkit" "${TEST_DIR}/workflow.buildx-no-override.yml" 2>/dev/null; then
+    if grep -qE "uses:[[:space:]]+docker/setup-buildx-action@v[0-9]+" "${TEST_DIR}/workflow.buildx-no-override.yml" 2>/dev/null; then
+        if ! grep -qE "^[[:space:]]*image=${PROXY_CACHE_HOST}/dockerhub-cache/moby/buildkit" "${TEST_DIR}/workflow.buildx-no-override.yml" 2>/dev/null; then
             test7_passed=true
         fi
     fi
@@ -303,6 +303,38 @@ EOF
         FAILED=1
     fi
 
+    # Test 11: Comments containing setup-buildx-action should NOT inflate count
+    echo ""
+    echo "=== Test 11: setup-buildx-action in comments should not inflate count ==="
+    cat > "${TEST_DIR}/workflow.buildx-comment.yml" << 'EOF'
+      # Patch BuildKit containers after they are created by setup-buildx-action
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1
+EOF
+
+    test11_passed=true
+    buildx_count=$(grep -cE "uses:[[:space:]]+docker/setup-buildx-action@v[0-9]+" "${TEST_DIR}/workflow.buildx-comment.yml" 2>/dev/null || echo 0)
+    harbor_buildkit_count=$(grep -cE "^[[:space:]]*image=${PROXY_CACHE_HOST}/dockerhub-cache/moby/buildkit" "${TEST_DIR}/workflow.buildx-comment.yml" 2>/dev/null || echo 0)
+
+    if [[ "${buildx_count}" -ne 1 ]]; then
+        test11_passed=false
+        echo "  FAIL: Comment inflated Buildx count (${buildx_count})"
+    fi
+
+    if [[ "${harbor_buildkit_count}" -ne 1 ]]; then
+        test11_passed=false
+        echo "  FAIL: Harbor BuildKit override not counted (${harbor_buildkit_count})"
+    fi
+
+    if [[ "${test11_passed}" == true ]]; then
+        echo "  PASS: Comment mention did not inflate Buildx count"
+    else
+        FAILED=1
+    fi
+
     echo ""
     if [[ ${FAILED} -eq 0 ]]; then
         echo "SELF-TEST: PASSED"
@@ -346,9 +378,9 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
     # -------------------------------------------------------------------------
     # Rule 1: QEMU must have Harbor image override (not just avoid DockerHub)
     # -------------------------------------------------------------------------
-    if grep -qE "setup-qemu-action" "${workflow}"; then
-        qemu_count=$(grep -cE "setup-qemu-action" "${workflow}" 2>/dev/null || echo 0)
-        harbor_image_count=$(grep -cE "image:.*${PROXY_CACHE_HOST}/dockerhub-cache/tonistiigi/binfmt" "${workflow}" 2>/dev/null || echo 0)
+    if grep -qE "uses:[[:space:]]+docker/setup-qemu-action@v[0-9]+" "${workflow}"; then
+        qemu_count=$(grep -cE "uses:[[:space:]]+docker/setup-qemu-action@v[0-9]+" "${workflow}" 2>/dev/null || echo 0)
+        harbor_image_count=$(grep -cE "^[[:space:]]*image:[[:space:]]*${PROXY_CACHE_HOST}/dockerhub-cache/tonistiigi/binfmt" "${workflow}" 2>/dev/null || echo 0)
 
         if [[ ${qemu_count} -gt 0 ]] && [[ ${harbor_image_count} -lt ${qemu_count} ]]; then
             echo "  FAIL: QEMU section missing Harbor image override (${harbor_image_count}/${qemu_count} have it)"
@@ -371,9 +403,9 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
     # -------------------------------------------------------------------------
     # Rule 3: Buildx must have Harbor BuildKit image override
     # -------------------------------------------------------------------------
-    if grep -qE "setup-buildx-action" "${workflow}"; then
-        buildx_count=$(grep -cE "setup-buildx-action" "${workflow}" 2>/dev/null || echo 0)
-        harbor_buildkit_count=$(grep -cE "image=${PROXY_CACHE_HOST}/dockerhub-cache/moby/buildkit" "${workflow}" 2>/dev/null || echo 0)
+    if grep -qE "uses:[[:space:]]+docker/setup-buildx-action@v[0-9]+" "${workflow}"; then
+        buildx_count=$(grep -cE "uses:[[:space:]]+docker/setup-buildx-action@v[0-9]+" "${workflow}" 2>/dev/null || echo 0)
+        harbor_buildkit_count=$(grep -cE "^[[:space:]]*image=${PROXY_CACHE_HOST}/dockerhub-cache/moby/buildkit" "${workflow}" 2>/dev/null || echo 0)
 
         if [[ ${buildx_count} -gt 0 ]] && [[ ${harbor_buildkit_count} -lt ${buildx_count} ]]; then
             echo "  FAIL: Buildx section missing Harbor BuildKit image override (${harbor_buildkit_count}/${buildx_count} have it)"
