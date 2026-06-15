@@ -77,7 +77,10 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm64,amd64
+          platforms: arm64
+          image: registry.spbnix.com/dockerhub-cache/tonistiigi/binfmt:latest
+          # Use Harbor proxy cache instead of GitHub Actions cache for faster, local-first pulls
+          cache-image: false
 
       - name: Set up Docker Buildx
         id: buildx
@@ -114,8 +117,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=registry.spbnix.com/k9b/cache/k9b-backend:buildcache
+          cache-to: type=registry,ref=registry.spbnix.com/k9b/cache/k9b-backend:buildcache,mode=max
           build-args: |
             KUBECTL_VERSION=v1.29.6
             HELM_VERSION=3.20.1
@@ -148,7 +151,10 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm64,amd64
+          platforms: arm64
+          image: registry.spbnix.com/dockerhub-cache/tonistiigi/binfmt:latest
+          # Use Harbor proxy cache instead of GitHub Actions cache for faster, local-first pulls
+          cache-image: false
 
       - name: Set up Docker Buildx
         id: buildx
@@ -185,5 +191,5 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=registry.spbnix.com/k9b/cache/k9b-frontend:buildcache
+          cache-to: type=registry,ref=registry.spbnix.com/k9b/cache/k9b-frontend:buildcache,mode=max

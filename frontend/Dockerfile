@@ -10,7 +10,8 @@ WORKDIR /app
 
 # Copy package metadata before source so npm ci layer stays cached when code changes
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+# BuildKit cache mount for npm - compatible with registry cache exporter
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Copy source code
 COPY frontend/ ./
