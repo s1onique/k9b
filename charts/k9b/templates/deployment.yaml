@@ -10,6 +10,12 @@ metadata:
     {{- include "k9b.backend.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.backend.replicaCount }}
+  # Recreate strategy required: backend mounts a PVC (runs persistence) that can only
+  # be attached to one node at a time. RollingUpdate with maxSurge > 0 can cause
+  # Multi-Attach errors when Kubernetes creates the new pod before the old pod terminates.
+  # Recreate ensures the old pod is deleted before the new pod starts.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "k9b.backend.selectorLabels" . | nindent 6 }}

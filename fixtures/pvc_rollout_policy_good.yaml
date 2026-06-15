@@ -1,0 +1,35 @@
+# GOOD FIXTURE: PVC Deployment with Recreate strategy
+# This fixture should PASS the verifier because:
+# 1. It mounts a persistentVolumeClaim
+# 2. It uses strategy.type=Recreate
+#
+# Expected: PASS - Safe rollout behavior
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pvc-rollout-good-fixture
+  labels:
+    app: test
+    fixture-type: good
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: test
+  template:
+    metadata:
+      labels:
+        app: test
+    spec:
+      containers:
+        - name: app
+          image: nginx:latest
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: test-pvc

@@ -1,0 +1,36 @@
+# BAD FIXTURE: PVC Deployment with default RollingUpdate strategy
+# This fixture should FAIL the verifier because:
+# 1. It mounts a persistentVolumeClaim
+# 2. It uses the default RollingUpdate strategy (not Recreate)
+#
+# Expected: FAIL - Multi-Attach error during rollout
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pvc-rollout-bad-fixture
+  labels:
+    app: test
+    fixture-type: bad
+spec:
+  replicas: 1
+  # NOTE: No strategy specified - defaults to RollingUpdate
+  # This will cause Multi-Attach errors when old pod hasn't terminated
+  # before new pod tries to mount the same PVC
+  selector:
+    matchLabels:
+      app: test
+  template:
+    metadata:
+      labels:
+        app: test
+    spec:
+      containers:
+        - name: app
+          image: nginx:latest
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: test-pvc

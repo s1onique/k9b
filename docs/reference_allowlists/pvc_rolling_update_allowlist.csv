@@ -1,0 +1,15 @@
+# PVC Rolling Update Allowlist
+# Deployments in this file are explicitly allowed to use RollingUpdate strategy
+# even when mounting persistentVolumeClaim volumes.
+#
+# Format: deployment_name,reason,storage_access_mode
+#
+# Only add deployments here if:
+# 1. The PVC uses a storage class that supports multi-writer access (e.g., ReadWriteMany)
+# 2. The workload is designed to handle concurrent access safely
+# 3. The deployment strategy is intentionally RollingUpdate for zero-downtime requirements
+#
+# For single-writer PVCs (ReadWriteOnce), use strategy.type=Recreate instead.
+
+# Example entries (commented out - uncomment and fill in if needed):
+# my-multi-writer-deployment,Uses NFS storage class with ReadWriteMany,ReadWriteMany
