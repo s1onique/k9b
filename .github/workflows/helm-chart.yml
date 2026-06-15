@@ -119,6 +119,11 @@ jobs:
           docker buildx version
           ls -l /var/run/docker.sock
 
+      - name: Install SPbNIX Harbor CA
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+        run: .github/scripts/install-spbnix-harbor-ca.sh
+
       - name: Validate Harbor configuration
         run: |
           echo "Validating Harbor configuration..."

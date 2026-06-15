@@ -80,7 +80,14 @@ jobs:
           platforms: arm64,amd64
 
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Install SPbNIX Harbor CA
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+          BUILDX_BUILDER_NAME: ${{ steps.buildx.outputs.name }}
+        run: .github/scripts/install-spbnix-harbor-ca.sh
 
       - name: Login to Harbor
         if: github.event_name != 'pull_request'
@@ -144,7 +151,14 @@ jobs:
           platforms: arm64,amd64
 
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Install SPbNIX Harbor CA
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+          BUILDX_BUILDER_NAME: ${{ steps.buildx.outputs.name }}
+        run: .github/scripts/install-spbnix-harbor-ca.sh
 
       - name: Login to Harbor
         if: github.event_name != 'pull_request'

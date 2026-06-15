@@ -21,8 +21,36 @@ Before the workflow can push images, add these secrets to your GitHub repository
 |--------|-------------|
 | `HARBOR_USERNAME` | Your Harbor username |
 | `HARBOR_TOKEN` | Harbor access token (preferably a robot-account token with push access) |
+| `SPBNIX_CA_CERT_PEM` | PEM-encoded CA certificate (or CA chain) for `registry.spbnix.com` / `harbor-pve1.spbnix.local` |
 
 **Note:** `HARBOR_TOKEN` should preferably be a Harbor robot-account token with push access to the target Harbor project.
+
+## SPbNIX Harbor CA Certificate
+
+The `SPBNIX_CA_CERT_PEM` secret contains the PEM-encoded CA certificate (or CA chain) required to trust the SPbNIX Harbor registry. This is needed because `registry.spbnix.com` resolves to `harbor-pve1.spbnix.local`, which uses a certificate signed by the internal SPbNIX CA.
+
+### Creating the Secret
+
+The CA certificate is typically provided by the SPbNIX infrastructure team. Once you have the PEM file:
+
+```bash
+# For repository-level secret
+gh secret set SPBNIX_CA_CERT_PEM --repo s1onique/k9b < spbnix-harbor-ca.pem
+
+# For organization-level secret (if applicable)
+gh secret set SPBNIX_CA_CERT_PEM --org s1onique < spbnix-harbor-ca.pem
+```
+
+Alternatively, set it via the GitHub UI: **Settings → Secrets and variables → Actions → New repository secret**.
+
+### CA Installation Behavior
+
+The CA is installed in two places:
+
+1. **Runner trust store** - For Docker CLI operations (login, diagnostics)
+2. **BuildKit containers** - For image push operations via `docker/build-push-action`
+
+This ensures end-to-end TLS verification without disabling certificate checks.
 
 ## Registry Configuration
 
