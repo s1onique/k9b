@@ -58,6 +58,34 @@ This ensures end-to-end TLS verification without disabling certificate checks.
 |---------|-------|
 | Registry | `registry.spbnix.com` |
 | Harbor Project | `gitinsky` |
+| DockerHub Proxy Cache | `registry.spbnix.com/dockerhub-cache` |
+
+## DockerHub Proxy Cache
+
+Base images for Docker builds are routed through Harbor's proxy cache to avoid DockerHub layer pull instability.
+
+### How It Works
+
+- **Harbor project**: `dockerhub-cache` (proxy-cache mode, not a push target)
+- **Purpose**: Cache DockerHub layers locally to avoid rate limiting and pull failures
+- **Images routed through proxy**:
+  - `python:3.12-slim` → `registry.spbnix.com/dockerhub-cache/library/python:3.12-slim`
+  - `node:20-slim` → `registry.spbnix.com/dockerhub-cache/library/node:20-slim`
+  - `nginxinc/nginx-unprivileged:stable-alpine` → `registry.spbnix.com/dockerhub-cache/nginxinc/nginx-unprivileged:stable-alpine`
+
+### DockerHub Official Images
+
+DockerHub official images (like `python`, `node`, `nginx`) require the `library/` prefix in Harbor because they live under the `library/` namespace on DockerHub.
+
+### Verification
+
+The script `scripts/verify_dockerhub_base_images.sh` checks that CI-critical Dockerfiles use the Harbor proxy cache and fails if direct DockerHub base images are detected.
+
+### Notes
+
+- This fixes DockerHub layer pull instability, not GitHub Actions cache timeouts
+- The proxy cache is read-only from the build perspective (pull only)
+- After first pull, layers are cached in Harbor and subsequent builds use local layers
 
 ## Image Names
 

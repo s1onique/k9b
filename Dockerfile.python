@@ -1,4 +1,7 @@
-FROM python:3.12-slim
+# Use Harbor proxy cache for DockerHub images to avoid pull instability
+# Harbor project: dockerhub-cache (proxy-cache, not push target)
+# DockerHub official images require 'library/' prefix in Harbor
+FROM registry.spbnix.com/dockerhub-cache/library/python:3.12-slim
 
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM

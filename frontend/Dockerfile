@@ -1,7 +1,10 @@
 # =============================================================================
 # Stage 1: Build
 # =============================================================================
-FROM node:20-slim AS builder
+# Use Harbor proxy cache for DockerHub images to avoid pull instability
+# Harbor project: dockerhub-cache (proxy-cache, not push target)
+# DockerHub official images require 'library/' prefix in Harbor
+FROM registry.spbnix.com/dockerhub-cache/library/node:20-slim AS builder
 
 WORKDIR /app
 
@@ -20,7 +23,9 @@ RUN npm run build
 # Uses nginx-unprivileged image for Kubernetes readOnlyRootFilesystem compatibility.
 # All nginx temp/runtime paths are moved to /tmp (mounted as writable emptyDir).
 # =============================================================================
-FROM nginxinc/nginx-unprivileged:stable-alpine AS runtime
+# Use Harbor proxy cache for DockerHub images to avoid pull instability
+# Harbor project: dockerhub-cache (proxy-cache, not push target)
+FROM registry.spbnix.com/dockerhub-cache/nginxinc/nginx-unprivileged:stable-alpine AS runtime
 
 # Create nginx temp directories for runtime (non-root compatible)
 # These are required by nginx.conf pid/client_body/proxy/fastcgi/uwsgi/scgi_temp paths
