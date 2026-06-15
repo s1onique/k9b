@@ -96,35 +96,41 @@ install_into_runner_trust() {
 # --- Install into Docker daemon trust (CRITICAL for "Error response from daemon") ---
 # Docker daemon validates registry TLS using /etc/docker/certs.d/<host>/ca.crt
 # This path must be accessible to the Docker daemon, not just the runner container.
-# In DinD setups, the daemon runs in a sidecar container; we install to the host
-# filesystem where the daemon can see it.
+# In DinD setups, the daemon runs in a sidecar container; the CA is mounted there.
+#
+# ARC GitHub-hosted runners use DinD sidecar for the Docker daemon. The runner-side
+# /etc/docker/certs.d write is no longer authoritative after infra ESO changes.
+# When SKIP_RUNNER_DOCKER_CERTS_D=1, skip runner-side install entirely and let
+# the DinD sidecar own the daemon CA trust path.
 install_into_docker_daemon_trust() {
   echo "Installing CA into Docker daemon trust store for $HARBOR_HOST..."
 
   local docker_certs_dir="/etc/docker/certs.d/${HARBOR_HOST}"
   local ca_dest="${docker_certs_dir}/ca.crt"
 
-  # Try runner filesystem first (works if runner IS the Docker host)
-  if [[ -w "$docker_certs_dir" ]] || mkdir -p "$docker_certs_dir" 2>/dev/null; then
+  # If ARC/DinD mounts the CA into the daemon sidecar, runner-side certs.d is
+  # diagnostic/convenience only. Do not fail the workflow here.
+  if [[ "${SKIP_RUNNER_DOCKER_CERTS_D:-0}" == "1" ]]; then
+    echo "Skipping runner-side Docker certs.d install; ARC DinD sidecar owns daemon CA trust."
+    return 0
+  fi
+
+  if [[ -d "$docker_certs_dir" && -w "$docker_certs_dir" ]]; then
     cp "$CERT_FILE" "$ca_dest"
     chmod 0644 "$ca_dest"
-    echo "CA installed into Docker daemon trust: $ca_dest"
+    echo "CA installed into runner-side Docker certs.d: $ca_dest"
     return 0
   fi
 
-  # Try with sudo (runner container with sudo access)
   if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    sudo mkdir -p "$docker_certs_dir"
-    sudo cp "$CERT_FILE" "$ca_dest"
-    sudo chmod 0644 "$ca_dest"
-    echo "CA installed into Docker daemon trust (sudo): $ca_dest"
+    sudo install -D -m 0644 "$CERT_FILE" "$ca_dest"
+    echo "CA installed into runner-side Docker certs.d via sudo: $ca_dest"
     return 0
   fi
 
-  echo "WARNING: Could not install CA into Docker daemon trust at $ca_dest"
-  echo "This may cause 'Error response from daemon' when docker login/push runs."
-  echo "Attempting to verify docker info anyway..."
-  return 0  # Don't fail - docker might work if daemon already trusts the CA
+  echo "WARNING: Could not install CA into runner-side Docker certs.d at $ca_dest"
+  echo "This is non-fatal when ARC DinD mounts the CA into the dind sidecar."
+  return 0
 }
 
 install_into_runner_trust

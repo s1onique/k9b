@@ -76,9 +76,11 @@ jobs:
 
       # CA must be installed BEFORE QEMU/Buildx because they pull images from Harbor.
       # The Docker daemon validates registry TLS, so the CA must be in daemon trust.
+      # SKIP_RUNNER_DOCKER_CERTS_D=1: DinD sidecar owns daemon CA trust, runner-side is diagnostic.
       - name: Install SPbNIX Harbor CA
         env:
           SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+          SKIP_RUNNER_DOCKER_CERTS_D: "1"
         run: .github/scripts/install-spbnix-harbor-ca.sh
 
       # Proof step: docker pull exercises dockerd's trust path, not just CLI tools.
@@ -117,6 +119,7 @@ jobs:
         env:
           SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
           BUILDX_BUILDER_NAME: ${{ steps.buildx.outputs.name }}
+          SKIP_RUNNER_DOCKER_CERTS_D: "1"
         run: .github/scripts/install-spbnix-harbor-ca.sh
 
       - name: Login to Harbor
@@ -177,9 +180,11 @@ jobs:
 
       # CA must be installed BEFORE QEMU/Buildx because they pull images from Harbor.
       # The Docker daemon validates registry TLS, so the CA must be in daemon trust.
+      # SKIP_RUNNER_DOCKER_CERTS_D=1: DinD sidecar owns daemon CA trust, runner-side is diagnostic.
       - name: Install SPbNIX Harbor CA
         env:
           SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+          SKIP_RUNNER_DOCKER_CERTS_D: "1"
         run: .github/scripts/install-spbnix-harbor-ca.sh
 
       # Proof step: docker pull exercises dockerd's trust path, not just CLI tools.
@@ -218,6 +223,7 @@ jobs:
         env:
           SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
           BUILDX_BUILDER_NAME: ${{ steps.buildx.outputs.name }}
+          SKIP_RUNNER_DOCKER_CERTS_D: "1"
         run: .github/scripts/install-spbnix-harbor-ca.sh
 
       - name: Login to Harbor

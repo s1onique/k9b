@@ -357,6 +357,7 @@ echo "  4. No --insecure-skip-tls-verify flags"
 echo "  5. No near-miss hostnames"
 echo "  6. Push tags must include registry hostname"
 echo "  7. Proxy cache references (${PROXY_CACHE_HOST}/dockerhub-cache/...) are OK"
+echo "  8. ARC DinD workflows must set SKIP_RUNNER_DOCKER_CERTS_D when using CA install script"
 echo ""
 
 for workflow in "${WORKFLOW_FILES[@]}"; do
@@ -480,6 +481,40 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
     # -------------------------------------------------------------------------
     if grep -qE "harbor-pve1\.spbnix\.local/dockerhub-cache" "${workflow}"; then
         echo "  OK: Proxy cache references found (OK for pull-through)"
+    fi
+
+    # -------------------------------------------------------------------------
+    # Rule 8: ARC DinD workflows using CA install script must set SKIP_RUNNER_DOCKER_CERTS_D
+    # -------------------------------------------------------------------------
+    # When workflows use spbnix-k8s-docker runners with the CA install script,
+    # they should set SKIP_RUNNER_DOCKER_CERTS_D=1 since DinD sidecar owns daemon trust.
+    # Check each script invocation individually to ensure every step sets the flag.
+    if grep -qE "runs-on:.*spbnix-k8s-docker" "${workflow}"; then
+        # Count invocations of the script
+        ca_invocation_count=$(grep -cE "\brun:\s*\..*install-spbnix-harbor-ca\.sh" "${workflow}" || true)
+        if [[ "${ca_invocation_count}" -gt 0 ]]; then
+            echo "  Found ${ca_invocation_count} install-spbnix-harbor-ca.sh invocation(s) in DinD workflow"
+
+            # Parse each invocation line number from grep -n output
+            all_ok=true
+            while IFS=':' read -r line_num rest; do
+                # Get content around this line (up to 15 preceding lines for env block)
+                start=$((line_num > 15 ? line_num - 15 : 1))
+                context=$(sed -n "${start},${line_num}p" "${workflow}")
+
+                # Check if this invocation has SKIP_RUNNER_DOCKER_CERTS_D in its env block
+                if ! echo "${context}" | grep -qE "SKIP_RUNNER_DOCKER_CERTS_D.*1"; then
+                    echo "  FAIL: Script invocation at line ${line_num} missing SKIP_RUNNER_DOCKER_CERTS_D=1"
+                    echo "        DinD sidecar owns daemon CA trust; runner-side certs.d is non-authoritative."
+                    all_ok=false
+                    FAILED=1
+                fi
+            done < <(grep -nE "\brun:\s*\..*install-spbnix-harbor-ca\.sh" "${workflow}" 2>/dev/null || true)
+
+            if [[ "${all_ok}" == true ]]; then
+                echo "  OK: All ${ca_invocation_count} CA install invocation(s) set SKIP_RUNNER_DOCKER_CERTS_D=1"
+            fi
+        fi
     fi
 
     echo ""
