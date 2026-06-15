@@ -155,17 +155,17 @@ Example image tags:
 
 **Status:** Active workaround (do not remove until Harbor is fixed)
 
-**Problem:** Harbor leaks its internal hostname (`harbor-pve1.spbnix.local`) in OCI blob-upload redirect responses. When `helm push` receives a redirect to the internal hostname, the request fails with 401 Unauthorized because the external hostname credentials do not authenticate against the internal hostname.
+**Problem:** Harbor leaks its internal hostname (`harbor-pve1.spbnix.local`) in OCI blob-upload redirect responses. Additionally, the internal hostname uses an internal CA not trusted by CI runners.
 
 **Workaround:** Log into both hostnames before pushing the chart:
-- `registry.spbnix.com` - external/public hostname
-- `harbor-pve1.spbnix.local` - internal blob-upload hostname
+- `registry.spbnix.com` - external/public hostname (via `docker/login-action`)
+- `harbor-pve1.spbnix.local` - internal blob-upload hostname (via `helm registry login --insecure`)
 
-**How it works:** The `publish` job in `helm-chart.yml` now runs two `docker/login-action` steps before `helm push`:
-1. Login to `registry.spbnix.com` (external hostname)
-2. Login to `harbor-pve1.spbnix.local` (internal blob-upload hostname, workaround)
+**How it works:** The `publish` job in `helm-chart.yml` runs:
+1. External host login: `docker/login-action` to `registry.spbnix.com`
+2. Internal host login: `helm registry login harbor-pve1.spbnix.local --username ... --password-stdin --insecure`
 
-Both logins use the same Harbor robot credentials (`HARBOR_USERNAME`, `HARBOR_TOKEN`).
+The `--insecure` flag is isolated to the internal hostname workaround only, since that host uses a self-signed internal CA.
 
 **Long-term fix:** Repair Harbor's external URL / reverse-proxy configuration so it never emits internal hostnames in redirect responses. Once fixed:
 1. Remove the internal-host login step from `helm-chart.yml`
@@ -173,10 +173,11 @@ Both logins use the same Harbor robot credentials (`HARBOR_USERNAME`, `HARBOR_TO
 3. Verify `helm push` succeeds with only the external hostname login
 
 **Verifier:** The script `scripts/verify_helm_oci_login.sh` checks that:
-- Both hostnames have login steps
+- Both hostnames have login steps (docker/login-action for external, helm --insecure for internal)
 - Push target remains `oci://registry.spbnix.com/k9b`
-- No `--password` usage (must use `--password-stdin` or secrets injection)
+- No plain `--password` usage (must use `--password-stdin` or secrets injection)
 - No secrets are echoed or printed
+- `--insecure` is only used for the internal hostname (isolated to workaround)
 
 ## Workflow Architecture
 

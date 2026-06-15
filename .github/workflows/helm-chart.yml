@@ -155,15 +155,17 @@ jobs:
           password: ${{ secrets.HARBOR_TOKEN }}
 
       - name: Log in to Harbor (internal blob-upload hostname)
-        # WORKAROUND: Harbor leaks the internal hostname (harbor-pve1.spbnix.local) in OCI
-        # blob-upload redirect responses. Authenticate against both hostnames so the
-        # redirected PUT request succeeds. Remove this login once Harbor's external URL /
-        # reverse-proxy header is fixed to never emit internal hostnames.
-        uses: docker/login-action@v4
-        with:
-          registry: harbor-pve1.spbnix.local
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_TOKEN }}
+        # WORKAROUND: Harbor leaks harbor-pve1.spbnix.local in OCI blob-upload URLs.
+        # The internal host uses an internal CA not trusted by GitHub-hosted runners,
+        # so this login is isolated to Helm and uses --insecure only for the leaked
+        # internal hostname. Remove this login once Harbor's external URL / reverse-proxy
+        # header is fixed to never emit internal hostnames.
+        shell: bash
+        run: |
+          echo "${{ secrets.HARBOR_TOKEN }}" | helm registry login harbor-pve1.spbnix.local \
+            --username "${{ secrets.HARBOR_USERNAME }}" \
+            --password-stdin \
+            --insecure
 
       - name: Download package artifact
         uses: actions/download-artifact@v4
