@@ -74,6 +74,29 @@ jobs:
           docker buildx version
           ls -l /var/run/docker.sock
 
+      # CA must be installed BEFORE QEMU/Buildx because they pull images from Harbor.
+      # The Docker daemon validates registry TLS, so the CA must be in daemon trust.
+      - name: Install SPbNIX Harbor CA
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+        run: .github/scripts/install-spbnix-harbor-ca.sh
+
+      # Proof step: docker pull exercises dockerd's trust path, not just CLI tools.
+      # If this fails with "unknown ca", the DinD sidecar needs the CA mounted.
+      - name: Verify Docker daemon trusts Harbor
+        run: |
+          set -euo pipefail
+          echo "Runner-side Docker cert path:"
+          ls -l /etc/docker/certs.d/harbor-pve1.spbnix.local/ca.crt 2>/dev/null || echo "NOT FOUND in runner"
+          echo ""
+          echo "Docker daemon probe (pulls from Harbor):"
+          docker pull harbor-pve1.spbnix.local/dockerhub-cache/library/busybox:latest || {
+            echo "ERROR: docker pull failed - Docker daemon does not trust Harbor CA"
+            echo "If runner:/etc/docker/certs.d exists but dind sidecar does not,"
+            echo "the ARC runner scale set pod template needs CA volume mount."
+            exit 1
+          }
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
@@ -89,7 +112,8 @@ jobs:
           driver-opts: |
             image=harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1
 
-      - name: Install SPbNIX Harbor CA
+      # Patch BuildKit containers after they are created by setup-buildx-action
+      - name: Patch BuildKit containers with Harbor CA
         env:
           SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
           BUILDX_BUILDER_NAME: ${{ steps.buildx.outputs.name }}
@@ -151,6 +175,29 @@ jobs:
           docker buildx version
           ls -l /var/run/docker.sock
 
+      # CA must be installed BEFORE QEMU/Buildx because they pull images from Harbor.
+      # The Docker daemon validates registry TLS, so the CA must be in daemon trust.
+      - name: Install SPbNIX Harbor CA
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+        run: .github/scripts/install-spbnix-harbor-ca.sh
+
+      # Proof step: docker pull exercises dockerd's trust path, not just CLI tools.
+      # If this fails with "unknown ca", the DinD sidecar needs the CA mounted.
+      - name: Verify Docker daemon trusts Harbor
+        run: |
+          set -euo pipefail
+          echo "Runner-side Docker cert path:"
+          ls -l /etc/docker/certs.d/harbor-pve1.spbnix.local/ca.crt 2>/dev/null || echo "NOT FOUND in runner"
+          echo ""
+          echo "Docker daemon probe (pulls from Harbor):"
+          docker pull harbor-pve1.spbnix.local/dockerhub-cache/library/busybox:latest || {
+            echo "ERROR: docker pull failed - Docker daemon does not trust Harbor CA"
+            echo "If runner:/etc/docker/certs.d exists but dind sidecar does not,"
+            echo "the ARC runner scale set pod template needs CA volume mount."
+            exit 1
+          }
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
@@ -166,7 +213,8 @@ jobs:
           driver-opts: |
             image=harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1
 
-      - name: Install SPbNIX Harbor CA
+      # Patch BuildKit containers after they are created by setup-buildx-action
+      - name: Patch BuildKit containers with Harbor CA
         env:
           SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
           BUILDX_BUILDER_NAME: ${{ steps.buildx.outputs.name }}

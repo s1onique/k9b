@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # install-spbnix-harbor-ca.sh
-# Installs SPbNIX Harbor CA certificate into runner and BuildKit containers.
+# Installs SPbNIX Harbor CA certificate into runner, Docker daemon, and BuildKit containers.
 #
 # Required env vars:
 #   SPBNIX_CA_CERT_PEM  - PEM-encoded CA certificate content
 #
 # Optional env vars:
 #   BUILDX_BUILDER_NAME - Buildx builder name; if set, patches BuildKit containers
+#   HARBOR_HOST         - Harbor hostname (default: harbor-pve1.spbnix.local)
 #
 set -euo pipefail
 
@@ -17,7 +18,8 @@ if [[ -z "${SPBNIX_CA_CERT_PEM:-}" ]]; then
   exit 1
 fi
 
-# --- Setup directories ---
+# --- Configuration ---
+HARBOR_HOST="${HARBOR_HOST:-harbor-pve1.spbnix.local}"
 CERT_DIR="${RUNNER_TEMP:-/tmp}/spbnix-ca"
 CERT_FILE="${CERT_DIR}/spbnix-harbor-ca.crt"
 mkdir -p "$CERT_DIR"
@@ -36,9 +38,26 @@ echo "CA certificate details:"
 echo "$VALIDATED"
 echo ""
 
-# --- Install into runner trust ---
-install_into_runner() {
-  echo "Installing CA into runner trust store..."
+# --- Helper: install with sudo if needed ---
+install_file() {
+  local src="$1"
+  local dest="$2"
+  local mode="${3:-0644}"
+
+  if [[ -w "$(dirname "$dest")" ]]; then
+    cp "$src" "$dest"
+    chmod "$mode" "$dest"
+  elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    sudo install -D -m "$mode" "$src" "$dest"
+  else
+    echo "ERROR: Cannot write to $(dirname "$dest")"
+    exit 1
+  fi
+}
+
+# --- Install into runner system trust (for curl, openssl, etc.) ---
+install_into_runner_trust() {
+  echo "Installing CA into runner system trust store..."
 
   local dest=""
   local updated=0
@@ -64,21 +83,52 @@ install_into_runner() {
         sudo tee -a /etc/ssl/certs/ca-certificates.crt < "$CERT_FILE" > /dev/null
       else
         echo "ERROR: Cannot install CA into runner trust: no write access to system CA store."
-        echo "Neither /usr/local/share/ca-certificates nor /etc/ssl/certs/ca-certificates.crt are writable."
-        echo "Docker login/push diagnostics require trustworthy TLS."
         exit 1
       fi
     fi
-    echo "CA installed into runner trust: $dest"
+    echo "CA installed into runner system trust: $dest"
   else
     echo "ERROR: Cannot install CA into runner trust: no write access to system CA store."
-    echo "Neither /usr/local/share/ca-certificates nor /etc/ssl/certs/ca-certificates.crt are writable."
-    echo "Docker login/push diagnostics require trustworthy TLS."
     exit 1
   fi
 }
 
-install_into_runner
+# --- Install into Docker daemon trust (CRITICAL for "Error response from daemon") ---
+# Docker daemon validates registry TLS using /etc/docker/certs.d/<host>/ca.crt
+# This path must be accessible to the Docker daemon, not just the runner container.
+# In DinD setups, the daemon runs in a sidecar container; we install to the host
+# filesystem where the daemon can see it.
+install_into_docker_daemon_trust() {
+  echo "Installing CA into Docker daemon trust store for $HARBOR_HOST..."
+
+  local docker_certs_dir="/etc/docker/certs.d/${HARBOR_HOST}"
+  local ca_dest="${docker_certs_dir}/ca.crt"
+
+  # Try runner filesystem first (works if runner IS the Docker host)
+  if [[ -w "$docker_certs_dir" ]] || mkdir -p "$docker_certs_dir" 2>/dev/null; then
+    cp "$CERT_FILE" "$ca_dest"
+    chmod 0644 "$ca_dest"
+    echo "CA installed into Docker daemon trust: $ca_dest"
+    return 0
+  fi
+
+  # Try with sudo (runner container with sudo access)
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    sudo mkdir -p "$docker_certs_dir"
+    sudo cp "$CERT_FILE" "$ca_dest"
+    sudo chmod 0644 "$ca_dest"
+    echo "CA installed into Docker daemon trust (sudo): $ca_dest"
+    return 0
+  fi
+
+  echo "WARNING: Could not install CA into Docker daemon trust at $ca_dest"
+  echo "This may cause 'Error response from daemon' when docker login/push runs."
+  echo "Attempting to verify docker info anyway..."
+  return 0  # Don't fail - docker might work if daemon already trusts the CA
+}
+
+install_into_runner_trust
+install_into_docker_daemon_trust
 
 # --- Patch BuildKit containers if builder name is provided ---
 if [[ -n "${BUILDX_BUILDER_NAME:-}" ]]; then
