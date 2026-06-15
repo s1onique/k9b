@@ -103,21 +103,33 @@ if [[ -n "${BUILDX_BUILDER_NAME:-}" ]]; then
   
   for container in $CONTAINERS; do
     echo "Patching $container..."
-    
-    # Copy certificate into container
-    docker cp "$CERT_FILE" "${container}:/usr/local/share/ca-certificates/spbnix-harbor-ca.crt"
-    
-    # Try update-ca-certificates first
-    if docker exec "$container" command -v update-ca-certificates &>/dev/null; then
-      docker exec "$container" update-ca-certificates
+
+    docker cp "$CERT_FILE" "${container}:/tmp/spbnix-harbor-ca.crt"
+
+    if docker exec "$container" sh -lc 'command -v update-ca-certificates >/dev/null 2>&1'; then
+      docker exec "$container" sh -lc '
+        set -eu
+        mkdir -p /usr/local/share/ca-certificates
+        cp /tmp/spbnix-harbor-ca.crt /usr/local/share/ca-certificates/spbnix-harbor-ca.crt
+        update-ca-certificates
+      '
     else
       echo "WARNING: update-ca-certificates not available in $container, appending to system CA bundle"
-      docker exec "$container" tee -a /etc/ssl/certs/ca-certificates.crt < "$CERT_FILE" > /dev/null 2>&1 || {
+      docker exec "$container" sh -lc '
+        set -eu
+        test -f /etc/ssl/certs/ca-certificates.crt
+        cat /tmp/spbnix-harbor-ca.crt >> /etc/ssl/certs/ca-certificates.crt
+      ' || {
         echo "ERROR: Failed to install CA in BuildKit container $container"
         exit 1
       }
     fi
-    
+
+    docker exec "$container" sh -lc '
+      test -s /etc/ssl/certs/ca-certificates.crt
+      grep -q "BEGIN CERTIFICATE" /etc/ssl/certs/ca-certificates.crt
+    '
+
     echo "Patched: $container"
   done
   
