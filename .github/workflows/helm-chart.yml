@@ -94,7 +94,8 @@ jobs:
   publish:
     name: Publish Helm Chart to Harbor OCI
     # Harbor resolves to internal SPbNIX names during OCI pushes; publish jobs must run inside SPbNIX infrastructure.
-    runs-on: spbnix-k8s
+    # Docker-capable runner required for Harbor registry login.
+    runs-on: spbnix-k8s-docker
     needs: [verify, package]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     steps:
@@ -105,6 +106,18 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           version: '3.14.0'
+
+      - name: Docker preflight
+        run: |
+          set -eux
+          echo "runner=${RUNNER_NAME:-unknown}"
+          echo "os=${RUNNER_OS:-unknown}"
+          echo "arch=${RUNNER_ARCH:-unknown}"
+          which docker
+          docker version
+          docker info
+          docker buildx version
+          ls -l /var/run/docker.sock
 
       - name: Validate Harbor configuration
         run: |

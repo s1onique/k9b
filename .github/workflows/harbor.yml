@@ -52,7 +52,8 @@ jobs:
 
   build-push:
     # Harbor resolves to internal SPbNIX names during OCI pushes; publish jobs must run inside SPbNIX infrastructure.
-    runs-on: spbnix-k8s
+    # Docker-capable runner required for QEMU, Buildx, build, and push operations.
+    runs-on: spbnix-k8s-docker
     needs: verify
     permissions:
       contents: read
@@ -60,6 +61,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Docker preflight
+        run: |
+          set -eux
+          echo "runner=${RUNNER_NAME:-unknown}"
+          echo "os=${RUNNER_OS:-unknown}"
+          echo "arch=${RUNNER_ARCH:-unknown}"
+          which docker
+          docker version
+          docker info
+          docker buildx version
+          ls -l /var/run/docker.sock
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -103,7 +116,8 @@ jobs:
   # Frontend image build (separate job for clarity and future extensibility)
   frontend:
     # Harbor resolves to internal SPbNIX names during OCI pushes; publish jobs must run inside SPbNIX infrastructure.
-    runs-on: spbnix-k8s
+    # Docker-capable runner required for QEMU, Buildx, build, and push operations.
+    runs-on: spbnix-k8s-docker
     needs: verify
     permissions:
       contents: read
@@ -111,6 +125,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Docker preflight
+        run: |
+          set -eux
+          echo "runner=${RUNNER_NAME:-unknown}"
+          echo "os=${RUNNER_OS:-unknown}"
+          echo "arch=${RUNNER_ARCH:-unknown}"
+          which docker
+          docker version
+          docker info
+          docker buildx version
+          ls -l /var/run/docker.sock
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
