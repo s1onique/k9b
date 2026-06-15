@@ -5,12 +5,15 @@
 # Verifies that GitHub Actions workflows follow local-first Docker build hygiene:
 #   - setup-qemu-action must use Harbor proxy cache for binfmt image (not default)
 #   - setup-qemu-action restricts QEMU platforms to non-native targets only
+#   - setup-buildx-action must use Harbor proxy cache for BuildKit builder image
 #   - docker/build-push-action must use registry cache (Harbor), not GHA cache
 #
 # This script fails on:
 #   - setup-qemu-action missing Harbor image override (silently uses DockerHub default)
 #   - setup-qemu-action with docker.io/tonistiigi/binfmt (explicit DockerHub pull)
 #   - setup-qemu-action with platforms including native architecture
+#   - setup-buildx-action missing Harbor BuildKit image override
+#   - setup-buildx-action with explicit unproxied BuildKit images
 #   - docker/build-push-action missing registry cache (hard fail)
 #   - docker/build-push-action using type=gha cache
 #
@@ -25,6 +28,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Required Harbor binfmt image (from Harbor proxy cache)
 HARBOR_BINFMT_IMAGE="registry.spbnix.com/dockerhub-cache/tonistiigi/binfmt:latest"
+
+# Required Harbor BuildKit builder image (from Harbor proxy cache)
+HARBOR_BUILDKIT_IMAGE="registry.spbnix.com/dockerhub-cache/moby/buildkit:buildx-stable-1"
 
 # Self-test mode: create temp workflows and verify detection
 SELF_TEST_MODE=false
@@ -194,6 +200,110 @@ EOF
         FAILED=1
     fi
 
+    # Test 7: Buildx with no driver-opts image override should FAIL
+    echo ""
+    echo "=== Test 7: Buildx with no driver-opts image override should FAIL ==="
+    cat > "${TEST_DIR}/workflow.buildx-no-override.yml" << 'EOF'
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+EOF
+
+    test7_passed=false
+    if grep -qE "setup-buildx-action" "${TEST_DIR}/workflow.buildx-no-override.yml" 2>/dev/null; then
+        # Check if there's no driver-opts with Harbor BuildKit image
+        if ! grep -qE "image=registry\.spbnix\.com/dockerhub-cache/moby/buildkit" "${TEST_DIR}/workflow.buildx-no-override.yml" 2>/dev/null; then
+            test7_passed=true
+        fi
+    fi
+
+    if [[ "${test7_passed}" == true ]]; then
+        echo "  PASS: Buildx missing driver-opts image override correctly detected"
+    else
+        echo "  FAIL: Buildx missing driver-opts image override not detected"
+        FAILED=1
+    fi
+
+    # Test 8: Buildx with explicit unproxied BuildKit image should FAIL
+    echo ""
+    echo "=== Test 8: Buildx with explicit unproxied BuildKit image should FAIL ==="
+    cat > "${TEST_DIR}/workflow.buildx-unproxied.yml" << 'EOF'
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:buildx-stable-1
+EOF
+
+    test8_passed=false
+    if grep -qE "image=moby/buildkit:buildx-stable-1" "${TEST_DIR}/workflow.buildx-unproxied.yml" 2>/dev/null; then
+        test8_passed=true
+    fi
+
+    if [[ "${test8_passed}" == true ]]; then
+        echo "  PASS: Buildx unproxied BuildKit image correctly detected"
+    else
+        echo "  FAIL: Buildx unproxied BuildKit image not detected"
+        FAILED=1
+    fi
+
+    # Test 9: Buildx with Harbor proxy BuildKit image should PASS
+    echo ""
+    echo "=== Test 9: Buildx with Harbor proxy BuildKit image should PASS ==="
+    cat > "${TEST_DIR}/workflow.buildx-correct.yml" << 'EOF'
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=registry.spbnix.com/dockerhub-cache/moby/buildkit:buildx-stable-1
+EOF
+
+    test9_passed=true
+    if grep -qE "image=moby/buildkit:buildx-stable-1" "${TEST_DIR}/workflow.buildx-correct.yml" 2>/dev/null; then
+        test9_passed=false
+        echo "  FAIL: Incorrectly flagged Harbor proxy BuildKit image"
+    fi
+    if grep -qE "image: moby/buildkit:buildx-stable-1" "${TEST_DIR}/workflow.buildx-correct.yml" 2>/dev/null; then
+        test9_passed=false
+        echo "  FAIL: Incorrectly flagged Harbor proxy BuildKit image (with space)"
+    fi
+    if grep -qE "docker\.io/moby/buildkit:buildx-stable-1" "${TEST_DIR}/workflow.buildx-correct.yml" 2>/dev/null; then
+        test9_passed=false
+        echo "  FAIL: Incorrectly flagged Harbor proxy BuildKit image (docker.io)"
+    fi
+
+    if [[ "${test9_passed}" == true ]]; then
+        echo "  PASS: Buildx with Harbor proxy BuildKit image correctly allowed"
+    else
+        FAILED=1
+    fi
+
+    # Test 10: Buildx with docker.io/moby BuildKit should FAIL
+    echo ""
+    echo "=== Test 10: Buildx with docker.io/moby BuildKit should FAIL ==="
+    cat > "${TEST_DIR}/workflow.buildx-dockerhub.yml" << 'EOF'
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=docker.io/moby/buildkit:buildx-stable-1
+EOF
+
+    test10_passed=false
+    if grep -qE "docker\.io/moby/buildkit:buildx-stable-1" "${TEST_DIR}/workflow.buildx-dockerhub.yml" 2>/dev/null; then
+        test10_passed=true
+    fi
+
+    if [[ "${test10_passed}" == true ]]; then
+        echo "  PASS: Buildx docker.io/moby BuildKit correctly detected"
+    else
+        echo "  FAIL: Buildx docker.io/moby BuildKit not detected"
+        FAILED=1
+    fi
+
     echo ""
     if [[ ${FAILED} -eq 0 ]]; then
         echo "SELF-TEST: PASSED"
@@ -222,7 +332,8 @@ WORKFLOW_FILES=(
 echo "Rules:"
 echo "  1. setup-qemu-action must specify Harbor proxy image (not default DockerHub)"
 echo "  2. QEMU platforms should exclude native architecture (amd64 on amd64 runner)"
-echo "  3. docker/build-push-action must use registry cache, not GHA cache"
+echo "  3. setup-buildx-action must use Harbor proxy cache for BuildKit builder image"
+echo "  4. docker/build-push-action must use registry cache, not GHA cache"
 echo ""
 
 for workflow in "${WORKFLOW_FILES[@]}"; do
@@ -260,7 +371,41 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
     fi
 
     # -------------------------------------------------------------------------
-    # Rule 3: No GHA cache usage
+    # Rule 3: Buildx must have Harbor BuildKit image override
+    # -------------------------------------------------------------------------
+    if grep -qE "setup-buildx-action" "${workflow}"; then
+        # Count Buildx occurrences and count Harbor BuildKit image overrides
+        buildx_count=$(grep -cE "setup-buildx-action" "${workflow}" 2>/dev/null || echo 0)
+        harbor_buildkit_count=$(grep -cE "image=registry\.spbnix\.com/dockerhub-cache/moby/buildkit" "${workflow}" 2>/dev/null || echo 0)
+
+        if [[ ${buildx_count} -gt 0 ]] && [[ ${harbor_buildkit_count} -lt ${buildx_count} ]]; then
+            echo "  FAIL: Buildx section missing Harbor BuildKit image override (${harbor_buildkit_count}/${buildx_count} have it)"
+            echo "        Expected: driver-opts with image=${HARBOR_BUILDKIT_IMAGE}"
+            echo "        Buildx silently pulls default moby/buildkit without this override"
+            FAILED=1
+        else
+            echo "  OK: All Buildx sections use Harbor BuildKit image override"
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Rule 4: No explicit unproxied BuildKit images
+    # -------------------------------------------------------------------------
+    if grep -qE "image=moby/buildkit:buildx-stable-1" "${workflow}"; then
+        echo "  FAIL: Found explicit unproxied BuildKit image (should use Harbor proxy)"
+        FAILED=1
+    fi
+    if grep -qE "image: moby/buildkit:buildx-stable-1" "${workflow}"; then
+        echo "  FAIL: Found explicit unproxied BuildKit image (should use Harbor proxy)"
+        FAILED=1
+    fi
+    if grep -qE "docker\.io/moby/buildkit:buildx-stable-1" "${workflow}"; then
+        echo "  FAIL: Found explicit DockerHub BuildKit image (should use Harbor proxy)"
+        FAILED=1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Rule 5: No GHA cache usage
     # -------------------------------------------------------------------------
     if grep -qE "type=gha" "${workflow}"; then
         echo "  FAIL: Found GHA cache usage (must use Harbor registry cache)"
@@ -270,7 +415,7 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
     fi
 
     # -------------------------------------------------------------------------
-    # Rule 4: Must have registry cache for build-push-action (hard fail)
+    # Rule 6: Must have registry cache for build-push-action (hard fail)
     # -------------------------------------------------------------------------
     if grep -qE "docker/build-push-action" "${workflow}"; then
         if grep -qE "type=registry,ref=registry\.spbnix\.com/k9b/cache" "${workflow}"; then
@@ -293,7 +438,10 @@ if [[ ${FAILED} -eq 1 ]]; then
     echo "  1. QEMU must have explicit Harbor image override:"
     echo "     image: ${HARBOR_BINFMT_IMAGE}"
     echo "  2. Remove amd64 from QEMU platforms (native architecture)"
-    echo "  3. Replace GHA cache with Harbor registry cache:"
+    echo "  3. Buildx must have Harbor BuildKit image override:"
+    echo "     driver-opts: |"
+    echo "       image=${HARBOR_BUILDKIT_IMAGE}"
+    echo "  4. Replace GHA cache with Harbor registry cache:"
     echo "     cache-from: type=registry,ref=registry.spbnix.com/k9b/cache/<image>:buildcache"
     echo "     cache-to: type=registry,ref=registry.spbnix.com/k9b/cache/<image>:buildcache,mode=max"
     exit 1
