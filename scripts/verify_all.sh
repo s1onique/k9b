@@ -397,7 +397,8 @@ _run_and_record() {
 _run_python_lane() {
     _run_and_record "python" "doctrine" "Verifying Factory blockstor-derived doctrine" bash "$SCRIPT_DIR/verify_factory_doctrine.sh"
     _run_and_record "python" "dockerhub-base-images" "Verifying Dockerfiles use Harbor proxy cache" bash "$SCRIPT_DIR/verify_dockerhub_base_images.sh"
-    _run_and_record "python" "docker-workflow-hygiene" "Verifying Docker workflow local-first hygiene" bash "$SCRIPT_DIR/verify_docker_workflow_hygiene.sh"
+    _run_and_record "python" "docker-workflow-hygiene" "Verifying Docker workflow registry hygiene" bash "$SCRIPT_DIR/verify_docker_workflow_hygiene.sh"
+    _run_and_record "python" "docker-build-locality" "Verifying Docker build locality hygiene" bash "$SCRIPT_DIR/verify_docker_build_locality.sh"
     _run_and_record "python" "agent-pipeline" "Verifying agentic doctrine pipeline" "$PYTHON" scripts/verify_agentic_pipeline.py
     _run_and_record "python" "llm-evidence-boundaries" "Verifying LLM evidence boundaries" "$PYTHON" scripts/verify_llm_evidence_boundaries.py
     _run_and_record "python" "llm-semantic-injection" "Verifying semantic injection detection" "$PYTHON" scripts/verify_llm_semantic_injection_detection.py

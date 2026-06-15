@@ -194,4 +194,10 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [CONFIG] Checker configuration - baseline allowlist ledger
     ("scripts/check_llm_friendly_files.py", "[CONFIG] LLM-friendly checker implementation"),
     ("scripts/llm_friendly_allowlist.py", "[CONFIG] Baseline burn-down allowlist ledger"),
+
+    # [VERIFIER] Registry hygiene verification scripts
+    ("scripts/verify_helm_oci_login.sh", "[VERIFIER] Helm OCI login verification - comprehensive rules and self-tests"),
+    ("scripts/verify_docker_workflow_hygiene.sh", "[VERIFIER] Docker workflow hygiene verification - comprehensive rules and self-tests"),
+    ("scripts/verify_dockerhub_base_images.sh", "[VERIFIER] DockerHub base image verification - comprehensive rules and self-tests"),
+    ("scripts/verify_docker_build_locality.sh", "[VERIFIER] Docker build locality verification - comprehensive rules and self-tests"),
 ]

@@ -13,8 +13,8 @@ on:
       - main
 
 env:
-  # Harbor registry configuration
-  REGISTRY: registry.spbnix.com
+  # Harbor registry configuration (internal hostname for ARC/k3s runners)
+  REGISTRY: harbor-pve1.spbnix.local
   HARBOR_PROJECT: k9b
   BACKEND_IMAGE_NAME: k9b-backend
   FRONTEND_IMAGE_NAME: k9b-frontend
@@ -78,7 +78,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
-          image: registry.spbnix.com/dockerhub-cache/tonistiigi/binfmt:latest
+          image: harbor-pve1.spbnix.local/dockerhub-cache/tonistiigi/binfmt:latest
           # Use Harbor proxy cache instead of GitHub Actions cache for faster, local-first pulls
           cache-image: false
 
@@ -87,7 +87,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver-opts: |
-            image=registry.spbnix.com/dockerhub-cache/moby/buildkit:buildx-stable-1
+            image=harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1
 
       - name: Install SPbNIX Harbor CA
         env:
@@ -120,8 +120,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=registry.spbnix.com/k9b/cache/k9b-backend:buildcache
-          cache-to: type=registry,ref=registry.spbnix.com/k9b/cache/k9b-backend:buildcache,mode=max
+          cache-from: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-backend:buildcache
+          cache-to: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-backend:buildcache,mode=max
           build-args: |
             KUBECTL_VERSION=v1.29.6
             HELM_VERSION=3.20.1
@@ -155,7 +155,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
-          image: registry.spbnix.com/dockerhub-cache/tonistiigi/binfmt:latest
+          image: harbor-pve1.spbnix.local/dockerhub-cache/tonistiigi/binfmt:latest
           # Use Harbor proxy cache instead of GitHub Actions cache for faster, local-first pulls
           cache-image: false
 
@@ -164,7 +164,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver-opts: |
-            image=registry.spbnix.com/dockerhub-cache/moby/buildkit:buildx-stable-1
+            image=harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1
 
       - name: Install SPbNIX Harbor CA
         env:
@@ -197,5 +197,5 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=registry.spbnix.com/k9b/cache/k9b-frontend:buildcache
-          cache-to: type=registry,ref=registry.spbnix.com/k9b/cache/k9b-frontend:buildcache,mode=max
+          cache-from: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-frontend:buildcache
+          cache-to: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-frontend:buildcache,mode=max

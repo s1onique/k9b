@@ -1,6 +1,20 @@
 # Harbor Publishing
 
-This repository uses GitHub Actions to build and push Docker images and Helm charts to the Harbor registry at `registry.spbnix.com`.
+This repository uses GitHub Actions to build and push Docker images and Helm charts to the Harbor registry.
+
+## Registry Architecture
+
+The k9b CI uses the internal Harbor hostname for all push and pull operations on ARC/k3s runners.
+
+| Registry Path | Purpose | Hostname |
+|--------------|---------|----------|
+| `harbor-pve1.spbnix.local/k9b/...` | Owned image/chart pushes | `harbor-pve1.spbnix.local` (internal) |
+| `harbor-pve1.spbnix.local/dockerhub-cache/...` | DockerHub proxy cache (pull-only) | `harbor-pve1.spbnix.local` (internal) |
+| `registry.spbnix.com` | External/public identity (do not use in CI workflows) | N/A |
+
+**Important distinction:**
+- `dockerhub-cache` is a pull-through proxy-cache project
+- `k9b` (and other project namespaces) are normal projects for owned artifacts
 
 ## Verification Gate
 
@@ -21,13 +35,13 @@ Before the workflow can push images, add these secrets to your GitHub repository
 |--------|-------------|
 | `HARBOR_USERNAME` | Your Harbor username |
 | `HARBOR_TOKEN` | Harbor access token (preferably a robot-account token with push access) |
-| `SPBNIX_CA_CERT_PEM` | PEM-encoded CA certificate (or CA chain) for `registry.spbnix.com` / `harbor-pve1.spbnix.local` |
+| `SPBNIX_CA_CERT_PEM` | PEM-encoded CA certificate (or CA chain) for `harbor-pve1.spbnix.local` |
 
 **Note:** `HARBOR_TOKEN` should preferably be a Harbor robot-account token with push access to the target Harbor project.
 
 ## SPbNIX Harbor CA Certificate
 
-The `SPBNIX_CA_CERT_PEM` secret contains the PEM-encoded CA certificate (or CA chain) required to trust the SPbNIX Harbor registry. This is needed because `registry.spbnix.com` resolves to `harbor-pve1.spbnix.local`, which uses a certificate signed by the internal SPbNIX CA.
+The `SPBNIX_CA_CERT_PEM` secret contains the PEM-encoded CA certificate (or CA chain) required to trust the SPbNIX Harbor registry. This is needed because `harbor-pve1.spbnix.local` uses a certificate signed by the internal SPbNIX CA.
 
 ### Creating the Secret
 
@@ -56,9 +70,11 @@ This ensures end-to-end TLS verification without disabling certificate checks.
 
 | Setting | Value |
 |---------|-------|
-| Registry | `registry.spbnix.com` |
-| Harbor Project | `gitinsky` |
-| DockerHub Proxy Cache | `registry.spbnix.com/dockerhub-cache` |
+| Registry (internal) | `harbor-pve1.spbnix.local` |
+| Harbor Project | `k9b` |
+| DockerHub Proxy Cache | `harbor-pve1.spbnix.local/dockerhub-cache` |
+
+**Note:** `registry.spbnix.com` is the external/public registry identity and must NOT be used by ARC-local CI workflows.
 
 ## DockerHub Proxy Cache
 
@@ -69,9 +85,9 @@ Base images for Docker builds are routed through Harbor's proxy cache to avoid D
 - **Harbor project**: `dockerhub-cache` (proxy-cache mode, not a push target)
 - **Purpose**: Cache DockerHub layers locally to avoid rate limiting and pull failures
 - **Images routed through proxy**:
-  - `python:3.12-slim` → `registry.spbnix.com/dockerhub-cache/library/python:3.12-slim`
-  - `node:20-slim` → `registry.spbnix.com/dockerhub-cache/library/node:20-slim`
-  - `nginxinc/nginx-unprivileged:stable-alpine` → `registry.spbnix.com/dockerhub-cache/nginxinc/nginx-unprivileged:stable-alpine`
+  - `python:3.12-slim` → `harbor-pve1.spbnix.local/dockerhub-cache/library/python:3.12-slim`
+  - `node:20-slim` → `harbor-pve1.spbnix.local/dockerhub-cache/library/node:20-slim`
+  - `nginxinc/nginx-unprivileged:stable-alpine` → `harbor-pve1.spbnix.local/dockerhub-cache/nginxinc/nginx-unprivileged:stable-alpine`
 
 ### DockerHub Official Images
 
@@ -79,7 +95,9 @@ DockerHub official images (like `python`, `node`, `nginx`) require the `library/
 
 ### Verification
 
-The script `scripts/verify_dockerhub_base_images.sh` checks that CI-critical Dockerfiles use the Harbor proxy cache and fails if direct DockerHub base images are detected.
+The script `scripts/verify_dockerhub_base_images.sh` checks that CI-critical Dockerfiles use the Harbor proxy cache with the internal hostname and fails if:
+- Direct DockerHub base images are detected
+- External hostname (`registry.spbnix.com`) is used for proxy cache
 
 ### Notes
 
@@ -91,18 +109,18 @@ The script `scripts/verify_dockerhub_base_images.sh` checks that CI-critical Doc
 
 | Image | Harbor URL |
 |-------|------------|
-| Backend | `registry.spbnix.com/gitinsky/k9b-backend` |
-| Frontend (Node) | `registry.spbnix.com/gitinsky/k9b-frontend` |
+| Backend | `harbor-pve1.spbnix.local/k9b/k9b-backend` |
+| Frontend (Node) | `harbor-pve1.spbnix.local/k9b/k9b-frontend` |
 
 ## Helm Chart
 
 | Artifact | Harbor OCI URL |
 |----------|----------------|
-| Helm chart | `oci://registry.spbnix.com/gitinsky/k9b:<version>` |
+| Helm chart | `oci://harbor-pve1.spbnix.local/k9b:<version>` |
 
 Install published chart:
 ```bash
-helm install infra-k9b oci://registry.spbnix.com/gitinsky/k9b --version <version>
+helm install infra-k9b oci://harbor-pve1.spbnix.local/k9b --version <version>
 ```
 
 ## Trigger Events
@@ -132,8 +150,8 @@ All images are tagged with the short Git commit SHA only:
 - `{COMMIT_SHORT_SHA}` - e.g., `4344ab1`
 
 Example image tags:
-- `registry.spbnix.com/gitinsky/k9b-backend:4344ab1`
-- `registry.spbnix.com/gitinsky/k9b-frontend:4344ab1`
+- `harbor-pve1.spbnix.local/k9b/k9b-backend:4344ab1`
+- `harbor-pve1.spbnix.local/k9b/k9b-frontend:4344ab1`
 
 ### On `pull_request` (build only)
 - `{sha}` - short Git commit SHA (not pushed)
@@ -150,34 +168,6 @@ Example image tags:
 |----------|---------|
 | `.github/workflows/harbor.yml` | Build and push container images to Harbor |
 | `.github/workflows/helm-chart.yml` | Build and push Helm chart to Harbor OCI |
-
-## Helm OCI Dual-Login Workaround
-
-**Status:** Active workaround (do not remove until Harbor is fixed)
-
-**Problem:** Harbor leaks its internal hostname (`harbor-pve1.spbnix.local`) in OCI blob-upload redirect responses. Additionally, the internal hostname uses an internal CA not trusted by CI runners.
-
-**Workaround:** Log into both hostnames before pushing the chart:
-- `registry.spbnix.com` - external/public hostname (via `docker/login-action`)
-- `harbor-pve1.spbnix.local` - internal blob-upload hostname (via `helm registry login --insecure`)
-
-**How it works:** The `publish` job in `helm-chart.yml` runs:
-1. External host login: `docker/login-action` to `registry.spbnix.com`
-2. Internal host login: `helm registry login harbor-pve1.spbnix.local --username ... --password-stdin --insecure`
-
-The `--insecure` flag is isolated to the internal hostname workaround only, since that host uses a self-signed internal CA.
-
-**Long-term fix:** Repair Harbor's external URL / reverse-proxy configuration so it never emits internal hostnames in redirect responses. Once fixed:
-1. Remove the internal-host login step from `helm-chart.yml`
-2. Update this documentation to mark the workaround as removed
-3. Verify `helm push` succeeds with only the external hostname login
-
-**Verifier:** The script `scripts/verify_helm_oci_login.sh` checks that:
-- Both hostnames have login steps (docker/login-action for external, helm --insecure for internal)
-- Push target remains `oci://registry.spbnix.com/k9b`
-- No plain `--password` usage (must use `--password-stdin` or secrets injection)
-- No secrets are echoed or printed
-- `--insecure` is only used for the internal hostname (isolated to workaround)
 
 ## Workflow Architecture
 
@@ -198,6 +188,7 @@ The `--insecure` flag is isolated to the internal hostname workaround only, sinc
 │       │                 │                                │
 │       ▼                 ▼                                │
 │  Harbor push      Harbor push                            │
+│  (harbor-pve1.spbnix.local/k9b/...)                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -219,12 +210,21 @@ Both images are built for:
 
 ## GitHub Actions Runner Configuration
 
-Publish jobs (`build-push` and `frontend` in `harbor.yml`, `publish` in `helm-chart.yml`) run on the self-hosted Kubernetes runner (`spbnix-k8s`) because Harbor resolves to internal SPbNIX/private DNS names during OCI push operations. GitHub-hosted runners cannot resolve these internal addresses.
+Publish jobs (`build-push` and `frontend` in `harbor.yml`, `publish` in `helm-chart.yml`) run on the self-hosted Kubernetes runner (`spbnix-k8s-docker`) because Harbor resolves to internal SPbNIX/private DNS names during OCI push operations. GitHub-hosted runners cannot resolve these internal addresses.
 
 | Job | Runner | Reason |
 |-----|--------|--------|
 | `verify` | `ubuntu-latest` (GitHub-hosted) | Public verification, no Harbor access required |
 | `package` | `ubuntu-latest` (GitHub-hosted) | Helm chart packaging only |
-| `build-push` | `spbnix-k8s` (self-hosted) | Internal Harbor DNS required |
-| `frontend` | `spbnix-k8s` (self-hosted) | Internal Harbor DNS required |
-| `publish` | `spbnix-k8s` (self-hosted) | Internal Harbor OCI push required |
+| `build-push` | `spbnix-k8s-docker` (self-hosted) | Internal Harbor DNS required |
+| `frontend` | `spbnix-k8s-docker` (self-hosted) | Internal Harbor DNS required |
+| `publish` | `spbnix-k8s-docker` (self-hosted) | Internal Harbor OCI push required |
+
+## Registry Identity Rules
+
+| Path Pattern | Allowed? | Reason |
+|-------------|----------|--------|
+| `harbor-pve1.spbnix.local/k9b/...` | ✅ Yes | Normal project for owned images/charts |
+| `harbor-pve1.spbnix.local/dockerhub-cache/...` | ✅ Yes (pull-only) | Proxy cache for DockerHub images |
+| `registry.spbnix.com/...` | ❌ No | External hostname, not used by ARC runners |
+| `harbor-pve1.spbnix.local/dockerhub-cache/...` (push) | ❌ No | Proxy cache is pull-only, not a push target |
