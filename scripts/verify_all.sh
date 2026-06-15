@@ -430,6 +430,7 @@ _run_helm_lane() {
         return 0
     fi
     _run_and_record "helm" "helm-chart" "Verifying Helm chart" bash "$SCRIPT_DIR/verify_helm_chart.sh"
+    _run_and_record "helm" "helm-oci-login" "Verifying Helm OCI dual-login workaround" bash "$SCRIPT_DIR/verify_helm_oci_login.sh"
 }
 
 # Launch lanes based on scope

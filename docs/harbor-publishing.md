@@ -151,6 +151,33 @@ Example image tags:
 | `.github/workflows/harbor.yml` | Build and push container images to Harbor |
 | `.github/workflows/helm-chart.yml` | Build and push Helm chart to Harbor OCI |
 
+## Helm OCI Dual-Login Workaround
+
+**Status:** Active workaround (do not remove until Harbor is fixed)
+
+**Problem:** Harbor leaks its internal hostname (`harbor-pve1.spbnix.local`) in OCI blob-upload redirect responses. When `helm push` receives a redirect to the internal hostname, the request fails with 401 Unauthorized because the external hostname credentials do not authenticate against the internal hostname.
+
+**Workaround:** Log into both hostnames before pushing the chart:
+- `registry.spbnix.com` - external/public hostname
+- `harbor-pve1.spbnix.local` - internal blob-upload hostname
+
+**How it works:** The `publish` job in `helm-chart.yml` now runs two `docker/login-action` steps before `helm push`:
+1. Login to `registry.spbnix.com` (external hostname)
+2. Login to `harbor-pve1.spbnix.local` (internal blob-upload hostname, workaround)
+
+Both logins use the same Harbor robot credentials (`HARBOR_USERNAME`, `HARBOR_TOKEN`).
+
+**Long-term fix:** Repair Harbor's external URL / reverse-proxy configuration so it never emits internal hostnames in redirect responses. Once fixed:
+1. Remove the internal-host login step from `helm-chart.yml`
+2. Update this documentation to mark the workaround as removed
+3. Verify `helm push` succeeds with only the external hostname login
+
+**Verifier:** The script `scripts/verify_helm_oci_login.sh` checks that:
+- Both hostnames have login steps
+- Push target remains `oci://registry.spbnix.com/k9b`
+- No `--password` usage (must use `--password-stdin` or secrets injection)
+- No secrets are echoed or printed
+
 ## Workflow Architecture
 
 ```
