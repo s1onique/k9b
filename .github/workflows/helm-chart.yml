@@ -154,18 +154,36 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_TOKEN }}
 
-      - name: Log in to Harbor (internal blob-upload hostname)
+      - name: Mirror Harbor auth for leaked internal OCI hostname
         # WORKAROUND: Harbor leaks harbor-pve1.spbnix.local in OCI blob-upload URLs.
-        # The internal host uses an internal CA not trusted by GitHub-hosted runners,
-        # so this login is isolated to Helm and uses --insecure only for the leaked
-        # internal hostname. Remove this login once Harbor's external URL / reverse-proxy
-        # header is fixed to never emit internal hostnames.
+        # The internal hostname is not a first-class login endpoint. Instead, we mirror
+        # the Docker auth entry from registry.spbnix.com to harbor-pve1.spbnix.local
+        # so Helm can use credentials when following the redirected blob PUT.
+        # Helm uses Docker's registry config by default, including DOCKER_CONFIG.
+        # Remove this step once Harbor's external URL / reverse-proxy header is fixed
+        # to never emit internal hostnames.
         shell: bash
         run: |
-          echo "${{ secrets.HARBOR_TOKEN }}" | helm registry login harbor-pve1.spbnix.local \
-            --username "${{ secrets.HARBOR_USERNAME }}" \
-            --password-stdin \
-            --insecure
+          set -euo pipefail
+
+          docker_config="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+
+          if [[ ! -f "$docker_config" ]]; then
+            echo "Docker config not found: $docker_config" >&2
+            exit 1
+          fi
+
+          tmp="$(mktemp)"
+          jq '
+            if (.auths["registry.spbnix.com"] == null) then
+              error("missing registry.spbnix.com auth entry in Docker config")
+            else
+              .auths["harbor-pve1.spbnix.local"] = .auths["registry.spbnix.com"]
+            end
+          ' "$docker_config" > "$tmp"
+          mv "$tmp" "$docker_config"
+
+          echo "Mirrored Harbor auth entry for leaked internal OCI hostname"
 
       - name: Download package artifact
         uses: actions/download-artifact@v4
@@ -184,4 +202,4 @@ jobs:
           echo "Resolved push target: ${PUSH_TARGET}"
           echo "Chart will be published as: ${RESOLVED_IMAGE}"
           
-          helm push "$PACKAGE_FILE" "${PUSH_TARGET}"
+          helm push "$PACKAGE_FILE" "${PUSH_TARGET}" --insecure-skip-tls-verify

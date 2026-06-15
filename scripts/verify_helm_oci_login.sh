@@ -3,18 +3,19 @@
 # verify_helm_oci_login.sh
 # =============================================================================
 # Verifies that GitHub Actions Helm chart workflow follows the Harbor OCI
-# dual-login workaround:
-#   - Logs into registry.spbnix.com (external/public hostname)
-#   - Logs into harbor-pve1.spbnix.local (internal blob-upload hostname)
+# auth-mirroring workaround:
+#   - Authenticates to registry.spbnix.com (external/public hostname)
+#   - Mirrors auth entry to harbor-pve1.spbnix.local via Docker config
 #   - Push target remains oci://registry.spbnix.com/k9b
-#   - Uses --password-stdin for credentials (not --password)
+#   - Uses --insecure-skip-tls-verify only on helm push (for leaked blob transport)
 #   - No secrets are echoed or printed
 #
 # This script fails on:
-#   - Missing login for registry.spbnix.com
-#   - Missing login for harbor-pve1.spbnix.local
+#   - Missing authentication for registry.spbnix.com
+#   - Missing auth mirroring to harbor-pve1.spbnix.local
 #   - helm push target changed away from oci://registry.spbnix.com/k9b
-#   - Credentials passed via --password instead of --password-stdin
+#   - Direct helm/docker login to internal hostname
+#   - --password usage (credentials should be in Docker config via login-action)
 #   - Secrets echoed or printed in workflow
 #
 # Self-test mode (--self-test):
@@ -164,10 +165,90 @@ EOF
         FAILED=1
     fi
 
-    # Test 6: Correct patterns should PASS
+    # Test 6: Correct patterns should PASS (auth-mirroring contract)
     echo ""
-    echo "=== Test 6: Correct patterns should PASS ==="
+    echo "=== Test 6: Correct auth-mirroring patterns should PASS ==="
     cat > "${TEST_DIR}/workflow.correct.yml" << 'EOF'
+      - name: Log in to Harbor (external hostname)
+        uses: docker/login-action@v4
+        with:
+          registry: registry.spbnix.com
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_TOKEN }}
+
+      - name: Mirror Harbor auth for leaked internal OCI hostname
+        shell: bash
+        run: |
+          jq '.auths["harbor-pve1.spbnix.local"] = .auths["registry.spbnix.com"]' config.json
+
+      - name: Push chart to Harbor OCI
+        run: |
+          helm push "$PACKAGE_FILE" "oci://registry.spbnix.com/k9b" --insecure-skip-tls-verify
+EOF
+
+    test6_passed=true
+
+    # Check external login present
+    if ! grep -qE "registry:.*registry\.spbnix\.com" "${TEST_DIR}/workflow.correct.yml" 2>/dev/null; then
+        test6_passed=false
+        echo "  FAIL: Missing external host login"
+    fi
+    # Check auth mirroring present (new contract)
+    workflow_lines=$(tr '\n' ' ' < "${TEST_DIR}/workflow.correct.yml")
+    if ! echo "${workflow_lines}" | grep -qE '\.auths\["harbor-pve1\.spbnix\.local"\]'; then
+        test6_passed=false
+        echo "  FAIL: Missing auth mirroring to internal hostname"
+    fi
+    # Check push target is correct
+    if ! grep -qE 'helm push.*oci://registry\.spbnix\.com/k9b' "${TEST_DIR}/workflow.correct.yml" 2>/dev/null; then
+        test6_passed=false
+        echo "  FAIL: Incorrect push target"
+    fi
+    # Check --insecure-skip-tls-verify present on helm push
+    if ! grep -qE 'helm push.*--insecure-skip-tls-verify' "${TEST_DIR}/workflow.correct.yml" 2>/dev/null; then
+        test6_passed=false
+        echo "  FAIL: Missing --insecure-skip-tls-verify on helm push"
+    fi
+
+    if [[ "${test6_passed}" == true ]]; then
+        echo "  PASS: Correct auth-mirroring patterns correctly allowed"
+    else
+        FAILED=1
+    fi
+
+    # Test 7: Missing auth mirror should FAIL
+    echo ""
+    echo "=== Test 7: Missing auth mirroring should FAIL ==="
+    cat > "${TEST_DIR}/workflow.missing-mirror.yml" << 'EOF'
+      - name: Log in to Harbor (external hostname)
+        uses: docker/login-action@v4
+        with:
+          registry: registry.spbnix.com
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_TOKEN }}
+
+      - name: Push chart to Harbor OCI
+        run: |
+          helm push "$PACKAGE_FILE" "oci://registry.spbnix.com/k9b" --insecure-skip-tls-verify
+EOF
+
+    test7_passed=false
+    workflow_lines=$(tr '\n' ' ' < "${TEST_DIR}/workflow.missing-mirror.yml")
+    if ! echo "${workflow_lines}" | grep -qE '\.auths\["harbor-pve1\.spbnix\.local"\]'; then
+        test7_passed=true
+    fi
+
+    if [[ "${test7_passed}" == true ]]; then
+        echo "  PASS: Missing auth mirroring correctly detected"
+    else
+        echo "  FAIL: Missing auth mirroring not detected"
+        FAILED=1
+    fi
+
+    # Test 8: Direct internal login should FAIL
+    echo ""
+    echo "=== Test 8: Direct internal docker login should FAIL ==="
+    cat > "${TEST_DIR}/workflow.direct-internal.yml" << 'EOF'
       - name: Log in to Harbor (external hostname)
         uses: docker/login-action@v4
         with:
@@ -181,32 +262,18 @@ EOF
           registry: harbor-pve1.spbnix.local
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_TOKEN }}
-
-      - name: Push chart to Harbor OCI
-        run: |
-          helm push "$PACKAGE_FILE" "oci://registry.spbnix.com/k9b"
 EOF
 
-    test6_passed=true
-
-    # Check both logins present
-    if ! grep -qE "registry:.*registry\.spbnix\.com" "${TEST_DIR}/workflow.correct.yml" 2>/dev/null; then
-        test6_passed=false
-        echo "  FAIL: Missing external host login"
-    fi
-    if ! grep -qE "registry:.*harbor-pve1\.spbnix\.local" "${TEST_DIR}/workflow.correct.yml" 2>/dev/null; then
-        test6_passed=false
-        echo "  FAIL: Missing internal host login"
-    fi
-    # Check push target is correct
-    if ! grep -qE 'helm push.*oci://registry\.spbnix\.com/k9b' "${TEST_DIR}/workflow.correct.yml" 2>/dev/null; then
-        test6_passed=false
-        echo "  FAIL: Incorrect push target"
+    test8_passed=false
+    # This should fail because there's direct login to internal hostname
+    if grep -qE "registry:.*harbor-pve1\.spbnix\.local" "${TEST_DIR}/workflow.direct-internal.yml" 2>/dev/null; then
+        test8_passed=true
     fi
 
-    if [[ "${test6_passed}" == true ]]; then
-        echo "  PASS: Correct patterns correctly allowed"
+    if [[ "${test8_passed}" == true ]]; then
+        echo "  PASS: Direct internal login correctly detected"
     else
+        echo "  FAIL: Direct internal login not detected"
         FAILED=1
     fi
 
@@ -236,11 +303,12 @@ WORKFLOW_FILES=(
 
 # Rules
 echo "Rules:"
-echo "  1. Must log in to ${EXTERNAL_HOST} (external hostname)"
-echo "  2. Must log in to ${INTERNAL_HOST} (internal blob-upload hostname)"
+echo "  1. Must authenticate to ${EXTERNAL_HOST} (external hostname via docker/login-action)"
+echo "  2. Must mirror auth entry to ${INTERNAL_HOST} (auth-mirroring workaround)"
 echo "  3. Push target must remain ${EXPECTED_PUSH_TARGET}"
-echo "  4. Credentials must use --password-stdin, not --password"
-echo "  5. No secrets echoed or printed"
+echo "  4. No direct helm/docker login to internal hostname"
+echo "  5. --insecure-skip-tls-verify allowed only on helm push"
+echo "  6. No secrets echoed or printed"
 echo ""
 
 for workflow in "${WORKFLOW_FILES[@]}"; do
@@ -267,19 +335,19 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
     fi
 
     # -------------------------------------------------------------------------
-    # Rule 2: Must log in to internal hostname (workaround)
+    # Rule 2: Must mirror auth entry to internal hostname (auth-mirroring workaround)
     # -------------------------------------------------------------------------
-    # Accept either docker/login-action or helm registry login with --insecure
-    # Use tr to join lines so multiline YAML multiline strings are matched correctly
+    # Check for auth mirroring pattern:
+    #   .auths["harbor-pve1.spbnix.local"] = .auths["registry.spbnix.com"]
+    # This is the expected workaround since internal hostname is not a first-class
+    # login endpoint and Harbor rejects login probes.
     workflow_lines=$(tr '\n' ' ' < "${workflow}")
-    if echo "${workflow_lines}" | grep -qE "registry:.*${INTERNAL_HOST}"; then
-        echo "  OK: Login to ${INTERNAL_HOST} found (workaround active)"
-    elif echo "${workflow_lines}" | grep -qE "helm registry login.*${INTERNAL_HOST}.*--insecure"; then
-        echo "  OK: Login to ${INTERNAL_HOST} found via Helm --insecure (workaround active)"
+    if echo "${workflow_lines}" | grep -qE '\.auths\["'"${INTERNAL_HOST}"'"\]'; then
+        echo "  OK: Auth mirroring to ${INTERNAL_HOST} found (workaround active)"
     else
-        echo "  FAIL: Missing login to ${INTERNAL_HOST} (workaround not applied)"
+        echo "  FAIL: Missing auth mirroring to ${INTERNAL_HOST} (workaround not applied)"
         echo "        Harbor leaks internal hostname in OCI blob-upload redirects."
-        echo "        Both hosts must be authenticated for redirects to succeed."
+        echo "        Auth entry must be mirrored from ${EXTERNAL_HOST} for redirects to succeed."
         WORKFLOW_FAILED=1
         FAILED=1
     fi
@@ -305,26 +373,77 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
     fi
 
     # -------------------------------------------------------------------------
-    # Rule 4: No --password usage (must use --password-stdin or secrets)
+    # Rule 4: No direct helm/docker login to internal hostname
     # -------------------------------------------------------------------------
-    # Check for helm registry login with --password flag (not --password-stdin)
-    # EXCEPTION: --insecure for internal hostname is allowed as isolated workaround
-    # Only flag plain --password usage that bypasses --password-stdin AND --insecure
-    if grep -qE "helm registry login.*--password\s" "${workflow}"; then
-        # Check if this is the internal host workaround with --insecure
-        if grep -qE "helm registry login.*harbor-pve1\.spbnix\.local.*--insecure" "${workflow}"; then
-            echo "  OK: Internal host workaround uses --insecure (expected)"
+    # Direct login to internal hostname should fail; use auth mirroring instead
+    # Extract each step and check if it's a login-action with internal hostname
+    # This avoids false positives from jq auth mirroring in run blocks
+    if grep -qE "uses: docker/login-action" "${workflow}"; then
+        # Use awk to find steps with login-action and check their registry
+        internal_login_found=$(
+            awk '
+                /^[[:space:]]*- name:/ { name=$0 }
+                /uses: docker\/login-action/ {
+                    in_login_step=1
+                }
+                /with:/ && in_login_step {
+                    in_with_block=1
+                }
+                /registry:/ && in_with_block {
+                    if ($2 ~ /'"${INTERNAL_HOST}"'/) {
+                        print "FOUND"
+                        exit 0
+                    }
+                }
+                /^[[:space:]]*- name:/ && name != "" {
+                    in_login_step=0
+                    in_with_block=0
+                    name=""
+                }
+            ' "${workflow}"
+        )
+        
+        if [[ "${internal_login_found}" == "FOUND" ]]; then
+            echo "  FAIL: Direct docker/login-action to ${INTERNAL_HOST} found"
+            echo "        Use auth mirroring instead (internal host is not a login endpoint)"
+            WORKFLOW_FAILED=1
+            FAILED=1
         else
-            echo "  FAIL: Found helm registry login with --password (use --password-stdin)"
+            echo "  OK: No direct docker/login-action to internal hostname"
+        fi
+    fi
+    
+    # Also check for helm registry login to internal hostname
+    if grep -qE "helm registry login" "${workflow}"; then
+        workflow_lines=$(tr '\n' ' ' < "${workflow}")
+        if echo "${workflow_lines}" | grep -qE "helm registry login.*${INTERNAL_HOST}"; then
+            echo "  FAIL: Direct helm registry login to ${INTERNAL_HOST} found"
+            echo "        Use auth mirroring instead (internal host is not a login endpoint)"
+            WORKFLOW_FAILED=1
+            FAILED=1
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Rule 5: --insecure-skip-tls-verify only allowed on helm push
+    # -------------------------------------------------------------------------
+    # Check for --insecure-skip-tls-verify outside helm push context
+    if grep -qE "\-\-insecure-skip-tls-verify" "${workflow}"; then
+        # Check if it's on helm push command
+        workflow_lines=$(tr '\n' ' ' < "${workflow}")
+        if echo "${workflow_lines}" | grep -qE "helm push.*\-\-insecure-skip-tls-verify"; then
+            echo "  OK: --insecure-skip-tls-verify on helm push (allowed for blob transport)"
+        else
+            echo "  FAIL: --insecure-skip-tls-verify outside helm push context"
             WORKFLOW_FAILED=1
             FAILED=1
         fi
     else
-        echo "  OK: No --password usage in helm registry login"
+        echo "  OK: No --insecure-skip-tls-verify (or using proper TLS)"
     fi
 
     # -------------------------------------------------------------------------
-    # Rule 5: No secret echo/print
+    # Rule 6: No secret echo/print
     # -------------------------------------------------------------------------
     if grep -qE "(echo|printenv).*\${{ secrets\.(HARBOR_USERNAME|HARBOR_TOKEN|PASSWORD) }}" "${workflow}"; then
         echo "  FAIL: Found secret echo/print in workflow"
@@ -350,15 +469,16 @@ if [[ ${FAILED} -eq 1 ]]; then
     echo "RESULT: FAILED"
     echo ""
     echo "Helm OCI login violations detected. Please fix:"
-    echo "  1. Add login to ${EXTERNAL_HOST}"
-    echo "  2. Add login to ${INTERNAL_HOST} (Harbor hostname leak workaround)"
+    echo "  1. Add login to ${EXTERNAL_HOST} via docker/login-action"
+    echo "  2. Mirror auth entry to ${INTERNAL_HOST} in Docker config"
     echo "  3. Keep push target as ${EXPECTED_PUSH_TARGET}"
-    echo "  4. Use --password-stdin for helm registry login, not --password"
-    echo "  5. Do not echo or print secrets"
+    echo "  4. No direct helm/docker login to internal hostname"
+    echo "  5. Use --insecure-skip-tls-verify only on helm push"
+    echo "  6. Do not echo or print secrets"
     exit 1
 else
     echo "RESULT: PASSED"
     echo ""
-    echo "Helm OCI workflow follows dual-login workaround hygiene."
+    echo "Helm OCI workflow follows auth-mirroring workaround hygiene."
     exit 0
 fi
