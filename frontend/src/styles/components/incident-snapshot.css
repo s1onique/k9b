@@ -1,0 +1,93 @@
+/**
+ * IncidentSnapshotPanel styles
+ * Minimal styling for incident snapshot capture UI.
+ */
+
+/* Input section */
+.incident-snapshot-input {
+  margin: 0.75rem 0;
+}
+
+.incident-snapshot-input input {
+  width: 100%;
+  max-width: 300px;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  margin-left: 0.5rem;
+}
+
+/* Loading state */
+.incident-snapshot-loading {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-muted, #666);
+}
+
+/* Success result */
+.incident-snapshot-result {
+  margin-top: 1rem;
+}
+
+.incident-snapshot-summary dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.incident-snapshot-summary dt {
+  font-weight: 600;
+  color: var(--text-secondary, #666);
+}
+
+.incident-snapshot-summary dd {
+  margin: 0;
+}
+
+.incident-snapshot-summary h4 {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.875rem;
+}
+
+.incident-snapshot-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.incident-snapshot-counts li {
+  font-size: 0.875rem;
+}
+
+/* Action buttons */
+.incident-snapshot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+/* Error state */
+.incident-snapshot-error {
+  padding: 1rem;
+  background: var(--error-bg, #fee);
+  border: 1px solid var(--error-border, #f88);
+  border-radius: 4px;
+  margin-top: 1rem;
+}
+
+.incident-snapshot-error h3 {
+  color: var(--error-text, #c00);
+  margin: 0 0 0.5rem;
+}
+
+.incident-snapshot-error .error-message {
+  color: var(--error-text, #c00);
+  font-weight: 500;
+  margin: 0 0 0.5rem;
+}

@@ -11,9 +11,6 @@ from __future__ import annotations
 
 import json
 import unittest
-from io import BytesIO
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from k8s_diag_agent.collect.api_incident import (
@@ -21,7 +18,6 @@ from k8s_diag_agent.collect.api_incident import (
     IncidentSnapshotResponse,
     handle_incident_snapshot,
 )
-
 
 # =============================================================================
 # Mock Fixtures
@@ -110,7 +106,7 @@ FAKE_BUNDLE_DATA = {
 class TestHandleIncidentSnapshot(unittest.TestCase):
     """Test the incident snapshot handler with mock data."""
 
-    @patch("k8s_diag_agent.collect.incident_snapshot._kubectl")
+    @patch("k8s_diag_agent.collect.incident_collectors.kubectl")
     def test_success_returns_bundle(self, mock_kubectl: unittest.mock.MagicMock) -> None:
         """Test that successful collection returns a bundle with summary."""
         # Configure mock to return fake pod data
@@ -221,7 +217,7 @@ class TestSentinelPatternsInResponse(unittest.TestCase):
                         violations.extend(self._check_dict_for_sentinels(item, f"{current_path}[{i}]"))
         return violations
 
-    @patch("k8s_diag_agent.collect.incident_snapshot._kubectl")
+    @patch("k8s_diag_agent.collect.incident_collectors.kubectl")
     def test_response_no_sentinels(self, mock_kubectl: unittest.mock.MagicMock) -> None:
         """API response should not contain any sentinel patterns."""
         # Return pods with embedded credentials

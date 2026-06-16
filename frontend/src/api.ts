@@ -530,3 +530,57 @@ export const downloadExecutionStateDiagnostics = async (runId: string): Promise<
 
   return response.blob();
 };
+
+// ============================================================================
+// Incident Snapshot API
+// ============================================================================
+
+export type IncidentSnapshotRequest = {
+  namespace: string;
+  since_hours?: number;
+};
+
+export type IncidentSnapshotSummary = {
+  total_pods: number;
+  failing_pods_count: number;
+  total_deployments: number;
+  total_events: number;
+  symptoms_count: number;
+};
+
+export type IncidentSnapshotResponse = {
+  bundle_id: string;
+  captured_at: string;
+  namespace: string;
+  summary: IncidentSnapshotSummary;
+  bundle?: Record<string, unknown>;
+  error?: string | null;
+};
+
+export const captureIncidentSnapshot = async (
+  request: IncidentSnapshotRequest
+): Promise<IncidentSnapshotResponse> => {
+  const response = await fetch("/api/incidents/snapshot", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        message = String((payload as Record<string, unknown>).error);
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message || "Failed to capture incident snapshot");
+  }
+
+  return (await response.json()) as IncidentSnapshotResponse;
+};

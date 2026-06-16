@@ -24,13 +24,11 @@ from .cli_handlers import (
     handle_run_feedback,
     handle_snapshot,
 )
-from .cli_incident_handlers import handle_incident
 from .llm.provider import AVAILABLE_PROVIDERS
 
 _SUBCOMMANDS = {
     "fixture",
     "snapshot",
-    "incident",
     "compare",
     "batch-snapshot",
     "assess-snapshots",
@@ -58,8 +56,6 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     if command == "snapshot":
         return handle_snapshot(args)
-    if command == "incident":
-        return handle_incident(args)
     if command == "compare":
         return handle_compare(args)
     if command == "batch-snapshot":
@@ -127,35 +123,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
         help="Path for snapshot JSON.",
-    )
-
-    incident_parser = subparsers.add_parser(
-        "incident",
-        help="Capture incident evidence bundle from a namespace.",
-    )
-    incident_parser.add_argument(
-        "--namespace",
-        "-n",
-        required=True,
-        help="Kubernetes namespace to capture.",
-    )
-    incident_parser.add_argument(
-        "--context",
-        required=False,
-        help="Kubernetes context name (defaults to in-cluster).",
-    )
-    incident_parser.add_argument(
-        "--output",
-        "-o",
-        type=Path,
-        required=True,
-        help="Output directory for incident bundle.",
-    )
-    incident_parser.add_argument(
-        "--since",
-        type=_positive_int,
-        default=2,
-        help="Lookback window in hours for events (default: 2).",
     )
 
     compare_parser = subparsers.add_parser("compare", help="Compare two snapshots.")

@@ -9,17 +9,16 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 
 from k8s_diag_agent.collect.incident_snapshot import (
     IncidentBundleMetadata,
     IncidentEvidenceBundle,
-    write_incident_bundle,
     _parse_event_summary,
     _parse_pod_summary,
+    write_incident_bundle,
 )
-from datetime import UTC, datetime
-
 
 # =============================================================================
 # Sentinel Patterns - These should NEVER appear in sanitized output

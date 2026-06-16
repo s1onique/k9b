@@ -14,6 +14,7 @@ due to:
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -104,8 +105,9 @@ def handle_incident_snapshot(request: IncidentSnapshotRequest) -> IncidentSnapsh
             bundle=bundle.to_dict(),
         )
 
-    except Exception as exc:
-        # Sanitize error for operator display
+    except (RuntimeError, json.JSONDecodeError, OSError) as exc:
+        # Handle expected collection failures (subprocess errors, JSON parse errors, file errors)
+        # All errors are sanitized before being returned to the operator
         sanitized_message = sanitize_exception_message(exc, max_length=200)
         _logger.warning(
             "Incident snapshot collection failed for namespace %s: %s",

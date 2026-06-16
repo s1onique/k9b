@@ -99,6 +99,7 @@
 @import url('./components/next-check-queue.css');
 @import url('./components/run-overview-dashboard.css');
 @import url('./components/runtime-status.css');
+@import url('./components/incident-snapshot.css');
 @import url('./components/incident-report-card.css');
 @import url('./components/operator-worklist-card.css');
 @import url('./components/command-text.css');

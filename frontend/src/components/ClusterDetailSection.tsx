@@ -20,6 +20,7 @@ import { ClusterNextCheckPlanSection } from "./ClusterNextCheckPlanSection";
 import type { ClusterNextCheckPlanSectionProps } from "./ClusterNextCheckPlanSection";
 import { ClusterRelatedContextSection } from "./ClusterRelatedContextSection";
 import { ClusterEvidenceTabsSection } from "./ClusterEvidenceTabsSection";
+import { IncidentSnapshotPanel } from "./IncidentSnapshotPanel";
 
 // Re-export execution/approval result types for App.tsx consumers
 export type { ExecutionErrorResult, ExecutionResult, ApprovalResult } from "./ClusterNextCheckPlanSection";
@@ -155,6 +156,11 @@ export const ClusterDetailSection: React.FC<ClusterDetailSectionProps> = ({
           </label>
         </div>
       </div>
+      {/* Incident snapshot capture - positioned in the diagnose/diagnostic area */}
+      {/* NOTE: Pass null for namespace to show manual namespace input.
+          selectedClusterLabel is a cluster label (e.g., "cluster-a"), not a Kubernetes namespace.
+          Operator can enter any namespace via the input field. */}
+      <IncidentSnapshotPanel namespace={null} defaultNamespace="default" />
       <details
         className="cluster-detail-panel"
         open={clusterDetailExpanded}
