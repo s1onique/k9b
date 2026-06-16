@@ -434,7 +434,7 @@ _run_python_lane() {
     _run_and_record "python" "llm-friendly" "Checking file sizes for LLM-friendly limits" "$PYTHON" scripts/check_llm_friendly_files.py --quiet
     _run_and_record "python" "ruff-lint" "Running Ruff lint" "$PYTHON" -m ruff check src tests
     _run_and_record "python" "structured-output" "Verifying health-loop structured output hygiene" bash "$SCRIPT_DIR/verify_health_loop_structured_output.sh"
-    _run_and_record "python" "unit-tests" "Running unit tests" env PYTHON="$PYTHON" VERIFY_ALL_ACTIVE=1 bash "$SCRIPT_DIR/run_unit_tests.sh"
+    _run_and_record "python" "unit-tests" "Running unit tests" env PYTHON="$PYTHON" VERIFY_ALL_ACTIVE=1 RUN_FULL_VERIFY_TEST= bash "$SCRIPT_DIR/run_unit_tests.sh"
     _run_and_record "python" "mypy" "Running mypy" "$PYTHON" -m mypy src/k8s_diag_agent
     _run_and_record "python" "mypy-tests" "Running mypy on tests" "$PYTHON" -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py
 }
