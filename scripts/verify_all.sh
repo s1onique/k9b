@@ -422,6 +422,7 @@ _run_python_lane() {
     _run_and_record "python" "doctrine" "Verifying Factory blockstor-derived doctrine" bash "$SCRIPT_DIR/verify_factory_doctrine.sh"
     _run_and_record "python" "dockerhub-base-images" "Verifying Dockerfiles use Harbor proxy cache" bash "$SCRIPT_DIR/verify_dockerhub_base_images.sh"
     _run_and_record "python" "docker-workflow-hygiene" "Verifying Docker workflow registry hygiene" bash "$SCRIPT_DIR/verify_docker_workflow_hygiene.sh"
+    _run_and_record "python" "helm-workflow-hygiene" "Verifying Helm version pin hygiene" bash "$SCRIPT_DIR/verify_helm_workflow_hygiene.sh"
     _run_and_record "python" "docker-build-locality" "Verifying Docker build locality hygiene" bash "$SCRIPT_DIR/verify_docker_build_locality.sh"
     _run_and_record "python" "agent-pipeline" "Verifying agentic doctrine pipeline" "$PYTHON" scripts/verify_agentic_pipeline.py
     _run_and_record "python" "llm-evidence-boundaries" "Verifying LLM evidence boundaries" "$PYTHON" scripts/verify_llm_evidence_boundaries.py
@@ -457,6 +458,7 @@ step_commands = {
     'doctrine': 'python|bash verify_factory_doctrine.sh',
     'dockerhub-base-images': 'python|bash verify_dockerhub_base_images.sh',
     'docker-workflow-hygiene': 'python|bash verify_docker_workflow_hygiene.sh',
+    'helm-workflow-hygiene': 'python|bash verify_helm_workflow_hygiene.sh',
     'docker-build-locality': 'python|bash verify_docker_build_locality.sh',
     'agent-pipeline': 'python|python scripts/verify_agentic_pipeline.py',
     'llm-evidence-boundaries': 'python|python scripts/verify_llm_evidence_boundaries.py',

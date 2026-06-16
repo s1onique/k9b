@@ -44,7 +44,7 @@ jobs:
       - name: Setup Helm
         uses: azure/setup-helm@v4
         with:
-          version: '3.14.0'
+          version: v3.14.0
 
       - name: Verify Helm chart
         run: bash scripts/verify_helm_chart.sh
@@ -64,7 +64,7 @@ jobs:
       - name: Setup Helm
         uses: azure/setup-helm@v4
         with:
-          version: '3.14.0'
+          version: v3.14.0
 
       - name: Read chart version
         id: version
@@ -107,7 +107,7 @@ jobs:
       - name: Setup Helm
         uses: azure/setup-helm@v4
         with:
-          version: '3.14.0'
+          version: v3.14.0
 
       - name: Docker preflight
         run: |
