@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import MagicMock, patch
 
 from k8s_diag_agent.identity.artifact import new_artifact_id
 from k8s_diag_agent.identity.cluster import derive_cluster_uid, get_cluster_uid_from_snapshot
@@ -46,7 +47,12 @@ class TestClusterUid(unittest.TestCase):
         IMPORTANT: canonical identity is ONLY the real kube-system namespace UID.
         No synthetic fallbacks are used.
         """
-        uid = derive_cluster_uid(kube_context=None, cluster_label="test-cluster")
+        # Mock subprocess.run to avoid 10-second kubectl timeout in tests
+        mock_result = unittest.mock.MagicMock()
+        mock_result.returncode = 1  # Simulate kubectl failure
+        mock_result.stderr = "kubectl not found"
+        with patch("k8s_diag_agent.identity.cluster.subprocess.run", return_value=mock_result):
+            uid = derive_cluster_uid(kube_context=None, cluster_label="test-cluster")
         # Returns None when kubectl unavailable OR a real UID when available
         # No synthetic fallbacks like "legacy:cluster_label" or "unknown"
         self.assertTrue(
@@ -56,9 +62,26 @@ class TestClusterUid(unittest.TestCase):
 
     def test_derive_cluster_uid_returns_uid(self) -> None:
         """derive_cluster_uid returns str when kubectl succeeds or None on failure."""
-        uid = derive_cluster_uid(kube_context=None)
+        # Mock subprocess.run to avoid 10-second kubectl timeout in tests
+        mock_result = unittest.mock.MagicMock()
+        mock_result.returncode = 1  # Simulate kubectl failure
+        mock_result.stderr = "kubectl not found"
+        with patch("k8s_diag_agent.identity.cluster.subprocess.run", return_value=mock_result):
+            uid = derive_cluster_uid(kube_context=None)
         # Either returns a real UID or None
         self.assertTrue(uid is None or isinstance(uid, str))
+
+    def test_derive_cluster_uid_success_path(self) -> None:
+        """derive_cluster_uid returns UID when kubectl succeeds."""
+        # Mock subprocess.run where it's used (in the cluster module)
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = '{"metadata": {"uid": "550e8400-e29b-41d4-a716-446655440000"}}'
+        mock_result.stderr = ""
+        with patch("k8s_diag_agent.identity.cluster.subprocess.run", return_value=mock_result):
+            uid = derive_cluster_uid(kube_context=None)
+        # Should return the UID from kubectl output
+        self.assertEqual(uid, "550e8400-e29b-41d4-a716-446655440000")
 
     def test_get_cluster_uid_from_snapshot_with_existing(self) -> None:
         """Should use existing cluster_uid in snapshot."""

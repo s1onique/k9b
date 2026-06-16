@@ -41,7 +41,7 @@ The gate uploads `.gate-timings.json` as a CI artifact with 7-day retention.
 
 | Step | Duration | Lane | Exit |
 |------|----------|------|------|
-| unit-tests | ~165s | python | 0 |
+| unit-tests | ~87s | python | 0 |
 | llm-friendly | ~12s | python | 0 |
 | dockerhub-base-images | ~2s | python | 0 |
 | llm-evidence-boundaries | ~2s | python | 0 |
@@ -391,3 +391,74 @@ Split each oversized file into smaller behavior-focused test modules.
 - `frontend/src/__tests__/app.run-selection.test.tsx` - **DELETED** (replaced by above)
 - `frontend/src/__tests__/app.review-enrichment.test.tsx` - **DELETED** (replaced by above)
 - `docs/gate-timings.md` - this entry
+
+## Python unit-test runtime cleanup result (2026-06-16)
+
+### Baseline
+
+- `unit-tests`: 101.83s (1:42)
+- Total gate step time: ~349s
+- Slowest files/tests:
+  - `test_identity_primitives.py::TestClusterUid::test_derive_cluster_uid_returns_uid` - 10.01s
+  - `test_identity_primitives.py::TestClusterUid::test_derive_cluster_uid_returns_none_or_uid` - 10.01s
+  - `test_health_loop_vmalert_discovery.py::test_aggregates_sources_across_multiple_targets` - 2.80s
+  - `test_health_scheduler.py::test_scheduler_runs_up_to_max` - 2.01s
+
+### Root causes identified
+
+1. **kubectl 10-second timeout**: `derive_cluster_uid()` calls `kubectl get namespace kube-system` with a 10-second timeout. Tests without kubectl available wait for the full timeout.
+
+2. **Real time.sleep between scheduler runs**: `test_scheduler_runs_up_to_max` runs 3 iterations with 1-second sleep between each.
+
+3. **derive_cluster_uid in vmalert discovery**: `run_vmalert_discovery()` calls `derive_cluster_uid()` for each cluster target, adding 10s per target.
+
+### Changes
+
+| File | Slow pattern | Fix | Runtime before | Runtime after |
+|------|--------------|-----|----------------|---------------|
+| `test_identity_primitives.py` | Real kubectl subprocess with 10s timeout | Mock `subprocess.run` to return failure | 10.01s | <0.1s |
+| `test_health_loop_vmalert_discovery.py` | `derive_cluster_uid()` calls kubectl | Mock `k8s_diag_agent.identity.cluster.derive_cluster_uid` | 2.80s | <0.1s |
+| `test_health_scheduler.py` | Real `time.sleep(1)` between runs | Mock `k8s_diag_agent.health.loop_scheduler_run.time.sleep` | 2.01s | <0.1s |
+
+### Result
+
+- `unit-tests` before: 101.83s (1:42)
+- `unit-tests` after: **86.71s** (1:26)
+- Improvement: **~15s (~15% faster)**
+- Total gate time before: ~349s
+- Total gate time after: ~334s (estimated)
+
+### Coverage preserved
+
+- Tests skipped: none
+- Assertions removed: none
+- Production defaults changed: no
+- Real sleeps removed: 3 (via mocking)
+- All 4278 tests pass
+
+### Verification
+
+- `python -m pytest tests/unit/test_identity_primitives.py tests/unit/test_health_loop_vmalert_discovery.py tests/unit/test_health_scheduler.py`: **PASS** (54 tests in 8.4s)
+- `python -m pytest tests/unit --durations=50`: **PASS** (4278 tests in 86.71s)
+- `python scripts/check_llm_friendly_files.py --quiet`: **PASS** (0 failures)
+- `./scripts/verify_all.sh`: **in progress**
+
+### Files changed
+
+- `tests/unit/test_identity_primitives.py` - Added mock for `subprocess.run` in `TestClusterUid` tests (failure-path and success-path)
+- `tests/unit/test_health_loop_vmalert_discovery.py` - Added mock for `derive_cluster_uid` in all tests that call `_run_vmalert_discovery`
+- `tests/unit/test_health_scheduler.py` - Added mock for `time.sleep` in `test_scheduler_runs_up_to_max`
+- `docs/gate-timings.md` - Updated timing summary and added this section
+
+### Remaining slow groups
+
+- `test_health_loop_alertmanager_snapshot_collection.py::test_snapshot_source_provenance` - 5.11s (port-forward subprocess)
+- `test_runs_list_window_optimization.py::test_execution_files_parsed_only_for_window_runs` - 2.35s (file I/O)
+- `test_alertmanager_relevance_endpoint.py::test_all_valid_relevance_classes_accepted` - 2.05s (HTTP server startup)
+- `test_scripts.py::TestStepRunnerHeartbeat::*` - 5-12s (heartbeat interval waits)
+
+### Deferred
+
+- Port-forward subprocess mocking in alertmanager snapshot collection tests
+- Heartbeat interval test optimization
+- Runs list window optimization test speedup
