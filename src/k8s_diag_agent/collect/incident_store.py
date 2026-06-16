@@ -27,6 +27,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from .incident_bundle_promotion import (
+    merge_candidate_into_incident_with_bundle,
+    open_incident_from_candidate_with_bundle,
+)
 from .incident_lifecycle import (
     Incident,
     IncidentStatus,
@@ -75,16 +79,26 @@ class IncidentStore:
         self,
         candidates: list[IncidentCandidate] | tuple[IncidentCandidate, ...],
         observed_at: datetime,
+        snapshot_bundle_id: str | None = None,
     ) -> tuple[Incident, ...]:
         """Promote candidates into incidents.
 
         For each candidate:
-        - If no matching incident exists, opens a new incident in OPEN state
+        - If no matching incident exists, opens a new incident
+          - With bundle_id provided: COLLECTING_EVIDENCE state
+          - Without bundle_id: OPEN state (current behavior)
         - If matching incident exists (same dedupe key), merges signals into it
+          - Status transitions based on terminal-ish status rules:
+            - SUPPRESSED/DUPLICATE/RESOLVED: no status change
+            - READY_FOR_REVIEW: no status change (no downgrade)
+            - OPEN/COLLECTING_EVIDENCE/INVESTIGATING: transitions to COLLECTING_EVIDENCE
+          - snapshot_bundle_id updates to latest bundle ID when transitioning
 
         Args:
             candidates: Sequence of incident candidates to promote
             observed_at: When these candidates were observed
+            snapshot_bundle_id: Optional ID of the snapshot bundle containing evidence.
+                When provided, new incidents start in COLLECTING_EVIDENCE state.
 
         Returns:
             Tuple of all incidents (both new and updated), sorted by incident_id
@@ -97,18 +111,48 @@ class IncidentStore:
             if incident_id in self._incidents:
                 # Merge into existing incident
                 existing = self._incidents[incident_id]
-                updated = merge_candidate_into_incident(existing, candidate, observed_at)
+                if snapshot_bundle_id is not None:
+                    updated = merge_candidate_into_incident_with_bundle(
+                        existing, candidate, observed_at, snapshot_bundle_id
+                    )
+                else:
+                    updated = merge_candidate_into_incident(existing, candidate, observed_at)
                 self._incidents[incident_id] = updated
                 updated_incidents[incident_id] = updated
             else:
                 # Open new incident
-                new_incident = open_incident_from_candidate(candidate, observed_at)
+                if snapshot_bundle_id is not None:
+                    new_incident = open_incident_from_candidate_with_bundle(
+                        candidate, observed_at, snapshot_bundle_id
+                    )
+                else:
+                    new_incident = open_incident_from_candidate(candidate, observed_at)
                 self._incidents[incident_id] = new_incident
                 updated_incidents[incident_id] = new_incident
 
         # Return snapshot copies to avoid exposing internal state
         all_updated = [self._snapshot_incident(i) for i in updated_incidents.values()]
         return tuple(sorted(all_updated, key=lambda i: i.incident_id))
+
+    def promote_candidates_from_bundle(
+        self,
+        bundle_id: str,
+        candidates: list[IncidentCandidate] | tuple[IncidentCandidate, ...],
+        observed_at: datetime,
+    ) -> tuple[Incident, ...]:
+        """Promote candidates from a snapshot bundle.
+
+        This is a convenience wrapper around promote_candidates with bundle_id.
+
+        Args:
+            bundle_id: ID of the snapshot bundle containing evidence
+            candidates: Sequence of incident candidates to promote
+            observed_at: When these candidates were observed
+
+        Returns:
+            Tuple of all incidents (both new and updated), sorted by incident_id
+        """
+        return self.promote_candidates(candidates, observed_at, snapshot_bundle_id=bundle_id)
 
     def list_incidents(
         self,
