@@ -8,9 +8,14 @@ Each function takes a bundle and returns a list of markdown lines.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from .incident_models import (
     IncidentEvidenceBundle,
 )
+
+if TYPE_CHECKING:
+    from .incident_candidates import IncidentCandidate
 
 
 def build_metadata_section(bundle: IncidentEvidenceBundle) -> list[str]:
@@ -320,6 +325,73 @@ def build_next_evidence_questions(bundle: IncidentEvidenceBundle) -> list[str]:
     return lines
 
 
+def build_candidates_section(bundle: IncidentEvidenceBundle) -> list[str]:
+    """Build incident candidates section."""
+    lines = [
+        "## Incident Candidates",
+        "",
+        "**Note:** Candidates are deterministic signals, not root cause determinations. "
+        "No remediation is claimed.",
+        "",
+    ]
+
+    if not bundle.candidates:
+        lines.extend([
+            "_No incident candidates detected in captured evidence._",
+            "",
+        ])
+    else:
+        lines.append(f"**{len(bundle.candidates)}** candidate(s) detected:")
+        lines.append("")
+
+        # Group by severity
+        errors = [c for c in bundle.candidates if c.severity.value == "error"]
+        warnings = [c for c in bundle.candidates if c.severity.value == "warning"]
+
+        if errors:
+            lines.append("### Critical (Error)")
+            lines.append("")
+            for candidate in errors:
+                lines.extend(_format_candidate(candidate))
+                lines.append("")
+
+        if warnings:
+            lines.append("### Warning")
+            lines.append("")
+            for candidate in warnings:
+                lines.extend(_format_candidate(candidate))
+                lines.append("")
+
+    return lines
+
+
+def _format_candidate(candidate: IncidentCandidate) -> list[str]:
+    """Format a single candidate for the review packet."""
+    # Include raw_object_kind in display for disambiguation when object_kind is UNKNOWN
+    kind_display = candidate.object_kind.value
+    if candidate.raw_object_kind:
+        kind_display = candidate.raw_object_kind
+
+    lines = [
+        f"- **{candidate.candidate_class.value}**",
+        f"  - Object: `{kind_display}/{candidate.object_name}`",
+        f"  - Namespace: `{candidate.namespace}`",
+        f"  - Evidence needed: {', '.join(candidate.evidence_needed)}",
+    ]
+
+    # Add signals summary
+    if candidate.signals:
+        lines.append("  - Signals:")
+        for signal in candidate.signals[:3]:  # Limit to 3 signals per candidate
+            lines.append(f"    - {signal.reason}: {signal.message[:80]}{'...' if len(signal.message) > 80 else ''}")
+
+    return lines
+
+
+if TYPE_CHECKING:
+    from k8s_diag_agent.collect.incident_candidates import IncidentCandidate
+
+
 __all__ = [
     "build_metadata_section",
     "build_evidence_summary",
@@ -331,4 +403,5 @@ __all__ = [
     "build_known_limitations_section",
     "build_raw_evidence_index",
     "build_next_evidence_questions",
+    "build_candidates_section",
 ]

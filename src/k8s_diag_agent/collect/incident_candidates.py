@@ -92,9 +92,10 @@ class IncidentCandidate:
     severity: Severity
     signals: tuple[CandidateSignal, ...]
     evidence_needed: tuple[str, ...]  # generic evidence types, not kubectl commands
+    raw_object_kind: str | None = None  # Preserves original kind for UNKNOWN object kinds (ReplicaSet, StatefulSet, etc.)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result: dict[str, Any] = {
             "candidate_id": self.candidate_id,
             "namespace": self.namespace,
             "object_kind": self.object_kind.value,
@@ -104,6 +105,10 @@ class IncidentCandidate:
             "signals": [{"source": s.source, "reason": s.reason, "message": s.message} for s in self.signals],
             "evidence_needed": list(self.evidence_needed),
         }
+        # Include raw_object_kind for disambiguation when object_kind is UNKNOWN
+        if self.raw_object_kind is not None:
+            result["raw_object_kind"] = self.raw_object_kind
+        return result
 
 
 def _sanitize_message(message: str | None, max_length: int = 200) -> str:
@@ -145,18 +150,30 @@ def _make_candidate_id(
     object_kind: ObjectKind,
     object_name: str,
     candidate_class: CandidateClass,
+    raw_object_kind: str | None = None,
 ) -> str:
     """Create a deterministic candidate ID from components.
 
     Format: namespace-kind-name-class
     The ID is deterministic so repeated detections produce the same ID,
     enabling dedupe at the candidate level.
+
+    When object_kind is UNKNOWN and raw_object_kind is provided, the raw kind
+    is used in the ID to prevent collision between different unknown kinds
+    (e.g., ReplicaSet/foo vs StatefulSet/foo).
     """
+    # When UNKNOWN, use raw_object_kind if available to prevent collision
+    kind_value: str
+    if object_kind == ObjectKind.UNKNOWN and raw_object_kind:
+        kind_value = raw_object_kind.lower()
+    else:
+        kind_value = object_kind.value.lower()
+
     # Use lowercase and hyphens for consistency
     # Note: underscore in candidate_class is preserved (e.g., image_pull_error)
     parts = [
         namespace.lower(),
-        object_kind.value.lower(),
+        kind_value,
         object_name.lower(),
         candidate_class.value.lower(),
     ]
@@ -292,11 +309,13 @@ def detect_incident_candidates(
             # Create a stable ID for this burst
             # Use safe conversion to handle unknown Kubernetes kinds (ReplicaSet, StatefulSet, etc.)
             safe_kind = _safe_object_kind(object_kind_str)
+            raw_kind: str | None = object_kind_str if safe_kind == ObjectKind.UNKNOWN else None
             burst_id = _make_candidate_id(
                 namespace=namespace,
                 object_kind=safe_kind,
                 object_name=object_name,
                 candidate_class=CandidateClass.WARNING_EVENT_BURST,
+                raw_object_kind=raw_kind,
             )
 
             # Build signals from the events
@@ -319,6 +338,7 @@ def detect_incident_candidates(
                 severity=Severity.WARNING,
                 signals=tuple(signals),
                 evidence_needed=("object_events", "object_describe"),
+                raw_object_kind=raw_kind,
             )
 
     # Return sorted by candidate_id for deterministic output

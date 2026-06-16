@@ -22,7 +22,11 @@ from k8s_diag_agent.collect.incident_review_packet import (
     generate_incident_review_packet,
 )
 
-from .incident_review_packet_fixtures import make_test_bundle
+from .incident_review_packet_fixtures import (
+    make_test_bundle,
+    make_test_bundle_no_candidates,
+    make_test_bundle_with_unknown_kind,
+)
 
 
 class TestPacketSections(unittest.TestCase):
@@ -230,6 +234,85 @@ class TestPacketDynamicContent(unittest.TestCase):
 
         self.assertIn("Unhealthy Deployments", packet)
         self.assertIn("replica(s) unavailable", packet)
+
+
+class TestIncidentCandidatesSection(unittest.TestCase):
+    """Test incident candidates in review packet."""
+
+    def test_packet_includes_incident_candidates_section(self) -> None:
+        """Packet must include Incident Candidates section when candidates are present."""
+        bundle = make_test_bundle()
+        packet = generate_incident_review_packet(bundle)
+
+        self.assertIn("Incident Candidates", packet)
+
+    def test_packet_includes_candidate_details(self) -> None:
+        """Packet must include candidate details (name, class, severity)."""
+        bundle = make_test_bundle()
+        packet = generate_incident_review_packet(bundle)
+
+        self.assertIn("crashloop-pod", packet)
+        self.assertIn("crash_loop", packet)
+
+    def test_packet_preserves_raw_object_kind(self) -> None:
+        """Packet must show raw object kind for unknown Kubernetes kinds."""
+        bundle = make_test_bundle_with_unknown_kind()
+        packet = generate_incident_review_packet(bundle)
+
+        # Raw object kind should be displayed instead of UNKNOWN
+        self.assertIn("ReplicaSet", packet)
+        self.assertIn("my-replicaset-abc123", packet)
+
+    def test_packet_no_candidates_empty_state(self) -> None:
+        """Packet must show empty state message when no candidates detected."""
+        bundle = make_test_bundle_no_candidates()
+        packet = generate_incident_review_packet(bundle)
+
+        self.assertIn("No incident candidates detected", packet)
+
+    def test_packet_candidates_disclaimer(self) -> None:
+        """Packet must include disclaimer that candidates are not root cause determinations."""
+        bundle = make_test_bundle()
+        packet = generate_incident_review_packet(bundle)
+
+        self.assertIn("deterministic signals", packet.lower())
+        self.assertIn("not root cause", packet.lower())
+
+    def test_packet_candidates_evidence_needed(self) -> None:
+        """Packet must include evidence needed for candidates."""
+        bundle = make_test_bundle()
+        packet = generate_incident_review_packet(bundle)
+
+        # The output shows "Evidence needed:" with proper casing
+        self.assertIn("evidence needed", packet.lower())
+
+
+class TestBundleCandidatesInclusion(unittest.TestCase):
+    """Test that bundles include candidates correctly."""
+
+    def test_bundle_with_candidates_has_candidates_field(self) -> None:
+        """Bundle with detected candidates should have non-empty candidates tuple."""
+        bundle = make_test_bundle()
+        self.assertGreater(len(bundle.candidates), 0)
+
+    def test_bundle_no_candidates_empty_tuple(self) -> None:
+        """Bundle with no candidates should have empty candidates tuple."""
+        bundle = make_test_bundle_no_candidates()
+        self.assertEqual(len(bundle.candidates), 0)
+
+    def test_candidate_has_raw_object_kind_when_unknown(self) -> None:
+        """Candidate with unknown object kind should preserve raw_object_kind."""
+        bundle = make_test_bundle_with_unknown_kind()
+        self.assertEqual(len(bundle.candidates), 1)
+        candidate = bundle.candidates[0]
+        self.assertEqual(candidate.raw_object_kind, "ReplicaSet")
+
+    def test_candidate_raw_object_kind_none_for_known_kind(self) -> None:
+        """Candidate with known object kind should have raw_object_kind as None."""
+        bundle = make_test_bundle()
+        self.assertEqual(len(bundle.candidates), 1)
+        candidate = bundle.candidates[0]
+        self.assertIsNone(candidate.raw_object_kind)
 
 
 if __name__ == "__main__":

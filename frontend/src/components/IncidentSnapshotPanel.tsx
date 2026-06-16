@@ -9,8 +9,56 @@
  */
 
 import { useState, useCallback } from "react";
-import type { IncidentSnapshotResponse, IncidentReviewPacketResponse } from "../api";
+import type { IncidentSnapshotResponse, IncidentReviewPacketResponse, IncidentCandidate } from "../api";
 import { captureIncidentSnapshot, generateIncidentReviewPacket } from "../api";
+
+/**
+ * Renders a compact incident candidate item.
+ * Shows: severity badge, class, object kind/name, raw_object_kind when present, evidence_needed.
+ */
+const CandidateItem: React.FC<{ candidate: IncidentCandidate }> = ({ candidate }) => {
+  const severityClass = candidate.severity === "error" ? "severity-error" : "severity-warning";
+  const displayKind = candidate.raw_object_kind || candidate.object_kind;
+  
+  return (
+    <li className="candidate-item">
+      <div className="candidate-header">
+        <span className={`severity-badge ${severityClass}`}>{candidate.severity}</span>
+        <span className="candidate-class">{candidate.class.replace(/_/g, " ")}</span>
+      </div>
+      <div className="candidate-details">
+        <span className="candidate-object">
+          {displayKind}/{candidate.object_name}
+        </span>
+      </div>
+      <div className="candidate-evidence">
+        <span className="muted small">Evidence needed: </span>
+        <span>{candidate.evidence_needed.join(", ")}</span>
+      </div>
+    </li>
+  );
+};
+
+/**
+ * Renders the list of incident candidates.
+ */
+const CandidateList: React.FC<{ candidates: IncidentCandidate[] }> = ({ candidates }) => {
+  if (candidates.length === 0) {
+    return (
+      <div className="candidates-empty">
+        <p className="muted small">No incident candidates detected</p>
+      </div>
+    );
+  }
+  
+  return (
+    <ul className="candidates-list">
+      {candidates.map((candidate, index) => (
+        <CandidateItem key={candidate.candidate_id || index} candidate={candidate} />
+      ))}
+    </ul>
+  );
+};
 
 export interface IncidentSnapshotPanelProps {
   /** Current namespace (reused from cluster context) */
@@ -282,8 +330,23 @@ export const IncidentSnapshotPanel: React.FC<IncidentSnapshotPanelProps> = ({
               <li>
                 Symptoms: <strong>{state.result.summary.symptoms_count}</strong>
               </li>
+              <li>
+                Incident Candidates: <strong>{state.result.summary.candidates_count}</strong>
+              </li>
             </ul>
           </div>
+
+          {/* Incident Candidates List */}
+          {state.result.bundle?.candidates && state.result.bundle.candidates.length > 0 && (
+            <div className="incident-candidates-section">
+              <h4>Incident Candidates</h4>
+              <p className="muted small">
+                Deterministic incident candidates derived from cluster evidence. 
+                These are detection hints, not root cause determinations.
+              </p>
+              <CandidateList candidates={state.result.bundle.candidates} />
+            </div>
+          )}
 
           {/* Review packet generation */}
           <div className="incident-snapshot-packet">

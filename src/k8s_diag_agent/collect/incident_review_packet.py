@@ -33,6 +33,7 @@ from .incident_review_packet_markdown import (
     join_lines,
 )
 from .incident_review_packet_sections import (
+    build_candidates_section,
     build_collection_errors_section,
     build_deployment_health_section,
     build_evidence_summary,
@@ -81,6 +82,7 @@ def generate_incident_review_packet(
         build_failing_pods_section(bundle),
         build_deployment_health_section(bundle),
         build_warning_events_section(bundle),
+        build_candidates_section(bundle),
         build_collection_errors_section(bundle),
         build_known_limitations_section(),
         build_raw_evidence_index(bundle),
@@ -196,6 +198,57 @@ def generate_incident_review_packet_from_dict(
     # Parse collection errors
     collection_errors = tuple(bundle_data.get("collection_errors", []))
 
+    # Parse candidates - handle both dict and object format
+    from .incident_candidates import (
+        CandidateClass,
+        CandidateSignal,
+        IncidentCandidate,
+        ObjectKind,
+        Severity,
+    )
+    candidates: list[IncidentCandidate] = []
+    for cand_data in bundle_data.get("candidates", []):
+        severity_str = cand_data.get("severity", "warning")
+        try:
+            severity = Severity(severity_str)
+        except ValueError:
+            severity = Severity.WARNING
+
+        # Parse object_kind
+        kind_str = cand_data.get("object_kind", "Unknown")
+        try:
+            object_kind = ObjectKind(kind_str)
+        except ValueError:
+            object_kind = ObjectKind.UNKNOWN
+
+        # Parse candidate_class
+        class_str = cand_data.get("class", "unknown")
+        try:
+            candidate_class = CandidateClass(class_str)
+        except ValueError:
+            candidate_class = CandidateClass.UNKNOWN
+
+        # Parse signals
+        signals: list[CandidateSignal] = []
+        for sig_data in cand_data.get("signals", []):
+            signals.append(CandidateSignal(
+                source=sig_data.get("source", ""),
+                reason=sig_data.get("reason", ""),
+                message=sig_data.get("message", ""),
+            ))
+
+        candidates.append(IncidentCandidate(
+            candidate_id=cand_data.get("candidate_id", ""),
+            namespace=cand_data.get("namespace", ""),
+            object_kind=object_kind,
+            object_name=cand_data.get("object_name", ""),
+            candidate_class=candidate_class,
+            severity=severity,
+            signals=tuple(signals),
+            evidence_needed=tuple(cand_data.get("evidence_needed", [])),
+            raw_object_kind=cand_data.get("raw_object_kind"),
+        ))
+
     # Build bundle
     bundle = IncidentEvidenceBundle(
         metadata=metadata,
@@ -204,6 +257,7 @@ def generate_incident_review_packet_from_dict(
         deployments=deployments,
         symptoms=symptoms,
         collection_errors=collection_errors,
+        candidates=tuple(candidates),
     )
 
     return generate_incident_review_packet(bundle)

@@ -15,7 +15,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from k8s_diag_agent.collect.incident_candidates import IncidentCandidate
 
 
 class PodHealthStatus(StrEnum):
@@ -143,6 +146,7 @@ class IncidentBundleMetadata:
     total_deployments: int
     failing_pods_count: int
     symptoms_count: int
+    candidates_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -156,6 +160,7 @@ class IncidentBundleMetadata:
             "total_deployments": self.total_deployments,
             "failing_pods_count": self.failing_pods_count,
             "symptoms_count": self.symptoms_count,
+            "candidates_count": self.candidates_count,
         }
 
 
@@ -169,6 +174,7 @@ class IncidentEvidenceBundle:
     deployments: list[DeploymentSummary]
     symptoms: list[IncidentSymptom]
     collection_errors: tuple[str, ...] = field(default_factory=tuple)
+    candidates: tuple[IncidentCandidate, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -178,6 +184,7 @@ class IncidentEvidenceBundle:
             "deployments": [d.to_dict() for d in self.deployments],
             "symptoms": [s.to_dict() for s in self.symptoms],
             "collection_errors": list(self.collection_errors),
+            "candidates": [c.to_dict() for c in self.candidates],
         }
 
 

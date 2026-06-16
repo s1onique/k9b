@@ -540,12 +540,91 @@ export type IncidentSnapshotRequest = {
   since_hours?: number;
 };
 
+// ============================================================================
+// Incident Candidate shape for frontend display
+// ============================================================================
+
+export type IncidentCandidateSignal = {
+  source: string;
+  reason: string;
+  message: string;
+};
+
+export type IncidentCandidate = {
+  candidate_id: string;
+  namespace: string;
+  object_kind: string;
+  object_name: string;
+  class: string;
+  severity: string;
+  signals: IncidentCandidateSignal[];
+  evidence_needed: string[];
+  raw_object_kind?: string | null;
+};
+
 export type IncidentSnapshotSummary = {
   total_pods: number;
   failing_pods_count: number;
   total_deployments: number;
   total_events: number;
   symptoms_count: number;
+  candidates_count: number;
+};
+
+export type IncidentSnapshotBundle = {
+  metadata: {
+    bundle_id: string;
+    captured_at: string;
+    namespace: string;
+    since_hours: number;
+    context: string | null;
+    total_pods: number;
+    total_events: number;
+    total_deployments: number;
+    failing_pods_count: number;
+    symptoms_count: number;
+    candidates_count: number;
+  };
+  pods: Array<{
+    name: string;
+    namespace: string;
+    phase: string;
+    health_status: string;
+    restart_count: number;
+    node: string | null;
+    image_refs: string[];
+    reason: string | null;
+    message: string | null;
+    is_failing: boolean;
+  }>;
+  events: Array<{
+    namespace: string;
+    name: string;
+    type: string;
+    reason: string;
+    message: string;
+    involved_object_kind: string | null;
+    involved_object_name: string | null;
+    count: number;
+    last_timestamp: string | null;
+  }>;
+  deployments: Array<{
+    name: string;
+    namespace: string;
+    replicas: number;
+    available_replicas: number;
+    ready_replicas: number;
+    updated_replicas: number;
+    available: boolean;
+  }>;
+  symptoms: Array<{
+    symptom_type: string;
+    pod_name: string | null;
+    message: string;
+    severity: string;
+  }>;
+  collection_errors: string[];
+  candidates: IncidentCandidate[];
 };
 
 export type IncidentSnapshotResponse = {
@@ -553,7 +632,7 @@ export type IncidentSnapshotResponse = {
   captured_at: string;
   namespace: string;
   summary: IncidentSnapshotSummary;
-  bundle?: Record<string, unknown>;
+  bundle?: IncidentSnapshotBundle;
   error?: string | null;
 };
 

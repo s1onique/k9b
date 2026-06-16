@@ -36,6 +36,7 @@ This file remains for backward compatibility with existing imports.
 from __future__ import annotations
 
 from ..datetime_utils import now_utc
+from .incident_candidates import detect_incident_candidates
 from .incident_collectors import (
     DEFAULT_SINCE_HOURS,
     collect_deployments,
@@ -122,6 +123,13 @@ def collect_incident_snapshot(
     # Detect symptoms
     symptoms = detect_symptoms(pods, events)
 
+    # Detect incident candidates from collected evidence
+    candidates = detect_incident_candidates(
+        pods=pods,
+        deployments=deployments,
+        events=events,
+    )
+
     metadata = IncidentBundleMetadata(
         bundle_id=bundle_id,
         captured_at=now,
@@ -133,6 +141,7 @@ def collect_incident_snapshot(
         total_deployments=len(deployments),
         failing_pods_count=len(failing_pods),
         symptoms_count=len(symptoms),
+        candidates_count=len(candidates),
     )
 
     return IncidentEvidenceBundle(
@@ -142,4 +151,5 @@ def collect_incident_snapshot(
         deployments=deployments,
         symptoms=symptoms,
         collection_errors=tuple(errors),
+        candidates=candidates,
     )

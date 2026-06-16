@@ -153,6 +153,65 @@ class TestEventDeduplication(unittest.TestCase):
         self.assertNotEqual(candidates1[0].candidate_id, candidates2[0].candidate_id)
 
 
+class TestUnknownObjectKindIdCollision(unittest.TestCase):
+    """Test that unknown object kinds produce unique candidate IDs."""
+
+    def test_replicaset_vs_statefulset_unique_ids(self) -> None:
+        """ReplicaSet/foo and StatefulSet/foo must produce distinct candidate IDs.
+
+        Without raw_object_kind in ID, both would produce 'default-unknown-foo-warning_event_burst'.
+        With the fix, they produce distinct IDs:
+        - ReplicaSet: 'default-replicaset-foo-warning_event_burst'
+        - StatefulSet: 'default-statefulset-foo-warning_event_burst'
+        """
+        # Events for ReplicaSet
+        rs_events = [
+            make_event(name="rs-event-1", namespace="default", involved_object_kind="ReplicaSet", involved_object_name="foo"),
+            make_event(name="rs-event-2", namespace="default", involved_object_kind="ReplicaSet", involved_object_name="foo"),
+            make_event(name="rs-event-3", namespace="default", involved_object_kind="ReplicaSet", involved_object_name="foo"),
+        ]
+        # Events for StatefulSet
+        sts_events = [
+            make_event(name="sts-event-1", namespace="default", involved_object_kind="StatefulSet", involved_object_name="foo"),
+            make_event(name="sts-event-2", namespace="default", involved_object_kind="StatefulSet", involved_object_name="foo"),
+            make_event(name="sts-event-3", namespace="default", involved_object_kind="StatefulSet", involved_object_name="foo"),
+        ]
+
+        rs_candidates = detect_incident_candidates(pods=[], deployments=[], events=rs_events)
+        sts_candidates = detect_incident_candidates(pods=[], deployments=[], events=sts_events)
+
+        # Both should produce exactly one candidate
+        self.assertEqual(len(rs_candidates), 1)
+        self.assertEqual(len(sts_candidates), 1)
+
+        # Candidate IDs must be distinct (this was the collision bug)
+        self.assertNotEqual(rs_candidates[0].candidate_id, sts_candidates[0].candidate_id)
+
+        # Verify the IDs contain the raw kind
+        self.assertIn("replicaset", rs_candidates[0].candidate_id)
+        self.assertIn("statefulset", sts_candidates[0].candidate_id)
+
+        # raw_object_kind should be preserved in the candidate
+        self.assertEqual(rs_candidates[0].raw_object_kind, "ReplicaSet")
+        self.assertEqual(sts_candidates[0].raw_object_kind, "StatefulSet")
+
+    def test_same_unknown_kind_same_object_same_id(self) -> None:
+        """Same unknown kind + name should produce the same ID on repeated calls."""
+        events = [
+            make_event(name="event-1", namespace="default", involved_object_kind="DaemonSet", involved_object_name="foo"),
+            make_event(name="event-2", namespace="default", involved_object_kind="DaemonSet", involved_object_name="foo"),
+            make_event(name="event-3", namespace="default", involved_object_kind="DaemonSet", involved_object_name="foo"),
+        ]
+
+        result1 = detect_incident_candidates(pods=[], deployments=[], events=events)
+        result2 = detect_incident_candidates(pods=[], deployments=[], events=events)
+
+        self.assertEqual(len(result1), 1)
+        self.assertEqual(len(result2), 1)
+        self.assertEqual(result1[0].candidate_id, result2[0].candidate_id)
+        self.assertIn("daemonset", result1[0].candidate_id)
+
+
 class TestUnknownObjectKinds(unittest.TestCase):
     """Test handling of unknown Kubernetes object kinds."""
 

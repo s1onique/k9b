@@ -14,16 +14,99 @@ export const mockSuccessResponse = {
     total_deployments: 3,
     total_events: 25,
     symptoms_count: 3,
+    candidates_count: 2,
   },
   bundle: {
     metadata: {
       bundle_id: "default-20260101-120000",
       namespace: "default",
+      since_hours: 2,
+      context: null,
+      total_pods: 10,
+      total_events: 25,
+      total_deployments: 3,
+      failing_pods_count: 2,
+      symptoms_count: 3,
+      candidates_count: 2,
     },
     pods: [],
     events: [],
     deployments: [],
     symptoms: [],
+    collection_errors: [],
+    candidates: [],
+  },
+};
+
+/**
+ * Mock response with incident candidates for testing the candidate list rendering.
+ */
+export const mockSuccessResponseWithCandidates = {
+  bundle_id: "default-20260101-120000",
+  captured_at: "2026-01-01T12:00:00Z",
+  namespace: "default",
+  summary: {
+    total_pods: 10,
+    failing_pods_count: 2,
+    total_deployments: 3,
+    total_events: 25,
+    symptoms_count: 3,
+    candidates_count: 2,
+  },
+  bundle: {
+    metadata: {
+      bundle_id: "default-20260101-120000",
+      namespace: "default",
+      since_hours: 2,
+      context: null,
+      total_pods: 10,
+      total_events: 25,
+      total_deployments: 3,
+      failing_pods_count: 2,
+      symptoms_count: 3,
+      candidates_count: 2,
+    },
+    pods: [],
+    events: [],
+    deployments: [],
+    symptoms: [],
+    collection_errors: [],
+    candidates: [
+      {
+        candidate_id: "default-pod-crashloop-pod-crash_loop",
+        namespace: "default",
+        object_kind: "Pod",
+        object_name: "crashloop-pod",
+        class: "crash_loop",
+        severity: "error",
+        signals: [
+          {
+            source: "pod",
+            reason: "CrashLoopBackOff",
+            message: "Back-off 5m40s restarting",
+          },
+        ],
+        evidence_needed: ["pod_logs", "pod_describe"],
+        raw_object_kind: null,
+      },
+      {
+        candidate_id: "default-replicaset-my-replicaset-warning_event_burst",
+        namespace: "default",
+        object_kind: "Unknown",
+        object_name: "my-replicaset",
+        class: "warning_event_burst",
+        severity: "warning",
+        signals: [
+          {
+            source: "event",
+            reason: "Warning",
+            message: "Warning event burst detected",
+          },
+        ],
+        evidence_needed: ["recent_events", "object_describe"],
+        raw_object_kind: "ReplicaSet",
+      },
+    ],
   },
 };
 

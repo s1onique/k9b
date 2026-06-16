@@ -241,3 +241,47 @@ class TestIncidentBundleCollection(unittest.TestCase):
 
         self.assertIn("pods_collection", bundle.collection_errors[0])
         self.assertEqual(bundle.metadata.total_pods, 0)
+
+    @patch("k8s_diag_agent.collect.incident_collectors.kubectl")
+    def test_bundle_includes_candidates(
+        self, mock_kubectl: unittest.mock.MagicMock
+    ) -> None:
+        """Test that collected bundle includes incident candidates."""
+        def kubectl_side_effect(*args: str) -> str:
+            if "pods" in args and "-o" in args:
+                return json.dumps(FAKE_PODS_RESPONSE)
+            if "deployments" in args and "-o" in args:
+                return json.dumps(FAKE_DEPLOYMENTS_RESPONSE)
+            if "events" in args and "-o" in args:
+                return json.dumps(FAKE_EVENTS_RESPONSE)
+            return "{}"
+
+        mock_kubectl.side_effect = kubectl_side_effect
+
+        bundle = collect_incident_snapshot(namespace="default")
+
+        # Verify candidates are present (crashloop pod and image pull error should generate candidates)
+        self.assertIsInstance(bundle.candidates, tuple)
+        # At minimum we should have candidates for crashloop pod and image pull error
+        self.assertGreaterEqual(len(bundle.candidates), 2)
+
+    @patch("k8s_diag_agent.collect.incident_collectors.kubectl")
+    def test_metadata_includes_candidates_count(
+        self, mock_kubectl: unittest.mock.MagicMock
+    ) -> None:
+        """Test that metadata includes candidates_count matching actual candidates."""
+        def kubectl_side_effect(*args: str) -> str:
+            if "pods" in args and "-o" in args:
+                return json.dumps(FAKE_PODS_RESPONSE)
+            if "deployments" in args and "-o" in args:
+                return json.dumps(FAKE_DEPLOYMENTS_RESPONSE)
+            if "events" in args and "-o" in args:
+                return json.dumps(FAKE_EVENTS_RESPONSE)
+            return "{}"
+
+        mock_kubectl.side_effect = kubectl_side_effect
+
+        bundle = collect_incident_snapshot(namespace="default")
+
+        # Verify candidates_count matches length of candidates
+        self.assertEqual(bundle.metadata.candidates_count, len(bundle.candidates))

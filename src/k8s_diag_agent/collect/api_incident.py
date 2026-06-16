@@ -95,6 +95,7 @@ def handle_incident_snapshot(request: IncidentSnapshotRequest) -> IncidentSnapsh
             "total_deployments": bundle.metadata.total_deployments,
             "total_events": bundle.metadata.total_events,
             "symptoms_count": bundle.metadata.symptoms_count,
+            "candidates_count": bundle.metadata.candidates_count,
         }
 
         return IncidentSnapshotResponse(
@@ -124,6 +125,7 @@ def handle_incident_snapshot(request: IncidentSnapshotRequest) -> IncidentSnapsh
                 "total_deployments": 0,
                 "total_events": 0,
                 "symptoms_count": 0,
+                "candidates_count": 0,
             },
             error=sanitized_message,
         )
