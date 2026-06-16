@@ -150,7 +150,9 @@ class TestHealthLoopVmalertDiscovery(unittest.TestCase):
         )
         
         # Track whether discovery was called
-        with patch("k8s_diag_agent.health.loop_vmalert_discovery.discover_vmalerts") as discover_mock, \
+        # Mock derive_cluster_uid to avoid 10-second kubectl timeout
+        with patch("k8s_diag_agent.identity.cluster.derive_cluster_uid", return_value=None), \
+             patch("k8s_diag_agent.health.loop_vmalert_discovery.discover_vmalerts") as discover_mock, \
              patch("k8s_diag_agent.health.loop_vmalert_discovery.write_vmalert_sources") as write_mock:
             
             inventory = VmalertSourceInventory()
@@ -206,7 +208,9 @@ class TestHealthLoopVmalertDiscovery(unittest.TestCase):
             baseline_policy=BaselinePolicy.empty(),
         )
         
-        with patch("k8s_diag_agent.health.loop_vmalert_discovery.discover_vmalerts") as discover_mock, \
+        # Mock derive_cluster_uid to avoid 10-second kubectl timeout
+        with patch("k8s_diag_agent.identity.cluster.derive_cluster_uid", return_value=None), \
+             patch("k8s_diag_agent.health.loop_vmalert_discovery.discover_vmalerts") as discover_mock, \
              patch("k8s_diag_agent.health.loop_vmalert_discovery.write_vmalert_sources") as write_mock:
             
             inventory = VmalertSourceInventory()
@@ -271,7 +275,9 @@ class TestHealthLoopVmalertDiscovery(unittest.TestCase):
             baseline_policy=BaselinePolicy.empty(),
         )
         
-        with patch("k8s_diag_agent.health.loop_vmalert_discovery.discover_vmalerts", return_value=VmalertSourceInventory()), \
+        # Mock derive_cluster_uid to avoid 10-second kubectl timeout
+        with patch("k8s_diag_agent.identity.cluster.derive_cluster_uid", return_value=None), \
+             patch("k8s_diag_agent.health.loop_vmalert_discovery.discover_vmalerts", return_value=VmalertSourceInventory()), \
              patch("k8s_diag_agent.health.loop_vmalert_discovery.write_vmalert_sources") as write_mock:
             
             expected_path = self.output_dir / "health" / f"{self.run_id}-vmalert-sources.json"
@@ -364,7 +370,9 @@ class TestHealthLoopVmalertDiscovery(unittest.TestCase):
             ))
             return inventory
         
-        with patch("k8s_diag_agent.health.loop_vmalert_discovery.discover_vmalerts", side_effect=mock_discover) as discover_mock, \
+        # Mock derive_cluster_uid to avoid 10-second kubectl timeout
+        with patch("k8s_diag_agent.identity.cluster.derive_cluster_uid", return_value=None), \
+             patch("k8s_diag_agent.health.loop_vmalert_discovery.discover_vmalerts", side_effect=mock_discover) as discover_mock, \
              patch("k8s_diag_agent.health.loop_vmalert_discovery.write_vmalert_sources") as write_mock:
             
             runner._run_vmalert_discovery(records, {"root": self.output_dir / "health"})
@@ -417,7 +425,9 @@ class TestHealthLoopVmalertDiscovery(unittest.TestCase):
             baseline_policy=BaselinePolicy.empty(),
         )
         
-        with patch("k8s_diag_agent.health.loop_vmalert_discovery.discover_vmalerts") as discover_mock, \
+        # Mock derive_cluster_uid to avoid 10-second kubectl timeout
+        with patch("k8s_diag_agent.identity.cluster.derive_cluster_uid", return_value=None), \
+             patch("k8s_diag_agent.health.loop_vmalert_discovery.discover_vmalerts") as discover_mock, \
              patch("k8s_diag_agent.health.loop_vmalert_discovery.write_vmalert_sources", side_effect=RuntimeError("Write failed")), \
              patch.object(runner, "_log_event") as log_mock:
             

@@ -3,7 +3,7 @@
 # Outputs per-file timing to support profiling and sharding decisions.
 #
 # Usage:
-#   scripts/run_unit_tests.sh              # standard run (unittest)
+#   scripts/run_unit_tests.sh              # standard run (pytest tests/)
 #   scripts/run_unit_tests.sh --profile    # with per-test timing
 #   scripts/run_unit_tests.sh --shard N K  # run shard N of K (0-indexed)
 #
@@ -165,11 +165,11 @@ with open('$TIMING_FILE', 'w') as f:
     # Exit with pytest's exit code
     exit $PYTEST_EXIT
 else
-    # Standard mode: use unittest for compatibility
+    # Standard mode: use pytest tests/ for complete coverage
     if [[ "$SHARD_MODE" == true && -n "$SHARD_FILES" ]]; then
         "$PYTHON" -m pytest $SHARD_FILES --tb=short 2>&1 | tee "$TIMING_FILE.log"
     else
-        env VERIFY_ALL_ACTIVE=1 RUN_FULL_VERIFY_TEST= "$PYTHON" -m unittest discover tests 2>&1 | tee "$TIMING_FILE.log"
+        "$PYTHON" -m pytest tests/ --tb=short 2>&1 | tee "$TIMING_FILE.log"
     fi
     exit $?
 fi

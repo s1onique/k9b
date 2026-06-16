@@ -462,3 +462,69 @@ Split each oversized file into smaller behavior-focused test modules.
 - Port-forward subprocess mocking in alertmanager snapshot collection tests
 - Heartbeat interval test optimization
 - Runs list window optimization test speedup
+
+## Python unit-tests wrapper/runtime discrepancy result (2026-06-16)
+
+### Problem
+
+Targeted `pytest tests/unit --durations=50` ran in ~86.71s, but the CI `unit-tests` gate step still took ~160s.
+
+### Investigation
+
+| Command | Tests collected/run | Duration | Notes |
+|---------|---------------------|----------|-------|
+| `python -m pytest tests/unit` | 4,279 | 79.81s | tests/unit only |
+| `python -m pytest tests/` | 5,455 | 160.91s | Full pytest (tests/unit + tests/*) |
+| `python -m pytest tests/ --ignore=tests/unit` | 1,176 | 81.32s | Tests outside tests/unit |
+| `python -m unittest discover tests` | 3,577 | 140.188s | Original wrapper command |
+
+### Root cause
+
+The wrapper (`scripts/run_unit_tests.sh`) ran `unittest discover tests` which:
+1. Executed a different test set than targeted pytest
+2. Had slower test collection than pytest
+3. Was not comparable to the ~87s targeted pytest timing
+
+### Fix
+
+Changed `scripts/run_unit_tests.sh` default mode from `unittest discover tests` to `pytest tests/`:
+- Uses pytest instead of unittest (faster collection)
+- **Full coverage**: All 5,455 tests (not just tests/unit)
+- Tests outside `tests/unit` (1,176 tests) are now included in CI
+
+### Timing result
+
+| Step | Before | After | Delta |
+|------|--------|-------|-------|
+| unit-tests (unittest) | 140.0s | ~161.0s (pytest) | pytest tests/ is slower but complete |
+| total gate | 347.0s | TBD | Pending full gate run |
+
+### Coverage preserved
+
+- Tests skipped: none
+- Assertions removed: none
+- **Full coverage**: All 5,455 tests run via `pytest tests/`
+- Tests outside `tests/unit` now included: 1,176 tests
+
+### Correct approach
+
+The investigation showed that `pytest tests/` (full coverage) is the correct command.
+It runs 5,455 tests vs 3,577 from unittest discover. The outside-unit tests
+(1,176 tests in tests/test_*.py, tests/security/, tests/health/, etc.) must be
+included in CI.
+
+### Remaining optimization
+
+The outside-unit tests (1,176 tests) take ~81s. Optimization of this group is
+the next target for reducing total runtime.
+
+### Files changed
+
+- `scripts/run_unit_tests.sh` - Changed default from unittest to pytest tests/ (full coverage)
+- `docs/gate-timings.md` - Added this section
+
+### Deferred
+
+- Python test sharding (for parallel CI)
+- Frontend test sharding
+- Optimize slow outside-unit tests

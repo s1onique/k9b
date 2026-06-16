@@ -68,9 +68,11 @@ class HealthSchedulerTests(unittest.TestCase):
             run_results.append(1)
             return (0, [], [], [], [], ExternalAnalysisSettings())
         scheduler._run_health_loop_fn = tracking_mock
-        with patch.object(scheduler, "_acquire_lock", return_value=True), patch.object(
-            scheduler, "_release_lock", return_value=None
-        ), patch.object(scheduler, "_log_event"):
+        # Mock time.sleep to avoid real 1-second waits between runs
+        with patch("k8s_diag_agent.health.loop_scheduler_run.time.sleep"), \
+             patch.object(scheduler, "_acquire_lock", return_value=True), \
+             patch.object(scheduler, "_release_lock", return_value=None), \
+             patch.object(scheduler, "_log_event"):
             exit_code = scheduler.run()
         self.assertEqual(exit_code, 0)
         self.assertEqual(len(run_results), 3)
