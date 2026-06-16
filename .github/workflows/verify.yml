@@ -11,11 +11,10 @@ name: Verify
 # No secrets required - this is a read-only verification lane.
 
 on:
+  # Pull requests - standard verification lane
   pull_request:
     types: [opened, synchronize, reopened]
-  push:
-    branches:
-      - main
+  # Manual verification only - no push trigger (harbor.yml handles push gates)
   workflow_dispatch:
     inputs:
       scope:

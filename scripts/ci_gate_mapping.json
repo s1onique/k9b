@@ -1,143 +1,128 @@
 {
   "_metadata": {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Mapping between local verify_all.sh gates and CI workflow equivalents",
     "updated": "2026-06-17",
-    "source_of_truth": "scripts/verify_all.sh step definitions"
+    "source_of_truth": "scripts/verify_all.sh step definitions",
+    "canonical_workflow": ".github/workflows/harbor.yml",
+    "note": "harbor.yml is the canonical push workflow. verify.yml runs on PR and workflow_dispatch only."
   },
   "required_gates": {
     "doctrine": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_factory_doctrine.sh"],
       "reason": "Factory blockstor-derived doctrine check"
     },
     "dockerhub-base-images": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_dockerhub_base_images.sh"],
       "reason": "Dockerfiles must use Harbor proxy cache"
     },
     "docker-workflow-hygiene": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_docker_workflow_hygiene.sh"],
       "reason": "Docker workflow registry hygiene check"
     },
     "helm-workflow-hygiene": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["helm-chart"],
-        ".github/workflows/verify.yml": ["helm-chart"]
+        ".github/workflows/harbor.yml": ["helm-chart"]
       },
       "required_command_fragments": ["verify_helm_workflow_hygiene.sh"],
       "reason": "Helm version pin hygiene check"
     },
     "docker-build-locality": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_docker_build_locality.sh"],
       "reason": "Docker build locality hygiene check"
     },
     "agent-pipeline": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_agentic_pipeline.py"],
       "reason": "Agentic doctrine pipeline verification"
     },
     "llm-evidence-boundaries": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_llm_evidence_boundaries.py"],
       "reason": "LLM evidence boundaries check"
     },
     "llm-semantic-injection": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_llm_semantic_injection_detection.py"],
       "reason": "Semantic injection detection check"
     },
     "discovery-logging-hygiene": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_discovery_logging_hygiene.py"],
       "reason": "Discovery strategy logging hygiene check"
     },
     "pvc-rollout-policy": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_pvc_rollout_policy.py"],
       "reason": "PVC rollout policy check (Recreate for single-writer)"
     },
     "shared-pvc-colocation": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_shared_pvc_colocation.py"],
       "reason": "Shared PVC colocation policy check"
     },
     "next-check-sanitization": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_next_check_sanitization_hygiene.py"],
       "reason": "Next-check sanitization hygiene check"
     },
     "operator-projection-hygiene": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_operator_projection_hygiene.py"],
       "reason": "Operator projection sanitization hygiene check"
     },
     "llm-friendly": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["check_llm_friendly_files.py"],
       "reason": "File size limits for LLM-friendly code"
     },
     "ruff-lint": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["ruff check"],
       "reason": "Ruff linting"
     },
     "structured-output": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["verify_health_loop_structured_output.sh"],
       "reason": "Health-loop structured output hygiene check"
     },
     "unit-tests": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["python-unit-tests", "python-unit-shard-union"],
-        ".github/workflows/verify.yml": ["python-unit-tests", "python-unit-shard-union"]
+        ".github/workflows/harbor.yml": ["python-unit-tests", "python-unit-shard-union"]
       },
       "required_command_fragments": ["run_unit_tests.sh --shard", "run_unit_tests.sh --verify-shards"],
       "shard_required": true,
@@ -146,56 +131,49 @@
     },
     "mypy": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["mypy src/k8s_diag_agent"],
       "reason": "Type checking on main source"
     },
     "mypy-tests": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"],
-        ".github/workflows/verify.yml": ["lint"]
+        ".github/workflows/harbor.yml": ["lint-policy"]
       },
       "required_command_fragments": ["mypy tests/"],
       "reason": "Type checking on test files"
     },
     "npm-ci": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["frontend-tests"],
-        ".github/workflows/verify.yml": ["frontend"]
+        ".github/workflows/harbor.yml": ["frontend-tests"]
       },
       "required_command_fragments": ["npm ci"],
       "reason": "Frontend dependency installation"
     },
     "npm-test-ui": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["frontend-tests"],
-        ".github/workflows/verify.yml": ["frontend"]
+        ".github/workflows/harbor.yml": ["frontend-tests"]
       },
       "required_command_fragments": ["npm run test:ui"],
       "reason": "Frontend UI tests"
     },
     "npm-build": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["frontend-tests"],
-        ".github/workflows/verify.yml": ["frontend"]
+        ".github/workflows/harbor.yml": ["frontend-tests"]
       },
       "required_command_fragments": ["npm run build"],
       "reason": "Frontend build"
     },
     "helm-chart": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["helm-chart"],
-        ".github/workflows/verify.yml": ["helm-chart"]
+        ".github/workflows/harbor.yml": ["helm-chart"]
       },
       "required_command_fragments": ["verify_helm_chart.sh"],
       "reason": "Helm chart verification"
     },
     "helm-oci-login": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["helm-chart"],
-        ".github/workflows/verify.yml": ["helm-chart"]
+        ".github/workflows/harbor.yml": ["helm-chart"]
       },
       "required_command_fragments": ["verify_helm_oci_login.sh"],
       "reason": "Helm OCI dual-login workaround verification"
@@ -210,12 +188,127 @@
     {
       "gate": "helm-workflow-hygiene",
       "workflow": ".github/workflows/helm-chart.yml",
-      "reason": "This workflow is a Helm-specific path-triggered workflow; helm-workflow-hygiene is covered in harbor.yml and verify.yml helm-chart jobs"
+      "reason": "This workflow is a Helm-specific path-triggered workflow; helm-workflow-hygiene is covered in harbor.yml helm-chart job"
     },
     {
       "gate": "helm-workflow-hygiene",
       "workflow": ".github/workflows/verify.yml",
-      "reason": "verify.yml helm-chart job only runs on helm-only scope; helm-workflow-hygiene is covered in harbor.yml helm-chart job"
+      "reason": "verify.yml runs on PR and workflow_dispatch only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "doctrine",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "dockerhub-base-images",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "docker-workflow-hygiene",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "docker-build-locality",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "agent-pipeline",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "llm-evidence-boundaries",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "llm-semantic-injection",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "discovery-logging-hygiene",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "pvc-rollout-policy",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "shared-pvc-colocation",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "next-check-sanitization",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "operator-projection-hygiene",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "llm-friendly",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "ruff-lint",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "structured-output",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "mypy",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "mypy-tests",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "unit-tests",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "npm-ci",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "npm-test-ui",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "npm-build",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "helm-chart",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "helm-oci-login",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
     }
   ]
 }

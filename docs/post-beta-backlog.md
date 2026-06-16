@@ -112,7 +112,7 @@ Deferred strict gates, release mechanics, and image publish/access verification.
 | **Chart/package publishing** | Documented | Helm chart is installable from local checkout. Publication to Harbor OCI registry requires `HARBOR_USERNAME` and `HARBOR_TOKEN` secrets. |
 | **Helm values schema validation** | Basic | `helm lint charts/k9b` runs; full values schema validation (JSON Schema in `values.schema.json`) not present |
 | **GitHub release creation** | Not required | Rolling beta does not require a GitHub release. Distribution is via repository + local Helm chart. |
-| **Verification gate in CI** | Implemented | `.github/workflows/verify.yml` added (2026-05-13); mirrors `scripts/verify_all.sh`; runs on PRs and main push; no secrets required |
+| **Verification gate in CI** | Implemented | `.github/workflows/verify.yml` runs on PRs and workflow_dispatch; `.github/workflows/harbor.yml` is the canonical push workflow (2026-06-17). No secrets required. |
 | **Coverage gate in CI** | ✅ MANDATORY | Coverage job now blocks merge on threshold violations; backend 80% line coverage enforced via `--cov-fail-under=80`; frontend 90% line/statement coverage enforced via Vitest thresholds |
 
 ---

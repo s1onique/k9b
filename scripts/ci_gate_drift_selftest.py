@@ -94,20 +94,20 @@ def run_self_tests() -> int:
 
     # Test 6: Parse workflow and extract jobs
     print("Test 6: Workflow parsing")
-    verify_yml = REPO_ROOT / ".github/workflows/verify.yml"
-    if verify_yml.exists():
-        with open(verify_yml, encoding="utf-8") as f:
+    harbor_yml = REPO_ROOT / ".github/workflows/harbor.yml"
+    if harbor_yml.exists():
+        with open(harbor_yml, encoding="utf-8") as f:
             content = f.read()
         jobs = extract_jobs_from_workflow(content)
-        if "lint" in jobs or "lint-policy" in jobs:
+        if "lint-policy" in jobs:
             passes.append("Test 6: Workflow parsing works")
             print("  PASS\n")
         else:
-            failures.append("Test 6: Failed to extract jobs from verify.yml")
+            failures.append("Test 6: Failed to extract jobs from harbor.yml")
             print("  FAIL: No jobs extracted\n")
     else:
-        failures.append("Test 6: verify.yml not found")
-        print("  FAIL: verify.yml not found\n")
+        failures.append("Test 6: harbor.yml not found")
+        print("  FAIL: harbor.yml not found\n")
 
     # Test 7: Check unit-tests shard mapping
     print("Test 7: unit-tests shard mapping")
@@ -282,8 +282,7 @@ _run_and_record "python" "new-gate-xyz" "message"
         print(f"  FAIL: expected failure, got {passed}\n")
 
     # Test 17: Negative fixture - canonical workflow missing gate should fail
-    # Simulates: harbor.yml drops npm-test-ui but verify.yml has it
-    # This tests the ORCHESTRATOR-LEVEL behavior, not just verify_gate_mapping()
+    # harbor.yml is the ONLY canonical push workflow
     print("Test 17: Negative fixture - canonical workflow missing gate fails")
     # harbor.yml is missing npm-test-ui
     harbor_jobs = {
@@ -293,7 +292,7 @@ _run_and_record "python" "new-gate-xyz" "message"
             "raw_content": "frontend-tests:\n  steps:\n    - run: npm ci\n    - run: npm run build",
         }
     }
-    # verify.yml has npm-test-ui
+    # verify.yml has npm-test-ui (but this doesn't matter for push gates)
     verify_jobs = {
         "frontend-tests": {
             "commands": ["npm ci", "npm run test:ui", "npm run build"],
@@ -307,10 +306,9 @@ _run_and_record "python" "new-gate-xyz" "message"
         "reason": "test",
     }
 
-    # Simulate the orchestrator logic: ALL canonical workflows must pass
+    # Simulate the orchestrator logic: harbor.yml is the ONLY canonical workflow
     CANONICAL_WORKFLOWS = {
         ".github/workflows/harbor.yml",
-        ".github/workflows/verify.yml",
     }
     workflow_jobs = {
         ".github/workflows/harbor.yml": harbor_jobs,

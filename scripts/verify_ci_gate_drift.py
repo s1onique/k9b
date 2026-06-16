@@ -120,10 +120,10 @@ def run_verification(verbose: bool = False) -> int:
     required_gates = manifest.get("required_gates", {})
     allowlist = manifest.get("allowlist", [])
 
-    # Canonical workflows that must have every gate
+    # Canonical workflow that must have every gate
+    # harbor.yml is the canonical push workflow; verify.yml is PR/manual-only
     CANONICAL_WORKFLOWS = {
         ".github/workflows/harbor.yml",
-        ".github/workflows/verify.yml",
     }
 
     print("Gate mappings:")

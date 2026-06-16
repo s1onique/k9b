@@ -35,10 +35,9 @@ def validate_manifest(manifest: dict) -> list[str]:
             if ci_equiv is None:
                 errors.append(f"Gate '{gate_id}' missing 'ci_equivalent'")
             elif isinstance(ci_equiv, dict):
-                # Per-workflow format: must have entries for canonical workflows
-                for wf in [".github/workflows/harbor.yml", ".github/workflows/verify.yml"]:
-                    if wf not in ci_equiv:
-                        errors.append(f"Gate '{gate_id}' missing ci_equivalent for canonical workflow '{wf}'")
+                # Per-workflow format: harbor.yml is the only canonical push workflow
+                if ".github/workflows/harbor.yml" not in ci_equiv:
+                    errors.append(f"Gate '{gate_id}' missing ci_equivalent for canonical workflow '.github/workflows/harbor.yml'")
             elif isinstance(ci_equiv, list):
                 if not ci_equiv:
                     errors.append(f"Gate '{gate_id}.ci_equivalent' is empty list")

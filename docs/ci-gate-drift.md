@@ -77,11 +77,21 @@ python scripts/verify_ci_gate_drift.py --verbose
 
 The verifier is wired into `scripts/verify_all.sh` as the `ci-gate-drift` step in the Python lane. It runs after all other verification steps to catch any drift that may have occurred.
 
+## Canonical Workflow
+
+`.github/workflows/harbor.yml` is the **canonical push workflow**. It runs all verification gates on push to `main`, `release/**`, and version tags (`v*`), then builds and pushes images.
+
+`.github/workflows/verify.yml` runs on:
+- **Pull requests** - standard PR verification
+- **workflow_dispatch** - manual ad-hoc verification
+
+This eliminates duplicate CI execution for push events.
+
 ## Workflow Files Checked
 
-- `.github/workflows/harbor.yml`
-- `.github/workflows/verify.yml`
-- `.github/workflows/helm-chart.yml`
+- `.github/workflows/harbor.yml` (canonical push gate)
+- `.github/workflows/verify.yml` (PR/manual verification only)
+- `.github/workflows/helm-chart.yml` (Helm chart publishing)
 
 ## Adding a New Gate
 
