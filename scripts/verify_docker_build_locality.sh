@@ -7,6 +7,8 @@
 #   - setup-qemu-action restricts QEMU platforms to non-native targets only
 #   - setup-buildx-action must use Harbor proxy cache for BuildKit builder image
 #   - docker/build-push-action must use registry cache, not GHA cache
+#   - Python Dockerfiles use BuildKit pip cache mounts, not --no-cache-dir
+#   - Python Dockerfiles install third-party deps before copying high-churn src/
 #
 # This script fails on:
 #   - setup-qemu-action missing Harbor image override (silently uses DockerHub default)
@@ -16,6 +18,8 @@
 #   - setup-buildx-action with explicit unproxied BuildKit images
 #   - docker/build-push-action missing registry cache (hard fail)
 #   - docker/build-push-action using type=gha cache
+#   - Python Dockerfile with pip install --no-cache-dir after COPY src/scripts
+#   - Python Dockerfile missing BuildKit pip cache mounts
 #
 # Self-test mode (--self-test):
 #   Proves that forbidden patterns fail and correct patterns pass.
@@ -459,6 +463,133 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
     echo ""
 done
 
+# =============================================================================
+# Python Dockerfile checks
+# =============================================================================
+
+# Python Dockerfiles to check
+PYTHON_DOCKERFILES=(
+    "${REPO_ROOT}/Dockerfile.python"
+)
+
+# Additional rules for Python Dockerfiles
+echo "----------------------------------------"
+echo "Python Dockerfile Checks:"
+echo "  7. pip install must not use --no-cache-dir for dependency installs"
+echo "  8. Python Dockerfiles should use BuildKit pip cache mounts"
+echo "  9. pip dependency install should precede high-churn COPY src/"
+echo ""
+
+for dockerfile in "${PYTHON_DOCKERFILES[@]}"; do
+    if [[ ! -f "${dockerfile}" ]]; then
+        echo "WARNING: ${dockerfile} not found, skipping"
+        continue
+    fi
+
+    echo "Checking: ${dockerfile}"
+
+    # -------------------------------------------------------------------------
+    # Rule 7: No pip install --no-cache-dir for dependency installs
+    # -------------------------------------------------------------------------
+    # Pattern: pip install --no-cache-dir followed by COPY src or COPY scripts
+    # This is the anti-pattern that causes layer invalidation on code changes
+    if grep -qE "pip install.*--no-cache-dir" "${dockerfile}"; then
+        # Check if the no-cache-dir pip install appears after COPY src/scripts
+        # (within 20 lines) - this is the anti-pattern
+        no_cache_lines=$(grep -nE "pip install.*--no-cache-dir" "${dockerfile}" 2>/dev/null | cut -d: -f1 || true)
+        src_copy_lines=$(grep -nE "COPY src|COPY scripts" "${dockerfile}" 2>/dev/null | cut -d: -f1 || true)
+
+        detected=false
+        for no_cache_line in ${no_cache_lines}; do
+            for src_line in ${src_copy_lines}; do
+                # If src/scripts COPY appears before (line number lower) than no-cache-dir pip install
+                if [[ ${src_line} -lt ${no_cache_line} ]] && [[ $((no_cache_line - src_line)) -lt 30 ]]; then
+                    detected=true
+                    break 2
+                fi
+            done
+        done
+
+        if [[ "${detected}" == true ]]; then
+            echo "  FAIL: pip install --no-cache-dir found after COPY src/scripts"
+            echo "        This causes layer invalidation on every code change."
+            echo "        Move pip install to before COPY src/ and use BuildKit cache mounts instead."
+            FAILED=1
+        else
+            echo "  OK: No anti-pattern pip install --no-cache-dir detected"
+        fi
+    else
+        echo "  OK: No pip install --no-cache-dir found"
+    fi
+
+    # -------------------------------------------------------------------------
+    # Rule 8: Must have BuildKit pip cache mounts
+    # -------------------------------------------------------------------------
+    if grep -qE '\-\-mount=type=cache.*target=/root/.cache/pip' "${dockerfile}"; then
+        echo "  OK: BuildKit pip cache mounts present"
+    else
+        echo "  FAIL: Missing BuildKit pip cache mounts (--mount=type=cache,target=/root/.cache/pip)"
+        echo "        Add pip cache mounts to avoid re-downloading packages on rebuilds."
+        FAILED=1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Rule 9: pip dependency install should precede COPY src/
+    # -------------------------------------------------------------------------
+    # Find line numbers for pip install (excluding --no-deps) and COPY src
+    # Use grep -v to exclude --no-deps reinstalls which are expected after COPY src
+    # Use [[:space:]] for BSD/macOS portability (not \s which is GNU only)
+    pip_dep_install_line=$(grep -nE "pip install.*[^n][^o]-[d][e][p][s]" "${dockerfile}" 2>/dev/null | grep -v "\-\-no-deps" | head -1 | cut -d: -f1 || true)
+    # Also check for explicit package installs (requests ijson, etc.) which install deps
+    pip_explicit_install_line=$(grep -nE "pip[[:space:]]+install[[:space:]]+[a-z]" "${dockerfile}" 2>/dev/null | head -1 | cut -d: -f1 || true)
+    src_copy_line=$(grep -nE "COPY src" "${dockerfile}" 2>/dev/null | head -1 | cut -d: -f1 || true)
+
+    # Use the first valid dependency install line
+    first_dep_install=""
+    if [[ -n "${pip_dep_install_line}" ]]; then
+        first_dep_install="${pip_dep_install_line}"
+    elif [[ -n "${pip_explicit_install_line}" ]]; then
+        first_dep_install="${pip_explicit_install_line}"
+    fi
+
+    if [[ -n "${first_dep_install}" ]] && [[ -n "${src_copy_line}" ]]; then
+        if [[ ${first_dep_install} -lt ${src_copy_line} ]]; then
+            echo "  OK: pip dependency install (line ${first_dep_install}) precedes COPY src (line ${src_copy_line})"
+        else
+            echo "  FAIL: pip dependency install (line ${first_dep_install}) comes after COPY src (line ${src_copy_line})"
+            echo "        This invalidates the dependency layer on every code change."
+            echo "        Move pip install to before COPY src/ to enable warm-cache rebuilds."
+            FAILED=1
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Rule 10: SSOT compliance - must use requirements.docker.txt not hardcoded deps
+    # -------------------------------------------------------------------------
+    # Check if Dockerfile uses requirements.docker.txt (SSOT compliance)
+    if grep -qE "requirements\.docker\.txt" "${dockerfile}"; then
+        echo "  OK: Dockerfile uses requirements.docker.txt (SSOT compliant)"
+
+        # Check that requirements.docker.txt is fresh relative to pyproject.toml
+        if ! bash "${SCRIPT_DIR}/sync-docker-requirements.sh" --check > /dev/null 2>&1; then
+            echo "  FAIL: requirements.docker.txt is stale (out of sync with pyproject.toml)"
+            echo "        Run: bash scripts/sync-docker-requirements.sh"
+            FAILED=1
+        else
+            echo "  OK: requirements.docker.txt is fresh (matches pyproject.toml)"
+        fi
+    elif grep -qE "pip[[:space:]]+install[[:space:]]+[a-z]" "${dockerfile}" 2>/dev/null; then
+        echo "  FAIL: Dockerfile has hardcoded pip packages instead of requirements.docker.txt"
+        echo "        This creates SSOT drift risk. Use requirements.docker.txt and sync from pyproject.toml."
+        echo "        Run: bash scripts/sync-docker-requirements.sh"
+        FAILED=1
+    else
+        echo "  OK: No hardcoded pip packages detected"
+    fi
+
+    echo ""
+done
+
 echo "=========================================="
 if [[ ${FAILED} -eq 1 ]]; then
     echo "RESULT: FAILED"
@@ -473,6 +604,10 @@ if [[ ${FAILED} -eq 1 ]]; then
     echo "  4. Replace GHA cache with Harbor registry cache:"
     echo "     cache-from: type=registry,ref=${PROXY_CACHE_HOST}/k9b/cache/<image>:buildcache"
     echo "     cache-to: type=registry,ref=${PROXY_CACHE_HOST}/k9b/cache/<image>:buildcache,mode=max"
+    echo "  5. Python Dockerfiles:"
+    echo "     - Remove pip install --no-cache-dir"
+    echo "     - Add BuildKit pip cache mounts (--mount=type=cache,target=/root/.cache/pip)"
+    echo "     - Move pip install to before COPY src/"
     exit 1
 else
     echo "RESULT: PASSED"

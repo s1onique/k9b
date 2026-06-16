@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # Use Harbor proxy cache for DockerHub images to avoid pull instability
 # Harbor project: dockerhub-cache (proxy-cache, not push target)
 # DockerHub official images require 'library/' prefix in Harbor
@@ -26,35 +28,57 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 
-RUN set -eux; \
+# Download kubectl and helm before copying the app source so the layer stays cached across code edits
+RUN --mount=type=cache,id=kubectl-helm-${TARGETARCH},target=/var/cache/kubectl-helm \
+    set -eu; \
     echo "BUILDPLATFORM=${BUILDPLATFORM} TARGETPLATFORM=${TARGETPLATFORM} TARGETARCH=${TARGETARCH}"; \
     case "${TARGETARCH}" in \
         amd64) ARCH=amd64 ;; \
         arm64) ARCH=arm64 ;; \
         *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    # Download kubectl and helm before copying the app source so the layer stays cached across code edits
-    curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
-      "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" \
-      -o /usr/local/bin/kubectl; \
-    chmod +x /usr/local/bin/kubectl; \
+    # Check cache first; skip download if already present (persisted in mount)
+    if [ ! -f /var/cache/kubectl-helm/kubectl ]; then \
+      curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
+        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" \
+        -o /var/cache/kubectl-helm/kubectl; \
+    fi; \
+    install -m 0755 /var/cache/kubectl-helm/kubectl /usr/local/bin/kubectl; \
     # Verify kubectl binary is valid for this platform - file command confirms arch
     file /usr/local/bin/kubectl; \
-    curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
-      "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${ARCH}.tar.gz" \
-      | tar xz -C /tmp; \
-    install -m 0755 /tmp/linux-${ARCH}/helm /usr/local/bin/helm; \
-    rm -rf /tmp/linux-${ARCH}; \
+    if [ ! -f /var/cache/kubectl-helm/helm ]; then \
+      curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
+        "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${ARCH}.tar.gz" \
+        | tar xz -C /tmp; \
+      install -m 0755 /tmp/linux-${ARCH}/helm /var/cache/kubectl-helm/helm; \
+      rm -rf /tmp/linux-${ARCH}; \
+    fi; \
+    install -m 0755 /var/cache/kubectl-helm/helm /usr/local/bin/helm; \
     # Verify helm binary is valid for this platform
     file /usr/local/bin/helm; \
     helm version --short
 
+# Install third-party Python dependencies BEFORE copying app source.
+# This layer survives normal src/ and scripts/ churn, enabling warm-cache rebuilds.
+# SSOT: Dependencies are synced from pyproject.toml via scripts/sync-docker-requirements.sh
+# Do not edit the requirements file manually; edit pyproject.toml and regenerate.
+COPY requirements.docker.txt ./
+
+RUN --mount=type=cache,id=pip-${TARGETARCH},target=/root/.cache/pip \
+    python -m venv .venv \
+    && .venv/bin/pip install --upgrade pip setuptools wheel \
+    && .venv/bin/pip install -r requirements.docker.txt
+
+# Copy Python metadata after pip deps layer - metadata changes don't invalidate pip layer
+COPY pyproject.toml README.md ./
+
 COPY src ./src
 COPY scripts ./scripts
 
-RUN python -m venv .venv \
-    && .venv/bin/pip install --upgrade pip setuptools wheel \
-    && .venv/bin/pip install --no-cache-dir .
+# Reinstall local package only (no dep download) when only app code changes.
+# Uses pip cache mount so wheel reuse works even when layer rebuilds.
+RUN --mount=type=cache,id=pip-${TARGETARCH},target=/root/.cache/pip \
+    .venv/bin/pip install --no-deps .
 
 COPY docker/python-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh

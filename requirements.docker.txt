@@ -1,0 +1,6 @@
+# Auto-generated from pyproject.toml - DO NOT EDIT DIRECTLY
+# Regenerate with: bash scripts/sync-docker-requirements.sh
+# SSOT: pyproject.toml
+
+ijson>=3.2
+requests>=2.31.0
