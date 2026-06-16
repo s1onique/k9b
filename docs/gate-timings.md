@@ -1,93 +1,105 @@
-# Gate Timing Inventory
+# Gate Timings
 
-**Purpose:** Track and document verification gate step durations to enable measurable optimization.
+## Gate timing inventory
 
-**Output:** `.gate-timings.json` - Machine-readable timing data (gitignored)
+The `.gate-timings.json` file records per-step timing for the verification gate.
 
-## JSON Schema
+### Schema
 
 ```json
 {
-  "generated": "ISO-8601 timestamp",
-  "total_step_duration_ms": 27000,
+  "generated": "ISO8601 timestamp",
+  "total_step_duration_ms": 123456,
   "step_count": 18,
   "steps": [
     {
-      "id": "step-name",
-      "command": "python -m ruff check src tests",
-      "lane": "python",
+      "id": "step-id",
+      "command": "python|bash command",
+      "lane": "python|frontend|helm",
       "exit_code": 0,
-      "duration_ms": 1000,
+      "duration_ms": 1234,
       "notes": null
     }
   ]
 }
 ```
 
-**Note:** `total_step_duration_ms` is the sum of all step durations, NOT the wall-clock time. Lanes run in parallel, so actual gate wall-clock time is less than this value.
+### Semantics
 
-## Baseline Timings (Python lane, 2026-06-16)
+- `total_step_duration_ms`: Sum of all step durations (not wall-clock time)
+- `steps`: Sorted by duration descending (slowest first)
+- `lane`: Which parallel lane the step runs in
+- `command`: Format is `interpreter|command` for grep-friendly matching
 
-| Rank | Step | Duration | Lane | Notes |
-|------|------|----------|------|-------|
-| 1 | llm-friendly | 11.0s | python | File size check across 1180 files |
-| 2 | llm-semantic-injection | 3.0s | python | Semantic injection detection |
-| 3 | llm-evidence-boundaries | 2.0s | python | LLM evidence boundary verification |
-| 4 | next-check-sanitization | 2.0s | python | Next-check hygiene |
-| 5 | doctrine | 1.0s | python | Factory doctrine check |
-| 6 | dockerhub-base-images | 1.0s | python | Docker base image check |
-| 7 | docker-workflow-hygiene | 1.0s | python | Docker workflow check |
-| 8 | docker-build-locality | 1.0s | python | Docker build locality |
-| 9 | agent-pipeline | 1.0s | python | Agent pipeline verification |
-| 10 | discovery-logging-hygiene | 1.0s | python | Discovery logging check |
-| 11 | pvc-rollout-policy | 1.0s | python | PVC policy check |
-| 12 | shared-pvc-colocation | 1.0s | python | PVC colocation check |
-| 13 | operator-projection-hygiene | 1.0s | python | Projection hygiene |
-| 14 | structured-output | 1.0s | python | Structured output check |
-| 15 | ruff-lint | <1s | python | Linting (SKIPPED in this run) |
-| 16 | unit-tests | <1s | python | Tests (SKIPPED) |
-| 17 | mypy | <1s | python | Type check (SKIPPED) |
-| 18 | mypy-tests | <1s | python | Test types (SKIPPED) |
+### CI artifacts
 
-**Total step time (Python lane):** ~27s (sum of all steps, not wall-clock)
+The gate uploads `.gate-timings.json` as a CI artifact with 7-day retention.
 
-## First Optimization Targets
+## Current gate bottlenecks
 
-1. **llm-friendly (11s)** - Primary optimization candidate
-   - Scans 1180 files for size compliance
-   - Option: Incremental check with cache
-   - Option: Skip unchanged files via git
+### Latest timing summary (2026-06-16)
 
-2. **llm-semantic-injection (3s)** - Secondary candidate
-   - Semantic injection detection
-   - Option: Parallelize checks
+| Step | Duration | Lane | Exit |
+|------|----------|------|------|
+| unit-tests | ~165s | python | 0 |
+| llm-friendly | ~12s | python | 0 |
+| dockerhub-base-images | ~2s | python | 0 |
+| llm-evidence-boundaries | ~2s | python | 0 |
+| llm-semantic-injection | ~2s | python | 0 |
 
-3. **llm-evidence-boundaries (2s)** - Secondary candidate
-   - Evidence boundary verification
-   - Option: Batch processing
+## Unit-test profiling results (2026-06-16)
 
-## Usage
+### Baseline metrics
 
-```bash
-# Run gate and see timing summary
-./scripts/verify_all.sh
+| Runner | Duration | Tests | Command |
+|--------|----------|-------|---------|
+| unittest discover | ~144s | ~5400+ | `python -m unittest discover tests` |
+| pytest full run | ~238s | 5454 passed, 20 skipped | `python -m pytest tests/ --tb=no -q` |
 
-# View timing JSON
-cat .gate-timings.json
+### Top bottlenecks (pytest --durations=50)
 
-# Analyze with jq
-cat .gate-timings.json | jq '.steps | sort_by(.duration_ms) | reverse | .[:5]'
-```
+| Test | Duration | File |
+|------|----------|------|
+| test_discover_alertmanagers_with_manual_sources | 60.03s | tests/unit/test_alertmanager_discovery.py |
+| test_heartbeat_elapsed_is_per_step | 12.30s | tests/test_scripts.py |
+| test_derive_cluster_uid_returns_none_or_uid | 10.01s | tests/unit/test_identity_primitives.py |
+| test_derive_cluster_uid_returns_uid | 10.01s | tests/unit/test_identity_primitives.py |
+| test_heartbeat_only_emits_at_interval_boundaries | 5.14s | tests/test_scripts.py |
+| test_snapshot_source_provenance | 5.10s | tests/unit/test_health_loop_alertmanager_snapshot_collection.py |
+| test_strict_mode_fails_with_allowlist | 5.06s | tests/test_scripts.py |
+| test_other_checks_still_run | 5.01s | tests/test_scripts.py |
+| test_except_exception_as_exc_is_detected | 4.94s | tests/test_scripts.py |
+| test_baseline_mode_passes_with_allowlist | 4.61s | tests/test_scripts.py |
+| test_aggregates_sources_across_multiple_targets | 3.91s | tests/unit/test_health_loop_vmalert_discovery.py |
 
-## CI Integration
+### Slowest files summary
 
-Timing artifacts are uploaded in CI:
-- Artifact name: `verification-logs-{run_id}`
-- Contains: `runs/verification/` and `.gate-timings.json`
-- Retention: 7 days
+| File | Max test | Cumulative | Notes |
+|------|----------|------------|-------|
+| tests/unit/test_alertmanager_discovery.py | 60.03s | ~60s | MAJOR BOTTLENECK - kubectl subprocess overhead |
+| tests/test_scripts.py | 12.30s | ~40s | Step runner heartbeat tests with deliberate delays |
+| tests/unit/test_identity_primitives.py | 10.01s | ~20s | Cluster UID derivation tests |
+| tests/unit/test_health_loop_vmalert_discovery.py | 3.91s | ~11s | vmalert discovery fixture setup |
+| tests/unit/test_health_scheduler.py | 2.01s | ~2s | Scheduler timing tests |
 
-## Notes
+### Decision
 
-- Timings are per-step wall-clock, not parallel total
-- Lanes run in parallel, so total gate time < sum of all steps
-- SKIPPED steps show 0ms duration (not run due to earlier failure)
+- Added profiling/sharding infrastructure (`scripts/run_unit_tests.sh`)
+- Did not shard canonical gate yet (unittest ~144s is acceptable)
+- Next optimization should target **kubectl subprocess overhead** in Alertmanager discovery tests
+
+### Sharding options
+
+1. **File-level sharding**: Divide test files across N parallel pytest processes
+2. **Slow-test tagging**: Tag tests >5s as slow, run in separate nightly shard
+
+### Slow tests eligible for nightly-only
+
+- `tests/unit/test_alertmanager_discovery.py::test_discover_alertmanagers_with_manual_sources` (60s)
+- `tests/test_scripts.py::TestStepRunnerHeartbeat::*` (multiple 5-12s tests)
+
+## Runtime evidence
+
+Durable profiling evidence is stored in:
+- `.gate-timings.json` - gitignored, runtime evidence per gate run
+- `runs/verification/test-timings/` - per-run timing data with `--profile` flag
