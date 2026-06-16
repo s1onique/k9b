@@ -145,3 +145,64 @@ tests:
       - notMatchRegex:
           template: templates/configmap-frontend-nginx.yaml
           pattern: 'proxy_pass http://k9b-backend:'
+
+  # ===== Static asset serving: /assets/ returns 404 for missing files =====
+  # Regression: missing assets must return 404, not fall back to index.html
+
+  - it: nginx ConfigMap /assets/ location should use try_files $uri =404
+    template: configmap-frontend-nginx.yaml
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: 'location /assets/.*\{[^}]*try_files \$uri =404;'
+
+  - it: nginx ConfigMap /assets/ location should have immutable cache header
+    template: configmap-frontend-nginx.yaml
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: 'location /assets/.*\{[^}]*add_header Cache-Control "public, max-age=31536000, immutable" always;'
+
+  # ===== Root/index.html: explicit no-store cache control =====
+
+  - it: nginx ConfigMap / location should have no-store cache header
+    template: configmap-frontend-nginx.yaml
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: 'location = / \{[^}]*add_header Cache-Control "no-store, no-cache, must-revalidate" always;'
+
+  - it: nginx ConfigMap /index.html location should have no-store cache header
+    template: configmap-frontend-nginx.yaml
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: 'location = /index.html \{[^}]*add_header Cache-Control "no-store, no-cache, must-revalidate" always;'
+
+  # ===== SPA fallback preserved for app routes =====
+
+  - it: nginx ConfigMap should preserve SPA fallback for non-asset routes
+    template: configmap-frontend-nginx.yaml
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: 'location / \{[^}]*try_files \$uri \$uri/ /index.html;'
+
+  - it: nginx ConfigMap SPA fallback location should have no-store cache header
+    template: configmap-frontend-nginx.yaml
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: 'location / \{[^}]*add_header Cache-Control "no-store, no-cache, must-revalidate" always;[^}]*try_files \$uri \$uri/ /index.html;'
