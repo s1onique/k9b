@@ -13,6 +13,8 @@ on:
       - main
 
 env:
+  # Force color output for better CI logs
+  FORCE_COLOR: '1'
   # Harbor registry configuration (internal hostname for ARC/k3s runners)
   REGISTRY: harbor-pve1.spbnix.local
   HARBOR_PROJECT: k9b
@@ -20,8 +22,15 @@ env:
   FRONTEND_IMAGE_NAME: k9b-frontend
 
 jobs:
-  verify:
+  # =============================================================================
+  # Quality gates - parallel lanes mirroring scripts/verify_all.sh structure
+  # =============================================================================
+
+  # Python lint/type/doctrine gates (excluding unit tests - handled by shards)
+  lint-policy:
+    name: Lint & Type Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -31,14 +40,133 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
           cache: 'pip'
 
-      - name: Create virtual environment and install dependencies
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install dependencies
         run: |
-          python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/pip install -e ".[dev]"
+
+      - name: Run lint checks
+        run: |
+          .venv/bin/python -m ruff check src tests
+          .venv/bin/python scripts/check_llm_friendly_files.py --quiet
+
+      - name: Run type checks
+        run: |
+          .venv/bin/python -m mypy src/k8s_diag_agent
+          .venv/bin/python -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py
+
+      - name: Run doctrine checks
+        run: |
+          bash scripts/verify_factory_doctrine.sh
+          bash scripts/verify_dockerhub_base_images.sh
+          bash scripts/verify_docker_workflow_hygiene.sh
+          bash scripts/verify_docker_build_locality.sh
+          bash scripts/verify_health_loop_structured_output.sh
+
+      - name: Run Python doctrine checks
+        run: |
+          .venv/bin/python scripts/verify_agentic_pipeline.py
+          .venv/bin/python scripts/verify_llm_evidence_boundaries.py
+          .venv/bin/python scripts/verify_llm_semantic_injection_detection.py
+          .venv/bin/python scripts/verify_discovery_logging_hygiene.py
+          .venv/bin/python scripts/verify_pvc_rollout_policy.py
+          .venv/bin/python scripts/verify_shared_pvc_colocation.py
+          .venv/bin/python scripts/verify_next_check_sanitization_hygiene.py
+          .venv/bin/python scripts/verify_operator_projection_hygiene.py
+
+  # Python unit-test shards in parallel matrix
+  python-unit-tests:
+    needs: lint-policy
+    name: Python unit tests shard ${{ matrix.shard_index }}/${{ matrix.shard_total }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard_index: [0, 1]
+        shard_total: [2]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install dependencies
+        run: |
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -e ".[dev]"
+
+      - name: Run Python unit test shard
+        run: |
+          echo "Running Python unit tests shard ${{ matrix.shard_index }}/${{ matrix.shard_total }}"
+          scripts/run_unit_tests.sh --shard "${{ matrix.shard_index }}" "${{ matrix.shard_total }}"
+
+      - name: Upload test timing artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-timing-shard-${{ matrix.shard_index }}-${{ github.run_id }}
+          path: |
+            runs/verification/test-timings/
+          retention-days: 7
+          compression-level: 9
+
+  # Verify shard union completeness
+  python-unit-shard-union:
+    needs: python-unit-tests
+    name: Verify shard union completeness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install dependencies
+        run: |
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -e ".[dev]"
+
+      - name: Verify shard completeness
+        run: |
+          echo "Verifying 2-way shard partition completeness"
+          scripts/run_unit_tests.sh --verify-shards 2
+
+  # Frontend verification - runs independently (no needs: lint-policy)
+  frontend-tests:
+    name: Frontend build & tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -47,14 +175,67 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'frontend/package-lock.json'
 
-      - name: Run verification gate
-        run: ./scripts/verify_all.sh
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: ./frontend
+        run: npm run test:ui
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+  # Helm chart verification - runs independently
+  helm-chart:
+    name: Helm chart verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install dependencies
+        run: |
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -e ".[dev]"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Run Helm chart verification
+        run: |
+          bash scripts/verify_helm_workflow_hygiene.sh
+          bash scripts/verify_helm_chart.sh
+          bash scripts/verify_helm_oci_login.sh
+
+  # =============================================================================
+  # Build and push jobs - depend on all quality gates
+  # =============================================================================
 
   build-push:
     # Harbor resolves to internal SPbNIX names during OCI pushes; publish jobs must run inside SPbNIX infrastructure.
     # Docker-capable runner required for QEMU, Buildx, build, and push operations.
     runs-on: spbnix-k8s-docker
-    needs: verify
+    needs:
+      - lint-policy
+      - python-unit-shard-union
+      - frontend-tests
+      - helm-chart
     permissions:
       contents: read
 
@@ -153,12 +334,16 @@ jobs:
             KUBECTL_VERSION=v1.29.6
             HELM_VERSION=3.20.1
 
-  # Frontend image build (separate job for clarity and future extensibility)
+  # Frontend image build - depends on quality gates but can run in parallel with build-push
   frontend:
     # Harbor resolves to internal SPbNIX names during OCI pushes; publish jobs must run inside SPbNIX infrastructure.
     # Docker-capable runner required for QEMU, Buildx, build, and push operations.
     runs-on: spbnix-k8s-docker
-    needs: verify
+    needs:
+      - lint-policy
+      - python-unit-shard-union
+      - frontend-tests
+      - helm-chart
     permissions:
       contents: read
 

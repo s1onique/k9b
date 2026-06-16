@@ -76,3 +76,37 @@ Coverage reporting is now integrated into CI as a separate non-blocking job:
 **Remaining:**
 - Threshold enforcement deferred (fail_under=0 in pyproject.toml)
 - Next check: add thresholds after baseline coverage stabilizes
+
+## CI Gate Splitting Results (2026-06-16)
+
+### Problem
+`harbor.yml` had a monolithic `verify` job running `./scripts/verify_all.sh` as one serial step (3m36s bottleneck).
+
+### Solution
+Split `verify` into parallel CI lanes mirroring `verify.yml` structure:
+
+**Changes made to `.github/workflows/harbor.yml`:**
+- Replaced single `verify` job with 5 parallel quality gate jobs:
+  - `lint-policy` - ruff, mypy, doctrine checks
+  - `python-unit-tests` - sharded 2-way parallel matrix
+  - `python-unit-shard-union` - verifies shard completeness
+  - `frontend-tests` - npm ci, test:ui, build
+  - `helm-chart` - helm verification
+- Updated `build-push` and `frontend` jobs to depend on all 4 required quality gates
+- Added pip/npm caching via setup-python and setup-node
+- Upgraded Python from 3.11 to 3.13 for consistency with verify.yml
+
+**New dependency graph:**
+```
+lint-policy ──┬── python-unit-tests[0] ──┐
+             │  python-unit-tests[1] ──┴── python-unit-shard-union ──┐
+             └────────────────────────────────────────────────────────┴──┬── build-push
+frontend-tests ──────────────────────────────────────────────────────────┴──┐
+helm-chart ─────────────────────────────────────────────────────────────────┴── (both)
+```
+
+**Benefits:**
+- Quality gates run in parallel (~5-10 min total vs 3m36s sequential)
+- `build-push` and `frontend` still block on all quality gates
+- No duplicate frontend execution (frontend-tests IS the frontend quality gate)
+- YAML syntax validated
