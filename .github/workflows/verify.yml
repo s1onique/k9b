@@ -82,7 +82,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: verification-logs-${{ github.run_id }}
-          path: runs/verification/
+          path: |
+            runs/verification/
+            .gate-timings.json
           retention-days: 7
           compression-level: 9
 

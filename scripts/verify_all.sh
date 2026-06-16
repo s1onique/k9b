@@ -223,6 +223,30 @@ _mark_global_failed() {
     _GLOBAL_FAILED_SET=true
 }
 
+# ---------------------------------------------------------------------------
+# Step metadata for timing inventory
+# ---------------------------------------------------------------------------
+# Maps step_id -> "lane|command"
+
+declare -A _STEP_META=()
+
+# Register step metadata before running
+_register_step() {
+    local step_id="$1"
+    local lane="$2"
+    shift 2
+    # Store lane and command for timing inventory
+    local cmd_str=""
+    for arg in "$@"; do
+        if [[ -n "$cmd_str" ]]; then
+            cmd_str="$cmd_str $arg"
+        else
+            cmd_str="$arg"
+        fi
+    done
+    _STEP_META["$step_id"]="$lane|$cmd_str"
+}
+
 # Function to check if global failure has been marked
 _is_global_failed() {
     [[ -f "$_GLOBAL_FAILED_FILE" ]] && return 0 || return 1
@@ -415,6 +439,114 @@ _run_python_lane() {
     _run_and_record "python" "mypy-tests" "Running mypy on tests" "$PYTHON" -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py
 }
 
+# Emit gate timings JSON sorted by duration
+_emit_gate_timings() {
+    local timings_file="$REPO_ROOT/.gate-timings.json"
+    
+    # Write timing JSON using Python for proper JSON handling
+    # Pass state_file and timings_file as arguments to avoid heredoc issues
+    "$PYTHON" -c "
+import json
+from datetime import datetime, timezone
+
+state_file = '$_LANE_STATE_FILE'
+timings_file = '$timings_file'
+
+# Step command map (lane|command format - no tuples to avoid quoting issues)
+step_commands = {
+    'doctrine': 'python|bash verify_factory_doctrine.sh',
+    'dockerhub-base-images': 'python|bash verify_dockerhub_base_images.sh',
+    'docker-workflow-hygiene': 'python|bash verify_docker_workflow_hygiene.sh',
+    'docker-build-locality': 'python|bash verify_docker_build_locality.sh',
+    'agent-pipeline': 'python|python scripts/verify_agentic_pipeline.py',
+    'llm-evidence-boundaries': 'python|python scripts/verify_llm_evidence_boundaries.py',
+    'llm-semantic-injection': 'python|python scripts/verify_llm_semantic_injection_detection.py',
+    'discovery-logging-hygiene': 'python|python scripts/verify_discovery_logging_hygiene.py',
+    'pvc-rollout-policy': 'python|python scripts/verify_pvc_rollout_policy.py',
+    'shared-pvc-colocation': 'python|python scripts/verify_shared_pvc_colocation.py',
+    'next-check-sanitization': 'python|python scripts/verify_next_check_sanitization_hygiene.py',
+    'operator-projection-hygiene': 'python|python scripts/verify_operator_projection_hygiene.py',
+    'llm-friendly': 'python|python scripts/check_llm_friendly_files.py --quiet',
+    'ruff-lint': 'python|python -m ruff check src tests',
+    'structured-output': 'python|bash verify_health_loop_structured_output.sh',
+    'unit-tests': 'python|python -m unittest discover tests',
+    'mypy': 'python|python -m mypy src/k8s_diag_agent',
+    'mypy-tests': 'python|python -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py',
+    'npm-ci': 'frontend|npm ci',
+    'npm-test-ui': 'frontend|npm run test:ui',
+    'npm-build': 'frontend|npm run build',
+    'helm-chart': 'helm|bash verify_helm_chart.sh',
+    'helm-oci-login': 'helm|bash verify_helm_oci_login.sh',
+}
+
+try:
+    with open(state_file, 'r') as f:
+        state = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    state = {'python': [], 'frontend': [], 'helm': []}
+
+# Collect all steps with metadata
+timings = []
+for lane in ['python', 'frontend', 'helm']:
+    for step in state.get(lane, []):
+        step_id = step['id']
+        # Get command and lane from map
+        meta = step_commands.get(step_id, 'unknown|unknown')
+        parts = meta.split('|', 1)
+        cmd_lane = parts[0]
+        command = parts[1] if len(parts) > 1 else meta
+        
+        timings.append({
+            'id': step_id,
+            'command': command,
+            'lane': cmd_lane,
+            'exit_code': step['exit_code'],
+            'duration_ms': step['duration_ms'],
+            'notes': None
+        })
+
+# Sort by duration descending (slowest first)
+timings.sort(key=lambda x: x['duration_ms'], reverse=True)
+
+# Calculate total step time (sum of all step durations, not wall-clock)
+total_step_duration = sum(t['duration_ms'] for t in timings) if timings else 0
+
+# Build output
+output = {
+    'generated': datetime.now(timezone.utc).isoformat(),
+    'total_step_duration_ms': total_step_duration,
+    'step_count': len(timings),
+    'steps': timings
+}
+
+with open(timings_file, 'w') as f:
+    json.dump(output, f, indent=2)
+
+print(timings_file)
+"
+    
+    if [[ -f "$timings_file" ]]; then
+        echo ""
+        echo "=== Gate Timing Summary (sorted by duration) ==="
+        # Print top 10 slowest steps
+        "$PYTHON" -c "
+import json
+with open('$timings_file', 'r') as f:
+    data = json.load(f)
+print(f'Total steps: {data[\"step_count\"]}')
+print(f'Total step time: {data[\"total_step_duration_ms\"]}ms ({data[\"total_step_duration_ms\"]/1000:.1f}s)')
+print()
+print(f\"{'Step':<35} {'Duration':>10} {'Lane':<10} {'Exit':>5}\")
+print('-' * 65)
+for step in data['steps'][:10]:
+    duration_fmt = f\"{step['duration_ms']}ms\"
+    if step['duration_ms'] >= 1000:
+        duration_fmt = f\"{step['duration_ms']/1000:.1f}s\"
+    print(f\"{step['id']:<35} {duration_fmt:>10} {step['lane']:<10} {step['exit_code']:>5}\")
+"
+    fi
+}
+
 # Run Frontend lane in background
 _run_frontend_lane() {
     pushd "$REPO_ROOT/frontend" >/dev/null
@@ -535,6 +667,12 @@ print(failed)
     if (( failed_count > 0 )); then
         final_exit=1
     fi
+fi
+
+# Emit gate timings before finalize (unless in JSON mode where we want clean output)
+if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+    export _LANE_STATE_FILE _TIMINGS_FILE
+    _emit_gate_timings
 fi
 
 step_finalize $final_exit

@@ -93,6 +93,7 @@ podman/
 runs/verification/
 tests/tmp-health/
 .verify_lock/
+.gate-timings.json
 .kilocode/package-lock.json
 
 runs/debug/
