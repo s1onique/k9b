@@ -63,21 +63,45 @@ scripts/run_unit_tests.sh --list-files
 scripts/run_unit_tests.sh --shard 0 2 --list-files
 ```
 
-### CI wiring (deferred)
+### CI wiring (implemented 2026-06-16)
 
-Shard mode is ready for CI matrix wiring. Example:
+Shard mode is now wired into `.github/workflows/verify.yml`:
 
 ```yaml
-strategy:
-  fail-fast: false
-  matrix:
-    shard_index: [0, 1]
-    shard_count: [2]
-
-steps:
-  - name: Run Python unit test shard
-    run: scripts/run_unit_tests.sh --shard "${{ matrix.shard_index }}" "${{ matrix.shard_count }}"
+python-unit-tests:
+  needs: lint
+  name: Python unit tests shard ${{ matrix.shard_index }}/${{ matrix.shard_total }}
+  strategy:
+    fail-fast: false
+    matrix:
+      shard_index: [0, 1]
+      shard_total: [2]
+  steps:
+    - run: scripts/run_unit_tests.sh --shard "${{ matrix.shard_index }}" "${{ matrix.shard_total }}"
 ```
+
+Shard completeness verified by:
+
+```yaml
+python-unit-shard-union:
+  needs: python-unit-tests
+  steps:
+    - run: scripts/run_unit_tests.sh --verify-shards 2
+```
+
+Local full-suite behavior unchanged:
+
+```bash
+scripts/run_unit_tests.sh  # runs full pytest tests/
+```
+
+**Scope preservation**: Each job has an `if` condition to respect `workflow_dispatch` scope input:
+- `lint`, `python-unit-tests`, `python-unit-shard-union`: Run for `all` or `python-only`
+- `frontend`: Run for `all` or `frontend-only` (no `needs: lint` - runs independently)
+- `helm-chart`: Run for `all` or `helm-only` (no `needs: lint` - runs independently)
+- `coverage`: Always runs (non-blocking report)
+
+Removing `needs: lint` from `frontend` and `helm-chart` ensures these jobs run even when `lint` is skipped (e.g., `scope=frontend-only` or `scope=helm-only`).
 
 ### Files changed
 
