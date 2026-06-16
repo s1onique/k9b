@@ -404,6 +404,7 @@ _run_python_lane() {
     _run_and_record "python" "llm-semantic-injection" "Verifying semantic injection detection" "$PYTHON" scripts/verify_llm_semantic_injection_detection.py
     _run_and_record "python" "discovery-logging-hygiene" "Verifying discovery strategy logging hygiene" "$PYTHON" scripts/verify_discovery_logging_hygiene.py
     _run_and_record "python" "pvc-rollout-policy" "Verifying PVC rollout policy (Recreate for single-writer)" "$PYTHON" scripts/verify_pvc_rollout_policy.py
+    _run_and_record "python" "shared-pvc-colocation" "Verifying shared PVC colocation policy" "$PYTHON" scripts/verify_shared_pvc_colocation.py
     _run_and_record "python" "next-check-sanitization" "Verifying next-check sanitization hygiene" "$PYTHON" scripts/verify_next_check_sanitization_hygiene.py
     _run_and_record "python" "operator-projection-hygiene" "Verifying operator projection sanitization hygiene" "$PYTHON" scripts/verify_operator_projection_hygiene.py
     _run_and_record "python" "llm-friendly" "Checking file sizes for LLM-friendly limits" "$PYTHON" scripts/check_llm_friendly_files.py --quiet

@@ -1,0 +1,43 @@
+# GOOD FIXTURE: Shared PVC Deployment with required pod affinity on hostname
+# This fixture should PASS the verifier because:
+# 1. It mounts a PVC that is shared with another deployment
+# 2. It has required podAffinity.requiredDuringSchedulingIgnoredDuringExecution
+# 3. The topologyKey is kubernetes.io/hostname (same node)
+#
+# Expected: PASS - Safe co-location behavior
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-scheduler
+  labels:
+    app: k9b
+    fixture-type: good
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k9b
+      app.kubernetes.io/component: scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k9b
+        app.kubernetes.io/component: scheduler
+    spec:
+      containers:
+        - name: scheduler
+          image: k9b:latest
+      volumes:
+        - name: runs
+          persistentVolumeClaim:
+            claimName: k9b-runs
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: k9b
+                  app.kubernetes.io/component: backend
+              topologyKey: kubernetes.io/hostname
