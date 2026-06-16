@@ -16,7 +16,7 @@ from ..collect.api_incident_review_packet import (
     IncidentReviewPacketRequest,
     handle_incident_review_packet,
 )
-from .server_shared import send_json_response
+from .server_response import send_json_response
 
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
@@ -47,28 +47,28 @@ def handle_incident_review_packet_api(handler: HealthUIRequestHandler) -> None:
         content_length = handler.headers.get("Content-Length")
         if not content_length:
             _logger.warning("Missing Content-Length header for review packet request")
-            send_json_response(handler, 400, {"error": "Missing Content-Length header"})
+            send_json_response(handler, {"error": "Missing Content-Length header"}, 400)
             return
 
         try:
             body = handler.rfile.read(int(content_length))
         except OSError as exc:
             _logger.warning("Failed to read request body: %s", exc)
-            send_json_response(handler, 400, {"error": "Failed to read request body"})
+            send_json_response(handler, {"error": "Failed to read request body"}, 400)
             return
 
         try:
             request_data = json.loads(body)
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             _logger.warning("Failed to parse review packet request: %s", exc)
-            send_json_response(handler, 400, {"error": f"Invalid JSON: {exc}"})
+            send_json_response(handler, {"error": f"Invalid JSON: {exc}"}, 400)
             return
 
         # Extract bundle from request
         bundle = request_data.get("bundle")
         if not bundle:
             _logger.warning("Review packet request missing bundle field")
-            send_json_response(handler, 400, {"error": "Missing required field: bundle"})
+            send_json_response(handler, {"error": "Missing required field: bundle"}, 400)
             return
 
         # Extract format (optional, default to markdown)
@@ -77,7 +77,7 @@ def handle_incident_review_packet_api(handler: HealthUIRequestHandler) -> None:
         # Validate format
         if format_type not in ("markdown",):
             _logger.warning("Unsupported format type: %s", format_type)
-            send_json_response(handler, 400, {"error": "Unsupported format. Only 'markdown' is supported."})
+            send_json_response(handler, {"error": "Unsupported format. Only 'markdown' is supported."}, 400)
             return
 
         # Build request object
@@ -90,12 +90,12 @@ def handle_incident_review_packet_api(handler: HealthUIRequestHandler) -> None:
         response = handle_incident_review_packet(request)
 
         # Send response
-        send_json_response(handler, 200, response.to_dict())
+        send_json_response(handler, response.to_dict(), 200)
 
     except (OSError, RuntimeError) as exc:
         # Handle expected I/O and runtime errors
         _logger.error("Error in review packet handler: %s", exc)
-        send_json_response(handler, 500, {"error": "Internal server error"})
+        send_json_response(handler, {"error": "Internal server error"}, 500)
         return
 
 

@@ -114,11 +114,28 @@ def log_access_completion(
     This is the core access logging function. It accepts injectable emit_fn
     to preserve test mock compatibility via server.emit_structured_log patch point.
 
-    Args:
-        handler: HealthUIRequestHandler instance with all _request_* attributes.
-        emit_fn: The emit_structured_log function to use (injected by caller).
-        slow_request_threshold_ms: Threshold in ms above which request is "slow".
+    CRITICAL: This function must never raise. If emit_fn fails, we must NOT
+    propagate the exception because the caller (do_GET/do_POST) has a try/except
+    that re-raises after calling this function. If this raises, send_error() is
+    never called and the client gets RemoteDisconnected instead of a proper 500.
     """
+    try:
+        _log_access_completion_inner(handler, emit_fn, slow_request_threshold_ms)
+    except Exception as exc:
+        # NEVER let logging failures propagate - that would break the HTTP response
+        # and turn deterministic 500s into RemoteDisconnected errors for clients.
+        # At worst, we lose an access log. The client always gets a response.
+        import sys
+
+        print(f"access logging failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+
+
+def _log_access_completion_inner(
+    handler: Any,
+    emit_fn: Any,
+    slow_request_threshold_ms: float,
+) -> None:
+    """Inner implementation of log_access_completion. Raises are NOT caught here."""
     if handler._start_time == 0.0:
         return
 
