@@ -139,11 +139,17 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
     from .server_alertmanager import handle_alertmanager_source_action
     from .server_batch_execution import handle_run_batch_next_check_execution
     from .server_feedback import handle_alertmanager_relevance_feedback, handle_usefulness_feedback
+    from .server_incident import handle_incident_snapshot_api
     from .server_next_checks import (
         handle_deterministic_promotion,
         handle_next_check_approval,
         handle_next_check_execution,
     )
+
+    # Incident snapshot capture
+    if route == "/api/incidents/snapshot":
+        handle_incident_snapshot_api(handler)
+        return
 
     # Delegate next-check mutation handlers to server_next_checks module
     if route == "/api/deterministic-next-check/promote":
