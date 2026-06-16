@@ -524,7 +524,13 @@ def test_verification_timeout() -> None:
 # --- Orchestrated Discovery Tests ---
 
 def test_discover_alertmanagers_with_manual_sources() -> None:
-    """Test that manual sources are preserved during discovery."""
+    """Test that manual sources are preserved during discovery.
+    
+    FIX: Mock all three strategies to avoid real subprocess calls.
+    Previously only CRDStrategy was mocked, causing Prometheus and Service
+    strategies to run real kubectl calls (~60s per test).
+    Now all strategies are mocked for deterministic sub-second execution.
+    """
     manual = AlertmanagerSource(
         source_id="manual:custom",
         endpoint="http://custom:9093",
@@ -532,7 +538,12 @@ def test_discover_alertmanagers_with_manual_sources() -> None:
         state=AlertmanagerSourceState.MANUAL,
     )
     
-    with patch.object(CRDDiscoveryStrategy, "discover") as mock_crd:
+    with (
+        patch.object(CRDDiscoveryStrategy, "discover") as mock_crd,
+        patch.object(PrometheusCRDConfigDiscoveryStrategy, "discover") as mock_prom,
+        patch.object(ServiceHeuristicDiscoveryStrategy, "discover") as mock_service,
+    ):
+        # CRD returns a conflicting source that manual should override
         mock_crd.return_value = DiscoveryResult(
             sources=(
                 AlertmanagerSource(
@@ -543,6 +554,20 @@ def test_discover_alertmanagers_with_manual_sources() -> None:
             ),
             errors=(),
             strategy="alertmanager-crd",
+        )
+        
+        # Prometheus returns empty (simulates no Prometheus CRDs)
+        mock_prom.return_value = DiscoveryResult(
+            sources=(),
+            errors=(),
+            strategy="prometheus-crd-config",
+        )
+        
+        # Service returns empty (simulates no service matches)
+        mock_service.return_value = DiscoveryResult(
+            sources=(),
+            errors=(),
+            strategy="service-heuristic",
         )
         
         result = discover_alertmanagers(manual_sources=(manual,))
