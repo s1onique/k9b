@@ -28,8 +28,8 @@ The `.gate-timings.json` file records per-step timing for the verification gate.
 
 - `total_step_duration_ms`: Sum of all step durations (not wall-clock time)
 - `steps`: Sorted by duration descending (slowest first)
-- `lane`: Which parallel lane the step runs in
-- `command`: Format is `interpreter|command` for grep-friendly matching
+- `lane`: Which parallel lane the step runs in (python|frontend|helm)
+- `command`: Command string recorded for the step
 
 ### CI artifacts
 
@@ -106,3 +106,104 @@ The gate uploads `.gate-timings.json` as a CI artifact with 7-day retention.
 Durable profiling evidence is stored in:
 - `.gate-timings.json` - gitignored, runtime evidence per gate run
 - `runs/verification/test-timings/` - per-run timing data with `--profile` flag
+- `runs/verification/frontend-test-timings/` - frontend UI test profiling data
+
+## Frontend UI test profiling results (2026-06-16)
+
+### Baseline metrics
+
+| Runner | Duration | Tests | Files | Command |
+|--------|----------|-------|-------|---------|
+| vitest run | ~14s (warm) / ~25s (cold) | 1626 | 81 | `npm run test:ui` |
+
+### Slowest test files
+
+| Rank | File | Tests | Duration | Notes |
+|------|------|-------|----------|-------|
+| 1 | `src/__tests__/app.test.tsx` | 120 | **~12.8s** | **92% of test runtime** |
+| 2 | `src/__tests__/app.test.tsx` | - | ~12.8s | 4124 lines (LLM-friendly violation) |
+| 3 | `src/run-control/__tests__/useRunControl.test.tsx` | - | <200ms | Per-test timing available |
+| 4 | Other 80 files | ~1500 | <1s each | Well-structured |
+
+### Root cause analysis
+
+**Primary bottleneck: `app.test.tsx`**
+- 4124 lines (violates LLM-friendly 500-line threshold)
+- 120 tests consuming ~92% of test runtime
+- **No fake timers** - uses 86 `waitFor` calls with real wall-clock waits
+- Each `waitFor` with default polling interval adds latency
+- Tests render full App component repeatedly
+
+**Secondary issues:**
+1. **No fake timers** in test setup (`vitest.setup.ts` only mocks localStorage)
+2. **Multiple `waitFor` with 5000ms timeouts** in helper functions
+3. **Full component renders** instead of targeted component tests where possible
+
+### Profiling command output
+
+```
+ Test Files  81 passed (81)
+      Tests  1626 passed (1626)
+   Start at  15:18:37
+   Duration  24.45s (transform 4.05s, setup 7.90s, collect 64.47s, tests 143.79s, environment 44.96s, prepare 6.92s)
+```
+
+**Note:** Vitest phase timings are aggregate worker timings and can exceed wall-clock duration. Use the top-level Duration field as elapsed runtime and phase timings as bottleneck signals.
+
+Breakdown:
+- **Wall-clock Duration: 24.45s** (actual elapsed time)
+- **Collect phase: 64.47s** (aggregate, signals slow file discovery)
+- **Tests phase: 143.79s** (aggregate, dominated by app.test.tsx)
+- **Environment: 44.96s** (aggregate, jsdom setup per test file)
+
+### Decision
+
+- Added profiling/sharding infrastructure (`scripts/run_frontend_ui_tests.sh`)
+- **NOT FIXED**: No runtime reduction in this ACT
+- **Deferred**: app.test.tsx refactoring to next ACT
+- Updated `verify_all.sh` to route through wrapper
+
+### Sharding options (for CI parallelization)
+
+1. **File-level sharding**: Divide 81 test files across N parallel vitest processes
+2. **app.test.tsx isolation**: Split into logical test groups (e.g., queue tests, run selection tests)
+3. **Slow-test tagging**: Tag tests >5s as slow, run in separate nightly shard
+
+### Recommended next ACT
+
+**Split `app.test.tsx` by behavior group**
+
+Target test groups from current file:
+1. Queue panel tests (20+ tests)
+2. Run selection tests (20+ tests)
+3. Panel ordering tests (10+ tests)
+4. Notification tests (10+ tests)
+5. Review enrichment tests (10+ tests)
+6. LLM activity/policy tests (10+ tests)
+
+Expected impact: Each shard ~2-4s instead of single 12.8s file.
+
+### Coverage preserved
+
+- All 1626 tests still pass
+- No assertions removed
+- Full UI coverage maintained
+
+### Result
+
+- Before: ~14s (warm run), ~25s (cold run including collect)
+- After: **unchanged in this ACT**
+- Improvement: None (profiling-only ACT)
+- Next ACT target: ~5-7s (2-3x improvement from splitting app.test.tsx)
+
+### Files changed
+
+- `scripts/run_frontend_ui_tests.sh` - new profiling/sharding wrapper
+- `scripts/verify_all.sh` - route npm-test-ui through wrapper
+- `docs/gate-timings.md` - this section added
+
+### Deferred
+
+- Sharding CI wiring: pending app.test.tsx split
+- Fake timer migration: complex async behavior requires careful review
+- Collect phase optimization: investigate vitest --no-watch behavior

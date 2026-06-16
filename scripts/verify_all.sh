@@ -473,7 +473,7 @@ step_commands = {
     'mypy': 'python|python -m mypy src/k8s_diag_agent',
     'mypy-tests': 'python|python -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py',
     'npm-ci': 'frontend|npm ci',
-    'npm-test-ui': 'frontend|npm run test:ui',
+    'npm-test-ui': 'frontend|bash scripts/run_frontend_ui_tests.sh',
     'npm-build': 'frontend|npm run build',
     'helm-chart': 'helm|bash verify_helm_chart.sh',
     'helm-oci-login': 'helm|bash verify_helm_oci_login.sh',
@@ -551,7 +551,7 @@ for step in data['steps'][:10]:
 _run_frontend_lane() {
     pushd "$REPO_ROOT/frontend" >/dev/null
     _run_and_record "frontend" "npm-ci" "Installing frontend deps (npm ci)" npm ci
-    _run_and_record "frontend" "npm-test-ui" "Running frontend UI tests" npm run test:ui
+    _run_and_record "frontend" "npm-test-ui" "Running frontend UI tests" bash "$REPO_ROOT/scripts/run_frontend_ui_tests.sh"
     _run_and_record "frontend" "npm-build" "Building frontend" npm run build
     popd >/dev/null
 }
