@@ -1,0 +1,21 @@
+# GOOD fixture: deployment doesn't share any PVC
+# Expected: PASS - No shared PVC, no affinity needed
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k9b
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k9b
+        app.kubernetes.io/component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: k9b:latest

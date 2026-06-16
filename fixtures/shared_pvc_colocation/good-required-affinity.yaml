@@ -1,0 +1,36 @@
+# GOOD fixture: scheduler has required backend pod affinity on hostname
+# Expected: PASS - Correct required pod affinity with hostname topology
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-scheduler
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k9b
+      app.kubernetes.io/component: scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k9b
+        app.kubernetes.io/component: scheduler
+    spec:
+      containers:
+        - name: scheduler
+          image: k9b:latest
+      volumes:
+        - name: runs
+          persistentVolumeClaim:
+            claimName: k9b-runs
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: k9b
+                  app.kubernetes.io/instance: RELEASE_NAME
+                  app.kubernetes.io/component: backend
+              topologyKey: kubernetes.io/hostname

@@ -1,16 +1,9 @@
-# BAD FIXTURE: Shared PVC Deployment without required pod affinity
-# This fixture should FAIL the verifier because:
-# 1. It mounts a PVC that is shared with another deployment
-# 2. It lacks required podAffinity.requiredDuringSchedulingIgnoredDuringExecution
-#
-# Expected: FAIL - Missing required pod affinity
+# BAD fixture: required hostname affinity omits component label
+# Expected: FAIL - Selector must include app.kubernetes.io/component=backend
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: k9b-scheduler
-  labels:
-    app: k9b
-    fixture-type: bad
 spec:
   replicas: 1
   strategy:
@@ -32,5 +25,10 @@ spec:
         - name: runs
           persistentVolumeClaim:
             claimName: k9b-runs
-      # NOTE: No affinity specified - this will cause Multi-Attach errors
-      # when scheduler schedules on a different node than backend
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: k9b
+              topologyKey: kubernetes.io/hostname

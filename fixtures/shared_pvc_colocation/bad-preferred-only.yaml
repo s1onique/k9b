@@ -1,0 +1,37 @@
+# BAD fixture: scheduler has soft/preferred affinity only
+# Expected: FAIL - Only preferred affinity, not required
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-scheduler
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k9b
+      app.kubernetes.io/component: scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k9b
+        app.kubernetes.io/component: scheduler
+    spec:
+      containers:
+        - name: scheduler
+          image: k9b:latest
+      volumes:
+        - name: runs
+          persistentVolumeClaim:
+            claimName: k9b-runs
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: k9b
+                    app.kubernetes.io/component: backend
+                topologyKey: kubernetes.io/hostname
