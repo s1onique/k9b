@@ -312,3 +312,82 @@ The frontend fake-timer spike showed global fake timers are unsafe with jsdom/us
 - `frontend/src/utils/selectors.ts` - added optional `now` param to freshness helpers
 - `frontend/src/__tests__/app.run-freshness.test.tsx` - uses clock seam with fixed TEST_NOW
 - `docs/gate-timings.md` - this entry
+
+## LLM-friendly file split result (2026-06-16)
+
+### Problem
+
+After the initial `app.test.tsx` split, three files still exceeded the 500-line LLM-friendly threshold:
+- `app.run-freshness.test.tsx`: 888 lines (FAILED)
+- `app.run-selection.test.tsx`: 585 lines (FAILED)
+- `app.review-enrichment.test.tsx`: 552 lines (FAILED)
+
+### Solution
+
+Split each oversized file into smaller behavior-focused test modules.
+
+### app.run-freshness.test.tsx split
+
+| New file | Behavior group | Lines |
+|----------|----------------|-------|
+| `app.run-freshness.thresholds.test.tsx` | Fresh/Aging/Stale thresholds | 179 |
+| `app.run-freshness.selection.test.tsx` | Selection vs freshness semantics | 254 |
+| `app.run-freshness.refresh.test.tsx` | Refresh behavior, polling | 147 |
+| `app.run-freshness.run-specific.test.tsx` | Run-specific data selection | 393 |
+
+### app.run-selection.test.tsx split
+
+| New file | Behavior group | Lines |
+|----------|----------------|-------|
+| `app.run-selection.execution.test.tsx` | Recent runs selection, run summary | 309 |
+| `app.run-selection.execution-history.test.tsx` | Execution history cards | 66 |
+| `app.run-selection.freshness.test.tsx` | Run freshness thresholds | 171 |
+| `app.run-selection.badges.test.tsx` | Review status badges | 130 |
+
+### app.review-enrichment.test.tsx split
+
+| New file | Behavior group | Lines |
+|----------|----------------|-------|
+| `app.review-enrichment.status.test.tsx` | Review enrichment panel status messages | 201 |
+| `app.review-enrichment.diagnostic-pack.test.tsx` | Diagnostic pack review panel | 144 |
+| `app.review-enrichment.plan-cards.test.tsx` | Next check plan, plan cards | 264 |
+
+### Result
+
+- Original 3 oversized files removed
+- 11 new behavior-focused files created
+- All new files under 500-line threshold (max: 393 lines)
+- All 1626 tests pass
+- LLM-friendly gate: **PASS** (0 failures)
+
+### Verification
+
+- `npm run test:ui`: **PASS** (1626 tests)
+- `npm run build`: **PASS**
+- `python scripts/check_llm_friendly_files.py`: **PASS** (0 failures)
+- Individual file tests: **PASS** (11 files verified)
+
+### Non-goals preserved
+
+- No threshold changes
+- No allowlist additions
+- No coverage reduction
+- No production behavior changes
+
+### Files changed
+
+- `frontend/src/__tests__/app.run-freshness.thresholds.test.tsx` - new thresholds tests
+- `frontend/src/__tests__/app.run-freshness.selection.test.tsx` - new selection semantics tests
+- `frontend/src/__tests__/app.run-freshness.refresh.test.tsx` - new refresh tests
+- `frontend/src/__tests__/app.run-freshness.run-specific.test.tsx` - new run-specific tests
+- `frontend/src/__tests__/app.run-selection.execution.test.tsx` - new execution tests
+- `frontend/src/__tests__/app.run-selection.execution-history.test.tsx` - new history tests
+- `frontend/src/__tests__/app.run-selection.freshness.test.tsx` - new freshness tests
+- `frontend/src/__tests__/app.run-selection.badges.test.tsx` - new badges tests
+- `frontend/src/__tests__/app.review-enrichment.status.test.tsx` - new status tests
+- `frontend/src/__tests__/app.review-enrichment.diagnostic-pack.test.tsx` - new diagnostic pack tests
+- `frontend/src/__tests__/app.review-enrichment.plan-cards.test.tsx` - new plan cards tests
+- `frontend/src/__tests__/app.run-freshness.test.tsx` - **DELETED** (replaced by above)
+- `frontend/src/__tests__/app.run-selection.test.tsx` - **DELETED** (replaced by above)
+- `frontend/src/__tests__/app.review-enrichment.test.tsx` - **DELETED** (replaced by above)
+- `docs/gate-timings.md` - this entry
