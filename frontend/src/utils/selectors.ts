@@ -43,16 +43,24 @@ export const priorityLabel = (confidence: string): string => {
 type FreshnessLevel = "fresh" | "warning" | "stale";
 
 // Page/data freshness thresholds: <=30s fresh, >30s and <3m warning, >=3m stale
-export const getPageFreshnessLevel = (lastRefreshTime: dayjs.Dayjs): FreshnessLevel => {
-  const seconds = dayjs().diff(lastRefreshTime, "second");
+export const getPageFreshnessLevel = (
+  lastRefreshTime: dayjs.Dayjs,
+  now?: dayjs.Dayjs
+): FreshnessLevel => {
+  const currentTime = now ?? dayjs();
+  const seconds = currentTime.diff(lastRefreshTime, "second");
   if (seconds <= 30) return "fresh";
   if (seconds < 180) return "warning";
   return "stale";
 };
 
 // Run freshness thresholds: <=15m fresh, >15m and <=45m warning (Aging), >45m stale
-export const getRunFreshnessLevel = (timestamp: string): FreshnessLevel => {
-  const minutes = dayjs().diff(dayjs(timestamp), "minute");
+export const getRunFreshnessLevel = (
+  timestamp: string,
+  now?: dayjs.Dayjs
+): FreshnessLevel => {
+  const currentTime = now ?? dayjs();
+  const minutes = currentTime.diff(dayjs(timestamp), "minute");
   if (minutes <= 15) return "fresh";
   if (minutes <= 45) return "warning";
   return "stale";
@@ -72,8 +80,10 @@ export const FRESHNESS_LABEL: Record<FreshnessLevel, string> = {
 
 export const FRESHNESS_THRESHOLD_MINUTES = 10;
 
-export const isStaleTimestamp = (timestamp: string): boolean =>
-  dayjs().diff(timestamp, "minute") >= FRESHNESS_THRESHOLD_MINUTES;
+export const isStaleTimestamp = (timestamp: string, now?: dayjs.Dayjs): boolean => {
+  const currentTime = now ?? dayjs();
+  return currentTime.diff(dayjs(timestamp), "minute") >= FRESHNESS_THRESHOLD_MINUTES;
+};
 
 // ==========================================================================
 // Duration formatting

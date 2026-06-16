@@ -5,6 +5,7 @@
  * hook call order and state dependencies.
  */
 
+import dayjs from "dayjs";
 import { relativeRecency } from "../utils";
 import {
   FRESHNESS_EMOJI,
@@ -38,6 +39,9 @@ export interface AppHeaderProps {
 
   // Demo shell
   onOpenDemo: () => void;
+
+  // Clock seam for testability (optional, defaults to real time)
+  clock?: dayjs.Dayjs;
 }
 
 export function AppHeader({
@@ -53,8 +57,10 @@ export function AppHeader({
   onAutoRefreshChange,
   onClickLatest,
   onOpenDemo,
+  clock,
 }: AppHeaderProps) {
   const autoRefreshSelectValue = autoRefreshInterval ? String(autoRefreshInterval) : "off";
+  const currentTime = clock ?? dayjs();
 
   return (
     <header className="panel hero compact">
@@ -76,9 +82,9 @@ export function AppHeader({
           </div>
           <div className="hero-run-freshness">
             {isSelectedRunLatest && (
-              <span className={`freshness-indicator freshness-indicator--${getRunFreshnessLevel(headerRunTimestamp)}`}>
-                <span className="freshness-indicator__emoji">{FRESHNESS_EMOJI[getRunFreshnessLevel(headerRunTimestamp)]}</span>
-                <span className="freshness-indicator__label">{FRESHNESS_LABEL[getRunFreshnessLevel(headerRunTimestamp)]}</span>
+              <span className={`freshness-indicator freshness-indicator--${getRunFreshnessLevel(headerRunTimestamp, currentTime)}`}>
+                <span className="freshness-indicator__emoji">{FRESHNESS_EMOJI[getRunFreshnessLevel(headerRunTimestamp, currentTime)]}</span>
+                <span className="freshness-indicator__label">{FRESHNESS_LABEL[getRunFreshnessLevel(headerRunTimestamp, currentTime)]}</span>
               </span>
             )}
             {!isSelectedRunLatest && (
@@ -102,11 +108,11 @@ export function AppHeader({
       <div className="hero-actions">
         <div className="refresh-controls">
           <span
-            className={`page-freshness-indicator page-freshness-indicator--${getPageFreshnessLevel(lastRefresh)}`}
+            className={`page-freshness-indicator page-freshness-indicator--${getPageFreshnessLevel(lastRefresh, currentTime)}`}
             title={`Page data refreshed ${relativeRecency(lastRefresh.toISOString())}`}
-            aria-label={`Page data freshness: ${getPageFreshnessLevel(lastRefresh)}`}
+            aria-label={`Page data freshness: ${getPageFreshnessLevel(lastRefresh, currentTime)}`}
           >
-            {FRESHNESS_EMOJI[getPageFreshnessLevel(lastRefresh)]}
+            {FRESHNESS_EMOJI[getPageFreshnessLevel(lastRefresh, currentTime)]}
           </span>
           <button type="button" onClick={onRefresh}>
             Refresh

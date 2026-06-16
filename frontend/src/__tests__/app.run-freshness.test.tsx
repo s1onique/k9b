@@ -1,17 +1,18 @@
 /**
  * Run freshness and selection semantics tests.
- * 
+ *
  * Tests run freshness thresholds, selection semantics, and the semantic
  * separation between selection state (Latest/Past run) and freshness
  * state (Fresh/Aging/Stale).
- * 
- * Split from app.test.tsx as part of the LLM-friendly file split.
- * These tests were extracted from the original file to restore coverage.
+ *
+ * Uses a production-safe clock seam to make tests deterministic
+ * without requiring fake timers.
  */
 
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
+import dayjs from "dayjs";
 import App from "../App";
 
 import {
@@ -20,10 +21,22 @@ import {
   defaultPayloads,
   makeFetchResponse,
   makeRunWithOverrides,
-  minsAgo,
   sampleRun,
   sampleRunsList,
 } from "./app.test-fixtures";
+
+/**
+ * Clock seam for run freshness tests.
+ * Uses a fixed reference time so tests are deterministic without fake timers.
+ */
+const TEST_NOW = dayjs("2026-04-07T12:00:00Z");
+
+/**
+ * Generate a timestamp N minutes before the test reference time.
+ * This creates deterministic timestamps for freshness testing.
+ */
+const minsBeforeTestNow = (minutes: number) =>
+  TEST_NOW.subtract(minutes, "minute").toISOString();
 
 let setIntervalSpy: ReturnType<typeof vi.fn>;
 let clearIntervalSpy: ReturnType<typeof vi.fn>;
@@ -44,7 +57,7 @@ afterEach(() => {
 
 describe("Run freshness thresholds", () => {
   test("run shows Stale status when timestamp is > 45 minutes old", async () => {
-    const staleTimestamp = minsAgo(60);
+    const staleTimestamp = minsBeforeTestNow(60);
     const staleRun = {
       ...sampleRun,
       timestamp: staleTimestamp,
@@ -56,7 +69,7 @@ describe("Run freshness thresholds", () => {
       totalCount: 1,
     };
     vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": staleRun, "/api/runs": staleRunsList }));
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -68,20 +81,20 @@ describe("Run freshness thresholds", () => {
   });
 
   test("boundary: run at exactly 15 minutes shows Fresh", async () => {
-    const freshTimestamp = minsAgo(14);
+    const freshTimestamp = minsBeforeTestNow(14);
     const freshRun = {
       ...sampleRun,
       timestamp: freshTimestamp,
     };
     vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": freshRun }));
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
     expect(screen.getByText(/^Fresh$/i)).toBeInTheDocument();
   });
 
   test("boundary: run at exactly 45 minutes shows Aging", async () => {
-    const agingTimestamp = minsAgo(44);
+    const agingTimestamp = minsBeforeTestNow(44);
     const agingRun = {
       ...sampleRun,
       timestamp: agingTimestamp,
@@ -93,15 +106,15 @@ describe("Run freshness thresholds", () => {
       totalCount: 1,
     };
     vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": agingRun, "/api/runs": agingRunsList }));
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
     expect(screen.getByText(/^Aging$/i)).toBeInTheDocument();
   });
 
   test("selecting a stale latest run shows Stale indicator", async () => {
-    const staleRunTimestamp = minsAgo(60);
-    const olderStaleTimestamp = minsAgo(120);
+    const staleRunTimestamp = minsBeforeTestNow(60);
+    const olderStaleTimestamp = minsBeforeTestNow(120);
 
     const runsWithStaleLatest = {
       runs: [
@@ -137,7 +150,7 @@ describe("Run freshness thresholds", () => {
 
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -167,7 +180,7 @@ describe("Run freshness thresholds", () => {
 
   test("refresh controls remain present and queryable in header", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -185,13 +198,13 @@ describe("Run freshness thresholds", () => {
 
 describe("Cockpit header selection vs freshness semantics", () => {
   test("State 1: selected run is latest and fresh - shows Latest badge and Fresh indicator", async () => {
-    const recentTimestamp = minsAgo(5);
+    const recentTimestamp = minsBeforeTestNow(5);
     const freshRun = {
       ...sampleRun,
       timestamp: recentTimestamp,
     };
     vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": freshRun }));
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -201,8 +214,8 @@ describe("Cockpit header selection vs freshness semantics", () => {
   });
 
   test("State 2: past run selected but latest is fresh - shows Past run badge, NO Stale indicator", async () => {
-    const pastRunTimestamp = minsAgo(60);
-    const latestRunTimestamp = minsAgo(5);
+    const pastRunTimestamp = minsBeforeTestNow(60);
+    const latestRunTimestamp = minsBeforeTestNow(5);
 
     const runsWithPastAndFreshLatest = {
       runs: [
@@ -238,7 +251,7 @@ describe("Cockpit header selection vs freshness semantics", () => {
 
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -273,7 +286,7 @@ describe("Cockpit header selection vs freshness semantics", () => {
   });
 
   test("State 3: latest run itself is stale - shows Stale indicator for latest run", async () => {
-    const staleTimestamp = minsAgo(60);
+    const staleTimestamp = minsBeforeTestNow(60);
     const staleRun = {
       ...sampleRun,
       timestamp: staleTimestamp,
@@ -285,7 +298,7 @@ describe("Cockpit header selection vs freshness semantics", () => {
       totalCount: 1,
     };
     vi.stubGlobal("fetch", createFetchMock({ ...defaultPayloads, "/api/run": staleRun, "/api/runs": staleRunsList }));
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -297,8 +310,8 @@ describe("Cockpit header selection vs freshness semantics", () => {
   });
 
   test("jump to latest button returns to latest run and restores Fresh indicator", async () => {
-    const pastRunTimestamp = minsAgo(60);
-    const latestRunTimestamp = minsAgo(5);
+    const pastRunTimestamp = minsBeforeTestNow(60);
+    const latestRunTimestamp = minsBeforeTestNow(5);
 
     const runsWithPastAndFreshLatest = {
       runs: [
@@ -334,7 +347,7 @@ describe("Cockpit header selection vs freshness semantics", () => {
 
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -366,7 +379,7 @@ describe("Cockpit header selection vs freshness semantics", () => {
   test("panel switching behavior still works after run selection", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -410,7 +423,7 @@ describe("Cockpit refresh regression", () => {
   test("selected run remains selected after manual refresh", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -442,7 +455,7 @@ describe("Cockpit refresh regression", () => {
 
   test("interval polling does not leak or duplicate timers", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -465,7 +478,7 @@ describe("Cockpit refresh regression", () => {
         {
           runId: "run-124",
           runLabel: "2026-04-07-1400",
-          timestamp: new Date().toISOString(),
+          timestamp: TEST_NOW.toISOString(),
           clusterCount: 2,
           triaged: false,
           executionCount: 0,
@@ -482,7 +495,7 @@ describe("Cockpit refresh regression", () => {
     const payloads = { ...defaultPayloads, "/api/runs": runsWithNewLatest };
     vi.stubGlobal("fetch", createFetchMock(payloads));
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -563,7 +576,7 @@ describe("Run selection with run-specific data", () => {
 
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -653,7 +666,7 @@ describe("Run selection with run-specific data", () => {
 
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -691,7 +704,7 @@ describe("Run selection with run-specific data", () => {
   test("selected run remains stable when runs list updates with new latest run", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -775,7 +788,7 @@ describe("Run selection with run-specific data", () => {
 
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
@@ -838,7 +851,7 @@ describe("Run selection with run-specific data", () => {
 
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
-    render(<App />);
+    render(<App clock={() => TEST_NOW} />);
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 

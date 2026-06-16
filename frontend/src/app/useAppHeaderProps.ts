@@ -43,6 +43,8 @@ export interface UseAppHeaderPropsArgs {
   handleAutoRefreshChange: (value: string) => void;
   /** Click to jump to latest run handler */
   clickLatest: () => void;
+  /** Clock seam for testability (optional, defaults to real time) */
+  clock?: dayjs.Dayjs;
 }
 
 export interface UseAppHeaderPropsReturn {
@@ -85,7 +87,10 @@ export function useAppHeaderProps({
   refresh,
   handleAutoRefreshChange,
   clickLatest,
+  clock,
 }: UseAppHeaderPropsArgs): UseAppHeaderPropsReturn {
+  const currentTime = clock ?? dayjs();
+
   // Find selected run in the runs list for timestamp/label/id
   const selectedRunListEntry = runsList.find((r) => r.runId === selectedRunId) ?? null;
 
@@ -96,9 +101,9 @@ export function useAppHeaderProps({
   // Freshness computation
   // runFresh controls whether the freshness indicator is shown in AppHeader
   // runAgeMinutes is passed through to useAppDemoShellOverlayProps
-  const runFresh = !isStaleTimestamp(headerRunTimestamp);
+  const runFresh = !isStaleTimestamp(headerRunTimestamp, currentTime);
   const runAgeMinutes = headerRunTimestamp
-    ? Math.floor(dayjs().diff(headerRunTimestamp, "minute"))
+    ? Math.floor(currentTime.diff(dayjs(headerRunTimestamp), "minute"))
     : 0;
 
   // Run header display values from list entry or run payload
@@ -138,6 +143,7 @@ export function useAppHeaderProps({
     autoRefreshInterval,
     onAutoRefreshChange: handleAutoRefreshChange,
     onClickLatest: clickLatest,
+    clock: currentTime,
   };
 
   return {

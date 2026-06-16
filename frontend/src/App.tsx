@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from "react";
 import dayjs from "dayjs";
+import type { Dayjs } from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import utc from "dayjs/plugin/utc";
 import { useAppNavigationHighlights } from "./hooks/useAppNavigationHighlights";
@@ -166,7 +167,20 @@ dayjs.extend(relativeTime);
 dayjs.extend(utc);
 
 
-const App = () => {
+export interface AppProps {
+  /** Clock seam for testability (optional, defaults to real time) */
+  clock?: () => Dayjs;
+}
+
+/**
+ * Application root component.
+ *
+ * @param props - Optional props for testing:
+ *   - clock: Optional function that returns a Dayjs instance for the current time.
+ *           When provided, this is used instead of dayjs() for freshness calculations,
+ *           making tests deterministic without requiring fake timers.
+ */
+const App = ({ clock }: AppProps = {}) => {
   // Phase 3: Run Control Plane - source of truth for selected-run causal chain
   // Single useRunControl call provides all selected-run state and actions
   const {
@@ -444,6 +458,7 @@ const App = () => {
   // Also extracts freshness-related values needed by useAppDemoShellOverlayProps
   // Must compute freshness values BEFORE calling useAppDemoShellOverlayProps
   // because headerRunTimestamp is needed by both hooks
+  const currentClock = clock ? clock() : undefined;
   const { headerDerivedProps, headerRunTimestamp, runFresh, runAgeMinutes, headerStats } = useAppHeaderProps({
     run,
     runsList,
@@ -455,6 +470,7 @@ const App = () => {
     refresh,
     handleAutoRefreshChange,
     clickLatest,
+    clock: currentClock,
   });
 
   // Extract demo shell overlay props - MUST be before early return to maintain hook order

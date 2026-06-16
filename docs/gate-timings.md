@@ -272,3 +272,43 @@ Expected impact: Each shard ~2-4s instead of single 12.8s file.
 - `frontend/src/__tests__/app.run-freshness.test.tsx` - restored run freshness tests (18 tests)
 - `frontend/src/__tests__/app.test.tsx` - reduced from 4124 to ~450 lines
 - `docs/gate-timings.md` - updated with split results and restored tests
+
+## Run freshness clock seam result (2026-06-16)
+
+The frontend fake-timer spike showed global fake timers are unsafe with jsdom/userEvent in this suite. Run freshness tests now use a production-safe clock seam instead of fake timers.
+
+- **Fake timers**: not used
+- **Test clock**: injected via `<App clock={() => dayjs("...")} />` prop
+- **Tests preserved**: 1626 (all pass)
+- **Runtime impact**: neutral (~10s warm run, unchanged)
+- **Freshness semantics preserved**:
+  - Fresh <= 15m
+  - Aging > 15m and <= 45m
+  - Stale > 45m
+
+### Design
+
+- **Clock seam location**: `App.tsx` accepts optional `clock` prop (`() => Dayjs`)
+- **Production default**: `dayjs()` (real current time)
+- **Test injection path**: `<App clock={() => TEST_NOW} />`
+- **Helper functions updated**:
+  - `getRunFreshnessLevel(timestamp, now?)` - optional dayjs param
+  - `getPageFreshnessLevel(lastRefresh, now?)` - optional dayjs param
+  - `isStaleTimestamp(timestamp, now?)` - optional dayjs param
+- **Why no global fake timers**: jsdom teardown conflict with `Window.close()` / `stopAllTimers`
+
+### Verification
+
+- `cd frontend && npx vitest run src/__tests__/app.run-freshness*.test.tsx`: **PASS** (18 tests)
+- `cd frontend && npm run test:ui`: **PASS** (1626 tests)
+- `cd frontend && npm run build`: **PASS**
+- `./scripts/verify_all.sh`: **in progress**
+
+### Files changed
+
+- `frontend/src/App.tsx` - added `AppProps` interface with optional `clock` prop
+- `frontend/src/app/AppHeader.tsx` - added optional `clock` prop, uses for freshness calculations
+- `frontend/src/app/useAppHeaderProps.ts` - added optional `clock` param, threads to AppHeader
+- `frontend/src/utils/selectors.ts` - added optional `now` param to freshness helpers
+- `frontend/src/__tests__/app.run-freshness.test.tsx` - uses clock seam with fixed TEST_NOW
+- `docs/gate-timings.md` - this entry
