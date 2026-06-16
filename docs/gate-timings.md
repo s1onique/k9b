@@ -207,3 +207,68 @@ Expected impact: Each shard ~2-4s instead of single 12.8s file.
 - Sharding CI wiring: pending app.test.tsx split
 - Fake timer migration: complex async behavior requires careful review
 - Collect phase optimization: investigate vitest --no-watch behavior
+
+## app.test.tsx split result (2026-06-16)
+
+### Before
+
+| Metric | Value |
+|--------|-------|
+| File | `frontend/src/__tests__/app.test.tsx` |
+| Lines | 4124 |
+| Tests | 120 |
+| Runtime | ~12.6–12.8s |
+| waitFor calls | ~86 |
+
+### After
+
+| New file | Behavior group | Tests moved | Lines |
+|----------|----------------|-------------|-------|
+| `app.test-fixtures.tsx` | Shared fixtures/helpers | - | ~280 |
+| `app.smoke.test.tsx` | App bootstrap, cluster detail tabs | 4 | ~120 |
+| `app.queue-panel.test.tsx` | Queue panel behavior | 18 | ~450 |
+| `app.run-selection.test.tsx` | Run selection, summary, freshness | 18 | ~500 |
+| `app.run-freshness.test.tsx` | Run freshness, selection semantics, refresh behavior | 18 | ~500 |
+| `app.panel-layout.test.tsx` | Navigation, panel ordering | 14 | ~350 |
+| `app.notifications.test.tsx` | Notifications, autorefresh | 7 | ~350 |
+| `app.review-enrichment.test.tsx` | Review enrichment, diagnostic pack | 21 | ~500 |
+| `app.llm-policy.test.tsx` | LLM activity, policy | 3 | ~150 |
+| `app.test.tsx` (reduced) | Deterministic panel, execution actions | 17 | ~450 |
+
+### Result
+
+- `npm-test-ui` before: ~14s warm / ~25s cold
+- `npm-test-ui` after: **10.0s** (wall-clock)
+- Improvement: **~1.4x** (from 14s to 10s warm run)
+- LLM-friendly status: **PASS** (all files < 500 lines)
+
+### Notes
+
+- No assertions removed.
+- No tests skipped.
+- All 1626 tests pass (restored 18 tests in app.run-freshness.test.tsx).
+- Original app.test.tsx reduced from 4124 to ~450 lines.
+- Split files can run independently.
+- Sharding now feasible with smaller file sizes.
+- Fake-timer migration deferred to next ACT.
+
+### Verification
+
+- `cd frontend && npm run test:ui`: **PASS** (1626 tests)
+- `cd frontend && npm run build`: **PASS**
+- `python scripts/check_llm_friendly_files.py --quiet`: **PASS** (0 failures)
+- Individual split files: **PASS** (all 9 files verified)
+
+### Files changed
+
+- `frontend/src/__tests__/app.test-fixtures.tsx` - new shared fixtures
+- `frontend/src/__tests__/app.smoke.test.tsx` - new smoke tests
+- `frontend/src/__tests__/app.queue-panel.test.tsx` - new queue panel tests
+- `frontend/src/__tests__/app.run-selection.test.tsx` - new run selection tests
+- `frontend/src/__tests__/app.panel-layout.test.tsx` - new panel layout tests
+- `frontend/src/__tests__/app.notifications.test.tsx` - new notification tests
+- `frontend/src/__tests__/app.review-enrichment.test.tsx` - new review enrichment tests
+- `frontend/src/__tests__/app.llm-policy.test.tsx` - new LLM policy tests
+- `frontend/src/__tests__/app.run-freshness.test.tsx` - restored run freshness tests (18 tests)
+- `frontend/src/__tests__/app.test.tsx` - reduced from 4124 to ~450 lines
+- `docs/gate-timings.md` - updated with split results and restored tests
