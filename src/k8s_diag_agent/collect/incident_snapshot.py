@@ -1,17 +1,34 @@
 """Incident snapshot collection - compatibility facade.
 
 This module provides read-only Kubernetes incident evidence collection for
-LLM/Cline review. It captures namespace-scoped evidence into a deterministic
-bundle without mutating the cluster.
+k9b's internal reviewer pipeline. It captures namespace-scoped evidence into
+a deterministic bundle without mutating the cluster.
 
-Implementation note:
+**Self-Contained k9b-Only Constraint:**
+
+The complete incident investigation workflow must run inside k9b:
+- no Cline required
+- no manual kubectl required
+- no operator exec into pods required
+- no local CLI required
+- no copy/paste to external tools required
+- no external artifact massaging required
+
+Development-time helpers are allowed, but every helper must either:
+1. become an internal k9b backend/UI capability, or
+2. be explicitly marked as temporary scaffolding and removed before the epic closes.
+
+**Current Implementation Note:**
+
 This module is a compatibility facade that re-exports from split modules.
 The actual implementation is distributed across:
 - incident_models.py: dataclasses and enums
 - incident_parsers.py: parsing functions
-- incident_collectors.py: kubectl collection
+- incident_collectors.py: kubectl collection (TEMPORARY SCAFFOLD - to be replaced with in-process API)
 - incident_triage.py: symptom detection
 - incident_writer.py: bundle persistence
+
+For review packet generation, see: incident_review_packet.py
 
 This file remains for backward compatibility with existing imports.
 """

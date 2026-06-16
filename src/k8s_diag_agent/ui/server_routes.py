@@ -145,10 +145,16 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
         handle_next_check_approval,
         handle_next_check_execution,
     )
+    from .server_review_packet import handle_incident_review_packet_api
 
     # Incident snapshot capture
     if route == "/api/incidents/snapshot":
         handle_incident_snapshot_api(handler)
+        return
+
+    # Incident review packet generation
+    if route == "/api/incidents/review-packet":
+        handle_incident_review_packet_api(handler)
         return
 
     # Delegate next-check mutation handlers to server_next_checks module

@@ -584,3 +584,47 @@ export const captureIncidentSnapshot = async (
 
   return (await response.json()) as IncidentSnapshotResponse;
 };
+
+// ============================================================================
+// Incident Review Packet API
+// ============================================================================
+
+export type IncidentReviewPacketRequest = {
+  bundle: Record<string, unknown>;
+  format?: "markdown";
+};
+
+export type IncidentReviewPacketResponse = {
+  bundle_id: string;
+  packet: string;
+  format: string;
+  error?: string | null;
+};
+
+export const generateIncidentReviewPacket = async (
+  request: IncidentReviewPacketRequest
+): Promise<IncidentReviewPacketResponse> => {
+  const response = await fetch("/api/incidents/review-packet", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        message = String((payload as Record<string, unknown>).error);
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message || "Failed to generate incident review packet");
+  }
+
+  return (await response.json()) as IncidentReviewPacketResponse;
+};
