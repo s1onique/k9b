@@ -131,19 +131,19 @@ def derive_linkage_context_from_snapshots(
         # Check for image pull issues - another incident-class problem
         if pod_counts.image_pull_backoff > 0:
             workloads = snapshot.workloads
-            namespace: str | None = "default"
+            image_pull_namespace: str | None = "default"
             if workloads:
                 for key, value in workloads.items():
                     if isinstance(value, dict):
                         ns = value.get("namespace") or value.get("metadata", {}).get("namespace")
                         if ns:
-                            namespace = ns
+                            image_pull_namespace = ns
                             break
 
             return IncidentLinkageContext(
                 incident_id=None,  # No specific pod identified for image pull
                 source_candidate_id=None,
-                namespace=namespace,
+                namespace=image_pull_namespace,
                 object_kind="Pod",
                 object_name=None,
                 candidate_class="image_pull",
