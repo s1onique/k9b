@@ -711,47 +711,102 @@ export const generateIncidentReviewPacket = async (
 
 // ============================================================================
 // Incident List API (read-only)
+// Incident aggregate root: owns case lifecycle truth
 // ============================================================================
 
 /**
- * Incident signal from backend.
+ * Signal that contributed to an incident.
+ * Read-only; provenance for diagnostic context.
  */
 export type IncidentSignal = {
   source: string;
   reason: string;
   message: string;
   captured_at: string;
+  run_id?: string | null;
+  detector_id?: string | null;
+  finding_id?: string | null;
+  fingerprint?: string | null;
 };
 
 /**
- * Incident record from backend.
- * Read-only in-memory incident store - no mutation, no remediation, no LLM.
+ * Evidence artifact attached to an incident.
+ * Read-only; links incident to artifact store.
  */
-export type Incident = {
+export type IncidentEvidenceLink = {
   incident_id: string;
-  source_candidate_id: string;
+  artifact_id: string;
+  role: string;
+  attached_at: string;
+};
+
+/**
+ * Review packet state for an incident.
+ * Replaces old review_packet_available + review_packet_id pattern.
+ */
+export type IncidentReviewPacketPayload = {
+  status: string;
+  id?: string | null;
+  generated_at?: string | null;
+  error_message?: string | null;
+};
+
+/**
+ * Timeline event in an incident's lifecycle.
+ * Read-only; append-only record of state transitions.
+ */
+export type IncidentEvent = {
+  event_id: string;
+  incident_id: string;
+  event_type: string;
+  actor: string;
+  occurred_at: string;
+  message: string;
+  actor_id?: string | null;
+  data?: Record<string, unknown> | null;
+};
+
+/**
+ * Incident summary payload - lightweight list view.
+ * Uses latest_snapshot_bundle_id (not snapshot_bundle_id).
+ * Uses review_packet object (not review_packet_available + review_packet_id).
+ */
+export type IncidentSummaryPayload = {
+  incident_id: string;
   namespace: string;
   object_kind: string;
   object_name: string;
   raw_object_kind: string | null;
-  class: string;
+  candidate_class: string;
   severity: string;
   status: string;
   first_observed_at: string;
   last_observed_at: string;
-  signals: IncidentSignal[];
-  evidence_needed: string[];
-  snapshot_bundle_id: string | null;
-  review_packet_available: boolean;
-  review_packet_id: string | null;
+  signal_count: number;
+  evidence_count: number;
+  latest_snapshot_bundle_id: string | null;
+  review_packet: IncidentReviewPacketPayload;
   suppressed_reason: string | null;
   duplicate_of: string | null;
   resolved_at: string | null;
   resolution_notes: string | null;
 };
 
+/**
+ * Incident detail payload - full case view.
+ * Includes signals, evidence links, and timeline.
+ * Run artifacts remain evidence provenance, not the primary case object.
+ */
+export type IncidentDetailPayload = IncidentSummaryPayload & {
+  source_candidate_id: string;
+  signals: IncidentSignal[];
+  evidence_needed: string[];
+  evidence_links: IncidentEvidenceLink[];
+  events: IncidentEvent[];
+};
+
 export type IncidentsListResponse = {
-  incidents: Incident[];
+  incidents: IncidentSummaryPayload[];
   total: number;
 };
 
@@ -799,7 +854,7 @@ export const listIncidents = async (status?: string): Promise<IncidentsListRespo
  * 
  * @param incidentId - The incident ID to look up
  */
-export const getIncident = async (incidentId: string): Promise<Incident> => {
+export const getIncident = async (incidentId: string): Promise<IncidentDetailPayload> => {
   const response = await fetch(`/api/incidents/${encodeURIComponent(incidentId)}`, {
     cache: "no-store",
   });
@@ -820,5 +875,5 @@ export const getIncident = async (incidentId: string): Promise<Incident> => {
     throw new Error(message || "Failed to get incident");
   }
 
-  return (await response.json()) as Incident;
+  return (await response.json()) as IncidentDetailPayload;
 };

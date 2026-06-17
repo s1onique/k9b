@@ -11,6 +11,8 @@ Hard constraints enforced:
 - NO LLM calls
 - NO external tool invocation
 - NO persistence (in-memory only)
+
+Uses api_incident_reads serializers for typed payloads.
 """
 
 from __future__ import annotations
@@ -18,6 +20,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..ui.api_incident_reads import (
+    build_incident_detail_payload,
+    build_incident_summary_payload,
+)
 from .incident_lifecycle import IncidentStatus
 from .incident_store_provider import get_incident_store
 
@@ -47,7 +53,7 @@ def handle_list_incidents(status: str | None = None) -> dict[str, Any]:
     incidents = store.list_incidents(status=status_filter)
 
     return {
-        "incidents": [inc.to_dict() for inc in incidents],
+        "incidents": [build_incident_summary_payload(inc) for inc in incidents],
         "total": len(incidents),
     }
 
@@ -59,7 +65,7 @@ def handle_get_incident(incident_id: str) -> dict[str, Any] | None:
         incident_id: The incident ID to look up
 
     Returns:
-        Incident dict if found, None if not found
+        Incident detail dict if found, None if not found
     """
     store = get_incident_store()
     incident = store.get_incident(incident_id)
@@ -67,7 +73,7 @@ def handle_get_incident(incident_id: str) -> dict[str, Any] | None:
     if incident is None:
         return None
 
-    return incident.to_dict()
+    return build_incident_detail_payload(incident)
 
 
 __all__ = [

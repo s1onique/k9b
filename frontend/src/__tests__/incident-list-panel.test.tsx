@@ -5,7 +5,8 @@
  * - API client list call parses incidents
  * - Empty incident list renders empty state
  * - Incidents render status/severity/class/object
- * - snapshot_bundle_id renders when present
+ * - latest_snapshot_bundle_id renders when present
+ * - review_packet object fields render correctly (status-based)
  * - No remediation/action buttons exist (strong assertions)
  * - Component handles API error with generic message
  * - Read-only notice is always displayed
@@ -23,32 +24,29 @@ vi.mock("../api", () => ({
 }));
 
 import { listIncidents } from "../api";
+import type { IncidentSummaryPayload } from "../api";
 
-// Fixtures
-const mockIncident = {
+// Fixtures using new IncidentSummaryPayload shape
+const mockIncident: IncidentSummaryPayload = {
   incident_id: "default-pod-test-pod-crash_loop",
-  source_candidate_id: "default-pod-test-pod-crash_loop",
   namespace: "default",
   object_kind: "Pod",
   object_name: "test-pod",
   raw_object_kind: null,
-  class: "crash_loop",
+  candidate_class: "crash_loop",
   severity: "error",
   status: "open",
   first_observed_at: "2026-01-01T12:00:00Z",
   last_observed_at: "2026-01-01T14:00:00Z",
-  signals: [
-    {
-      source: "pod",
-      reason: "CrashLoopBackOff",
-      message: "Back-off 5m40s restarting",
-      captured_at: "2026-01-01T14:00:00Z",
-    },
-  ],
-  evidence_needed: ["pod_logs", "pod_describe"],
-  snapshot_bundle_id: "default-20260101-140000",
-  review_packet_available: false,
-  review_packet_id: null,
+  signal_count: 1,
+  evidence_count: 2,
+  latest_snapshot_bundle_id: "default-20260101-140000",
+  review_packet: {
+    status: "not_generated",
+    id: null,
+    generated_at: null,
+    error_message: null,
+  },
   suppressed_reason: null,
   duplicate_of: null,
   resolved_at: null,
@@ -57,12 +55,12 @@ const mockIncident = {
 
 const mockIncidentWithBundle = {
   ...mockIncident,
-  snapshot_bundle_id: "default-20260101-140000",
+  latest_snapshot_bundle_id: "default-20260101-140000",
 };
 
 const mockIncidentWithoutBundle = {
   ...mockIncident,
-  snapshot_bundle_id: null,
+  latest_snapshot_bundle_id: null,
 };
 
 describe("IncidentListPanel", () => {
@@ -246,8 +244,8 @@ describe("IncidentListPanel", () => {
     });
   });
 
-  describe("snapshot_bundle_id renders when present", () => {
-    it("shows bundle ID when incident has snapshot_bundle_id", async () => {
+  describe("latest_snapshot_bundle_id renders when present", () => {
+    it("shows bundle ID when incident has latest_snapshot_bundle_id", async () => {
       vi.mocked(listIncidents).mockResolvedValueOnce({
         incidents: [mockIncidentWithBundle],
         total: 1,
@@ -275,12 +273,16 @@ describe("IncidentListPanel", () => {
   });
 
   describe("review_packet fields render correctly", () => {
-    it("shows review packet available badge and ID when review_packet_available=true", async () => {
+    it("shows review packet available badge and ID when review_packet.status=available", async () => {
       const incidentWithReviewPacket = {
         ...mockIncident,
-        snapshot_bundle_id: "default-20260101-140000",
-        review_packet_available: true,
-        review_packet_id: "review-packet-abc123",
+        latest_snapshot_bundle_id: "default-20260101-140000",
+        review_packet: {
+          status: "available",
+          id: "review-packet-abc123",
+          generated_at: "2026-01-01T12:00:00Z",
+          error_message: null,
+        },
       };
       vi.mocked(listIncidents).mockResolvedValueOnce({
         incidents: [incidentWithReviewPacket],
@@ -299,12 +301,16 @@ describe("IncidentListPanel", () => {
       });
     });
 
-    it("shows 'Not generated yet' when review_packet_available=false", async () => {
+    it("shows 'Not generated yet' when review_packet.status=not_generated", async () => {
       const incidentWithoutReviewPacket = {
         ...mockIncident,
-        snapshot_bundle_id: "default-20260101-140000",
-        review_packet_available: false,
-        review_packet_id: null,
+        latest_snapshot_bundle_id: "default-20260101-140000",
+        review_packet: {
+          status: "not_generated",
+          id: null,
+          generated_at: null,
+          error_message: null,
+        },
       };
       vi.mocked(listIncidents).mockResolvedValueOnce({
         incidents: [incidentWithoutReviewPacket],
@@ -319,15 +325,19 @@ describe("IncidentListPanel", () => {
       });
     });
 
-    it("shows 'Not generated yet' when review_packet_id is null even if review_packet_available=true", async () => {
-      const incidentWithFlagOnly = {
+    it("shows 'Generating...' when review_packet.status=generating", async () => {
+      const incidentGenerating = {
         ...mockIncident,
-        snapshot_bundle_id: "default-20260101-140000",
-        review_packet_available: true,
-        review_packet_id: null,
+        latest_snapshot_bundle_id: "default-20260101-140000",
+        review_packet: {
+          status: "generating",
+          id: "review-packet-pending",
+          generated_at: null,
+          error_message: null,
+        },
       };
       vi.mocked(listIncidents).mockResolvedValueOnce({
-        incidents: [incidentWithFlagOnly],
+        incidents: [incidentGenerating],
         total: 1,
       });
 
@@ -335,7 +345,31 @@ describe("IncidentListPanel", () => {
 
       await waitFor(() => {
         expect(screen.getByText(/Review Packet:/i)).toBeInTheDocument();
-        expect(screen.getByText(/Not generated yet/i)).toBeInTheDocument();
+        expect(screen.getByText(/Generating\.\.\./i)).toBeInTheDocument();
+      });
+    });
+
+    it("shows error message when review_packet.status=failed", async () => {
+      const incidentFailed = {
+        ...mockIncident,
+        latest_snapshot_bundle_id: "default-20260101-140000",
+        review_packet: {
+          status: "failed",
+          id: null,
+          generated_at: null,
+          error_message: "LLM unavailable",
+        },
+      };
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [incidentFailed],
+        total: 1,
+      });
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Review Packet:/i)).toBeInTheDocument();
+        expect(screen.getByText(/Failed: LLM unavailable/i)).toBeInTheDocument();
       });
     });
 
@@ -344,16 +378,24 @@ describe("IncidentListPanel", () => {
         {
           ...mockIncident,
           incident_id: "incident-1",
-          snapshot_bundle_id: "bundle-1",
-          review_packet_available: true,
-          review_packet_id: "review-1",
+          latest_snapshot_bundle_id: "bundle-1",
+          review_packet: {
+            status: "available",
+            id: "review-1",
+            generated_at: "2026-01-01T12:00:00Z",
+            error_message: null,
+          },
         },
         {
           ...mockIncident,
           incident_id: "incident-2",
-          snapshot_bundle_id: "bundle-2",
-          review_packet_available: false,
-          review_packet_id: null,
+          latest_snapshot_bundle_id: "bundle-2",
+          review_packet: {
+            status: "not_generated",
+            id: null,
+            generated_at: null,
+            error_message: null,
+          },
         },
       ];
       vi.mocked(listIncidents).mockResolvedValueOnce({

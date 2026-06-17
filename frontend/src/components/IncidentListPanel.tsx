@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import type { Incident } from "../api";
+import type { IncidentSummaryPayload } from "../api";
 import { listIncidents } from "../api";
 
 // Status values from IncidentStatus enum
@@ -87,11 +87,12 @@ const formatTimestamp = (timestamp: string): string => {
 };
 
 interface IncidentRowProps {
-  incident: Incident;
+  incident: IncidentSummaryPayload;
 }
 
 /**
  * Renders a single incident row with read-only evidence and review packet info.
+ * Uses latest_snapshot_bundle_id and review_packet state object.
  */
 const IncidentRow: React.FC<IncidentRowProps> = ({ incident }) => {
   const displayKind = incident.raw_object_kind || incident.object_kind;
@@ -118,25 +119,44 @@ const IncidentRow: React.FC<IncidentRowProps> = ({ incident }) => {
         </div>
         <div className="incident-class">
           <span className="muted small">Class:</span>
-          <span>{incident.class.replace(/_/g, " ")}</span>
+          <span>{incident.candidate_class.replace(/_/g, " ")}</span>
         </div>
         <div className="incident-timestamp">
           <span className="muted small">Last observed:</span>
           <span>{formatTimestamp(incident.last_observed_at)}</span>
         </div>
-        {incident.snapshot_bundle_id && (
+        {/* Signal and evidence counts */}
+        <div className="incident-counts">
+          <span className="muted small">Signals:</span>
+          <span>{incident.signal_count}</span>
+          <span className="muted small">Evidence:</span>
+          <span>{incident.evidence_count}</span>
+        </div>
+        {incident.latest_snapshot_bundle_id && (
           <div className="incident-bundle-id">
             <span className="muted small">Bundle:</span>
-            <code>{incident.snapshot_bundle_id}</code>
+            <code>{incident.latest_snapshot_bundle_id}</code>
           </div>
         )}
-        {/* Review packet evidence section - read-only */}
+        {/* Review packet state section - uses review_packet object */}
         <div className="incident-review-section">
-          {incident.review_packet_available && incident.review_packet_id ? (
+          {incident.review_packet.status === "available" ? (
             <div className="review-packet-info">
               <span className="muted small">Review Packet:</span>
               <span className="review-packet-badge">Available</span>
-              <code className="review-packet-id">{incident.review_packet_id}</code>
+              {incident.review_packet.id && (
+                <code className="review-packet-id">{incident.review_packet.id}</code>
+              )}
+            </div>
+          ) : incident.review_packet.status === "generating" ? (
+            <div className="review-packet-pending">
+              <span className="muted small">Review Packet:</span>
+              <span className="review-packet-generating-text">Generating...</span>
+            </div>
+          ) : incident.review_packet.status === "failed" ? (
+            <div className="review-packet-pending">
+              <span className="muted small">Review Packet:</span>
+              <span className="review-packet-error-text">Failed: {incident.review_packet.error_message || "Unknown error"}</span>
             </div>
           ) : (
             <div className="review-packet-pending">
@@ -159,7 +179,7 @@ export interface IncidentListPanelProps {
  * Displays incidents promoted from snapshot captures.
  */
 export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
-  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [incidents, setIncidents] = useState<IncidentSummaryPayload[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");

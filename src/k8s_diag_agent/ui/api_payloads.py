@@ -25,6 +25,13 @@ __all__ = [
     # Shared primitives (moved to api_payloads_primitives.py)
     "ArtifactLink",  # noqa: F401 - re-exported
     "ProblemSummary",  # noqa: F401 - re-exported
+    # Incident read-model contracts (moved to api_payloads_incident_reads.py)
+    "IncidentSignalPayload",  # noqa: F401 - re-exported
+    "IncidentEvidenceLinkPayload",  # noqa: F401 - re-exported
+    "IncidentReviewPacketPayload",  # noqa: F401 - re-exported
+    "IncidentEventPayload",  # noqa: F401 - re-exported
+    "IncidentSummaryPayload",  # noqa: F401 - re-exported
+    "IncidentDetailPayload",  # noqa: F401 - re-exported
     # Runs-list contracts (moved to api_payloads_runs.py)
     "BatchExecutionSummary",  # noqa: F401 - re-exported
     "RunsListEntry",  # noqa: F401 - re-exported
@@ -128,6 +135,7 @@ __all__ = [
 
 # === Re-exports for backward compatibility ===
 
+# Incident read-model contracts (moved to api_payloads_incident_reads.py)
 # Shared primitives (moved to api_payloads_primitives.py)
 # Runs-list contracts (moved to api_payloads_runs.py)
 # Next-check contracts (moved to api_payloads_next_checks.py)
@@ -174,6 +182,14 @@ from .api_payloads_incident import (  # noqa: F401 - re-exported for backward co
     VmalertDiscoveryContextPayload,
     VmalertRuleStateContextPayload,
     VmalertSourceSummaryPayload,
+)
+from .api_payloads_incident_reads import (  # noqa: F401 - re-exported for backward compatibility
+    IncidentDetailPayload,
+    IncidentEventPayload,
+    IncidentEvidenceLinkPayload,
+    IncidentReviewPacketPayload,
+    IncidentSignalPayload,
+    IncidentSummaryPayload,
 )
 from .api_payloads_llm import (  # noqa: F401 - re-exported for backward compatibility
     AutoDrilldownPolicyPayload,
