@@ -346,7 +346,7 @@ class TestIncidentSnapshotResponseWithPromotion(unittest.TestCase):
                     "signals": [],
                     "evidence_needed": ["pod_logs", "pod_describe"],
                     "latest_snapshot_bundle_id": "test-bundle-001",
-                    "review_packet": {"status": "not_generated", "id": None},
+                    "review_packet": {"status": "not_generated"},
                     "suppressed_reason": None,
                     "duplicate_of": None,
                     "resolved_at": None,

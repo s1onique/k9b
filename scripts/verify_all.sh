@@ -439,6 +439,7 @@ _run_python_lane() {
     _run_and_record "python" "mypy" "Running mypy" "$PYTHON" -m mypy src/k8s_diag_agent
     _run_and_record "python" "mypy-tests" "Running mypy on tests" "$PYTHON" -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py
     _run_and_record "python" "ci-gate-drift" "Verifying CI workflow gate mappings" "$PYTHON" scripts/verify_ci_gate_drift.py
+    _run_and_record "python" "data-model-docs" "Verifying data model documentation hygiene" "$PYTHON" scripts/verify_data_model_docs.py
 }
 
 # Emit gate timings JSON sorted by duration
