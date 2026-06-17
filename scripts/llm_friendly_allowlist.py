@@ -150,6 +150,7 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("frontend/src/__tests__/pagination.test.tsx", "[FRONTEND TEST] Pagination tests"),
     ("frontend/src/__tests__/run-overview-dashboard.test.tsx", "[FRONTEND TEST] Dashboard tests"),
     ("frontend/src/__tests__/selected-run-refresh-regression.test.tsx", "[FRONTEND TEST] Refresh regression tests"),
+    ("frontend/src/__tests__/incident-list-panel.test.tsx", "[FRONTEND TEST] Incident list panel tests - comprehensive coverage"),
 
     # [TEST FIXTURES] Additional test fixture files
     ("tests/fixtures/incident_report_cross_cluster_fixtures.py", "[TEST] Cross-cluster fixtures - large data"),

@@ -274,6 +274,102 @@ describe("IncidentListPanel", () => {
     });
   });
 
+  describe("review_packet fields render correctly", () => {
+    it("shows review packet available badge and ID when review_packet_available=true", async () => {
+      const incidentWithReviewPacket = {
+        ...mockIncident,
+        snapshot_bundle_id: "default-20260101-140000",
+        review_packet_available: true,
+        review_packet_id: "review-packet-abc123",
+      };
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [incidentWithReviewPacket],
+        total: 1,
+      });
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Review Packet:/i)).toBeInTheDocument();
+        // Use specific selector for the badge element
+        const badge = document.querySelector(".review-packet-badge");
+        expect(badge).not.toBeNull();
+        expect(badge?.textContent).toBe("Available");
+        expect(screen.getByText(/review-packet-abc123/i)).toBeInTheDocument();
+      });
+    });
+
+    it("shows 'Not generated yet' when review_packet_available=false", async () => {
+      const incidentWithoutReviewPacket = {
+        ...mockIncident,
+        snapshot_bundle_id: "default-20260101-140000",
+        review_packet_available: false,
+        review_packet_id: null,
+      };
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [incidentWithoutReviewPacket],
+        total: 1,
+      });
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Review Packet:/i)).toBeInTheDocument();
+        expect(screen.getByText(/Not generated yet/i)).toBeInTheDocument();
+      });
+    });
+
+    it("shows 'Not generated yet' when review_packet_id is null even if review_packet_available=true", async () => {
+      const incidentWithFlagOnly = {
+        ...mockIncident,
+        snapshot_bundle_id: "default-20260101-140000",
+        review_packet_available: true,
+        review_packet_id: null,
+      };
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [incidentWithFlagOnly],
+        total: 1,
+      });
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Review Packet:/i)).toBeInTheDocument();
+        expect(screen.getByText(/Not generated yet/i)).toBeInTheDocument();
+      });
+    });
+
+    it("renders review packet section for multiple incidents with different states", async () => {
+      const incidents = [
+        {
+          ...mockIncident,
+          incident_id: "incident-1",
+          snapshot_bundle_id: "bundle-1",
+          review_packet_available: true,
+          review_packet_id: "review-1",
+        },
+        {
+          ...mockIncident,
+          incident_id: "incident-2",
+          snapshot_bundle_id: "bundle-2",
+          review_packet_available: false,
+          review_packet_id: null,
+        },
+      ];
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents,
+        total: 2,
+      });
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/review-1/i)).toBeInTheDocument();
+        expect(screen.getByText(/Not generated yet/i)).toBeInTheDocument();
+      });
+    });
+  });
+
   describe("Read-only notice is always displayed", () => {
     it("displays read-only notice with all required text", async () => {
       vi.mocked(listIncidents).mockResolvedValueOnce({

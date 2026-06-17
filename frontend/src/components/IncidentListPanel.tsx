@@ -90,6 +90,9 @@ interface IncidentRowProps {
   incident: Incident;
 }
 
+/**
+ * Renders a single incident row with read-only evidence and review packet info.
+ */
 const IncidentRow: React.FC<IncidentRowProps> = ({ incident }) => {
   const displayKind = incident.raw_object_kind || incident.object_kind;
 
@@ -127,6 +130,21 @@ const IncidentRow: React.FC<IncidentRowProps> = ({ incident }) => {
             <code>{incident.snapshot_bundle_id}</code>
           </div>
         )}
+        {/* Review packet evidence section - read-only */}
+        <div className="incident-review-section">
+          {incident.review_packet_available && incident.review_packet_id ? (
+            <div className="review-packet-info">
+              <span className="muted small">Review Packet:</span>
+              <span className="review-packet-badge">Available</span>
+              <code className="review-packet-id">{incident.review_packet_id}</code>
+            </div>
+          ) : (
+            <div className="review-packet-pending">
+              <span className="muted small">Review Packet:</span>
+              <span className="review-packet-pending-text">Not generated yet</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
