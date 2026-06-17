@@ -6,8 +6,6 @@ These tests verify the incident linkage field injection for next-check plan arti
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
-from unittest.mock import MagicMock
 
 from k8s_diag_agent.collect.incident_candidates import (
     CandidateClass,
@@ -16,15 +14,14 @@ from k8s_diag_agent.collect.incident_candidates import (
     Severity,
 )
 from k8s_diag_agent.external_analysis.next_check_incident_linkage import (
-    IncidentLinkageContext,
     LINKAGE_SCHEMA_VERSION,
+    IncidentLinkageContext,
     NextCheckCandidateLinkage,
     NextCheckPlanLinkage,
     build_next_check_incident_linkage,
     enrich_next_check_candidate_dict,
     enrich_next_check_plan_dict,
 )
-
 
 # =============================================================================
 # Test Fixtures
@@ -1035,9 +1032,6 @@ class TestNextCheckPlanToPayloadWithLinkage(unittest.TestCase):
 
     def test_to_payload_without_linkage_context(self) -> None:
         """to_payload() works without linkage_context (old behavior preserved)."""
-        from k8s_diag_agent.external_analysis.next_check_incident_linkage import (
-            enrich_next_check_plan_dict,
-        )
 
         # Simulate plan without linkage context
         plan_dict = {
