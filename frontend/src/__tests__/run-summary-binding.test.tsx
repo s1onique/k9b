@@ -471,8 +471,8 @@ describe("Run Summary follows selected run", () => {
     // Track fetch calls before refresh
     const fetchCountBefore = fetchMock.mock.calls.length;
 
-    // Manually trigger refresh (simulating what auto-refresh would do)
-    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    // Click header refresh button (IncidentListPanel uses "Refresh incidents")
+    const refreshButton = screen.getByRole("button", { name: /^Refresh$/i });
     await act(async () => {
       await user.click(refreshButton);
     });

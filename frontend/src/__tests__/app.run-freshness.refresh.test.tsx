@@ -64,7 +64,8 @@ describe("Cockpit refresh regression", () => {
       expect(run122Row).toHaveClass("run-row-selected");
     });
 
-    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    // Find header refresh button using text match (IncidentListPanel uses "Refresh incidents")
+    const refreshButton = screen.getByRole("button", { name: /^Refresh$/i });
     await user.click(refreshButton);
 
     await waitFor(() => {
@@ -132,7 +133,8 @@ describe("Cockpit refresh regression", () => {
 
     expect(screen.getByText(/← Latest/i)).toBeInTheDocument();
 
-    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    // Find header refresh button using text match (IncidentListPanel uses "Refresh incidents")
+    const refreshButton = screen.getByRole("button", { name: /^Refresh$/i });
     await user.click(refreshButton);
 
     await waitFor(() => {

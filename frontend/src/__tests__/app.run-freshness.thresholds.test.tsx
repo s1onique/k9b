@@ -166,9 +166,10 @@ describe("Run freshness thresholds", () => {
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
-    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
-    expect(refreshButton).toBeInTheDocument();
-    expect(refreshButton).not.toBeDisabled();
+    // Find header refresh button - use aria-label to get the specific one
+    const headerRefreshButton = screen.getByRole("button", { name: /^Refresh$/i });
+    expect(headerRefreshButton).toBeInTheDocument();
+    expect(headerRefreshButton).not.toBeDisabled();
 
     const autoRefreshSelect = await screen.findByLabelText(/Auto/i);
     expect(autoRefreshSelect).toBeInTheDocument();

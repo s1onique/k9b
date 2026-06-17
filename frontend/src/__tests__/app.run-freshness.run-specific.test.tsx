@@ -259,7 +259,8 @@ describe("Run selection with run-specific data", () => {
       "/api/runs": newRunsList,
     }));
 
-    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    // Find header refresh button using text match (IncidentListPanel uses "Refresh incidents")
+    const refreshButton = screen.getByRole("button", { name: /^Refresh$/i });
     await user.click(refreshButton);
 
     const selectedAfterRefresh = document.querySelector('.run-row-selected');

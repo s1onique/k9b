@@ -78,7 +78,7 @@ describe("Demo Shell Mount (ACT 9.5)", () => {
       vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
       render(<App />);
       await screen.findByRole("heading", { name: /Fleet overview/i });
-      expect(screen.getByRole("button", { name: /Refresh/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^Refresh$/i })).toBeInTheDocument();
       expect(screen.getByTestId("start-demo-button")).toBeInTheDocument();
     });
   });

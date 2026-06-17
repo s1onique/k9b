@@ -318,7 +318,7 @@ describe("Cockpit refresh regression", () => {
     const initialFreshness = document.querySelector(".page-freshness-indicator");
     expect(initialFreshness).not.toBeNull();
 
-    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    const refreshButton = await screen.findByRole("button", { name: /^Refresh$/i });
     await act(async () => {
       await user.click(refreshButton);
     });
@@ -353,7 +353,8 @@ describe("Cockpit refresh regression", () => {
       expect(run122Row).toHaveClass("run-row-selected");
     });
 
-    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    // Find header refresh button using text match (IncidentListPanel uses "Refresh incidents")
+    const refreshButton = screen.getByRole("button", { name: /^Refresh$/i });
     await act(async () => {
       await user.click(refreshButton);
     });
@@ -390,7 +391,8 @@ describe("Cockpit refresh regression", () => {
 
     await screen.findByRole("heading", { name: /Fleet overview/i });
 
-    const refreshButton = await screen.findByRole("button", { name: /Refresh/i });
+    // Use first button (header refresh) as IncidentListPanel adds a second Refresh button
+    const refreshButton = (await screen.findAllByRole("button", { name: /^Refresh$/i }))[0];
     expect(refreshButton).toBeInTheDocument();
     expect(refreshButton).not.toBeDisabled();
 

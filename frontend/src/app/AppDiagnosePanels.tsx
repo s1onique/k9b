@@ -13,6 +13,7 @@ import { DiagnosticPackReviewPanel } from "../components/DiagnosticPackReviewPan
 import { AlertmanagerSnapshotPanel } from "../components/AlertmanagerPanel";
 import { AlertmanagerSourcesPanel } from "../components/AlertmanagerPanel";
 import { DeterministicNextChecksPanel } from "../components/DeterministicNextChecksPanel";
+import { IncidentListPanel } from "../components/IncidentListPanel";
 import type { DeterministicNextCheckSummary } from "../types";
 
 export interface AppDiagnosePanelsProps {
@@ -124,6 +125,8 @@ export function AppDiagnosePanels({
           </div>
         </section>
       )}
+      {/* Incident list panel - read-only view of promoted incidents */}
+      <IncidentListPanel />
     </>
   );
 }

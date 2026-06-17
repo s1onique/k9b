@@ -708,3 +708,117 @@ export const generateIncidentReviewPacket = async (
 
   return (await response.json()) as IncidentReviewPacketResponse;
 };
+
+// ============================================================================
+// Incident List API (read-only)
+// ============================================================================
+
+/**
+ * Incident signal from backend.
+ */
+export type IncidentSignal = {
+  source: string;
+  reason: string;
+  message: string;
+  captured_at: string;
+};
+
+/**
+ * Incident record from backend.
+ * Read-only in-memory incident store - no mutation, no remediation, no LLM.
+ */
+export type Incident = {
+  incident_id: string;
+  source_candidate_id: string;
+  namespace: string;
+  object_kind: string;
+  object_name: string;
+  raw_object_kind: string | null;
+  class: string;
+  severity: string;
+  status: string;
+  first_observed_at: string;
+  last_observed_at: string;
+  signals: IncidentSignal[];
+  evidence_needed: string[];
+  snapshot_bundle_id: string | null;
+  review_packet_available: boolean;
+  review_packet_id: string | null;
+  suppressed_reason: string | null;
+  duplicate_of: string | null;
+  resolved_at: string | null;
+  resolution_notes: string | null;
+};
+
+export type IncidentsListResponse = {
+  incidents: Incident[];
+  total: number;
+};
+
+/**
+ * List incidents from the in-memory store.
+ * 
+ * Hard constraints:
+ * - NO remediation actions
+ * - NO Kubernetes mutation
+ * - NO LLM calls
+ * - NO external tool invocation
+ * - NO persistence (in-memory only)
+ * 
+ * @param status - Optional status filter (e.g., "open", "collecting_evidence")
+ */
+export const listIncidents = async (status?: string): Promise<IncidentsListResponse> => {
+  const params = new URLSearchParams();
+  if (status) {
+    params.append("status", status);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  
+  const response = await fetch(`/api/incidents${suffix}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        message = String((payload as Record<string, unknown>).error);
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message || "Failed to list incidents");
+  }
+
+  return (await response.json()) as IncidentsListResponse;
+};
+
+/**
+ * Get a specific incident by ID.
+ * 
+ * @param incidentId - The incident ID to look up
+ */
+export const getIncident = async (incidentId: string): Promise<Incident> => {
+  const response = await fetch(`/api/incidents/${encodeURIComponent(incidentId)}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let message = response.statusText;
+    if (response.status === 404) {
+      throw new Error("Incident not found");
+    }
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        message = String((payload as Record<string, unknown>).error);
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message || "Failed to get incident");
+  }
+
+  return (await response.json()) as Incident;
+};

@@ -160,7 +160,7 @@ describe('Recent runs selection-pagination sync', () => {
     expect(screen.getByRole('button', { name: /← Latest/i })).toBeInTheDocument();
 
     // Click refresh button
-    const refreshButton = await screen.findByRole('button', { name: /refresh/i });
+    const refreshButton = await screen.findAllByRole('button', { name: /^Refresh$/i }).then(btns => btns[0]);
     await act(async () => {
       await user.click(refreshButton);
     });
@@ -272,7 +272,7 @@ describe('Recent runs selection-pagination sync', () => {
     // Simulate auto-refresh with new runs
     payloads['/api/runs'] = newRunsPayload;
 
-    const refreshButton = await screen.findByRole('button', { name: /refresh/i });
+    const refreshButton = await screen.findAllByRole('button', { name: /^Refresh$/i }).then(btns => btns[0]);
     await act(async () => {
       await user.click(refreshButton);
     });
