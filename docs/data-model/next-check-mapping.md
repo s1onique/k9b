@@ -1,66 +1,118 @@
 # Next-Check-to-Incident Mapping Contract
 
-**Status**: Discovery ACT - Contract Definition  
-**Date**: 2026-06-17  
-**Scope**: Mapping contract only; no implementation, no population, no execution
+**Status**: ACT Complete - Linkage Fields Added  
+**Date**: 2026-06-18  
+**Scope**: Schema change complete; suggested_checks population deferred to future ACT
 
 ## Executive Summary
 
-This document defines the **next-check-to-incident mapping contract** discovered during the 2026-06-17 ACT.
+This document defines the **next-check-to-incident mapping contract** and documents the 2026-06-18 ACT that added deterministic linkage fields to newly produced next-check artifacts.
 
-**Finding**: No SAFE deterministic mapping currently exists between next-check artifacts and Incident records. The preferred outcome is to document the mapping contract with mechanically proven safe/ambiguous/unsafe classifications, plus fixtures and tests that prove the classification.
+**Finding**: Next-check plan artifacts now include incident linkage fields when production context provides them. Old artifacts without linkage fields remain compatible.
 
 ---
 
 ## 1. Artifact Inventory
 
-### 1.1 Run-Scoped Next-Check Artifacts
+### 1.1 Run-Scoped Next-Check Artifacts (Updated)
 
 These artifacts are keyed by `run_id` and exist under `runs/health/external-analysis/`:
 
 | Artifact | Path Pattern | Producer | Scope | Identity Fields | Can Link to Incident? |
 |----------|--------------|----------|-------|-----------------|----------------------|
-| **next-check-plan** | `{run_id}-next-check-plan.json` | LLM planner | Run-scoped | `candidateId`, `candidateIndex`, `description`, `targetCluster` | **No** - run-scoped |
-| **next-check-approval** | `{run_id}-next-check-approval-{index}.json` | Operator | Run-scoped | `candidateId`, `candidateIndex` | **No** - run-scoped |
-| **next-check-promotion** | `{run_id}-next-check-promotion-{index}.json` | Operator | Run-scoped | `candidateId`, `description` | **No** - run-scoped |
-| **next-check-execution** | `{run_id}-next-check-execution-{index}.json` | Manual execution | Run-scoped | `candidateId`, `candidateIndex`, `status` | **No** - run-scoped |
+| **next-check-plan** | `{run_id}-next-check-plan.json` | LLM planner | Run-scoped | `candidateId`, `candidateIndex`, `description`, `targetCluster`, **linkage fields** | **Yes (with linkage context)** |
+| **next-check-approval** | `{run_id}-next-check-approval-{index}.json` | Operator | Run-scoped | `candidateId`, `candidateIndex` | **May be enriched when read** |
+| **next-check-promotion** | `{run_id}-next-check-promotion-{index}.json` | Operator | Run-scoped | `candidateId`, `description` | **May be enriched when read** |
+| **next-check-execution** | `{run_id}-next-check-execution-{index}.json` | Manual execution | Run-scoped | `candidateId`, `candidateIndex`, `status` | **May be enriched when read** |
 
 ### 1.2 Incident Aggregate Root
 
 | Model | Location | Identity Fields | Can Link to Next-Check? |
 |-------|----------|-----------------|------------------------|
-| **Incident** | `incident_lifecycle.py` | `incident_id`, `source_candidate_id`, `namespace`, `object_kind`, `object_name`, `candidate_class` | **No** - no next-check linkage |
+| **Incident** | `incident_lifecycle.py` | `incident_id`, `source_candidate_id`, `namespace`, `object_kind`, `object_name`, `candidate_class` | **Yes - via linkage fields** |
 | **IncidentSignal** | same | `run_id`, `detector_id`, `fingerprint` | **Indirect** - via run_id |
 
-### 1.3 Key Field Comparison
+### 1.3 Linkage Fields Schema (NEW)
 
-| Field | In Next-Check Plan? | In Incident? |
-|-------|---------------------|--------------|
-| `incident_id` | No | Yes |
-| `source_candidate_id` | `candidateId` (optional) | Yes |
-| `run_id` | From filename only | Via signals |
-| `namespace` | No | Yes |
-| `object_kind` | No | Yes |
-| `object_name` | In description only | Yes |
-| `candidate_class` | No | Yes |
-| `target_cluster` | Yes | No |
+New next-check plan artifacts include:
+
+**Plan-level fields:**
+```json
+{
+  "linkage_schema_version": 1,
+  "run_id": "run-123",
+  "linkage_status": "linked | partial | unlinked",
+  "linkage_reason": "Human-readable explanation"
+}
+```
+
+**Per-candidate fields:**
+```json
+{
+  "incident_id": "default-pod-my-pod-crash-loop",
+  "source_candidate_id": "cand-001",
+  "namespace": "default",
+  "objectKind": "Pod",
+  "objectName": "my-pod",
+  "candidateClass": "crash_loop",
+  "linkage_status": "linked | partial | unlinked",
+  "linkage_reason": "Human-readable explanation"
+}
+```
 
 ---
 
-## 2. Mapping Contract Classification
+## 2. Linkage Status Classification
 
-### 2.1 SAFE Mappings
+### 2.1 Linked
 
-**None exist today.** All mappings require missing fields.
+**Definition**: Candidate has `incident_id` and enough structured context to identify the incident.
 
-### 2.2 CONDITIONALLY SAFE Mappings
+**Conditions**:
+- `incident_id` field is present AND
+- `incident_id` matches an existing Incident record
+
+**Classification**: **SAFE** - Direct deterministic mapping.
+
+### 2.2 Partial
+
+**Definition**: Candidate lacks `incident_id` but has enough structured fields for fallback mapping.
+
+**Conditions** (one of):
+- `run_id` + `source_candidate_id` are present (unique match against Incident signals)
+- Complete entity identity (all 4 fields): `namespace` + `objectKind` + `objectName` + `candidateClass`
+
+**Classification**: **CONDITIONALLY SAFE** - Depends on uniqueness guarantees.
+
+### 2.3 Unlinked
+
+**Definition**: Candidate lacks enough structured fields for deterministic mapping.
+
+**Conditions**:
+- No `incident_id`
+- No `run_id` + `source_candidate_id`
+- Incomplete or missing entity identity
+
+**Classification**: **UNSAFE** - Cannot determine incident mapping.
+
+---
+
+## 3. Mapping Contract Classification (Updated)
+
+### 3.1 SAFE Mappings
 
 | Strategy | Conditions | Confidence |
 |----------|------------|------------|
-| `run_id + candidateId + targetCluster` | When candidateId is stable and unique per run | Medium |
-| `run_id + exact entity match` | When namespace/kind/name/class match exactly | Medium |
+| **Direct incident_id match** | `incident_id` in candidate matches `incident_id` in Incident | **SAFE** |
 
-### 2.3 AMBIGUOUS Mappings
+### 3.2 CONDITIONALLY SAFE Mappings
+
+| Strategy | Conditions | Confidence |
+|----------|------------|------------|
+| `run_id + source_candidate_id` | Unique match on run_id signals + source_candidate_id | **Conditionally Safe** |
+| Complete entity identity | All 4 fields match uniquely | **Conditionally Safe** |
+
+### 3.3 AMBIGUOUS Mappings
 
 | Strategy | Why Ambiguous |
 |----------|--------------|
@@ -68,66 +120,105 @@ These artifacts are keyed by `run_id` and exist under `runs/health/external-anal
 | `latest_snapshot_bundle_id` | Bundle may contain multiple candidates/incidents |
 | `source_candidate_id` without run_id | Same candidate_id may appear in different runs |
 
-### 2.4 UNSAFE Mappings (Explicitly Rejected)
+### 3.4 UNSAFE Mappings (Explicitly Rejected)
 
 | Strategy | Why Unsafe |
-|----------|------------|
+|----------|----------|
 | Title text similarity | Not deterministic |
 | LLM summary similarity | Not deterministic |
 | Description fuzzy match | Free text |
+| Partial entity identity | Missing fields for unique identification |
 
 ---
 
-## 3. Required Future Fields
+## 4. Old Artifact Compatibility
 
-To enable SAFE mapping, next-check artifacts need:
+**Key Invariant**: Old next-check plan artifacts without linkage fields remain compatible.
 
-```json
-{
-  "purpose": "next-check-planning",
-  "incident_id": "default-pod-my-pod-crash-loop",
-  "candidates": [{
-    "incident_id": "default-pod-my-pod-crash-loop",
-    "namespace": "default",
-    "objectKind": "Pod",
-    "objectName": "my-pod",
-    "candidateClass": "crash_loop"
-  }]
-}
-```
+- Artifacts without `linkage_schema_version` are treated as legacy
+- Reader code must handle missing linkage fields gracefully
+- `linkage_status: "unlinked"` is the implied default for old artifacts
+- No migration or rewriting of old artifacts is required
 
 ---
 
-## 4. Safety Constraints
+## 5. Production Context Requirements
 
-- No execution
-- No manual promotion
-- No remediation
-- No fake suggestions
-- No Kubernetes mutation
+### 5.1 When Linkage Fields Are Available
+
+Linkage fields are available when:
+
+1. **IncidentCandidate exists for the run**: The candidate's entity identity (namespace, kind, name, class) can be used to derive `incident_id`.
+
+2. **Run has associated Incident records**: The `run_id` from the artifact filename can be matched against Incident signals.
+
+### 5.2 When Linkage Fields Are NOT Available
+
+Linkage fields are unavailable when:
+
+- No incident context is threaded into the planner input
+- The run has no associated Incident records
+- Only run-scoped candidates are available (no entity identity)
+
+### 5.3 Threading Incident Context
+
+The `IncidentLinkageContext` dataclass in `next_check_incident_linkage.py` provides:
+
+- `from_incident_candidate()`: Create context from an IncidentCandidate
+- `from_selection_context()`: Create partial context from review selection
+- `determine_linkage_status()`: Classify linkage quality
+
+The context is threaded through:
+1. `plan_next_checks()` → accepts `linkage_context` parameter
+2. `run_next_check_planning()` → accepts `linkage_context` parameter  
+3. `HealthLoopRunner._run_next_check_planning()` → accepts `linkage_context` parameter
 
 ---
 
-## 5. Current Status
+## 6. Safety Constraints
+
+- **No execution** - Linkage fields are provenance only
+- **No manual promotion** - Artifacts are read-only
+- **No remediation** - No Kubernetes mutation
+- **No fake suggestions** - Fields are deterministically derived
+- **No LLM-generated linkage** - Provider output cannot forge incident_id
+- **No Kubernetes mutation** - No cluster changes
+
+---
+
+## 7. Current Status
 
 | Field | Status |
 |-------|--------|
 | `suggested_checks` in IncidentDetailPayload | **Empty by default** |
-| Mapping proven safe? | **No** |
+| Linkage fields in new plan artifacts | **Implemented** |
+| Old artifact compatibility | **Preserved** |
 
 ---
 
-## 6. Future ACT Recommendation
+## 8. Future ACT Recommendation
 
-**[Open / next] ACT: Add incident linkage fields to next-check artifacts at production time**
+### Immediate Next ACT (Recommended)
 
-**Rationale**: Required fields missing from next-check plan artifacts.
+**[Open / next] ACT: Populate IncidentDetailPayload.suggested_checks from SAFE incident_id-linked next-check artifacts**
+
+**Rationale**: Linkage fields are now available. Population can safely use candidates where `linkage_status: "linked"`.
+
+### Alternative Next ACT (If linkage context unavailable)
+
+**[Open / next] ACT: Thread Incident context into next-check planner input**
+
+**Rationale**: Required if production context cannot provide incident context at plan time.
 
 ---
 
-## 7. References
+## 9. References
 
 - `docs/data-model/next-checks.md`
 - `docs/data-model/incidents.md`
 - `src/k8s_diag_agent/collect/incident_lifecycle.py`
 - `src/k8s_diag_agent/collect/incident_candidates.py`
+- `src/k8s_diag_agent/external_analysis/next_check_incident_linkage.py`
+- `src/k8s_diag_agent/external_analysis/next_check_planner.py`
+- `src/k8s_diag_agent/health/loop_runner_next_check_planning.py`
+- `src/k8s_diag_agent/ui/incident_suggested_check_mapping.py`

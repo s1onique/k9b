@@ -8,7 +8,7 @@ import warnings
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4  # noqa: F401 - re-exported for backward compatibility
 
 from ..collect.cluster_snapshot import ClusterSnapshot
@@ -88,6 +88,9 @@ from .utils import normalize_ref
 # Re-export for backward compatibility with existing imports
 HealthTarget = _HealthTarget
 HealthSnapshotRecord = _HealthSnapshotRecord
+
+if TYPE_CHECKING:
+    from ..external_analysis.next_check_incident_linkage import IncidentLinkageContext
 
 
 def _is_openai_compatible_provider(provider_name: str) -> bool:
@@ -471,7 +474,10 @@ class HealthLoopRunner:
             external_artifacts.append(enrichment_artifact)
         # Filter to execution artifacts for run-scoped feedback
         execution_artifacts = tuple(a for a in external_artifacts if a.purpose == ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION)
-        plan_artifact = self._run_next_check_planning(review_path, enrichment_artifact, directories, execution_artifacts)
+        # Derive incident linkage context from cluster snapshots for production runs
+        # This enables deterministic incident_id generation in next-check plan artifacts
+        linkage_context = self._derive_incident_linkage_context(records)
+        plan_artifact = self._run_next_check_planning(review_path, enrichment_artifact, directories, execution_artifacts, linkage_context)
         if plan_artifact:
             external_artifacts.append(plan_artifact)
         healthy_count = sum(1 for artifact in assessments if artifact.health_rating == HealthRating.HEALTHY)
@@ -737,6 +743,7 @@ class HealthLoopRunner:
         enrichment_artifact: ExternalAnalysisArtifact | None,
         directories: dict[str, Path],
         execution_artifacts: tuple[ExternalAnalysisArtifact, ...] | None = None,
+        linkage_context: IncidentLinkageContext | None = None,
     ) -> ExternalAnalysisArtifact | None:
         return run_next_check_planning(
             review_path=review_path,
@@ -746,7 +753,35 @@ class HealthLoopRunner:
             run_label=self.run_label,
             log_event=self._log_event,
             execution_artifacts=execution_artifacts,
+            linkage_context=linkage_context,
         )
+
+    def _derive_incident_linkage_context(
+        self,
+        records: list[HealthSnapshotRecord],
+    ) -> IncidentLinkageContext | None:
+        """Derive incident linkage context from cluster snapshots for next-check planning.
+
+        This is the production wiring that connects cluster evidence to next-check
+        incident linkage. It examines health signals from cluster snapshots to determine
+        if there are incident-class issues that should be linked to next-check plans.
+
+        Args:
+            records: List of health snapshot records from cluster collection.
+
+        Returns:
+            IncidentLinkageContext if incident-class health issues are detected,
+            None otherwise.
+        """
+        # Import here to avoid circular imports at module level
+        from .loop_incident_linkage_from_snapshot import derive_linkage_context_from_snapshots
+
+        # Extract snapshots from records
+        snapshots = [record.snapshot for record in records if record.snapshot is not None]
+        if not snapshots:
+            return None
+
+        return derive_linkage_context_from_snapshots(snapshots, self.run_id)
 
     def _write_review_artifact(
         self,

@@ -14,6 +14,7 @@ from ..external_analysis.artifact import (
     ExternalAnalysisStatus,
     write_external_analysis_artifact,
 )
+from ..external_analysis.next_check_incident_linkage import IncidentLinkageContext
 from ..external_analysis.next_check_planner import plan_next_checks
 
 
@@ -26,6 +27,7 @@ def run_next_check_planning(
     run_label: str,
     log_event: Callable[..., None],
     execution_artifacts: tuple[ExternalAnalysisArtifact, ...] | None = None,
+    linkage_context: IncidentLinkageContext | None = None,
 ) -> ExternalAnalysisArtifact | None:
     """Run next-check planning from enrichment artifact.
 
@@ -37,6 +39,8 @@ def run_next_check_planning(
         run_label: Human-readable run label.
         log_event: Callback for logging events.
         execution_artifacts: Optional tuple of execution artifacts for ranking.
+        linkage_context: Optional incident linkage context for enriching plan
+            artifacts with incident_id and entity identity fields.
 
     Returns:
         The created planning artifact, or None if planning was skipped or produced
@@ -56,7 +60,7 @@ def run_next_check_planning(
         )
         return None
 
-    plan = plan_next_checks(review_path, run_id, enrichment_artifact, execution_artifacts)
+    plan = plan_next_checks(review_path, run_id, enrichment_artifact, execution_artifacts, linkage_context)
     if not plan:
         # Log that planner produced no candidates
         log_event(

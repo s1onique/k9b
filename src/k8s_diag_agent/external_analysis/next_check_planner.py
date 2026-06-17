@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..external_analysis.artifact import ExternalAnalysisArtifact
 from .alertmanager_feedback import (
     build_feedback_from_execution_artifacts,
+)
+from .next_check_incident_linkage import (
+    IncidentLinkageContext,
+    build_next_check_incident_linkage,
+    enrich_next_check_candidate_dict,
+    enrich_next_check_plan_dict,
 )
 from .next_check_planner_alertmanager import (
     AlertmanagerRankingSignal,
@@ -42,6 +49,9 @@ from .next_check_planner_ranking import (
     rank_candidates,
 )
 from .result_digest import ExecutionResultDigest
+
+if TYPE_CHECKING:
+    pass
 
 # Re-export for backward compatibility with modules that import from next_check_planner
 __all__ = [
@@ -81,18 +91,37 @@ class NextCheckPlan:
     review_path: Path
     enrichment_artifact_path: str | None
     candidates: tuple[NextCheckCandidate, ...]
+    linkage_context: IncidentLinkageContext | None = None
 
     def to_payload(self) -> dict[str, object | None]:
-        candidates_payload: list[dict[str, object | None]] = []
+        # Build base payload
+        candidates_payload: list[dict[str, object]] = []
         for index, candidate in enumerate(self.candidates):
             candidate_dict = candidate.to_dict()
             candidate_dict.setdefault("candidateIndex", index)
             candidates_payload.append(candidate_dict)
-        return {
+
+        base_payload: dict[str, object | None] = {
             "review_path": str(self.review_path),
             "enrichment_artifact_path": self.enrichment_artifact_path,
             "candidates": candidates_payload,
         }
+
+        # Enrich with incident linkage fields if context is available
+        if self.linkage_context is not None:
+            linkage_result = build_next_check_incident_linkage(self.linkage_context)
+            if linkage_result:
+                plan_linkage, candidate_linkage = linkage_result
+                # Enrich plan-level payload with linkage fields
+                base_payload = enrich_next_check_plan_dict(base_payload, plan_linkage)
+                # Enrich each candidate with linkage fields
+                enriched_candidates: list[dict[str, object]] = []
+                for candidate_dict in candidates_payload:
+                    enriched = enrich_next_check_candidate_dict(candidate_dict, candidate_linkage)
+                    enriched_candidates.append(enriched)
+                base_payload["candidates"] = enriched_candidates
+
+        return base_payload
 
 
 def plan_next_checks(
@@ -100,6 +129,7 @@ def plan_next_checks(
     run_id: str,
     enrichment_artifact: ExternalAnalysisArtifact,
     execution_artifacts: tuple[ExternalAnalysisArtifact, ...] | None = None,
+    linkage_context: IncidentLinkageContext | None = None,
 ) -> NextCheckPlan | None:
     """Plan next checks from enrichment artifact.
     
@@ -109,6 +139,9 @@ def plan_next_checks(
     
     If execution_artifacts are provided, their digests are passed to
     candidate building for provenance and contextual reasoning.
+    
+    If linkage_context is provided, the resulting plan will include
+    incident linkage fields in its payload.
     """
     # Build execution context digests from execution artifacts
     # These digests are passed explicitly to candidate building
@@ -161,4 +194,5 @@ def plan_next_checks(
         review_path=review_path,
         enrichment_artifact_path=enrichment_artifact.artifact_path,
         candidates=sorted_candidates,
+        linkage_context=linkage_context,
     )
