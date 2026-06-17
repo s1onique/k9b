@@ -21,10 +21,14 @@ from .api_payloads_incident_reads import (
     IncidentEvidenceLinkPayload,
     IncidentReviewPacketPayload,
     IncidentSignalPayload,
+    IncidentSuggestedCheckPayload,
     IncidentSummaryPayload,
 )
+from .incident_suggested_checks import build_suggested_checks_from_next_check_plan_payload
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from ..collect.incident_events import IncidentEvent
     from ..collect.incident_evidence import EvidenceLink
     from ..collect.incident_lifecycle import Incident, IncidentSignal
@@ -134,16 +138,37 @@ def build_incident_summary_payload(incident: Incident) -> IncidentSummaryPayload
     }
 
 
-def build_incident_detail_payload(incident: Incident) -> IncidentDetailPayload:
+def build_incident_detail_payload(
+    incident: Incident,
+    *,
+    next_check_plan_payload: Mapping[str, object] | None = None,
+) -> IncidentDetailPayload:
     """Build IncidentDetailPayload from Incident model.
 
     Full case view with signals, evidence links, timeline, and suggested checks.
     Run artifacts remain evidence provenance, not the primary case object.
 
+    Args:
+        incident: The incident model to serialize
+        next_check_plan_payload: Optional pre-loaded next-check plan artifact payload.
+            When provided, suggested_checks will be populated from candidates where
+            linkage_status="linked" and incident_id matches.
+
     Note: suggested_checks is a read-only compatibility projection.
-    Currently returns empty list as no reliable next-check-to-incident mapping exists.
-    See docs/data-model/next-checks.md for target direction.
+    When next_check_plan_payload is None, returns empty list.
+    When provided, extracts only SAFE linked candidates.
     """
+    # Build suggested checks from plan payload if available
+    if next_check_plan_payload is not None:
+        suggested_checks: list[IncidentSuggestedCheckPayload] = (
+            build_suggested_checks_from_next_check_plan_payload(
+                incident.incident_id,
+                next_check_plan_payload,
+            )
+        )
+    else:
+        suggested_checks = []
+
     # Build the payload explicitly to avoid type: ignore
     result: IncidentDetailPayload = {
         "incident_id": incident.incident_id,
@@ -171,7 +196,7 @@ def build_incident_detail_payload(incident: Incident) -> IncidentDetailPayload:
         "evidence_links": [build_incident_evidence_link_payload(e) for e in incident.evidence_links],
         "events": [build_incident_event_payload(e) for e in incident.get_timeline()],
         # Suggested checks - read-only compatibility projection
-        # Returns empty list when no next-check-to-incident mapping exists
-        "suggested_checks": [],
+        # Populated from next-check plan artifacts with SAFE linkage
+        "suggested_checks": suggested_checks,
     }
     return result

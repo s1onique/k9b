@@ -190,9 +190,68 @@ The context is threaded through:
 
 | Field | Status |
 |-------|--------|
-| `suggested_checks` in IncidentDetailPayload | **Empty by default** |
+| `suggested_checks` in IncidentDetailPayload | **Serializer can populate from pre-loaded linked artifacts; handler loading pending** |
 | Linkage fields in new plan artifacts | **Implemented** |
 | Old artifact compatibility | **Preserved** |
+| Extraction helper | **Implemented** (incident_suggested_checks.py) |
+
+### 7.1 ACT Complete: Population from SAFE Linkage (2026-06-18)
+
+**Implemented** in this ACT:
+
+1. **Extraction helper**: `src/k8s_diag_agent/ui/incident_suggested_checks.py`
+   - `build_suggested_check_from_linked_candidate()`: Extracts a single suggested check
+   - `build_suggested_checks_from_next_check_plan_payload()`: Extracts from plan payload
+
+2. **Serializer integration**: `build_incident_detail_payload()` accepts optional `next_check_plan_payload`
+   - When provided, extracts suggested_checks from linked candidates
+   - When None, returns empty list (backward compatible)
+
+3. **SAFE filter** (enforced):
+   - `candidate.linkage_status == "linked"`
+   - `candidate.incident_id == incident.incident_id`
+   - Candidate must have incident_id present
+
+4. **Filters that IGNORE candidates**:
+   - Partial linkage (entity fields only, no incident_id)
+   - Unlinked linkage status
+   - Non-matching incident_id
+   - Old artifacts without linkage fields
+   - Provider/text-only candidates
+   - Text similarity
+
+5. **No unsafe behavior implemented**:
+   - No execution
+   - No manual promotion
+   - No remediation
+   - No Kubernetes mutation
+   - No LLM calls
+   - No text similarity matching
+   - No partial mapping population
+
+6. **Mapping to IncidentSuggestedCheckPayload**:
+   - `check_id`: candidate["candidateId"] or source_candidate_id fallback
+   - `title`: candidate["title"] or description first line or "Suggested check"
+   - `rationale`: candidate["rationale"] or description or linkage_reason or default
+   - `source`: "next-check-plan"
+   - `risk_level`: candidate["riskLevel"] or risk_level or null
+   - `status`: "suggested"
+   - `artifact_id`: from plan artifact (optional)
+   - `run_id`: from plan-level run_id (optional)
+
+### 7.2 Artifact Read Path
+
+The serializer accepts pre-loaded plan payloads. Callers (handlers) are responsible for:
+- Locating relevant next-check plan artifacts
+- Loading artifact payload
+- Passing to `build_incident_detail_payload()` via `next_check_plan_payload` parameter
+
+**Recommended read path**: From incident signals, extract `run_id` values, then locate corresponding `{run_id}-next-check-plan.json` artifacts.
+
+### 7.3 Tests Added
+
+- `tests/unit/test_incident_suggested_checks.py`: extraction tests covering SAFE filter, compatibility, malformed input, no mutation, and no action fields
+- `tests/unit/test_api_incident_reads_serializers.py`: serializer tests covering linking, filtering, and compatibility
 
 ---
 
@@ -200,15 +259,15 @@ The context is threaded through:
 
 ### Immediate Next ACT (Recommended)
 
-**[Open / next] ACT: Populate IncidentDetailPayload.suggested_checks from SAFE incident_id-linked next-check artifacts**
+**[Open / next] ACT: Wire incident detail handler to load next-check plan artifacts**
 
-**Rationale**: Linkage fields are now available. Population can safely use candidates where `linkage_status: "linked"`.
+**Rationale**: Handler needs artifact read path integration to populate suggested_checks from signal run_ids.
 
-### Alternative Next ACT (If linkage context unavailable)
+### Alternative Next ACT (If full read seam unavailable)
 
-**[Open / next] ACT: Thread Incident context into next-check planner input**
+**[Open / next] ACT: Add read-only external-analysis artifact index for incident details**
 
-**Rationale**: Required if production context cannot provide incident context at plan time.
+**Rationale**: Required if production needs automatic artifact discovery without manual path construction.
 
 ---
 

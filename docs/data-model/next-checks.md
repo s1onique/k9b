@@ -88,22 +88,37 @@ Current next-check artifacts remain valid and continue to work.
 
 ### Suggested checks compatibility projection
 
-The Incident detail view now includes a read-only "Suggested checks" section that renders the `suggested_checks` field from `IncidentDetailPayload`.
+The Incident detail view includes a read-only "Suggested checks" section that renders the `suggested_checks` field from `IncidentDetailPayload`.
 
 **Current state:**
-- `IncidentDetailPayload.suggested_checks` returns an empty list by default
-- No reliable next-check-to-incident mapping exists today (next-check artifacts are run-scoped, not incident-scoped)
-- When populated, suggestions display: title, rationale, source, risk_level, status, artifact_id, run_id
+- `IncidentDetailPayload.suggested_checks` is populated when next-check plan artifacts with linked candidates exist
+- `build_incident_detail_payload()` accepts optional `next_check_plan_payload` parameter
+- When provided, extracts suggested_checks from candidates where `linkage_status="linked"` and `incident_id` matches
+
+**SAFE population source**:
+- Only candidates where `candidate.linkage_status == "linked"` AND `candidate.incident_id == incident.incident_id`
+- All other candidates (partial, unlinked, old, text-derived) are ignored
+- No partial mapping, text similarity, or LLM-derived linkage
 
 **UI behavior:**
 - Empty state: "No suggested checks linked to this incident yet."
 - Populated state: Read-only list with no execution, promotion, or remediation buttons
 - Hard UI boundary: No "Run", "Execute", "Promote", "Apply", "Remediate" buttons
 
-**Future work:**
-- Implement next-check-to-incident mapping via incident_id, source_candidate_id, entity identity, run_id, or latest_snapshot_bundle_id
-- Populate `suggested_checks` when reliable mapping becomes available
-- Do NOT implement check execution or manual promotion in this UI
+**Extraction helper** (`src/k8s_diag_agent/ui/incident_suggested_checks.py`):
+- Pure functions, no file IO
+- Accepts pre-loaded plan payloads
+- Implements SAFE filter directly
+
+**Serializer integration** (`build_incident_detail_payload()`):
+- Accepts optional `next_check_plan_payload: Mapping[str, object] | None`
+- Returns empty list when None (backward compatible)
+- Returns populated list when payload provided
+
+**Handler integration** (future ACT):
+- Handler locates plan artifacts via signal run_ids
+- Loads artifact payload
+- Passes to serializer via `next_check_plan_payload` parameter
 
 ## Safety constraints
 
