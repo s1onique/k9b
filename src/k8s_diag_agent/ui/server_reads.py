@@ -81,6 +81,7 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         _single_flight_release,
         _single_flight_wait,
     )
+    from .server_incident_reads import handle_incident_routes
     from .server_singleflight import (
         _notifications_cache,
         _notifications_cache_lock,
@@ -359,6 +360,11 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
 
         handler._send_json(payload)
         return
+
+    # Incident read routes (no context required) - dispatch before context loading
+    if route.startswith("/api/incidents"):
+        if handle_incident_routes(handler, route, query):
+            return
 
     # All other endpoints need the context from the current (possibly selected) run
     from urllib.parse import parse_qs

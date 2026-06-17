@@ -87,3 +87,10 @@ external_analysis/discovery_structured_logging.py safe_emit_discovery_failure st
 
 # === Access Logging Boundary ===
 ui/server_handler_state.py _log_access_completion_inner HTTP handler logging boundary - graceful logging failure, never propagate to prevent broken socket / RemoteDisconnected
+
+# === Read-Only Incident API ===
+ui/server_incident_reads.py handle_incidents_list_route incident list route graceful fallback - sanitize_exception_message prevents credential leakage
+ui/server_incident_reads.py handle_incident_detail_route incident detail route graceful fallback - sanitize_exception_message prevents credential leakage
+
+# === Incident Snapshot Capture ===
+collect/api_incident.py handle_incident_snapshot incident promotion error boundary - sanitize_exception_message prevents credential leakage
