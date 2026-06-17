@@ -423,6 +423,60 @@ class TestHandleGetIncidentPayloadShape(unittest.TestCase):
         self.assertNotIn("review_packet_id", result)
         self.assertNotIn("snapshot_bundle_id", result)
 
+    def test_detail_includes_suggested_checks(self) -> None:
+        """Detail payload must include suggested_checks field."""
+        # Add incident
+        candidate = make_candidate(name="test-pod")
+        self._test_store.promote_candidates([candidate], TEST_TIME_1)
+        incidents = self._test_store.list_incidents()
+        incident_id = incidents[0].incident_id
+
+        result = handle_get_incident(incident_id)
+
+        self.assertIsNotNone(result)
+        self.assertIn("suggested_checks", result)
+        self.assertIsInstance(result["suggested_checks"], list)
+
+    def test_detail_suggested_checks_is_empty_by_default(self) -> None:
+        """Detail payload suggested_checks must be empty when no mapping exists."""
+        # Add incident
+        candidate = make_candidate(name="test-pod")
+        self._test_store.promote_candidates([candidate], TEST_TIME_1)
+        incidents = self._test_store.list_incidents()
+        incident_id = incidents[0].incident_id
+
+        result = handle_get_incident(incident_id)
+
+        self.assertIsNotNone(result)
+        self.assertIn("suggested_checks", result)
+        self.assertEqual(result["suggested_checks"], [])
+
+
+class TestBuildIncidentDetailPayloadSuggestedChecks(unittest.TestCase):
+    """Test suggested_checks field in detail payload."""
+
+    def test_detail_suggested_checks_field_present(self) -> None:
+        """Detail payload must include suggested_checks field."""
+        incident = make_full_incident()
+        result = build_incident_detail_payload(incident)
+
+        self.assertIn("suggested_checks", result)
+        self.assertIsInstance(result["suggested_checks"], list)
+
+    def test_detail_suggested_checks_empty_by_default(self) -> None:
+        """Detail payload suggested_checks must be empty when no mapping exists."""
+        incident = make_full_incident()
+        result = build_incident_detail_payload(incident)
+
+        self.assertEqual(result["suggested_checks"], [])
+
+    def test_summary_does_not_include_suggested_checks(self) -> None:
+        """Summary payload must NOT include suggested_checks (detail-only field)."""
+        incident = make_full_incident()
+        result = build_incident_summary_payload(incident)
+
+        self.assertNotIn("suggested_checks", result)
+
 
 if __name__ == "__main__":
     unittest.main()

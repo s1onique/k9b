@@ -17,8 +17,10 @@
  * 13. Renders timeline events in provided order
  * 14. Renders empty timeline state
  * 15. Renders evidence_needed list
- * 16. Does not render remediation/action buttons
- * 17. Does not require old fields (review_packet_available, review_packet_id, snapshot_bundle_id)
+ * 16. Renders suggested_checks empty state
+ * 17. Renders suggested_checks list when non-empty
+ * 18. Does not render remediation/action buttons
+ * 19. Does not require old fields (review_packet_available, review_packet_id, snapshot_bundle_id)
  */
 
 import { describe, it, expect } from "vitest";
@@ -56,6 +58,7 @@ const createIncidentFixture = (overrides: Partial<IncidentDetailPayload> = {}): 
   evidence_needed: [],
   evidence_links: [],
   events: [],
+  suggested_checks: [],
   ...overrides,
 });
 

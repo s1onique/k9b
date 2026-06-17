@@ -269,6 +269,63 @@ const EvidenceNeededSection: React.FC<{ evidenceNeeded: IncidentDetailPayload["e
 };
 
 /**
+ * Renders suggested checks section.
+ * Read-only compatibility projection - no execution, promotion, or remediation.
+ */
+const SuggestedChecksSection: React.FC<{ suggestedChecks?: IncidentDetailPayload["suggested_checks"] }> = ({ suggestedChecks }) => {
+  // Defensive: treat undefined/empty as empty state
+  const checks = suggestedChecks ?? [];
+  if (checks.length === 0) {
+    return (
+      <div className="incident-detail-section">
+        <h4>Suggested checks</h4>
+        <p className="muted small">No suggested checks linked to this incident yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="incident-detail-section">
+      <h4>Suggested checks</h4>
+      <p className="muted small">Read-only view. No execution, promotion, or remediation available.</p>
+      <ul className="incident-suggested-checks-list">
+        {checks.map((check, index) => (
+          <li key={index} className="suggested-check-item">
+            <div className="suggested-check-header">
+              <span className="suggested-check-title">{check.title}</span>
+              {check.risk_level && (
+                <span className={`risk-badge risk-${check.risk_level.toLowerCase()}`}>
+                  {check.risk_level}
+                </span>
+              )}
+              <span className={`status-badge status-${check.status}`}>
+                {check.status}
+              </span>
+            </div>
+            <div className="suggested-check-rationale">{check.rationale}</div>
+            <div className="suggested-check-meta muted small">
+              <span>Source: {check.source}</span>
+              {check.artifact_id && (
+                <>
+                  <span>·</span>
+                  <span>Artifact: {check.artifact_id}</span>
+                </>
+              )}
+              {check.run_id && (
+                <>
+                  <span>·</span>
+                  <span>Run: {check.run_id}</span>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+/**
  * Read-only incident detail panel.
  * Displays full incident information including signals, evidence links, and timeline.
  */
@@ -357,6 +414,9 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({ incide
 
       {/* Evidence needed */}
       <EvidenceNeededSection evidenceNeeded={incident.evidence_needed} />
+
+      {/* Suggested checks - read-only compatibility projection */}
+      <SuggestedChecksSection suggestedChecks={incident.suggested_checks} />
 
       {/* Read-only notice */}
       <div className="incident-detail-notice">

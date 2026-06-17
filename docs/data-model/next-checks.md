@@ -82,6 +82,27 @@ Promotion/execution should append `IncidentEvent` entries to the incident timeli
 
 Current next-check artifacts remain valid and continue to work.
 
+## UI integration
+
+### Suggested checks compatibility projection
+
+The Incident detail view now includes a read-only "Suggested checks" section that renders the `suggested_checks` field from `IncidentDetailPayload`.
+
+**Current state:**
+- `IncidentDetailPayload.suggested_checks` returns an empty list by default
+- No reliable next-check-to-incident mapping exists today (next-check artifacts are run-scoped, not incident-scoped)
+- When populated, suggestions display: title, rationale, source, risk_level, status, artifact_id, run_id
+
+**UI behavior:**
+- Empty state: "No suggested checks linked to this incident yet."
+- Populated state: Read-only list with no execution, promotion, or remediation buttons
+- Hard UI boundary: No "Run", "Execute", "Promote", "Apply", "Remediate" buttons
+
+**Future work:**
+- Implement next-check-to-incident mapping via incident_id, source_candidate_id, entity identity, run_id, or latest_snapshot_bundle_id
+- Populate `suggested_checks` when reliable mapping becomes available
+- Do NOT implement check execution or manual promotion in this UI
+
 ## Safety constraints
 
 - **operator approval remains required for risky or mutating work.**

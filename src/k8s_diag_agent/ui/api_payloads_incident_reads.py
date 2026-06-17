@@ -18,13 +18,14 @@ Design notes:
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 __all__ = [
     "IncidentSignalPayload",
     "IncidentEvidenceLinkPayload",
     "IncidentReviewPacketPayload",
     "IncidentEventPayload",
+    "IncidentSuggestedCheckPayload",
     "IncidentSummaryPayload",
     "IncidentDetailPayload",
 ]
@@ -95,6 +96,35 @@ class IncidentEventPayload(TypedDict, total=False):
     data: dict[str, Any] | None
 
 
+class IncidentSuggestedCheckPayload(TypedDict, total=False):
+    """Read-only suggested-check compatibility projection for incident detail views.
+
+    This payload provides a read-only view of suggested checks that may be
+    associated with an incident. It is NOT a fully implemented persistence object.
+
+    The status field indicates the mapping reliability:
+    - "suggested": Next-check artifact successfully mapped to incident
+    - "compatibility": Legacy artifact without reliable incident mapping
+    - "unknown": No mapping attempted or mapping failed
+
+    Hard constraints:
+    - NO check execution
+    - NO manual promotion
+    - NO remediation actions
+    - NO Kubernetes mutation
+    - NO LLM calls
+    """
+
+    check_id: str  # Unique identifier for this suggested check
+    title: str  # Human-readable check title
+    rationale: str  # Why this check is suggested
+    source: str  # Origin of suggestion (e.g., "next-check-planning", "diagnostic-pack")
+    risk_level: str | None  # Risk assessment (LOW, MEDIUM, HIGH) or null
+    status: Literal["suggested", "compatibility", "unknown"]  # Mapping status
+    artifact_id: str | None  # Source artifact ID if available
+    run_id: str | None  # Associated run ID if available
+
+
 class IncidentSummaryPayload(TypedDict, total=False):
     """Lightweight incident payload for list views.
 
@@ -125,8 +155,12 @@ class IncidentSummaryPayload(TypedDict, total=False):
 class IncidentDetailPayload(TypedDict, total=False):
     """Full incident payload for detail views.
 
-    Includes signals, evidence links, and timeline.
+    Includes signals, evidence links, timeline, and suggested checks.
     Run artifacts remain evidence provenance, not the primary case object.
+
+    Note: suggested_checks is a read-only compatibility projection.
+    Currently returns empty list as no reliable next-check-to-incident mapping exists.
+    See docs/data-model/next-checks.md for target direction.
     """
 
     # Inherited from summary
@@ -154,3 +188,6 @@ class IncidentDetailPayload(TypedDict, total=False):
     evidence_needed: list[str]
     evidence_links: list[IncidentEvidenceLinkPayload]
     events: list[IncidentEventPayload]
+    # Suggested checks - read-only compatibility projection
+    # Returns empty list when no next-check-to-incident mapping exists
+    suggested_checks: list[IncidentSuggestedCheckPayload]

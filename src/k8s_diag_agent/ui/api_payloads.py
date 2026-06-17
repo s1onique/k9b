@@ -30,6 +30,7 @@ __all__ = [
     "IncidentEvidenceLinkPayload",  # noqa: F401 - re-exported
     "IncidentReviewPacketPayload",  # noqa: F401 - re-exported
     "IncidentEventPayload",  # noqa: F401 - re-exported
+    "IncidentSuggestedCheckPayload",  # noqa: F401 - re-exported
     "IncidentSummaryPayload",  # noqa: F401 - re-exported
     "IncidentDetailPayload",  # noqa: F401 - re-exported
     # Runs-list contracts (moved to api_payloads_runs.py)
@@ -189,6 +190,7 @@ from .api_payloads_incident_reads import (  # noqa: F401 - re-exported for backw
     IncidentEvidenceLinkPayload,
     IncidentReviewPacketPayload,
     IncidentSignalPayload,
+    IncidentSuggestedCheckPayload,
     IncidentSummaryPayload,
 )
 from .api_payloads_llm import (  # noqa: F401 - re-exported for backward compatibility

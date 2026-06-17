@@ -137,8 +137,12 @@ def build_incident_summary_payload(incident: Incident) -> IncidentSummaryPayload
 def build_incident_detail_payload(incident: Incident) -> IncidentDetailPayload:
     """Build IncidentDetailPayload from Incident model.
 
-    Full case view with signals, evidence links, and timeline.
+    Full case view with signals, evidence links, timeline, and suggested checks.
     Run artifacts remain evidence provenance, not the primary case object.
+
+    Note: suggested_checks is a read-only compatibility projection.
+    Currently returns empty list as no reliable next-check-to-incident mapping exists.
+    See docs/data-model/next-checks.md for target direction.
     """
     # Build the payload explicitly to avoid type: ignore
     result: IncidentDetailPayload = {
@@ -166,5 +170,8 @@ def build_incident_detail_payload(incident: Incident) -> IncidentDetailPayload:
         "evidence_needed": list(incident.evidence_needed),
         "evidence_links": [build_incident_evidence_link_payload(e) for e in incident.evidence_links],
         "events": [build_incident_event_payload(e) for e in incident.get_timeline()],
+        # Suggested checks - read-only compatibility projection
+        # Returns empty list when no next-check-to-incident mapping exists
+        "suggested_checks": [],
     }
     return result

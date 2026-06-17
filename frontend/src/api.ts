@@ -767,6 +767,33 @@ export type IncidentEvent = {
 };
 
 /**
+ * Read-only suggested-check compatibility projection for incident detail views.
+ * This is NOT a fully implemented persistence object.
+ *
+ * The status field indicates the mapping reliability:
+ * - "suggested": Next-check artifact successfully mapped to incident
+ * - "compatibility": Legacy artifact without reliable incident mapping
+ * - "unknown": No mapping attempted or mapping failed
+ *
+ * Hard constraints:
+ * - NO check execution
+ * - NO manual promotion
+ * - NO remediation actions
+ * - NO Kubernetes mutation
+ * - NO LLM calls
+ */
+export type IncidentSuggestedCheck = {
+  check_id: string;
+  title: string;
+  rationale: string;
+  source: string;
+  risk_level: string | null;
+  status: "suggested" | "compatibility" | "unknown";
+  artifact_id: string | null;
+  run_id: string | null;
+};
+
+/**
  * Incident summary payload - lightweight list view.
  * Uses latest_snapshot_bundle_id (not snapshot_bundle_id).
  * Uses review_packet object (not review_packet_available + review_packet_id).
@@ -794,8 +821,11 @@ export type IncidentSummaryPayload = {
 
 /**
  * Incident detail payload - full case view.
- * Includes signals, evidence links, and timeline.
+ * Includes signals, evidence links, timeline, and suggested checks.
  * Run artifacts remain evidence provenance, not the primary case object.
+ *
+ * Note: suggested_checks is a read-only compatibility projection.
+ * Currently returns empty list when no next-check-to-incident mapping exists.
  */
 export type IncidentDetailPayload = IncidentSummaryPayload & {
   source_candidate_id: string;
@@ -803,6 +833,7 @@ export type IncidentDetailPayload = IncidentSummaryPayload & {
   evidence_needed: string[];
   evidence_links: IncidentEvidenceLink[];
   events: IncidentEvent[];
+  suggested_checks: IncidentSuggestedCheck[];
 };
 
 export type IncidentsListResponse = {
