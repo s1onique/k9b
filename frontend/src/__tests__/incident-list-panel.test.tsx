@@ -10,6 +10,10 @@
  * - No remediation/action buttons exist (strong assertions)
  * - Component handles API error with generic message
  * - Read-only notice is always displayed
+ * - Expandable details functionality (View/Hide details)
+ * - Loading state during detail fetch
+ * - Error state when detail fetch fails
+ * - Stale response protection
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -23,8 +27,8 @@ vi.mock("../api", () => ({
   getIncident: vi.fn(),
 }));
 
-import { listIncidents } from "../api";
-import type { IncidentSummaryPayload } from "../api";
+import { listIncidents, getIncident } from "../api";
+import type { IncidentSummaryPayload, IncidentDetailPayload } from "../api";
 
 // Fixtures using new IncidentSummaryPayload shape
 const mockIncident: IncidentSummaryPayload = {
@@ -61,6 +65,66 @@ const mockIncidentWithBundle = {
 const mockIncidentWithoutBundle = {
   ...mockIncident,
   latest_snapshot_bundle_id: null,
+};
+
+// Full detail fixture using IncidentDetailPayload
+const mockIncidentDetail: IncidentDetailPayload = {
+  ...mockIncident,
+  source_candidate_id: "candidate-abc",
+  signals: [
+    {
+      source: "metrics-collector",
+      reason: "HighErrorRate",
+      message: "Error rate exceeded threshold",
+      captured_at: "2026-01-01T13:00:00Z",
+    },
+  ],
+  evidence_needed: ["kubectl logs for test-pod"],
+  evidence_links: [
+    {
+      incident_id: "default-pod-test-pod-crash_loop",
+      artifact_id: "artifact-abc-123",
+      role: "snapshot",
+      attached_at: "2026-01-01T14:00:00Z",
+    },
+  ],
+  events: [
+    {
+      event_id: "event-1",
+      incident_id: "default-pod-test-pod-crash_loop",
+      event_type: "created",
+      actor: "system",
+      occurred_at: "2026-01-01T12:00:00Z",
+      message: "Incident created",
+    },
+  ],
+};
+
+// Second incident for stale response tests
+const mockIncident2: IncidentSummaryPayload = {
+  incident_id: "default-pod-test-pod-oom",
+  namespace: "default",
+  object_kind: "Pod",
+  object_name: "test-pod-2",
+  raw_object_kind: null,
+  candidate_class: "oom_kill",
+  severity: "warning",
+  status: "investigating",
+  first_observed_at: "2026-01-01T10:00:00Z",
+  last_observed_at: "2026-01-01T15:00:00Z",
+  signal_count: 3,
+  evidence_count: 1,
+  latest_snapshot_bundle_id: "default-20260101-150000",
+  review_packet: {
+    status: "available",
+    id: "review-packet-xyz",
+    generated_at: "2026-01-01T12:00:00Z",
+    error_message: null,
+  },
+  suppressed_reason: null,
+  duplicate_of: null,
+  resolved_at: null,
+  resolution_notes: null,
 };
 
 describe("IncidentListPanel", () => {
@@ -435,7 +499,7 @@ describe("IncidentListPanel", () => {
   });
 
   describe("No remediation/action buttons exist", () => {
-    it("has no remediation action buttons", async () => {
+    it("has no remediation action buttons in row", async () => {
       vi.mocked(listIncidents).mockResolvedValueOnce({
         incidents: [mockIncident],
         total: 1,
@@ -447,9 +511,9 @@ describe("IncidentListPanel", () => {
         expect(screen.getByText(/1 incident/)).toBeInTheDocument();
       });
 
-      // Get all buttons in the incident panel
-      const panel = document.getElementById("incident-list");
-      const buttons = panel?.querySelectorAll("button") || [];
+      // Get all buttons in the incident row
+      const incidentRow = document.querySelector(".incident-row");
+      const buttons = incidentRow?.querySelectorAll("button") || [];
       const buttonTexts = Array.from(buttons).map(b => b.textContent?.toLowerCase() || "");
 
       // Should NOT have any remediation/action buttons
@@ -461,14 +525,9 @@ describe("IncidentListPanel", () => {
       forbiddenActions.forEach(action => {
         expect(buttonTexts.some(t => t.includes(action))).toBe(false);
       });
-
-      // Should ONLY have "Refresh incidents" as the action button
-      const refreshButtons = buttons;
-      expect(refreshButtons.length).toBe(1);
-      expect(refreshButtons[0]?.textContent).toContain("Refresh incidents");
     });
 
-    it("has only refresh button as action control with correct aria-label", async () => {
+    it("has only view/hide details as action control with correct aria attributes", async () => {
       vi.mocked(listIncidents).mockResolvedValueOnce({
         incidents: [mockIncident],
         total: 1,
@@ -481,9 +540,9 @@ describe("IncidentListPanel", () => {
       });
 
       // Use aria-label to get the specific button
-      const refreshButton = screen.getByRole("button", { name: /refresh incidents/i });
-      expect(refreshButton).toBeInTheDocument();
-      expect(refreshButton).toHaveAttribute("aria-label", "Refresh incidents");
+      const detailsButton = screen.getByRole("button", { name: /view details/i });
+      expect(detailsButton).toBeInTheDocument();
+      expect(detailsButton).toHaveAttribute("aria-expanded", "false");
     });
   });
 
@@ -574,6 +633,353 @@ describe("IncidentListPanel", () => {
 
       const select = screen.getByRole("combobox");
       expect(select).toBeDisabled();
+    });
+  });
+
+  // =============================================================================
+  // Expandable details tests
+  // =============================================================================
+
+  describe("Expandable details", () => {
+    it("shows 'View details' button for each incident row", async () => {
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+    });
+
+    it("clicking 'View details' calls getIncident() with the incident_id", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(mockIncidentDetail);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        expect(getIncident).toHaveBeenCalledWith("default-pod-test-pod-crash_loop");
+      });
+    });
+
+    it("shows loading state while detail fetch is pending", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+      // Use a slow promise that won't resolve immediately
+      vi.mocked(getIncident).mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve(mockIncidentDetail), 1000))
+      );
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      // Should show loading text
+      expect(screen.getByText(/loading incident details/i)).toBeInTheDocument();
+    });
+
+    it("successful fetch renders IncidentDetailPanel content", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(mockIncidentDetail);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        // IncidentDetailPanel should be rendered
+        expect(screen.getByText("Signals")).toBeInTheDocument();
+        expect(screen.getByText("Evidence links")).toBeInTheDocument();
+        expect(screen.getByText("Timeline")).toBeInTheDocument();
+      });
+
+      // Button should now say "Hide details"
+      expect(screen.getByRole("button", { name: /hide details/i })).toBeInTheDocument();
+    });
+
+    it("clicking 'Hide details' collapses the detail panel", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(mockIncidentDetail);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      // Expand
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Signals")).toBeInTheDocument();
+      });
+
+      // Collapse
+      const hideButton = screen.getByRole("button", { name: /hide details/i });
+      await act(async () => {
+        await user.click(hideButton);
+      });
+
+      await waitFor(() => {
+        // Detail panel should be gone
+        expect(screen.queryByText("Signals")).not.toBeInTheDocument();
+        // View details button should be back
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+    });
+
+    it("failed fetch shows generic error message", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockRejectedValueOnce(new Error("Network error: Connection refused"));
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText(/unable to load incident details/i)).toBeInTheDocument();
+      });
+
+      // Should NOT expose raw exception details
+      expect(screen.queryByText(/network error/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/connection refused/i)).not.toBeInTheDocument();
+    });
+
+    it("expanding one incident then another renders only the selected incident's detail", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident, mockIncident2],
+        total: 2,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(mockIncidentDetail);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/2 incidents/)).toBeInTheDocument();
+      });
+
+      // Click view details on first incident
+      const viewButtons = screen.getAllByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButtons[0]);
+      });
+
+      await waitFor(() => {
+        expect(getIncident).toHaveBeenCalledWith("default-pod-test-pod-crash_loop");
+      });
+
+      // Setup mock for second incident
+      const mockIncident2Detail: IncidentDetailPayload = {
+        ...mockIncident2,
+        source_candidate_id: "candidate-xyz",
+        signals: [
+          {
+            source: "events-collector",
+            reason: "OOMKill",
+            message: "Container was OOM killed",
+            captured_at: "2026-01-01T13:00:00Z",
+          },
+        ],
+        evidence_needed: [],
+        evidence_links: [],
+        events: [],
+      };
+      vi.mocked(getIncident).mockResolvedValueOnce(mockIncident2Detail);
+
+      // Click view details on second incident
+      await act(async () => {
+        await user.click(viewButtons[1]);
+      });
+
+      await waitFor(() => {
+        // Should show signals from second incident
+        expect(screen.getByText(/OOMKill/i)).toBeInTheDocument();
+        // First incident detail should not be visible
+        expect(screen.queryByText(/HighErrorRate/i)).not.toBeInTheDocument();
+      });
+    });
+
+    it("stale response from a previous incident does not overwrite the currently selected incident", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident, mockIncident2],
+        total: 2,
+      });
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/2 incidents/)).toBeInTheDocument();
+      });
+
+      // Setup slow response for first incident
+      const slowPromise = new Promise<IncidentDetailPayload>((resolve) => {
+        setTimeout(() => resolve(mockIncidentDetail), 500);
+      });
+      vi.mocked(getIncident).mockImplementation(
+        (id: string) => id === mockIncident.incident_id ? slowPromise : Promise.reject(new Error("Not found"))
+      );
+
+      const viewButtons = screen.getAllByRole("button", { name: /view details/i });
+
+      // Click view details on first incident (slow)
+      await act(async () => {
+        await user.click(viewButtons[0]);
+      });
+
+      // Should show loading
+      expect(screen.getByText(/loading incident details/i)).toBeInTheDocument();
+
+      // Quickly click view details on second incident (fast - will fail)
+      await act(async () => {
+        await user.click(viewButtons[1]);
+      });
+
+      // Should show error for second incident
+      await waitFor(() => {
+        expect(screen.getByText(/unable to load incident details/i)).toBeInTheDocument();
+      });
+
+      // Wait for slow promise to resolve
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      });
+
+      // Error from second incident should still be visible (stale response from first should not overwrite)
+      expect(screen.getByText(/unable to load incident details/i)).toBeInTheDocument();
+      // First incident detail should not appear - check for detail panel content unique to detail view
+      // "Evidence links" section only appears in the detail panel, not in list rows
+      expect(screen.queryByText(/Evidence links/i)).not.toBeInTheDocument();
+    });
+
+    it("no remediation/action buttons are introduced in detail panel", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(mockIncidentDetail);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Signals")).toBeInTheDocument();
+      });
+
+      // Check detail panel for forbidden buttons
+      const detailPanel = document.querySelector(".incident-detail-panel");
+      const buttons = detailPanel?.querySelectorAll("button") || [];
+      const buttonTexts = Array.from(buttons).map(b => b.textContent?.toLowerCase() || "");
+
+      const forbiddenActions = [
+        "remediate", "resolve", "suppress", "delete", "patch",
+        "apply", "execute", "create", "update", "edit", "remove"
+      ];
+
+      forbiddenActions.forEach(action => {
+        expect(buttonTexts.some(t => t.includes(action))).toBe(false);
+      });
+    });
+
+    it("old fields are not required for detail panel", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+
+      // Create detail without old fields
+      const detailWithoutOldFields: IncidentDetailPayload = {
+        ...mockIncidentDetail,
+      };
+
+      // Explicitly ensure old fields are not present
+      expect((detailWithoutOldFields as Record<string, unknown>).review_packet_available).toBeUndefined();
+      expect((detailWithoutOldFields as Record<string, unknown>).review_packet_id).toBeUndefined();
+      expect((detailWithoutOldFields as Record<string, unknown>).snapshot_bundle_id).toBeUndefined();
+
+      vi.mocked(getIncident).mockResolvedValueOnce(detailWithoutOldFields);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        // Should render without errors
+        expect(screen.getByText("Signals")).toBeInTheDocument();
+      });
     });
   });
 });

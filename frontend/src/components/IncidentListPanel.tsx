@@ -12,9 +12,10 @@
  * - NO write actions
  */
 
-import { useState, useEffect, useCallback } from "react";
-import type { IncidentSummaryPayload } from "../api";
-import { listIncidents } from "../api";
+import { useState, useEffect, useCallback, useRef } from "react";
+import type { IncidentSummaryPayload, IncidentDetailPayload } from "../api";
+import { listIncidents, getIncident } from "../api";
+import { IncidentDetailPanel } from "./IncidentDetailPanel";
 
 // Status values from IncidentStatus enum
 const INCIDENT_STATUSES = [
@@ -88,13 +89,23 @@ const formatTimestamp = (timestamp: string): string => {
 
 interface IncidentRowProps {
   incident: IncidentSummaryPayload;
+  isExpanded: boolean;
+  isLoading: boolean;
+  hasError: boolean;
+  onToggle: () => void;
 }
 
 /**
  * Renders a single incident row with read-only evidence and review packet info.
  * Uses latest_snapshot_bundle_id and review_packet state object.
  */
-const IncidentRow: React.FC<IncidentRowProps> = ({ incident }) => {
+const IncidentRow: React.FC<IncidentRowProps> = ({
+  incident,
+  isExpanded,
+  isLoading,
+  hasError,
+  onToggle,
+}) => {
   const displayKind = incident.raw_object_kind || incident.object_kind;
 
   return (
@@ -165,6 +176,24 @@ const IncidentRow: React.FC<IncidentRowProps> = ({ incident }) => {
             </div>
           )}
         </div>
+        {/* View/Hide details control */}
+        <div className="incident-detail-control">
+          {isLoading ? (
+            <span className="incident-detail-loading muted small">Loading incident details...</span>
+          ) : hasError ? (
+            <span className="incident-detail-error muted small">Unable to load incident details.</span>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-ghost btn-small"
+              onClick={onToggle}
+              aria-expanded={isExpanded}
+              aria-controls={`incident-detail-${incident.incident_id}`}
+            >
+              {isExpanded ? "Hide details" : "View details"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -184,6 +213,15 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
 
+  // Detail expansion state
+  const [expandedIncidentId, setExpandedIncidentId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<IncidentDetailPayload | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  // Ref for stale-response protection
+  const activeRequestRef = useRef<string | null>(null);
+
   const loadIncidents = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -197,6 +235,44 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
       setIsLoading(false);
     }
   }, [statusFilter]);
+
+  // Toggle incident details with stale-response protection
+  const toggleIncidentDetails = useCallback(async (incidentId: string) => {
+    // If already expanded, collapse it
+    if (expandedIncidentId === incidentId) {
+      setExpandedIncidentId(null);
+      setDetail(null);
+      setDetailError(null);
+      activeRequestRef.current = null;
+      return;
+    }
+
+    // Expand new incident - clear previous state
+    setExpandedIncidentId(incidentId);
+    setDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    activeRequestRef.current = incidentId;
+
+    try {
+      const payload = await getIncident(incidentId);
+      // Stale-response guard: only apply if this is still the active request
+      if (activeRequestRef.current === incidentId) {
+        setDetail(payload);
+        setDetailError(null);
+      }
+    } catch {
+      // Only apply error if this is still the active request
+      if (activeRequestRef.current === incidentId) {
+        setDetailError("Unable to load incident details.");
+      }
+    } finally {
+      // Only clear loading if this is still the active request
+      if (activeRequestRef.current === incidentId) {
+        setDetailLoading(false);
+      }
+    }
+  }, [expandedIncidentId]);
 
   useEffect(() => {
     loadIncidents();
@@ -271,7 +347,24 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
           </p>
           <div className="incident-items">
             {incidents!.map((incident) => (
-              <IncidentRow key={incident.incident_id} incident={incident} />
+              <div key={incident.incident_id}>
+                <IncidentRow
+                  incident={incident}
+                  isExpanded={expandedIncidentId === incident.incident_id}
+                  isLoading={expandedIncidentId === incident.incident_id && detailLoading}
+                  hasError={expandedIncidentId === incident.incident_id && detailError !== null}
+                  onToggle={() => toggleIncidentDetails(incident.incident_id)}
+                />
+                {/* Expanded detail panel */}
+                {expandedIncidentId === incident.incident_id && detail && (
+                  <div
+                    id={`incident-detail-${incident.incident_id}`}
+                    className="incident-detail-wrapper"
+                  >
+                    <IncidentDetailPanel incident={detail} />
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>
