@@ -18,19 +18,21 @@ Uses api_incident_reads serializers for typed payloads.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from ..ui.api_incident_reads import (
     build_incident_detail_payload,
     build_incident_summary_payload,
 )
+from ..ui.api_payloads import IncidentDetailPayload, IncidentSummaryPayload
 from .incident_lifecycle import IncidentStatus
 from .incident_store_provider import get_incident_store
 
 _logger = logging.getLogger(__name__)
 
 
-def handle_list_incidents(status: str | None = None) -> dict[str, Any]:
+def handle_list_incidents(
+    status: str | None = None,
+) -> dict[str, list[IncidentSummaryPayload] | int]:
     """List incidents from the in-memory store.
 
     Args:
@@ -58,7 +60,7 @@ def handle_list_incidents(status: str | None = None) -> dict[str, Any]:
     }
 
 
-def handle_get_incident(incident_id: str) -> dict[str, Any] | None:
+def handle_get_incident(incident_id: str) -> IncidentDetailPayload | None:
     """Get a specific incident by ID.
 
     Args:
