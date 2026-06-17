@@ -249,6 +249,9 @@ export const IncidentSnapshotPanel: React.FC<IncidentSnapshotPanelProps> = ({
   const targetNamespace = namespace ?? inputNamespace;
   const showInput = !namespace;
 
+  // Extract incident promotion info from summary if present
+  const incidentsPromotedCount = state.result?.summary?.incidents_promoted_count;
+
   return (
     <section className="panel" id="incident-snapshot">
       <div className="section-head">
@@ -334,6 +337,19 @@ export const IncidentSnapshotPanel: React.FC<IncidentSnapshotPanelProps> = ({
                 Incident Candidates: <strong>{state.result.summary.candidates_count}</strong>
               </li>
             </ul>
+            
+            {/* Incident promotion summary */}
+            {incidentsPromotedCount !== undefined && incidentsPromotedCount > 0 && (
+              <div className="incident-promotion-summary">
+                <p className="success-message">
+                  Incidents promoted: <strong>{incidentsPromotedCount}</strong>
+                </p>
+                <p className="muted small">
+                  Candidate incidents have been promoted to the incident store 
+                  for tracking.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Incident Candidates List */}

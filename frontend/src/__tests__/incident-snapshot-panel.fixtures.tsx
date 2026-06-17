@@ -15,6 +15,7 @@ export const mockSuccessResponse = {
     total_events: 25,
     symptoms_count: 3,
     candidates_count: 2,
+    incidents_promoted_count: 0,
   },
   bundle: {
     metadata: {
@@ -52,6 +53,7 @@ export const mockSuccessResponseWithCandidates = {
     total_events: 25,
     symptoms_count: 3,
     candidates_count: 2,
+    incidents_promoted_count: 0,
   },
   bundle: {
     metadata: {

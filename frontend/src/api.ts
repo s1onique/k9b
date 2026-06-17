@@ -569,6 +569,7 @@ export type IncidentSnapshotSummary = {
   total_events: number;
   symptoms_count: number;
   candidates_count: number;
+  incidents_promoted_count: number;
 };
 
 export type IncidentSnapshotBundle = {

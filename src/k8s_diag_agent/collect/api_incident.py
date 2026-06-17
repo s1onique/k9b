@@ -10,13 +10,20 @@ due to:
 - Safe bounded retrieval needed (size limits per pod)
 - Log sanitization requirements beyond string-level patterns
 - Test coverage for redaction
+
+Hard constraints enforced:
+- NO remediation actions
+- NO Kubernetes resource mutation
+- NO LLM calls
+- NO external tool invocation
+- NO persistence (in-memory only)
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -52,6 +59,10 @@ class IncidentSnapshotResponse:
     bundle: dict[str, Any] | None = None
     error: str | None = None
     download_url: str | None = None
+    # Incident promotion fields
+    candidates_count: int = 0
+    incidents_promoted_count: int = 0
+    promoted_incidents: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -66,6 +77,14 @@ class IncidentSnapshotResponse:
             result["error"] = self.error
         if self.download_url is not None:
             result["download_url"] = self.download_url
+        # Always include incident promotion info in summary
+        result["summary"] = {
+            **self.summary,
+            "candidates_count": self.candidates_count,
+            "incidents_promoted_count": self.incidents_promoted_count,
+        }
+        if self.promoted_incidents:
+            result["promoted_incidents"] = self.promoted_incidents
         return result
 
 
@@ -75,12 +94,18 @@ def handle_incident_snapshot(request: IncidentSnapshotRequest) -> IncidentSnapsh
     This function performs read-only Kubernetes collection to produce
     a sanitized, bounded evidence bundle.
 
+    On successful capture, it promotes any incident candidates into the
+    in-memory IncidentStore using the bundle ID.
+
     Args:
         request: IncidentSnapshotRequest with namespace and options
 
     Returns:
         IncidentSnapshotResponse with bundle or error
     """
+    # Import here to avoid circular imports
+    from .incident_store_provider import get_incident_store
+
     try:
         bundle = collect_incident_snapshot(
             namespace=request.namespace,
@@ -98,12 +123,41 @@ def handle_incident_snapshot(request: IncidentSnapshotRequest) -> IncidentSnapsh
             "candidates_count": bundle.metadata.candidates_count,
         }
 
+        # Promote candidates into incident store
+        promoted_incidents: list[dict[str, Any]] = []
+        incidents_promoted_count = 0
+
+        if bundle.candidates:
+            try:
+                store = get_incident_store()
+                promoted = store.promote_candidates_from_bundle(
+                    bundle_id=bundle.metadata.bundle_id,
+                    candidates=bundle.candidates,
+                    observed_at=bundle.metadata.captured_at,
+                )
+                # Convert to dicts for API response
+                promoted_incidents = [inc.to_dict() for inc in promoted]
+                incidents_promoted_count = len(promoted_incidents)
+            except Exception as exc:
+                # Promotion errors must not mask successful evidence capture
+                # Log but don't fail the response
+                # Use sanitized message to prevent credential/exception leakage
+                sanitized_message = sanitize_exception_message(exc, max_length=200)
+                _logger.warning(
+                    "Incident promotion failed for bundle %s: %s",
+                    bundle.metadata.bundle_id,
+                    sanitized_message,
+                )
+
         return IncidentSnapshotResponse(
             bundle_id=bundle.metadata.bundle_id,
             captured_at=bundle.metadata.captured_at.isoformat(),
             namespace=bundle.metadata.namespace,
             summary=summary,
             bundle=bundle.to_dict(),
+            candidates_count=bundle.metadata.candidates_count,
+            incidents_promoted_count=incidents_promoted_count,
+            promoted_incidents=promoted_incidents,
         )
 
     except (RuntimeError, json.JSONDecodeError, OSError) as exc:
