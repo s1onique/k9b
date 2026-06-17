@@ -9,7 +9,6 @@ These tests verify:
 from __future__ import annotations
 
 import unittest
-from datetime import UTC, datetime
 
 from k8s_diag_agent.collect.api_incident_reads import handle_get_incident
 from k8s_diag_agent.collect.incident_events import IncidentEvent, IncidentEventActor, IncidentEventType, make_event_id
@@ -23,13 +22,13 @@ from k8s_diag_agent.ui.api_incident_reads import (
     build_incident_signal_payload,
 )
 
+from .api_incident_reads_serializer_fixtures import TEST_TIME_1, TEST_TIME_2, TEST_TIME_3
 from .incident_lifecycle_fixtures import (
     make_candidate,
     make_full_incident,
     make_incident_with_events,
     make_incident_with_evidence_links,
 )
-from .api_incident_reads_serializer_fixtures import TEST_TIME_1, TEST_TIME_2, TEST_TIME_3
 
 
 class TestBuildIncidentDetailPayload(unittest.TestCase):

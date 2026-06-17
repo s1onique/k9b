@@ -18,10 +18,6 @@ from k8s_diag_agent.ui.incident_suggested_checks import (
 from .incident_suggested_checks_fixtures import (
     DEFAULT_INCIDENT_ID,
     make_linked_candidate,
-    make_old_candidate,
-    make_partial_candidate,
-    make_plan_payload,
-    make_unlinked_candidate,
 )
 
 

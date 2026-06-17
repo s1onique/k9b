@@ -18,11 +18,11 @@ from k8s_diag_agent.ui.api_incident_reads import (
     build_incident_summary_payload,
 )
 
+from .api_incident_reads_serializer_fixtures import TEST_TIME_1
 from .incident_lifecycle_fixtures import (
     make_candidate,
     make_full_incident,
 )
-from .api_incident_reads_serializer_fixtures import TEST_TIME_1
 
 
 class TestBuildIncidentReviewPacketPayload(unittest.TestCase):
