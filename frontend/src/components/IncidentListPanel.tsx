@@ -93,6 +93,8 @@ interface IncidentRowProps {
   isLoading: boolean;
   hasError: boolean;
   onToggle: () => void;
+  onRetry: () => void;
+  detailId: string;
 }
 
 /**
@@ -105,6 +107,8 @@ const IncidentRow: React.FC<IncidentRowProps> = ({
   isLoading,
   hasError,
   onToggle,
+  onRetry,
+  detailId,
 }) => {
   const displayKind = incident.raw_object_kind || incident.object_kind;
 
@@ -181,14 +185,33 @@ const IncidentRow: React.FC<IncidentRowProps> = ({
           {isLoading ? (
             <span className="incident-detail-loading muted small">Loading incident details...</span>
           ) : hasError ? (
-            <span className="incident-detail-error muted small">Unable to load incident details.</span>
+            <>
+              <span className="incident-detail-error muted small">Unable to load incident details.</span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-small"
+                onClick={onRetry}
+                aria-label="Retry details"
+              >
+                Retry details
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-small"
+                onClick={onToggle}
+                aria-expanded={isExpanded}
+                aria-controls={detailId}
+              >
+                Hide details
+              </button>
+            </>
           ) : (
             <button
               type="button"
               className="btn btn-ghost btn-small"
               onClick={onToggle}
               aria-expanded={isExpanded}
-              aria-controls={`incident-detail-${incident.incident_id}`}
+              aria-controls={detailId}
             >
               {isExpanded ? "Hide details" : "View details"}
             </button>
@@ -236,19 +259,8 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
     }
   }, [statusFilter]);
 
-  // Toggle incident details with stale-response protection
-  const toggleIncidentDetails = useCallback(async (incidentId: string) => {
-    // If already expanded, collapse it
-    if (expandedIncidentId === incidentId) {
-      setExpandedIncidentId(null);
-      setDetail(null);
-      setDetailError(null);
-      activeRequestRef.current = null;
-      return;
-    }
-
-    // Expand new incident - clear previous state
-    setExpandedIncidentId(incidentId);
+  // Load incident details with stale-response protection
+  const loadIncidentDetails = useCallback(async (incidentId: string) => {
     setDetail(null);
     setDetailError(null);
     setDetailLoading(true);
@@ -272,7 +284,28 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
         setDetailLoading(false);
       }
     }
-  }, [expandedIncidentId]);
+  }, []);
+
+  // Toggle incident details with stale-response protection
+  const toggleIncidentDetails = useCallback(async (incidentId: string) => {
+    // If already expanded, collapse it
+    if (expandedIncidentId === incidentId) {
+      setExpandedIncidentId(null);
+      setDetail(null);
+      setDetailError(null);
+      activeRequestRef.current = null;
+      return;
+    }
+
+    // Expand new incident - clear previous state and load details
+    setExpandedIncidentId(incidentId);
+    await loadIncidentDetails(incidentId);
+  }, [expandedIncidentId, loadIncidentDetails]);
+
+  // Retry loading incident details
+  const retryIncidentDetails = useCallback(async (incidentId: string) => {
+    await loadIncidentDetails(incidentId);
+  }, [loadIncidentDetails]);
 
   useEffect(() => {
     loadIncidents();
@@ -354,6 +387,8 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
                   isLoading={expandedIncidentId === incident.incident_id && detailLoading}
                   hasError={expandedIncidentId === incident.incident_id && detailError !== null}
                   onToggle={() => toggleIncidentDetails(incident.incident_id)}
+                  onRetry={() => retryIncidentDetails(incident.incident_id)}
+                  detailId={`incident-detail-${incident.incident_id}`}
                 />
                 {/* Expanded detail panel */}
                 {expandedIncidentId === incident.incident_id && detail && (

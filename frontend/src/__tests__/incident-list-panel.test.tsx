@@ -982,4 +982,135 @@ describe("IncidentListPanel", () => {
       });
     });
   });
+
+  // =============================================================================
+  // Detail error recovery tests
+  // =============================================================================
+
+  describe("Detail error recovery retry/hide buttons", () => {
+    it("failed detail fetch shows Retry details and Hide details buttons", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockRejectedValueOnce(new Error("Network error"));
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        // Error message should be visible
+        expect(screen.getByText(/unable to load incident details/i)).toBeInTheDocument();
+        // Retry details button should be visible
+        expect(screen.getByRole("button", { name: /retry details/i })).toBeInTheDocument();
+        // Hide details button should be visible
+        expect(screen.getByRole("button", { name: /hide details/i })).toBeInTheDocument();
+      });
+    });
+
+    it("clicking Retry details calls getIncident again and renders detail on success", async () => {
+      const user = userEvent.setup();
+      // Track call count to return appropriate responses
+      let callCount = 0;
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // First call fails
+          return Promise.reject(new Error("Network error"));
+        }
+        // Second call (retry) succeeds
+        return Promise.resolve(mockIncidentDetail);
+      });
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      // Click view details - will fail
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /retry details/i })).toBeInTheDocument();
+      });
+
+      // Click retry
+      const retryButton = screen.getByRole("button", { name: /retry details/i });
+      await act(async () => {
+        await user.click(retryButton);
+      });
+
+      // Verify getIncident was called twice
+      expect(getIncident).toHaveBeenCalledTimes(2);
+      expect(getIncident).toHaveBeenLastCalledWith("default-pod-test-pod-crash_loop");
+
+      // Verify IncidentDetailPanel is rendered on success
+      await waitFor(() => {
+        expect(screen.getByText("Signals")).toBeInTheDocument();
+        expect(screen.getByText("Evidence links")).toBeInTheDocument();
+        expect(screen.getByText("Timeline")).toBeInTheDocument();
+      });
+
+      // Button should now say "Hide details"
+      expect(screen.getByRole("button", { name: /hide details/i })).toBeInTheDocument();
+    });
+
+    it("clicking Hide details after failure collapses and clears the error", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockRejectedValueOnce(new Error("Network error"));
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      // Click view details - will fail
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /hide details/i })).toBeInTheDocument();
+        expect(screen.getByText(/unable to load incident details/i)).toBeInTheDocument();
+      });
+
+      // Click hide details
+      const hideButton = screen.getByRole("button", { name: /hide details/i });
+      await act(async () => {
+        await user.click(hideButton);
+      });
+
+      await waitFor(() => {
+        // Error should be cleared
+        expect(screen.queryByText(/unable to load incident details/i)).not.toBeInTheDocument();
+        // View details button should be back
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+        // Retry button should be gone
+        expect(screen.queryByRole("button", { name: /retry details/i })).not.toBeInTheDocument();
+      });
+    });
+  });
 });
