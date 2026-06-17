@@ -57,8 +57,6 @@ class TestIncidentRecordSchema(unittest.TestCase):
                 ),
             ],
             evidence_needed=["pod_logs", "pod_describe"],
-            snapshot_bundle_id=None,
-            review_packet_available=False,
         )
 
         d = incident.to_dict()
@@ -77,8 +75,8 @@ class TestIncidentRecordSchema(unittest.TestCase):
         self.assertIn("last_observed_at", d)
         self.assertIn("signals", d)
         self.assertIn("evidence_needed", d)
-        self.assertIn("snapshot_bundle_id", d)
-        self.assertIn("review_packet_available", d)
+        self.assertIn("latest_snapshot_bundle_id", d)
+        self.assertIn("review_packet", d)
 
     def test_signal_serialization(self) -> None:
         """IncidentSignal.to_dict() must include captured_at."""
@@ -323,7 +321,7 @@ class TestNoKubernetesMutation(unittest.TestCase):
 
         # Original incident should be unchanged
         self.assertEqual(incident.status, IncidentStatus.OPEN)
-        self.assertIsNone(incident.snapshot_bundle_id)
+        self.assertIsNone(incident.latest_snapshot_bundle_id)
 
         # Results should be new objects
         self.assertIsNot(result1, incident)

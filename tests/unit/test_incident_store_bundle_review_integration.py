@@ -20,7 +20,7 @@ from k8s_diag_agent.collect.api_incident_review_packet import (
     IncidentReviewPacketRequest,
     handle_incident_review_packet,
 )
-from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus
+from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus, ReviewPacketStatus
 from k8s_diag_agent.collect.incident_store_provider import (
     reset_incident_store,
     set_incident_store,
@@ -118,14 +118,14 @@ class TestMarkReadyForReviewByBundleId(unittest.TestCase):
 
         self.assertEqual(len(updated), 1)
         self.assertEqual(updated[0].status, IncidentStatus.READY_FOR_REVIEW)
-        self.assertTrue(updated[0].review_packet_available)
-        self.assertEqual(updated[0].review_packet_id, "review-456")
+        self.assertTrue(updated[0].review_packet.status == ReviewPacketStatus.AVAILABLE)
+        self.assertEqual(updated[0].review_packet.id, "review-456")
 
         # Verify stored incident is updated
         stored = self._test_store.get_incident(incident_id)
         self.assertIsNotNone(stored)
         self.assertEqual(stored.status, IncidentStatus.READY_FOR_REVIEW)
-        self.assertTrue(stored.review_packet_available)
+        self.assertTrue(stored.review_packet.status == ReviewPacketStatus.AVAILABLE)
 
     def test_mark_ready_for_review_by_bundle_id_excludes_suppressed(self) -> None:
         """mark_ready_for_review_by_bundle_id must not update SUPPRESSED incidents."""
@@ -146,7 +146,7 @@ class TestMarkReadyForReviewByBundleId(unittest.TestCase):
         stored = self._test_store.get_incident(incident_id)
         self.assertIsNotNone(stored)
         self.assertEqual(stored.status, IncidentStatus.SUPPRESSED)
-        self.assertFalse(stored.review_packet_available)
+        self.assertFalse(stored.review_packet.status == ReviewPacketStatus.AVAILABLE)
 
     def test_mark_ready_for_review_by_bundle_id_excludes_duplicate(self) -> None:
         """mark_ready_for_review_by_bundle_id must not update DUPLICATE incidents."""
@@ -167,7 +167,7 @@ class TestMarkReadyForReviewByBundleId(unittest.TestCase):
         stored = self._test_store.get_incident(incident_id)
         self.assertIsNotNone(stored)
         self.assertEqual(stored.status, IncidentStatus.DUPLICATE)
-        self.assertFalse(stored.review_packet_available)
+        self.assertFalse(stored.review_packet.status == ReviewPacketStatus.AVAILABLE)
 
     def test_mark_ready_for_review_by_bundle_id_no_match_returns_empty(self) -> None:
         """mark_ready_for_review_by_bundle_id returns empty tuple when no match."""
@@ -283,8 +283,8 @@ class TestReviewPacketGenerationUpdatesIncidentState(unittest.TestCase):
         incident = self._test_store.get_incident(incident_id)
         self.assertIsNotNone(incident)
         self.assertEqual(incident.status, IncidentStatus.READY_FOR_REVIEW)
-        self.assertTrue(incident.review_packet_available)
-        self.assertEqual(incident.review_packet_id, bundle_id)
+        self.assertTrue(incident.review_packet.status == ReviewPacketStatus.AVAILABLE)
+        self.assertEqual(incident.review_packet.id, bundle_id)
 
     def test_review_packet_generation_stores_review_packet_id(self) -> None:
         """Review packet generation must store review_packet_id on incident."""
@@ -304,7 +304,7 @@ class TestReviewPacketGenerationUpdatesIncidentState(unittest.TestCase):
         incident = self._test_store.get_incident(incident_id)
 
         # review_packet_id should be set to bundle_id
-        self.assertEqual(incident.review_packet_id, bundle_id)
+        self.assertEqual(incident.review_packet.id, bundle_id)
 
     def test_incident_list_api_returns_review_packet_available_true(self) -> None:
         """Incident list API must return review_packet_available=true after review packet generation."""
@@ -327,8 +327,8 @@ class TestReviewPacketGenerationUpdatesIncidentState(unittest.TestCase):
 
         self.assertEqual(len(result["incidents"]), 1)
         incident = result["incidents"][0]
-        self.assertTrue(incident["review_packet_available"])
-        self.assertEqual(incident["review_packet_id"], bundle_id)
+        self.assertTrue(incident["review_packet"]["status"] == "available")
+        self.assertEqual(incident["review_packet"]["id"], bundle_id)
         self.assertEqual(incident["status"], IncidentStatus.READY_FOR_REVIEW.value)
 
     def test_no_matching_incident_is_harmless(self) -> None:
@@ -368,7 +368,7 @@ class TestReviewPacketGenerationUpdatesIncidentState(unittest.TestCase):
         # Verify incident is still suppressed
         incident = self._test_store.get_incident(incident_id)
         self.assertEqual(incident.status, IncidentStatus.SUPPRESSED)
-        self.assertFalse(incident.review_packet_available)
+        self.assertFalse(incident.review_packet.status == ReviewPacketStatus.AVAILABLE)
 
         # Verify incident_updates does not include suppressed incidents
         self.assertEqual(response.incident_updates["ready_for_review_count"], 0)
@@ -395,7 +395,7 @@ class TestReviewPacketGenerationUpdatesIncidentState(unittest.TestCase):
         self.assertEqual(_response.incident_updates["ready_for_review_count"], 0)
         incident = self._test_store.get_incident(incident_id)
         self.assertEqual(incident.status, IncidentStatus.DUPLICATE)
-        self.assertFalse(incident.review_packet_available)
+        self.assertFalse(incident.review_packet.status == ReviewPacketStatus.AVAILABLE)
 
     def test_review_packet_generation_failure_does_not_mutate_state(self) -> None:
         """Review packet generation failure must not mutate incident state."""
@@ -420,7 +420,7 @@ class TestReviewPacketGenerationUpdatesIncidentState(unittest.TestCase):
         # Verify incident state is unchanged
         incident = self._test_store.get_incident(incident_id)
         self.assertEqual(incident.status, original_status)
-        self.assertFalse(incident.review_packet_available)
+        self.assertFalse(incident.review_packet.status == ReviewPacketStatus.AVAILABLE)
 
 
 if __name__ == "__main__":

@@ -171,7 +171,7 @@ class TestHandleIncidentSnapshotWithPromotion(unittest.TestCase):
 
         self.assertEqual(len(response.promoted_incidents), 1)
         self.assertEqual(
-            response.promoted_incidents[0]["snapshot_bundle_id"],
+            response.promoted_incidents[0]["latest_snapshot_bundle_id"],
             "test-bundle-001",
         )
 
@@ -345,9 +345,8 @@ class TestIncidentSnapshotResponseWithPromotion(unittest.TestCase):
                     "last_observed_at": "2024-01-15T12:00:00+00:00",
                     "signals": [],
                     "evidence_needed": ["pod_logs", "pod_describe"],
-                    "snapshot_bundle_id": "test-bundle-001",
-                    "review_packet_available": False,
-                    "review_packet_id": None,
+                    "latest_snapshot_bundle_id": "test-bundle-001",
+                    "review_packet": {"status": "not_generated", "id": None},
                     "suppressed_reason": None,
                     "duplicate_of": None,
                     "resolved_at": None,
@@ -360,7 +359,7 @@ class TestIncidentSnapshotResponseWithPromotion(unittest.TestCase):
         incident = data["promoted_incidents"][0]
 
         self.assertEqual(incident["incident_id"], "default-pod-crashloop-pod-crash_loop")
-        self.assertEqual(incident["snapshot_bundle_id"], "test-bundle-001")
+        self.assertEqual(incident["latest_snapshot_bundle_id"], "test-bundle-001")
         self.assertEqual(incident["status"], "collecting_evidence")
 
 

@@ -13,7 +13,7 @@ import unittest
 
 from incident_store_fixtures import TEST_TIME_1, make_candidate, make_store
 
-from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus
+from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus, ReviewPacketStatus
 
 
 class TestCollectingEvidenceTransition(unittest.TestCase):
@@ -32,7 +32,7 @@ class TestCollectingEvidenceTransition(unittest.TestCase):
 
         self.assertIsNotNone(updated)
         self.assertEqual(updated.status, IncidentStatus.COLLECTING_EVIDENCE)
-        self.assertEqual(updated.snapshot_bundle_id, "bundle-123")
+        self.assertEqual(updated.latest_snapshot_bundle_id, "bundle-123")
 
         # Verify stored incident is updated
         stored = store.get_incident(incident_id)
@@ -64,8 +64,8 @@ class TestReadyForReviewTransition(unittest.TestCase):
 
         self.assertIsNotNone(updated)
         self.assertEqual(updated.status, IncidentStatus.READY_FOR_REVIEW)
-        self.assertTrue(updated.review_packet_available)
-        self.assertEqual(updated.review_packet_id, "review-456")
+        self.assertEqual(updated.review_packet.status, ReviewPacketStatus.AVAILABLE)
+        self.assertEqual(updated.review_packet.id, "review-456")
 
         # Verify stored incident is updated
         stored = store.get_incident(incident_id)
@@ -85,7 +85,8 @@ class TestReadyForReviewTransition(unittest.TestCase):
 
         self.assertIsNotNone(updated)
         self.assertEqual(updated.status, IncidentStatus.READY_FOR_REVIEW)
-        self.assertTrue(updated.review_packet_available)
+        # Without explicit packet ID, review_packet stays not-generated
+        self.assertEqual(updated.review_packet.status, ReviewPacketStatus.NOT_GENERATED)
 
 
 if __name__ == "__main__":

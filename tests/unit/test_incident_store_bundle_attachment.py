@@ -34,7 +34,7 @@ class TestPromoteWithoutBundleIdPreservesOpenBehavior(unittest.TestCase):
 
         self.assertEqual(len(incidents), 1)
         self.assertEqual(incidents[0].status, IncidentStatus.OPEN)
-        self.assertIsNone(incidents[0].snapshot_bundle_id)
+        self.assertIsNone(incidents[0].latest_snapshot_bundle_id)
 
     def test_promote_without_bundle_id_merges_without_status_change(self) -> None:
         """Without bundle_id, merge should not change status."""
@@ -63,7 +63,7 @@ class TestPromoteWithBundleIdOpensCollectingEvidence(unittest.TestCase):
 
         self.assertEqual(len(incidents), 1)
         self.assertEqual(incidents[0].status, IncidentStatus.COLLECTING_EVIDENCE)
-        self.assertEqual(incidents[0].snapshot_bundle_id, bundle_id)
+        self.assertEqual(incidents[0].latest_snapshot_bundle_id, bundle_id)
 
     def test_promote_from_bundle_creates_collecting_evidence_incident(self) -> None:
         """promote_candidates_from_bundle must create COLLECTING_EVIDENCE incidents."""
@@ -75,7 +75,7 @@ class TestPromoteWithBundleIdOpensCollectingEvidence(unittest.TestCase):
 
         self.assertEqual(len(incidents), 1)
         self.assertEqual(incidents[0].status, IncidentStatus.COLLECTING_EVIDENCE)
-        self.assertEqual(incidents[0].snapshot_bundle_id, bundle_id)
+        self.assertEqual(incidents[0].latest_snapshot_bundle_id, bundle_id)
 
 
 class TestIncidentStoresSnapshotBundleId(unittest.TestCase):
@@ -89,7 +89,7 @@ class TestIncidentStoresSnapshotBundleId(unittest.TestCase):
 
         incidents = store.promote_candidates([candidate], TEST_TIME_1, snapshot_bundle_id=bundle_id)
 
-        self.assertEqual(incidents[0].snapshot_bundle_id, bundle_id)
+        self.assertEqual(incidents[0].latest_snapshot_bundle_id, bundle_id)
 
     def test_stored_incident_has_bundle_id(self) -> None:
         """Stored incident must have the bundle ID after promotion."""
@@ -100,7 +100,7 @@ class TestIncidentStoresSnapshotBundleId(unittest.TestCase):
         store.promote_candidates([candidate], TEST_TIME_1, snapshot_bundle_id=bundle_id)
         stored = store.list_incidents()[0]
 
-        self.assertEqual(stored.snapshot_bundle_id, bundle_id)
+        self.assertEqual(stored.latest_snapshot_bundle_id, bundle_id)
 
 
 class TestRepeatedCandidateWithNewBundleId(unittest.TestCase):
@@ -126,11 +126,11 @@ class TestRepeatedCandidateWithNewBundleId(unittest.TestCase):
 
         # First promote with bundle-1
         incidents1 = store.promote_candidates([candidate], TEST_TIME_1, snapshot_bundle_id="bundle-1")
-        self.assertEqual(incidents1[0].snapshot_bundle_id, "bundle-1")
+        self.assertEqual(incidents1[0].latest_snapshot_bundle_id, "bundle-1")
 
         # Second promote with bundle-2
         incidents2 = store.promote_candidates([candidate], TEST_TIME_2, snapshot_bundle_id="bundle-2")
-        self.assertEqual(incidents2[0].snapshot_bundle_id, "bundle-2")
+        self.assertEqual(incidents2[0].latest_snapshot_bundle_id, "bundle-2")
 
     def test_first_observed_at_remains_stable(self) -> None:
         """first_observed_at must remain stable across repeated promotions."""
@@ -174,7 +174,7 @@ class TestSuppressedIncidentNotReopened(unittest.TestCase):
         # last_observed_at should still update
         self.assertEqual(after_repeat.last_observed_at, TEST_TIME_2)
         # snapshot_bundle_id should NOT be updated for SUPPRESSED
-        self.assertIsNone(after_repeat.snapshot_bundle_id)
+        self.assertIsNone(after_repeat.latest_snapshot_bundle_id)
 
 
 class TestDuplicateIncidentNotReopened(unittest.TestCase):
@@ -207,7 +207,7 @@ class TestDuplicateIncidentNotReopened(unittest.TestCase):
         # last_observed_at should still update
         self.assertEqual(after_repeat.last_observed_at, TEST_TIME_2)
         # snapshot_bundle_id should NOT be updated for DUPLICATE
-        self.assertIsNone(after_repeat.snapshot_bundle_id)
+        self.assertIsNone(after_repeat.latest_snapshot_bundle_id)
 
 
 class TestReadyForReviewNotDowngraded(unittest.TestCase):
@@ -235,7 +235,7 @@ class TestReadyForReviewNotDowngraded(unittest.TestCase):
         # last_observed_at should still update
         self.assertEqual(after_repeat.last_observed_at, TEST_TIME_2)
         # snapshot_bundle_id should NOT be updated for READY_FOR_REVIEW
-        self.assertIsNone(after_repeat.snapshot_bundle_id)
+        self.assertIsNone(after_repeat.latest_snapshot_bundle_id)
 
 
 class TestReturnedIncidentsAreSnapshots(unittest.TestCase):
@@ -324,7 +324,7 @@ class TestBundleAttachmentSemantics(unittest.TestCase):
         after_merge = store.get_incident(incident_id)
 
         self.assertEqual(after_merge.status, IncidentStatus.COLLECTING_EVIDENCE)
-        self.assertEqual(after_merge.snapshot_bundle_id, "bundle-1")
+        self.assertEqual(after_merge.latest_snapshot_bundle_id, "bundle-1")
 
     def test_collecting_evidence_updates_bundle_id_on_merge(self) -> None:
         """COLLECTING_EVIDENCE incident must update bundle_id on merge."""
@@ -340,7 +340,7 @@ class TestBundleAttachmentSemantics(unittest.TestCase):
         after_merge = store.get_incident(incident_id)
 
         self.assertEqual(after_merge.status, IncidentStatus.COLLECTING_EVIDENCE)
-        self.assertEqual(after_merge.snapshot_bundle_id, "bundle-2")
+        self.assertEqual(after_merge.latest_snapshot_bundle_id, "bundle-2")
 
     def test_investigating_incident_not_downgraded(self) -> None:
         """INVESTIGATING incident should transition to COLLECTING_EVIDENCE (not preserved)."""
@@ -373,7 +373,7 @@ class TestMultipleCandidatesWithBundle(unittest.TestCase):
 
         self.assertEqual(len(incidents), 2)
         for incident in incidents:
-            self.assertEqual(incident.snapshot_bundle_id, bundle_id)
+            self.assertEqual(incident.latest_snapshot_bundle_id, bundle_id)
             self.assertEqual(incident.status, IncidentStatus.COLLECTING_EVIDENCE)
 
     def test_mixed_new_and_existing_with_bundle(self) -> None:
@@ -390,7 +390,7 @@ class TestMultipleCandidatesWithBundle(unittest.TestCase):
 
         self.assertEqual(len(incidents), 2)
         for incident in incidents:
-            self.assertEqual(incident.snapshot_bundle_id, "bundle-1")
+            self.assertEqual(incident.latest_snapshot_bundle_id, "bundle-1")
             self.assertEqual(incident.status, IncidentStatus.COLLECTING_EVIDENCE)
 
 

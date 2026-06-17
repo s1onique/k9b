@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from k8s_diag_agent.collect.incident_lifecycle import (
     Incident,
     IncidentStatus,
+    ReviewPacketStatus,
     mark_collecting_evidence,
     mark_ready_for_review,
 )
@@ -22,7 +23,7 @@ from k8s_diag_agent.collect.incident_lifecycle import (
 
 def make_transition_incident(
     status: IncidentStatus = IncidentStatus.OPEN,
-    snapshot_bundle_id: str | None = None,
+    latest_snapshot_bundle_id: str | None = None,
 ) -> Incident:
     """Create an incident ready for transition testing."""
     now = datetime.now(UTC)
@@ -38,7 +39,7 @@ def make_transition_incident(
         status=status,
         first_observed_at=now,
         last_observed_at=now,
-        snapshot_bundle_id=snapshot_bundle_id,
+        latest_snapshot_bundle_id=latest_snapshot_bundle_id,
     )
 
 
@@ -52,7 +53,7 @@ class TestCollectingEvidenceTransition(unittest.TestCase):
         updated = mark_collecting_evidence(incident, "bundle-123")
 
         self.assertEqual(updated.status, IncidentStatus.COLLECTING_EVIDENCE)
-        self.assertEqual(updated.snapshot_bundle_id, "bundle-123")
+        self.assertEqual(updated.latest_snapshot_bundle_id, "bundle-123")
 
 
 class TestReadyForReviewTransition(unittest.TestCase):
@@ -62,14 +63,14 @@ class TestReadyForReviewTransition(unittest.TestCase):
         """mark_ready_for_review must set review_packet_available."""
         incident = make_transition_incident(
             status=IncidentStatus.COLLECTING_EVIDENCE,
-            snapshot_bundle_id="bundle-123",
+            latest_snapshot_bundle_id="bundle-123",
         )
 
         updated = mark_ready_for_review(incident, "review-packet-456")
 
         self.assertEqual(updated.status, IncidentStatus.READY_FOR_REVIEW)
-        self.assertTrue(updated.review_packet_available)
-        self.assertEqual(updated.review_packet_id, "review-packet-456")
+        self.assertTrue(updated.review_packet.status == ReviewPacketStatus.AVAILABLE)
+        self.assertEqual(updated.review_packet.id, "review-packet-456")
 
     def test_ready_for_review_with_default_id(self) -> None:
         """mark_ready_for_review must work without review_packet_id."""
@@ -80,8 +81,8 @@ class TestReadyForReviewTransition(unittest.TestCase):
         updated = mark_ready_for_review(incident)
 
         self.assertEqual(updated.status, IncidentStatus.READY_FOR_REVIEW)
-        self.assertTrue(updated.review_packet_available)
-        self.assertIsNone(updated.review_packet_id)
+        # Without explicit packet ID, review_packet stays not-generated
+        self.assertEqual(updated.review_packet.status, ReviewPacketStatus.NOT_GENERATED)
 
 
 if __name__ == "__main__":

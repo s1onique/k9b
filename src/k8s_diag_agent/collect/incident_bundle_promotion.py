@@ -17,9 +17,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from .incident_evidence import EvidenceLink, EvidenceRole
 from .incident_lifecycle import (
     Incident,
+    IncidentEvent,
+    IncidentEventActor,
+    IncidentEventType,
+    IncidentSignal,
     IncidentStatus,
+    make_event_id,
     mark_collecting_evidence,
 )
 
@@ -51,7 +57,7 @@ def open_incident_from_candidate_with_bundle(
     incident = open_incident_from_candidate(candidate, observed_at)
 
     # Transition to collecting_evidence with bundle attachment
-    return mark_collecting_evidence(incident, snapshot_bundle_id)
+    return mark_collecting_evidence(incident, snapshot_bundle_id, occurred_at=observed_at)
 
 
 # Terminal-ish statuses that should not be reopened or downgraded
@@ -89,8 +95,6 @@ def merge_candidate_into_incident_with_bundle(
     Returns:
         Updated incident with new signals, updated timestamp, and bundle ID
     """
-    from .incident_lifecycle import IncidentSignal
-
     # Convert candidate signals to incident signals
     new_signals: list[IncidentSignal] = []
     for sig in candidate.signals:
@@ -106,14 +110,58 @@ def merge_candidate_into_incident_with_bundle(
     # Determine status: only update if not in a terminal-ish status
     # and not already at READY_FOR_REVIEW (don't downgrade)
     new_status = incident.status
+    should_collect = False
     if incident.status not in _TERMINAL_REOPEN_BLOCKED_STATUSES:
         if incident.status != IncidentStatus.READY_FOR_REVIEW:
             new_status = IncidentStatus.COLLECTING_EVIDENCE
+            should_collect = True
 
     # Determine snapshot_bundle_id: update if transitioning to collecting_evidence
-    new_bundle_id = incident.snapshot_bundle_id
-    if new_status == IncidentStatus.COLLECTING_EVIDENCE:
+    new_bundle_id = incident.latest_snapshot_bundle_id
+    new_evidence_links = list(incident.evidence_links)
+    new_evidence_count = incident.evidence_count
+    new_events = list(incident.events)
+
+    if should_collect:
         new_bundle_id = snapshot_bundle_id
+        # Check idempotency: don't duplicate evidence link if same bundle already attached
+        existing_link = any(
+            link.artifact_id == snapshot_bundle_id and link.role == EvidenceRole.SNAPSHOT
+            for link in incident.evidence_links
+        )
+        if not existing_link:
+            # Create evidence link for the new bundle
+            new_link = EvidenceLink(
+                incident_id=incident.incident_id,
+                artifact_id=snapshot_bundle_id,
+                role=EvidenceRole.SNAPSHOT,
+                attached_at=observed_at,
+            )
+            new_evidence_links.append(new_link)
+            new_evidence_count += 1
+            # Create timeline event only when link is actually added
+            new_event = IncidentEvent(
+                event_id=make_event_id(incident.incident_id, "evidence_collection_started", observed_at),
+                incident_id=incident.incident_id,
+                event_type=IncidentEventType.EVIDENCE_COLLECTION_STARTED,
+                actor=IncidentEventActor.SYSTEM,
+                occurred_at=observed_at,
+                message=f"Evidence collection started with bundle {snapshot_bundle_id}",
+                data={"bundle_id": snapshot_bundle_id},
+            )
+            new_events.append(new_event)
+
+    # Create signal merge event
+    signal_event = IncidentEvent(
+        event_id=make_event_id(incident.incident_id, "signal_merged", observed_at),
+        incident_id=incident.incident_id,
+        event_type=IncidentEventType.SIGNAL_MERGED,
+        actor=IncidentEventActor.SYSTEM,
+        occurred_at=observed_at,
+        message=f"Merged {len(new_signals)} new signal(s) from candidate",
+        data={"signal_count": len(new_signals), "candidate_id": candidate.candidate_id},
+    )
+    new_events.append(signal_event)
 
     return Incident(
         incident_id=incident.incident_id,
@@ -129,9 +177,12 @@ def merge_candidate_into_incident_with_bundle(
         last_observed_at=observed_at,
         signals=incident.signals + new_signals,
         evidence_needed=list(incident.evidence_needed),
-        snapshot_bundle_id=new_bundle_id,
-        review_packet_available=incident.review_packet_available,
-        review_packet_id=incident.review_packet_id,
+        evidence_links=new_evidence_links,
+        latest_snapshot_bundle_id=new_bundle_id,
+        review_packet=incident.review_packet,
+        signal_count=incident.signal_count + len(new_signals),
+        evidence_count=new_evidence_count,
+        events=new_events,
         suppressed_reason=incident.suppressed_reason,
         duplicate_of=incident.duplicate_of,
         resolved_at=incident.resolved_at,

@@ -31,24 +31,14 @@ from .incident_bundle_promotion import (
     merge_candidate_into_incident_with_bundle,
     open_incident_from_candidate_with_bundle,
 )
+from .incident_evidence import EvidenceLink, EvidenceRole
 from .incident_lifecycle import (
     Incident,
+    IncidentEvent,
     IncidentStatus,
     incident_id_from_candidate,
     merge_candidate_into_incident,
     open_incident_from_candidate,
-)
-from .incident_lifecycle import (
-    mark_collecting_evidence as _mark_collecting_evidence,
-)
-from .incident_lifecycle import (
-    mark_duplicate as _mark_duplicate,
-)
-from .incident_lifecycle import (
-    mark_ready_for_review as _mark_ready_for_review,
-)
-from .incident_lifecycle import (
-    suppress_incident as _suppress_incident,
 )
 
 if TYPE_CHECKING:
@@ -92,7 +82,7 @@ class IncidentStore:
             - SUPPRESSED/DUPLICATE/RESOLVED: no status change
             - READY_FOR_REVIEW: no status change (no downgrade)
             - OPEN/COLLECTING_EVIDENCE/INVESTIGATING: transitions to COLLECTING_EVIDENCE
-          - snapshot_bundle_id updates to latest bundle ID when transitioning
+          - latest_snapshot_bundle_id updates to latest bundle ID when transitioning
 
         Args:
             candidates: Sequence of incident candidates to promote
@@ -196,6 +186,34 @@ class IncidentStore:
         # Return a snapshot copy
         return self._snapshot_incident(incident)
 
+    def get_incident_timeline(self, incident_id: str) -> list[IncidentEvent]:
+        """Get the timeline for a specific incident.
+
+        Args:
+            incident_id: The incident ID to look up
+
+        Returns:
+            List of timeline events sorted by occurrence time, or empty list if not found
+        """
+        incident = self._incidents.get(incident_id)
+        if incident is None:
+            return []
+        return incident.get_timeline()
+
+    def get_incident_evidence_links(self, incident_id: str) -> list[EvidenceLink]:
+        """Get the evidence links for a specific incident.
+
+        Args:
+            incident_id: The incident ID to look up
+
+        Returns:
+            List of evidence links, or empty list if not found
+        """
+        incident = self._incidents.get(incident_id)
+        if incident is None:
+            return []
+        return list(incident.evidence_links)
+
     def _snapshot_incident(self, incident: Incident) -> Incident:
         """Create a snapshot copy of an incident.
 
@@ -215,9 +233,12 @@ class IncidentStore:
             last_observed_at=incident.last_observed_at,
             signals=list(incident.signals),
             evidence_needed=list(incident.evidence_needed),
-            snapshot_bundle_id=incident.snapshot_bundle_id,
-            review_packet_available=incident.review_packet_available,
-            review_packet_id=incident.review_packet_id,
+            evidence_links=list(incident.evidence_links),
+            latest_snapshot_bundle_id=incident.latest_snapshot_bundle_id,
+            review_packet=incident.review_packet,
+            signal_count=incident.signal_count,
+            evidence_count=incident.evidence_count,
+            events=list(incident.events),
             suppressed_reason=incident.suppressed_reason,
             duplicate_of=incident.duplicate_of,
             resolved_at=incident.resolved_at,
@@ -234,6 +255,8 @@ class IncidentStore:
         Returns:
             Updated incident snapshot, or None if not found
         """
+        from .incident_lifecycle import mark_collecting_evidence as _mark_collecting_evidence
+
         incident = self._incidents.get(incident_id)
         if incident is None:
             return None
@@ -256,6 +279,8 @@ class IncidentStore:
         Returns:
             Updated incident snapshot, or None if not found
         """
+        from .incident_lifecycle import mark_ready_for_review as _mark_ready_for_review
+
         incident = self._incidents.get(incident_id)
         if incident is None:
             return None
@@ -283,7 +308,7 @@ class IncidentStore:
         """
         matching: list[Incident] = []
         for incident in self._incidents.values():
-            if incident.snapshot_bundle_id == snapshot_bundle_id:
+            if incident.latest_snapshot_bundle_id == snapshot_bundle_id:
                 # Do not include protected statuses (terminal-ish states)
                 if incident.status in (
                     IncidentStatus.SUPPRESSED,
@@ -315,9 +340,11 @@ class IncidentStore:
         Returns:
             Tuple of updated incidents
         """
+        from .incident_lifecycle import mark_ready_for_review as _mark_ready_for_review
+
         updated: list[Incident] = []
         for incident_id, incident in self._incidents.items():
-            if incident.snapshot_bundle_id == snapshot_bundle_id:
+            if incident.latest_snapshot_bundle_id == snapshot_bundle_id:
                 # Do not update protected statuses (terminal-ish states)
                 if incident.status in (
                     IncidentStatus.SUPPRESSED,
@@ -341,6 +368,8 @@ class IncidentStore:
         Returns:
             Updated incident snapshot, or None if not found
         """
+        from .incident_lifecycle import suppress_incident as _suppress_incident
+
         incident = self._incidents.get(incident_id)
         if incident is None:
             return None
@@ -359,11 +388,39 @@ class IncidentStore:
         Returns:
             Updated incident snapshot, or None if not found
         """
+        from .incident_lifecycle import mark_duplicate as _mark_duplicate
+
         incident = self._incidents.get(incident_id)
         if incident is None:
             return None
 
         updated = _mark_duplicate(incident, duplicate_of)
+        self._incidents[incident_id] = updated
+        return self._snapshot_incident(updated)
+
+    def attach_evidence(
+        self,
+        incident_id: str,
+        artifact_id: str,
+        role: EvidenceRole,
+    ) -> Incident | None:
+        """Attach an evidence artifact to the incident.
+
+        Args:
+            incident_id: ID of the incident to attach evidence to
+            artifact_id: ID of the evidence artifact
+            role: Role of the evidence
+
+        Returns:
+            Updated incident snapshot, or None if not found
+        """
+        from .incident_lifecycle import attach_evidence_artifact as _attach_evidence_artifact
+
+        incident = self._incidents.get(incident_id)
+        if incident is None:
+            return None
+
+        updated = _attach_evidence_artifact(incident, artifact_id, role)
         self._incidents[incident_id] = updated
         return self._snapshot_incident(updated)
 
