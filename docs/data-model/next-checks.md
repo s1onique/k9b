@@ -1,5 +1,7 @@
 # Next-check and manual promotion flow
 
+**See also**: [Next-check-to-incident mapping contract](./next-check-mapping.md) for detailed artifact inventory and mapping classification.
+
 ## Purpose
 
 Document the current next-check/manual promotion flow and the target incident-scoped mapping.
