@@ -45,6 +45,10 @@ class IncidentReviewPacketResponse:
     error: str | None = None
     """Error message if packet generation failed."""
 
+    # Incident state updates after successful packet generation
+    incident_updates: dict[str, Any] | None = None
+    """Summary of incident state updates (ready_for_review_count, incident_ids)."""
+
     @classmethod
     def from_error(
         cls,
@@ -67,7 +71,41 @@ class IncidentReviewPacketResponse:
         }
         if self.error is not None:
             result["error"] = self.error
+        if self.incident_updates is not None:
+            result["incident_updates"] = self.incident_updates
         return result
+
+
+def _update_incident_state_for_bundle(
+    bundle_id: str,
+) -> dict[str, Any]:
+    """Update incident state after successful review packet generation.
+
+    This function finds incidents with the matching bundle_id and marks them
+    as ready_for_review. It is separated from the main handler to enable
+    deterministic testing and clean error handling.
+
+    Protected status rule: Does not update SUPPRESSED, DUPLICATE, or RESOLVED
+    incidents. These are considered terminal-ish states.
+
+    Args:
+        bundle_id: The snapshot bundle ID to match
+
+    Returns:
+        Dict with ready_for_review_count and incident_ids
+    """
+    from .incident_store_provider import get_incident_store
+
+    store = get_incident_store()
+    updated_incidents = store.mark_ready_for_review_by_bundle_id(
+        snapshot_bundle_id=bundle_id,
+        review_packet_id=bundle_id,  # Use bundle_id as review_packet_id
+    )
+
+    return {
+        "ready_for_review_count": len(updated_incidents),
+        "incident_ids": [inc.incident_id for inc in updated_incidents],
+    }
 
 
 def handle_incident_review_packet(
@@ -105,10 +143,25 @@ def handle_incident_review_packet(
         # Generate the packet
         packet = generate_incident_review_packet_from_dict(bundle_data)
 
+        # Update incident state to mark ready_for_review
+        # This is best-effort: failures here should not fail the response
+        incident_updates: dict[str, Any] | None = None
+        try:
+            incident_updates = _update_incident_state_for_bundle(bundle_id)
+        except Exception as exc:
+            # Log but don't fail - packet generation succeeded
+            sanitized_message = sanitize_exception_message(exc, max_length=200)
+            _logger.warning(
+                "Failed to update incident state for bundle %s: %s",
+                bundle_id,
+                sanitized_message,
+            )
+
         return IncidentReviewPacketResponse(
             bundle_id=bundle_id,
             packet=packet,
             format=request.format,
+            incident_updates=incident_updates,
         )
 
     except (ValueError, KeyError) as exc:

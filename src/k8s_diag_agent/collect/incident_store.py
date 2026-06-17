@@ -264,6 +264,73 @@ class IncidentStore:
         self._incidents[incident_id] = updated
         return self._snapshot_incident(updated)
 
+    def find_incidents_by_bundle_id(
+        self,
+        snapshot_bundle_id: str,
+    ) -> tuple[Incident, ...]:
+        """Find all incidents with matching snapshot_bundle_id.
+
+        This is used to link review packet generation back to incidents.
+
+        Protected status rule: Does not update SUPPRESSED, DUPLICATE, or RESOLVED
+        incidents unless explicitly justified. These are considered terminal-ish states.
+
+        Args:
+            snapshot_bundle_id: The bundle ID to search for
+
+        Returns:
+            Tuple of matching incidents (excluding protected statuses)
+        """
+        matching: list[Incident] = []
+        for incident in self._incidents.values():
+            if incident.snapshot_bundle_id == snapshot_bundle_id:
+                # Do not include protected statuses (terminal-ish states)
+                if incident.status in (
+                    IncidentStatus.SUPPRESSED,
+                    IncidentStatus.DUPLICATE,
+                    IncidentStatus.RESOLVED,
+                ):
+                    continue
+                matching.append(self._snapshot_incident(incident))
+
+        return tuple(sorted(matching, key=lambda i: i.incident_id))
+
+    def mark_ready_for_review_by_bundle_id(
+        self,
+        snapshot_bundle_id: str,
+        review_packet_id: str | None = None,
+    ) -> tuple[Incident, ...]:
+        """Mark all incidents with matching bundle_id as ready_for_review.
+
+        This is called after successful review packet generation to update
+        the incident lifecycle state.
+
+        Protected status rule: Does not update SUPPRESSED, DUPLICATE, or RESOLVED
+        incidents. These are considered terminal-ish states.
+
+        Args:
+            snapshot_bundle_id: The bundle ID to match
+            review_packet_id: Optional ID of the review packet
+
+        Returns:
+            Tuple of updated incidents
+        """
+        updated: list[Incident] = []
+        for incident_id, incident in self._incidents.items():
+            if incident.snapshot_bundle_id == snapshot_bundle_id:
+                # Do not update protected statuses (terminal-ish states)
+                if incident.status in (
+                    IncidentStatus.SUPPRESSED,
+                    IncidentStatus.DUPLICATE,
+                    IncidentStatus.RESOLVED,
+                ):
+                    continue
+                updated_incident = _mark_ready_for_review(incident, review_packet_id)
+                self._incidents[incident_id] = updated_incident
+                updated.append(self._snapshot_incident(updated_incident))
+
+        return tuple(sorted(updated, key=lambda i: i.incident_id))
+
     def suppress(self, incident_id: str, reason: str) -> Incident | None:
         """Transition incident to SUPPRESSED state.
 
