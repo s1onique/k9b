@@ -37,12 +37,24 @@ class LogWindows:
 
 @dataclass
 class PvcUsage:
-    """PVC storage usage with byte counts and percentage."""
+    """PVC storage usage with byte counts and percentage.
+    
+    Attributes:
+        name: PVC name (e.g., "backend-data").
+        used_bytes: Used storage in bytes.
+        free_bytes: Free/available storage in bytes.
+        capacity_bytes: Total capacity in bytes.
+        used_percent: Percentage of capacity used (0-100).
+        source: Data source method (e.g., "statvfs", "kubelet", "k8s_api").
+        unavailable_reason: Human-readable reason if data is unavailable.
+    """
     name: str = ""
     used_bytes: int | None = None
     free_bytes: int | None = None
     capacity_bytes: int | None = None
     used_percent: int | None = None
+    source: str | None = None
+    unavailable_reason: str | None = None
 
 
 @dataclass
@@ -77,6 +89,8 @@ class RuntimeStatusPayload:
                     "free_bytes": self.backend_pvc.free_bytes,
                     "capacity_bytes": self.backend_pvc.capacity_bytes,
                     "used_percent": self.backend_pvc.used_percent,
+                    "source": self.backend_pvc.source,
+                    "unavailable_reason": self.backend_pvc.unavailable_reason,
                 }
                 if self.backend_pvc
                 else None

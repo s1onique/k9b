@@ -162,12 +162,15 @@ export const PvcUsageBar = ({ displayState }: PvcUsageBarProps) => {
 interface PvcUsageUnavailableProps {
   /** PVC name to display */
   name?: string;
+  /** Reason why data is unavailable */
+  reason?: string | null;
 }
 
 /**
  * Renders unavailable state for PVC when data cannot be fetched.
  */
-export const PvcUsageUnavailable = ({ name = "backend-data" }: PvcUsageUnavailableProps) => {
+export const PvcUsageUnavailable = ({ name = "backend-data", reason }: PvcUsageUnavailableProps) => {
+  const displayReason = reason || "PVC usage unavailable";
   return (
     <div
       className="pvc-usage-bar pvc-usage-bar--unavailable"
@@ -187,7 +190,9 @@ export const PvcUsageUnavailable = ({ name = "backend-data" }: PvcUsageUnavailab
       </div>
 
       <div className="pvc-usage-details">
-        <span className="pvc-usage-unavailable-text">PVC usage unavailable</span>
+        <span className="pvc-usage-unavailable-text" title={reason || undefined}>
+          {displayReason}
+        </span>
       </div>
     </div>
   );

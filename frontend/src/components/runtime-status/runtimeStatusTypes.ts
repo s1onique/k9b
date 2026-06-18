@@ -54,6 +54,10 @@ export interface PvcUsage {
   capacity_bytes: number | null;
   /** Percentage of capacity used (0-100) */
   used_percent: number | null;
+  /** Data source method (e.g., "statvfs", "kubelet", "k8s_api") */
+  source: string | null;
+  /** Human-readable reason if data is unavailable */
+  unavailable_reason: string | null;
 }
 
 /**

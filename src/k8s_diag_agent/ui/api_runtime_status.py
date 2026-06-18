@@ -11,13 +11,15 @@ Data sources:
     log extracts. They represent aggregate operational health from the health loop.
     Until per-pod/component log extraction is implemented, both fields show identical
     counts derived from the global health.log.
-- PVC usage: Not available in current cluster snapshots - returns honest unavailable state
+- PVC usage: Filesystem stats via os.statvfs() on configured mount paths
+  - backend-data: /app/runs (PVC mount path)
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -41,6 +43,14 @@ _NON_INFO_SEVERITIES = frozenset({"ERROR", "WARNING"})
 # Health log path relative to runs directory
 _HEALTH_LOG_PATH = Path("health") / "health.log"
 
+# PVC name to mount path mapping for Runtime Status
+# Maps PVC names to their local mount paths in the backend pod.
+# The backend pod mounts the PVC at the configured mountPath, so we can
+# read filesystem stats directly from the local mount without RBAC.
+_RUNTIME_STATUS_PVC_MOUNTS: dict[str, str] = {
+    "backend-data": "/app/runs",
+}
+
 
 def build_runtime_status_payload(
     runs_dir: Path,
@@ -59,8 +69,8 @@ def build_runtime_status_payload(
     # Build log windows from health.log
     log_windows = _build_log_windows_from_health_log(runs_dir, now=now)
 
-    # PVC usage is not available in current cluster snapshots
-    backend_pvc = _build_pvc_usage_unavailable()
+    # Build PVC usage from local filesystem stats
+    backend_pvc = _build_pvc_usage_from_statvfs("backend-data")
 
     return RuntimeStatusPayload(
         log_windows=log_windows,
@@ -218,11 +228,121 @@ def _build_pvc_usage_unavailable() -> PvcUsage | None:
     - unavailable data (None) - "PVC: unavailable"
     - populated data (PvcUsage instance)
 
-    Future: PVC data could be sourced from:
-    - Live Kubernetes API reads (requires read-only permissions)
-    - Cluster snapshots with persistentvolumeclaims data (not currently collected)
+    Note: This function is kept for backwards compatibility. New code should
+    use _build_pvc_usage_from_statvfs() which provides real filesystem stats.
     """
     return None
+
+
+def _build_pvc_usage_from_statvfs(pvc_name: str) -> PvcUsage | None:
+    """Build PVC usage from local filesystem stats using os.statvfs().
+
+    Reads filesystem statistics directly from the PVC mount path without
+    requiring kubectl exec or additional RBAC permissions.
+
+    Args:
+        pvc_name: PVC name (e.g., "backend-data").
+
+    Returns:
+        PvcUsage with filesystem stats, or None if mount path not configured.
+    """
+    # Look up the mount path for this PVC
+    mount_path = _RUNTIME_STATUS_PVC_MOUNTS.get(pvc_name)
+    if not mount_path:
+        logger.debug("No mount path configured for PVC: %s", pvc_name)
+        return None
+
+    return _get_filesystem_stats(pvc_name, mount_path)
+
+
+def _get_filesystem_stats(pvc_name: str, mount_path: str) -> PvcUsage:
+    """Get filesystem statistics for a mount path using os.statvfs().
+
+    Args:
+        pvc_name: PVC name for display.
+        mount_path: Local mount path to query.
+
+    Returns:
+        PvcUsage with capacity, used, and free bytes from statvfs.
+        Returns unavailable state on any error (missing path, permission denied, etc.).
+    """
+    try:
+        # Check if path exists
+        if not os.path.exists(mount_path):
+            return PvcUsage(
+                name=pvc_name,
+                used_bytes=None,
+                free_bytes=None,
+                capacity_bytes=None,
+                used_percent=None,
+                source="statvfs",
+                unavailable_reason=f"Path not found: {mount_path}",
+            )
+
+        # Get filesystem stats
+        stat_info = os.statvfs(mount_path)
+
+        # Extract values (convert from filesystem blocks to bytes)
+        # f_frsize is the fragment size (usually same as block size)
+        # f_blocks is total fragments
+        # f_bfree is free fragments
+        # f_bavail is available fragments (for non-privileged users)
+        frsize = stat_info.f_frsize or 1  # Avoid division by zero
+        total_blocks = stat_info.f_blocks
+        free_blocks = stat_info.f_bfree
+        avail_blocks = stat_info.f_bavail  # Available to non-privileged users
+
+        capacity_bytes = total_blocks * frsize
+        free_bytes = avail_blocks * frsize  # Use available, not just free
+        used_bytes = (total_blocks - free_blocks) * frsize
+
+        # Handle edge case: zero capacity means no meaningful stats
+        if capacity_bytes == 0:
+            return PvcUsage(
+                name=pvc_name,
+                used_bytes=None,
+                free_bytes=None,
+                capacity_bytes=None,
+                used_percent=None,
+                source="statvfs",
+                unavailable_reason="Zero capacity filesystem",
+            )
+
+        # Calculate percentage
+        used_percent = round((used_bytes / capacity_bytes) * 100)
+
+        return PvcUsage(
+            name=pvc_name,
+            used_bytes=used_bytes,
+            free_bytes=free_bytes,
+            capacity_bytes=capacity_bytes,
+            used_percent=used_percent,
+            source="statvfs",
+            unavailable_reason=None,
+        )
+
+    except OSError as exc:
+        logger.debug("Failed to get filesystem stats for %s: %s", mount_path, exc)
+        return PvcUsage(
+            name=pvc_name,
+            used_bytes=None,
+            free_bytes=None,
+            capacity_bytes=None,
+            used_percent=None,
+            source="statvfs",
+            unavailable_reason=f"Cannot read filesystem: {exc}",
+        )
+    except (ValueError, TypeError) as exc:
+        logger.debug("Unexpected error getting filesystem stats for %s: %s", mount_path, exc)
+        return PvcUsage(
+            name=pvc_name,
+            used_bytes=None,
+            free_bytes=None,
+            capacity_bytes=None,
+            used_percent=None,
+            source="statvfs",
+            unavailable_reason="Invalid filesystem data",
+        )
 
 
 def handle_runtime_status_route(handler: HealthUIRequestHandler) -> None:

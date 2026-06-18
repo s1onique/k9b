@@ -168,7 +168,10 @@ export const RuntimeStatusSummary = ({
             {pvcDisplayState ? (
               <PvcUsageBar displayState={pvcDisplayState} />
             ) : (
-              <PvcUsageUnavailable name={pvcData?.name ?? "backend-data"} />
+              <PvcUsageUnavailable
+                name={pvcData?.name ?? "backend-data"}
+                reason={pvcData?.unavailable_reason}
+              />
             )}
           </div>
         </div>
