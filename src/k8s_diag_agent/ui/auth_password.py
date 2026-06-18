@@ -10,6 +10,7 @@ Example: $pbkdf2-sha256$600000$abc123$def456
 
 from __future__ import annotations
 
+import binascii
 import hashlib
 import hmac
 import secrets
@@ -113,8 +114,10 @@ def verify_password(password: str, stored_hash: str) -> bool:
         import base64
 
         salt_bytes = base64.urlsafe_b64decode(salt_b64 + "==")
-    except Exception:
-        # Invalid salt encoding - reject
+    except (binascii.Error, ValueError):
+        # Invalid salt encoding - reject (fail-closed auth boundary)
+        # base64.b64decode raises binascii.Error on invalid padding/characters
+        # ValueError may be raised for invalid inputs to some operations
         _constant_time_dummy_compare(stored_hash)
         return False
 

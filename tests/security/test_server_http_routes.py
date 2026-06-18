@@ -40,26 +40,30 @@ class TestArtifactHTTPRoute:
 
     These tests exercise the artifact serving endpoint through real HTTP requests,
     proving security behavior is preserved through URL parsing and routing.
+
+    NOTE: Auth is disabled via http_harness_no_auth fixture because these tests
+    are about path validation and traversal rejection, not auth enforcement.
+    The separate auth suite owns "unauthenticated /artifact returns 401".
     """
 
-    def test_valid_artifact_served_via_http(self, http_harness: list) -> None:
+    def test_valid_artifact_served_via_http(self, http_harness_no_auth: list) -> None:
         """Valid artifact path within runs_dir should be served successfully via HTTP."""
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_no_auth
         status, body, _ = harness.request("GET", "/artifact?path=external-analysis/run-test-assessment-001.json")
 
         assert status == 200, f"Expected 200 for valid artifact, got {status}"
         assert b"valid artifact" in body
 
-    def test_missing_path_returns_400(self, http_harness: list) -> None:
+    def test_missing_path_returns_400(self, http_harness_no_auth: list) -> None:
         """Missing path parameter should return 400 via HTTP."""
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_no_auth
         status, body, _ = harness.request("GET", "/artifact")
 
         assert status == 400, f"Expected 400 for missing path, got {status}"
 
-    def test_basic_traversal_rejected_via_http(self, http_harness: list) -> None:
+    def test_basic_traversal_rejected_via_http(self, http_harness_no_auth: list) -> None:
         """Basic path traversal must be rejected via HTTP."""
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_no_auth
 
         for payload in TRAVERSAL_PAYLOADS[:3]:  # Test subset for HTTP layer
             status, body, _ = harness.request("GET", f"/artifact?path={quote(payload)}")
@@ -73,13 +77,13 @@ class TestArtifactHTTPRoute:
                 f"Canary content leaked via HTTP for payload {payload!r}"
             )
 
-    def test_encoded_traversal_rejected_via_http(self, http_harness: list) -> None:
+    def test_encoded_traversal_rejected_via_http(self, http_harness_no_auth: list) -> None:
         """URL-encoded traversal patterns must be rejected via HTTP.
 
         This tests the real-world case where clients send %2e%2e%2f directly
         in the URL, exercising the same code path as browsers and API clients.
         """
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_no_auth
 
         for payload in ENCODED_TRAVERSAL_PAYLOADS[:4]:  # Test key encoded patterns
             status, body, _ = harness.request("GET", f"/artifact?path={payload}")
@@ -93,13 +97,13 @@ class TestArtifactHTTPRoute:
                 f"Canary leaked via HTTP for encoded payload {payload!r}"
             )
 
-    def test_double_encoded_traversal_rejected_via_http(self, http_harness: list) -> None:
+    def test_double_encoded_traversal_rejected_via_http(self, http_harness_no_auth: list) -> None:
         """Double-encoded traversal (%252e%252e%252f) must be rejected via HTTP.
 
         This tests defense in depth: the server should reject double-encoded
         traversal even though single-encoding should catch it first.
         """
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_no_auth
 
         # %252e = encoded %2e = encoded .
         # This tests that URL decoding is handled correctly
@@ -114,9 +118,9 @@ class TestArtifactHTTPRoute:
         assert canary_content not in body
         assert b"/etc/passwd" not in body
 
-    def test_absolute_paths_rejected_via_http(self, http_harness: list) -> None:
+    def test_absolute_paths_rejected_via_http(self, http_harness_no_auth: list) -> None:
         """Absolute path attempts must be rejected via HTTP."""
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_no_auth
 
         for payload in ABSOLUTE_PATH_PAYLOADS[:3]:  # Test subset
             status, body, _ = harness.request("GET", f"/artifact?path={quote(payload)}")
@@ -126,9 +130,9 @@ class TestArtifactHTTPRoute:
             )
             assert canary.get_canary_content().encode() not in body
 
-    def test_null_bytes_rejected_via_http(self, http_harness: list) -> None:
+    def test_null_bytes_rejected_via_http(self, http_harness_no_auth: list) -> None:
         """Null byte injection must be rejected via HTTP."""
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_no_auth
 
         for payload in NULL_BYTE_PAYLOADS[:2]:  # Test subset
             # Null bytes are URL-encoded in query strings
@@ -139,9 +143,9 @@ class TestArtifactHTTPRoute:
                 f"Null byte payload {payload!r} was not rejected via HTTP: status={status}"
             )
 
-    def test_canary_not_accessible_via_http_traversal(self, http_harness: list) -> None:
+    def test_canary_not_accessible_via_http_traversal(self, http_harness_no_auth: list) -> None:
         """Canary files outside root must not be accessible via HTTP traversal."""
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_no_auth
 
         canary_paths = canary.get_all_canary_paths()
         if not canary_paths:
@@ -152,7 +156,7 @@ class TestArtifactHTTPRoute:
             if not canary_path.is_file():
                 continue
 
-            # Construct traversal path: ../<canary-dir-name>/<filename>
+            # Construct traversal path: ../<canary-dir-name>/
             runs_parent = canary_path.resolve().parents[1]
             relative_to_runs = canary_path.relative_to(runs_parent)
             traversal = str(relative_to_runs).replace(
@@ -166,9 +170,9 @@ class TestArtifactHTTPRoute:
                 f"Canary file {canary_path.name!r} was accessible via HTTP traversal {traversal!r}"
             )
 
-    def test_no_host_path_leak_in_artifact_response(self, http_harness: list) -> None:
+    def test_no_host_path_leak_in_artifact_response(self, http_harness_no_auth: list) -> None:
         """Artifact error responses must not leak absolute host paths."""
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_no_auth
 
         status, body, _ = harness.request("GET", "/artifact?path=../etc/passwd")
         response_text = body.decode("utf-8", errors="replace")
@@ -182,12 +186,12 @@ class TestArtifactHTTPRoute:
         assert "/home/" not in response_text
         assert "/tmp/" not in response_text
 
-    def test_dot_segment_encoded_variants(self, http_harness: list) -> None:
+    def test_dot_segment_encoded_variants(self, http_harness_no_auth: list) -> None:
         """Dot-segment normalization variants must be rejected via HTTP.
 
         Tests: %2e%2e%2f, %2e%2e/, %2e.
         """
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_no_auth
 
         variants = [
             "%2e%2e%2fetc%2fpasswd",  # Encoded ../

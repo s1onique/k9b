@@ -6,17 +6,17 @@ These tests verify:
 3. Route-level /api/run response includes Content-Length
 4. Response body can be read without waiting for connection close
 5. Raw HTTP keep-alive test: body read completes from Content-Length without socket close
+
+NOTE: These tests use auth-disabled server to test route behavior,
+not auth enforcement. The auth suite owns "unauthenticated returns 401".
 """
 
-import functools
 import json
 import shutil
 import socket
 import tempfile
-import threading
 import unittest
 import unittest.mock as mock
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +30,10 @@ from k8s_diag_agent.external_analysis.config import (
     ReviewEnrichmentPolicy,
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class SendJsonContentLengthTests(unittest.TestCase):
@@ -85,23 +88,19 @@ class SendJsonContentLengthTests(unittest.TestCase):
                 available_adapters=(),
             )
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
+    def _start_server(self) -> tuple[Any, Any, Any]:
+        """Start server with auth disabled to test route behavior."""
+        server, thread, patcher = start_ui_test_server_without_auth(
             runs_dir=self.runs_dir,
             static_dir=self.static_dir,
         )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
+        return server, thread, patcher
 
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
+    def _shutdown_server(self, server: Any, thread: Any, patcher: Any) -> None:
+        """Shutdown test server with auth patcher."""
+        shutdown_test_server(server, thread, patcher)
 
-    def _fetch_with_raw_socket(self, server: ThreadingHTTPServer) -> dict[str, Any]:
+    def _fetch_with_raw_socket(self, server: Any) -> dict[str, Any]:
         """Fetch /api/run using raw socket to inspect headers."""
         host, port = server.server_address[:2]
         host_str = host.decode("utf-8") if isinstance(host, bytes) else host
@@ -157,7 +156,7 @@ class SendJsonContentLengthTests(unittest.TestCase):
 
     def test_send_json_content_length_matches_encoded_bytes(self) -> None:
         """Test that _send_json Content-Length header equals actual UTF-8 encoded body length."""
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             result = self._fetch_with_raw_socket(server)
             
@@ -178,11 +177,11 @@ class SendJsonContentLengthTests(unittest.TestCase):
             self.assertIsInstance(parsed, dict)
             
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_response_bytes_matches_body_length(self) -> None:
         """Test that Content-Length matches actual body length (verifying _response_bytes will be correct)."""
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             result = self._fetch_with_raw_socket(server)
             
@@ -200,11 +199,11 @@ class SendJsonContentLengthTests(unittest.TestCase):
             self.assertIsInstance(parsed, dict)
             
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_api_run_response_includes_content_length(self) -> None:
         """Test that /api/run response includes Content-Length header."""
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             host, port = server.server_address[:2]
             host_str = host.decode("utf-8") if isinstance(host, bytes) else host
@@ -221,7 +220,7 @@ class SendJsonContentLengthTests(unittest.TestCase):
                 f"Content-Length header ({content_length}) should match body length ({len(body)})")
             
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_body_reads_without_waiting_for_eof(self) -> None:
         """Test that response body can be read based on Content-Length without waiting for connection close.
@@ -229,7 +228,7 @@ class SendJsonContentLengthTests(unittest.TestCase):
         This is the key regression test: if Content-Length is missing or wrong, the client
         may wait for EOF/timeout instead of reading exactly Content-Length bytes.
         """
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             result = self._fetch_with_raw_socket(server)
             
@@ -250,7 +249,7 @@ class SendJsonContentLengthTests(unittest.TestCase):
                 )
             
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
 
 class HTTPFramingTests(unittest.TestCase):
@@ -302,28 +301,24 @@ class HTTPFramingTests(unittest.TestCase):
                 available_adapters=(),
             )
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
+    def _start_server(self) -> tuple[Any, Any, Any]:
+        """Start server with auth disabled to test route behavior."""
+        server, thread, patcher = start_ui_test_server_without_auth(
             runs_dir=self.runs_dir,
             static_dir=self.static_dir,
         )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
+        return server, thread, patcher
 
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
+    def _shutdown_server(self, server: Any, thread: Any, patcher: Any) -> None:
+        """Shutdown test server with auth patcher."""
+        shutdown_test_server(server, thread, patcher)
 
     def test_runs_list_response_framing(self) -> None:
         """Test that /api/runs response has correct Content-Length framing."""
         run_id = "test-run"
         self._write_minimal_index(run_id)
         
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             host, port = server.server_address[:2]
             host_str = host.decode("utf-8") if isinstance(host, bytes) else host
@@ -344,7 +339,7 @@ class HTTPFramingTests(unittest.TestCase):
             self.assertIn("runs", parsed)
             
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_json_responses_include_connection_close(self) -> None:
         """Test that _send_json adds Connection: close header and sets close_connection.
@@ -357,7 +352,7 @@ class HTTPFramingTests(unittest.TestCase):
         run_id = "test-run-conn-close"
         self._write_minimal_index(run_id)
         
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             host, port = server.server_address[:2]
             host_str = host.decode("utf-8") if isinstance(host, bytes) else host
@@ -401,7 +396,7 @@ class HTTPFramingTests(unittest.TestCase):
             self.fail("Should have received complete response headers with Connection: close")
             
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
 
 if __name__ == "__main__":

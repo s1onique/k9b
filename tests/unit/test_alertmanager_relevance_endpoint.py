@@ -5,16 +5,16 @@ These tests exercise the actual HTTP endpoint using a test server, covering:
 2. Invalid request → 400 response
 3. Source execution artifact unchanged (immutability)
 4. Persisted review visible after re-read through normal server path
+
+NOTE: These tests use auth-disabled server to test route behavior,
+not auth enforcement. The auth suite owns "unauthenticated returns 401".
 """
 
-import functools
 import json
 import shutil
 import tempfile
-import threading
 import unittest
 import urllib.error
-import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 from http.server import ThreadingHTTPServer
@@ -24,7 +24,10 @@ from typing import Any
 from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisPurpose,
 )
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
@@ -52,21 +55,17 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
+    def _start_server(self) -> tuple[Any, Any, Any]:
+        """Start server with auth disabled to test route behavior."""
+        server, thread, patcher = start_ui_test_server_without_auth(
             runs_dir=self.runs_dir,
             static_dir=self.static_dir,
         )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
+        return server, thread, patcher
 
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
+    def _shutdown_server(self, server: Any, thread: Any, patcher: Any) -> None:
+        """Shutdown test server with auth patcher."""
+        shutdown_test_server(server, thread, patcher)
 
     def _create_execution_artifact(
         self,
@@ -123,7 +122,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
         run_id = "test-valid"
         artifact_path, relative_path = self._create_execution_artifact(run_id, 0)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             code, response = self._post_alertmanager_feedback(
                 server,
@@ -149,7 +148,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             self.assertEqual(review_data["alertmanager_relevance_summary"], "Alertmanager was helpful")
             self.assertIn("reviewed_at", review_data)
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_source_execution_artifact_unchanged(self) -> None:
         """Test that source execution artifact is NOT modified when review is created."""
@@ -157,7 +156,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
         artifact_path, relative_path = self._create_execution_artifact(run_id, 0)
         original_content = artifact_path.read_text(encoding="utf-8")
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             code, response = self._post_alertmanager_feedback(
                 server,
@@ -178,14 +177,14 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             self.assertTrue(review_path.exists(), f"Review path {review_path} does not exist")
             self.assertNotEqual(review_path, artifact_path)
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_invalid_relevance_class_returns_400(self) -> None:
         """Test that invalid alertmanagerRelevance returns 400."""
         run_id = "test-invalid-class"
         _, relative_path = self._create_execution_artifact(run_id, 0)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             code, response = self._post_alertmanager_feedback(
                 server,
@@ -199,11 +198,11 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             self.assertIn("error", response)
             self.assertIn("Invalid alertmanagerRelevance", response["error"])
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_missing_artifact_path_returns_400(self) -> None:
         """Test that missing artifactPath returns 400."""
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             code, response = self._post_alertmanager_feedback(
                 server,
@@ -216,14 +215,14 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             self.assertIn("error", response)
             self.assertIn("artifactPath is required", response["error"])
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_missing_relevance_returns_400(self) -> None:
         """Test that missing alertmanagerRelevance returns 400."""
         run_id = "test-missing-relevance"
         _, relative_path = self._create_execution_artifact(run_id, 0)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             code, response = self._post_alertmanager_feedback(
                 server,
@@ -236,11 +235,11 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             self.assertIn("error", response)
             self.assertIn("alertmanagerRelevance is required", response["error"])
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_nonexistent_artifact_returns_404(self) -> None:
         """Test that non-existent artifact path returns 404."""
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             code, response = self._post_alertmanager_feedback(
                 server,
@@ -254,11 +253,11 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             self.assertIn("error", response)
             self.assertIn("not found", response["error"].lower())
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_invalid_json_returns_400(self) -> None:
         """Test that invalid JSON returns 400."""
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             port = server.server_address[1]
             url = f"http://127.0.0.1:{port}/api/alertmanager-relevance-feedback"
@@ -273,11 +272,11 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
                 urllib.request.urlopen(req, timeout=5)
             self.assertEqual(ctx.exception.code, 400)
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_empty_body_returns_400(self) -> None:
         """Test that empty body returns 400."""
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             port = server.server_address[1]
             url = f"http://127.0.0.1:{port}/api/alertmanager-relevance-feedback"
@@ -291,7 +290,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
                 urllib.request.urlopen(req, timeout=5)
             self.assertEqual(ctx.exception.code, 400)
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_preserves_server_owned_provenance(self) -> None:
         """Test that review artifact preserves server-owned provenance from execution."""
@@ -303,7 +302,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
         }
         artifact_path, relative_path = self._create_execution_artifact(run_id, 0, alertmanager_provenance=provenance)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             code, response = self._post_alertmanager_feedback(
                 server,
@@ -324,7 +323,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             self.assertIn("alertmanager_provenance", review_data)
             self.assertEqual(review_data["alertmanager_provenance"], provenance)
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_review_visible_after_reload_through_discovery(self) -> None:
         """Test that persisted review is discoverable after reload."""
@@ -334,7 +333,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
         provenance = {"matchedDimensions": ["namespace"]}
         artifact_path, relative_path = self._create_execution_artifact(run_id, 0, alertmanager_provenance=provenance)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             # Create review through endpoint
             code, response = self._post_alertmanager_feedback(
@@ -360,7 +359,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             self.assertEqual(discovered["alertmanager_relevance"], "not_relevant")
             self.assertEqual(discovered["alertmanager_relevance_summary"], "Not helpful for this namespace")
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_review_visible_in_merged_history_after_reload(self) -> None:
         """Test that review is visible in merged execution history after reload."""
@@ -373,7 +372,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
         provenance = {"matchedDimensions": ["cluster"]}
         artifact_path, relative_path = self._create_execution_artifact(run_id, 0, alertmanager_provenance=provenance)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             # Create review through endpoint
             code, response = self._post_alertmanager_feedback(
@@ -408,7 +407,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             self.assertIn("alertmanagerReviewedAt", merged)
             self.assertIn("alertmanagerReviewArtifactPath", merged)
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_all_valid_relevance_classes_accepted(self) -> None:
         """Test that all 4 valid relevance classes are accepted."""
@@ -422,7 +421,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             run_id = f"test-{relevance_class}"
             _, relative_path = self._create_execution_artifact(run_id, 0)
 
-            server, thread = self._start_server()
+            server, thread, patcher = self._start_server()
             try:
                 code, response = self._post_alertmanager_feedback(
                     server,
@@ -439,14 +438,14 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
                 review_path = self.health_dir / response["reviewArtifactPath"]
                 self.assertTrue(review_path.exists(), f"Review path {review_path} does not exist")
             finally:
-                self._shutdown_server(server, thread)
+                self._shutdown_server(server, thread, patcher)
 
     def test_review_does_not_require_summary(self) -> None:
         """Test that review creation works without optional summary."""
         run_id = "test-no-summary"
         _, relative_path = self._create_execution_artifact(run_id, 0)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             code, response = self._post_alertmanager_feedback(
                 server,
@@ -466,7 +465,7 @@ class TestAlertmanagerRelevanceFeedbackEndpoint(unittest.TestCase):
             review_data = json.loads(review_path.read_text(encoding="utf-8"))
             self.assertIsNone(review_data.get("alertmanager_relevance_summary"))
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
 
 if __name__ == "__main__":

@@ -5,19 +5,19 @@ These tests verify:
 2. /api/run timing log includes request lifecycle fields
 3. Cached /api/run request path is observable and fast
 4. Existing /api/runs index fast-path tests still pass
+
+NOTE: These tests use auth-disabled server to test route behavior,
+not auth enforcement. The auth suite owns "unauthenticated returns 401".
 """
 
-import functools
 import json
 import shutil
 import tempfile
-import threading
 import unittest
 import unittest.mock as mock
 import urllib.request
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisArtifact,
@@ -29,7 +29,10 @@ from k8s_diag_agent.external_analysis.config import (
     ReviewEnrichmentPolicy,
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class RunPayloadPerformanceTests(unittest.TestCase):
@@ -84,23 +87,19 @@ class RunPayloadPerformanceTests(unittest.TestCase):
                 available_adapters=(),
             )
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
+    def _start_server(self) -> tuple[Any, Any, Any]:
+        """Start server with auth disabled to test route behavior."""
+        server, thread, patcher = start_ui_test_server_without_auth(
             runs_dir=self.runs_dir,
             static_dir=self.static_dir,
         )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
+        return server, thread, patcher
 
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
+    def _shutdown_server(self, server: Any, thread: Any, patcher: Any) -> None:
+        """Shutdown test server with auth patcher."""
+        shutdown_test_server(server, thread, patcher)
 
-    def _fetch_run_payload(self, server: ThreadingHTTPServer) -> dict[str, object]:
+    def _fetch_run_payload(self, server: Any) -> dict[str, object]:
         address = server.server_address
         host_address, port, *_ = address
         host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
@@ -130,7 +129,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             # Patch the structured logging to capture timing fields
             captured_logs: list[dict[str, object]] = []
@@ -179,7 +178,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
             )
 
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_run_payload_timing_log_includes_lifecycle_fields(self) -> None:
         """Regression test: /api/run timing log should include request lifecycle fields."""
@@ -187,7 +186,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
         artifact = self._build_artifact(run_id)
         self._write_index(artifact)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             captured_logs: list[dict[str, object]] = []
 
@@ -237,7 +236,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
                 )
 
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_cached_run_payload_is_fast(self) -> None:
         """Regression test: Cached /api/run should be fast and observable."""
@@ -245,7 +244,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
         artifact = self._build_artifact(run_id)
         self._write_index(artifact)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             captured_logs: list[dict[str, object]] = []
 
@@ -301,11 +300,11 @@ class RunPayloadPerformanceTests(unittest.TestCase):
             )
 
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
 
     def _fetch_selected_run_payload(
-        self, server: ThreadingHTTPServer, run_id: str
+        self, server: Any, run_id: str
     ) -> dict[str, object]:
         address = server.server_address
         host_address, port, *_ = address
@@ -360,7 +359,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             captured_logs: list[dict[str, object]] = []
 
@@ -402,7 +401,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
             )
 
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_selected_run_uses_notification_index_when_present(self) -> None:
         """Regression test: selected-run should use ui-index notification_index when available.
@@ -442,7 +441,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             # Fetch the payload - verify it loads without directory scan
             payload = self._fetch_selected_run_payload(server, run_id)
@@ -455,7 +454,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
             # The notification data is loaded from index, not scanned from disk
 
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_selected_run_uses_proposal_status_summary_from_review(self) -> None:
         """Regression test: selected-run should use _proposal_status_summary from review artifact.
@@ -501,7 +500,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             captured_logs: list[dict[str, object]] = []
 
@@ -555,7 +554,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
             # Proposals are deferred when _proposal_status_summary exists in review
 
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_selected_run_missing_notification_index_defers(self) -> None:
         """Regression test: missing ui-index.json should NOT trigger notification directory scan.
@@ -588,7 +587,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             # Fetch the payload - should return 0 notifications (deferred, no scan)
             payload = self._fetch_selected_run_payload(server, run_id)
@@ -601,7 +600,7 @@ class RunPayloadPerformanceTests(unittest.TestCase):
             # The notification data is deferred, not scanned from disk
 
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
 
 # Note: /api/runs index fast-path is comprehensively tested in test_index_super_fast_path.py

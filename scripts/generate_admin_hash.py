@@ -25,7 +25,7 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from k8s_diag_agent.ui.auth_password import hash_password, generate_password
+from k8s_diag_agent.ui.auth_password import generate_password, hash_password
 
 
 def main() -> None:

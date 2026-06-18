@@ -2,6 +2,10 @@
 
 This module contains the HTTP test harness and fixtures used across
 server HTTP route security test modules.
+
+Auth mode: Tests that need to test route security behavior (not auth enforcement)
+should use start_ui_test_server_without_auth() to disable auth and assert
+the underlying route semantics.
 """
 
 from __future__ import annotations
@@ -15,6 +19,10 @@ from typing import Any
 
 import pytest
 
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 from tests.security.server_static_test_support import (
     SecurityCanaryFiles,
 )
@@ -155,4 +163,80 @@ def http_harness(tmp_path: Path) -> Generator[list, None, None]:
         yield [harness, port, canary]
     finally:
         harness.stop()
+        canary.cleanup()
+
+
+@pytest.fixture
+def http_harness_no_auth(tmp_path: Path) -> Generator[list, None, None]:
+    """Create an HTTP test harness with auth disabled for route-behavior testing.
+
+    Use this fixture for tests that verify route security behavior (path validation,
+    traversal rejection, framing) rather than auth enforcement. Auth is disabled
+    via mocking so tests can assert the underlying route semantics.
+
+    Yields a tuple of (harness, port, canary) where harness has auth disabled.
+    """
+    runs_dir = tmp_path / "runs"
+    runs_dir.mkdir(parents=True)
+    health_dir = runs_dir / "health"
+    health_dir.mkdir(parents=True)
+    ea_dir = runs_dir / "external-analysis"
+    ea_dir.mkdir(parents=True)
+
+    # Create a valid artifact inside the root
+    valid_artifact = ea_dir / "run-test-assessment-001.json"
+    valid_artifact.write_text(
+        '{"findings": [], "summary": "valid artifact"}',
+        encoding="utf-8",
+    )
+
+    static_dir = tmp_path / "static"
+    static_dir.mkdir(parents=True)
+    (static_dir / "index.html").write_text("<h1>Welcome</h1>", encoding="utf-8")
+    (static_dir / "assets").mkdir()
+    (static_dir / "assets" / "app.js").write_text("// app", encoding="utf-8")
+
+    canary = SecurityCanaryFiles(runs_dir)
+
+    # Start server with auth disabled so route behavior can be tested
+    server, thread, patcher = start_ui_test_server_without_auth(
+        runs_dir=runs_dir,
+        static_dir=static_dir,
+    )
+
+    # Create a simple harness wrapper that uses the auth-disabled server
+    class AuthDisabledHarness:
+        """Harness wrapper for auth-disabled server."""
+
+        def __init__(self, server_instance: Any) -> None:
+            self._server = server_instance
+
+        @property
+        def port(self) -> int:
+            return self._server.server_address[1]
+
+        def request(
+            self, method: str, path: str, headers: dict[str, str] | None = None
+        ) -> tuple[int, bytes, dict[str, str]]:
+            """Make an HTTP request. Returns (status_code, body, headers_dict)."""
+            conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+            try:
+                if headers:
+                    conn.request(method, path, headers=headers)
+                else:
+                    conn.request(method, path)
+                response = conn.getresponse()
+                status = response.status
+                body = response.read()
+                response_headers = dict(response.getheaders())
+                return status, body, response_headers
+            finally:
+                conn.close()
+
+    harness = AuthDisabledHarness(server)
+
+    try:
+        yield [harness, harness.port, canary]
+    finally:
+        shutdown_test_server(server, thread, patcher)
         canary.cleanup()

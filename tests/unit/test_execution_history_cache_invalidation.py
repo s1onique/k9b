@@ -11,18 +11,17 @@ health loop ran.
 
 Fix: Backend now touches ui-index.json after successful execution, which
 invalidates the cache and forces fresh data on the next /api/run request.
+
+NOTE: These tests use auth-disabled server to test route behavior,
+not auth enforcement. The auth suite owns "unauthenticated returns 401".
 """
 
-import functools
 import json
 import shutil
 import tempfile
-import threading
 import unittest
 import unittest.mock as mock
-import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +35,10 @@ from k8s_diag_agent.external_analysis.config import (
     ReviewEnrichmentPolicy,
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class ExecutionCacheInvalidationTests(unittest.TestCase):
@@ -114,18 +116,15 @@ class ExecutionCacheInvalidationTests(unittest.TestCase):
                 expected_scheduler_interval_seconds=None,
             )
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
+    def _start_server(self) -> tuple[Any, Any, Any]:
+        """Start server with auth disabled to test route behavior."""
+        server, thread, patcher = start_ui_test_server_without_auth(
             runs_dir=self.runs_dir,
             static_dir=self.static_dir,
         )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
+        return server, thread, patcher
 
-    def _fetch_run_payload(self, server: ThreadingHTTPServer) -> dict[str, Any]:
+    def _fetch_run_payload(self, server: Any) -> dict[str, Any]:
         address = server.server_address
         host_address, port, *_ = address
         host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
@@ -135,10 +134,9 @@ class ExecutionCacheInvalidationTests(unittest.TestCase):
             assert isinstance(payload, dict)
             return payload
 
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
+    def _shutdown_server(self, server: Any, thread: Any, patcher: Any) -> None:
+        """Shutdown test server with auth patcher."""
+        shutdown_test_server(server, thread, patcher)
 
     def test_execution_invalidates_cache_and_appears_in_history(self) -> None:
         """Verify that execution invalidates stale cache and exposes new entry in history.
@@ -233,7 +231,7 @@ class ExecutionCacheInvalidationTests(unittest.TestCase):
             },
         }, indent=2), encoding="utf-8")
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             # Step 1: Fetch /api/run to populate the cache
             payload_before = self._fetch_run_payload(server)
@@ -275,7 +273,7 @@ class ExecutionCacheInvalidationTests(unittest.TestCase):
             self.assertEqual(entry.get("clusterLabel"), "cluster-a")
 
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_execution_artifact_exists_after_successful_execution(self) -> None:
         """Verify that execution writes the artifact file correctly."""
@@ -358,7 +356,7 @@ class ExecutionCacheInvalidationTests(unittest.TestCase):
             },
         }, indent=2), encoding="utf-8")
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             # Mock to prevent actual command execution
             with mock.patch(
@@ -389,7 +387,7 @@ class ExecutionCacheInvalidationTests(unittest.TestCase):
             self.assertEqual(artifact_data["payload"]["candidateDescription"], "Check pod status")
 
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
 
 if __name__ == "__main__":

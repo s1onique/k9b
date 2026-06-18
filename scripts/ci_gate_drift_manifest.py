@@ -29,7 +29,8 @@ def validate_manifest(manifest: dict) -> list[str]:
     elif not isinstance(manifest["required_gates"], dict):
         errors.append("'required_gates' must be a dictionary")
     else:
-        workflows_to_check = manifest.get("workflows_to_check", [])
+        # workflows_to_check: reserved for future per-workflow validation
+        _ = manifest.get("workflows_to_check", [])
         for gate_id, gate_config in manifest["required_gates"].items():
             ci_equiv = gate_config.get("ci_equivalent")
             if ci_equiv is None:

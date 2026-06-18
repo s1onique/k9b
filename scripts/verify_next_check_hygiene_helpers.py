@@ -12,17 +12,16 @@ from pathlib import Path
 from typing import NamedTuple
 
 from verify_next_check_hygiene_patterns import (
-    FORBIDDEN_PATTERNS,
     ALLOWED_PATTERNS,
+    FORBIDDEN_PATTERNS,
 )
 
 
 # Named tuple type alias for pattern entries (re-exported for external use)
-_ForbiddenPattern = NamedTuple("_ForbiddenPattern", [
-    ("pattern", re.Pattern[str]),
-    ("name", str),
-    ("explanation", str),
-])
+class _ForbiddenPattern(NamedTuple):
+    pattern: re.Pattern[str]
+    name: str
+    explanation: str
 
 
 def _is_line_commented(line: str) -> bool:

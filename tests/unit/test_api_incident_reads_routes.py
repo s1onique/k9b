@@ -7,6 +7,9 @@ Tests:
 - GET /api/incidents/{unknown} returns 404 {"error": "Incident not found"}
 - handler does not require current run context
 - malformed/internal errors do not leak raw exception strings
+
+NOTE: These tests use auth-disabled server to test route behavior,
+not auth enforcement. The auth suite owns "unauthenticated returns 401".
 """
 
 from __future__ import annotations
@@ -22,8 +25,10 @@ from k8s_diag_agent.collect.incident_store_provider import (
     reset_incident_store,
     set_incident_store,
 )
-
-from ..security.server_http_test_support import HTTPServerTestHarness
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class TestIncidentReadRoutes(unittest.TestCase):
@@ -47,18 +52,33 @@ class TestIncidentReadRoutes(unittest.TestCase):
         self._static_dir.mkdir(parents=True)
         (self._static_dir / "index.html").write_text("<h1>Test</h1>")
 
-        self._harness = HTTPServerTestHarness(
+        # Start server with auth disabled to test route behavior
+        self._server, self._thread, self._patcher = start_ui_test_server_without_auth(
             runs_dir=self._runs_dir,
             static_dir=self._static_dir,
         )
-        self._port = self._harness.start()
+        self._port = self._server.server_address[1]
 
     def tearDown(self) -> None:
         """Clean up."""
-        self._harness.stop()
+        shutdown_test_server(self._server, self._thread, self._patcher)
         self._tmpdir.cleanup()
         set_incident_store(None)
         reset_incident_store()
+
+    def _request(self, method: str, path: str, headers: dict | None = None) -> tuple[int, bytes, dict]:
+        """Make an HTTP request to the test server."""
+        from http.client import HTTPConnection
+        conn = HTTPConnection("127.0.0.1", self._port, timeout=5)
+        try:
+            if headers:
+                conn.request(method, path, headers=headers)
+            else:
+                conn.request(method, path)
+            response = conn.getresponse()
+            return response.status, response.read(), dict(response.getheaders())
+        finally:
+            conn.close()
 
     def test_get_incidents_list_returns_incidents_and_total(self) -> None:
         """GET /api/incidents returns incidents list and total."""
@@ -92,7 +112,7 @@ class TestIncidentReadRoutes(unittest.TestCase):
             datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
         )
 
-        status, body, _ = self._harness.request("GET", "/api/incidents")
+        status, body, _ = self._request("GET", "/api/incidents")
 
         self.assertEqual(status, 200)
         data = json.loads(body)
@@ -103,7 +123,7 @@ class TestIncidentReadRoutes(unittest.TestCase):
 
     def test_get_incidents_empty_store_returns_empty_list(self) -> None:
         """GET /api/incidents returns empty list when store is empty."""
-        status, body, _ = self._harness.request("GET", "/api/incidents")
+        status, body, _ = self._request("GET", "/api/incidents")
 
         self.assertEqual(status, 200)
         data = json.loads(body)
@@ -142,19 +162,19 @@ class TestIncidentReadRoutes(unittest.TestCase):
         self._test_store.suppress(incidents[0].incident_id, "known issue")
 
         # Filter by open
-        status, body, _ = self._harness.request("GET", "/api/incidents?status=open")
+        status, body, _ = self._request("GET", "/api/incidents?status=open")
         self.assertEqual(status, 200)
         data = json.loads(body)
         self.assertEqual(data["total"], 1)
 
         # Filter by suppressed
-        status, body, _ = self._harness.request("GET", "/api/incidents?status=suppressed")
+        status, body, _ = self._request("GET", "/api/incidents?status=suppressed")
         self.assertEqual(status, 200)
         data = json.loads(body)
         self.assertEqual(data["total"], 1)
 
         # Filter by investigating (none)
-        status, body, _ = self._harness.request("GET", "/api/incidents?status=investigating")
+        status, body, _ = self._request("GET", "/api/incidents?status=investigating")
         self.assertEqual(status, 200)
         data = json.loads(body)
         self.assertEqual(data["total"], 0)
@@ -187,7 +207,7 @@ class TestIncidentReadRoutes(unittest.TestCase):
         incidents = self._test_store.list_incidents()
         incident_id = incidents[0].incident_id
 
-        status, body, _ = self._harness.request("GET", f"/api/incidents/{incident_id}")
+        status, body, _ = self._request("GET", f"/api/incidents/{incident_id}")
 
         self.assertEqual(status, 200)
         data = json.loads(body)
@@ -197,7 +217,7 @@ class TestIncidentReadRoutes(unittest.TestCase):
 
     def test_get_incident_unknown_returns_404(self) -> None:
         """GET /api/incidents/{unknown} returns 404 with error envelope."""
-        status, body, _ = self._harness.request("GET", "/api/incidents/nonexistent-id-12345")
+        status, body, _ = self._request("GET", "/api/incidents/nonexistent-id-12345")
 
         self.assertEqual(status, 404)
         data = json.loads(body)
@@ -205,7 +225,7 @@ class TestIncidentReadRoutes(unittest.TestCase):
 
     def test_no_post_route_for_incidents_list(self) -> None:
         """Verify no POST endpoint exists for /api/incidents."""
-        status, body, _ = self._harness.request(
+        status, body, _ = self._request(
             "POST",
             "/api/incidents",
             headers={"Content-Type": "application/json"},
@@ -219,7 +239,7 @@ class TestIncidentRouteSecurity(unittest.TestCase):
     """Test security properties of incident routes."""
 
     def setUp(self) -> None:
-        """Set up HTTP test harness."""
+        """Set up HTTP test harness with auth disabled."""
         from k8s_diag_agent.collect.incident_store import IncidentStore
 
         self._test_store = IncidentStore()
@@ -232,18 +252,33 @@ class TestIncidentRouteSecurity(unittest.TestCase):
         self._static_dir.mkdir(parents=True)
         (self._static_dir / "index.html").write_text("<h1>Test</h1>")
 
-        self._harness = HTTPServerTestHarness(
+        # Start server with auth disabled to test route behavior
+        self._server, self._thread, self._patcher = start_ui_test_server_without_auth(
             runs_dir=self._runs_dir,
             static_dir=self._static_dir,
         )
-        self._port = self._harness.start()
+        self._port = self._server.server_address[1]
 
     def tearDown(self) -> None:
         """Clean up."""
-        self._harness.stop()
+        shutdown_test_server(self._server, self._thread, self._patcher)
         self._tmpdir.cleanup()
         set_incident_store(None)
         reset_incident_store()
+
+    def _request(self, method: str, path: str, headers: dict | None = None) -> tuple[int, bytes, dict]:
+        """Make an HTTP request to the test server."""
+        from http.client import HTTPConnection
+        conn = HTTPConnection("127.0.0.1", self._port, timeout=5)
+        try:
+            if headers:
+                conn.request(method, path, headers=headers)
+            else:
+                conn.request(method, path)
+            response = conn.getresponse()
+            return response.status, response.read(), dict(response.getheaders())
+        finally:
+            conn.close()
 
     def test_error_response_does_not_leak_exception(self) -> None:
         """Internal errors must not leak raw exception strings."""
@@ -278,7 +313,7 @@ class TestIncidentRouteSecurity(unittest.TestCase):
             "k8s_diag_agent.collect.api_incident_reads.get_incident_store",
             side_effect=RuntimeError("SECRET_TOKEN=abc123 INTERNAL_ERROR"),
         ):
-            status, body, _ = self._harness.request("GET", f"/api/incidents/{incident_id}")
+            status, body, _ = self._request("GET", f"/api/incidents/{incident_id}")
 
         # Should return 500 with generic error
         self.assertEqual(status, 500)
@@ -315,7 +350,7 @@ class TestIncidentRouteSecurity(unittest.TestCase):
         )
 
         # Test list endpoint
-        status, body, _ = self._harness.request("GET", "/api/incidents")
+        status, body, _ = self._request("GET", "/api/incidents")
         self.assertEqual(status, 200)
         data = json.loads(body)
 

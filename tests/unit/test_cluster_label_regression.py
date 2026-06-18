@@ -6,19 +6,19 @@ AlertmanagerSource model has this field and it was present in the artifact.
 
 This test verifies the fix that added cluster_label and cluster_context
 to the serialized output dict in _serialize_alertmanager_sources().
+
+NOTE: These tests use auth-disabled server to test route behavior,
+not auth enforcement. The auth suite owns "unauthenticated returns 401".
 """
 
-import functools
 import json
 import shutil
 import tempfile
-import threading
 import unittest
 import urllib.request
 from datetime import UTC, datetime
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from k8s_diag_agent.external_analysis.alertmanager_source_registry import (
     AlertmanagerSourceRegistry,
@@ -36,7 +36,10 @@ from k8s_diag_agent.external_analysis.config import (
     ReviewEnrichmentPolicy,
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class ClusterLabelRegressionTests(unittest.TestCase):
@@ -160,25 +163,21 @@ class ClusterLabelRegressionTests(unittest.TestCase):
             index_data["run"] = run_entry
             index_path.write_text(json.dumps(index_data, indent=2), encoding="utf-8")
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
+    def _start_server(self) -> tuple[Any, Any, Any]:
+        """Start server with auth disabled to test route behavior."""
+        server, thread, patcher = start_ui_test_server_without_auth(
             runs_dir=self.runs_dir,
             static_dir=self.static_dir,
         )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
+        return server, thread, patcher
 
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
+    def _shutdown_server(self, server: Any, thread: Any, patcher: Any) -> None:
+        """Shutdown test server with auth patcher."""
+        shutdown_test_server(server, thread, patcher)
 
     def _fetch_run_payload(
         self,
-        server: ThreadingHTTPServer,
+        server: Any,
         run_id: str,
     ) -> dict[str, object]:
         """Fetch run payload for the specified run_id."""
@@ -232,7 +231,7 @@ class ClusterLabelRegressionTests(unittest.TestCase):
         ]
         self._write_sources_with_cluster_label(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             payload = self._fetch_run_payload(server, run_id=run_id)
 
@@ -258,7 +257,7 @@ class ClusterLabelRegressionTests(unittest.TestCase):
                 self.assertIsNotNone(cluster_label2)
                 self.assertEqual(cluster_label2, "cluster2")
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_promoted_source_persists_across_runs_via_registry_on_plain_rediscovery(self) -> None:
         """Regression test: serializer applies durable registry promotion on later plain rediscovery.
@@ -340,7 +339,7 @@ class ClusterLabelRegressionTests(unittest.TestCase):
         ]
         self._write_sources_with_cluster_label(run_id_b, sources_run_b)
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             payload = self._fetch_run_payload(server, run_id=run_id_b)
 
@@ -364,7 +363,7 @@ class ClusterLabelRegressionTests(unittest.TestCase):
                 # Serializer passes through state set by health loop
                 self.assertEqual(source.get("state"), "manual")
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
     def test_disabled_source_is_filtered_across_runs_via_registry(self) -> None:
         """Regression test: serializer filters disabled sources when registry entry exists.
@@ -425,7 +424,7 @@ class ClusterLabelRegressionTests(unittest.TestCase):
         # So the artifact won't contain this source at all
         self._write_sources_with_cluster_label(run_id_b, [])  # Empty sources = disabled filtered
 
-        server, thread = self._start_server()
+        server, thread, patcher = self._start_server()
         try:
             payload = self._fetch_run_payload(server, run_id=run_id_b)
 
@@ -440,7 +439,7 @@ class ClusterLabelRegressionTests(unittest.TestCase):
                     "Disabled source should be filtered out by health loop applying registry"
                 )
         finally:
-            self._shutdown_server(server, thread)
+            self._shutdown_server(server, thread, patcher)
 
 
 if __name__ == "__main__":
