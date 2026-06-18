@@ -9,11 +9,9 @@ causing vmalertSources: null for historical runs loaded via ?run_id= query param
 
 from __future__ import annotations
 
-import functools
 import json
 import shutil
 import tempfile
-import threading
 import unittest
 from datetime import UTC, datetime
 from http.server import ThreadingHTTPServer
@@ -30,7 +28,10 @@ from k8s_diag_agent.external_analysis.config import (
     ReviewEnrichmentPolicy,
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class VmalertSourcesHistoricalRunTests(unittest.TestCase):
@@ -189,22 +190,6 @@ class VmalertSourcesHistoricalRunTests(unittest.TestCase):
         review_path = reviews_dir / f"{artifact.run_id}-review.json"
         review_path.write_text(json.dumps(review_data, indent=2), encoding="utf-8")
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
-
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-
     def _fetch_run_payload(
         self,
         server: ThreadingHTTPServer,
@@ -288,7 +273,10 @@ class VmalertSourcesHistoricalRunTests(unittest.TestCase):
         self._write_vmalert_sources_artifact(run_id, sources)
 
         # Start the server
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Request the specific run via query parameter
             payload = self._fetch_run_payload(server, run_id=run_id)
@@ -313,7 +301,7 @@ class VmalertSourcesHistoricalRunTests(unittest.TestCase):
                 self.assertIn("vmalert-src-historical-2", source_ids)
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_latest_run_includes_vmalert_sources(self) -> None:
         """Baseline test: GET /api/run (no run_id) includes vmalertSources.
@@ -361,7 +349,10 @@ class VmalertSourcesHistoricalRunTests(unittest.TestCase):
         self._write_index(artifact, vmalert_sources=vmalert_sources_entry)
 
         # Start the server
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Request latest run (no run_id parameter)
             payload = self._fetch_run_payload(server)
@@ -374,7 +365,7 @@ class VmalertSourcesHistoricalRunTests(unittest.TestCase):
             )
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_requested_run_without_vmalert_sources_returns_null(self) -> None:
         """Test that requested run without vmalert sources artifact returns null.
@@ -394,7 +385,10 @@ class VmalertSourcesHistoricalRunTests(unittest.TestCase):
         # DO NOT write vmalert_sources artifact - simulating a run without it
 
         # Start the server
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Request the specific run via query parameter
             payload = self._fetch_run_payload(server, run_id=run_id)
@@ -409,7 +403,7 @@ class VmalertSourcesHistoricalRunTests(unittest.TestCase):
             )
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_vmalert_sources_counts_in_response(self) -> None:
         """Test that vmalert sources counts are correctly populated in the response."""
@@ -472,7 +466,10 @@ class VmalertSourcesHistoricalRunTests(unittest.TestCase):
         self._write_vmalert_sources_artifact(run_id, sources)
 
         # Start the server
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_run_payload(server, run_id=run_id)
 
@@ -500,7 +497,7 @@ class VmalertSourcesHistoricalRunTests(unittest.TestCase):
                     self.assertIn("display_state", src)
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
 
 class VmalertSourcesAPIPayloadTests(unittest.TestCase):
@@ -655,22 +652,6 @@ class VmalertSourcesAPIPayloadTests(unittest.TestCase):
         path.write_text(json.dumps(inventory.to_dict(), indent=2), encoding="utf-8")
         return path
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
-
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-
     def _fetch_run_payload(
         self,
         server: ThreadingHTTPServer,
@@ -723,7 +704,10 @@ class VmalertSourcesAPIPayloadTests(unittest.TestCase):
         self._write_index(artifact, vmalert_sources=vmalert_sources_entry)
         self._write_vmalert_sources_artifact(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_run_payload(server, run_id=run_id)
 
@@ -736,4 +720,4 @@ class VmalertSourcesAPIPayloadTests(unittest.TestCase):
                                 "vmalertSources should not be null when artifact exists")
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)

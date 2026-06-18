@@ -9,11 +9,9 @@ These tests verify that:
 6. Logs do not include raw payload/secret-like values
 """
 
-import functools
 import json
 import shutil
 import tempfile
-import threading
 import unittest
 import urllib.error
 import urllib.request
@@ -33,7 +31,10 @@ from k8s_diag_agent.external_analysis.config import (
     ReviewEnrichmentPolicy,
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
@@ -150,21 +151,32 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
             index_data["run"] = run_entry
             index_path.write_text(json.dumps(index_data, indent=2), encoding="utf-8")
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
+    def _fetch(
+        self,
+        server: ThreadingHTTPServer,
+        method: str,
+        path: str,
+        data: bytes | None = None,
+    ) -> tuple[int, str]:
+        """Make an HTTP request to the test server and return status code and body."""
+        address = server.server_address
+        host_address, port, *_ = address
+        host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
+        url = f"http://{host}:{port}{path}"
 
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
+        headers = {"Content-Type": "application/json"} if data else {}
+        request = urllib.request.Request(
+            url,
+            data=data,
+            headers=headers,
+            method=method,
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read().decode("utf-8")
 
     def _post_source_action(
         self,
@@ -174,30 +186,22 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
         payload: dict[str, object] | None = None,
     ) -> urllib.error.HTTPError | dict[str, object]:
         """POST to the source action endpoint."""
-        address = server.server_address
-        host_address, port, *_ = address
-        host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
-
         from urllib.parse import quote
 
         encoded_source_id = quote(source_id, safe="")
-        url = f"http://{host}:{port}/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
-
+        path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
         body = json.dumps(payload or {"action": "promote", "clusterLabel": "test-cluster"}).encode(
             "utf-8"
         )
-        request = urllib.request.Request(
-            url,
-            data=body,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
 
         try:
-            with urllib.request.urlopen(request, timeout=5) as response:
-                return cast(dict[str, object], json.loads(response.read().decode("utf-8")))
+            status, body_text = self._fetch(server, "POST", path, body)
+            if status >= 400:
+                # Create HTTPError for consistency
+                exc = urllib.error.HTTPError(path, status, "", {}, None)
+                return exc
+            return cast(dict[str, object], json.loads(body_text))
         except urllib.error.HTTPError as exc:
-            # Return the error for inspection
             return exc
 
     def test_malformed_json_returns_400(self) -> None:
@@ -222,37 +226,25 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
-            address = server.server_address
-            host_address, port, *_ = address
-            host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
-
             from urllib.parse import quote
 
             encoded_source_id = quote(source_id, safe="")
-            url = f"http://{host}:{port}/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+            path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
 
             # Send malformed JSON (missing closing brace)
             malformed_payload = b'{"action": "promote", "clusterLabel": "test-cluster"'
 
-            request = urllib.request.Request(
-                url,
-                data=malformed_payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-
-            try:
-                with urllib.request.urlopen(request, timeout=5):
-                    self.fail("Expected HTTPError for malformed JSON")
-            except urllib.error.HTTPError as exc:
-                self.assertEqual(exc.code, 400, "Malformed JSON should return 400")
-                error_body = exc.read().decode("utf-8")
-                self.assertIn("Invalid JSON payload", error_body)
+            status, body = self._fetch(server, "POST", path, malformed_payload)
+            self.assertEqual(status, 400, "Malformed JSON should return 400")
+            self.assertIn("Invalid JSON payload", body)
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_invalid_non_object_json_returns_400(self) -> None:
         """Non-object JSON (e.g., array) in request body returns 400."""
@@ -276,37 +268,25 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
-            address = server.server_address
-            host_address, port, *_ = address
-            host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
-
             from urllib.parse import quote
 
             encoded_source_id = quote(source_id, safe="")
-            url = f"http://{host}:{port}/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+            path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
 
             # Send array instead of object (ValueError from json.loads)
             array_payload = b'["not", "an", "object"]'
 
-            request = urllib.request.Request(
-                url,
-                data=array_payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-
-            try:
-                with urllib.request.urlopen(request, timeout=5):
-                    self.fail("Expected HTTPError for array JSON")
-            except urllib.error.HTTPError as exc:
-                self.assertEqual(exc.code, 400, "Non-object JSON should return 400")
-                error_body = exc.read().decode("utf-8")
-                self.assertIn("Invalid JSON payload", error_body)
+            status, body = self._fetch(server, "POST", path, array_payload)
+            self.assertEqual(status, 400, "Non-object JSON should return 400")
+            self.assertIn("Invalid JSON payload", body)
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_missing_required_action_returns_400(self) -> None:
         """Missing 'action' field in request body returns 400."""
@@ -330,37 +310,25 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
-            address = server.server_address
-            host_address, port, *_ = address
-            host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
-
             from urllib.parse import quote
 
             encoded_source_id = quote(source_id, safe="")
-            url = f"http://{host}:{port}/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+            path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
 
             # Send valid JSON but missing required 'action' field
             payload = b'{"clusterLabel": "test-cluster"}'
 
-            request = urllib.request.Request(
-                url,
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-
-            try:
-                with urllib.request.urlopen(request, timeout=5):
-                    self.fail("Expected HTTPError for missing action")
-            except urllib.error.HTTPError as exc:
-                self.assertEqual(exc.code, 400, "Missing action should return 400")
-                error_body = exc.read().decode("utf-8")
-                self.assertIn("action is required", error_body)
+            status, body = self._fetch(server, "POST", path, payload)
+            self.assertEqual(status, 400, "Missing action should return 400")
+            self.assertIn("action is required", body)
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_corrupted_override_read_uses_fallback(self) -> None:
         """Corrupted override file read results in fresh start (fallback behavior)."""
@@ -388,7 +356,10 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
         overrides_path = self.health_dir / f"{run_id}-alertmanager-source-overrides.json"
         overrides_path.write_text('{"corrupted": "data', encoding="utf-8")  # Missing closing brace
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._post_source_action(
                 server,
@@ -402,7 +373,7 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
             self.assertEqual(response.get("status"), "success")
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_unicode_decode_error_returns_400(self) -> None:
         """Invalid UTF-8 encoding in request body returns 400."""
@@ -426,35 +397,24 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
-            address = server.server_address
-            host_address, port, *_ = address
-            host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
-
             from urllib.parse import quote
 
             encoded_source_id = quote(source_id, safe="")
-            url = f"http://{host}:{port}/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+            path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
 
             # Send invalid UTF-8 bytes (continuation byte without start)
             invalid_utf8 = b'{"action": "promote", "clusterLabel": "test-cluster"}\xff\xfe'
 
-            request = urllib.request.Request(
-                url,
-                data=invalid_utf8,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-
-            try:
-                with urllib.request.urlopen(request, timeout=5):
-                    self.fail("Expected HTTPError for invalid UTF-8")
-            except urllib.error.HTTPError as exc:
-                self.assertEqual(exc.code, 400, "Invalid UTF-8 should return 400")
+            status, body = self._fetch(server, "POST", path, invalid_utf8)
+            self.assertEqual(status, 400, "Invalid UTF-8 should return 400")
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
 
 class AlertmanagerSourceActionLoggingTests(unittest.TestCase):
@@ -565,21 +525,32 @@ class AlertmanagerSourceActionLoggingTests(unittest.TestCase):
             index_data["run"] = run_entry
             index_path.write_text(json.dumps(index_data, indent=2), encoding="utf-8")
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
+    def _fetch(
+        self,
+        server: ThreadingHTTPServer,
+        method: str,
+        path: str,
+        data: bytes | None = None,
+    ) -> tuple[int, str]:
+        """Make an HTTP request to the test server and return status code and body."""
+        address = server.server_address
+        host_address, port, *_ = address
+        host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
+        url = f"http://{host}:{port}{path}"
 
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
+        headers = {"Content-Type": "application/json"} if data else {}
+        request = urllib.request.Request(
+            url,
+            data=data,
+            headers=headers,
+            method=method,
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read().decode("utf-8")
 
     def test_success_log_does_not_include_raw_payload(self) -> None:
         """Verify success logs don't include raw request payload."""
@@ -603,17 +574,16 @@ class AlertmanagerSourceActionLoggingTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             with self.assertLogs("k8s_diag_agent.ui.server_alertmanager", level="INFO") as logs:
-                address = server.server_address
-                host_address, port, *_ = address
-                host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
-
                 from urllib.parse import quote
 
                 encoded_source_id = quote(source_id, safe="")
-                url = f"http://{host}:{port}/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+                path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
 
                 payload = json.dumps(
                     {
@@ -623,15 +593,7 @@ class AlertmanagerSourceActionLoggingTests(unittest.TestCase):
                     }
                 ).encode("utf-8")
 
-                request = urllib.request.Request(
-                    url,
-                    data=payload,
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-
-                with urllib.request.urlopen(request, timeout=5):
-                    pass
+                self._fetch(server, "POST", path, payload)
 
             # Verify log doesn't contain raw JSON payload
             log_output = "\n".join(logs.output)
@@ -639,7 +601,7 @@ class AlertmanagerSourceActionLoggingTests(unittest.TestCase):
             self.assertNotIn('{"action"', log_output)
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,6 @@
-import functools
 import json
 import shutil
 import tempfile
-import threading
 import unittest
 import unittest.mock as mock
 import urllib.error
@@ -30,7 +28,10 @@ from k8s_diag_agent.health.notifications import (
     write_notification_artifact,
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class RunApiServerTests(unittest.TestCase):
@@ -232,17 +233,6 @@ class RunApiServerTests(unittest.TestCase):
             ),
         )
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
-
     def _fetch_run_payload(self, server: ThreadingHTTPServer) -> dict[str, object]:
         address = server.server_address
         host_address, port, *_ = address
@@ -263,18 +253,16 @@ class RunApiServerTests(unittest.TestCase):
             assert isinstance(payload, dict)
             return cast(dict[str, object], payload)
 
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-
     def test_artifact_endpoint_serves_zip_binary(self) -> None:
         artifact_dir = self.runs_dir / "external-analysis"
         artifact_dir.mkdir(parents=True, exist_ok=True)
         artifact_path = artifact_dir / "diagnostic-pack.zip"
         with zipfile.ZipFile(artifact_path, "w") as archive:
             archive.writestr("info.txt", "diagnostic bundle")
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             encoded_path = urllib.parse.quote(str(artifact_path.relative_to(self.runs_dir)))
             url = f"http://127.0.0.1:{server.server_address[1]}/artifact?path={encoded_path}"
@@ -289,7 +277,7 @@ class RunApiServerTests(unittest.TestCase):
             self.assertIsNotNone(disposition)
             self.assertIn("diagnostic-pack.zip", disposition)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_alertmanager_source_action_endpoint_validates_promote_action(self) -> None:
         """Test that the endpoint validates the promote action field."""
@@ -299,7 +287,10 @@ class RunApiServerTests(unittest.TestCase):
         artifact = self._build_artifact(run_id=run_id, status=ExternalAnalysisStatus.SUCCESS)
         self._write_index(artifact)
         
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Test promote action (will fail at source lookup stage, but action validation should pass)
             req = urllib.request.Request(
@@ -321,7 +312,7 @@ class RunApiServerTests(unittest.TestCase):
             # Should NOT be an action validation error - action is valid
             self.assertNotIn("action must be 'promote' or 'disable'", error_body.get("error", ""))
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_alertmanager_source_action_endpoint_validates_action(self) -> None:
         """Test that the endpoint validates the action field."""
@@ -331,7 +322,10 @@ class RunApiServerTests(unittest.TestCase):
         artifact = self._build_artifact(run_id=run_id, status=ExternalAnalysisStatus.SUCCESS)
         self._write_index(artifact)
         
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Test invalid action
             req = urllib.request.Request(
@@ -350,7 +344,7 @@ class RunApiServerTests(unittest.TestCase):
             error_body = json.loads(ctx.exception.read().decode("utf-8"))
             self.assertIn("action must be 'promote' or 'disable'", error_body.get("error", ""))
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_alertmanager_source_action_endpoint_requires_cluster_label(self) -> None:
         """Test that the endpoint requires clusterLabel in the body."""
@@ -360,7 +354,10 @@ class RunApiServerTests(unittest.TestCase):
         artifact = self._build_artifact(run_id=run_id, status=ExternalAnalysisStatus.SUCCESS)
         self._write_index(artifact)
         
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Test missing clusterLabel
             req = urllib.request.Request(
@@ -378,7 +375,7 @@ class RunApiServerTests(unittest.TestCase):
             error_body = json.loads(ctx.exception.read().decode("utf-8"))
             self.assertIn("clusterLabel is required", error_body.get("error", ""))
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_next_check_execution_creates_run_scoped_usefulness_review_artifact(self) -> None:
         """Test that execution through UI creates run-scoped usefulness-review artifact.
@@ -480,7 +477,10 @@ class RunApiServerTests(unittest.TestCase):
             "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             return_value=manual_artifact,
         ):
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 req = urllib.request.Request(
                     f"http://127.0.0.1:{server.server_address[1]}/api/next-check-execution",
@@ -500,7 +500,7 @@ class RunApiServerTests(unittest.TestCase):
                 # In this test environment, the script may not exist or may fail, so we just verify
                 # the endpoint doesn't crash. The actual integration test verifies the artifact exists.
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
 
     def test_run_endpoint_exposes_successful_review_enrichment(self) -> None:
         artifact = self._build_artifact(
@@ -516,11 +516,14 @@ class RunApiServerTests(unittest.TestCase):
             summary=None,
         )
         self._write_index(artifact)
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_run_payload(server)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
         enrichment = payload.get("reviewEnrichment")
         self.assertIsNotNone(enrichment)
         assert isinstance(enrichment, dict)
@@ -541,11 +544,14 @@ class RunApiServerTests(unittest.TestCase):
             error_summary="timeout",
         )
         self._write_index(artifact)
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_run_payload(server)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
         enrichment = payload.get("reviewEnrichment")
         self.assertIsNotNone(enrichment)
         assert isinstance(enrichment, dict)
@@ -561,11 +567,14 @@ class RunApiServerTests(unittest.TestCase):
             skip_reason="adapter unavailable",
         )
         self._write_index(artifact)
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_run_payload(server)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
         enrichment = payload.get("reviewEnrichment")
         self.assertIsNotNone(enrichment)
         assert isinstance(enrichment, dict)
@@ -592,11 +601,14 @@ class RunApiServerTests(unittest.TestCase):
             },
         )
         self._write_index(artifact, extra_external_analysis=(execution_artifact,))
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_run_payload(server)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
         history = payload.get("nextCheckExecutionHistory")
         self.assertIsInstance(history, list)
         assert isinstance(history, list)
@@ -652,11 +664,14 @@ class RunApiServerTests(unittest.TestCase):
         }
         artifact_path.write_text(json.dumps(artifact_data), encoding="utf-8")
         self._write_index(artifact, extra_external_analysis=(execution_artifact,))
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_run_payload(server)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
         history = payload.get("nextCheckExecutionHistory")
         self.assertIsInstance(history, list)
         assert isinstance(history, list)
@@ -711,11 +726,14 @@ class RunApiServerTests(unittest.TestCase):
         }
         artifact_path.write_text(json.dumps(artifact_data), encoding="utf-8")
         self._write_index(artifact, extra_external_analysis=(execution_artifact,))
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_run_payload(server)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
         history = payload.get("nextCheckExecutionHistory")
         self.assertIsInstance(history, list)
         assert isinstance(history, list)
@@ -833,11 +851,14 @@ class RunApiServerTests(unittest.TestCase):
             exec_artifacts.append(exec_artifact)
 
         self._write_index(artifact, extra_external_analysis=tuple(exec_artifacts))
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_run_payload(server)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
         history = payload.get("nextCheckExecutionHistory")
         self.assertIsInstance(history, list)
         self.assertEqual(len(cast(list, history)), 3)
@@ -880,11 +901,14 @@ class RunApiServerTests(unittest.TestCase):
             payload=plan_payload,
         )
         self._write_index(plan_artifact)
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_run_payload(server)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
         queue = payload.get("nextCheckQueue")
         self.assertIsInstance(queue, list)
         self.assertTrue(queue)
@@ -922,11 +946,14 @@ class RunApiServerTests(unittest.TestCase):
             run_id="run-gamma",
             timestamp=(base_time + timedelta(minutes=2)).strftime("%Y%m%dT%H%M%S"),
         )
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_notifications_payload(server, "?kind=warning&cluster_label=cluster-beta")
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
         self.assertEqual(payload.get("total"), 1)
         notifications = payload.get("notifications")
         self.assertIsInstance(notifications, list)
@@ -962,11 +989,14 @@ class RunApiServerTests(unittest.TestCase):
             created_notifications.append(notification_artifact)
         # Write index AFTER creating notifications so notification_index is populated
         self._write_index_with_notifications(artifact, created_notifications)
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             payload = self._fetch_notifications_payload(server)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
         notifications = payload.get("notifications")
         self.assertIsInstance(notifications, list)
         assert isinstance(notifications, list)
@@ -987,11 +1017,14 @@ class RunApiServerTests(unittest.TestCase):
                 run_id=f"run-{idx}",
                 timestamp=(base_time + timedelta(seconds=idx)).strftime("%Y%m%dT%H%M%S"),
             )
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             self._fetch_notifications_payload(server, "?limit=10&page=2")
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_next_check_execution_endpoint_runs_candidate(self) -> None:
         plan_payload: dict[str, object] = {
@@ -1055,7 +1088,10 @@ class RunApiServerTests(unittest.TestCase):
         with mock.patch(
             "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check", return_value=manual_artifact
         ) as mock_execute:
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 req = urllib.request.Request(
                     f"http://127.0.0.1:{server.server_address[1]}/api/next-check-execution",
@@ -1072,7 +1108,7 @@ class RunApiServerTests(unittest.TestCase):
                 self.assertEqual(payload.get("command"), ["kubectl", "logs"])
                 mock_execute.assert_called_once()
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
 
     def test_next_check_approval_endpoint_records_approval(self) -> None:
         plan_payload: dict[str, object] = {
@@ -1114,7 +1150,10 @@ class RunApiServerTests(unittest.TestCase):
         )
         self._write_index(plan_artifact)
         self._ensure_cluster_entry("cluster-a", "prod")
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             req = urllib.request.Request(
                 f"http://127.0.0.1:{server.server_address[1]}/api/next-check-approval",
@@ -1129,7 +1168,7 @@ class RunApiServerTests(unittest.TestCase):
             self.assertIsNotNone(payload.get("artifactPath"))
             self.assertIsNotNone(payload.get("approvalTimestamp"))
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_access_log_emitted_on_successful_request(self) -> None:
         """Test that access log is emitted with duration_ms and status_code on successful request."""
@@ -1162,7 +1201,10 @@ class RunApiServerTests(unittest.TestCase):
             return dict(result)
         
         with mock.patch("k8s_diag_agent.ui.server.emit_structured_log", side_effect=capture_emit):
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 # Make a request to /api/runs endpoint
                 address = server.server_address
@@ -1172,7 +1214,7 @@ class RunApiServerTests(unittest.TestCase):
                 with urllib.request.urlopen(url, timeout=5) as response:
                     self.assertEqual(response.getcode(), 200)
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
         
         # Find the ui-access log entry
         access_logs = [log for log in captured_logs if log.get("component") == "ui-access"]
@@ -1231,7 +1273,10 @@ class RunApiServerTests(unittest.TestCase):
             server_module._SLOW_REQUEST_THRESHOLD_MS = 0
             
             with mock.patch("k8s_diag_agent.ui.server.emit_structured_log", side_effect=capture_emit):
-                server, thread = self._start_server()
+                server, thread, patcher = start_ui_test_server_without_auth(
+                    runs_dir=self.runs_dir,
+                    static_dir=self.static_dir,
+                )
                 try:
                     address = server.server_address
                     host_address, port, *_ = address
@@ -1240,7 +1285,7 @@ class RunApiServerTests(unittest.TestCase):
                     with urllib.request.urlopen(url, timeout=5) as response:
                         self.assertEqual(response.getcode(), 200)
                 finally:
-                    self._shutdown_server(server, thread)
+                    shutdown_test_server(server, thread, patcher)
             
             # Find the ui-access log entry
             access_logs = [log for log in captured_logs if log.get("component") == "ui-access"]
@@ -1283,7 +1328,10 @@ class RunApiServerTests(unittest.TestCase):
             return dict(result)
         
         with mock.patch("k8s_diag_agent.ui.server.emit_structured_log", side_effect=capture_emit):
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 # Make a request to /api/run which requires valid context
                 # Without valid ui-index.json, this should fail
@@ -1298,7 +1346,7 @@ class RunApiServerTests(unittest.TestCase):
                 # May fail with HTTP error - that's OK, we just need to check logs
                 pass
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
         
         # Find the ui-access log entry - should exist and have either ERROR or INFO severity
         access_logs = [log for log in captured_logs if log.get("component") == "ui-access"]
@@ -1337,14 +1385,17 @@ class RunApiServerTests(unittest.TestCase):
             return dict(result)
         
         with mock.patch("k8s_diag_agent.ui.server.emit_structured_log", side_effect=capture_emit):
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 encoded_path = urllib.parse.quote(str(artifact_path.relative_to(self.runs_dir)))
                 url = f"http://127.0.0.1:{server.server_address[1]}/artifact?path={encoded_path}"
                 with urllib.request.urlopen(url, timeout=5) as response:
                     self.assertEqual(response.getcode(), 200)
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
         
         # Check for ui-access log for artifact endpoint
         access_logs = [log for log in captured_logs if log.get("component") == "ui-access"]
@@ -1384,7 +1435,10 @@ class RunApiServerTests(unittest.TestCase):
         )
         self._write_index(plan_artifact)
         self._ensure_cluster_entry("cluster-a", "prod")
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             req = urllib.request.Request(
                 f"http://127.0.0.1:{server.server_address[1]}/api/next-check-approval",
@@ -1399,7 +1453,7 @@ class RunApiServerTests(unittest.TestCase):
             data = json.loads(body)
             self.assertIsNone(data.get("blockingReason"))
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_next_check_execution_endpoint_rejects_approval_needed(self) -> None:
         plan_payload: dict[str, object] = {
@@ -1443,7 +1497,10 @@ class RunApiServerTests(unittest.TestCase):
             "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             side_effect=ManualNextCheckError("approval required"),
         ):
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 req = urllib.request.Request(
                     f"http://127.0.0.1:{server.server_address[1]}/api/next-check-execution",
@@ -1455,7 +1512,7 @@ class RunApiServerTests(unittest.TestCase):
                     urllib.request.urlopen(req, timeout=5)
                 self.assertEqual(cm.exception.code, 400)
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
 
     def test_next_check_execution_endpoint_emits_structured_log_on_not_found(self) -> None:
         """Test that structured log is emitted when candidate is not found.
@@ -1523,7 +1580,10 @@ class RunApiServerTests(unittest.TestCase):
             return dict(result)
         
         with mock.patch("k8s_diag_agent.structured_logging.emit_structured_log", side_effect=capture_emit):
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 # Request a candidate that doesn't exist (index 99)
                 req = urllib.request.Request(
@@ -1539,7 +1599,7 @@ class RunApiServerTests(unittest.TestCase):
                 body = cm.exception.read().decode("utf-8")
                 self.assertIn("not found", body.lower())
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
         
         # Verify structured log was emitted with required fields
         self.assertTrue(len(captured_logs) > 0, "Expected at least one structured log")
@@ -1607,7 +1667,10 @@ class RunApiServerTests(unittest.TestCase):
         )
         self._write_index(plan_artifact)
         self._ensure_cluster_entry("cluster-a", "prod")
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             req = urllib.request.Request(
                 f"http://127.0.0.1:{server.server_address[1]}/api/next-check-approval",
@@ -1624,7 +1687,7 @@ class RunApiServerTests(unittest.TestCase):
             self.assertIsNotNone(payload.get("artifactPath"))
             self.assertIsNotNone(payload.get("approvalTimestamp"))
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_next_check_execution_endpoint_accepts_candidate_id(self) -> None:
         plan_payload: dict[str, object] = {
@@ -1689,7 +1752,10 @@ class RunApiServerTests(unittest.TestCase):
             "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             return_value=manual_artifact,
         ) as mock_execute:
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 req = urllib.request.Request(
                     f"http://127.0.0.1:{server.server_address[1]}/api/next-check-execution",
@@ -1710,7 +1776,7 @@ class RunApiServerTests(unittest.TestCase):
                 kwargs = mock_execute.call_args[1]
                 self.assertEqual(kwargs.get("candidate_index"), 5)
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
 
     def test_next_check_execution_finds_by_id_ignores_stale_index(self) -> None:
         """Test that backend finds candidate by ID even when index is stale/wrong.
@@ -1786,7 +1852,10 @@ class RunApiServerTests(unittest.TestCase):
             "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             return_value=manual_artifact,
         ):
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 # Request with stale index - UI shows old card with index=1
                 # but backend should find by candidateId first
@@ -1805,7 +1874,7 @@ class RunApiServerTests(unittest.TestCase):
                 # Verify it used the correct index (0, from candidateId match, not 1 from stale request)
                 self.assertEqual(payload.get("planCandidateIndex"), 0)
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
 
     def _write_promotion_artifact(
         self,
@@ -1917,7 +1986,10 @@ class RunApiServerTests(unittest.TestCase):
             "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             return_value=manual_artifact,
         ):
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 req = urllib.request.Request(
                     f"http://127.0.0.1:{server.server_address[1]}/api/next-check-execution",
@@ -1932,7 +2004,7 @@ class RunApiServerTests(unittest.TestCase):
                 self.assertEqual(payload.get("status"), "success")
                 self.assertEqual(payload.get("targetCluster"), cluster_label)
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
 
     def test_next_check_approval_finds_deterministic_promoted_candidate(self) -> None:
         """Test that approval endpoint finds deterministic promoted candidates.
@@ -1985,7 +2057,10 @@ class RunApiServerTests(unittest.TestCase):
         candidate_id = promotion.get("candidateId")
         self.assertIsNotNone(candidate_id)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             req = urllib.request.Request(
                 f"http://127.0.0.1:{server.server_address[1]}/api/next-check-approval",
@@ -2002,7 +2077,7 @@ class RunApiServerTests(unittest.TestCase):
             self.assertIsNotNone(payload.get("artifactPath"))
             self.assertIsNotNone(payload.get("approvalTimestamp"))
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_mixed_queue_execution_finds_correct_candidate(self) -> None:
         """Test execution endpoint finds the correct candidate in a mixed queue.
@@ -2098,7 +2173,10 @@ class RunApiServerTests(unittest.TestCase):
             "k8s_diag_agent.ui.server_next_checks.execute_manual_next_check",
             return_value=manual_artifact,
         ):
-            server, thread = self._start_server()
+            server, thread, patcher = start_ui_test_server_without_auth(
+                runs_dir=self.runs_dir,
+                static_dir=self.static_dir,
+            )
             try:
                 # Try to execute the deterministic candidate (should find it in promotions)
                 req = urllib.request.Request(
@@ -2126,7 +2204,7 @@ class RunApiServerTests(unittest.TestCase):
                     payload2 = json.loads(response.read().decode("utf-8"))
                 self.assertEqual(payload2.get("status"), "success")
             finally:
-                self._shutdown_server(server, thread)
+                shutdown_test_server(server, thread, patcher)
 
     def test_wrong_source_lookup_does_not_resolve_to_wrong_candidate(self) -> None:
         """Test that looking up a planner ID in promotions doesn't find the wrong candidate.
@@ -2189,7 +2267,10 @@ class RunApiServerTests(unittest.TestCase):
         # planner-specific-id doesn't accidentally match a promotion candidateId
         collect_promoted_queue_entries(self.health_dir, run_id)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Try to find the planner candidate in promotions only (simulating wrong source)
             # First verify planner candidate is found via planner lookup
@@ -2226,7 +2307,7 @@ class RunApiServerTests(unittest.TestCase):
             data2 = json.loads(body2)
             self.assertIn("not found", data2.get("error", "").lower())
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_next_check_approval_finds_in_fallback_planner_artifact(self) -> None:
         """Test that approval endpoint finds candidate in a fallback planner artifact.
@@ -2290,7 +2371,10 @@ class RunApiServerTests(unittest.TestCase):
         self._write_index(plan_artifact, skip_llm_activity=True)
         self._ensure_cluster_entry(cluster_label, "prod")
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             req = urllib.request.Request(
                 f"http://127.0.0.1:{server.server_address[1]}/api/next-check-approval",
@@ -2307,4 +2391,4 @@ class RunApiServerTests(unittest.TestCase):
             self.assertIsNotNone(payload.get("artifactPath"))
             self.assertIsNotNone(payload.get("approvalTimestamp"))
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)

@@ -9,11 +9,9 @@ causing build_run_payload() to serialize alertmanagerSources: null for
 historical runs loaded via ?run_id= query parameter.
 """
 
-import functools
 import json
 import shutil
 import tempfile
-import threading
 import unittest
 import urllib.request
 from datetime import UTC, datetime
@@ -31,7 +29,10 @@ from k8s_diag_agent.external_analysis.config import (
     ReviewEnrichmentPolicy,
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class AlertmanagerSourcesHistoricalRunTests(unittest.TestCase):
@@ -173,22 +174,6 @@ class AlertmanagerSourcesHistoricalRunTests(unittest.TestCase):
                 index_data["run"] = run_entry
                 index_path.write_text(json.dumps(index_data, indent=2), encoding="utf-8")
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
-
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-
     def _fetch_run_payload(
         self,
         server: ThreadingHTTPServer,
@@ -286,7 +271,10 @@ class AlertmanagerSourcesHistoricalRunTests(unittest.TestCase):
         self._write_alertmanager_compact_artifact(run_id)
 
         # Start the server
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Request the specific run via query parameter
             payload = self._fetch_run_payload(server, run_id=run_id)
@@ -311,7 +299,7 @@ class AlertmanagerSourcesHistoricalRunTests(unittest.TestCase):
                 self.assertIn("am-src-historical-2", source_ids)
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_latest_run_includes_alertmanager_sources(self) -> None:
         """Baseline test: GET /api/run (no run_id) still includes alertmanagerSources.
@@ -373,7 +361,10 @@ class AlertmanagerSourcesHistoricalRunTests(unittest.TestCase):
         self._write_alertmanager_compact_artifact(run_id)
 
         # Start the server
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Request latest run (no run_id parameter)
             payload = self._fetch_run_payload(server)
@@ -386,7 +377,7 @@ class AlertmanagerSourcesHistoricalRunTests(unittest.TestCase):
             )
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_requested_run_without_alertmanager_sources_returns_null(self) -> None:
         """Test that requested run without alertmanager sources artifact returns null.
@@ -406,7 +397,10 @@ class AlertmanagerSourcesHistoricalRunTests(unittest.TestCase):
         # DO NOT write alertmanager_sources artifact - simulating a run without it
 
         # Start the server
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Request the specific run via query parameter
             payload = self._fetch_run_payload(server, run_id=run_id)
@@ -421,7 +415,7 @@ class AlertmanagerSourcesHistoricalRunTests(unittest.TestCase):
             )
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
 
 class AlertmanagerSourceActionURLEncodingTests(unittest.TestCase):
@@ -562,22 +556,6 @@ class AlertmanagerSourceActionURLEncodingTests(unittest.TestCase):
             index_data["run"] = run_entry
             index_path.write_text(json.dumps(index_data, indent=2), encoding="utf-8")
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
-
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-
     def _post_source_action(
         self,
         server: ThreadingHTTPServer,
@@ -646,7 +624,10 @@ class AlertmanagerSourceActionURLEncodingTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._post_source_action(server, run_id, source_id, "promote")
 
@@ -674,7 +655,7 @@ class AlertmanagerSourceActionURLEncodingTests(unittest.TestCase):
             self.assertEqual(cast(dict[str, object], our_override).get("action"), "promote", "Action should be 'promote'")
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_disable_source_with_colon_and_slash_in_id_succeeds(self) -> None:
         """Regression test: disabling source with `:` and `/` in source_id succeeds.
@@ -704,7 +685,10 @@ class AlertmanagerSourceActionURLEncodingTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._post_source_action(server, run_id, source_id, "disable")
 
@@ -731,7 +715,7 @@ class AlertmanagerSourceActionURLEncodingTests(unittest.TestCase):
             self.assertEqual(cast(dict[str, object], our_override).get("action"), "disable", "Action should be 'disable'")
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_encoded_path_parameter_is_decoded_before_lookup(self) -> None:
         """Test that URL decoding works for encoded source_id and non-encoded source_id.
@@ -781,23 +765,29 @@ class AlertmanagerSourceActionURLEncodingTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id_simple, sources_simple)
 
-        server1, thread1 = self._start_server()
+        server1, thread1, patcher1 = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Test 1: Source with special characters (promote)
             response_special = self._post_source_action(server1, run_id_special, source_id_special, "promote")
             self.assertEqual(response_special.get("status"), "success",
                             f"Source with special chars should be found: {response_special}")
         finally:
-            self._shutdown_server(server1, thread1)
+            shutdown_test_server(server1, thread1, patcher1)
 
-        server2, thread2 = self._start_server()
+        server2, thread2, patcher2 = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Test 2: Source with no special characters (promote)
             response_simple = self._post_source_action(server2, run_id_simple, source_id_simple, "promote")
             self.assertEqual(response_simple.get("status"), "success",
                             f"Source with no special chars should be found: {response_simple}")
         finally:
-            self._shutdown_server(server2, thread2)
+            shutdown_test_server(server2, thread2, patcher2)
 
 
 
@@ -959,22 +949,6 @@ class AlertmanagerSourceRegistryPersistenceTests(unittest.TestCase):
         index_path = self.health_dir / "ui-index.json"
         index_path.write_text(json.dumps(index_data, indent=2), encoding="utf-8")
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
-
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-
     def _post_source_action(
         self,
         server: ThreadingHTTPServer,
@@ -1038,12 +1012,15 @@ class AlertmanagerSourceRegistryPersistenceTests(unittest.TestCase):
             state="auto-tracked",
         )
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._post_source_action(server, run_id, source_id, "promote")
             self.assertEqual(response.get("status"), "success", f"Promote should succeed: {response}")
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
         # Verify registry entry was written
         from k8s_diag_agent.external_analysis.alertmanager_source_registry import (
@@ -1107,12 +1084,15 @@ class AlertmanagerSourceRegistryPersistenceTests(unittest.TestCase):
             state="auto-tracked",
         )
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._post_source_action(server, run_id, source_id, "disable")
             self.assertEqual(response.get("status"), "success", f"Disable should succeed: {response}")
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
         # Verify registry entry was written
         from k8s_diag_agent.external_analysis.alertmanager_source_registry import (
@@ -1173,12 +1153,15 @@ class AlertmanagerSourceRegistryPersistenceTests(unittest.TestCase):
             state="discovered",
         )
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._post_source_action(server, run_id, source_id, "promote")
             self.assertEqual(response.get("status"), "success")
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
         # Simulate what the health loop does when looking up registry state
         # It reads from registry and looks up using: cluster_context:canonical_identity
@@ -1346,22 +1329,6 @@ class AlertmanagerSourceActionArtifactIdentityTests(unittest.TestCase):
             index_data["run"] = run_entry
             index_path.write_text(json.dumps(index_data, indent=2), encoding="utf-8")
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
-
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-
     def _post_source_action(
         self,
         server: ThreadingHTTPServer,
@@ -1431,7 +1398,10 @@ class AlertmanagerSourceActionArtifactIdentityTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._post_source_action(server, run_id, source_id, "promote")
 
@@ -1462,7 +1432,7 @@ class AlertmanagerSourceActionArtifactIdentityTests(unittest.TestCase):
             )
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_disable_response_includes_action_artifact_id(self) -> None:
         """Test that disable action response includes both actionArtifactPath and actionArtifactId."""
@@ -1489,7 +1459,10 @@ class AlertmanagerSourceActionArtifactIdentityTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._post_source_action(server, run_id, source_id, "disable")
 
@@ -1514,7 +1487,7 @@ class AlertmanagerSourceActionArtifactIdentityTests(unittest.TestCase):
             )
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_existing_response_fields_unchanged(self) -> None:
         """Test that existing response fields remain unchanged when actionArtifactId is added.
@@ -1546,7 +1519,10 @@ class AlertmanagerSourceActionArtifactIdentityTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._post_source_action(server, run_id, source_id, "promote")
 
@@ -1563,7 +1539,7 @@ class AlertmanagerSourceActionArtifactIdentityTests(unittest.TestCase):
             self.assertIn("actionArtifactId", response)  # New
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_action_artifact_id_is_immutable_identity(self) -> None:
         """Test that actionArtifactId is the immutable artifact identity, not logical source identity.
@@ -1596,7 +1572,10 @@ class AlertmanagerSourceActionArtifactIdentityTests(unittest.TestCase):
         ]
         self._write_index_with_sources(run_id, sources)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # First action: promote
             response1 = self._post_source_action(server, run_id, source_id, "promote")
@@ -1659,7 +1638,7 @@ class AlertmanagerSourceActionArtifactIdentityTests(unittest.TestCase):
             )
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
 
 if __name__ == "__main__":

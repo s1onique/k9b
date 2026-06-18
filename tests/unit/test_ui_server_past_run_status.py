@@ -8,11 +8,9 @@ the behavior of the latest-run path.
 import json
 import shutil
 import tempfile
-import threading
 import unittest
 import unittest.mock as mock
 from datetime import UTC, datetime
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
 
@@ -22,7 +20,10 @@ from k8s_diag_agent.external_analysis.artifact import (
     ExternalAnalysisStatus,
 )
 from k8s_diag_agent.health.ui import write_health_ui_index
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class PastRunEnrichmentKeyVariantTests(unittest.TestCase):
@@ -45,24 +46,7 @@ class PastRunEnrichmentKeyVariantTests(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        from functools import partial
-        handler = partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
-
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-
-    def _fetch_run_payload(self, server: ThreadingHTTPServer, run_id: str) -> dict:
+    def _fetch_run_payload(self, server, run_id: str) -> dict:
         import urllib.request
         address = server.server_address
         host_address, port, *_ = address
@@ -157,11 +141,14 @@ class PastRunEnrichmentKeyVariantTests(unittest.TestCase):
             json.dumps(snake_case_artifact), encoding="utf-8"
         )
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             past_run_payload = self._fetch_run_payload(server, past_run_id)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
         # KEY ASSERTION: reviewEnrichment should NOT be None for snake_case artifact
         review_enrichment = past_run_payload.get("reviewEnrichment")
@@ -271,11 +258,14 @@ class PastRunEnrichmentKeyVariantTests(unittest.TestCase):
             json.dumps(camelcase_artifact), encoding="utf-8"
         )
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             past_run_payload = self._fetch_run_payload(server, past_run_id)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
         # reviewEnrichment should be loaded correctly
         review_enrichment = past_run_payload.get("reviewEnrichment")
@@ -366,11 +356,14 @@ class PastRunEnrichmentKeyVariantTests(unittest.TestCase):
             json.dumps(empty_artifact), encoding="utf-8"
         )
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             past_run_payload = self._fetch_run_payload(server, past_run_id)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
         # reviewEnrichment should exist (artifact found) but with empty arrays
         review_enrichment = past_run_payload.get("reviewEnrichment")
@@ -400,24 +393,7 @@ class PastRunStatusHydrationTests(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        from functools import partial
-        handler = partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
-
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-
-    def _fetch_run_payload(self, server: ThreadingHTTPServer, run_id: str) -> dict:
+    def _fetch_run_payload(self, server, run_id: str) -> dict:
         import urllib.request
         address = server.server_address
         host_address, port, *_ = address
@@ -520,12 +496,15 @@ class PastRunStatusHydrationTests(unittest.TestCase):
         )
 
         # Start server and fetch the past run
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Fetch the past run specifically (not the latest)
             past_run_payload = self._fetch_run_payload(server, past_run_id)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
         # The key assertion: reviewEnrichmentStatus should NOT be null
         # It should be derived from the config in the review artifact
@@ -600,11 +579,14 @@ class PastRunStatusHydrationTests(unittest.TestCase):
             json.dumps({"run_id": past_run_id}), encoding="utf-8"
         )
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             past_run_payload = self._fetch_run_payload(server, past_run_id)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
         # Status should show "disabled-for-run" since enrichment was disabled for this specific run
         review_enrichment_status = past_run_payload.get("reviewEnrichmentStatus")
@@ -653,7 +635,10 @@ class PastRunStatusHydrationTests(unittest.TestCase):
                 available_adapters=(),
             )
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Fetch without run_id - should use the latest
             address = server.server_address
@@ -664,7 +649,7 @@ class PastRunStatusHydrationTests(unittest.TestCase):
             with urllib.request.urlopen(url, timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
         # Latest run should have the enrichment ARTIFACT (not just status)
         review_enrichment = payload.get("reviewEnrichment")
@@ -740,11 +725,14 @@ class PastRunStatusHydrationTests(unittest.TestCase):
             json.dumps({"run_id": past_run_id}), encoding="utf-8"
         )
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             past_run_payload = self._fetch_run_payload(server, past_run_id)
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
         # The API should succeed without crashing
         self.assertIsNotNone(past_run_payload)

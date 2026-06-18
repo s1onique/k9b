@@ -5,13 +5,13 @@ These tests verify:
 2. Default index path parses zero notification files
 3. Fallback works when index is missing/malformed/empty
 4. Cache key includes ui-index.json mtime for proper invalidation
+
+Auth is disabled via test harness to focus on route behavior, not auth enforcement.
 """
 
-import functools
 import json
 import shutil
 import tempfile
-import threading
 import unittest
 import unittest.mock as mock
 import urllib.request
@@ -22,7 +22,10 @@ from typing import cast
 
 from k8s_diag_agent.health.notifications import NotificationArtifact, write_notification_artifact
 from k8s_diag_agent.health.ui import write_health_ui_index
-from k8s_diag_agent.ui.server import HealthUIRequestHandler
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
+)
 
 
 class NotificationsIndexRouteTests(unittest.TestCase):
@@ -86,23 +89,8 @@ class NotificationsIndexRouteTests(unittest.TestCase):
         assert isinstance(result, Path)
         return result
 
-    def _start_server(self) -> tuple[ThreadingHTTPServer, threading.Thread]:
-        handler = functools.partial(
-            HealthUIRequestHandler,
-            runs_dir=self.runs_dir,
-            static_dir=self.static_dir,
-        )
-        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        return server, thread
-
-    def _shutdown_server(self, server: ThreadingHTTPServer, thread: threading.Thread) -> None:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-
     def _fetch_notifications(self, server: ThreadingHTTPServer, query: str = "") -> dict[str, object]:
+        """Fetch notifications from the test server."""
         address = server.server_address
         host_address, port, *_ = address
         host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
@@ -135,7 +123,10 @@ class NotificationsIndexRouteTests(unittest.TestCase):
         # Write ui-index with notification_index
         self._write_ui_index_with_notifications(artifacts)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Capture logs
             captured_logs: list[dict[str, object]] = []
@@ -173,7 +164,7 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             self.assertEqual(metadata["path_strategy"], "index_notifications_path")
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_default_index_path_returns_correct_page_slice(self) -> None:
         """Default index path applies pagination correctly."""
@@ -196,7 +187,10 @@ class NotificationsIndexRouteTests(unittest.TestCase):
 
         self._write_ui_index_with_notifications(artifacts)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Request page 2 with limit 3
             response = self._fetch_notifications(server, "?limit=3&page=2")
@@ -214,14 +208,17 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             self.assertEqual(summaries, ["Notification 6", "Notification 5", "Notification 4"])
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_missing_ui_index_falls_back_with_reason(self) -> None:
         """When ui-index.json is missing, falls back with fallback_reason='missing_index'."""
         # Create notification files but no ui-index.json
         self._write_notification(kind="info", summary="Test", timestamp=datetime.now(UTC))
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._fetch_notifications(server)
 
@@ -233,7 +230,7 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             self.assertGreater(fully_parsed, 0)
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_malformed_ui_index_falls_back_with_reason(self) -> None:
         """When ui-index.json is malformed, falls back with fallback_reason='malformed_index'."""
@@ -241,7 +238,10 @@ class NotificationsIndexRouteTests(unittest.TestCase):
         ui_index_path = self.health_dir / "ui-index.json"
         ui_index_path.write_text("{ not valid json", encoding="utf-8")
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._fetch_notifications(server)
 
@@ -249,7 +249,7 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             self.assertEqual(response["fallback_reason"], "malformed_index")
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_empty_notification_index_still_uses_index_path(self) -> None:
         """Empty notification_index still uses index path (not stale file scan).
@@ -260,7 +260,10 @@ class NotificationsIndexRouteTests(unittest.TestCase):
         # Write ui-index with empty notifications
         self._write_ui_index_with_notifications([])
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             response = self._fetch_notifications(server)
 
@@ -273,7 +276,7 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             self.assertEqual(len(notifications), 0)
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
     def test_filtered_request_falls_back_with_reason(self) -> None:
         """Filtered /api/notifications falls back with explicit fallback_reason."""
@@ -286,7 +289,10 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             artifacts.append((NotificationArtifact.from_dict(raw), path))
         self._write_ui_index_with_notifications(artifacts)
 
-        server, thread = self._start_server()
+        server, thread, patcher = start_ui_test_server_without_auth(
+            runs_dir=self.runs_dir,
+            static_dir=self.static_dir,
+        )
         try:
             # Request with kind filter - should fall back
             response = self._fetch_notifications(server, "?kind=info")
@@ -297,7 +303,7 @@ class NotificationsIndexRouteTests(unittest.TestCase):
             self.assertIn("kind", fallback_reason)
 
         finally:
-            self._shutdown_server(server, thread)
+            shutdown_test_server(server, thread, patcher)
 
 
 if __name__ == "__main__":
