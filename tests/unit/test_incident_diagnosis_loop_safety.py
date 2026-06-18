@@ -17,11 +17,11 @@ import unittest
 from datetime import UTC, datetime
 
 from k8s_diag_agent.collect.incident_diagnosis_loop import (
-    DISALLOWED_ACTIONS as LOOP_DISALLOWED,
-)
-from k8s_diag_agent.collect.incident_diagnosis_loop import (
     LoopDecision,
     plan_next_diagnosis_pass,
+)
+from k8s_diag_agent.collect.incident_next_check_policy import (
+    DISALLOWED_ACTIONS as LOOP_DISALLOWED,
 )
 
 

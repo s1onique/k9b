@@ -15,7 +15,6 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Protocol
 
-
 __all__ = [
     "ReadOnlyCheckHandler",
     "FAKE_HANDLERS",
