@@ -244,6 +244,41 @@ def build_diagnosis_prompt(
                 "entries": check_result_summaries,
             }
 
+    # Add diagnosis loop passes (bounded, clearly labeled as deterministic loop metadata)
+    diagnosis_loop_passes = case_file.get("diagnosis_loop_passes", [])
+    if isinstance(diagnosis_loop_passes, list) and diagnosis_loop_passes:
+        # Extract bounded summary of loop passes
+        loop_pass_summaries = []
+        for lp in diagnosis_loop_passes[:5]:  # Limit to 5 entries
+            if isinstance(lp, dict):
+                # Extract safe fields only (no full runner output)
+                safe_entry = {
+                    "run_id": lp.get("run_id", "unknown"),
+                    "generated_at": lp.get("generated_at"),
+                    "decision": lp.get("decision", "unknown"),
+                    "stop_reason": lp.get("stop_reason"),
+                    "checks_requested": lp.get("checks_requested", 0),
+                    "checks_run": lp.get("checks_run", 0),
+                    "checks_skipped": lp.get("checks_skipped", 0),
+                    "checks_rejected": lp.get("checks_rejected", 0),
+                    "case_file_linked_artifact": lp.get("case_file_linked_artifact", False),
+                    "bounded": True,
+                }
+                # Include linked artifact names if present
+                linked = lp.get("linked_artifacts", [])
+                if isinstance(linked, list) and linked:
+                    safe_entry["linked_artifact_names"] = [
+                        a.get("name", "") for a in linked[:3] if isinstance(a, dict)
+                    ]
+                loop_pass_summaries.append(safe_entry)
+
+        if loop_pass_summaries:
+            incident_summary["diagnosis_loop_passes_context"] = {
+                "count": len(diagnosis_loop_passes),
+                "note": "Prior deterministic loop-pass metadata - these are breadcrumbs from previous loop passes, not new evidence by itself. Treat as diagnostic context.",
+                "entries": loop_pass_summaries,
+            }
+
     # Serialize with bounds
     incident_json = json.dumps(incident_summary, default=str)
     if len(incident_json) > max_incident_json_chars:

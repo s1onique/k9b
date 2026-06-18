@@ -39,6 +39,9 @@ from typing import TYPE_CHECKING
 
 from .incident_case_file import build_incident_case_file
 from .incident_diagnosis_loop_models import LoopDecision
+from .incident_diagnosis_loop_pass_artifacts import (
+    write_diagnosis_loop_pass_artifact,
+)
 from .incident_diagnosis_loop_planner import plan_next_diagnosis_pass
 from .incident_read_only_check_artifacts import (
     is_safe_run_id,
@@ -278,8 +281,43 @@ def run_one_read_only_diagnosis_loop_pass(
             and len(check_results) > 0
         )
 
-    # Build final orchestration result
+    # Build intermediate result for loop-pass artifact writing
     disallowed = safety_metadata["disallowed_actions"]
+    intermediate_result: dict[str, object] = {
+        "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+        "incident_id": incident_id,
+        "run_id": run_id,
+        "read_only": True,
+        "allowed_actions": [],
+        "disallowed_actions": list(disallowed) if isinstance(disallowed, list) else [],
+        "decision": decision,
+        "loop_update": loop_update,
+        "runner_result": runner_result,
+        "artifact": artifact,
+        "rebuilt_case_file": None,  # Don't include in loop-pass artifact
+        "case_file_linked_artifact": case_file_linked_artifact,
+        "safety_metadata": safety_metadata,
+    }
+
+    # Step 6: Write loop-pass artifact for all valid orchestrator passes
+    # This includes both run decisions and stop decisions
+    loop_pass_artifact: dict[str, object] | None = None
+    try:
+        loop_pass_artifact = write_diagnosis_loop_pass_artifact(
+            external_analysis_dir=external_analysis_dir,
+            run_id=run_id,
+            incident_id=incident_id,
+            orchestrator_result=intermediate_result,
+            now=resolved_now,
+        )
+    except (OSError, ValueError) as e:
+        # Loop-pass artifact write failed - continue without it
+        loop_pass_artifact = {
+            "error": str(e),
+            "written": False,
+        }
+
+    # Build final orchestration result
     result: dict[str, object] = {
         "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
         "incident_id": incident_id,
@@ -293,6 +331,7 @@ def run_one_read_only_diagnosis_loop_pass(
         "artifact": artifact,
         "rebuilt_case_file": rebuilt_case_file,
         "case_file_linked_artifact": case_file_linked_artifact,
+        "loop_pass_artifact": loop_pass_artifact,
         "safety_metadata": safety_metadata,
     }
 

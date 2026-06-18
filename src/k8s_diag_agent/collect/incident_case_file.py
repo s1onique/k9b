@@ -27,6 +27,9 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ..ui.api_incident_reads import build_incident_detail_payload
 from ..ui.incident_suggested_checks import build_suggested_checks_from_next_check_plan_payload
+from .incident_diagnosis_loop_pass_artifacts import (
+    load_diagnosis_loop_pass_artifacts_for_incident,
+)
 from .incident_next_check_artifacts import load_next_check_plan_payloads_for_incident
 from .incident_prior_analysis import load_prior_analysis_for_incident
 from .incident_read_only_check_artifacts import (
@@ -56,6 +59,7 @@ DEFAULT_MAX_EVENTS = 50
 DEFAULT_MAX_SUGGESTED_CHECKS = 20
 DEFAULT_MAX_PRIOR_ANALYSIS = 10
 DEFAULT_MAX_READ_ONLY_CHECK_RESULTS = 10
+DEFAULT_MAX_DIAGNOSIS_LOOP_PASSES = 10
 
 __all__ = [
     "build_incident_case_file",
@@ -79,6 +83,7 @@ def build_incident_case_file(
     max_suggested_checks: int = DEFAULT_MAX_SUGGESTED_CHECKS,
     max_prior_analysis: int = DEFAULT_MAX_PRIOR_ANALYSIS,
     read_only_check_result_run_ids: Sequence[str] | None = None,
+    diagnosis_loop_pass_run_ids: Sequence[str] | None = None,
 ) -> dict[str, object] | None:
     """Build a read-only incident case-file packet for LLM-assisted diagnosis.
 
@@ -88,6 +93,7 @@ def build_incident_case_file(
     - Linked evidence/artifacts (safe references only)
     - Suggested checks from safe next-check plan artifacts
     - Prior analysis from linked analysis artifacts (bounded)
+    - Diagnosis loop passes from loop-pass artifacts (bounded)
     - Timeline/events (bounded count)
     - Safety boundary metadata
 
@@ -106,6 +112,10 @@ def build_incident_case_file(
             is_safe_run_id() and checked for incident_id match. Use this to include
             artifacts written in the current orchestrator pass that may not yet be
             linked from incident signals.
+        diagnosis_loop_pass_run_ids: Optional explicit list of run_ids to load
+            diagnosis loop pass artifacts for. These are validated with
+            is_safe_run_id() and checked for incident_id match. Use this to include
+            artifacts written in the current orchestrator pass.
 
     Returns:
         Case-file packet dict if incident found, None otherwise.
@@ -121,6 +131,7 @@ def build_incident_case_file(
         - allowed_actions: []
         - disallowed_actions: [execute, promote, apply, remediate, delete, mutate_cluster]
         - prior_analysis entries contain no action-control fields
+        - diagnosis_loop_passes entries contain no action-control fields
     """
     # Use provided now or current time (timezone-aware UTC)
     generated_at = now if now is not None else datetime.now(UTC)
@@ -157,6 +168,16 @@ def build_incident_case_file(
             external_analysis_dir,
             max_artifacts=DEFAULT_MAX_READ_ONLY_CHECK_RESULTS,
             explicit_run_ids=read_only_check_result_run_ids,
+        )
+
+    # Load diagnosis loop pass artifacts if external_analysis_dir is available
+    diagnosis_loop_passes: list[dict[str, object]] = []
+    if external_analysis_dir is not None:
+        diagnosis_loop_passes = load_diagnosis_loop_pass_artifacts_for_incident(
+            incident,
+            external_analysis_dir,
+            max_artifacts=DEFAULT_MAX_DIAGNOSIS_LOOP_PASSES,
+            explicit_run_ids=diagnosis_loop_pass_run_ids,
         )
 
     # Build base detail payload (includes signals, events, evidence links)
@@ -219,6 +240,10 @@ def build_incident_case_file(
         # Note: These are fake runner outputs until real collectors are wired.
         # Treat as bounded diagnostic evidence, not remediation instructions.
         "read_only_check_results": read_only_check_results,
+        # Diagnosis loop passes from loop-pass artifacts (bounded, labeled as deterministic)
+        # Note: These are deterministic one-pass loop results, not model output.
+        # Treat as bounded diagnostic evidence breadcrumbs, not new evidence by itself.
+        "diagnosis_loop_passes": diagnosis_loop_passes,
     }
 
     return packet
