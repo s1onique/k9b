@@ -120,6 +120,13 @@
       "required_command_fragments": ["verify_health_loop_structured_output.sh"],
       "reason": "Health-loop structured output hygiene check"
     },
+    "data-model-docs": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"]
+      },
+      "required_command_fragments": ["verify_data_model_docs.py"],
+      "reason": "Data model documentation hygiene check"
+    },
     "unit-tests": {
       "ci_equivalent": {
         ".github/workflows/harbor.yml": ["python-unit-tests", "python-unit-shard-union"]
@@ -268,7 +275,17 @@
     {
       "gate": "structured-output",
       "workflow": ".github/workflows/verify.yml",
-      "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+      "reason": "verify.yml runs on PR and workflow_dispatch only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "data-model-docs",
+      "workflow": ".github/workflows/verify.yml",
+      "reason": "Data model docs hygiene is a local-only gate; CI coverage is report-only via coverage job which does not block merge"
+    },
+    {
+      "gate": "data-model-docs",
+      "workflow": ".github/workflows/harbor.yml",
+      "reason": "Data model docs hygiene is a local-only gate; CI coverage is report-only via coverage job which does not block merge"
     },
     {
       "gate": "mypy",
