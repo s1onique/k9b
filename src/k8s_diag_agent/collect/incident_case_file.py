@@ -20,7 +20,7 @@ The packet is structured for:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -78,6 +78,7 @@ def build_incident_case_file(
     max_events: int = DEFAULT_MAX_EVENTS,
     max_suggested_checks: int = DEFAULT_MAX_SUGGESTED_CHECKS,
     max_prior_analysis: int = DEFAULT_MAX_PRIOR_ANALYSIS,
+    read_only_check_result_run_ids: Sequence[str] | None = None,
 ) -> dict[str, object] | None:
     """Build a read-only incident case-file packet for LLM-assisted diagnosis.
 
@@ -100,6 +101,11 @@ def build_incident_case_file(
         max_events: Maximum number of timeline events to include (default 50)
         max_suggested_checks: Maximum number of suggested checks (default 20)
         max_prior_analysis: Maximum number of prior analysis entries (default 10)
+        read_only_check_result_run_ids: Optional explicit list of run_ids to load
+            read-only check result artifacts for. These are validated with
+            is_safe_run_id() and checked for incident_id match. Use this to include
+            artifacts written in the current orchestrator pass that may not yet be
+            linked from incident signals.
 
     Returns:
         Case-file packet dict if incident found, None otherwise.
@@ -150,6 +156,7 @@ def build_incident_case_file(
             incident,
             external_analysis_dir,
             max_artifacts=DEFAULT_MAX_READ_ONLY_CHECK_RESULTS,
+            explicit_run_ids=read_only_check_result_run_ids,
         )
 
     # Build base detail payload (includes signals, events, evidence links)

@@ -318,6 +318,7 @@ def run_checks_from_loop_decision(
     run_id: str,
     loop_update: Mapping[str, object],
     now: datetime | None = None,
+    fake_handlers: Mapping[str, ReadOnlyCheckHandler] | None = None,
 ) -> dict[str, object]:
     """Run checks from a loop decision output.
 
@@ -332,6 +333,7 @@ def run_checks_from_loop_decision(
         run_id: Unique identifier for this run
         loop_update: Output from plan_next_diagnosis_pass()
         now: Optional datetime for deterministic timestamps
+        fake_handlers: Optional override for fake handlers (for testing)
 
     Returns:
         Runner result dict, or no-op result if checks shouldn't run
@@ -386,4 +388,5 @@ def run_checks_from_loop_decision(
         run_id=run_id,
         accepted_checks=accepted_checks,
         now=resolved_now,
+        fake_handlers=fake_handlers,
     )
