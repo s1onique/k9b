@@ -4,12 +4,15 @@ import App from "./App";
 import "./themes.css";
 import "./styles/index.css";
 import { applyStoredThemeOnLoad } from "./theme";
+import { AuthGate } from "./features/auth";
 
 // Apply saved theme before first render to prevent flash
 applyStoredThemeOnLoad();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <AuthGate>
+      <App />
+    </AuthGate>
   </React.StrictMode>
 );

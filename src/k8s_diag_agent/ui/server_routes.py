@@ -39,9 +39,23 @@ def handle_get_request(handler: HealthUIRequestHandler) -> None:
     handler._is_static = not route.startswith("/api/") and route != "/artifact"
 
     try:
+        # AUTH-06: Check authentication for protected routes (API and artifact serving)
+        # Note: /artifact requires auth as it may expose sensitive cluster data
+        # Auth routes (/api/auth/*) are always public
+        # Protected routes: /api/* (except auth routes) and /artifact/*
+        is_protected_api = route.startswith("/api/") and not _is_auth_route(route)
+        is_protected_artifact = route == "/artifact" or route.startswith("/artifact/")
+        if is_protected_api or is_protected_artifact:
+            from .auth_guard import check_route_auth
+
+            if not check_route_auth(handler):
+                handler._status_code = 401
+                handler._log_access_completion()
+                return
+
         if route.startswith("/api/"):
             _handle_api_get(handler, route, query)
-        elif route == "/artifact":
+        elif route == "/artifact" or route.startswith("/artifact/"):
             from .server_static import serve_artifact
 
             serve_artifact(handler, query)
@@ -65,7 +79,7 @@ def handle_get_request(handler: HealthUIRequestHandler) -> None:
 def handle_post_request(handler: HealthUIRequestHandler) -> None:
     """Handle POST requests by routing to appropriate mutation handlers.
 
-    Validates bearer token for mutation endpoints if configured,
+    Validates session-based authentication for mutation endpoints,
     then delegates to route-specific handlers.
 
     Args:
@@ -77,11 +91,14 @@ def handle_post_request(handler: HealthUIRequestHandler) -> None:
     handler._request_query = ""
     handler._is_static = False
 
-    # AUTH-05: Validate bearer token for mutation endpoints if configured
-    if not _validate_bearer_token_for_post(handler):
-        handler._status_code = 401
-        handler._log_access_completion()
-        return
+    # AUTH-06: Check authentication for protected routes (includes POST mutations)
+    if not _is_auth_route(route):
+        from .auth_guard import check_route_auth
+
+        if not check_route_auth(handler):
+            handler._status_code = 401
+            handler._log_access_completion()
+            return
 
     try:
         _dispatch_post_route(handler, route)
@@ -98,18 +115,19 @@ def handle_post_request(handler: HealthUIRequestHandler) -> None:
         handler._log_access_completion()
 
 
-def _validate_bearer_token_for_post(handler: HealthUIRequestHandler) -> bool:
-    """Validate bearer token for POST mutation endpoints.
+def _is_auth_route(route: str) -> bool:
+    """Check if route is an auth route (public, no auth required).
 
     Args:
-        handler: The HTTP request handler instance
+        route: The request path
 
     Returns:
-        True if token is valid or no auth is configured, False otherwise.
+        True if route is an auth route, False otherwise
     """
-    from .server_shared import _validate_bearer_token as _validate
-
-    return _validate(handler, handler._auth_token)
+    # Auth routes are always public
+    if route.startswith("/api/auth/"):
+        return True
+    return False
 
 
 def _handle_api_get(handler: HealthUIRequestHandler, route: str, query: str) -> None:
@@ -146,6 +164,19 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
         handle_next_check_execution,
     )
     from .server_review_packet import handle_incident_review_packet_api
+
+    # AUTH routes - public, no auth required (they SET the session)
+    if route == "/api/auth/login":
+        from .auth_routes import handle_login
+
+        handle_login(handler)
+        return
+
+    if route == "/api/auth/logout":
+        from .auth_routes import handle_logout
+
+        handle_logout(handler)
+        return
 
     # Incident snapshot capture
     if route == "/api/incidents/snapshot":

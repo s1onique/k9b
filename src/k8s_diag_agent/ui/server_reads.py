@@ -87,6 +87,19 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         _notifications_cache_lock,
     )
 
+    # AUTH routes - public, no auth required
+    if route == "/api/auth/status":
+        from .auth_routes import handle_status
+
+        handle_status(handler)
+        return
+
+    if route == "/api/auth/me":
+        from .auth_routes import handle_me
+
+        handle_me(handler)
+        return
+
     if route == "/api/runs":
         # Delegate to extraction module for artifact-read isolation
         handle_runs_list_route(handler, query)

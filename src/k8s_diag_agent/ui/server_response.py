@@ -29,6 +29,7 @@ def send_json_response(
     body: object,
     code: int = 200,
     request_path: str = "",
+    extra_headers: dict[str, str] | None = None,
 ) -> None:
     """Send a JSON response with structured timing instrumentation.
 
@@ -45,6 +46,7 @@ def send_json_response(
         body: The Python object to serialize as JSON
         code: HTTP status code (default 200)
         request_path: The request path for logging (optional, for compatibility)
+        extra_headers: Optional dict of additional headers to send (e.g., Set-Cookie)
     """
     send_start = time.perf_counter()
     payload = json.dumps(body, ensure_ascii=False)
@@ -65,6 +67,10 @@ def send_json_response(
     # For production multi-process servers behind a reverse proxy, this header can be
     # removed if the proxy handles connection management correctly.
     handler.send_header("Connection", "close")
+    # Send any extra headers (e.g., Set-Cookie) AFTER send_response but BEFORE end_headers
+    if extra_headers:
+        for name, value in extra_headers.items():
+            handler.send_header(name, value)
     handler.end_headers()
     flush_done = time.perf_counter()
     handler.wfile.write(encoded)
