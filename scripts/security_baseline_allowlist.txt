@@ -97,3 +97,6 @@ collect/api_incident.py handle_incident_snapshot incident promotion error bounda
 
 # === Incident Review Packet ===
 collect/api_incident_review_packet.py _update_incident_state_for_bundle review packet incident state update boundary - best-effort update, failures logged but don't fail packet generation
+
+# === Fake Runner Boundaries ===
+collect/incident_read_only_check_runner.py run_read_only_checks Fake handler failure boundary - error captured and returned as structured failure, never propagated
