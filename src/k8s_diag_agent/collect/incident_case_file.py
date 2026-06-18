@@ -29,6 +29,9 @@ from ..ui.api_incident_reads import build_incident_detail_payload
 from ..ui.incident_suggested_checks import build_suggested_checks_from_next_check_plan_payload
 from .incident_next_check_artifacts import load_next_check_plan_payloads_for_incident
 from .incident_prior_analysis import load_prior_analysis_for_incident
+from .incident_read_only_check_artifacts import (
+    load_read_only_check_result_artifacts_for_incident,
+)
 from .incident_store_provider import get_incident_store
 
 if TYPE_CHECKING:
@@ -52,6 +55,7 @@ DEFAULT_MAX_SIGNALS = 20
 DEFAULT_MAX_EVENTS = 50
 DEFAULT_MAX_SUGGESTED_CHECKS = 20
 DEFAULT_MAX_PRIOR_ANALYSIS = 10
+DEFAULT_MAX_READ_ONLY_CHECK_RESULTS = 10
 
 __all__ = [
     "build_incident_case_file",
@@ -139,6 +143,15 @@ def build_incident_case_file(
             max_items=max_prior_analysis,
         )
 
+    # Load read-only check results if external_analysis_dir is available
+    read_only_check_results: list[dict[str, object]] = []
+    if external_analysis_dir is not None:
+        read_only_check_results = load_read_only_check_result_artifacts_for_incident(
+            incident,
+            external_analysis_dir,
+            max_artifacts=DEFAULT_MAX_READ_ONLY_CHECK_RESULTS,
+        )
+
     # Build base detail payload (includes signals, events, evidence links)
     detail_payload = build_incident_detail_payload(incident, next_check_plan_payloads=plan_payloads)
 
@@ -195,6 +208,10 @@ def build_incident_case_file(
         "suggested_checks": suggested_checks,
         # Prior analysis from linked artifacts (bounded, clearly labeled as model context)
         "prior_analysis": prior_analysis,
+        # Read-only check results from fake runner artifacts (bounded, labeled as fake)
+        # Note: These are fake runner outputs until real collectors are wired.
+        # Treat as bounded diagnostic evidence, not remediation instructions.
+        "read_only_check_results": read_only_check_results,
     }
 
     return packet
