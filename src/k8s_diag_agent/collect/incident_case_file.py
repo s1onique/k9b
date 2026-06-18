@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, cast
 from ..ui.api_incident_reads import build_incident_detail_payload
 from ..ui.incident_suggested_checks import build_suggested_checks_from_next_check_plan_payload
 from .incident_next_check_artifacts import load_next_check_plan_payloads_for_incident
+from .incident_prior_analysis import load_prior_analysis_for_incident
 from .incident_store_provider import get_incident_store
 
 if TYPE_CHECKING:
@@ -50,6 +51,7 @@ DISALLOWED_ACTIONS: list[str] = [
 DEFAULT_MAX_SIGNALS = 20
 DEFAULT_MAX_EVENTS = 50
 DEFAULT_MAX_SUGGESTED_CHECKS = 20
+DEFAULT_MAX_PRIOR_ANALYSIS = 10
 
 __all__ = [
     "build_incident_case_file",
@@ -71,6 +73,7 @@ def build_incident_case_file(
     max_signals: int = DEFAULT_MAX_SIGNALS,
     max_events: int = DEFAULT_MAX_EVENTS,
     max_suggested_checks: int = DEFAULT_MAX_SUGGESTED_CHECKS,
+    max_prior_analysis: int = DEFAULT_MAX_PRIOR_ANALYSIS,
 ) -> dict[str, object] | None:
     """Build a read-only incident case-file packet for LLM-assisted diagnosis.
 
@@ -79,18 +82,20 @@ def build_incident_case_file(
     - Incident signals with run_ids
     - Linked evidence/artifacts (safe references only)
     - Suggested checks from safe next-check plan artifacts
+    - Prior analysis from linked analysis artifacts (bounded)
     - Timeline/events (bounded count)
     - Safety boundary metadata
 
     Args:
         incident_id: The incident ID to build case-file for
         external_analysis_dir: Optional path to external-analysis directory
-            for loading next-check plan artifacts
+            for loading next-check plan artifacts and prior analysis
         now: Optional datetime for packet generation timestamp.
             If None, uses current time. Provided for deterministic testing.
         max_signals: Maximum number of signals to include (default 20)
         max_events: Maximum number of timeline events to include (default 50)
         max_suggested_checks: Maximum number of suggested checks (default 20)
+        max_prior_analysis: Maximum number of prior analysis entries (default 10)
 
     Returns:
         Case-file packet dict if incident found, None otherwise.
@@ -105,6 +110,7 @@ def build_incident_case_file(
         - read_only: true
         - allowed_actions: []
         - disallowed_actions: [execute, promote, apply, remediate, delete, mutate_cluster]
+        - prior_analysis entries contain no action-control fields
     """
     # Use provided now or current time (timezone-aware UTC)
     generated_at = now if now is not None else datetime.now(UTC)
@@ -122,6 +128,15 @@ def build_incident_case_file(
         plan_payloads = load_next_check_plan_payloads_for_incident(
             incident,
             external_analysis_dir,
+        )
+
+    # Load prior analysis if external_analysis_dir is available
+    prior_analysis: list[dict[str, object]] = []
+    if external_analysis_dir is not None:
+        prior_analysis = load_prior_analysis_for_incident(
+            incident,
+            external_analysis_dir,
+            max_items=max_prior_analysis,
         )
 
     # Build base detail payload (includes signals, events, evidence links)
@@ -178,6 +193,8 @@ def build_incident_case_file(
         "events": events,
         # Suggested checks from safe linked artifacts (bounded)
         "suggested_checks": suggested_checks,
+        # Prior analysis from linked artifacts (bounded, clearly labeled as model context)
+        "prior_analysis": prior_analysis,
     }
 
     return packet

@@ -181,6 +181,32 @@ def build_diagnosis_prompt(
             ]
             incident_summary["sample_suggested_checks"] = safe_checks
 
+    # Add prior analysis (bounded, clearly labeled as model context)
+    prior_analysis = case_file.get("prior_analysis", [])
+    if isinstance(prior_analysis, list) and prior_analysis:
+        # Extract bounded summary of prior analyses
+        prior_analysis_summaries = []
+        for pa in prior_analysis[:5]:  # Limit to 5 entries
+            if isinstance(pa, dict):
+                # Strip any action fields and include only safe fields
+                safe_entry = {
+                    "run_id": pa.get("run_id", "unknown"),
+                    "source": pa.get("source", "unknown"),
+                    "summary": pa.get("summary", ""),
+                    "confidence": pa.get("confidence", "unknown"),
+                    "bounded": True,
+                }
+                if pa.get("generated_at"):
+                    safe_entry["generated_at"] = pa["generated_at"]
+                prior_analysis_summaries.append(safe_entry)
+
+        if prior_analysis_summaries:
+            incident_summary["prior_analysis_context"] = {
+                "count": len(prior_analysis),
+                "note": "Prior model-generated context - treat as review evidence, not ground truth",
+                "entries": prior_analysis_summaries,
+            }
+
     # Serialize with bounds
     incident_json = json.dumps(incident_summary, default=str)
     if len(incident_json) > max_incident_json_chars:
