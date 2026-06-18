@@ -143,3 +143,42 @@ Common labels for frontend component (includes component label).
 {{- define "k9b.frontend.labels" -}}
 {{ include "k9b.frontend.selectorLabels" . }}
 {{- end }}
+
+{{/*
+Resolve the admin auth secret name.
+
+Priority:
+1. backend.auth.existingSecret (if non-empty)
+2. Chart-managed secret name (if backend.auth.adminPasswordHash is set)
+3. Fail with a clear error if neither is set and auth is enabled.
+*/}}
+{{- define "k9b.adminAuthSecretName" -}}
+{{- $existingSecret := .Values.backend.auth.existingSecret | default "" -}}
+{{- $adminPasswordHash := .Values.backend.auth.adminPasswordHash | default "" -}}
+{{- if .Values.backend.auth.enabled -}}
+  {{- if and (ne $existingSecret "") -}}
+    {{- $existingSecret -}}
+  {{- else if ne $adminPasswordHash "" -}}
+    {{- printf "%s-admin-auth" (include "k9b.fullname" .) -}}
+  {{- else -}}
+    {{- $failMsg := "backend.auth.enabled=true but neither backend.auth.existingSecret nor backend.auth.adminPasswordHash is set. " -}}
+    {{- $failMsg = printf "%sEither provide an existingSecret name or set adminPasswordHash for local/dev use." $failMsg -}}
+    {{- fail $failMsg -}}
+  {{- end -}}
+{{- else -}}
+  {{- /* Auth not enabled, return empty to skip secretKeyRef entirely */ -}}
+  {{- "" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Determine if chart should create the admin auth secret.
+Returns true only when auth is enabled, existingSecret is empty, and adminPasswordHash is set.
+*/}}
+{{- define "k9b.createAdminAuthSecret" -}}
+{{- if and .Values.backend.auth.enabled (not .Values.backend.auth.existingSecret) .Values.backend.auth.adminPasswordHash -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}

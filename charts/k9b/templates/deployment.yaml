@@ -92,6 +92,26 @@ spec:
                   name: {{ .Values.uiAuth.secretName }}
                   key: K9B_UI_TOKEN
             {{- end }}
+            # Always render K9B_AUTH_ENABLED - backend defaults to enabled when this env var is absent
+            - name: K9B_AUTH_ENABLED
+              value: {{ .Values.backend.auth.enabled | quote }}
+            {{- if .Values.backend.auth.enabled }}
+            - name: K9B_ADMIN_USERNAME
+              value: {{ .Values.backend.auth.adminUsername | quote }}
+            - name: K9B_SECURE_COOKIE
+              value: {{ .Values.backend.auth.secureCookie | quote }}
+            - name: K9B_SESSION_COOKIE_NAME
+              value: {{ .Values.backend.auth.sessionCookieName | quote }}
+            - name: K9B_SESSION_MAX_AGE_SECONDS
+              value: {{ .Values.backend.auth.sessionMaxAgeSeconds | quote }}
+            - name: K9B_SESSION_IDLE_TIMEOUT_SECONDS
+              value: {{ .Values.backend.auth.sessionIdleTimeoutSeconds | quote }}
+            - name: K9B_ADMIN_PASSWORD_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k9b.adminAuthSecretName" . }}
+                  key: {{ .Values.backend.auth.passwordHashKey }}
+            {{- end }}
           resources:
             {{- toYaml .Values.backend.resources | nindent 10 }}
           {{- with .Values.containerSecurityContext }}

@@ -1,0 +1,213 @@
+# Helm test assertions for k9b backend admin authentication.
+# Tests auth env var injection into backend container.
+suite: admin authentication - backend deployment
+
+templates:
+  - deployment.yaml
+  - secret-admin-auth.yaml
+
+tests:
+  # ===== auth disabled: K9B_AUTH_ENABLED="false" always rendered, others absent =====
+
+  - it: backend should render K9B_AUTH_ENABLED=false when auth is disabled
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_AUTH_ENABLED]
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_AUTH_ENABLED].value
+          value: "false"
+
+  - it: backend should NOT render K9B_ADMIN_USERNAME when auth is disabled
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_USERNAME]
+
+  - it: backend should NOT render K9B_ADMIN_PASSWORD_HASH when auth is disabled
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH]
+
+  - it: backend should NOT render K9B_SECURE_COOKIE when auth is disabled
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env[name=K9B_SECURE_COOKIE]
+
+  - it: secret-admin-auth should NOT be rendered when auth is disabled
+    asserts:
+      - isNull:
+          path: data
+
+  # ===== auth enabled with existingSecret =====
+
+  - it: backend should render K9B_AUTH_ENABLED=true when auth is enabled
+    set:
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_AUTH_ENABLED]
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_AUTH_ENABLED].value
+          value: "true"
+
+  - it: backend should render K9B_ADMIN_USERNAME when auth is enabled
+    set:
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+      backend.auth.adminUsername: admin
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_USERNAME]
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_USERNAME].value
+          value: "admin"
+
+  - it: backend should render K9B_SECURE_COOKIE=false by default when auth is enabled
+    set:
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_SECURE_COOKIE]
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_SECURE_COOKIE].value
+          value: "false"
+
+  - it: backend should render K9B_SECURE_COOKIE=true when set
+    set:
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+      backend.auth.secureCookie: true
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_SECURE_COOKIE]
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_SECURE_COOKIE].value
+          value: "true"
+
+  - it: backend should render K9B_SESSION_COOKIE_NAME when auth is enabled
+    set:
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_SESSION_COOKIE_NAME]
+
+  - it: backend should render K9B_SESSION_MAX_AGE_SECONDS when auth is enabled
+    set:
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_SESSION_MAX_AGE_SECONDS]
+
+  - it: backend should render K9B_SESSION_IDLE_TIMEOUT_SECONDS when auth is enabled
+    set:
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_SESSION_IDLE_TIMEOUT_SECONDS]
+
+  - it: backend should render K9B_ADMIN_PASSWORD_HASH from secretKeyRef with existingSecret
+    set:
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+      backend.auth.passwordHashKey: K9B_ADMIN_PASSWORD_HASH
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH]
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH].valueFrom
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH].valueFrom.secretKeyRef.name
+          value: k9b-admin-auth
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH].valueFrom.secretKeyRef.key
+          value: K9B_ADMIN_PASSWORD_HASH
+
+  # ===== auth enabled with adminPasswordHash (chart-managed secret) =====
+
+  - it: backend should render K9B_ADMIN_PASSWORD_HASH with chart-managed secret
+    set:
+      backend.auth.enabled: true
+      backend.auth.adminPasswordHash: "$pbkdf2-sha256$600000$salt$hash"
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH]
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH].valueFrom
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH].valueFrom.secretKeyRef.name
+          value: RELEASE-NAME-k9b-admin-auth
+
+  - it: secret-admin-auth should be rendered when adminPasswordHash is set
+    set:
+      backend.auth.enabled: true
+      backend.auth.adminPasswordHash: "$pbkdf2-sha256$600000$salt$hash"
+    asserts:
+      - isNotNull:
+          path: data
+
+  - it: secret-admin-auth should NOT be rendered when existingSecret is set
+    set:
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+      backend.auth.adminPasswordHash: "$pbkdf2-sha256$600000$salt$hash"
+    asserts:
+      - isNull:
+          path: data
+
+  # ===== Frontend should NOT receive K9B_ADMIN_PASSWORD_HASH =====
+
+  - it: frontend should NOT contain K9B_ADMIN_PASSWORD_HASH in any manifest
+    template: deployment-frontend.yaml
+    set:
+      frontend.configmapNginx: true
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH]
+
+  - it: frontend nginx ConfigMap should NOT contain K9B_ADMIN_PASSWORD_HASH
+    template: configmap-frontend-nginx.yaml
+    set:
+      frontend.configmapNginx: true
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+    asserts:
+      - notMatchRegex:
+          path: data["nginx.conf"]
+          pattern: K9B_ADMIN_PASSWORD_HASH
+
+  # ===== auth env vars are backend-only =====
+
+  - it: all auth env vars should appear only in backend deployment
+    template: deployment.yaml
+    set:
+      backend.auth.enabled: true
+      backend.auth.existingSecret: k9b-admin-auth
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_AUTH_ENABLED]
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_USERNAME]
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_SECURE_COOKIE]
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_SESSION_COOKIE_NAME]
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_SESSION_MAX_AGE_SECONDS]
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_SESSION_IDLE_TIMEOUT_SECONDS]
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH]
+
+  - it: scheduler should NOT contain any admin auth env vars
+    template: deployment-scheduler.yaml
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env[name=K9B_AUTH_ENABLED]
+      - isNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_USERNAME]
+      - isNull:
+          path: spec.template.spec.containers[0].env[name=K9B_ADMIN_PASSWORD_HASH]

@@ -31,6 +31,36 @@ backend:
   command: []
   # args: Override container arguments. Leave empty to use image's default.
   args: []
+  # auth: Admin authentication for the backend UI/API.
+  # When enabled, the backend requires login with admin credentials.
+  # The password hash must come from a Kubernetes Secret (existingSecret or adminPasswordHash).
+  auth:
+    # enabled: Enable admin authentication for the backend.
+    enabled: false
+    # adminUsername: Admin login username.
+    adminUsername: admin
+    # existingSecret: Name of a Kubernetes Secret containing K9B_ADMIN_PASSWORD_HASH.
+    # Preferred for production deployments. Create via:
+    #   kubectl create secret generic k9b-admin-auth --from-literal=K9B_ADMIN_PASSWORD_HASH='$pbkdf2-sha256$600000$...'
+    # Leave empty to use adminPasswordHash below (for local/dev only).
+    existingSecret: ""
+    # passwordHashKey: Key name in the Secret containing the password hash.
+    # Should match the key used when creating the Secret.
+    passwordHashKey: K9B_ADMIN_PASSWORD_HASH
+    # adminPasswordHash: Direct password hash value (local/dev convenience only).
+    # WARNING: Do NOT commit real password hashes to values.yaml or version control.
+    # Use existingSecret for production deployments.
+    # The hash format is PBKDF2-HMAC-SHA256 (e.g., $pbkdf2-sha256$600000$salt$encoded_hash).
+    adminPasswordHash: ""
+    # secureCookie: Set to true for HTTPS deployments. False for HTTP/local development.
+    # When true, the session cookie is marked Secure (HTTPS only).
+    secureCookie: false
+    # sessionCookieName: Name of the session cookie.
+    sessionCookieName: k9b_session
+    # sessionMaxAgeSeconds: Session cookie max age in seconds (8 hours by default).
+    sessionMaxAgeSeconds: 28800
+    # sessionIdleTimeoutSeconds: Session idle timeout in seconds (30 minutes by default).
+    sessionIdleTimeoutSeconds: 1800
   env:
     # HEALTH_SKIP_REFRESH: Set to "0" to enable auto-refresh, "1" to skip.
     HEALTH_SKIP_REFRESH: "1"

@@ -565,6 +565,72 @@ htpasswd -c auth admin
 kubectl create secret generic k9b-basic-auth --from-file=auth
 ```
 
+#### Admin Authentication (Session-based Login)
+
+The k9b backend supports session-based admin authentication for the UI/API. When enabled, users must log in with admin credentials before accessing the UI or protected endpoints.
+
+**Environment variables injected into backend only:**
+
+| Variable | Purpose |
+|----------|---------|
+| `K9B_AUTH_ENABLED` | Enable/disable admin auth |
+| `K9B_ADMIN_USERNAME` | Admin login username |
+| `K9B_ADMIN_PASSWORD_HASH` | PBKDF2-HMAC-SHA256 hash of admin password (from Secret) |
+| `K9B_SECURE_COOKIE` | Session cookie Secure flag (true for HTTPS) |
+| `K9B_SESSION_COOKIE_NAME` | Session cookie name |
+| `K9B_SESSION_MAX_AGE_SECONDS` | Session max age (default: 28800 = 8 hours) |
+| `K9B_SESSION_IDLE_TIMEOUT_SECONDS` | Session idle timeout (default: 1800 = 30 min) |
+
+**Example: Enable admin authentication with existingSecret**
+
+```bash
+# Step 1: Generate a password hash (PBKDF2-HMAC-SHA256)
+# The hash format is: $pbkdf2-sha256$iterations$salt$hash
+# Example: $pbkdf2-sha256$600000$salt$encoded_hash
+
+# Step 2: Create the Kubernetes Secret
+kubectl create secret generic k9b-admin-auth \
+  --from-literal='K9B_ADMIN_PASSWORD_HASH=$pbkdf2-sha256$600000$salt$hash' \
+  -n k9b
+
+# Step 3: Install with admin auth enabled
+helm install infra-k9b ./charts/k9b -n k9b \
+  --set backend.auth.enabled=true \
+  --set backend.auth.existingSecret=k9b-admin-auth
+```
+
+**values.yaml configuration:**
+
+```yaml
+backend:
+  auth:
+    enabled: true
+    adminUsername: admin
+    existingSecret: k9b-admin-auth
+    passwordHashKey: K9B_ADMIN_PASSWORD_HASH
+    secureCookie: false  # true for HTTPS deployments
+    sessionCookieName: k9b_session
+    sessionMaxAgeSeconds: 28800
+    sessionIdleTimeoutSeconds: 1800
+```
+
+**Local/development convenience (chart-managed Secret):**
+
+```yaml
+backend:
+  auth:
+    enabled: true
+    adminUsername: admin
+    adminPasswordHash: "$pbkdf2-sha256$600000$salt$hash"
+    secureCookie: false
+```
+
+**WARNING:** Do NOT commit real password hashes to values.yaml or version control. Use `existingSecret` for production deployments.
+
+**K9B_SECURE_COOKIE:**
+- `false` (default): For HTTP/local development
+- `true`: For HTTPS deployments (sets Secure flag on session cookie)
+
 #### Security Notes
 
 | Aspect | Status |
@@ -575,6 +641,7 @@ kubectl create secret generic k9b-basic-auth --from-file=auth
 | GET endpoint protection | **Deferred** (use reverse proxy) |
 | Token validation | Timing-attack resistant via `hmac.compare_digest` |
 | Token logging | Token never echoed in logs or errors |
+| Admin session auth | **Implemented** via backend.auth.* values |
 
 #### Helm Values Security Options
 
@@ -585,6 +652,10 @@ kubectl create secret generic k9b-basic-auth --from-file=auth
 | `uiAuth.enabled` | Enable bearer token auth | `false` |
 | `uiAuth.secretName` | Secret containing `K9B_UI_TOKEN` | `k9b-ui-auth` |
 | `backend.env.HEALTH_UI_HOST` | Backend bind address | `0.0.0.0` |
+| `backend.auth.enabled` | Enable admin session auth | `false` |
+| `backend.auth.existingSecret` | Secret name for admin password hash | `""` |
+| `backend.auth.adminUsername` | Admin login username | `admin` |
+| `backend.auth.secureCookie` | Secure cookie flag | `false` |
 
 ## Architecture
 
