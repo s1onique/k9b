@@ -75,6 +75,7 @@ def start_ui_test_server_without_auth(
             server.server_close()
     """
     from k8s_diag_agent.ui import auth_config as auth_config_module
+    from k8s_diag_agent.ui import auth_guard
     from k8s_diag_agent.ui.server import HealthUIRequestHandler
     
     # Create handler with functools.partial
@@ -89,16 +90,41 @@ def start_ui_test_server_without_auth(
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     
-    # Now patch get_auth_config to return disabled auth
-    # This must happen after server starts but before any requests
-    patcher = mock.patch.object(
+    # Patch at the usage site (auth_guard), not the definition site (auth_config).
+    # This is critical because auth_guard imports get_auth_config at module level.
+    # Patching at the definition site doesn't affect already-imported references.
+    # We patch both sites to be safe:
+    # 1. auth_guard.get_auth_config - where the handler actually calls it
+    # 2. auth_config_module.get_auth_config - in case other code uses it directly
+    disabled_config = _make_disabled_auth_config()
+    patcher_guard = mock.patch.object(
+        auth_guard,
+        'get_auth_config',
+        return_value=disabled_config
+    )
+    patcher_guard.start()
+    
+    patcher_config = mock.patch.object(
         auth_config_module,
         'get_auth_config',
-        return_value=_make_disabled_auth_config()
+        return_value=disabled_config
     )
-    patcher.start()
+    patcher_config.start()
     
-    return server, thread, patcher
+    # Return a composite patcher that stops both
+    class MultiPatcher:
+        """Composite patcher that stops multiple patches."""
+        
+        def __init__(self, p1: object, p2: object) -> None:
+            self._p1 = p1
+            self._p2 = p2
+        
+        def stop(self) -> None:
+            """Stop both patches."""
+            self._p1.stop()
+            self._p2.stop()
+    
+    return server, thread, MultiPatcher(patcher_guard, patcher_config)
 
 
 def start_ui_test_server_with_auth_disabled(
