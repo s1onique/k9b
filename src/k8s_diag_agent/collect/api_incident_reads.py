@@ -18,6 +18,8 @@ Uses api_incident_reads serializers for typed payloads.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
+from pathlib import Path
 
 from ..ui.api_incident_reads import (
     build_incident_detail_payload,
@@ -25,6 +27,7 @@ from ..ui.api_incident_reads import (
 )
 from ..ui.api_payloads import IncidentDetailPayload, IncidentSummaryPayload
 from .incident_lifecycle import IncidentStatus
+from .incident_next_check_artifacts import load_next_check_plan_payloads_for_incident
 from .incident_store_provider import get_incident_store
 
 _logger = logging.getLogger(__name__)
@@ -60,14 +63,26 @@ def handle_list_incidents(
     }
 
 
-def handle_get_incident(incident_id: str) -> IncidentDetailPayload | None:
+def handle_get_incident(
+    incident_id: str,
+    external_analysis_dir: Path | None = None,
+) -> IncidentDetailPayload | None:
     """Get a specific incident by ID.
 
     Args:
         incident_id: The incident ID to look up
+        external_analysis_dir: Optional path to external-analysis directory
+            for loading next-check plan artifacts to populate suggested_checks.
+            When provided, artifacts are loaded for each run_id found in incident
+            signals and passed to the serializer for SAFE linkage extraction.
 
     Returns:
         Incident detail dict if found, None if not found
+
+    Note:
+        When external_analysis_dir is None, suggested_checks will be empty.
+        When provided, suggested_checks are populated from linked candidates.
+        Missing or malformed artifacts do not cause errors - they are skipped.
     """
     store = get_incident_store()
     incident = store.get_incident(incident_id)
@@ -75,7 +90,15 @@ def handle_get_incident(incident_id: str) -> IncidentDetailPayload | None:
     if incident is None:
         return None
 
-    return build_incident_detail_payload(incident)
+    # Load next-check plan payloads if external_analysis_dir is available
+    plan_payloads: tuple[Mapping[str, object], ...] = ()
+    if external_analysis_dir is not None:
+        plan_payloads = load_next_check_plan_payloads_for_incident(
+            incident,
+            external_analysis_dir,
+        )
+
+    return build_incident_detail_payload(incident, next_check_plan_payloads=plan_payloads)
 
 
 __all__ = [

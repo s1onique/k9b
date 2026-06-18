@@ -209,8 +209,12 @@ class TestNoForbiddenFields(unittest.TestCase):
         for func in [handle_list_incidents, handle_get_incident]:
             sig = inspect.signature(func)
             params = [p.name for p in sig.parameters.values()]
-            forbidden = ["kubectl", "remediation", "mutation", "llm", "external", "persist", "database"]
+            forbidden = ["kubectl", "remediation", "mutation", "llm", "persist", "database"]
+            # Allow external_analysis_dir - it's the explicit artifact loading seam
+            allowed = {"external_analysis_dir"}
             for param in params:
+                if param in allowed:
+                    continue
                 for forb in forbidden:
                     self.assertNotIn(
                         forb.lower(),

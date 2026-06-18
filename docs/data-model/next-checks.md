@@ -90,10 +90,11 @@ Current next-check artifacts remain valid and continue to work.
 
 The Incident detail view includes a read-only "Suggested checks" section that renders the `suggested_checks` field from `IncidentDetailPayload`.
 
-**Current state:**
-- `IncidentDetailPayload.suggested_checks` is populated when next-check plan artifacts with linked candidates exist
-- `build_incident_detail_payload()` accepts optional `next_check_plan_payload` parameter
-- When provided, extracts suggested_checks from candidates where `linkage_status="linked"` and `incident_id` matches
+**Current state (fully implemented):**
+- `IncidentDetailPayload.suggested_checks` is populated at runtime when next-check plan artifacts with linked candidates exist
+- `handle_get_incident()` loads plan artifacts from `external-analysis/` directory based on incident signal run_ids
+- `build_incident_detail_payload()` accepts `next_check_plan_payloads` (iterable) for multiple artifacts
+- Suggestions from multiple run_ids are merged in deterministic order
 
 **SAFE population source**:
 - Only candidates where `candidate.linkage_status == "linked"` AND `candidate.incident_id == incident.incident_id`
@@ -105,20 +106,27 @@ The Incident detail view includes a read-only "Suggested checks" section that re
 - Populated state: Read-only list with no execution, promotion, or remediation buttons
 - Hard UI boundary: No "Run", "Execute", "Promote", "Apply", "Remediate" buttons
 
+**Artifact loading** (`src/k8s_diag_agent/collect/incident_next_check_artifacts.py`):
+- `incident_signal_run_ids()`: Extracts run_id from incident signals
+- `load_next_check_plan_payloads_for_incident()`: Loads all plan artifacts for incident
+- Bounded file IO (max 16 artifacts)
+- Failure-tolerant (missing/malformed artifacts skipped)
+
 **Extraction helper** (`src/k8s_diag_agent/ui/incident_suggested_checks.py`):
 - Pure functions, no file IO
 - Accepts pre-loaded plan payloads
 - Implements SAFE filter directly
 
 **Serializer integration** (`build_incident_detail_payload()`):
-- Accepts optional `next_check_plan_payload: Mapping[str, object] | None`
-- Returns empty list when None (backward compatible)
-- Returns populated list when payload provided
+- Accepts `next_check_plan_payloads: Iterable[Mapping[str, object]] | None`
+- Legacy `next_check_plan_payload` parameter preserved for backward compatibility
+- Flattens suggestions from multiple plan payloads
 
-**Handler integration** (future ACT):
-- Handler locates plan artifacts via signal run_ids
-- Loads artifact payload
-- Passes to serializer via `next_check_plan_payload` parameter
+**Handler integration** (implemented):
+- `handle_get_incident()` accepts optional `external_analysis_dir` parameter
+- Server route computes `external_analysis_dir` from `handler._health_root / "external-analysis"`
+- Loads plan artifacts for each run_id in incident signals
+- Passes payloads to serializer for SAFE linkage extraction
 
 ## Safety constraints
 

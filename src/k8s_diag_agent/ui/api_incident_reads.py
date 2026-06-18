@@ -27,7 +27,7 @@ from .api_payloads_incident_reads import (
 from .incident_suggested_checks import build_suggested_checks_from_next_check_plan_payload
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
     from ..collect.incident_events import IncidentEvent
     from ..collect.incident_evidence import EvidenceLink
@@ -141,6 +141,8 @@ def build_incident_summary_payload(incident: Incident) -> IncidentSummaryPayload
 def build_incident_detail_payload(
     incident: Incident,
     *,
+    next_check_plan_payloads: Iterable[Mapping[str, object]] | None = None,
+    # Legacy single-payload parameter for backward compatibility
     next_check_plan_payload: Mapping[str, object] | None = None,
 ) -> IncidentDetailPayload:
     """Build IncidentDetailPayload from Incident model.
@@ -150,22 +152,30 @@ def build_incident_detail_payload(
 
     Args:
         incident: The incident model to serialize
-        next_check_plan_payload: Optional pre-loaded next-check plan artifact payload.
-            When provided, suggested_checks will be populated from candidates where
-            linkage_status="linked" and incident_id matches.
+        next_check_plan_payloads: Optional iterable of pre-loaded next-check plan
+            artifact payloads. When provided, suggested_checks will be populated
+            from candidates where linkage_status="linked" and incident_id matches.
+        next_check_plan_payload: Legacy single-payload parameter. If provided and
+            next_check_plan_payloads is None, this is used for backward compatibility.
 
     Note: suggested_checks is a read-only compatibility projection.
-    When next_check_plan_payload is None, returns empty list.
+    When no plan payloads provided, returns empty list.
     When provided, extracts only SAFE linked candidates.
     """
-    # Build suggested checks from plan payload if available
-    if next_check_plan_payload is not None:
-        suggested_checks: list[IncidentSuggestedCheckPayload] = (
-            build_suggested_checks_from_next_check_plan_payload(
+    # Build suggested checks from plan payloads if available
+    # Handle both new iterable parameter and legacy single-payload parameter
+    if next_check_plan_payloads is None and next_check_plan_payload is not None:
+        # Legacy backward-compatible path
+        next_check_plan_payloads = (next_check_plan_payload,)
+
+    if next_check_plan_payloads is not None:
+        suggested_checks: list[IncidentSuggestedCheckPayload] = []
+        for plan_payload in next_check_plan_payloads:
+            checks = build_suggested_checks_from_next_check_plan_payload(
                 incident.incident_id,
-                next_check_plan_payload,
+                plan_payload,
             )
-        )
+            suggested_checks.extend(checks)
     else:
         suggested_checks = []
 

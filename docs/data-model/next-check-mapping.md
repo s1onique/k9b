@@ -190,29 +190,43 @@ The context is threaded through:
 
 | Field | Status |
 |-------|--------|
-| `suggested_checks` in IncidentDetailPayload | **Serializer can populate from pre-loaded linked artifacts; handler loading pending** |
+| `suggested_checks` in IncidentDetailPayload | **Fully implemented - runtime population from artifact loading** |
 | Linkage fields in new plan artifacts | **Implemented** |
 | Old artifact compatibility | **Preserved** |
 | Extraction helper | **Implemented** (incident_suggested_checks.py) |
+| Artifact loading helper | **Implemented** (incident_next_check_artifacts.py) |
+| Handler wiring | **Implemented** (api_incident_reads.py + server_incident_reads.py) |
 
-### 7.1 ACT Complete: Population from SAFE Linkage (2026-06-18)
+### 7.1 ACT Complete: Handler Wiring for Runtime Population (2026-06-18)
 
 **Implemented** in this ACT:
 
-1. **Extraction helper**: `src/k8s_diag_agent/ui/incident_suggested_checks.py`
-   - `build_suggested_check_from_linked_candidate()`: Extracts a single suggested check
-   - `build_suggested_checks_from_next_check_plan_payload()`: Extracts from plan payload
+1. **Artifact loading helper**: `src/k8s_diag_agent/collect/incident_next_check_artifacts.py`
+   - `incident_signal_run_ids()`: Extracts run_id values from incident signals
+   - `next_check_plan_path_for_run()`: Constructs expected artifact path
+   - `load_next_check_plan_payload()`: Loads and validates a single plan artifact
+   - `load_next_check_plan_payloads_for_incident()`: Loads all plan payloads for an incident
 
-2. **Serializer integration**: `build_incident_detail_payload()` accepts optional `next_check_plan_payload`
-   - When provided, extracts suggested_checks from linked candidates
-   - When None, returns empty list (backward compatible)
+2. **Handler update**: `src/k8s_diag_agent/collect/api_incident_reads.py`
+   - `handle_get_incident()` now accepts optional `external_analysis_dir` parameter
+   - When provided, loads plan artifacts and passes payloads to serializer
+   - When None, returns empty suggested_checks (backward compatible)
 
-3. **SAFE filter** (enforced):
+3. **Server route update**: `src/k8s_diag_agent/ui/server_incident_reads.py`
+   - `handle_incident_detail_route()` computes `external_analysis_dir` from `handler._health_root`
+   - Passes directory to `handle_get_incident()` for artifact loading
+
+4. **Serializer update**: `src/k8s_diag_agent/ui/api_incident_reads.py`
+   - `build_incident_detail_payload()` accepts `next_check_plan_payloads` (iterable)
+   - Preserves backward compatibility with legacy `next_check_plan_payload` parameter
+   - Flattens suggestions from multiple plan payloads
+
+5. **SAFE filter** (enforced at serializer level):
    - `candidate.linkage_status == "linked"`
    - `candidate.incident_id == incident.incident_id`
    - Candidate must have incident_id present
 
-4. **Filters that IGNORE candidates**:
+6. **Filters that IGNORE candidates**:
    - Partial linkage (entity fields only, no incident_id)
    - Unlinked linkage status
    - Non-matching incident_id
@@ -220,7 +234,7 @@ The context is threaded through:
    - Provider/text-only candidates
    - Text similarity
 
-5. **No unsafe behavior implemented**:
+7. **No unsafe behavior implemented**:
    - No execution
    - No manual promotion
    - No remediation
@@ -229,7 +243,7 @@ The context is threaded through:
    - No text similarity matching
    - No partial mapping population
 
-6. **Mapping to IncidentSuggestedCheckPayload**:
+8. **Mapping to IncidentSuggestedCheckPayload**:
    - `check_id`: candidate["candidateId"] or source_candidate_id fallback
    - `title`: candidate["title"] or description first line or "Suggested check"
    - `rationale`: candidate["rationale"] or description or linkage_reason or default
@@ -239,19 +253,31 @@ The context is threaded through:
    - `artifact_id`: from plan artifact (optional)
    - `run_id`: from plan-level run_id (optional)
 
-### 7.2 Artifact Read Path
+### 7.2 Artifact Read Path (Production Ready)
 
-The serializer accepts pre-loaded plan payloads. Callers (handlers) are responsible for:
-- Locating relevant next-check plan artifacts
-- Loading artifact payload
-- Passing to `build_incident_detail_payload()` via `next_check_plan_payload` parameter
+The handler now handles artifact discovery automatically:
 
-**Recommended read path**: From incident signals, extract `run_id` values, then locate corresponding `{run_id}-next-check-plan.json` artifacts.
+1. Extract run_ids from incident signals (structured, deterministic)
+2. For each run_id, look for `{run_id}-next-check-plan.json` in `external-analysis/` directory
+3. Load and validate JSON payloads
+4. Pass payloads to serializer for SAFE linkage extraction
+5. Merge suggestions from multiple artifacts in deterministic run_id order
+
+**Read path**:
+```
+Incident.signals[].run_id
+  → external_analysis_dir / {run_id}-next-check-plan.json
+  → load_next_check_plan_payload()
+  → build_incident_detail_payload(incident, next_check_plan_payloads=payloads)
+  → suggested_checks populated from linked candidates
+```
 
 ### 7.3 Tests Added
 
-- `tests/unit/test_incident_suggested_checks.py`: extraction tests covering SAFE filter, compatibility, malformed input, no mutation, and no action fields
-- `tests/unit/test_api_incident_reads_serializers.py`: serializer tests covering linking, filtering, and compatibility
+- `tests/unit/test_incident_next_check_artifacts.py`: artifact loading tests
+- `tests/unit/test_api_incident_reads_detail_serializers.py`: handler composition tests
+- Existing extraction tests preserved: `test_incident_suggested_checks.py`
+- Existing serializer tests preserved: `test_api_incident_reads_suggested_checks_serializers.py`
 
 ---
 

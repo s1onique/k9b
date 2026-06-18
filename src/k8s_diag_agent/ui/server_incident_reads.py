@@ -82,8 +82,11 @@ def handle_incident_detail_route(handler: HealthUIRequestHandler, path: str) -> 
 
     incident_id = match.group(1)
 
+    # Compute external_analysis_dir from handler's health_root
+    external_analysis_dir = handler._health_root / "external-analysis"
+
     try:
-        result = handle_get_incident(incident_id)
+        result = handle_get_incident(incident_id, external_analysis_dir=external_analysis_dir)
         if result is None:
             send_json_response(handler, {"error": "Incident not found"}, code=404)
         else:
