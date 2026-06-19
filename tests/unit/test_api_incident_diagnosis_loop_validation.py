@@ -263,6 +263,28 @@ class TestRequestValidation(unittest.TestCase):
         self.assertIn("must be an array", str(ctx.exception))
 
 
+class TestNonObjectJSONHandling(unittest.TestCase):
+    """Test handling of valid JSON that is not an object (e.g., [], null)."""
+
+    def test_non_object_json_raises(self) -> None:
+        """Valid JSON array (not object) raises ValueError."""
+        with self.assertRaises(ValueError) as ctx:
+            DiagnosisLoopOnePassRequest.from_dict([])
+        self.assertIn("must be a JSON object", str(ctx.exception))
+
+    def test_null_json_raises(self) -> None:
+        """Valid JSON null (not object) raises ValueError."""
+        with self.assertRaises(ValueError) as ctx:
+            DiagnosisLoopOnePassRequest.from_dict(None)
+        self.assertIn("must be a JSON object", str(ctx.exception))
+
+    def test_string_json_raises(self) -> None:
+        """Valid JSON string (not object) raises ValueError."""
+        with self.assertRaises(ValueError) as ctx:
+            DiagnosisLoopOnePassRequest.from_dict("not an object")
+        self.assertIn("must be a JSON object", str(ctx.exception))
+
+
 class TestMalformedJSONHandling(unittest.TestCase):
     """Test handling of malformed JSON in requests."""
 

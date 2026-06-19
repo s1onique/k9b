@@ -54,6 +54,30 @@ __all__ = [
 # Maximum request body size in bytes (safety bound)
 MAX_REQUEST_BODY_SIZE = 64 * 1024  # 64KB
 
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+
+def _artifact_filename(meta: object) -> str | None:
+    """Extract filename from artifact metadata dict.
+
+    Handles both 'artifact_path' (from artifact writers) and 'path' keys.
+
+    Args:
+        meta: Artifact metadata dict or None
+
+    Returns:
+        Filename string or None if not available
+    """
+    if not isinstance(meta, dict):
+        return None
+    raw_path = meta.get("artifact_path") or meta.get("path")
+    if not isinstance(raw_path, str) or not raw_path:
+        return None
+    return Path(raw_path).name
+
 # Forbidden action-control fields that must not appear in response
 _FORBIDDEN_ACTION_FIELDS: frozenset[str] = frozenset([
     "run",
@@ -107,7 +131,7 @@ class DiagnosisLoopOnePassRequest:
     diagnosis_report: dict[str, Any]
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> DiagnosisLoopOnePassRequest:
+    def from_dict(cls, data: object) -> DiagnosisLoopOnePassRequest:
         """Parse request from dict, validating required fields.
 
         Args:
@@ -119,6 +143,10 @@ class DiagnosisLoopOnePassRequest:
         Raises:
             ValueError: If required fields are missing or invalid
         """
+        # Reject non-dict input (e.g., [], null, etc.)
+        if not isinstance(data, dict):
+            raise ValueError("request body must be a JSON object")
+
         # Check for forbidden fields
         for field_name in _FORBIDDEN_REQUEST_FIELDS:
             if field_name in data:
@@ -310,22 +338,20 @@ def handle_diagnosis_loop_one_pass(
     }
 
     # Extract artifact references (not full contents)
+    # Use _artifact_filename to handle both 'artifact_path' and 'path' keys
     if artifact and isinstance(artifact, dict):
-        if artifact.get("written") and artifact.get("path"):
-            # Extract just the filename, not full path
-            path_str = artifact.get("path", "")
-            if isinstance(path_str, str):
-                name = Path(path_str).name
+        if artifact.get("written"):
+            name = _artifact_filename(artifact)
+            if name:
                 artifacts["read_only_check_results"] = {
                     "written": True,
                     "name": name,
                 }
 
     if loop_pass_artifact and isinstance(loop_pass_artifact, dict):
-        if loop_pass_artifact.get("written") and loop_pass_artifact.get("path"):
-            path_str = loop_pass_artifact.get("path", "")
-            if isinstance(path_str, str):
-                name = Path(path_str).name
+        if loop_pass_artifact.get("written"):
+            name = _artifact_filename(loop_pass_artifact)
+            if name:
                 artifacts["diagnosis_loop_pass"] = {
                     "written": True,
                     "name": name,

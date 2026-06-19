@@ -19,13 +19,19 @@ Tests:
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from k8s_diag_agent.collect.api_incident_diagnosis_loop import (
     DiagnosisLoopOnePassResponse,
 )
 from k8s_diag_agent.collect.incident_diagnosis_loop_models import (
     LoopDecision,
+)
+from tests.helpers.ui_test_harness import (
+    shutdown_test_server,
+    start_ui_test_server_without_auth,
 )
 
 
@@ -308,6 +314,175 @@ class TestDecisionValues(unittest.TestCase):
 
         data = response.to_dict()
         self.assertEqual(data["decision"], "run_allowed_read_only_checks")
+
+
+class TestIntegrationRunPath(unittest.TestCase):
+    """Integration tests for the run path with real orchestrator.
+
+    These tests prove that handle_diagnosis_loop_one_pass() actually:
+    1. Runs the orchestrator
+    2. Writes artifacts
+    3. Returns real artifact names
+    """
+
+    def setUp(self) -> None:
+        """Set up HTTP test harness and incident store."""
+        from k8s_diag_agent.collect.incident_store import IncidentStore
+        from k8s_diag_agent.collect.incident_store_provider import (
+            set_incident_store,
+        )
+
+        # Create fresh store for testing
+        self._test_store = IncidentStore()
+        set_incident_store(self._test_store)
+
+        # Create HTTP harness with a temporary directory
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._runs_dir = Path(self._tmpdir.name) / "runs"
+        self._runs_dir.mkdir(parents=True)
+        self._health_dir = self._runs_dir / "health"
+        self._health_dir.mkdir(parents=True)
+        self._static_dir = Path(self._tmpdir.name) / "static"
+        self._static_dir.mkdir(parents=True)
+        (self._static_dir / "index.html").write_text("<h1>Test</h1>")
+
+        # Start server with auth disabled to test route behavior
+        self._server, self._thread, self._patcher = start_ui_test_server_without_auth(
+            runs_dir=self._runs_dir,
+            static_dir=self._static_dir,
+        )
+        self._port = self._server.server_address[1]
+
+    def tearDown(self) -> None:
+        """Clean up."""
+        from k8s_diag_agent.collect.incident_store_provider import (
+            reset_incident_store,
+            set_incident_store,
+        )
+        shutdown_test_server(self._server, self._thread, self._patcher)
+        self._tmpdir.cleanup()
+        set_incident_store(None)
+        reset_incident_store()
+
+    def _request(self, method: str, path: str, body: bytes = b"", headers: dict | None = None) -> tuple[int, bytes, dict]:
+        """Make an HTTP request to the test server."""
+        from http.client import HTTPConnection
+        conn = HTTPConnection("127.0.0.1", self._port, timeout=5)
+        try:
+            request_headers = headers or {}
+            if body:
+                request_headers["Content-Length"] = str(len(body))
+            conn.request(method, path, body=body, headers=request_headers)
+            response = conn.getresponse()
+            return response.status, response.read(), dict(response.getheaders())
+        finally:
+            conn.close()
+
+    def _create_incident(self) -> str:
+        """Create a test incident and return its ID."""
+        from datetime import UTC, datetime
+
+        from k8s_diag_agent.collect.incident_candidates import (
+            CandidateClass,
+            CandidateSignal,
+            IncidentCandidate,
+            ObjectKind,
+            Severity,
+        )
+
+        candidate = IncidentCandidate(
+            candidate_id="test-diagnosis-loop-1",
+            namespace="default",
+            object_kind=ObjectKind.POD,
+            object_name="test-pod",
+            candidate_class=CandidateClass.CRASH_LOOP,
+            severity=Severity.ERROR,
+            signals=(CandidateSignal(source="test", reason="Error", message="err"),),
+            evidence_needed=(),
+        )
+        self._test_store.promote_candidates(
+            [candidate],
+            datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+        )
+        incidents = self._test_store.list_incidents()
+        return incidents[0].incident_id
+
+    def test_run_path_writes_artifacts_with_correct_names(self) -> None:
+        """Run path writes artifacts with correct filenames."""
+        incident_id = self._create_incident()
+        run_id = "test-run-diagnosis-loop-001"
+
+        request_body = json.dumps({
+            "run_id": run_id,
+            "diagnosis_report": {
+                "diagnosis": {
+                    "recommended_investigations": [
+                        {
+                            "check_id": "pod_logs",
+                            "title": "Check pod logs",
+                            "read_only": True,
+                            "source": "manual"
+                        }
+                    ]
+                }
+            }
+        }).encode()
+
+        status, body, _ = self._request(
+            "POST",
+            f"/api/incidents/{incident_id}/diagnosis-loop/one-pass",
+            body=request_body,
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+
+        # Verify artifacts are written with correct names
+        self.assertEqual(data["artifacts"]["read_only_check_results"]["written"], True)
+        self.assertEqual(
+            data["artifacts"]["read_only_check_results"]["name"],
+            f"{run_id}-read-only-check-results.json"
+        )
+        self.assertEqual(data["artifacts"]["diagnosis_loop_pass"]["written"], True)
+        self.assertEqual(
+            data["artifacts"]["diagnosis_loop_pass"]["name"],
+            f"{run_id}-diagnosis-loop-pass.json"
+        )
+
+    def test_stop_path_returns_empty_read_only_check_results(self) -> None:
+        """Stop path (no investigations) returns written=false for read-only-check-results."""
+        incident_id = self._create_incident()
+        run_id = "test-run-diagnosis-loop-stop-001"
+
+        request_body = json.dumps({
+            "run_id": run_id,
+            "diagnosis_report": {
+                "diagnosis": {
+                    "recommended_investigations": []
+                }
+            }
+        }).encode()
+
+        status, body, _ = self._request(
+            "POST",
+            f"/api/incidents/{incident_id}/diagnosis-loop/one-pass",
+            body=request_body,
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+
+        # Stop path: read-only-check-results not written (no checks ran)
+        self.assertEqual(data["artifacts"]["read_only_check_results"]["written"], False)
+        self.assertIsNone(data["artifacts"]["read_only_check_results"]["name"])
+        # But loop-pass artifact IS written (even on stop path)
+        self.assertEqual(data["artifacts"]["diagnosis_loop_pass"]["written"], True)
+        self.assertEqual(
+            data["artifacts"]["diagnosis_loop_pass"]["name"],
+            f"{run_id}-diagnosis-loop-pass.json"
+        )
 
 
 if __name__ == "__main__":
