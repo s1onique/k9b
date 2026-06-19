@@ -16,13 +16,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..identity.artifact import write_append_only_json_artifact
 from .image_pull_secret import ImagePullSecretInsight
 from .loop_history import (
     HealthHistoryEntry,
     HealthRating,
     _watched_crd_versions,
     _watched_release_versions,
-    _write_json,
 )
 from .notifications import (
     NotificationArtifact,
@@ -146,7 +146,11 @@ def build_assessments_for_records(
                 artifact_path=str(assessment_path),
             )
             HealthAssessmentValidator.validate(artifact.to_dict())
-            _write_json(artifact.to_dict(), assessment_path)
+            write_append_only_json_artifact(
+                assessment_path,
+                artifact.to_dict(),
+                context=f"run_id={run_id}, label={record.target.label}, kind=HealthAssessmentArtifact",
+            )
             artifacts.append(artifact)
 
             # Emit degraded health notification

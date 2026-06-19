@@ -24,6 +24,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..identity.artifact import write_append_only_json_artifact
 from ..structured_logging import emit_structured_log
 from .adaptation import HealthProposal, collect_trigger_details, generate_proposals_from_review
 from .baseline import BaselinePolicy
@@ -82,10 +83,14 @@ def write_review_and_proposals(
     except Exception:
         return None, ()
 
-    # Step 2: Write review artifact
+    # Step 2: Write review artifact (immutable - no overwrite)
     review_directory = directories["reviews"]
     review_path = review_directory / f"{run_id}-review.json"
-    _write_json(review.to_dict(), review_path)
+    write_append_only_json_artifact(
+        review_path,
+        review.to_dict(),
+        context=f"run_id={run_id}, kind=HealthReviewArtifact",
+    )
 
     # Step 3: Collect trigger details and generate proposals
     try:
@@ -106,7 +111,11 @@ def write_review_and_proposals(
         for proposal in proposals:
             proposal_path = proposals_dir / f"{proposal.proposal_id}.json"
             HealthProposalValidator.validate(proposal.to_dict())
-            _write_json(proposal.to_dict(), proposal_path)
+            write_append_only_json_artifact(
+                proposal_path,
+                proposal.to_dict(),
+                context=f"run_id={run_id}, proposal_id={proposal.proposal_id}, kind=HealthProposal",
+            )
             proposal_with_path = replace(proposal, artifact_path=str(proposal_path))
             proposal_records.append(proposal_with_path)
 

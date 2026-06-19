@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..identity.artifact import write_append_only_json_artifact
 from .loop_comparison_policy import BaselineRegistry, _policy_eligible_pair
 from .loop_comparison_triggers import determine_pair_trigger_reasons
 from .loop_comparison_types import (
@@ -223,7 +224,8 @@ def evaluate_triggers_for_records(
             directories["comparisons"]
             / f"{run_id}-{primary_record.target.label}-vs-{secondary_record.target.label}-comparison.json"
         )
-        _write_json(
+        write_append_only_json_artifact(
+            comparison_path,
             {
                 "differences": _serialize_value(comparison.differences),
                 "trigger_reasons": [detail.reason for detail in trigger_details],
@@ -233,7 +235,7 @@ def evaluate_triggers_for_records(
                 "ignored_drift_categories": list(ignored_categories),
                 "peer_notes": peer_notes,
             },
-            comparison_path,
+            context=f"run_id={run_id}, primary={primary_record.target.label}, secondary={secondary_record.target.label}, kind=ClusterComparison",
         )
 
         artifact = ComparisonTriggerArtifact(
@@ -257,12 +259,16 @@ def evaluate_triggers_for_records(
         )
         triggers.append(artifact)
 
-        # Write trigger artifact
+        # Write trigger artifact (immutable)
         trigger_path = (
             directories["triggers"]
             / f"{run_id}-{primary_record.target.label}-vs-{secondary_record.target.label}-trigger.json"
         )
-        _write_json(artifact.to_dict(), trigger_path)
+        write_append_only_json_artifact(
+            trigger_path,
+            artifact.to_dict(),
+            context=f"run_id={run_id}, primary={primary_record.target.label}, secondary={secondary_record.target.label}, kind=ComparisonTriggerArtifact",
+        )
 
         if log_event_fn:
             log_event_fn(
