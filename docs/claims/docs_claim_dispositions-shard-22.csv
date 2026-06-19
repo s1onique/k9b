@@ -116,7 +116,7 @@ DOC-CAND-27935ce32c2c,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-8502fa8acbf3,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-b63b5107f2d4,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-abf2b035b1a5,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-glob-audit.md
-DOC-CAND-57bf747dd7e2,backlog_future_claim,,,requires_future_human_review,2026-06-19,Security invariant: User IDs must never be interpolated - ACT 3.2
+DOC-CAND-57bf747dd7e2,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Source: security-standards.md Section 1. Implementation: path_validation.py provides validate_run_id() and safe_child_path(). All user-controlled IDs validated before path interpolation. Tests: test_path_validation.py proves traversal/glob metacharacter rejection. Path construction uses validated IDs.
 DOC-CAND-b92761e5e1d9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md
 DOC-CAND-00831e21d443,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md
 DOC-CAND-135b23295afd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md

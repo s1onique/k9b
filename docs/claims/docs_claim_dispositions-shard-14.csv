@@ -111,7 +111,7 @@ DOC-CAND-8e389f52e9eb,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-600e8e823c73,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-fcdeb9efc367,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-933029d72f28,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
-DOC-CAND-416d618a347d,backlog_future_claim,,,requires_future_human_review,2026-06-19,Security invariant: Fallback must not leak host paths - ACT 3.2
+DOC-CAND-416d618a347d,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Implementation: server_static.py serve_static() uses static string "Static assets unavailable" for 404 fallback. Source: static-artifact-serving-contract.md item 5. Tests: test_server_http_routes.py TestStaticHTTPRoute proves fallback 404 uses static message.
 DOC-CAND-fb4a91db992d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
 DOC-CAND-3b53ecd6f7f5,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-8f386823f67f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md

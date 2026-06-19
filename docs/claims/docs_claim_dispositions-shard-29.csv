@@ -82,7 +82,7 @@ DOC-CAND-a372e049e4ba,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-9256896b6564,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-294b45e67ff6,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-7a002bdf2956,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-a264b5f8a55f,backlog_future_claim,,,requires_future_human_review,2026-06-19,Security invariant: Anonymizer MUST NOT correlate across runs - ACT 3.2
+DOC-CAND-a264b5f8a55f,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Source: llm-anonymization-design.md Section 3.2. Implementation: MetadataAnonymizer.__init__() creates fresh _mappings dict per instance. Each prompt builder creates new MetadataAnonymizer(). Tests: test_metadata_anonymizer.py test_two_instances_independent_mappings() proves separate instances have independent alias mappings.
 DOC-CAND-2454147ca5f0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-bbe9ac4aa240,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-aa3701a81cbf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md

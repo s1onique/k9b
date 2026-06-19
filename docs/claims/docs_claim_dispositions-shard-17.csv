@@ -112,7 +112,7 @@ DOC-CAND-3f84be135e0d,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-b2f97ea833a0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-09be05a2e14b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-405c8d3b453d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
-DOC-CAND-b1602fe2cce5,backlog_future_claim,,,requires_future_human_review,2026-06-19,Security invariant: Fallback must never serve attacker files - ACT 3.2
+DOC-CAND-b1602fe2cce5,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Implementation: server_static.py serve_static() validates Path.relative_to() containment before serving. Traversal/outside-root falls back to index.html, never attacker-targeted files. Source: static-artifact-serving-contract.md item 4. Tests: test_server_static_path_traversal.py prove fallback serves index.html, not arbitrary files.
 DOC-CAND-96e72f476f1f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-f12d535b24cb,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-169d24148839,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
