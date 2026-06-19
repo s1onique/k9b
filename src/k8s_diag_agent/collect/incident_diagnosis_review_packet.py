@@ -1,26 +1,14 @@
 """Bounded diagnosis loop review packet artifact writer.
 
-This module provides a deterministic evidence packet for operator/ChatGPT review
-after automatic diagnosis loop evidence collection.
+Provides a deterministic evidence packet for operator/ChatGPT review after
+automatic diagnosis loop evidence collection.
 
 Design constraints:
 - Bounded JSON output only
-- No raw artifact contents
-- No absolute filesystem paths
-- No secrets, tokens, kubeconfig
-- No action-control fields
-- No tracebacks or stack traces
+- No raw artifact contents, absolute paths, secrets, or action-control fields
 - Deterministic and JSON-serializable
 
 Artifact naming: {run_id}-diagnosis-review-packet.json
-
-This module does NOT:
-- Execute Kubernetes collectors
-- Call kubectl/helm/subprocess/shell
-- Perform remediation or mutation
-- Write large raw artifacts
-- Include absolute paths
-- Include stack traces
 """
 
 from __future__ import annotations
@@ -30,15 +18,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .incident_diagnosis_review_packet_exceptions import (
+    AutomaticDiagnosisReviewPacketUnavailable,
+)
 from .incident_read_only_check_artifacts import is_safe_run_id
 
 if TYPE_CHECKING:
     from .incident_diagnosis_auto_loop import AutomaticDiagnosisLoopConfig
 
+
 __all__ = [
     "write_diagnosis_review_packet",
     "REVIEW_PACKET_SCHEMA_VERSION",
     "REVIEW_PACKET_ARTIFACT_TYPE",
+    "AutomaticDiagnosisReviewPacketUnavailable",
 ]
 
 
@@ -470,10 +463,11 @@ def load_review_packet_summary(
         incident_id: The incident ID to search for
 
     Returns:
-        Bounded summary dict or None if not found
+        Bounded summary dict, or None if no packet exists for this incident
     """
     packet_info = find_latest_review_packet(external_analysis_dir, incident_id)
     if packet_info is None:
+        # No packet found for this incident - not an error, just unavailable
         return None
 
     try:
@@ -494,5 +488,7 @@ def load_review_packet_summary(
             "eligible": data.get("eligibility", {}).get("eligible"),
             "eligibility_reason": data.get("eligibility", {}).get("reason"),
         }
-    except (OSError, json.JSONDecodeError, KeyError):
-        return None
+    except (OSError, json.JSONDecodeError, KeyError) as exc:
+        raise AutomaticDiagnosisReviewPacketUnavailable(
+            f"Failed to load review packet for incident {incident_id!r}: {exc}"
+        ) from exc

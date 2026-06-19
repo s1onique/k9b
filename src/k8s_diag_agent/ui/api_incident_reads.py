@@ -166,6 +166,9 @@ def build_automatic_diagnosis_review_payload(
     # Import here to avoid circular dependencies and keep this module read-only
     try:
         from ..collect.incident_diagnosis_review_packet import load_review_packet_summary
+        from ..collect.incident_diagnosis_review_packet_exceptions import (
+            AutomaticDiagnosisReviewPacketUnavailable,
+        )
     except ImportError:
         return {
             "available": False,
@@ -174,8 +177,8 @@ def build_automatic_diagnosis_review_payload(
 
     try:
         summary = load_review_packet_summary(external_analysis_dir, incident_id)
-    except Exception:
-        # Catch any unexpected errors during packet loading
+    except AutomaticDiagnosisReviewPacketUnavailable:
+        # Packet exists but couldn't be loaded (I/O error, malformed JSON)
         return {
             "available": False,
             "unavailable_reason": "malformed_review_packet",
