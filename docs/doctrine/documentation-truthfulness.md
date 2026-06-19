@@ -180,12 +180,92 @@ A structured registry that tracks claims from documentation:
 
 ### 4. Traceability Matrix
 
-**Status**: Planned (ACT 3)
+**Status**: Implemented (ACT 3)
 
 A matrix mapping:
 - Documents → Claims
 - Claims → Evidence
 - Evidence → Verification status
+- Produces coverage reports
+
+**Matrix file**: `docs/claims/docs_claim_traceability_matrix.csv`
+
+**Matrix columns**:
+| Field | Description |
+|-------|-------------|
+| `trace_id` | Stable ID (DOC-TRACE-0001 format, zero-padded 4 digits) |
+| `claim_id` | Reference to claim in docs_claims_registry.csv |
+| `evidence_kind` | Type: unit_test, integration_test, frontend_test, verifier, ci_gate, source_anchor, manual_lab, historical_record, none |
+| `evidence_ref` | Reference identifier for the evidence |
+| `evidence_path` | Path to evidence on disk (for test/verifier/source_anchor/historical_record) |
+| `evidence_symbol` | Symbol name if applicable (test function, class, etc.) |
+| `gate_name` | CI/local gate name (required for ci_gate evidence_kind) |
+| `coverage_strength` | Strength: direct, indirect, partial, manual, historical, none |
+| `verification_status` | Status: verified, pending, manual_only, historical_only, unsupported |
+| `last_verified` | ISO date of last verification |
+| `notes` | Additional context |
+
+**Evidence kind semantics**:
+| Kind | Description |
+|------|-------------|
+| `unit_test` | Python unit test |
+| `integration_test` | Integration test |
+| `frontend_test` | Frontend/test UI test |
+| `verifier` | Deterministic verification script |
+| `ci_gate` | CI gate step |
+| `source_anchor` | Source code reference |
+| `manual_lab` | Manual lab evidence |
+| `historical_record` | Historical documentation/report |
+| `none` | No evidence (placeholder) |
+
+**Coverage strength semantics**:
+| Strength | Meaning |
+|----------|---------|
+| `direct` | Evidence directly proves the claim |
+| `indirect` | Evidence supports the claim but doesn't directly prove it |
+| `partial` | Evidence covers part of the claim |
+| `manual` | Manual verification required |
+| `historical` | Historical evidence (cannot prove current behavior) |
+| `none` | No coverage |
+
+**Verification status semantics**:
+| Status | Meaning |
+|--------|---------|
+| `verified` | Evidence has been verified by automated test/verifier |
+| `pending` | Evidence tracing not yet completed |
+| `manual_only` | Manual verification only (requires meaningful notes) |
+| `historical_only` | Historical evidence only (cannot prove current behavior) |
+| `unsupported` | Evidence was valid but is no longer available (requires meaningful notes) |
+
+**Trace ID stability**:
+- IDs are zero-padded to 4 digits (DOC-TRACE-0001, DOC-TRACE-0002, etc.)
+- IDs are sorted ascending in the matrix
+- IDs are never reused or renumbered
+- Format: `DOC-TRACE-{4-digit-number}`
+
+**Linked claims**:
+Claims with `evidence_status=linked` in the registry must:
+1. Reference at least one valid `trace_id` in `evidence_ref`
+2. Have at least one trace row with `verification_status` in: `verified`, `manual_only`, or `historical_only`
+3. NOT be current claims linked only to `historical_only` evidence (historical evidence cannot prove current behavior)
+
+**Pending evidence**:
+Claims may remain pending when:
+- Evidence is being developed
+- Claim is stale and needs review
+- Manual verification is required
+
+**Historical evidence rules**:
+- Historical claims may use `historical_record` evidence_kind with `historical` coverage_strength
+- Historical evidence is labeled with `verification_status=historical_only`
+- Current claims MUST NOT be linked only to historical evidence
+- Historical evidence proves past behavior only, not current behavior
+
+**Verifier**: `scripts/verify_docs_claim_traceability.py`
+- Validates matrix structure and schema
+- Validates cross-file linkage to claims registry
+- Validates evidence references and paths
+- Validates semantic combinations
 - Produces coverage reports
 
 ### 5. Claim Coverage Reports
@@ -244,12 +324,13 @@ This doctrine complements:
 
 ## Enforcement
 
-- **Verification:** `scripts/verify_docs_inventory.py`, `scripts/verify_docs_claims_registry.py`
+- **Verification:** `scripts/verify_docs_inventory.py`, `scripts/verify_docs_claims_registry.py`, `scripts/verify_docs_claim_traceability.py`
 - **Self-tests:** Inline fixtures covering all validation rules
-- **CI:** Both verifiers run as part of standard gate
-- **Maintenance:** Inventory and registry updated when docs are added, moved, or reclassified
+- **CI:** All three verifiers run as part of standard gate
+- **Maintenance:** Inventory, registry, and traceability matrix updated when docs are added, moved, or reclassified
 
 ## History
 
 - **2026-06-19** — Initial doctrine: classification system, truth status, claim tracing foundation
 - **2026-06-19** — ACT 2: Added claims registry (`docs/claims/docs_claims_registry.csv`) and verifier (`scripts/verify_docs_claims_registry.py`)
+- **2026-06-19** — ACT 3: Added traceability matrix (`docs/claims/docs_claim_traceability_matrix.csv`), verifier (`scripts/verify_docs_claim_traceability.py`), and evidence linkage for claims
