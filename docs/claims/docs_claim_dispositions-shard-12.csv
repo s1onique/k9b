@@ -1,5 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-DOC-CAND-fb097bff7fb5,needs_new_claim,,,requires_future_human_review,2026-06-19,High-severity from canonical doc: README.md
+DOC-CAND-fb097bff7fb5,covered_by_existing_claim,,DOC-CLAIM-0059,covered_by_broader_claim,2026-06-19,No autonomous mutation; proposals pass check-proposal replay validation covered by DOC-CLAIM-0059; identical to DOC-CAND-68753c82f6cd
 DOC-CAND-0beedc372b5a,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-847436354dc0,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-42824659b7cd,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md

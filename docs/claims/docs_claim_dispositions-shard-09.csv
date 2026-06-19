@@ -1,8 +1,8 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
 DOC-CAND-81730025469b,registered_existing_claim,DOC-CLAIM-0061,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0061
-DOC-CAND-24ae91fc8c0d,needs_new_claim,,,requires_future_human_review,2026-06-19,High-severity from canonical doc: README.md
+DOC-CAND-24ae91fc8c0d,covered_by_existing_claim,,DOC-CLAIM-0066,covered_by_broader_claim,2026-06-19,LLM evidence/safety gates covered by DOC-CLAIM-0066 provider seam enforcement; verify_llm_evidence_boundaries.py and verify_llm_semantic_injection_detection.py verify both
 DOC-CAND-75f9ee4fd2a7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
-DOC-CAND-ab1a80cbcac1,needs_new_claim,,,requires_future_human_review,2026-06-19,High-severity from canonical doc: README.md
+DOC-CAND-ab1a80cbcac1,covered_by_existing_claim,,DOC-CLAIM-0066,covered_by_broader_claim,2026-06-19,Semantic injection detection integrated into prompt construction covered by DOC-CLAIM-0066 provider seam enforcement
 DOC-CAND-ac092c904ef4,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-ee0df7bda2b5,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-79faaf180701,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md

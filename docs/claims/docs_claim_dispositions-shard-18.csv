@@ -1,5 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-DOC-CAND-c3939db8f885,needs_new_claim,,,requires_future_human_review,2026-06-19,High-severity from canonical doc: README.md
+DOC-CAND-c3939db8f885,covered_by_existing_claim,,DOC-CLAIM-0059,covered_by_broader_claim,2026-06-19,Product description with embedded safety claim (without autonomous cluster mutation); safety part covered by DOC-CLAIM-0059
 DOC-CAND-9c1ae2c4b94b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-a66f11ba1448,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-539d2f9e9982,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md

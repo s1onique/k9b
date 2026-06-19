@@ -21,7 +21,7 @@ DOC-CAND-ef34fe482ab1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-09a2692da1f9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
 DOC-CAND-b918f1b24895,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
 DOC-CAND-3f3b77011b05,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
-DOC-CAND-3595b652352c,needs_new_claim,,,requires_future_human_review,2026-06-19,High-severity from canonical doc: docs/data-model.md
+DOC-CAND-3595b652352c,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broader_claim,2026-06-19,Run artifacts source of truth covered by DOC-CLAIM-0003; identical substance to DOC-CAND-0ebf6e9e51e2 (diagnostic pack immutability in same doc)
 DOC-CAND-820d6d7f8591,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-0047e06388dd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
 DOC-CAND-58e34c73b368,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md

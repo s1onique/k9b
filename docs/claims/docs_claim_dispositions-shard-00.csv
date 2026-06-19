@@ -1,6 +1,6 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
 DOC-CAND-3b6b80adfd33,registered_existing_claim,DOC-CLAIM-0059,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0059
-DOC-CAND-620fdfecdeb0,needs_new_claim,,,requires_future_human_review,2026-06-19,High-severity from canonical doc: README.md
+DOC-CAND-620fdfecdeb0,covered_by_existing_claim,,DOC-CLAIM-0066,covered_by_broader_claim,2026-06-19,Duplicate of DOC-CAND-ab1a80cbcac1; both from README.md:85/258; semantic injection covered by DOC-CLAIM-0066
 DOC-CAND-145d92827c9d,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-9aee62b870b8,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-f84c99ad4330,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md

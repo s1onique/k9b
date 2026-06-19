@@ -1,5 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-DOC-CAND-297f1c6d4a7b,needs_new_claim,,,requires_future_human_review,2026-06-19,High-severity from canonical doc: README.md
+DOC-CAND-297f1c6d4a7b,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,Evidence boundary discipline (raw data captured once, sanitized, immutable, bounded prompts) covered by DOC-CLAIM-0062; identical substance to DOC-CAND-e486a5089d5e
 DOC-CAND-d5a775e9e58a,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-5ad4426e9397,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-a4c845164d1d,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md

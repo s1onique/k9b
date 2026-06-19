@@ -27,7 +27,7 @@ DOC-CAND-80c992c17811,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-711b1272b0ea,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-bcbcde98f92c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-f11683b3dd17,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
-DOC-CAND-0ebf6e9e51e2,needs_new_claim,,,requires_future_human_review,2026-06-19,High-severity from canonical doc: docs/data-model.md
+DOC-CAND-0ebf6e9e51e2,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broader_claim,2026-06-19,Duplicate of DOC-CAND-3595b652352c; both from docs/data-model.md:13/14; run artifacts source of truth covered by DOC-CLAIM-0003
 DOC-CAND-09ec61d44ba7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
 DOC-CAND-6cae9ce93744,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-5151596cc374,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
