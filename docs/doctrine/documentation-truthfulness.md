@@ -104,19 +104,89 @@ This doctrine establishes the foundation. The following layers are planned:
 
 ### 3. Claims Registry
 
-A structured registry that tracks:
-- Claim text
-- Source document
-- Evidence type and location
-- Verification method (automated/manual)
-- Last verified date
+**Status**: Implemented (ACT 2)
+
+A structured registry that tracks claims from documentation:
+
+**Registry file**: `docs/claims/docs_claims_registry.csv`
+
+**Registry columns**:
+| Field | Description |
+|-------|-------------|
+| `claim_id` | Stable ID (DOC-CLAIM-0001 format, zero-padded 4 digits) |
+| `doc_path` | Source document path |
+| `anchor` | Section/anchor identifier within the doc |
+| `claim_text` | The specific claim being registered |
+| `claim_type` | Classification: behavior, security, operator, data_model, api_contract, ui_contract, ci_gate, architecture, performance, historical, planned |
+| `claim_status` | Current status: current, planned, historical, stale, unsupported, superseded |
+| `owner_area` | Team/area responsible for maintaining this claim |
+| `evidence_required` | Boolean: does this claim need evidence tracing |
+| `evidence_status` | Status: pending, linked, not_required, manual_only, unsupported |
+| `evidence_ref` | Reference to evidence (test, verifier, etc.) |
+| `freshness_policy` | How often to verify: on_change, per_release, manual_review, historical_only, not_applicable |
+| `notes` | Additional context |
+
+**What counts as a claim**:
+- Behavioral assertions ("The system does X when Y occurs")
+- Security properties ("Data is encrypted at rest")
+- Operator constraints ("The agent never mutates live clusters")
+- API/data-model contracts
+- CI gate requirements
+- Performance characteristics
+
+**What does NOT need to be registered**:
+- Introductory or motivational prose
+- General descriptions without specific assertions
+- Historical context that is explicitly labeled as such
+- Low-value descriptive text
+
+**Claim ID stability**:
+- IDs are zero-padded to 4 digits (DOC-CLAIM-0001, DOC-CLAIM-0002, etc.)
+- IDs are sorted ascending in the registry
+- IDs are never reused or renumbered
+
+**Claim status semantics**:
+| Status | Meaning | Evidence expectations |
+|--------|---------|----------------------|
+| `current` | Claim accurately reflects current behavior | Must have supported evidence_status |
+| `planned` | Future intended behavior | Evidence should be pending/manual_only/not_required |
+| `historical` | Past behavior preserved for reference | Use historical_only or not_applicable freshness |
+| `stale` | May no longer reflect reality | Needs review/update |
+| `unsupported` | Evidence is no longer valid | Cannot back current claims |
+| `superseded` | Replaced by another claim | Should reference replacement |
+
+**Evidence status semantics**:
+| Status | Meaning |
+|--------|---------|
+| `pending` | Evidence tracing not yet completed |
+| `linked` | Evidence reference provided (evidence_ref required) |
+| `not_required` | Claim does not need evidence tracing |
+| `manual_only` | Manual verification only (evidence_ref required) |
+| `unsupported` | Evidence was valid but is no longer available |
+
+**Freshness policy semantics**:
+| Policy | When to verify |
+|--------|----------------|
+| `on_change` | When the source document changes |
+| `per_release` | Verify before each release |
+| `manual_review` | Periodic human review |
+| `historical_only` | Historical claim, no current verification |
+| `not_applicable` | Claim does not require verification |
+
+**Next planned layer (ACT 3)**: The full traceability matrix that maps:
+- Claims → Evidence (test/verifier/manual)
+- Evidence → Verification status
+- Generates coverage reports
 
 ### 4. Traceability Matrix
+
+**Status**: Planned (ACT 3)
 
 A matrix mapping:
 - Documents → Claims
 - Claims → Evidence
 - Evidence → Verification status
+- Produces coverage reports
 
 ### 5. Claim Coverage Reports
 
@@ -174,11 +244,12 @@ This doctrine complements:
 
 ## Enforcement
 
-- **Verification:** `scripts/verify_docs_inventory.py`
+- **Verification:** `scripts/verify_docs_inventory.py`, `scripts/verify_docs_claims_registry.py`
 - **Self-tests:** Inline fixtures covering all validation rules
-- **CI:** Runs as part of standard gate
-- **Maintenance:** Inventory updated when docs are added, moved, or reclassified
+- **CI:** Both verifiers run as part of standard gate
+- **Maintenance:** Inventory and registry updated when docs are added, moved, or reclassified
 
 ## History
 
 - **2026-06-19** — Initial doctrine: classification system, truth status, claim tracing foundation
+- **2026-06-19** — ACT 2: Added claims registry (`docs/claims/docs_claims_registry.csv`) and verifier (`scripts/verify_docs_claims_registry.py`)

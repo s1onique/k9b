@@ -441,6 +441,7 @@ _run_python_lane() {
     _run_and_record "python" "ci-gate-drift" "Verifying CI workflow gate mappings" "$PYTHON" scripts/verify_ci_gate_drift.py
     _run_and_record "python" "data-model-docs" "Verifying data model documentation hygiene" "$PYTHON" scripts/verify_data_model_docs.py
     _run_and_record "python" "docs-inventory" "Verifying docs inventory integrity" "$PYTHON" scripts/verify_docs_inventory.py
+    _run_and_record "python" "docs-claims-registry" "Verifying docs claims registry integrity" "$PYTHON" scripts/verify_docs_claims_registry.py
 }
 
 # Emit gate timings JSON sorted by duration
