@@ -95,6 +95,9 @@ ui/server_incident_reads.py handle_incident_detail_route incident detail route g
 # === Incident Snapshot Capture ===
 collect/api_incident.py handle_incident_snapshot incident promotion error boundary - sanitize_exception_message prevents credential leakage
 
+# === Diagnosis Loop One-Pass ===
+collect/api_incident_diagnosis_loop.py handle_diagnosis_loop_one_pass diagnosis loop one-pass boundary - sanitize_exception_message prevents credential leakage
+
 # === Incident Review Packet ===
 collect/api_incident_review_packet.py _update_incident_state_for_bundle review packet incident state update boundary - best-effort update, failures logged but don't fail packet generation
 

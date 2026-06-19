@@ -24,6 +24,9 @@ if TYPE_CHECKING:
 _RUN_ALERTMANAGER_SOURCE_ACTION = re.compile(
     r"^/api/runs/([^/]+)/alertmanager-sources/([^/]+)/action$"
 )
+_INCIDENT_DIAGNOSIS_LOOP_PATTERN = re.compile(
+    r"^/api/incidents/([^/]+)/diagnosis-loop/one-pass$"
+)
 
 
 def handle_get_request(handler: HealthUIRequestHandler) -> None:
@@ -186,6 +189,18 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
     # Incident review packet generation
     if route == "/api/incidents/review-packet":
         handle_incident_review_packet_api(handler)
+        return
+
+    # Incident diagnosis loop one-pass
+    # POST /api/incidents/{incident_id}/diagnosis-loop/one-pass
+    incident_dl_match = _INCIDENT_DIAGNOSIS_LOOP_PATTERN.match(route)
+    if incident_dl_match:
+        from .server_incident_diagnosis_loop import (
+            handle_incident_diagnosis_loop_one_pass_api,
+        )
+
+        incident_id = incident_dl_match.group(1)
+        handle_incident_diagnosis_loop_one_pass_api(handler, incident_id)
         return
 
     # Delegate next-check mutation handlers to server_next_checks module
