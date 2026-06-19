@@ -275,6 +275,97 @@ Automated reports showing:
 - Evidence coverage by owner area
 - Stale claims requiring review
 
+### 6. Claim Candidate Scanner (ACT 4)
+
+**Status**: Implemented
+
+A deterministic claim-candidate scanner that reviews the full documentation corpus and makes under-registration mechanically visible.
+
+**Scanner file**: `scripts/scan_docs_claim_candidates.py`
+
+**Coverage verifier**: `scripts/verify_docs_claim_candidate_coverage.py`
+
+**Generated output**: `docs/claims/generated_claim_candidates.csv`
+
+**What the scanner does**:
+1. Scans markdown docs using regex patterns for 8 claim types:
+   - `normative` — MUST/SHOULD/SHALL statements
+   - `security` — authentication, RBAC, mutation, injection
+   - `api_contract` — endpoints, routes, request/response
+   - `config` — environment variables, flags, defaults
+   - `data_model` — lifecycle, states, schemas
+   - `source_of_truth` — immutable artifacts, durable records
+   - `ci_gate` — verify scripts, CI thresholds, coverage
+   - `performance` — timeouts, intervals, thresholds
+
+2. Generates deterministic candidate IDs using SHA1 hash of doc_path|line_number|text|claim_type (line_number ensures uniqueness per row)
+
+3. Assigns severity based on claim type (high/medium/low)
+
+4. Sets initial registration status based on doc classification
+
+**Severity by type**:
+| Type | Severity |
+|------|----------|
+| security | high |
+| source_of_truth | high |
+| ci_gate | medium |
+| normative | medium |
+| api_contract | medium |
+| data_model | medium |
+| config | low |
+| performance | low |
+
+**Registration status**:
+| Status | When assigned |
+|--------|---------------|
+| `unregistered` | Current docs with candidate claims |
+| `ignored_historical` | Historical docs |
+| `ignored_stale` | Stale/unknown docs |
+| `ignored_by_policy` | Generated docs |
+
+**Coverage gate policy** (ADVISORY ROLLOUT):
+- Scanner/verifier integrity problems → **FAIL** (invalid CSV, invalid enum values)
+- HIGH severity + unregistered + current + trace_required=true → **WARN** (advisory only)
+- HIGH severity + unregistered + current + trace_required=false → **WARN** (advisory only)
+- Stale/historical candidates → reported as INFO, no gate impact
+- Duplicate candidate IDs → NOT EXPECTED (IDs are unique per row via line_number in hash)
+
+The advisory policy makes under-registration visible without blocking the gate. Once the claims registry is expanded and candidates are registered, this can be converted to hard enforcement.
+
+**Gate wiring** (verify mode - does not mutate):
+```
+docs-claim-candidates  → scan_docs_claim_candidates.py
+docs-claim-coverage    → verify_docs_claim_candidate_coverage.py
+```
+
+**Manual regeneration** (when needed):
+```bash
+python scripts/scan_docs_claim_candidates.py --update  # regenerate CSV
+```
+
+**Self-tests**:
+- Scanner: 10 test cases covering type detection, severity, ID generation
+- Coverage verifier: 8 test cases covering all gate policies
+
+**Using the scanner**:
+```bash
+# Scan docs and generate candidates CSV
+python scripts/scan_docs_claim_candidates.py --update
+
+# Run coverage verification
+python scripts/verify_docs_claim_candidate_coverage.py
+
+# Run self-tests
+python scripts/scan_docs_claim_candidates.py --self-test
+python scripts/verify_docs_claim_candidate_coverage.py --self-test
+```
+
+**Integration with registry**:
+- Scanner output is the input for expanding the claims registry
+- Each registered claim should have a corresponding entry in `docs_claims_registry.csv`
+- Unregistered candidates flagged by coverage verifier should be reviewed for registry addition
+
 ## Inventory Maintenance
 
 The docs inventory (`docs/docs_inventory.csv`) is the source of truth for document classification. It is verified by `scripts/verify_docs_inventory.py` as part of the standard gate.
@@ -334,3 +425,4 @@ This doctrine complements:
 - **2026-06-19** — Initial doctrine: classification system, truth status, claim tracing foundation
 - **2026-06-19** — ACT 2: Added claims registry (`docs/claims/docs_claims_registry.csv`) and verifier (`scripts/verify_docs_claims_registry.py`)
 - **2026-06-19** — ACT 3: Added traceability matrix (`docs/claims/docs_claim_traceability_matrix.csv`), verifier (`scripts/verify_docs_claim_traceability.py`), and evidence linkage for claims
+- **2026-06-19** — ACT 4: Added claim candidate scanner (`scripts/scan_docs_claim_candidates.py`) and coverage verifier (`scripts/verify_docs_claim_candidate_coverage.py`), wired into verify_all.sh gate

@@ -4,15 +4,15 @@ docs/agent-docs-audit.md,reference,unknown,agents,,,false,Audit of agent documen
 docs/agent-run-review-template.md,runbook,current,agents,,,false,Template for agent run review
 docs/alertmanager-source-distinction-audit.md,reference,stale,discovery,,,false,Audit of alertmanager source distinction
 docs/artifact-immutability-audit.md,reference,stale,artifacts,,,false,Audit of artifact immutability claims
-docs/auth.md,reference,current,security,,,false,Authentication documentation
+docs/auth.md,reference,current,security,,,true,Authentication documentation
 docs/baseline_watch_practices.md,reference,stale,health,,,false,Baseline watch practices - may need review
 docs/beta-demo-readiness-checklist.md,epic_wal,historical,beta,,,false,Beta demo checklist - historical
 docs/beta-operator-guide.md,runbook,historical,beta,,,false,Beta operator guide - superseded by current docs
 docs/beta-release-notes.md,reference,historical,beta,,,false,Beta release notes - historical
 docs/beta-stakeholder-demo-script.md,runbook,historical,beta,,,false,Beta demo script - historical
-docs/ci-gate-drift.md,reference,current,ci,,,false,CI gate drift tracking
+docs/ci-gate-drift.md,reference,current,ci,,,true,CI gate drift tracking
 docs/cluster_snapshot_plan.md,architecture,stale,collection,,,false,Cluster snapshot plan - needs update
-docs/coverage.md,reference,current,quality,,,false,Coverage reporting policy
+docs/coverage.md,reference,current,quality,,,true,Coverage reporting policy
 docs/data-model.md,canonical,current,data-model,,,true,Core data model index - canonical reference
 docs/data-model/alertmanager-sources.md,reference,current,data-model,,,true,Alertmanager source data model
 docs/data-model/artifacts.md,reference,current,data-model,,,true,Artifact data model
