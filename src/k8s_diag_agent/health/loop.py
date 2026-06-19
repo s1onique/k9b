@@ -33,6 +33,7 @@ from .loop_alertmanager_port_forward import (
     stop_alertmanager_port_forward,
 )
 from .loop_alertmanager_snapshot import run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl
+from .loop_automatic_diagnosis import run_automatic_diagnosis_loop
 from .loop_baseline_helpers import _load_baseline_policy_from_path, _normalize_category_list, _parse_cohort_baselines, _policy_for_target, _resolve_target_baseline_path
 from .loop_comparison_policy import (  # noqa: F401
     BaselineRegistry,  # noqa: F401 - re-exported for backward compatibility
@@ -58,7 +59,6 @@ from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_r
 from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config_helpers import _resolve_collector_version, _resolve_output_dir
-from .loop_automatic_diagnosis import run_automatic_diagnosis_loop
 from .loop_runner_assessments import build_assessments_for_records
 from .loop_runner_comparisons import evaluate_triggers_for_records
 from .loop_runner_drilldowns import build_drilldowns_for_records

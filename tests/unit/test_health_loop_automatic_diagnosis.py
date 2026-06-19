@@ -288,9 +288,9 @@ class TestHealthLoopRunnerIntegration:
         from unittest.mock import patch
 
         from k8s_diag_agent.health.loop import HealthLoopRunner, HealthRunConfig
-        from k8s_diag_agent.health.loop_types import HealthTarget
-        from k8s_diag_agent.health.loop_comparison_types import TriggerPolicy
         from k8s_diag_agent.health.loop_baseline_helpers import BaselinePolicy
+        from k8s_diag_agent.health.loop_comparison_types import TriggerPolicy
+        from k8s_diag_agent.health.loop_types import HealthTarget
 
         # Create minimal config
         config = HealthRunConfig(

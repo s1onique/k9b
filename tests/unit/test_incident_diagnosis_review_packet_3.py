@@ -23,7 +23,6 @@ from k8s_diag_agent.collect.incident_diagnosis_review_packet import (
     load_review_packet_summary,
 )
 
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================

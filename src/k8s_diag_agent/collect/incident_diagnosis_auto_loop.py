@@ -38,9 +38,9 @@ from .incident_diagnosis_auto_loop_config import (
     is_automatic_diagnosis_loop_enabled,
 )
 from .incident_diagnosis_auto_loop_models import (
+    _COLLECTOR_SAFETY_METADATA,
     AutoLoopCollectorResult,
     AutoLoopIncidentResult,
-    _COLLECTOR_SAFETY_METADATA,
 )
 from .incident_diagnosis_loop_models import LoopDecision
 from .incident_diagnosis_loop_orchestrator import run_one_read_only_diagnosis_loop_pass

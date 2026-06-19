@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -24,8 +23,6 @@ from k8s_diag_agent.collect.incident_diagnosis_auto_loop import (
     collect_automatic_diagnosis_evidence,
     run_automatic_diagnosis_loop_evidence_collection,
 )
-from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus
-
 
 # =============================================================================
 # Test Fixtures

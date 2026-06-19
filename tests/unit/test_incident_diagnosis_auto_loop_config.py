@@ -30,7 +30,6 @@ from k8s_diag_agent.collect.incident_lifecycle import Incident, IncidentStatus
 from k8s_diag_agent.collect.incident_store import IncidentStore
 from k8s_diag_agent.collect.incident_store_provider import set_incident_store
 
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================
