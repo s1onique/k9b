@@ -33,6 +33,7 @@ __all__ = [
     "IncidentSuggestedCheckPayload",  # noqa: F401 - re-exported
     "IncidentSummaryPayload",  # noqa: F401 - re-exported
     "IncidentDetailPayload",  # noqa: F401 - re-exported
+    "AutomaticDiagnosisReviewPayload",  # noqa: F401 - re-exported
     # Runs-list contracts (moved to api_payloads_runs.py)
     "BatchExecutionSummary",  # noqa: F401 - re-exported
     "RunsListEntry",  # noqa: F401 - re-exported
@@ -185,6 +186,7 @@ from .api_payloads_incident import (  # noqa: F401 - re-exported for backward co
     VmalertSourceSummaryPayload,
 )
 from .api_payloads_incident_reads import (  # noqa: F401 - re-exported for backward compatibility
+    AutomaticDiagnosisReviewPayload,
     IncidentDetailPayload,
     IncidentEventPayload,
     IncidentEvidenceLinkPayload,

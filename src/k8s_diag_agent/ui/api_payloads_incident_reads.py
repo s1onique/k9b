@@ -28,6 +28,7 @@ __all__ = [
     "IncidentSuggestedCheckPayload",
     "IncidentSummaryPayload",
     "IncidentDetailPayload",
+    "AutomaticDiagnosisReviewPayload",
 ]
 
 
@@ -125,6 +126,50 @@ class IncidentSuggestedCheckPayload(TypedDict, total=False):
     run_id: str | None  # Associated run ID if available
 
 
+class AutomaticDiagnosisReviewPayload(TypedDict, total=False):
+    """Bounded automatic diagnosis review packet summary for incident detail views.
+
+    This payload provides a safe, read-only summary of the latest automatic
+    diagnosis loop review packet for an incident. It exposes metadata only
+    and does NOT include raw packet contents, paths, or secrets.
+
+    Safety constraints enforced:
+    - artifact_name is filename only (no path)
+    - All string fields are bounded (max lengths enforced at serialization)
+    - read_only is always True
+    - review_required_before_any_action is always True
+    - no_remediation_attempted is always True
+
+    Hard constraints:
+    - NO remediation actions
+    - NO raw packet contents
+    - NO absolute paths
+    - NO secrets, tokens, or kubeconfig
+    """
+
+    # Availability state
+    available: bool  # True if a review packet exists and is loadable
+
+    # When available=True: bounded summary fields
+    artifact_type: str | None  # Always "diagnosis-loop-review-packet" when available
+    artifact_name: str | None  # Filename only, no path (max 240 chars)
+    run_id: str | None  # Collector run ID (max 160 chars)
+    collector_run_id: str | None  # Batch collector run ID (max 160 chars)
+    generated_at: str | None  # ISO timestamp (max 80 chars)
+    decision: str | None  # Loop decision (max 120 chars)
+    checks_requested: int | None  # Number of checks requested
+    checks_run: int | None  # Number of checks actually run
+    checks_rejected: int | None  # Number of checks rejected
+    eligible: bool | None  # Whether incident was eligible
+    eligibility_reason: str | None  # Reason for eligibility (max 160 chars)
+    read_only: bool | None  # Always True
+    review_required_before_any_action: bool | None  # Always True
+    no_remediation_attempted: bool | None  # Always True
+
+    # When available=False: reason for unavailability
+    unavailable_reason: str | None  # "no_review_packet" or "malformed_review_packet"
+
+
 class IncidentSummaryPayload(TypedDict, total=False):
     """Lightweight incident payload for list views.
 
@@ -155,12 +200,17 @@ class IncidentSummaryPayload(TypedDict, total=False):
 class IncidentDetailPayload(TypedDict, total=False):
     """Full incident payload for detail views.
 
-    Includes signals, evidence links, timeline, and suggested checks.
+    Includes signals, evidence links, timeline, suggested checks, and
+    automatic diagnosis review summary.
+
     Run artifacts remain evidence provenance, not the primary case object.
 
     Note: suggested_checks is a read-only compatibility projection.
     Currently returns empty list as no reliable next-check-to-incident mapping exists.
     See docs/data-model/next-checks.md for target direction.
+
+    Note: automatic_diagnosis_review provides a bounded summary of the latest
+    automatic diagnosis loop review packet. Raw packet contents are not exposed.
     """
 
     # Inherited from summary
@@ -191,3 +241,6 @@ class IncidentDetailPayload(TypedDict, total=False):
     # Suggested checks - read-only compatibility projection
     # Returns empty list when no next-check-to-incident mapping exists
     suggested_checks: list[IncidentSuggestedCheckPayload]
+    # Automatic diagnosis review - bounded summary only
+    # Returns unavailable state when no packet exists or packet is malformed
+    automatic_diagnosis_review: AutomaticDiagnosisReviewPayload

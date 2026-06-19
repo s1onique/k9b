@@ -49,6 +49,53 @@ python scripts/collect_diagnosis_review_packet.py --incident-id <incident_id>
 
 Review packets are stored in `runs/health/external-analysis/`.
 
+## Incident Detail API
+
+Review packet summaries are surfaced in the incident detail API response:
+
+```json
+{
+  "automatic_diagnosis_review": {
+    "available": true,
+    "artifact_type": "diagnosis-loop-review-packet",
+    "artifact_name": "auto-incident-123-20260619074500-diagnosis-review-packet.json",
+    "run_id": "auto-incident-123-20260619074500",
+    "collector_run_id": "auto-diagnosis-20260619074500-abc123",
+    "generated_at": "2026-06-19T07:45:00+00:00",
+    "decision": "run_allowed_read_only_checks",
+    "checks_requested": 3,
+    "checks_run": 2,
+    "checks_rejected": 1,
+    "eligible": true,
+    "eligibility_reason": "active_incident_with_suggested_checks",
+    "read_only": true,
+    "review_required_before_any_action": true,
+    "no_remediation_attempted": true
+  }
+}
+```
+
+When no packet exists or is malformed:
+
+```json
+{
+  "automatic_diagnosis_review": {
+    "available": false,
+    "unavailable_reason": "no_review_packet"
+  }
+}
+```
+
+### Safety Properties
+
+The incident detail API projection:
+- Exposes metadata only (not raw packet contents)
+- Shows artifact filename only (not absolute paths)
+- Bounded string fields (max lengths enforced)
+- `read_only` is always `true`
+- `review_required_before_any_action` is always `true`
+- `no_remediation_attempted` is always `true`
+
 ## Configuration
 
 Hardcoded safe defaults:

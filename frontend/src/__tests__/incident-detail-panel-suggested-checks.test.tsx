@@ -43,6 +43,10 @@ const createIncidentFixture = (overrides: Partial<IncidentDetailPayload> = {}): 
   evidence_links: [],
   events: [],
   suggested_checks: [],
+  automatic_diagnosis_review: {
+    available: false,
+    unavailable_reason: "no_review_packet",
+  },
   ...overrides,
 });
 

@@ -98,6 +98,10 @@ const mockIncidentDetail: IncidentDetailPayload = {
       message: "Incident created",
     },
   ],
+  automatic_diagnosis_review: {
+    available: false,
+    unavailable_reason: "no_review_packet",
+  },
 };
 
 // Second incident for stale response tests
@@ -839,6 +843,10 @@ describe("IncidentListPanel", () => {
         evidence_needed: [],
         evidence_links: [],
         events: [],
+        automatic_diagnosis_review: {
+          available: false,
+          unavailable_reason: "no_review_packet",
+        },
       };
       vi.mocked(getIncident).mockResolvedValueOnce(mockIncident2Detail);
 

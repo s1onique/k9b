@@ -72,16 +72,17 @@ def handle_get_incident(
     Args:
         incident_id: The incident ID to look up
         external_analysis_dir: Optional path to external-analysis directory
-            for loading next-check plan artifacts to populate suggested_checks.
-            When provided, artifacts are loaded for each run_id found in incident
-            signals and passed to the serializer for SAFE linkage extraction.
+            for loading:
+            - Next-check plan artifacts to populate suggested_checks
+            - Automatic diagnosis review packet summaries
 
     Returns:
         Incident detail dict if found, None if not found
 
     Note:
-        When external_analysis_dir is None, suggested_checks will be empty.
-        When provided, suggested_checks are populated from linked candidates.
+        When external_analysis_dir is None, suggested_checks will be empty
+        and automatic_diagnosis_review will indicate no packet available.
+        When provided, both fields are populated from linked artifacts.
         Missing or malformed artifacts do not cause errors - they are skipped.
     """
     store = get_incident_store()
@@ -98,7 +99,11 @@ def handle_get_incident(
             external_analysis_dir,
         )
 
-    return build_incident_detail_payload(incident, next_check_plan_payloads=plan_payloads)
+    return build_incident_detail_payload(
+        incident,
+        external_analysis_dir=external_analysis_dir,
+        next_check_plan_payloads=plan_payloads,
+    )
 
 
 __all__ = [

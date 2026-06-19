@@ -794,6 +794,48 @@ export type IncidentSuggestedCheck = {
 };
 
 /**
+ * Bounded automatic diagnosis review packet summary for incident detail views.
+ *
+ * This payload provides a safe, read-only summary of the latest automatic
+ * diagnosis loop review packet for an incident. It exposes metadata only
+ * and does NOT include raw packet contents, paths, or secrets.
+ *
+ * Safety constraints enforced:
+ * - artifact_name is filename only (no path)
+ * - All string fields are bounded (max lengths enforced at serialization)
+ * - read_only is always True
+ * - review_required_before_any_action is always True
+ * - no_remediation_attempted is always True
+ *
+ * Hard constraints:
+ * - NO remediation actions
+ * - NO raw packet contents
+ * - NO absolute paths
+ * - NO secrets, tokens, or kubeconfig
+ */
+export type AutomaticDiagnosisReviewPayload = {
+  // Availability state
+  available: boolean;
+  // When available=true: bounded summary fields
+  artifact_type?: string | null;
+  artifact_name?: string | null;  // Filename only, no path (max 240 chars)
+  run_id?: string | null;  // Collector run ID (max 160 chars)
+  collector_run_id?: string | null;  // Batch collector run ID (max 160 chars)
+  generated_at?: string | null;  // ISO timestamp (max 80 chars)
+  decision?: string | null;  // Loop decision (max 120 chars)
+  checks_requested?: number | null;
+  checks_run?: number | null;
+  checks_rejected?: number | null;
+  eligible?: boolean | null;
+  eligibility_reason?: string | null;  // Reason for eligibility (max 160 chars)
+  read_only?: boolean | null;  // Always true
+  review_required_before_any_action?: boolean | null;  // Always true
+  no_remediation_attempted?: boolean | null;  // Always true
+  // When available=false: reason for unavailability
+  unavailable_reason?: string | null;  // "no_review_packet" or "malformed_review_packet"
+};
+
+/**
  * Incident summary payload - lightweight list view.
  * Uses latest_snapshot_bundle_id (not snapshot_bundle_id).
  * Uses review_packet object (not review_packet_available + review_packet_id).
@@ -821,11 +863,15 @@ export type IncidentSummaryPayload = {
 
 /**
  * Incident detail payload - full case view.
- * Includes signals, evidence links, timeline, and suggested checks.
+ * Includes signals, evidence links, timeline, suggested checks, and
+ * automatic diagnosis review summary.
  * Run artifacts remain evidence provenance, not the primary case object.
  *
  * Note: suggested_checks is a read-only compatibility projection.
  * Currently returns empty list when no next-check-to-incident mapping exists.
+ *
+ * Note: automatic_diagnosis_review provides a bounded summary of the latest
+ * automatic diagnosis loop review packet. Raw packet contents are not exposed.
  */
 export type IncidentDetailPayload = IncidentSummaryPayload & {
   source_candidate_id: string;
@@ -834,6 +880,7 @@ export type IncidentDetailPayload = IncidentSummaryPayload & {
   evidence_links: IncidentEvidenceLink[];
   events: IncidentEvent[];
   suggested_checks: IncidentSuggestedCheck[];
+  automatic_diagnosis_review: AutomaticDiagnosisReviewPayload;
 };
 
 export type IncidentsListResponse = {
