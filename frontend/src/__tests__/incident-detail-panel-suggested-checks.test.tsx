@@ -81,9 +81,11 @@ describe("IncidentDetailPanel suggested_checks", () => {
       render(<IncidentDetailPanel incident={incident} />);
 
       expect(screen.getByText("Suggested checks")).toBeInTheDocument();
-      expect(screen.getByText("Inspect pod logs for test-pod")).toBeInTheDocument();
+      // Title appears twice: once in read-only SuggestedChecksSection, once in diagnosis-loop selection
+      expect(screen.getAllByText("Inspect pod logs for test-pod")).toHaveLength(2);
       expect(screen.getByText("CrashLoopBackOff typically leaves informative logs")).toBeInTheDocument();
       expect(screen.getByText("Source: next-check-planning")).toBeInTheDocument();
+      // Status appears in SuggestedChecksSection
       expect(screen.getByText("suggested")).toBeInTheDocument();
       expect(screen.getByText("Artifact: plan-artifact-abc")).toBeInTheDocument();
       expect(screen.getByText("Run: run-123")).toBeInTheDocument();
@@ -116,8 +118,11 @@ describe("IncidentDetailPanel suggested_checks", () => {
       });
       render(<IncidentDetailPanel incident={incident} />);
 
-      expect(screen.getByText("Check pod logs")).toBeInTheDocument();
-      expect(screen.getByText("Describe deployment")).toBeInTheDocument();
+      // Each check appears in SuggestedChecksSection; "Check pod logs" also appears in diagnosis-loop selection
+      expect(screen.getAllByText("Check pod logs")).toHaveLength(2);
+      // "Describe deployment" appears twice: in SuggestedChecksSection and in diagnosis-loop selection
+      expect(screen.getAllByText("Describe deployment")).toHaveLength(2);
+      // Status badges appear once per check in SuggestedChecksSection
       expect(screen.getAllByText("suggested")).toHaveLength(1);
       expect(screen.getAllByText("compatibility")).toHaveLength(1);
     });
@@ -190,7 +195,8 @@ describe("IncidentDetailPanel suggested_checks", () => {
       });
       render(<IncidentDetailPanel incident={incident} />);
 
-      expect(screen.getByText("HIGH")).toBeInTheDocument();
+      // "HIGH" appears twice: once in SuggestedChecksSection, once in diagnosis-loop selection
+      expect(screen.getAllByText("HIGH")).toHaveLength(2);
     });
 
     it("renders unknown status", () => {

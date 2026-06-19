@@ -420,7 +420,10 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({ incide
       <SuggestedChecksSection suggestedChecks={incident.suggested_checks} />
 
       {/* Manual diagnosis loop - one-pass only */}
-      <IncidentDiagnosisLoopPanel incidentId={incident.incident_id} />
+      <IncidentDiagnosisLoopPanel
+        incidentId={incident.incident_id}
+        suggestedChecks={incident.suggested_checks}
+      />
 
       {/* Read-only notice */}
       <div className="incident-detail-notice">

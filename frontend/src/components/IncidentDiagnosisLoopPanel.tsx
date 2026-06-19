@@ -21,9 +21,10 @@ import {
   runIncidentDiagnosisLoopOnePass,
   generateManualRunId,
   createMinimalDiagnosisReport,
+  buildDiagnosisReportFromSelectedChecks,
   type DiagnosisLoopOnePassResponse,
 } from "../api/incidentDiagnosisLoop";
-import type { DiagnosisLoopOnePassResponse as ApiDiagnosisLoopOnePassResponse } from "../api";
+import type { IncidentSuggestedCheck } from "../api";
 
 // Re-export the type from api for consumers
 export type { DiagnosisLoopOnePassResponse } from "../api";
@@ -44,6 +45,7 @@ const boundErrorMessage = (message: string, maxLength: number = BOUND_ERROR_MAX_
 
 export interface IncidentDiagnosisLoopPanelProps {
   incidentId: string;
+  suggestedChecks?: IncidentSuggestedCheck[];
 }
 
 /**
@@ -135,6 +137,83 @@ const ResultSummary: React.FC<{ response: DiagnosisLoopOnePassResponse }> = ({ r
 );
 
 /**
+ * Suggested check item component - displays selectable check with metadata.
+ */
+const SuggestedCheckItem: React.FC<{
+  check: IncidentSuggestedCheck;
+  isSelected: boolean;
+  isDisabled: boolean;
+  onToggle: (checkId: string) => void;
+}> = ({ check, isSelected, isDisabled, onToggle }) => (
+  <li className="suggested-check-item">
+    <label className={`suggested-check-label ${isDisabled ? "disabled" : ""}`}>
+      <input
+        type="checkbox"
+        className="suggested-check-checkbox"
+        checked={isSelected}
+        disabled={isDisabled}
+        onChange={() => onToggle(check.check_id)}
+        aria-label={`Select ${check.title}`}
+      />
+      <div className="suggested-check-content">
+        <div className="suggested-check-header">
+          <span className="suggested-check-title">{check.title}</span>
+          <span className="suggested-check-id muted small">({check.check_id})</span>
+        </div>
+        <div className="suggested-check-meta muted small">
+          <span className="safe-indicator">Read-only</span>
+          {check.risk_level && (
+            <>
+              <span>·</span>
+              <span className={`risk-badge risk-${check.risk_level.toLowerCase()}`}>
+                {check.risk_level}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+    </label>
+  </li>
+);
+
+/**
+ * Suggested checks selection component.
+ */
+const SuggestedChecksSelection: React.FC<{
+  checks: IncidentSuggestedCheck[];
+  selectedCheckIds: Set<string>;
+  isDisabled: boolean;
+  onToggle: (checkId: string) => void;
+}> = ({ checks, selectedCheckIds, isDisabled, onToggle }) => {
+  if (checks.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="diagnosis-loop-suggested-checks">
+      <div className="diagnosis-loop-suggested-checks-header">
+        <h5>Optional read-only checks for this pass</h5>
+      </div>
+      <ul className="diagnosis-loop-suggested-checks-list">
+        {checks.map((check) => (
+          <SuggestedCheckItem
+            key={check.check_id}
+            check={check}
+            isSelected={selectedCheckIds.has(check.check_id)}
+            isDisabled={isDisabled}
+            onToggle={onToggle}
+          />
+        ))}
+      </ul>
+      <p className="diagnosis-loop-suggested-checks-helper muted small">
+        Only existing suggested checks are shown. Backend read-only policy still
+        decides what can run.
+      </p>
+    </div>
+  );
+};
+
+/**
  * Manual diagnosis loop panel for incident detail.
  *
  * Allows an authenticated operator to manually trigger exactly one
@@ -142,7 +221,8 @@ const ResultSummary: React.FC<{ response: DiagnosisLoopOnePassResponse }> = ({ r
  *
  * Safety guarantees:
  * - Always uses a safe run ID format (manual-loop-{timestamp})
- * - Always sends minimal diagnosis report (empty recommended_investigations)
+ * - Sends selected suggested checks via diagnosis_report when selected
+ * - Falls back to empty recommended_investigations when nothing selected
  * - Never displays raw case files, runner results, or artifact contents
  * - Never exposes action-control fields
  * - Does not auto-run on mount
@@ -150,10 +230,24 @@ const ResultSummary: React.FC<{ response: DiagnosisLoopOnePassResponse }> = ({ r
  */
 export const IncidentDiagnosisLoopPanel: React.FC<IncidentDiagnosisLoopPanelProps> = ({
   incidentId,
+  suggestedChecks = [],
 }) => {
   const [state, setState] = useState<PanelState>("idle");
   const [response, setResponse] = useState<DiagnosisLoopOnePassResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedCheckIds, setSelectedCheckIds] = useState<Set<string>>(new Set());
+
+  const handleToggleCheck = useCallback((checkId: string) => {
+    setSelectedCheckIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(checkId)) {
+        next.delete(checkId);
+      } else {
+        next.add(checkId);
+      }
+      return next;
+    });
+  }, []);
 
   const handleRun = useCallback(async () => {
     setState("running");
@@ -162,7 +256,15 @@ export const IncidentDiagnosisLoopPanel: React.FC<IncidentDiagnosisLoopPanelProp
 
     try {
       const runId = generateManualRunId();
-      const diagnosisReport = createMinimalDiagnosisReport();
+
+      // Build diagnosis report based on selected checks
+      const selectedChecksToUse = suggestedChecks.filter((c) =>
+        selectedCheckIds.has(c.check_id)
+      );
+      const diagnosisReport =
+        selectedChecksToUse.length > 0
+          ? buildDiagnosisReportFromSelectedChecks(selectedChecksToUse)
+          : createMinimalDiagnosisReport();
 
       const result = await runIncidentDiagnosisLoopOnePass(incidentId, {
         run_id: runId,
@@ -177,11 +279,16 @@ export const IncidentDiagnosisLoopPanel: React.FC<IncidentDiagnosisLoopPanelProp
       setErrorMessage(boundErrorMessage(rawMessage));
       setState("error");
     }
-  }, [incidentId]);
+  }, [incidentId, suggestedChecks, selectedCheckIds]);
 
   const isRunning = state === "running";
   const isSuccess = state === "success";
   const isError = state === "error";
+
+  // Filter suggested checks to only those with valid check_id and non-empty
+  const validSuggestedChecks = suggestedChecks.filter(
+    (check) => check.check_id && check.check_id.trim() !== ""
+  );
 
   return (
     <section className="panel incident-diagnosis-loop-panel">
@@ -201,6 +308,16 @@ export const IncidentDiagnosisLoopPanel: React.FC<IncidentDiagnosisLoopPanelProp
           This does not remediate, mutate the cluster, run kubectl, or schedule future work.
         </p>
       </div>
+
+      {/* Suggested checks selection */}
+      {validSuggestedChecks.length > 0 && (
+        <SuggestedChecksSelection
+          checks={validSuggestedChecks}
+          selectedCheckIds={selectedCheckIds}
+          isDisabled={isRunning}
+          onToggle={handleToggleCheck}
+        />
+      )}
 
       {/* Run button */}
       <div className="diagnosis-loop-action">

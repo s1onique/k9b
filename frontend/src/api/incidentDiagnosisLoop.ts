@@ -16,6 +16,7 @@
  * - NO background jobs
  */
 
+import type { IncidentSuggestedCheck } from "../api";
 import type { DiagnosisLoopOnePassRequest, DiagnosisLoopOnePassResponse } from "./types";
 
 // =============================================================================
@@ -106,6 +107,129 @@ export type DiagnosisLoopOnePassResponse = {
   case_file_linked_artifact: boolean;
   safety_metadata: DiagnosisSafetyMetadata;
   error?: string;
+};
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** Maximum number of suggested checks that can be selected per pass. */
+const MAX_SELECTABLE_CHECKS = 5;
+
+/** Maximum length for check_id field in request. */
+const MAX_CHECK_ID_LENGTH = 100;
+
+/** Maximum length for title field in request. */
+const MAX_TITLE_LENGTH = 200;
+
+/** Fixed source value for manual suggested check selection. */
+const MANUAL_SUGGESTED_CHECK_SOURCE = "manual_suggested_check";
+
+// =============================================================================
+// Safety Filtering
+// =============================================================================
+
+/**
+ * Forbidden field patterns that indicate unsafe/mutation actions.
+ * Any check containing these patterns should not be forwarded.
+ */
+const FORBIDDEN_PATTERNS = [
+  "mutate", "delete", "patch", "scale", "restart", "rollout",
+  "apply", "remediate", "kubectl", "exec", "run", "execute",
+  "external_analysis_dir", "artifact_root", "path",
+];
+
+/**
+ * Check if a suggested check appears to advertise unsafe actions.
+ * Frontend safety filter - backend policy remains authoritative.
+ */
+const isCheckPotentiallyUnsafe = (check: IncidentSuggestedCheck): boolean => {
+  // Check for forbidden patterns in check_id
+  const checkIdLower = (check.check_id || "").toLowerCase();
+  for (const pattern of FORBIDDEN_PATTERNS) {
+    if (checkIdLower.includes(pattern)) {
+      return true;
+    }
+  }
+  // Check title for forbidden patterns
+  const titleLower = (check.title || "").toLowerCase();
+  for (const pattern of FORBIDDEN_PATTERNS) {
+    if (titleLower.includes(pattern)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Filter and validate suggested checks for safety.
+ * Returns only checks that appear safe to include in the request.
+ */
+const filterSafeSuggestedChecks = (
+  checks: IncidentSuggestedCheck[]
+): IncidentSuggestedCheck[] => {
+  return checks.filter((check) => {
+    // Must have a non-empty check_id
+    if (!check.check_id || check.check_id.trim() === "") {
+      return false;
+    }
+    // Must not advertise unsafe actions
+    if (isCheckPotentiallyUnsafe(check)) {
+      return false;
+    }
+    return true;
+  });
+};
+
+// =============================================================================
+// Request Mapping
+// =============================================================================
+
+/**
+ * Bound a string to a maximum length, truncating with ellipsis if needed.
+ */
+const boundString = (value: string, maxLength: number): string => {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return value.slice(0, maxLength);
+};
+
+/**
+ * Build a diagnosis report from selected suggested checks.
+ *
+ * This is a pure mapping helper that:
+ * - Filters for safety
+ * - Bounds field lengths
+ * - Enforces max check count
+ * - Strips all unknown/action-control fields
+ * - Sets fixed source to "manual_suggested_check"
+ *
+ * @param selectedChecks - Array of suggested checks selected by the operator
+ * @returns Bounded diagnosis report containing only safe fields
+ */
+export const buildDiagnosisReportFromSelectedChecks = (
+  selectedChecks: IncidentSuggestedCheck[]
+): DiagnosisReport => {
+  // Filter for safety first
+  const safeChecks = filterSafeSuggestedChecks(selectedChecks);
+
+  // Enforce max check count (take first N if over limit)
+  const boundedChecks = safeChecks.slice(0, MAX_SELECTABLE_CHECKS);
+
+  // Map to investigation format with bounded fields
+  const investigations: DiagnosisInvestigation[] = boundedChecks.map((check) => ({
+    check_id: boundString(check.check_id, MAX_CHECK_ID_LENGTH),
+    title: boundString(check.title || "", MAX_TITLE_LENGTH),
+    read_only: true,
+    source: MANUAL_SUGGESTED_CHECK_SOURCE,
+  }));
+
+  return {
+    diagnosis: {
+      recommended_investigations: investigations,
+    },
+  };
 };
 
 // =============================================================================
