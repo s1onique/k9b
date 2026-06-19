@@ -32,7 +32,7 @@ DOC-CAND-10cbf1323b47,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-888717c92fbe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-117118f6097a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-8e678e46cd09,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
-DOC-CAND-d5ea493b6437,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
+DOC-CAND-d5ea493b6437,ignored_by_policy,,,low_value_context,2026-06-19,Implementation detail guidance; not a behavioral claim
 DOC-CAND-d84b8c465ee9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-133bfa5a9626,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-638b0ac74a79,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
@@ -82,7 +82,7 @@ DOC-CAND-a372e049e4ba,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-9256896b6564,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-294b45e67ff6,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-7a002bdf2956,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-a264b5f8a55f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-a264b5f8a55f,backlog_future_claim,,,requires_future_human_review,2026-06-19,Security invariant: Anonymizer MUST NOT correlate across runs - ACT 3.2
 DOC-CAND-2454147ca5f0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-bbe9ac4aa240,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-aa3701a81cbf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md

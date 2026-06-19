@@ -38,7 +38,7 @@ DOC-CAND-d9127b1308bf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-ff0d184fbe9f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/in-cluster-deployment.md
 DOC-CAND-d81a19b0b9a3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/in-cluster-deployment.md
 DOC-CAND-ae913d2b181e,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
-DOC-CAND-e7f884b5b812,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
+DOC-CAND-e7f884b5b812,ignored_by_policy,,,low_value_context,2026-06-19,Limitation statement; not a testable claim
 DOC-CAND-7937286e132c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-af7f16336a22,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-86d775957aa4,stale,,,stale_doc,2026-06-19,From stale doc: docs/provenance-filtering.md

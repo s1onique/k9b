@@ -25,7 +25,7 @@ DOC-CAND-978f5fd19012,registered_existing_claim,DOC-CLAIM-0045,,already_register
 DOC-CAND-9ed52e6b5da8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
 DOC-CAND-173e3128adc4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-bc9cb6cfb7f1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
-DOC-CAND-dcda94df0a87,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
+DOC-CAND-dcda94df0a87,ignored_by_policy,,,low_value_context,2026-06-19,Classification label; not a behavioral claim
 DOC-CAND-284b69f7ed69,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-5dfc41134ac8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
 DOC-CAND-a0e8d4dc7fa1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
@@ -35,7 +35,7 @@ DOC-CAND-9c151b02b30d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-ced635fc2172,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-1f67cee6be9a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
 DOC-CAND-0ea0d1e09910,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
-DOC-CAND-2a25044748e3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-2a25044748e3,covered_by_existing_claim,,DOC-CLAIM-0041,covered_by_broader_claim,2026-06-19,"Covered by DOC-CLAIM-0041: stale info is a risk category, not a claim"
 DOC-CAND-9b2a1f026208,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-8c115d4db3e8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-45bb1f11ab2e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md

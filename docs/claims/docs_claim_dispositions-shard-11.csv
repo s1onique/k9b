@@ -36,8 +36,8 @@ DOC-CAND-39be75872a7d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-45bbe81a9e7a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-827688f9606e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-5afa2e7d58b4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
-DOC-CAND-cb004d158ff0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
-DOC-CAND-4be69696b93e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
+DOC-CAND-cb004d158ff0,ignored_by_policy,,,low_value_context,2026-06-19,"Constitution principle; labeled in output, not testable claim"
+DOC-CAND-4be69696b93e,ignored_by_policy,,,low_value_context,2026-06-19,Design principle; not a testable claim
 DOC-CAND-42fbee1e16ef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-24234e1a70b5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-e1c80adaacea,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md

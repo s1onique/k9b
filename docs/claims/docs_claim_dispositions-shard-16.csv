@@ -33,7 +33,7 @@ DOC-CAND-0660b5932c5c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-2317d7ccd86b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
 DOC-CAND-901968ed7a30,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
 DOC-CAND-756980bfb244,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
-DOC-CAND-65afb26d144e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
+DOC-CAND-65afb26d144e,ignored_by_policy,,,low_value_context,2026-06-19,"Precedence principle; guidance only, not testable claim"
 DOC-CAND-7d4e42e45573,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
 DOC-CAND-cd5defe02983,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
 DOC-CAND-61bb11608da5,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-2.md

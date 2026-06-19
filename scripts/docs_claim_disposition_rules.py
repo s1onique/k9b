@@ -261,3 +261,131 @@ def check_disposition_statistics(
         result.add_info(f"  {disp}: {count}")
 
     return result
+
+
+# High-risk patterns that indicate ACTUAL normative claims
+# These are MUST/SHOULD/NEVER statements that represent testable invariants
+HIGH_RISK_NORMATIVE_PATTERNS = [
+    "must never",
+    "must not",
+    "should never",
+    "never mutates",
+    "no autonomous",
+    "no mutation",
+    "will never",
+    "cannot",
+    "guarantee",
+]
+
+# Generic low-value notes patterns that should NOT be used for high-risk ignored candidates
+GENERIC_LOW_VALUE_PATTERNS = [
+    "Low-value prose fragment from:",
+    "Low-value context from:",
+    "Low-value fragment from:",
+]
+
+
+def is_likely_table_or_short_fragment(text: str) -> bool:
+    """Check if text is table data, a heading, or very short fragment."""
+    text = text.strip()
+    
+    # Skip if it starts with table delimiters
+    if text.startswith("|"):
+        return True
+    
+    # Skip if it's a very short line (likely heading or table cell)
+    if len(text) < 30:
+        return True
+    
+    # Skip markdown list items that are just descriptive
+    if text.startswith("- ") and ":" not in text[:50]:
+        return True
+    
+    return False
+
+
+def contains_high_risk_normative_claim(text: str) -> bool:
+    """Check if text contains an actual high-risk normative claim.
+    
+    This is intentionally narrow - only catches MUST/SHOULD/NEVER statements
+    that represent testable invariants or safety guarantees.
+    """
+    text_lower = text.lower()
+    
+    # Skip table fragments and short text
+    if is_likely_table_or_short_fragment(text):
+        return False
+    
+    # Check for actual claim patterns
+    for pattern in HIGH_RISK_NORMATIVE_PATTERNS:
+        if pattern in text_lower:
+            return True
+    
+    return False
+
+
+def check_high_risk_ignored_has_specific_notes(
+    dispositions: list[dict[str, str]],
+    candidates: list[dict[str, str]],
+) -> DispositionCheckResult:
+    """Check that high-risk ignored candidates have specific reviewer notes.
+    
+    High-risk ignored candidates are those where:
+    - disposition=ignored_by_policy
+    - candidate text contains a high-risk normative claim (MUST/SHOULD/NEVER statement)
+    
+    For these, generic "Low-value prose fragment" notes are not acceptable.
+    """
+    result = DispositionCheckResult()
+    
+    # Build candidate lookup
+    candidate_map: dict[str, dict[str, str]] = {}
+    for cand in candidates:
+        cid = cand.get("candidate_id", "").strip()
+        if cid:
+            candidate_map[cid] = cand
+    
+    high_risk_count = 0
+    generic_note_count = 0
+    
+    for i, row in enumerate(dispositions):
+        disp = row.get("disposition", "").strip()
+        
+        # Only check ignored_by_policy
+        if disp != "ignored_by_policy":
+            continue
+        
+        cid = row.get("candidate_id", "").strip()
+        notes = row.get("reviewer_notes", "").strip()
+        candidate = candidate_map.get(cid, {})
+        
+        # Get candidate text
+        candidate_text = candidate.get("candidate_text", "")
+        
+        # Check if this contains a high-risk normative claim
+        if not contains_high_risk_normative_claim(candidate_text):
+            continue
+        
+        high_risk_count += 1
+        
+        # Check if notes are generic
+        is_generic = False
+        for pattern in GENERIC_LOW_VALUE_PATTERNS:
+            if pattern in notes:
+                is_generic = True
+                break
+        
+        if is_generic:
+            generic_note_count += 1
+            result.add_error(
+                f"Row {i + 2}: candidate {cid} contains high-risk normative claim but has "
+                f"generic notes: '{notes[:80]}...'. "
+                f"Provide specific rationale or link to covering claim."
+            )
+    
+    result.add_info(
+        f"High-risk ignored candidates checked: {high_risk_count}, "
+        f"with generic notes: {generic_note_count}"
+    )
+    
+    return result

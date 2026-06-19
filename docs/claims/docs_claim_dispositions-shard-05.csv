@@ -1,7 +1,7 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
 DOC-CAND-83083c7d764b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-09a133927581,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
-DOC-CAND-04a74288cf38,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
+DOC-CAND-04a74288cf38,covered_by_existing_claim,,DOC-CLAIM-0002,covered_by_broader_claim,2026-06-19,Covered by DOC-CLAIM-0002: agent never mutates live clusters
 DOC-CAND-606fe3e50cc0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-65818df67c8e,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-28cb4c246ad9,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -39,10 +39,10 @@ DOC-CAND-f3316420ca83,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-121d7a45a9fe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md
 DOC-CAND-4d18096d66a8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
 DOC-CAND-9a9370f91a86,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
-DOC-CAND-58ddcda6ebb7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
+DOC-CAND-58ddcda6ebb7,ignored_by_policy,,,low_value_context,2026-06-19,Playbook guidance; not a behavioral invariant
 DOC-CAND-8222aa151282,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
 DOC-CAND-9a34514b8463,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
-DOC-CAND-9eef0c8d292a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
+DOC-CAND-9eef0c8d292a,ignored_by_policy,,,low_value_context,2026-06-19,Design guideline only; no testable behavioral invariant
 DOC-CAND-c832479cf506,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-b7f405771c57,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-7ffaa30a4831,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
@@ -117,7 +117,7 @@ DOC-CAND-39df0a3680be,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-945a3e31ff57,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-38b6aa233784,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-151377ed7b09,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
-DOC-CAND-4e1efcf6646c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
+DOC-CAND-4e1efcf6646c,backlog_future_claim,,,requires_future_human_review,2026-06-19,Security invariant: Error responses must not leak host paths - ACT 3.2
 DOC-CAND-1e49c60982df,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-660955661fda,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-b3536aae4544,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
@@ -126,7 +126,7 @@ DOC-CAND-dfbec826e190,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-eb7de89b38d9,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-c64505444755,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-e4b50b65113e,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
-DOC-CAND-bde5606d7d34,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-bde5606d7d34,covered_by_existing_claim,,DOC-CLAIM-0010,covered_by_broader_claim,2026-06-19,Covered by DOC-CLAIM-0010: agent MUST NOT perform direct mutations
 DOC-CAND-2bf93cfd4fbe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-db5e8a57f78e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-4248cb6943c4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
@@ -142,7 +142,7 @@ DOC-CAND-ff74e21b70d0,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-cc7359d3221f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-cd1c3a3b5f78,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-glob-audit.md
 DOC-CAND-efc9162b2461,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
-DOC-CAND-8450ed7b957d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
+DOC-CAND-8450ed7b957d,backlog_future_claim,,,requires_future_human_review,2026-06-19,Security invariant: Subprocesses must never use stderr=DEVNULL - ACT 3.2
 DOC-CAND-d147128b54a7,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/TEST-CLEANUP-INVENTORY.md
 DOC-CAND-99f2f2eb19a9,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/selected-run-refresh-regression-test-updates.md
 DOC-CAND-29c497d0a711,stale,,,stale_doc,2026-06-19,From stale doc: docs/verification.md

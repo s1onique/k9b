@@ -44,7 +44,7 @@ DOC-CAND-c1bc76302f0e,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-7842ae34862c,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-3a0aff24b3f4,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
 DOC-CAND-9e3d3191d19e,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
-DOC-CAND-ad830ee077ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
+DOC-CAND-ad830ee077ae,ignored_by_policy,,,low_value_context,2026-06-19,Limitation statement; not a testable claim
 DOC-CAND-cdbc45077a37,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-d3f15acbc58d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-d1c4e466e118,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
@@ -88,7 +88,7 @@ DOC-CAND-cb4bfe79d5f6,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-c0e737ad076f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-9a75655ccc6f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-bd730bf5a400,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-a3f9eec5eb1a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-a3f9eec5eb1a,ignored_by_policy,,,low_value_context,2026-06-19,Design section header; not a standalone claim
 DOC-CAND-017a77057db5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-9306e9925338,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-b3d49c965e5d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
@@ -111,7 +111,7 @@ DOC-CAND-8e389f52e9eb,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-600e8e823c73,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-fcdeb9efc367,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-933029d72f28,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
-DOC-CAND-416d618a347d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
+DOC-CAND-416d618a347d,backlog_future_claim,,,requires_future_human_review,2026-06-19,Security invariant: Fallback must not leak host paths - ACT 3.2
 DOC-CAND-fb4a91db992d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
 DOC-CAND-3b53ecd6f7f5,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-8f386823f67f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md

@@ -36,6 +36,7 @@ from scripts.docs_claim_disposition_rules import (
     check_disposition_csv_exists,
     check_disposition_enum_valid,
     check_disposition_statistics,
+    check_high_risk_ignored_has_specific_notes,
     check_no_duplicate_dispositions,
     check_reason_code_enum_valid,
     check_reviewed_at_valid,
@@ -77,6 +78,9 @@ def run_verification() -> bool:
     # Get valid IDs for cross-reference checks
     valid_candidate_ids = get_valid_candidate_ids()
     valid_claim_ids = get_valid_claim_ids()
+    
+    # Load candidates for high-risk check
+    candidates, _ = read_all_shards()
 
     print(f"[INFO] Registry has {len(valid_claim_ids)} claims")
     print(f"[INFO] Candidates have {len(valid_candidate_ids)} candidate IDs")
@@ -92,6 +96,7 @@ def run_verification() -> bool:
         ("Reviewed-at populated", lambda: check_reviewed_at_valid(dispositions)),
         ("Reviewer notes required", lambda: check_reviewer_notes_required(dispositions)),
         ("All candidates have disposition", lambda: check_all_candidates_have_disposition(dispositions, valid_candidate_ids)),
+        ("High-risk ignored has specific notes", lambda: check_high_risk_ignored_has_specific_notes(dispositions, candidates)),
         ("Disposition statistics", lambda: check_disposition_statistics(dispositions)),
     ]
 

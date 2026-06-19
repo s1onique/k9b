@@ -32,7 +32,7 @@ DOC-CAND-09ec61d44ba7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-6cae9ce93744,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-5151596cc374,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-a0ae2a4aaa46,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
-DOC-CAND-556dbde1c64b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-556dbde1c64b,covered_by_existing_claim,,DOC-CLAIM-0041,covered_by_broader_claim,2026-06-19,"Covered by DOC-CLAIM-0041: immutable artifacts, not historical claim"
 DOC-CAND-98f15485cf6b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
 DOC-CAND-27f1a01eb020,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
 DOC-CAND-2a4a984cab6f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
@@ -41,10 +41,10 @@ DOC-CAND-626d5c937865,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-892119dd695e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
 DOC-CAND-eabf02792474,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
 DOC-CAND-5fb46a9f62ee,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
-DOC-CAND-3678720a1d69,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
+DOC-CAND-3678720a1d69,ignored_by_policy,,,low_value_context,2026-06-19,Design principle; not a testable claim
 DOC-CAND-4916b1df2f24,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-4cc66afcde75,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
-DOC-CAND-81aab6be0046,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
+DOC-CAND-81aab6be0046,ignored_by_policy,,,low_value_context,2026-06-19,Covered by DOC-CLAIM-0002: agent never mutates autonomously
 DOC-CAND-1ec71121b9fa,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-1699970e1d8f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-565a07e4b057,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md

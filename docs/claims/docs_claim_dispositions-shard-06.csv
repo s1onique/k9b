@@ -28,11 +28,11 @@ DOC-CAND-f15a5599fdac,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-f12802b3330d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
 DOC-CAND-24ed319f8a35,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-006f45c31d18,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
-DOC-CAND-7213dd812373,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
+DOC-CAND-7213dd812373,ignored_by_policy,,,low_value_context,2026-06-19,"Logging hygiene guidance; implementation detail, not a claim"
 DOC-CAND-ee6fc6f21600,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
 DOC-CAND-28043e3a7f13,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-135559920c82,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-3be4ab2a8aaf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md
+DOC-CAND-3be4ab2a8aaf,ignored_by_policy,,,low_value_context,2026-06-19,LLM-friendly file guidance; not a behavioral claim
 DOC-CAND-77935dbd5d77,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
 DOC-CAND-41148d86ec90,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-70c29b1e6172,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md

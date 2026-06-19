@@ -13,6 +13,7 @@ from scripts.docs_claim_disposition_rules import (
     check_claim_id_valid_for_disposition,
     check_covered_by_claim_id_valid,
     check_disposition_enum_valid,
+    check_high_risk_ignored_has_specific_notes,
     check_no_duplicate_dispositions,
     check_reason_code_enum_valid,
     check_reviewed_at_valid,
@@ -286,6 +287,104 @@ SELF_TEST_CASES = [
         "should_fail": True,
         "expect_error_contains": "requires reason_code",
     },
+    # High-risk guardrail tests
+    {
+        "name": "high-risk ignored with generic notes fails",
+        "dispositions": [
+            {
+                "candidate_id": "DOC-CAND-abc123def456",
+                "disposition": "ignored_by_policy",
+                "claim_id": "",
+                "covered_by_claim_id": "",
+                "reason_code": "low_value_context",
+                "reviewed_at": TODAY,
+                "reviewer_notes": "Low-value prose fragment from: README.md",
+            },
+        ],
+        "candidates": [
+            {
+                "candidate_id": "DOC-CAND-abc123def456",
+                "doc_path": "README.md",
+                "candidate_text": "The system must never mutate production without approval",
+            },
+        ],
+        "valid_claim_ids": VALID_CLAIM_IDS,
+        "valid_candidate_ids": VALID_CANDIDATE_IDS,
+        "should_fail": True,
+        "expect_error_contains": "high-risk normative claim",
+    },
+    {
+        "name": "high-risk ignored with specific notes passes",
+        "dispositions": [
+            {
+                "candidate_id": "DOC-CAND-def456abc789",
+                "disposition": "ignored_by_policy",
+                "claim_id": "",
+                "covered_by_claim_id": "",
+                "reason_code": "low_value_context",
+                "reviewed_at": TODAY,
+                "reviewer_notes": "Design guideline only; no testable behavioral invariant",
+            },
+        ],
+        "candidates": [
+            {
+                "candidate_id": "DOC-CAND-def456abc789",
+                "doc_path": "docs/doctrine/constitution.md",
+                "candidate_text": "The system must never mutate production without approval",
+            },
+        ],
+        "valid_claim_ids": VALID_CLAIM_IDS,
+        "valid_candidate_ids": VALID_CANDIDATE_IDS,
+        "should_fail": False,
+    },
+    {
+        "name": "table fragment with generic notes passes",
+        "dispositions": [
+            {
+                "candidate_id": "DOC-CAND-000999012345",
+                "disposition": "ignored_by_policy",
+                "claim_id": "",
+                "covered_by_claim_id": "",
+                "reason_code": "low_value_context",
+                "reviewed_at": TODAY,
+                "reviewer_notes": "Low-value prose fragment from: docs/data-model.md",
+            },
+        ],
+        "candidates": [
+            {
+                "candidate_id": "DOC-CAND-000999012345",
+                "doc_path": "docs/data-model/artifacts.md",
+                "candidate_text": "| Artifact | Path | Type |",
+            },
+        ],
+        "valid_claim_ids": VALID_CLAIM_IDS,
+        "valid_candidate_ids": VALID_CANDIDATE_IDS,
+        "should_fail": False,
+    },
+    {
+        "name": "short fragment with generic notes passes",
+        "dispositions": [
+            {
+                "candidate_id": "DOC-CAND-00000001ab12",
+                "disposition": "ignored_by_policy",
+                "claim_id": "",
+                "covered_by_claim_id": "",
+                "reason_code": "low_value_context",
+                "reviewed_at": TODAY,
+                "reviewer_notes": "Low-value prose fragment from: README.md",
+            },
+        ],
+        "candidates": [
+            {
+                "candidate_id": "DOC-CAND-00000001ab12",
+                "doc_path": "README.md",
+                "candidate_text": "immutable",
+            },
+        ],
+        "valid_claim_ids": VALID_CLAIM_IDS,
+        "valid_candidate_ids": {"DOC-CAND-00000001ab12"},
+        "should_fail": False,
+    },
 ]
 
 
@@ -351,6 +450,13 @@ def run_self_test() -> bool:
         # because it requires ALL candidates to have dispositions.
         # Individual tests test partial sets. The full check is done
         # by the verifier when the real ledger is complete.
+
+        # Run high-risk guardrail check if candidates are provided
+        candidates = case.get("candidates", [])
+        if candidates:
+            result = check_high_risk_ignored_has_specific_notes(dispositions, candidates)
+            if not result.passed:
+                errors_found.extend(result.errors)
 
         checks_failed = len(errors_found) > 0
 

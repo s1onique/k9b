@@ -96,7 +96,7 @@ DOC-CAND-a759b2ed4f2c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-2081b0a02717,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-c90d185118b0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-508768c62528,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
-DOC-CAND-21d27511681a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-21d27511681a,ignored_by_policy,,,low_value_context,2026-06-19,RBAC guidance; not a behavioral invariant
 DOC-CAND-2d626a27831f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-4c7445623e25,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-fb8d8e8fa2a8,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
