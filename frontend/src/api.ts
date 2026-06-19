@@ -956,6 +956,65 @@ export const getIncident = async (incidentId: string): Promise<IncidentDetailPay
   return (await response.json()) as IncidentDetailPayload;
 };
 
+/**
+ * Bounded handoff payload for automatic diagnosis review packets.
+ * Provides a safe, read-only markdown handoff for human/ChatGPT review.
+ */
+export type AutomaticDiagnosisReviewHandoffPayload = {
+  // Availability state
+  available: boolean;
+  // When available=true: handoff fields
+  incident_id?: string | null;
+  artifact_type?: string | null;
+  artifact_name?: string | null;
+  run_id?: string | null;
+  collector_run_id?: string | null;
+  generated_at?: string | null;
+  format?: string | null;
+  content?: string | null;
+  content_sha256?: string | null;
+  read_only?: boolean | null;
+  review_required_before_any_action?: boolean | null;
+  no_remediation_attempted?: boolean | null;
+  // When available=false: reason for unavailability
+  unavailable_reason?: string | null;
+};
+
+/**
+ * Get automatic diagnosis review handoff for an incident.
+ * 
+ * This is a read-only endpoint that provides a sanitized markdown handoff
+ * suitable for human/ChatGPT review. It does not expose raw packet contents,
+ * absolute paths, secrets, or action controls.
+ * 
+ * @param incidentId - The incident ID to look up
+ */
+export const getAutomaticDiagnosisReviewHandoff = async (
+  incidentId: string
+): Promise<AutomaticDiagnosisReviewHandoffPayload> => {
+  const response = await fetch(
+    `/api/incidents/${encodeURIComponent(incidentId)}/automatic-diagnosis-review/handoff`,
+    {
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        message = String((payload as Record<string, unknown>).error);
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message || "Failed to get review handoff");
+  }
+
+  return (await response.json()) as AutomaticDiagnosisReviewHandoffPayload;
+};
+
 // ============================================================================
 // Incident Diagnosis Loop API Types
 // Re-exported from incidentDiagnosisLoop.ts for consumer convenience

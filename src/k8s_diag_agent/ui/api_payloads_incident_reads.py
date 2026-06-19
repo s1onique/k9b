@@ -29,6 +29,7 @@ __all__ = [
     "IncidentSummaryPayload",
     "IncidentDetailPayload",
     "AutomaticDiagnosisReviewPayload",
+    "AutomaticDiagnosisReviewHandoffPayload",
 ]
 
 
@@ -162,6 +163,50 @@ class AutomaticDiagnosisReviewPayload(TypedDict, total=False):
     checks_rejected: int | None  # Number of checks rejected
     eligible: bool | None  # Whether incident was eligible
     eligibility_reason: str | None  # Reason for eligibility (max 160 chars)
+    read_only: bool | None  # Always True
+    review_required_before_any_action: bool | None  # Always True
+    no_remediation_attempted: bool | None  # Always True
+
+    # When available=False: reason for unavailability
+    unavailable_reason: str | None  # "no_review_packet" or "malformed_review_packet"
+
+
+class AutomaticDiagnosisReviewHandoffPayload(TypedDict, total=False):
+    """Bounded handoff payload for automatic diagnosis review packets.
+
+    This payload provides a safe, read-only markdown handoff for the latest
+    automatic diagnosis loop review packet. The handoff is suitable for
+    human/ChatGPT review and does NOT include raw packet contents, paths, or secrets.
+
+    Safety constraints enforced:
+    - artifact_name is filename only (no path)
+    - All string fields are bounded (max lengths enforced)
+    - content is bounded to 16 KiB max
+    - content includes explicit read-only/review-required/no-remediation language
+    - read_only is always True
+    - review_required_before_any_action is always True
+    - no_remediation_attempted is always True
+
+    Hard constraints:
+    - NO remediation actions
+    - NO raw packet contents beyond bounded summary fields
+    - NO absolute paths
+    - NO secrets, tokens, or kubeconfig
+    """
+
+    # Availability state
+    available: bool  # True if a review packet exists and is loadable
+
+    # When available=True: handoff fields
+    incident_id: str | None  # The incident ID (max 160 chars)
+    artifact_type: str | None  # Always "diagnosis-loop-review-packet" when available
+    artifact_name: str | None  # Filename only, no path (max 240 chars)
+    run_id: str | None  # Collector run ID (max 160 chars)
+    collector_run_id: str | None  # Batch collector run ID (max 160 chars)
+    generated_at: str | None  # ISO timestamp (max 80 chars)
+    format: str | None  # Always "markdown" when available
+    content: str | None  # Bounded markdown content (max 16 KiB)
+    content_sha256: str | None  # SHA256 of content (first 16 chars)
     read_only: bool | None  # Always True
     review_required_before_any_action: bool | None  # Always True
     no_remediation_attempted: bool | None  # Always True

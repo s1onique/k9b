@@ -114,3 +114,60 @@ Health loop logs include:
 - `total_review_packets_written`
 
 No raw case files or artifact contents are logged.
+
+## Review Handoff
+
+Incident detail provides a bounded handoff endpoint for the latest automatic diagnosis review packet.
+
+### Endpoint
+
+```bash
+GET /api/incidents/{incident_id}/automatic-diagnosis-review/handoff
+```
+
+### Response (Available)
+
+```json
+{
+  "available": true,
+  "incident_id": "incident-123",
+  "artifact_type": "diagnosis-loop-review-packet",
+  "artifact_name": "auto-incident-123-20260619074500-diagnosis-review-packet.json",
+  "run_id": "auto-incident-123-20260619074500",
+  "generated_at": "2026-06-19T07:45:00+00:00",
+  "format": "markdown",
+  "content": "# Automatic diagnosis review packet\n\n...",
+  "content_sha256": "abc123def456...",
+  "read_only": true,
+  "review_required_before_any_action": true,
+  "no_remediation_attempted": true
+}
+```
+
+### Response (Unavailable)
+
+```json
+{
+  "available": false,
+  "unavailable_reason": "no_review_packet"
+}
+```
+
+### Safety Properties
+
+The handoff endpoint:
+- Provides metadata-only read-only content (not raw packet contents)
+- Shows artifact filename only (not absolute paths)
+- Bounded content (16 KiB max)
+- Validated for forbidden terms (secrets, action-control fields, etc.)
+- Explicit read-only/review-required/no-remediation language
+- Content SHA256 for integrity verification
+
+### UI Integration
+
+The incident detail UI includes a "Copy review packet" control that:
+- Fetches the handoff endpoint
+- Copies bounded markdown content to clipboard
+- Falls back to download if clipboard unavailable
+- Shows safe unavailable/error states
+- Does not expose action controls or raw artifacts

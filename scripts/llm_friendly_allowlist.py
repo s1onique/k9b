@@ -34,6 +34,9 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("src/k8s_diag_agent/health/loop.py", "[EXTRACTION] Health loop - extract by concern"),
     ("src/k8s_diag_agent/health/loop_scheduler.py", "[EXTRACTION] Loop scheduler - run loop extracted; compatibility surface remains"),
 
+    # [CONTRACT] Review packet - bounded artifact writer with lookup functions
+    ("src/k8s_diag_agent/collect/incident_diagnosis_review_packet.py", "[CONTRACT] Review packet - artifact writer with bounded output; all functions related"),
+
     # [TEST] Test fixtures - need split by behavior
     ("tests/fixtures/incident_report_fixtures.py", "[TEST] Fixture data - extract by test family"),
     ("tests/unit/test_ui_server_api_alertmanager_sources.py", "[TEST] Alertmanager sources - large fixtures"),

@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 
 __all__ = [
     "write_diagnosis_review_packet",
+    "load_review_packet_summary",
+    "load_review_packet_for_handoff",
+    "find_latest_review_packet",
     "REVIEW_PACKET_SCHEMA_VERSION",
     "REVIEW_PACKET_ARTIFACT_TYPE",
     "AutomaticDiagnosisReviewPacketUnavailable",
@@ -485,6 +488,49 @@ def load_review_packet_summary(
             "checks_rejected": data.get("loop_result", {}).get("checks_rejected", 0),
             "generated_at": data.get("generated_at"),
             "artifact_name": data.get("run_id") + "-diagnosis-review-packet.json",
+            "eligible": data.get("eligibility", {}).get("eligible"),
+            "eligibility_reason": data.get("eligibility", {}).get("reason"),
+        }
+    except (OSError, json.JSONDecodeError, KeyError) as exc:
+        raise AutomaticDiagnosisReviewPacketUnavailable(
+            f"Failed to load review packet for incident {incident_id!r}: {exc}"
+        ) from exc
+
+
+def load_review_packet_for_handoff(
+    external_analysis_dir: Path,
+    incident_id: str,
+) -> dict[str, Any] | None:
+    """Load data from the latest review packet suitable for handoff generation.
+
+    This loads the packet and extracts fields needed for the handoff payload.
+    Unlike load_review_packet_summary, this returns additional fields needed
+    for the markdown handoff content.
+
+    Args:
+        external_analysis_dir: Path to external-analysis directory
+        incident_id: The incident ID to search for
+
+    Returns:
+        Dict with packet fields needed for handoff, or None if no packet exists
+    """
+    packet_info = find_latest_review_packet(external_analysis_dir, incident_id)
+    if packet_info is None:
+        return None
+
+    try:
+        content = Path(packet_info["path"]).read_text(encoding="utf-8")
+        data = json.loads(content)
+
+        # Return fields needed for handoff generation
+        return {
+            "run_id": data.get("run_id"),
+            "collector_run_id": data.get("collector_run_id"),
+            "decision": data.get("loop_result", {}).get("decision"),
+            "checks_requested": data.get("loop_result", {}).get("checks_requested", 0),
+            "checks_run": data.get("loop_result", {}).get("checks_run", 0),
+            "checks_rejected": data.get("loop_result", {}).get("checks_rejected", 0),
+            "generated_at": data.get("generated_at"),
             "eligible": data.get("eligibility", {}).get("eligible"),
             "eligibility_reason": data.get("eligibility", {}).get("reason"),
         }
