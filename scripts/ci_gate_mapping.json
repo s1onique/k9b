@@ -184,6 +184,65 @@
       },
       "required_command_fragments": ["verify_helm_oci_login.sh"],
       "reason": "Helm OCI dual-login workaround verification"
+    },
+    "incident-report-quality": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"],
+        ".github/workflows/verify.yml": ["lint"]
+      },
+      "required_command_fragments": ["verify_incident_report_quality.py"],
+      "reason": "Incident report quality invariants - runs in lint job"
+    },
+    "artifact-immutability": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"],
+        ".github/workflows/verify.yml": ["lint"]
+      },
+      "required_command_fragments": ["verify_artifact_immutability.py"],
+      "reason": "Artifact immutability enforcement - runs in lint job"
+    },
+    "production-readiness-disclaimer": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"],
+        ".github/workflows/verify.yml": ["lint"]
+      },
+      "required_command_fragments": ["verify_production_readiness_disclaimer.py"],
+      "reason": "Production readiness disclaimer - runs in lint job"
+    },
+    "docs-claims-registry": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"]
+      },
+      "required_command_fragments": ["verify_docs_claims_registry.py"],
+      "reason": "Docs claims registry integrity - local-only gate"
+    },
+    "docs-claim-traceability": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"]
+      },
+      "required_command_fragments": ["verify_docs_claim_traceability.py"],
+      "reason": "Docs claim traceability matrix - local-only gate"
+    },
+    "docs-claim-candidates": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"]
+      },
+      "required_command_fragments": ["scan_docs_claim_candidates.py"],
+      "reason": "Docs claim candidate scanner - local-only gate"
+    },
+    "docs-claim-candidate-coverage": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"]
+      },
+      "required_command_fragments": ["verify_docs_claim_candidate_coverage.py"],
+      "reason": "Docs claim candidate coverage - local-only gate"
+    },
+    "docs-inventory": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"]
+      },
+      "required_command_fragments": ["verify_docs_inventory.py"],
+      "reason": "Docs inventory integrity - local-only gate"
     }
   },
   "workflows_to_check": [
@@ -326,6 +385,31 @@
       "gate": "helm-oci-login",
       "workflow": ".github/workflows/verify.yml",
       "reason": "verify.yml is manual/PR-only; push gates are covered by harbor.yml which is the canonical push workflow"
+    },
+    {
+      "gate": "docs-claims-registry",
+      "workflow": ".github/workflows/harbor.yml",
+      "reason": "Local-only gate; docs truthfulness verified locally"
+    },
+    {
+      "gate": "docs-claim-traceability",
+      "workflow": ".github/workflows/harbor.yml",
+      "reason": "Local-only gate; docs truthfulness verified locally"
+    },
+    {
+      "gate": "docs-claim-candidates",
+      "workflow": ".github/workflows/harbor.yml",
+      "reason": "Local-only gate; docs truthfulness verified locally"
+    },
+    {
+      "gate": "docs-claim-candidate-coverage",
+      "workflow": ".github/workflows/harbor.yml",
+      "reason": "Local-only gate; docs truthfulness verified locally"
+    },
+    {
+      "gate": "docs-inventory",
+      "workflow": ".github/workflows/harbor.yml",
+      "reason": "Local-only gate; docs truthfulness verified locally"
     }
   ]
 }
