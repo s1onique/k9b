@@ -58,6 +58,7 @@ from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_r
 from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config_helpers import _resolve_collector_version, _resolve_output_dir
+from .loop_automatic_diagnosis import run_automatic_diagnosis_loop
 from .loop_runner_assessments import build_assessments_for_records
 from .loop_runner_comparisons import evaluate_triggers_for_records
 from .loop_runner_drilldowns import build_drilldowns_for_records
@@ -495,6 +496,12 @@ class HealthLoopRunner:
             external_analysis_count=len(external_artifacts),
         )
         self._prune_external_analysis_history(directories["external_analysis"])
+        # Run automatic diagnosis loop evidence collection (opt-in, read-only, bounded)
+        # Result is logged internally; no need to capture for downstream use
+        run_automatic_diagnosis_loop(
+            external_analysis_dir=directories["external_analysis"],
+            log_event_fn=self._log_event,
+        )
         # Scan for durable Alertmanager proposal candidates from aggregated patterns
         try:
             durable_candidates = scan_and_propose(directories["root"])

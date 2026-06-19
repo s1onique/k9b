@@ -1,10 +1,8 @@
-"""Unit tests for incident_diagnosis_auto_loop module.
+"""Unit tests for incident_diagnosis_auto_loop config and activation.
 
 Tests cover:
 - Config/activation tests (disabled by default, enabled via env)
 - Eligibility tests (active status, terminal status, budget)
-- Run tests (collector behavior, orchestrator wiring)
-- Safety tests (no forbidden imports)
 
 These tests do NOT:
 - Execute real Kubernetes collectors
@@ -21,18 +19,17 @@ from pathlib import Path
 
 import pytest
 
-from k8s_diag_agent.collect.incident_diagnosis_auto_loop import (
+from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
     _ACTIVE_STATUSES,
     _TERMINAL_STATUSES,
     AutomaticDiagnosisLoopConfig,
     check_incident_eligibility,
-    collect_automatic_diagnosis_evidence,
     is_automatic_diagnosis_loop_enabled,
-    run_automatic_diagnosis_loop_evidence_collection,
 )
 from k8s_diag_agent.collect.incident_lifecycle import Incident, IncidentStatus
 from k8s_diag_agent.collect.incident_store import IncidentStore
 from k8s_diag_agent.collect.incident_store_provider import set_incident_store
+
 
 # =============================================================================
 # Test Fixtures
@@ -102,7 +99,6 @@ class TestActivationConfig:
 
     def test_collector_disabled_by_default(self):
         """Prove automatic collector is disabled by default."""
-        # Clear any environment variable
         env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
         try:
             if "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
@@ -153,25 +149,6 @@ class TestActivationConfig:
                 os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
             elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
                 del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
-
-    def test_disabled_collector_does_not_run_checks(
-        self, clean_store, temp_external_dir
-    ):
-        """Prove disabled collector does not run checks."""
-        result = run_automatic_diagnosis_loop_evidence_collection(
-            external_analysis_dir=temp_external_dir,
-        )
-        assert result.enabled is False
-        assert result.incidents_processed == 0
-
-    def test_disabled_collector_does_not_write_packets(
-        self, clean_store, temp_external_dir
-    ):
-        """Prove disabled collector does not write evidence packets."""
-        result = run_automatic_diagnosis_loop_evidence_collection(
-            external_analysis_dir=temp_external_dir,
-        )
-        assert result.total_review_packets_written == 0
 
 
 class TestAutomaticDiagnosisLoopConfig:
@@ -256,7 +233,6 @@ class TestEligibilityModel:
 
     def test_resolved_incident_not_eligible(self, clean_store, sample_open_incident):
         """Prove resolved incident is not eligible."""
-        # Update status to resolved
         sample_open_incident.status = IncidentStatus.RESOLVED
 
         config = AutomaticDiagnosisLoopConfig()
@@ -340,236 +316,6 @@ class TestEligibilityModel:
         result = check_incident_eligibility("nonexistent-incident-id", config)
         assert result.eligible is False
         assert result.reason == "incident_not_found"
-
-
-# =============================================================================
-# Run Tests
-# =============================================================================
-
-
-class TestCollectorRun:
-    """Tests for collector run behavior."""
-
-    def test_disabled_collector_returns_early(
-        self, clean_store, temp_external_dir
-    ):
-        """Prove disabled collector returns without processing."""
-        # Ensure disabled
-        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
-        try:
-            if "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
-
-            result = run_automatic_diagnosis_loop_evidence_collection(
-                external_analysis_dir=temp_external_dir,
-            )
-            assert result.enabled is False
-            assert result.incidents_processed == 0
-            assert len(result.incident_results) == 1
-        finally:
-            if env_backup is not None:
-                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
-
-    def test_enabled_collector_with_no_incidents(
-        self, clean_store, temp_external_dir
-    ):
-        """Prove enabled collector handles no incidents gracefully."""
-        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
-        try:
-            os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "true"
-
-            result = run_automatic_diagnosis_loop_evidence_collection(
-                external_analysis_dir=temp_external_dir,
-            )
-            assert result.enabled is True
-            assert result.incidents_processed == 0
-            assert result.incidents_eligible == 0
-        finally:
-            if env_backup is not None:
-                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
-            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
-
-    def test_enabled_collector_processes_specific_incidents(
-        self, clean_store, sample_open_incident, temp_external_dir
-    ):
-        """Prove enabled collector processes specific incident IDs."""
-        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
-        try:
-            os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "true"
-
-            result = run_automatic_diagnosis_loop_evidence_collection(
-                external_analysis_dir=temp_external_dir,
-                incident_ids=[sample_open_incident.incident_id],
-            )
-            assert result.enabled is True
-            assert result.incidents_processed == 1
-        finally:
-            if env_backup is not None:
-                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
-            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
-
-    def test_collector_respects_max_incidents(
-        self, clean_store, sample_open_incident, temp_external_dir
-    ):
-        """Prove collector respects max_incidents_per_run bound."""
-        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
-        try:
-            os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "true"
-
-            config = AutomaticDiagnosisLoopConfig(max_incidents_per_run=1)
-            result = run_automatic_diagnosis_loop_evidence_collection(
-                external_analysis_dir=temp_external_dir,
-                incident_ids=["inc1", "inc2", "inc3"],  # 3 incidents
-                config=config,
-            )
-            assert result.incidents_processed <= 1
-        finally:
-            if env_backup is not None:
-                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
-            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
-
-    def test_collector_ineligible_incident_skipped(
-        self, clean_store, sample_open_incident, temp_external_dir
-    ):
-        """Prove collector skips ineligible incidents."""
-        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
-        try:
-            os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "true"
-
-            # Mark incident as resolved
-            sample_open_incident.status = IncidentStatus.RESOLVED
-
-            result = run_automatic_diagnosis_loop_evidence_collection(
-                external_analysis_dir=temp_external_dir,
-                incident_ids=[sample_open_incident.incident_id],
-            )
-            assert result.incidents_processed == 1
-            # Ineligible incidents are skipped, not ineligible
-            assert result.incidents_skipped == 1
-        finally:
-            if env_backup is not None:
-                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
-            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
-
-    def test_second_call_skips_budget_exhausted(
-        self, clean_store, sample_open_incident, temp_external_dir
-    ):
-        """Prove second call skips when budget is exhausted.
-
-        First call writes a review packet. Second call should skip
-        because budget is exhausted (count >= max_passes_per_incident).
-        """
-        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
-        try:
-            os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "true"
-
-            config = AutomaticDiagnosisLoopConfig(max_passes_per_incident=1)
-
-            # First call
-            result1 = run_automatic_diagnosis_loop_evidence_collection(
-                external_analysis_dir=temp_external_dir,
-                incident_ids=[sample_open_incident.incident_id],
-                config=config,
-            )
-
-            # First call should process the incident
-            assert result1.incidents_processed == 1
-
-            # Second call - should skip because budget is exhausted
-            result2 = run_automatic_diagnosis_loop_evidence_collection(
-                external_analysis_dir=temp_external_dir,
-                incident_ids=[sample_open_incident.incident_id],
-                config=config,
-            )
-
-            # Second call should skip due to budget exhaustion
-            assert result2.incidents_processed == 1
-            assert result2.incidents_skipped == 1
-            assert result2.incident_results[0]["skip_reason"] == "not_eligible: budget_exhausted"
-        finally:
-            if env_backup is not None:
-                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
-            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
-
-
-class TestCollectAutomaticDiagnosisEvidence:
-    """Tests for single-incident convenience function."""
-
-    def test_disabled_collector_returns_skipped(
-        self, clean_store, sample_open_incident, temp_external_dir
-    ):
-        """Prove convenience function respects disabled state."""
-        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
-        try:
-            if "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
-
-            result = collect_automatic_diagnosis_evidence(
-                incident_id=sample_open_incident.incident_id,
-                external_analysis_dir=temp_external_dir,
-            )
-            assert result.skipped is True
-            # Check for "not set" or "disabled" in skip_reason
-            assert "not set to true" in result.skip_reason or "disabled" in result.skip_reason
-        finally:
-            if env_backup is not None:
-                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
-
-
-# =============================================================================
-# Safety Tests
-# =============================================================================
-
-
-class TestSafetyMetadata:
-    """Tests for safety metadata in results."""
-
-    def test_collector_result_has_safety_metadata(
-        self, clean_store, temp_external_dir
-    ):
-        """Prove collector result includes safety metadata."""
-        result = run_automatic_diagnosis_loop_evidence_collection(
-            external_analysis_dir=temp_external_dir,
-        )
-        assert "read_only" in result.safety_metadata
-        assert result.safety_metadata["read_only"] is True
-        assert "no_kubectl" in result.safety_metadata
-        assert result.safety_metadata["no_kubectl"] is True
-        assert "no_shell" in result.safety_metadata
-        assert result.safety_metadata["no_shell"] is True
-        assert "no_remediation" in result.safety_metadata
-        assert result.safety_metadata["no_remediation"] is True
-
-    def test_incident_result_has_no_action_fields(
-        self, clean_store, temp_external_dir
-    ):
-        """Prove incident result does not contain action-control fields."""
-        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
-        try:
-            os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "true"
-
-            result = run_automatic_diagnosis_loop_evidence_collection(
-                external_analysis_dir=temp_external_dir,
-                incident_ids=["test-incident"],
-            )
-
-            if result.incident_results:
-                for ir in result.incident_results:
-                    # Should not have action-control fields
-                    assert "run" not in ir
-                    assert "execute" not in ir
-                    assert "remediate" not in ir
-                    assert "mutate" not in ir
-        finally:
-            if env_backup is not None:
-                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
-            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
 
 
 class TestActiveTerminalStatuses:
