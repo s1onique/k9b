@@ -33,7 +33,6 @@ from .loop_alertmanager_port_forward import (
     stop_alertmanager_port_forward,
 )
 from .loop_alertmanager_snapshot import run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl
-from .loop_automatic_diagnosis import run_automatic_diagnosis_loop
 from .loop_baseline_helpers import _load_baseline_policy_from_path, _normalize_category_list, _parse_cohort_baselines, _policy_for_target, _resolve_target_baseline_path
 from .loop_comparison_policy import (  # noqa: F401
     BaselineRegistry,  # noqa: F401 - re-exported for backward compatibility
@@ -498,6 +497,9 @@ class HealthLoopRunner:
         self._prune_external_analysis_history(directories["external_analysis"])
         # Run automatic diagnosis loop evidence collection (opt-in, read-only, bounded)
         # Result is logged internally; no need to capture for downstream use
+        # Lazy import to avoid circular dependency at module load time
+        from .loop_automatic_diagnosis import run_automatic_diagnosis_loop
+
         run_automatic_diagnosis_loop(
             external_analysis_dir=directories["external_analysis"],
             log_event_fn=self._log_event,

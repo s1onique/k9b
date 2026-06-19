@@ -23,7 +23,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..collect.incident_diagnosis_auto_loop import run_automatic_diagnosis_loop_evidence_collection
 from ..collect.incident_diagnosis_auto_loop_config import (
     AutomaticDiagnosisLoopConfig,
     is_automatic_diagnosis_loop_enabled,
@@ -108,6 +107,9 @@ def run_automatic_diagnosis_loop(
     )
 
     # Run the collector with bounded error handling
+    # Lazy import to avoid circular dependency at module load time
+    from ..collect.incident_diagnosis_auto_loop import run_automatic_diagnosis_loop_evidence_collection
+
     try:
         result = run_automatic_diagnosis_loop_evidence_collection(
             external_analysis_dir=external_analysis_dir,

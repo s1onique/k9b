@@ -103,3 +103,6 @@ collect/api_incident_review_packet.py _update_incident_state_for_bundle review p
 
 # === Fake Runner Boundaries ===
 collect/incident_read_only_check_runner.py run_read_only_checks Fake handler failure boundary - error captured and returned as structured failure, never propagated
+
+# === Automatic Diagnosis Loop ===
+health/loop_automatic_diagnosis.py run_automatic_diagnosis_loop failure isolation boundary - collector errors caught and returned as safe fallback, never propagated to health loop
