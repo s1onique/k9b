@@ -4,7 +4,7 @@
 # Each entry defines the doctrine's identity, scope, and enforcement requirements.
 
 version: "1"
-last_updated: "2026-05-31"
+last_updated: "2026-06-19"
 
 doctrines:
   - id: constitution

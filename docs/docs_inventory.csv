@@ -1,0 +1,110 @@
+doc_path,doc_class,truth_status,owner_area,generated_by,replacement_doc,claim_trace_required,notes
+README.md,canonical,current,general,,,false,Root project README with capabilities overview
+docs/agent-docs-audit.md,reference,unknown,agents,,,false,Audit of agent documentation
+docs/agent-run-review-template.md,runbook,current,agents,,,false,Template for agent run review
+docs/alertmanager-source-distinction-audit.md,reference,stale,discovery,,,false,Audit of alertmanager source distinction
+docs/artifact-immutability-audit.md,reference,stale,artifacts,,,false,Audit of artifact immutability claims
+docs/auth.md,reference,current,security,,,false,Authentication documentation
+docs/baseline_watch_practices.md,reference,stale,health,,,false,Baseline watch practices - may need review
+docs/beta-demo-readiness-checklist.md,epic_wal,historical,beta,,,false,Beta demo checklist - historical
+docs/beta-operator-guide.md,runbook,historical,beta,,,false,Beta operator guide - superseded by current docs
+docs/beta-release-notes.md,reference,historical,beta,,,false,Beta release notes - historical
+docs/beta-stakeholder-demo-script.md,runbook,historical,beta,,,false,Beta demo script - historical
+docs/ci-gate-drift.md,reference,current,ci,,,false,CI gate drift tracking
+docs/cluster_snapshot_plan.md,architecture,stale,collection,,,false,Cluster snapshot plan - needs update
+docs/coverage.md,reference,current,quality,,,false,Coverage reporting policy
+docs/data-model.md,canonical,current,data-model,,,true,Core data model index - canonical reference
+docs/data-model/alertmanager-sources.md,reference,current,data-model,,,true,Alertmanager source data model
+docs/data-model/artifacts.md,reference,current,data-model,,,true,Artifact data model
+docs/data-model/incident-report-quality.md,reference,current,data-model,,,true,Incident report quality schema
+docs/data-model/incidents.md,reference,current,data-model,,,true,Incident data model
+docs/data-model/next-check-mapping.md,reference,current,data-model,,,true,Next check mapping
+docs/data-model/next-checks.md,reference,current,data-model,,,true,Next checks data model
+docs/data-model/review-packets.md,reference,current,data-model,,,true,Review packet data model
+docs/data-model/run-lifecycle.md,reference,current,data-model,,,true,Run lifecycle data model
+docs/data-model/ui-model-boundaries.md,reference,current,data-model,,,true,UI model boundaries
+docs/doctrine/beta-real-incident-validation.md,doctrine,current,doctrine,,,false,Doctrine for beta real incident validation
+docs/doctrine/blockstor-derived-rules.md,doctrine,current,doctrine,,,true,Blockstor-derived factory rules doctrine
+docs/doctrine/constitution.md,doctrine,current,doctrine,,,true,Core foundational governance constitution
+docs/doctrine/css-ownership.md,doctrine,current,doctrine,,,false,CSS ownership doctrine
+docs/doctrine/discovery_logging_hygiene.md,doctrine,current,doctrine,,,true,Discovery logging hygiene doctrine
+docs/doctrine/documentation-truthfulness.md,doctrine,current,doctrine,,,true,Documentation truthfulness doctrine - classification, truth status, claim tracing
+docs/doctrine/identity-primer.md,doctrine,current,doctrine,,,false,Identity primer doctrine
+docs/doctrine/llm-friendly-files.md,doctrine,current,doctrine,,,true,LLM-friendly files doctrine
+docs/doctrine/path-security-doctrine.md,doctrine,current,doctrine,,,true,Path security doctrine
+docs/doctrine/playbooks/design_review.md,doctrine,current,doctrine,,,false,Design review playbook
+docs/doctrine/playbooks/redesign_staging.md,doctrine,current,doctrine,,,false,Redesign staging playbook
+docs/doctrine/precedence.md,doctrine,current,doctrine,,,true,Precedence doctrine
+docs/doctrine/seed_rules.md,doctrine,current,doctrine,,,true,Seed rules doctrine
+docs/frontend/elmish-controller-pattern.md,reference,current,frontend,,,false,Elmish controller pattern for frontend
+docs/gate-timings-history-1.md,reference,historical,ci,,,false,Gate timings history - historical
+docs/gate-timings-history-2.md,reference,historical,ci,,,false,Gate timings history - historical
+docs/gate-timings.md,reference,current,ci,,,false,Current gate timings
+docs/harbor-publishing.md,runbook,stale,release,,,false,Harbor publishing - needs update
+docs/in-cluster-deployment.md,runbook,current,deployment,,,false,In-cluster deployment guide
+docs/incidents/automatic-diagnosis-loop.md,architecture,stale,incidents,,,false,Automatic diagnosis loop - needs update
+docs/logging-policy.md,doctrine,current,doctrine,,,false,Logging policy
+docs/post-beta-backlog.md,reference,current,planning,,,false,Post-beta backlog
+docs/post-beta-operator-feedback-and-live-integrations.md,reference,stale,beta,,,false,Post-beta feedback - needs review
+docs/provenance-filtering.md,reference,stale,artifacts,,,false,Provenance filtering - needs update
+docs/recent-runs-execution-debugging.md,runbook,current,ops,,,false,Debugging recent runs execution
+docs/reports/app-tsx-source-map.md,reference,historical,reports,,,false,App TSX source map - historical
+docs/reports/current-agent-capabilities.md,reference,stale,agents,,,false,Current agent capabilities - needs update
+docs/reports/diagnostic-command-chain-requirements-traceability.md,reference,stale,diags,,,false,Diagnostic command chain traceability
+docs/reports/diagnostic-loop-audit-evidence.md,reference,historical,reports,,,false,Diagnostic loop audit evidence - historical
+docs/reports/diagnostic-loop-audit-next-acts.md,reference,historical,reports,,,false,Diagnostic loop audit next acts - historical
+docs/reports/diagnostic-loop-audit.md,reference,historical,reports,,,false,Diagnostic loop audit - historical
+docs/reports/frontend-app-shell-extraction-plan.md,reference,historical,reports,,,false,Frontend app shell extraction - historical
+docs/reports/health-assessment-remaining-seams.md,reference,historical,reports,,,false,Health assessment seams - historical
+docs/reports/health-loop-extraction-map.md,reference,historical,reports,,,false,Health loop extraction map - historical
+docs/reports/health-loop-orchestration-seams.md,reference,historical,reports,,,false,Health loop orchestration seams - historical
+docs/reports/impact-scan-ledger.md,reference,current,reports,,,false,Impact scan ledger
+docs/reports/k8s-accelerator-real-cluster-demo-storyline-evidence.md,reference,historical,reports,,,false,Demo storyline evidence - historical
+docs/reports/k8s-accelerator-real-cluster-demo-storyline-flow.md,reference,historical,reports,,,false,Demo storyline flow - historical
+docs/reports/k8s-accelerator-real-cluster-demo-storyline.md,reference,historical,reports,,,false,Demo storyline - historical
+docs/reports/llm-friendly-production-burn-down-closeout.md,reference,historical,reports,,,false,LLM-friendly burn down closeout - historical
+docs/reports/llm-prompt-builder-inventory-2026-06-03.md,reference,historical,reports,,,false,LLM prompt builder inventory - historical
+docs/reports/security-audit-2026-05-31.md,reference,historical,security,,,false,Security audit - historical
+docs/reports/security-claims-ledger-2026-05-31.md,reference,historical,security,,,false,Security claims ledger - historical
+docs/schemas/assessment-schema.md,reference,current,schemas,,,true,Assessment JSON schema
+docs/schemas/feedback-artifact-schema.md,reference,current,schemas,,,true,Feedback artifact JSON schema
+docs/schemas/fixture-schema.md,reference,current,schemas,,,true,Fixture JSON schema
+docs/schemas/health-proposal-schema.md,reference,current,schemas,,,true,Health proposal JSON schema
+docs/schemas/incident-report-schema.md,reference,current,schemas,,,true,Incident report JSON schema
+docs/schemas/run-artifact-layout.md,reference,current,schemas,,,true,Run artifact layout JSON schema
+docs/schemas/usefulness-feedback-schema.md,reference,current,schemas,,,true,Usefulness feedback JSON schema
+docs/seam-map-alertmanager-discovery.md,architecture,stale,seams,,,false,Seam map for alertmanager discovery - needs update
+docs/seam-map-assessment-comparison-orchestration.md,architecture,stale,seams,,,false,Seam map for assessment comparison - needs update
+docs/seam-map-drilldown-reason-wrapper.md,architecture,stale,seams,,,false,Seam map for drilldown reason wrapper - needs update
+docs/seam-map-health-loop-closure.md,architecture,stale,seams,,,false,Seam map for health loop closure - needs update
+docs/seam-map-llm-auto-drilldown-analysis.md,architecture,stale,seams,,,false,Seam map for LLM auto drilldown - needs update
+docs/seam-map-port-forward-history.md,architecture,stale,seams,,,false,Seam map for port forward history - needs update
+docs/seam-map-record-notification.md,architecture,stale,seams,,,false,Seam map for record notification - needs update
+docs/seam-map-review-artifact.md,architecture,stale,seams,,,false,Seam map for review artifact - needs update
+docs/seam-map-vmalert-discovery.md,architecture,stale,seams,,,false,Seam map for vmalert discovery - needs update
+docs/security-exception-audit.md,reference,historical,security,,,false,Security exception audit - historical
+docs/security-glob-audit.md,reference,historical,security,,,false,Security glob audit - historical
+docs/security-policy.md,doctrine,current,security,,,true,Security policy
+docs/security-standards.md,doctrine,current,security,,,true,Security standards
+docs/security-subprocess-audit.md,reference,historical,security,,,false,Security subprocess audit - historical
+docs/security/api-security-audit.md,reference,historical,security,,,false,API security audit - historical
+docs/security/artifact-integrity-audit.md,reference,historical,security,,,false,Artifact integrity audit - historical
+docs/security/llm-anonymization-design.md,design_proposal,current,security,,,true,LLM anonymization design
+docs/security/llm-prompt-security-audit.md,reference,historical,security,,,false,LLM prompt security audit - historical
+docs/security/operator-auth-design.md,design_proposal,current,security,,,true,Operator auth design
+docs/security/operator_facing_projection_leak_audit.md,reference,historical,security,,,false,Operator projection leak audit - historical
+docs/security/rbac-deployment-guide.md,runbook,current,security,,,false,RBAC deployment guide
+docs/security/security-audit-closeout.md,reference,historical,security,,,false,Security audit closeout - historical
+docs/security/static-artifact-serving-contract.md,design_proposal,current,security,,,true,Static artifact serving contract
+docs/security/subprocess-security-audit.md,reference,historical,security,,,false,Subprocess security audit - historical
+docs/security/threat-model.md,architecture,current,security,,,true,Threat model
+docs/self-contained-constraint.md,doctrine,current,doctrine,,,false,Self-contained constraint doctrine
+docs/templates/cold-resume.md,runbook,current,templates,,,false,Cold resume template
+docs/templates/release-certification.md,runbook,current,templates,,,false,Release certification template
+docs/testing/EPIC-TASK-BREAKDOWN.md,reference,historical,testing,,,false,Epic task breakdown - historical
+docs/testing/TEST-CLEANUP-INVENTORY.md,reference,historical,testing,,,false,Test cleanup inventory - historical
+docs/testing/selected-run-refresh-regression-test-updates.md,reference,historical,testing,,,false,Selected run refresh updates - historical
+docs/testing/unit-test-feedback-loop-guidelines.md,reference,current,testing,,,false,Unit test feedback loop guidelines
+docs/typing.md,doctrine,current,doctrine,,,false,Type annotation conventions
+docs/verification.md,reference,stale,quality,,,false,Verification documentation - needs update
+docs/worklist-ranking-rationale.md,reference,stale,agents,,,false,Worklist ranking rationale - needs update
