@@ -17,51 +17,51 @@ DOC-TRACE-0015,DOC-CLAIM-0015,historical_record,security-audit-2026-05-31,docs/r
 DOC-TRACE-0016,DOC-CLAIM-0016,verifier,scripts/verify_data_model_docs.py,scripts/verify_data_model_docs.py,,data-model-docs,direct,verified,2026-06-19,Artifact immutability - verified by data model docs hygiene check
 DOC-TRACE-0017,DOC-CLAIM-0017,verifier,scripts/verify_data_model_docs.py,scripts/verify_data_model_docs.py,,data-model-docs,direct,verified,2026-06-19,Health run lifecycle - verified by data model docs hygiene check
 DOC-TRACE-0018,DOC-CLAIM-0018,historical_record,llm-prompt-security-audit,docs/security/llm-prompt-security-audit.md,,,none,historical_only,2026-05-31,Historical security audit - preserved for reference
-DOC-TRACE-0019,DOC-CLAIM-0019,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0019
-DOC-TRACE-0020,DOC-CLAIM-0020,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0020
-DOC-TRACE-0021,DOC-CLAIM-0021,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0021
-DOC-TRACE-0022,DOC-CLAIM-0022,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0022
-DOC-TRACE-0023,DOC-CLAIM-0023,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0023
-DOC-TRACE-0024,DOC-CLAIM-0024,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0024
-DOC-TRACE-0025,DOC-CLAIM-0025,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0025
-DOC-TRACE-0026,DOC-CLAIM-0026,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0026
-DOC-TRACE-0027,DOC-CLAIM-0027,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0027
-DOC-TRACE-0028,DOC-CLAIM-0028,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0028
-DOC-TRACE-0029,DOC-CLAIM-0029,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0029
-DOC-TRACE-0030,DOC-CLAIM-0030,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0030
-DOC-TRACE-0031,DOC-CLAIM-0031,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0031
-DOC-TRACE-0032,DOC-CLAIM-0032,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0032
-DOC-TRACE-0033,DOC-CLAIM-0033,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0033
-DOC-TRACE-0034,DOC-CLAIM-0034,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0034
-DOC-TRACE-0035,DOC-CLAIM-0035,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0035
-DOC-TRACE-0036,DOC-CLAIM-0036,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0036
-DOC-TRACE-0037,DOC-CLAIM-0037,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0037
-DOC-TRACE-0038,DOC-CLAIM-0038,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0038
-DOC-TRACE-0039,DOC-CLAIM-0039,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0039
-DOC-TRACE-0040,DOC-CLAIM-0040,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0040
-DOC-TRACE-0041,DOC-CLAIM-0041,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0041
-DOC-TRACE-0042,DOC-CLAIM-0042,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0042
-DOC-TRACE-0043,DOC-CLAIM-0043,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0043
-DOC-TRACE-0044,DOC-CLAIM-0044,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0044
-DOC-TRACE-0045,DOC-CLAIM-0045,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0045
-DOC-TRACE-0046,DOC-CLAIM-0046,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0046
-DOC-TRACE-0047,DOC-CLAIM-0047,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0047
-DOC-TRACE-0048,DOC-CLAIM-0048,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0048
-DOC-TRACE-0049,DOC-CLAIM-0049,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0049
-DOC-TRACE-0050,DOC-CLAIM-0050,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0050
-DOC-TRACE-0051,DOC-CLAIM-0051,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0051
-DOC-TRACE-0052,DOC-CLAIM-0052,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0052
-DOC-TRACE-0053,DOC-CLAIM-0053,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0053
-DOC-TRACE-0054,DOC-CLAIM-0054,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0054
-DOC-TRACE-0055,DOC-CLAIM-0055,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0055
-DOC-TRACE-0056,DOC-CLAIM-0056,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0056
-DOC-TRACE-0057,DOC-CLAIM-0057,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0057
-DOC-TRACE-0058,DOC-CLAIM-0058,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0058
-DOC-TRACE-0059,DOC-CLAIM-0059,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0059
-DOC-TRACE-0060,DOC-CLAIM-0060,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0060
-DOC-TRACE-0061,DOC-CLAIM-0061,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0061
-DOC-TRACE-0062,DOC-CLAIM-0062,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0062
-DOC-TRACE-0063,DOC-CLAIM-0063,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0063
-DOC-TRACE-0064,DOC-CLAIM-0064,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0064
-DOC-TRACE-0065,DOC-CLAIM-0065,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0065
-DOC-TRACE-0066,DOC-CLAIM-0066,none,,,,,none,pending,,Pending evidence trace for DOC-CLAIM-0066
+DOC-TRACE-0019,DOC-CLAIM-0019,source_anchor,Session class and store,src/k8s_diag_agent/ui/auth_session.py,Session;SessionStore,,indirect,pending,2026-06-19,Session-based auth implemented in auth_session.py; tests in test_auth_session.py cover session creation/retrieval/expiry
+DOC-TRACE-0020,DOC-CLAIM-0020,source_anchor,_SESSION_ID_BYTES=32,src/k8s_diag_agent/ui/auth_session.py,_SESSION_ID_BYTES,,direct,verified,2026-06-19,256-bit (32 bytes) session IDs via secrets.token_urlsafe(32)
+DOC-TRACE-0021,DOC-CLAIM-0021,source_anchor,_DEFAULT_ITERATIONS=600000,src/k8s_diag_agent/ui/auth_password.py,_DEFAULT_ITERATIONS,,direct,verified,2026-06-19,PBKDF2-HMAC-SHA256 with 600,000 iterations per OWASP 2023
+DOC-TRACE-0022,DOC-CLAIM-0022,source_anchor,HttpOnly cookie flag,src/k8s_diag_agent/ui/auth_routes.py,_build_session_cookie,,direct,verified,2026-06-19,HttpOnly flag set in _build_session_cookie() to prevent XSS
+DOC-TRACE-0023,DOC-CLAIM-0023,source_anchor,SameSite=Lax cookie flag,src/k8s_diag_agent/ui/auth_routes.py,_build_session_cookie,,direct,verified,2026-06-19,SameSite=Lax set in _build_session_cookie() to prevent CSRF
+DOC-TRACE-0024,DOC-CLAIM-0024,source_anchor,secure_cookie config,src/k8s_diag_agent/ui/auth_config.py,secure_cookie,,indirect,pending,2026-06-19,Secure cookie flag configurable via K9B_SECURE_COOKIE env var; implementation exists but test coverage incomplete
+DOC-TRACE-0025,DOC-CLAIM-0025,source_anchor,8h max_age 30m idle,src/k8s_diag_agent/ui/auth_session.py,_DEFAULT_SESSION_MAX_AGE_SECONDS;_DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS,,direct,verified,2026-06-19,8 hour max age and 30 minute idle timeout constants
+DOC-TRACE-0026,DOC-CLAIM-0026,source_anchor,_PROTECTED_API_PREFIXES,src/k8s_diag_agent/ui/auth_guard.py,_PROTECTED_API_PREFIXES;require_auth,,direct,verified,2026-06-19,All /api routes except /api/auth/* require auth per auth_guard.py
+DOC-TRACE-0027,DOC-CLAIM-0027,source_anchor,Generic error message,src/k8s_diag_agent/ui/auth_routes.py,handle_login,,direct,verified,2026-06-19,Generic "Invalid credentials" error does not disclose which field failed
+DOC-TRACE-0028,DOC-CLAIM-0028,source_anchor,invalidate_session on logout,src/k8s_diag_agent/ui/auth_routes.py,handle_logout,,direct,verified,2026-06-19,Logout calls provider.invalidate_session() and clears cookie
+DOC-TRACE-0029,DOC-CLAIM-0029,verifier,scripts/run_coverage.sh,scripts/run_coverage.sh,,,direct,verified,2026-06-19,Canonical coverage generator exists for both backend and frontend
+DOC-TRACE-0030,DOC-CLAIM-0030,source_anchor,--cov-fail-under=80,scripts/run_coverage.sh,run_backend_coverage,,direct,verified,2026-06-19,Backend enforces 80% line coverage via --cov-fail-under=80 in pytest
+DOC-TRACE-0031,DOC-CLAIM-0031,source_anchor,thresholds 90%,frontend/vitest.config.ts,thresholds,,direct,verified,2026-06-19,Frontend enforces 90% lines/statements via Vitest threshold config
+DOC-TRACE-0032,DOC-CLAIM-0032,source_anchor,branch=true,pyproject.toml,[tool.coverage.run],,indirect,pending,2026-06-19,Branch coverage tracked (branch=true in pyproject.toml) but fail_under=0 means not enforced
+DOC-TRACE-0033,DOC-CLAIM-0033,verifier,coverage artifacts upload,scripts/run_coverage.sh,,,indirect,verified,2026-06-19,Coverage job uploads artifacts with 7-day retention per verify.yml (report-only, does not block merge)
+DOC-TRACE-0034,DOC-CLAIM-0034,source_anchor,fail_under=0,pyproject.toml,[tool.coverage],,indirect,pending,2026-06-19,Coverage job does NOT block merge - fail_under=0 in pyproject.toml; coverage is report-only
+DOC-TRACE-0035,DOC-CLAIM-0035,verifier,ci-gate-drift,scripts/verify_ci_gate_drift.py,,ci-gate-drift,direct,verified,2026-06-19,ci-gate-drift verifier wired in ci_gate_mapping.json
+DOC-TRACE-0036,DOC-CLAIM-0036,verifier,required_command_fragments,scripts/ci_gate_mapping.json,required_command_fragments,ci-gate-drift,direct,verified,2026-06-19,Command fragments checked against CI job definitions in verify_ci_gate_drift.py
+DOC-TRACE-0037,DOC-CLAIM-0037,verifier,shard_union verification,scripts/run_unit_tests.sh,run_unit_tests.sh --verify-shards,unit-tests,direct,verified,2026-06-19,Shard union verification ensures matrix AND union coverage in CI
+DOC-TRACE-0038,DOC-CLAIM-0038,source_anchor,PR trigger only,.github/workflows/verify.yml,pull_request trigger,,direct,verified,2026-06-19,verify.yml runs for PR only; harbor.yml handles push gates
+DOC-TRACE-0039,DOC-CLAIM-0039,source_anchor,is_mirror flag,src/k8s_diag_agent/ui/model_diagnostic_pack.py,is_mirror,,direct,verified,2026-06-19,latest/ aliases are mutable convenience (is_mirror=true)
+DOC-TRACE-0040,DOC-CLAIM-0040,source_anchor,is_mirror documentation,src/k8s_diag_agent/ui/model_diagnostic_pack.py,is_mirror,,direct,verified,2026-06-19,diagnostic-packs/latest/ is mutable derived alias per model_diagnostic_pack.py
+DOC-TRACE-0041,DOC-CLAIM-0041,source_anchor,FileExistsError for immutability,src/k8s_diag_agent/identity/artifact.py,write_immutable_artifact,,indirect,pending,2026-06-19,write_immutable_artifact rejects overwrites; but broader claim needs data model doc hygiene check
+DOC-TRACE-0042,DOC-CLAIM-0042,source_anchor,immutable snapshot artifacts,src/k8s_diag_agent/identity/artifact.py,write_immutable_artifact,,indirect,pending,2026-06-19,ClusterSnapshot under runs/health/snapshots/ immutable via write_immutable_artifact
+DOC-TRACE-0043,DOC-CLAIM-0043,source_anchor,immutable assessment artifacts,src/k8s_diag_agent/identity/artifact.py,write_immutable_artifact,,indirect,pending,2026-06-19,Assessment under runs/health/assessments/ immutable via write_immutable_artifact
+DOC-TRACE-0044,DOC-CLAIM-0044,source_anchor,immutable comparison artifacts,src/k8s_diag_agent/identity/artifact.py,write_immutable_artifact,,indirect,pending,2026-06-19,Comparison under runs/health/comparisons/ immutable via write_immutable_artifact
+DOC-TRACE-0045,DOC-CLAIM-0045,source_anchor,immutable review artifacts,src/k8s_diag_agent/identity/artifact.py,write_immutable_artifact,,indirect,pending,2026-06-19,Review under runs/health/reviews/ immutable via write_immutable_artifact
+DOC-TRACE-0046,DOC-CLAIM-0046,source_anchor,immutable alertmanager actions,src/k8s_diag_agent/external_analysis/alertmanager_source_actions.py,write_source_action_artifact,,direct,verified,2026-06-19,Alertmanager action artifacts are append-only audit trail via write_source_action_artifact
+DOC-TRACE-0047,DOC-CLAIM-0047,source_anchor,IncidentEvent vs EvidenceLink,src/k8s_diag_agent/collect/incident_events.py,IncidentEvent;EvidenceLink,,direct,verified,2026-06-19,Incident is case file; evidence truth lives in artifact store with EvidenceLink relationships
+DOC-TRACE-0048,DOC-CLAIM-0048,source_anchor,frozen=True IncidentEvent,src/k8s_diag_agent/collect/incident_events.py,IncidentEvent,,direct,verified,2026-06-19,IncidentEvent entries are append-only with frozen=True dataclass
+DOC-TRACE-0049,DOC-CLAIM-0049,source_anchor,derived projections doc,src/k8s_diag_agent/ui/api_incident_report.py,derived projections,,indirect,pending,2026-06-19,UI/API payloads are derived projections per api_incident_report.py module doc
+DOC-TRACE-0050,DOC-CLAIM-0050,source_anchor,AlertmanagerSourceRegistry,src/k8s_diag_agent/external_analysis/vmalert_artifact.py,AlertmanagerSourceRegistry,,direct,verified,2026-06-19,AlertmanagerSourceRegistry is authoritative cross-run source in alertmanager-source-registry.json
+DOC-TRACE-0051,DOC-CLAIM-0051,source_anchor,NOT authoritative override,src/k8s_diag_agent/external_analysis/alertmanager_source_actions.py,NOT authoritative,,indirect,verified,2026-06-19,Per-run overrides are NOT authoritative; registry is source of truth
+DOC-TRACE-0052,DOC-CLAIM-0052,source_anchor,append-only audit trail,src/k8s_diag_agent/external_analysis/alertmanager_source_actions.py,write_source_action_artifact,,direct,verified,2026-06-19,Action artifacts provide append-only audit trail surviving beyond run-scoped overrides
+DOC-TRACE-0053,DOC-CLAIM-0053,source_anchor,unique artifact_id (UUID),src/k8s_diag_agent/identity/artifact.py,new_artifact_id,,direct,verified,2026-06-19,Each action creates new artifact with unique UUID; survives beyond overrides
+DOC-TRACE-0054,DOC-CLAIM-0054,source_anchor,claim types in doc,docs/data-model/incident-report-quality.md,claim taxonomy,,indirect,pending,2026-06-19,Claim types defined in docs; implementation needs verifier coverage
+DOC-TRACE-0055,DOC-CLAIM-0055,source_anchor,observed claim docs,docs/data-model/incident-report-quality.md,observed claims,,indirect,pending,2026-06-19,Observed claims documented; LLM output rules need explicit verifier
+DOC-TRACE-0056,DOC-CLAIM-0056,source_anchor,hypothesis basis docs,docs/data-model/incident-report-quality.md,hypothesis claims,,indirect,pending,2026-06-19,Hypothesis basis requirement documented; needs implementation test
+DOC-TRACE-0057,DOC-CLAIM-0057,source_anchor,unknowns explicit docs,docs/data-model/incident-report-quality.md,unknown claims,,indirect,pending,2026-06-19,Unknown claims documented; needs implementation test
+DOC-TRACE-0058,DOC-CLAIM-0058,source_anchor,derived projection doc,src/k8s_diag_agent/ui/api_incident_report.py,read-only API projection,,indirect,verified,2026-06-19,Incident report and worklist are derived projections, not source of truth
+DOC-TRACE-0059,DOC-CLAIM-0059,verifier,operator-projection-hygiene,scripts/verify_operator_projection_hygiene.py,,operator-projection-hygiene,indirect,verified,2026-06-19,No autonomous mutation - enforced by operator projection hygiene verifier
+DOC-TRACE-0060,DOC-CLAIM-0060,source_anchor,advisory documentation,README.md,LLM output advisory,,indirect,pending,2026-06-19,README states LLM output is advisory; specific implementation test needed
+DOC-TRACE-0061,DOC-CLAIM-0061,verifier,data-model-docs,scripts/verify_data_model_docs.py,,data-model-docs,indirect,verified,2026-06-19,Artifact-first discipline verified by data model docs hygiene
+DOC-TRACE-0062,DOC-CLAIM-0062,verifier,llm-evidence-boundaries,scripts/verify_llm_evidence_boundaries.py,,llm-evidence-boundaries,indirect,verified,2026-06-19,Evidence boundary discipline verified by LLM evidence boundaries check
+DOC-TRACE-0063,DOC-CLAIM-0063,source_anchor,signal finding separation,src/k8s_diag_agent/ui/api_incident_report.py,signal/finding/hypothesis separation,,indirect,pending,2026-06-19,Module doc confirms separation; specific implementation test needed
+DOC-TRACE-0064,DOC-CLAIM-0064,source_anchor,production readiness docs,README.md,production readiness,,indirect,pending,2026-06-19,README documents production readiness requirements; implementation test needed
+DOC-TRACE-0065,DOC-CLAIM-0065,verifier,operator-projection-hygiene,scripts/verify_operator_projection_hygiene.py,,operator-projection-hygiene,indirect,verified,2026-06-19,No live cluster mutation enforced by operator projection hygiene verifier
+DOC-TRACE-0066,DOC-CLAIM-0066,verifier,llm-evidence-boundaries,scripts/verify_llm_evidence_boundaries.py,,llm-evidence-boundaries,direct,verified,2026-06-19,Provider seam enforcement verified by LLM evidence boundaries check
