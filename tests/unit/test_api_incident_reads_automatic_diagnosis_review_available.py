@@ -15,10 +15,7 @@ from k8s_diag_agent.collect.incident_diagnosis_review_packet import (
     REVIEW_PACKET_ARTIFACT_TYPE,
 )
 from k8s_diag_agent.ui.api_incident_reads import build_automatic_diagnosis_review_payload
-
-from .automatic_diagnosis_review_fixtures import (
-    write_review_packet,
-)
+from tests.unit.conftest import write_review_packet  # noqa: F401
 
 
 class TestAutomaticDiagnosisReviewAvailable:

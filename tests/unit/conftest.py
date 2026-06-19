@@ -1,11 +1,12 @@
-"""Shared fixtures and helpers for automatic_diagnosis_review tests.
+"""Pytest configuration for tests/unit.
 
-This module contains shared test fixtures and helper functions used by
-multiple test files for the automatic_diagnosis_review feature.
+Adds tests/unit to sys.path so that fixture modules (like incident_store_fixtures)
+can be imported by sibling test modules.
 """
 
 from __future__ import annotations
 
+import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +18,16 @@ from k8s_diag_agent.collect.incident_diagnosis_review_packet import (
 )
 from k8s_diag_agent.collect.incident_store import IncidentStore
 from k8s_diag_agent.collect.incident_store_provider import reset_incident_store, set_incident_store
+
+# Add this directory to sys.path so fixtures can be imported
+_tests_unit = Path(__file__).parent
+if str(_tests_unit) not in sys.path:
+    sys.path.insert(0, str(_tests_unit))
+
+
+# =============================================================================
+# Fixtures for automatic_diagnosis_review tests
+# =============================================================================
 
 
 @pytest.fixture
