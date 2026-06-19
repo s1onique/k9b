@@ -178,8 +178,9 @@ class TestSecureCookieConfig:
 
     def test_secure_cookie_false_by_default(self) -> None:
         """Test that secure_cookie defaults to False when env var is not set."""
-        from k8s_diag_agent.ui.auth_config import load_auth_config, reset_auth_config
         import os
+
+        from k8s_diag_agent.ui.auth_config import load_auth_config, reset_auth_config
 
         # Ensure env var is not set
         reset_auth_config()
@@ -194,8 +195,9 @@ class TestSecureCookieConfig:
 
     def test_secure_cookie_true_when_env_set(self) -> None:
         """Test that secure_cookie is True when K9B_SECURE_COOKIE=true."""
-        from k8s_diag_agent.ui.auth_config import load_auth_config, reset_auth_config
         import os
+
+        from k8s_diag_agent.ui.auth_config import load_auth_config, reset_auth_config
 
         reset_auth_config()
         original = os.environ.get("K9B_SECURE_COOKIE")
@@ -212,8 +214,9 @@ class TestSecureCookieConfig:
 
     def test_secure_cookie_parses_various_true_values(self) -> None:
         """Test that various true-like values are accepted."""
-        from k8s_diag_agent.ui.auth_config import load_auth_config, reset_auth_config
         import os
+
+        from k8s_diag_agent.ui.auth_config import load_auth_config, reset_auth_config
 
         for true_value in ("1", "yes", "on", "True", "TRUE"):
             reset_auth_config()
@@ -228,8 +231,9 @@ class TestSecureCookieConfig:
 
     def test_secure_cookie_false_for_invalid_values(self) -> None:
         """Test that invalid values result in secure_cookie=False."""
-        from k8s_diag_agent.ui.auth_config import load_auth_config, reset_auth_config
         import os
+
+        from k8s_diag_agent.ui.auth_config import load_auth_config, reset_auth_config
 
         reset_auth_config()
         original = os.environ.get("K9B_SECURE_COOKIE")

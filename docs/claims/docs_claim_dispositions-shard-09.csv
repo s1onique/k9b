@@ -1,0 +1,115 @@
+candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+DOC-CAND-81730025469b,registered_existing_claim,DOC-CLAIM-0061,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0061
+DOC-CAND-24ae91fc8c0d,needs_new_claim,,,requires_future_human_review,2026-06-19,High-severity from canonical doc: README.md
+DOC-CAND-75f9ee4fd2a7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
+DOC-CAND-ab1a80cbcac1,needs_new_claim,,,requires_future_human_review,2026-06-19,High-severity from canonical doc: README.md
+DOC-CAND-ac092c904ef4,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
+DOC-CAND-ee0df7bda2b5,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-79faaf180701,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
+DOC-CAND-13cb0b1ed3fa,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
+DOC-CAND-8b6e7579a38d,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
+DOC-CAND-fce5f6cf042c,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
+DOC-CAND-773697d38dbf,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-operator-guide.md
+DOC-CAND-d8e4b98faf82,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-operator-guide.md
+DOC-CAND-58c13fec169e,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-operator-guide.md
+DOC-CAND-d3cc9f2ffa8d,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
+DOC-CAND-dcea9319d667,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
+DOC-CAND-08e875a7ae73,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
+DOC-CAND-a0afe925765c,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
+DOC-CAND-63e3f0c6b6ba,stale,,,stale_doc,2026-06-19,From stale doc: docs/cluster_snapshot_plan.md
+DOC-CAND-e35cecf7a896,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
+DOC-CAND-4d3908163443,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-d9f21a20aaad,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-661c3778d89b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-eff09de83b3b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-fb32c62643af,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
+DOC-CAND-20d4d20d2156,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
+DOC-CAND-cad7cf88d04f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
+DOC-CAND-1749a5a48cef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
+DOC-CAND-ff65154ac95c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-46fd8cf794e3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-5906b02c1764,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-9aac5fd2b133,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-6179cc54d946,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-ce9e7775f2b5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
+DOC-CAND-bfd0bbaf8436,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
+DOC-CAND-bf6b0d680c29,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/gate-timings.md
+DOC-CAND-06f394b177c8,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
+DOC-CAND-1fb8539f7f5c,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
+DOC-CAND-47581e245660,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
+DOC-CAND-ca8895f53b6c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md
+DOC-CAND-edc1ea766517,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
+DOC-CAND-fdaf61a739e1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
+DOC-CAND-616001ba9a3a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
+DOC-CAND-878163282922,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
+DOC-CAND-f3472b3c64b9,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
+DOC-CAND-f19dba203efa,stale,,,stale_doc,2026-06-19,From stale doc: docs/provenance-filtering.md
+DOC-CAND-98aad0db761e,stale,,,stale_doc,2026-06-19,From stale doc: docs/provenance-filtering.md
+DOC-CAND-86d6c510a95e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md
+DOC-CAND-e471e57908ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md
+DOC-CAND-5dbb93016fbc,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/app-tsx-source-map.md
+DOC-CAND-bc27862b4a47,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/app-tsx-source-map.md
+DOC-CAND-5beefa8b9cc6,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/app-tsx-source-map.md
+DOC-CAND-26d9c8fc1441,stale,,,stale_doc,2026-06-19,From stale doc: docs/reports/current-agent-capabilities.md
+DOC-CAND-20c25a77fa8e,stale,,,stale_doc,2026-06-19,From stale doc: docs/reports/current-agent-capabilities.md
+DOC-CAND-1e02e7100924,stale,,,stale_doc,2026-06-19,From stale doc: docs/reports/diagnostic-command-chain-requirements-traceability.md
+DOC-CAND-2d9fb92daf46,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/diagnostic-loop-audit-evidence.md
+DOC-CAND-b9930f6264e1,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/frontend-app-shell-extraction-plan.md
+DOC-CAND-bd6736cdb5d0,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/health-assessment-remaining-seams.md
+DOC-CAND-37f2180badf2,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/health-loop-orchestration-seams.md
+DOC-CAND-1ef456945410,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/reports/impact-scan-ledger.md
+DOC-CAND-23aa41d1be74,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/reports/impact-scan-ledger.md
+DOC-CAND-de8dfe38290b,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/k8s-accelerator-real-cluster-demo-storyline-evidence.md
+DOC-CAND-beda6df8c188,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/k8s-accelerator-real-cluster-demo-storyline-flow.md
+DOC-CAND-0e2adea0ca15,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-audit-2026-05-31.md
+DOC-CAND-ff6c819024d0,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-audit-2026-05-31.md
+DOC-CAND-d5974c4c7090,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-audit-2026-05-31.md
+DOC-CAND-d1a76fe62544,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-claims-ledger-2026-05-31.md
+DOC-CAND-dfa6d66326cc,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
+DOC-CAND-8e1b4717ce46,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
+DOC-CAND-eefdd53c2be4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-41aab8fc0889,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-49fa965d7fe6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-0f4d160e2b9b,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-alertmanager-discovery.md
+DOC-CAND-6aaf37ab5cd8,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-llm-auto-drilldown-analysis.md
+DOC-CAND-6dd8c91e8a1c,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-port-forward-history.md
+DOC-CAND-a15f318c47b0,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-port-forward-history.md
+DOC-CAND-42da87671774,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-vmalert-discovery.md
+DOC-CAND-20957fde1510,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/api-security-audit.md
+DOC-CAND-858cc4531125,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/api-security-audit.md
+DOC-CAND-abf731217a82,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/api-security-audit.md
+DOC-CAND-49cd830c35c8,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/api-security-audit.md
+DOC-CAND-c08cf49526a7,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
+DOC-CAND-c6aa722d7a5a,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
+DOC-CAND-a8e1cca44996,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
+DOC-CAND-a3d5e36c0cf6,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
+DOC-CAND-f50d03871394,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-d6e6bb4f0f27,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-e0f5565a779f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-e0c376c86a72,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
+DOC-CAND-2f976fe5df23,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-c8181f424b4d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-5bcdc37e66c6,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
+DOC-CAND-fe916e6e43d5,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
+DOC-CAND-ffdb0622814a,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
+DOC-CAND-b55ca045b1f2,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
+DOC-CAND-b2c8af55aa63,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
+DOC-CAND-943816f5954b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
+DOC-CAND-f1362a3cacce,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
+DOC-CAND-46449f059777,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
+DOC-CAND-15686f866a40,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
+DOC-CAND-657404792ab2,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
+DOC-CAND-5fdf915914ed,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
+DOC-CAND-3377ba062510,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
+DOC-CAND-388987f48846,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-c0fc70c7dbdf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-17738142bbb7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-81a8eb257d3f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-b24e2ec8798f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-53f69ecc3630,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-e9a2b134469b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
+DOC-CAND-752ffe59e866,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
+DOC-CAND-dd05b2f0e7f6,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
+DOC-CAND-a55051349de0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
+DOC-CAND-ef428d044e90,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
+DOC-CAND-95bfd06abf27,stale,,,stale_doc,2026-06-19,From stale doc: docs/verification.md

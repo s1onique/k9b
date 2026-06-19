@@ -13,27 +13,10 @@ from __future__ import annotations
 
 import unittest
 import unittest.mock
-from io import BytesIO
-from typing import Any, cast
 
 from k8s_diag_agent.ui.api_incident_report import _build_incident_report_payload
-from k8s_diag_agent.ui.api_incident_report_claims import (
-    _build_assessment_derived_claims,
-    _build_finding_facts,
-    _build_inference_claims,
-    _build_recommendation_claims,
-    _build_unknown_claims,
-)
-from k8s_diag_agent.ui.api_payloads import (
-    IncidentReportDerivedPayload,
-    IncidentReportFactPayload,
-    IncidentReportInferencePayload,
-    IncidentReportRecommendationPayload,
-    IncidentReportUnknownPayload,
-)
 from k8s_diag_agent.ui.model import build_ui_context
 from tests.fixtures.ui_index_sample import sample_ui_index
-
 
 # Forbidden causal patterns per DOC-CLAIM-0055
 FORBIDDEN_CAUSAL_PATTERNS = [

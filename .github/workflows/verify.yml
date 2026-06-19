@@ -90,6 +90,7 @@ jobs:
           .venv/bin/python scripts/verify_incident_report_quality.py
           .venv/bin/python scripts/verify_artifact_immutability.py
           .venv/bin/python scripts/verify_production_readiness_disclaimer.py
+          .venv/bin/python scripts/verify_docs_claim_candidate_dispositions.py
 
   # Python unit-test shards in parallel matrix
   python-unit-tests:

@@ -29,6 +29,7 @@ docs/doctrine/constitution.md,doctrine,current,doctrine,,,true,Core foundational
 docs/doctrine/css-ownership.md,doctrine,current,doctrine,,,false,CSS ownership doctrine
 docs/doctrine/discovery_logging_hygiene.md,doctrine,current,doctrine,,,true,Discovery logging hygiene doctrine
 docs/doctrine/documentation-truthfulness.md,doctrine,current,doctrine,,,true,Documentation truthfulness doctrine - classification, truth status, claim tracing
+docs/doctrine/documentation-truthfulness-dispositions.md,doctrine,current,doctrine,,,false,Candidate disposition ledger supplement
 docs/doctrine/identity-primer.md,doctrine,current,doctrine,,,false,Identity primer doctrine
 docs/doctrine/llm-friendly-files.md,doctrine,current,doctrine,,,true,LLM-friendly files doctrine
 docs/doctrine/path-security-doctrine.md,doctrine,current,doctrine,,,true,Path security doctrine

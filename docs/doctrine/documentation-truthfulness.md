@@ -456,9 +456,12 @@ This doctrine complements:
 - **CI:** All three verifiers run as part of standard gate
 - **Maintenance:** Inventory, registry, and traceability matrix updated when docs are added, moved, or reclassified
 
+> **Note**: Section 8 (Candidate Disposition Ledger) has been moved to [documentation-truthfulness-dispositions.md](documentation-truthfulness-dispositions.md) to maintain LLM-friendly file size limits.
+
 ## History
 
 - **2026-06-19** — Initial doctrine: classification system, truth status, claim tracing foundation
 - **2026-06-19** — ACT 2: Added claims registry (`docs/claims/docs_claims_registry.csv`) and verifier (`scripts/verify_docs_claims_registry.py`)
 - **2026-06-19** — ACT 3: Added traceability matrix (`docs/claims/docs_claim_traceability_matrix.csv`), verifier (`scripts/verify_docs_claim_traceability.py`), and evidence linkage for claims
 - **2026-06-19** — ACT 4: Added claim candidate scanner (`scripts/scan_docs_claim_candidates.py`) and coverage verifier (`scripts/verify_docs_claim_candidate_coverage.py`), wired into verify_all.sh gate
+- **2026-06-19** — ACT 2.8: Added candidate disposition ledger (`docs/claims/docs_claim_dispositions-shard-*.csv`), verifier (`scripts/verify_docs_claim_candidate_dispositions.py`), and generator (`scripts/generate_disposition_ledger.py`), wired into local and CI gates

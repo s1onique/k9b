@@ -445,6 +445,7 @@ _run_python_lane() {
     _run_and_record "python" "docs-claim-traceability" "Verifying docs claim traceability matrix" "$PYTHON" scripts/verify_docs_claim_traceability.py
     _run_and_record "python" "docs-claim-candidates" "Scanning docs for claim candidates" "$PYTHON" scripts/scan_docs_claim_candidates.py
     _run_and_record "python" "docs-claim-candidate-coverage" "Verifying docs claim candidate coverage" "$PYTHON" scripts/verify_docs_claim_candidate_coverage.py
+    _run_and_record "python" "docs-claim-candidate-dispositions" "Verifying docs claim candidate dispositions" "$PYTHON" scripts/verify_docs_claim_candidate_dispositions.py
     _run_and_record "python" "incident-report-quality" "Verifying incident report quality invariants" "$PYTHON" scripts/verify_incident_report_quality.py
     _run_and_record "python" "artifact-immutability" "Verifying artifact immutability enforcement" "$PYTHON" scripts/verify_artifact_immutability.py
     _run_and_record "python" "production-readiness-disclaimer" "Verifying production readiness disclaimers" "$PYTHON" scripts/verify_production_readiness_disclaimer.py

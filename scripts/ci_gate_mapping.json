@@ -232,10 +232,19 @@
     },
     "docs-claim-candidate-coverage": {
       "ci_equivalent": {
-        ".github/workflows/harbor.yml": ["lint-policy"]
+        ".github/workflows/harbor.yml": ["lint-policy"],
+        ".github/workflows/verify.yml": ["lint"]
       },
       "required_command_fragments": ["verify_docs_claim_candidate_coverage.py"],
-      "reason": "Docs claim candidate coverage - local-only gate"
+      "reason": "Docs claim candidate coverage verifier"
+    },
+    "docs-claim-candidate-dispositions": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"],
+        ".github/workflows/verify.yml": ["lint"]
+      },
+      "required_command_fragments": ["verify_docs_claim_candidate_dispositions.py"],
+      "reason": "Docs claim candidate disposition ledger verifier"
     },
     "docs-inventory": {
       "ci_equivalent": {
