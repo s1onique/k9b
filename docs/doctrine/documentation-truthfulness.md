@@ -366,6 +366,42 @@ python scripts/verify_docs_claim_candidate_coverage.py --self-test
 - Each registered claim should have a corresponding entry in `docs_claims_registry.csv`
 - Unregistered candidates flagged by coverage verifier should be reviewed for registry addition
 
+### 7. Candidate-to-Registry Curation Policy (ACT 2.5)
+
+**Status**: Implemented
+
+Claims in `docs_claims_registry.csv` that were curated from generated candidates must link back to their source candidates.
+
+**Registry fields for candidate linkage**:
+
+| Field | Description |
+|-------|-------------|
+| `candidate_ids` | Semicolon-separated `DOC-CAND-xxx` IDs from `generated_claim_candidates.csv` |
+| `registered_claim_id` | Back-link in candidates CSV to the registry claim |
+
+**Curated claims must have**:
+1. `candidate_ids` field populated with at least one matching `DOC-CAND-xxx` ID
+2. Candidate IDs validated against `generated_claim_candidates.csv` for existence
+3. `generated_claim_candidates.csv` updated with `registered_claim_id` back-link
+
+**Curator workflow**:
+1. Run scanner: `python scripts/scan_docs_claim_candidates.py --update`
+2. Review high-severity candidates in `generated_claim_candidates.csv`
+3. Curate selected candidates into `docs_claims_registry.csv`
+4. Populate `candidate_ids` field with matching `DOC-CAND-xxx` IDs
+5. Update `generated_claim_candidates.csv` with `registered_claim_id` mappings
+6. Regenerate traceability matrix rows for new claims
+
+**Validation**:
+- `verify_docs_claims_registry.py` validates `candidate_ids` format (DOC-CAND-12-char-hex)
+- `verify_docs_claim_candidate_coverage.py` reports unregistered high-severity candidates
+- Linked candidates are recognized as "registered" status
+
+**Preserving original claims**:
+- Original claims DOC-CLAIM-0001 to DOC-CLAIM-0018 are preserved
+- Their traceability rows (DOC-TRACE-0001 to DOC-TRACE-0018) are preserved with verified evidence
+- New claims start at DOC-CLAIM-0019
+
 ## Inventory Maintenance
 
 The docs inventory (`docs/docs_inventory.csv`) is the source of truth for document classification. It is verified by `scripts/verify_docs_inventory.py` as part of the standard gate.

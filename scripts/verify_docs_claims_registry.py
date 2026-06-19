@@ -195,6 +195,7 @@ REQUIRED_COLUMNS = [
     "evidence_ref",
     "freshness_policy",
     "notes",
+    "candidate_ids",
 ]
 
 
@@ -592,6 +593,127 @@ def check_evidence_ref_for_linked(rows: list[dict[str, str]]) -> RegistryCheckRe
     return result
 
 
+def check_candidate_ids_valid(rows: list[dict[str, str]]) -> RegistryCheckResult:
+    """Check candidate_ids validity and backlink symmetry."""
+    result = RegistryCheckResult()
+    candidate_pattern = re.compile(r"^DOC-CAND-[a-f0-9]{12}$")
+
+    # Load candidates with their registration info from generated_claim_candidates.csv
+    candidates_by_id = {}
+    candidates_path = REPO_ROOT / "docs" / "claims" / "generated_claim_candidates.csv"
+    if candidates_path.exists():
+        with open(candidates_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                cid = row.get("candidate_id", "").strip()
+                if cid:
+                    candidates_by_id[cid] = row
+
+    # Build registry candidate_ids lookup: claim_id -> set of candidate_ids
+    claim_to_candidates: dict[str, set[str]] = {}
+    for row in rows:
+        claim_id = row.get("claim_id", "").strip()
+        candidate_ids = row.get("candidate_ids", "").strip()
+        if candidate_ids:
+            claim_to_candidates[claim_id] = {
+                cid.strip() for cid in candidate_ids.split(";") if cid.strip()
+            }
+
+    # Reverse checks: scan all candidates for backlink symmetry
+    for cid, cand in candidates_by_id.items():
+        reg_id = cand.get("registered_claim_id", "").strip()
+        status = cand.get("registration_status", "").strip()
+        
+        # registered must have back-link
+        if status == "registered" and not reg_id:
+            result.add_error(
+                f"Candidate '{cid}' has registration_status='registered' but missing registered_claim_id"
+            )
+        
+        # back-link must have registered status
+        if reg_id and status != "registered":
+            result.add_error(
+                f"Candidate '{cid}' has registered_claim_id='{reg_id}' but status='{status}' "
+                f"(expected: registered)"
+            )
+        
+        # back-link must point to existing claim
+        if reg_id:
+            claim_exists = any(r.get("claim_id", "").strip() == reg_id for r in rows)
+            if not claim_exists:
+                result.add_error(
+                    f"Candidate '{cid}' back-links to '{reg_id}' which does not exist in registry"
+                )
+            
+            # registered candidate must be listed in that exact claim's candidate_ids
+            if status == "registered":
+                claim_cids = claim_to_candidates.get(reg_id, set())
+                if cid not in claim_cids:
+                    result.add_error(
+                        f"Candidate '{cid}' back-links to '{reg_id}' but is not listed "
+                        f"in that claim's candidate_ids field"
+                    )
+
+    for i, row in enumerate(rows):
+        claim_id = row.get("claim_id", "").strip()
+        candidate_ids = row.get("candidate_ids", "").strip()
+        claim_status = row.get("claim_status", "").strip()
+        evidence_required = row.get("evidence_required", "").strip().lower()
+        
+        # New curated claims (DOC-CLAIM-0019+) require candidate_ids
+        is_new_claim = claim_id >= "DOC-CLAIM-0019"
+        if is_new_claim and claim_status == "current" and evidence_required == "true":
+            if not candidate_ids:
+                result.add_error(
+                    f"Row {i + 2}: New curated claim '{claim_id}' is missing candidate_ids "
+                    f"(expected: at least one DOC-CAND-xxx reference)"
+                )
+
+        if not candidate_ids:
+            continue
+
+        # Parse semicolon-separated candidate IDs
+        for cid in candidate_ids.split(";"):
+            cid = cid.strip()
+            if not cid:
+                continue
+            
+            # Check format
+            if not candidate_pattern.match(cid):
+                result.add_error(
+                    f"Row {i + 2}: candidate_id '{cid}' does not match pattern DOC-CAND-<12-char-hex>"
+                )
+                continue
+            
+            # Check existence
+            if cid not in candidates_by_id:
+                result.add_error(
+                    f"Row {i + 2}: candidate_id '{cid}' not found in generated_claim_candidates.csv"
+                )
+                continue
+            
+            # Check backlink symmetry
+            cand = candidates_by_id[cid]
+            cand_reg_id = cand.get("registered_claim_id", "").strip()
+            cand_status = cand.get("registration_status", "").strip()
+            
+            # Candidate must be registered
+            if cand_status != "registered":
+                result.add_error(
+                    f"Row {i + 2}: candidate '{cid}' has registration_status='{cand_status}' "
+                    f"(expected: registered)"
+                )
+            
+            # Candidate's back-link must match this claim
+            if cand_reg_id != claim_id:
+                result.add_error(
+                    f"Row {i + 2}: candidate '{cid}' back-links to '{cand_reg_id}' "
+                    f"(expected: {claim_id})"
+                )
+
+    return result
+
+
 def run_verification() -> bool:
     """Run all verification checks."""
     print("=== Docs Claims Registry Verification ===\n")
@@ -634,6 +756,7 @@ def run_verification() -> bool:
         ("planned claims evidence", lambda: check_planned_claims_evidence(rows)),
         ("evidence_required=false", lambda: check_evidence_required_false(rows)),
         ("evidence_ref for linked", lambda: check_evidence_ref_for_linked(rows)),
+        ("candidate_ids valid", lambda: check_candidate_ids_valid(rows)),
     ]
 
     all_passed = True
@@ -663,9 +786,9 @@ SELF_TEST_CASES: list[dict[str, object]] = [
         "name": "valid minimal registry passes",
         "registry": (
             "claim_id,doc_path,anchor,claim_text,claim_type,claim_status,owner_area,"
-            "evidence_required,evidence_status,evidence_ref,freshness_policy,notes\n"
+            "evidence_required,evidence_status,evidence_ref,freshness_policy,notes,candidate_ids\n"
             "DOC-CLAIM-0001,README.md,test-anchor,This is a test claim with enough length.,"
-            "behavior,current,test,true,pending,,on_change,Test claim\n"
+            "behavior,current,test,true,pending,,on_change,Test claim,\n"
         ),
         "inventory": "doc_path,doc_class,truth_status,owner_area,generated_by,replacement_doc,claim_trace_required,notes\nREADME.md,canonical,current,test,,,false,Test\n",
         "should_fail": False,
@@ -844,6 +967,46 @@ SELF_TEST_CASES: list[dict[str, object]] = [
         "should_fail": True,
         "expect_error_contains": "anchor is empty",
     },
+    {
+        # candidate_ids self-tests
+        "name": "new curated claim missing candidate_ids fails",
+        "registry": (
+            "claim_id,doc_path,anchor,claim_text,claim_type,claim_status,owner_area,"
+            "evidence_required,evidence_status,evidence_ref,freshness_policy,notes,candidate_ids\n"
+            "DOC-CLAIM-0019,README.md,test-anchor,Claim text with enough length for new claim.,"
+            "behavior,current,test,true,pending,,on_change,Missing candidate,\n"
+        ),
+        "inventory": "doc_path,doc_class,truth_status,owner_area,generated_by,replacement_doc,claim_trace_required,notes\nREADME.md,canonical,current,test,,,false,Test\n",
+        "should_fail": True,
+        "expect_error_contains": "missing candidate_ids",
+    },
+    {
+        "name": "unknown candidate_id fails",
+        "registry": (
+            "claim_id,doc_path,anchor,claim_text,claim_type,claim_status,owner_area,"
+            "evidence_required,evidence_status,evidence_ref,freshness_policy,notes,candidate_ids\n"
+            "DOC-CLAIM-0019,README.md,test-anchor,Claim text with enough length here.,"
+            "behavior,current,test,true,pending,,on_change,Unknown candidate,DOC-CAND-000000000000\n"
+        ),
+        "inventory": "doc_path,doc_class,truth_status,owner_area,generated_by,replacement_doc,claim_trace_required,notes\nREADME.md,canonical,current,test,,,false,Test\n",
+        "candidates": "candidate_id,candidate_text,source_doc,source_anchor,claim_type,severity,registration_status,registered_claim_id,ignored_reason\n",
+        "should_fail": True,
+        "expect_error_contains": "not found in generated_claim_candidates",
+    },
+    {
+        "name": "candidate back-links to wrong claim fails",
+        "registry": (
+            "claim_id,doc_path,anchor,claim_text,claim_type,claim_status,owner_area,"
+            "evidence_required,evidence_status,evidence_ref,freshness_policy,notes,candidate_ids\n"
+            "DOC-CLAIM-0020,README.md,test-anchor,Claim text with enough length here.,"
+            "behavior,current,test,true,pending,,on_change,Wrong backlink,DOC-CAND-a1b2c3d4e5f6\n"
+        ),
+        "inventory": "doc_path,doc_class,truth_status,owner_area,generated_by,replacement_doc,claim_trace_required,notes\nREADME.md,canonical,current,test,,,false,Test\n",
+        "candidates": "candidate_id,candidate_text,source_doc,source_anchor,claim_type,severity,registration_status,registered_claim_id,ignored_reason\n"
+            "DOC-CAND-a1b2c3d4e5f6,Some candidate text,README.md,test-anchor,behavior,medium,registered,DOC-CLAIM-0019,\n",
+        "should_fail": True,
+        "expect_error_contains": "back-links to 'DOC-CLAIM-0019' (expected: DOC-CLAIM-0020)",
+    },
 ]
 
 
@@ -869,6 +1032,12 @@ def run_self_test() -> bool:
 
             # Write inventory
             tmp_inventory.write_text(str(case["inventory"]))
+
+            # Write candidates CSV if fixture provides one
+            if "candidates" in case:
+                tmp_candidates = tmp_path / "docs" / "claims" / "generated_claim_candidates.csv"
+                tmp_candidates.parent.mkdir(parents=True, exist_ok=True)
+                tmp_candidates.write_text(str(case["candidates"]))
 
             # Create all referenced files
             registry_text = str(case["registry"])
@@ -942,6 +1111,7 @@ def run_self_test() -> bool:
                     ("planned claims evidence", check_planned_claims_evidence(rows)),
                     ("evidence_required=false", check_evidence_required_false(rows)),
                     ("evidence_ref for linked", check_evidence_ref_for_linked(rows)),
+                    ("candidate_ids valid", check_candidate_ids_valid(rows)),
                 ]
 
                 all_errors: list[str] = []
