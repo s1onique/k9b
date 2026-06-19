@@ -159,9 +159,18 @@ describe("IncidentDetailPanel suggested_checks", () => {
       });
       render(<IncidentDetailPanel incident={incident} />);
 
-      // Should still have zero buttons (no Run, Execute, Promote, etc.)
+      // Should have exactly 1 button: the "Run one read-only pass" button from IncidentDiagnosisLoopPanel
+      // This is intentional safe functionality - no remediation/action buttons
       const buttons = document.querySelectorAll("button");
-      expect(buttons.length).toBe(0);
+      expect(buttons.length).toBe(1);
+
+      // The button should NOT contain remediation/action words
+      const FORBIDDEN_WORDS = ["Apply", "Delete", "Patch", "Scale", "Restart", "Rollout", "Remediate", "Fix", "Resolve automatically"];
+      for (const button of buttons) {
+        for (const word of FORBIDDEN_WORDS) {
+          expect(button.textContent).not.toContain(word);
+        }
+      }
     });
 
     it("renders risk level badge when present", () => {

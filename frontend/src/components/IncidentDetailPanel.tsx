@@ -18,6 +18,7 @@
  */
 
 import type { IncidentDetailPayload } from "../api";
+import { IncidentDiagnosisLoopPanel } from "./IncidentDiagnosisLoopPanel";
 
 export interface IncidentDetailPanelProps {
   incident: IncidentDetailPayload;
@@ -417,6 +418,9 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({ incide
 
       {/* Suggested checks - read-only compatibility projection */}
       <SuggestedChecksSection suggestedChecks={incident.suggested_checks} />
+
+      {/* Manual diagnosis loop - one-pass only */}
+      <IncidentDiagnosisLoopPanel incidentId={incident.incident_id} />
 
       {/* Read-only notice */}
       <div className="incident-detail-notice">

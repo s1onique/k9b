@@ -422,12 +422,25 @@ describe("IncidentDetailPanel", () => {
   });
 
   describe("16. Does not render remediation/action buttons", () => {
+    // Note: IncidentDetailPanel now includes IncidentDiagnosisLoopPanel which has
+    // a "Run one read-only pass" button. This is intentional safe functionality.
+    // The button does NOT contain remediation/action words.
+
     it("has no remediation/action buttons", () => {
       const incident = createIncidentFixture();
       render(<IncidentDetailPanel incident={incident} />);
 
       const buttons = document.querySelectorAll("button");
-      expect(buttons.length).toBe(0);
+      // There should be exactly 1 button: the "Run one read-only pass" button
+      expect(buttons.length).toBe(1);
+
+      // The button should NOT contain remediation/action words
+      const FORBIDDEN_WORDS = ["Apply", "Delete", "Patch", "Scale", "Restart", "Rollout", "Remediate", "Fix", "Resolve automatically"];
+      for (const button of buttons) {
+        for (const word of FORBIDDEN_WORDS) {
+          expect(button.textContent).not.toContain(word);
+        }
+      }
     });
   });
 

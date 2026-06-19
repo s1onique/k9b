@@ -908,3 +908,19 @@ export const getIncident = async (incidentId: string): Promise<IncidentDetailPay
 
   return (await response.json()) as IncidentDetailPayload;
 };
+
+// ============================================================================
+// Incident Diagnosis Loop API Types
+// Re-exported from incidentDiagnosisLoop.ts for consumer convenience
+// ============================================================================
+
+export type {
+  DiagnosisInvestigation,
+  DiagnosisSection,
+  DiagnosisReport,
+  DiagnosisLoopOnePassRequest,
+  DiagnosisArtifactRef,
+  DiagnosisArtifacts,
+  DiagnosisSafetyMetadata,
+  DiagnosisLoopOnePassResponse,
+} from "./api/incidentDiagnosisLoop";
