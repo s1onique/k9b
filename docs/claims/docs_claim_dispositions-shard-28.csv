@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-d885e1db84b1,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
 DOC-CAND-f309789c7b84,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-f04df65249b3,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md

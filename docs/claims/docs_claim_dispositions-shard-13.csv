@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-5fa11677dea9,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-47a34d5ccfe8,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-0ecdd8800cce,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -18,7 +19,7 @@ DOC-CAND-51ddfbd9cd28,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-447ce25db445,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-46a880265cd5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-22e587077d52,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
-DOC-CAND-aff1a2936d51,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
+DOC-CAND-aff1a2936d51,covered_by_existing_claim,,DOC-CLAIM-0039,covered_by_broader_claim,2026-06-20,ACT 3.5: Latest bundle pointer; covered by DOC-CLAIM-0039
 DOC-CAND-72e6eae3fc98,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-4b2935aa2768,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-60be758d4a2e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md

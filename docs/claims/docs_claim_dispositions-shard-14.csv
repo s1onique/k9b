@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-cda93cad4910,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-e86d20d6c723,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-c3d75e842d9e,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
@@ -17,7 +18,7 @@ DOC-CAND-7fe043a428f5,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-a5df0b739c9d,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-d062a44b7a35,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-76c6a14b25f7,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
-DOC-CAND-7fa7812e5ede,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
+DOC-CAND-7fa7812e5ede,covered_by_existing_claim,,DOC-CLAIM-0013,covered_by_broader_claim,2026-06-20,ACT 3.5: Manifest-based mapping; covered by DOC-CLAIM-0013
 DOC-CAND-a53eca11629f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
 DOC-CAND-92aaef7582df,registered_existing_claim,DOC-CLAIM-0048,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0048
 DOC-CAND-bdd31004ce7e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md

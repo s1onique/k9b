@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-ac74b8db5695,registered_existing_claim,DOC-CLAIM-0060,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0060
 DOC-CAND-1ea3fb1e91bf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-30d4fe60737e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
@@ -25,7 +26,7 @@ DOC-CAND-4b3975732305,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-2a8a61512473,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
 DOC-CAND-e3c93192e8db,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-964885ac4182,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
-DOC-CAND-cced3922a860,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
+DOC-CAND-cced3922a860,covered_by_existing_claim,,DOC-CLAIM-0065,covered_by_broader_claim,2026-06-20,ACT 3.5: Promotion artifact claim; relates to DOC-CLAIM-0065
 DOC-CAND-a9c11464bd49,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-00976abc6abe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-644f7acda2df,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md

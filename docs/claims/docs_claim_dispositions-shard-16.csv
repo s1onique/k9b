@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-d64ddd819dd3,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-571fe3c9ae1d,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-56be4e692f92,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -12,11 +13,11 @@ DOC-CAND-7a4268ae4ae4,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-e56707927a3d,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
 DOC-CAND-8e7cfdc07796,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
 DOC-CAND-eca703074867,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
-DOC-CAND-5eb43421ca1c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
-DOC-CAND-efe815426c80,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
+DOC-CAND-5eb43421ca1c,covered_by_existing_claim,,DOC-CLAIM-0036,covered_by_broader_claim,2026-06-20,ACT 3.5: Required command fragments; covered by DOC-CLAIM-0036
+DOC-CAND-efe815426c80,covered_by_existing_claim,,DOC-CLAIM-0014,covered_by_broader_claim,2026-06-20,ACT 3.5: Canonical push workflow; covered by DOC-CLAIM-0014 harbor canonical
 DOC-CAND-e6d2f6c4eac5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
 DOC-CAND-c820e7733600,registered_existing_claim,DOC-CLAIM-0032,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0032
-DOC-CAND-31ae049462cb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
+DOC-CAND-31ae049462cb,covered_by_existing_claim,,DOC-CLAIM-0033,covered_by_broader_claim,2026-06-20,ACT 3.5: CI artifacts; covered by DOC-CLAIM-0033
 DOC-CAND-b74db22307cd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
 DOC-CAND-bac512c53802,registered_existing_claim,DOC-CLAIM-0041,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0041
 DOC-CAND-0ae1baf46a80,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md

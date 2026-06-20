@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-420717455949,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-430ce0aa18e5,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
 DOC-CAND-fb215105a9ce,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -6,16 +7,16 @@ DOC-CAND-ad0b352b385d,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact
 DOC-CAND-da5d514f8f1e,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-bf60b2445097,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-07570b92c6e7,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-a506113e7234,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
+DOC-CAND-a506113e7234,covered_by_existing_claim,,DOC-CLAIM-0022,covered_by_broader_claim,2026-06-20,ACT 3.5: Session cookie attributes; covered by DOC-CLAIM-0022 (HttpOnly), DOC-CLAIM-0023 (SameSite), DOC-CLAIM-0024 (Secure)
 DOC-CAND-977fe0d8319b,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-a52abd190274,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-c6382bb9c38f,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
 DOC-CAND-05c14affe0f4,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-9811c0babd49,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-14755f3bed2a,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
-DOC-CAND-510934fdd1fd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
+DOC-CAND-510934fdd1fd,covered_by_existing_claim,,DOC-CLAIM-0038,covered_by_broader_claim,2026-06-20,ACT 3.5: Verify.yml PR trigger; covered by DOC-CLAIM-0038
 DOC-CAND-fc266436bf16,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
-DOC-CAND-08f4b9858bc9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
+DOC-CAND-08f4b9858bc9,covered_by_existing_claim,,DOC-CLAIM-0056,covered_by_broader_claim,2026-06-20,ACT 3.5: Hypothesis basis required; covered by DOC-CLAIM-0056
 DOC-CAND-0faefacc1e9b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-ef34fe482ab1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-09a2692da1f9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md

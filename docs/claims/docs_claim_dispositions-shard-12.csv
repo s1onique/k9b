@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-fb097bff7fb5,covered_by_existing_claim,,DOC-CLAIM-0059,covered_by_broader_claim,2026-06-19,No autonomous mutation; proposals pass check-proposal replay validation covered by DOC-CLAIM-0059; identical to DOC-CAND-68753c82f6cd
 DOC-CAND-0beedc372b5a,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-847436354dc0,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
@@ -20,11 +21,11 @@ DOC-CAND-d8daced825a2,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-b732691733f6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
 DOC-CAND-8ac47d7d24a2,stale,,,stale_doc,2026-06-19,From stale doc: docs/cluster_snapshot_plan.md
 DOC-CAND-77ef769c075e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
-DOC-CAND-c1c50a2f45ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
+DOC-CAND-c1c50a2f45ba,covered_by_existing_claim,,DOC-CLAIM-0032,covered_by_broader_claim,2026-06-20,ACT 3.5: Branch/function tracked; covered by DOC-CLAIM-0032
 DOC-CAND-e3c0c4894ccc,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-8445abf22c41,registered_existing_claim,DOC-CLAIM-0053,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0053
 DOC-CAND-f4119450f4d2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
-DOC-CAND-1fbc11a6d70b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-1fbc11a6d70b,covered_by_existing_claim,,DOC-CLAIM-0048,covered_by_broader_claim,2026-06-20,ACT 3.5: Events append-only; covered by DOC-CLAIM-0048
 DOC-CAND-f4137d72f87d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-4cf186c4ba30,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-5bd10d954348,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md

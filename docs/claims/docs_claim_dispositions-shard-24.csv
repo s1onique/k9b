@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-68753c82f6cd,covered_by_existing_claim,,DOC-CLAIM-0059,covered_by_broader_claim,2026-06-19,Duplicate of DOC-CAND-fb097bff7fb5; both from README.md:88/261; no autonomous mutation covered by DOC-CLAIM-0059
 DOC-CAND-700cf506a2a2,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-57553b52a991,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
@@ -18,7 +19,7 @@ DOC-CAND-713f07159d78,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-4f33265fef4d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-351544bd88c3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-2f2da3679a3c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
-DOC-CAND-8c45f0762012,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-8c45f0762012,covered_by_existing_claim,,DOC-CLAIM-0016,covered_by_broader_claim,2026-06-20,ACT 3.5: Pack ZIPs immutable; covered by DOC-CLAIM-0016
 DOC-CAND-690ffd6d8d06,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-5d57fb00a06c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-7e2d1dfb19ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md

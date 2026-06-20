@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-202326dab603,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-4b8e373240e1,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-078365b3c842,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -8,7 +9,7 @@ DOC-CAND-cb5bda6b762b,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact
 DOC-CAND-ca4f6762b78a,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-f3dab83154cf,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-790f55b62e30,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-56ffe33d4859,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
+DOC-CAND-56ffe33d4859,covered_by_existing_claim,,DOC-CLAIM-0026,covered_by_broader_claim,2026-06-20,ACT 3.5: Protected routes claim; covered by DOC-CLAIM-0026 authenticated routes
 DOC-CAND-44709b758113,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
 DOC-CAND-697ac6d96ae5,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-62109adc6d00,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-operator-guide.md
@@ -18,17 +19,17 @@ DOC-CAND-5b39c08941fa,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-f5556cd368c1,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-7f6bc7e27e05,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-6035af6b7b30,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
-DOC-CAND-4c842bd3a10d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
-DOC-CAND-478de0f6cc4e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
+DOC-CAND-4c842bd3a10d,covered_by_existing_claim,,DOC-CLAIM-0031,covered_by_broader_claim,2026-06-20,ACT 3.5: App.tsx inclusion note; relates to DOC-CLAIM-0031
+DOC-CAND-478de0f6cc4e,covered_by_existing_claim,,DOC-CLAIM-0034,covered_by_broader_claim,2026-06-20,ACT 3.5: Coverage blocking; relates to DOC-CLAIM-0034 (report-only per ACT 2.7)
 DOC-CAND-ec6e358cfad2,registered_existing_claim,DOC-CLAIM-0051,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0051
-DOC-CAND-c4351eca1977,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
+DOC-CAND-c4351eca1977,covered_by_existing_claim,,DOC-CLAIM-0050,covered_by_broader_claim,2026-06-20,ACT 3.5: Registry authoritative source of truth; covered by DOC-CLAIM-0050
 DOC-CAND-54faf2cc03e9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
 DOC-CAND-fc5a1fe6c81f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
 DOC-CAND-09f24089f9f2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-68cfbd47bfa3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-3e53ceadb9c8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-57036c4b400f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
-DOC-CAND-6ab707c5ee3f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
+DOC-CAND-6ab707c5ee3f,covered_by_existing_claim,,DOC-CLAIM-0004,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident aggregate root; covered by DOC-CLAIM-0004
 DOC-CAND-eb8188d870fa,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-92695a622f58,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-7357507da621,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md

@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-e486a5089d5e,registered_existing_claim,DOC-CLAIM-0062,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0062
 DOC-CAND-3fa3f2daecf9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-d56c58de776b,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
@@ -14,7 +15,7 @@ DOC-CAND-303f51477877,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact
 DOC-CAND-7d8e5c68fa75,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-489ed076519a,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-2022348d4fe5,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-5ee6dce7ecf4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
+DOC-CAND-5ee6dce7ecf4,covered_by_existing_claim,,DOC-CLAIM-0021,covered_by_broader_claim,2026-06-20,ACT 3.5: Descriptive prose about password hash generation helper; behavior covered by DOC-CLAIM-0021
 DOC-CAND-30278c13966a,stale,,,stale_doc,2026-06-19,From stale doc: docs/baseline_watch_practices.md
 DOC-CAND-fe848f4bb844,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-686e7cf7fbe1,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
@@ -25,13 +26,13 @@ DOC-CAND-4f31f9f1cca6,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-40ec2aec495f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-8d5cd474d64a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-4a03e39a3db0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
-DOC-CAND-4abf4798a3a8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-4abf4798a3a8,covered_by_existing_claim,,DOC-CLAIM-0040,covered_by_broader_claim,2026-06-20,ACT 3.5: Latest directory mutable; covered by DOC-CLAIM-0040
 DOC-CAND-d176de6be414,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
 DOC-CAND-b1a58560b94a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
 DOC-CAND-e851edb3fa36,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
 DOC-CAND-a59f409b3055,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
 DOC-CAND-7406a1ee0284,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
-DOC-CAND-2c97f2a5bc78,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-2c97f2a5bc78,covered_by_existing_claim,,DOC-CLAIM-0006,covered_by_broader_claim,2026-06-20,ACT 3.5: Ready for review not downgraded; covered by DOC-CLAIM-0006
 DOC-CAND-ea0ca526cecd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-5616589672d1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-835095a4b07d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md

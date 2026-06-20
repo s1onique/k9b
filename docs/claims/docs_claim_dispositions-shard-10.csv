@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-fef54ed3570f,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-20a06b5df6e0,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
 DOC-CAND-8ead20e9e208,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
@@ -6,7 +7,7 @@ DOC-CAND-340dd6bd787b,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact
 DOC-CAND-f13c089abc7b,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-ea9bc1bcef69,registered_existing_claim,DOC-CLAIM-0019,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0019
 DOC-CAND-0e3943601880,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
-DOC-CAND-c310631006f5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
+DOC-CAND-c310631006f5,covered_by_existing_claim,,DOC-CLAIM-0028,covered_by_broader_claim,2026-06-20,ACT 3.5: Logout behavior; covered by DOC-CLAIM-0028 session invalidation
 DOC-CAND-343dcc77d7c0,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-0184cece175d,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-e4791b9f92f7,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-operator-guide.md
@@ -18,14 +19,14 @@ DOC-CAND-7c7926a0ffaf,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-8000ed643fae,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
 DOC-CAND-d0fbe28bc353,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
 DOC-CAND-da3696c53d42,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
-DOC-CAND-bcfa5287cf6b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
+DOC-CAND-bcfa5287cf6b,covered_by_existing_claim,,DOC-CLAIM-0013,covered_by_broader_claim,2026-06-20,ACT 3.5: CI gate drift verifier purpose; covered by DOC-CLAIM-0013 manifest mapping
 DOC-CAND-1d121b0550b3,registered_existing_claim,DOC-CLAIM-0037,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0037
 DOC-CAND-9361381d925b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
 DOC-CAND-db755caa2556,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-b95774eeb69d,registered_existing_claim,DOC-CLAIM-0040,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0040
 DOC-CAND-e358ca5de092,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
 DOC-CAND-80ded315808b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
-DOC-CAND-212750e0af37,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
+DOC-CAND-212750e0af37,covered_by_existing_claim,,DOC-CLAIM-0065,covered_by_broader_claim,2026-06-20,ACT 3.5: Approval artifact claim; relates to DOC-CLAIM-0065 no autonomous mutation
 DOC-CAND-1cab9be767e6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
 DOC-CAND-e7f559b9f2ef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
 DOC-CAND-b962dbb88972,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md

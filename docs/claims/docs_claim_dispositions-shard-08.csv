@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-c322ef204de5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-b938edf59d8e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/agent-run-review-template.md
 DOC-CAND-0f362301c374,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -15,10 +16,10 @@ DOC-CAND-d8fbb8f6014b,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-b6365b85245e,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-cebde4fda0ab,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-aa21fbda360b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
-DOC-CAND-3711da8b6c46,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-3711da8b6c46,covered_by_existing_claim,,DOC-CLAIM-0016,covered_by_broader_claim,2026-06-20,ACT 3.5: Immutable truth in pack files; covered by DOC-CLAIM-0016
 DOC-CAND-d1c4bde045b1,registered_existing_claim,DOC-CLAIM-0057,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0057
 DOC-CAND-1f042a1c6d75,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
-DOC-CAND-495b3a0995fb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-495b3a0995fb,covered_by_existing_claim,,DOC-CLAIM-0047,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident does not replace run artifacts; covered by DOC-CLAIM-0047
 DOC-CAND-d01306656ecf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-b54e9cefea7a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-406c0d541db6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md

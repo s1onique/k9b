@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-83083c7d764b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-09a133927581,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-04a74288cf38,covered_by_existing_claim,,DOC-CLAIM-0002,covered_by_broader_claim,2026-06-19,Covered by DOC-CLAIM-0002: agent never mutates live clusters
@@ -22,7 +23,7 @@ DOC-CAND-8ac70411cb3d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-cc3c5e81da39,registered_existing_claim,DOC-CLAIM-0042,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0042
 DOC-CAND-b57e6cc75b6e,registered_existing_claim,DOC-CLAIM-0043,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0043
 DOC-CAND-626a57e9b09e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
-DOC-CAND-faa7cf122bbd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-faa7cf122bbd,covered_by_existing_claim,,DOC-CLAIM-0047,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident owns truth; covered by DOC-CLAIM-0047
 DOC-CAND-ad1f3a48bf58,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-9b8d0ee464d1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
 DOC-CAND-fa38fc4f878a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md

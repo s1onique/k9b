@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-e72d144d6de4,registered_existing_claim,DOC-CLAIM-0064,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0064
 DOC-CAND-217a6f9e098b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-2d6c197dcf92,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
@@ -29,7 +30,7 @@ DOC-CAND-fbc28f93a7ac,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-e143675e99a4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
 DOC-CAND-ff0b684f59ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
 DOC-CAND-61d2129dfbbb,registered_existing_claim,DOC-CLAIM-0056,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0056
-DOC-CAND-3dfe82d6bfb2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-3dfe82d6bfb2,covered_by_existing_claim,,DOC-CLAIM-0047,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident not evidence store; covered by DOC-CLAIM-0047
 DOC-CAND-cf5e73cb975f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-615297300611,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-f95edb8b04ed,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md

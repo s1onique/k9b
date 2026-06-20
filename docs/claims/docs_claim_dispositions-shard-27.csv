@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-164b680b4bf0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-3aee07d810c9,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-55fff0d8d5cd,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
@@ -23,14 +24,14 @@ DOC-CAND-731e5180d38e,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-be5e4f2d4038,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-f4525b466b56,registered_existing_claim,DOC-CLAIM-0029,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0029
 DOC-CAND-a9971e735790,registered_existing_claim,DOC-CLAIM-0031,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0031
-DOC-CAND-e88bde333ddc,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
+DOC-CAND-e88bde333ddc,covered_by_existing_claim,,DOC-CLAIM-0030,covered_by_broader_claim,2026-06-20,ACT 3.5: Coverage mandatory; relates to DOC-CLAIM-0030
 DOC-CAND-e58abfb328ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-6f660b7bebe4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-d3357b432167,registered_existing_claim,DOC-CLAIM-0052,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0052
-DOC-CAND-fde9941e996c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
+DOC-CAND-fde9941e996c,covered_by_existing_claim,,DOC-CLAIM-0052,covered_by_broader_claim,2026-06-20,ACT 3.5: Action artifacts append-only; covered by DOC-CLAIM-0052
 DOC-CAND-00d0d4eb1da4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
 DOC-CAND-7cc798b6d6ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
-DOC-CAND-b9ab384f87fb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
+DOC-CAND-b9ab384f87fb,covered_by_existing_claim,,DOC-CLAIM-0057,covered_by_broader_claim,2026-06-20,ACT 3.5: Unknowns explicit; covered by DOC-CLAIM-0057
 DOC-CAND-2aedc93cf766,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-34bfe468548b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-af5b8e8d1aaf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md

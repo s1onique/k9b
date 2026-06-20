@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-1b6f8e56850b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-a37ba5bd065a,covered_by_existing_claim,,DOC-CLAIM-0061,covered_by_broader_claim,2026-06-19,Covered by DOC-CLAIM-0061 artifact-first discipline (runs/health/ artifacts); identical substance to DOC-CAND-81730025469b
 DOC-CAND-a908b3808458,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
@@ -11,11 +12,11 @@ DOC-CAND-1db2a9b976bb,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-1da2f208163c,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-18adb721f8e3,stale,,,stale_doc,2026-06-19,From stale doc: docs/cluster_snapshot_plan.md
 DOC-CAND-26d95ff7b124,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
-DOC-CAND-233d1d6b0167,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
+DOC-CAND-233d1d6b0167,covered_by_existing_claim,,DOC-CLAIM-0058,covered_by_broader_claim,2026-06-20,ACT 3.5: Report not source of truth; covered by DOC-CLAIM-0058
 DOC-CAND-8013be345bf5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-7381d330e39b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-ec9e229b7082,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
-DOC-CAND-33e163365d85,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
+DOC-CAND-33e163365d85,covered_by_existing_claim,,DOC-CLAIM-0065,covered_by_broader_claim,2026-06-20,ACT 3.5: Execution artifact claim; relates to DOC-CLAIM-0065
 DOC-CAND-34197189a972,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-7bcac73b73f4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-10b484b41130,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md

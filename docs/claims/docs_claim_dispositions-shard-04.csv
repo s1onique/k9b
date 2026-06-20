@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-67dcb2f03d53,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-a511b30710a2,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-19243668c4ce,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -10,14 +11,14 @@ DOC-CAND-2127adb1c9ac,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-12e8b2ac53ae,stale,,,stale_doc,2026-06-19,From stale doc: docs/cluster_snapshot_plan.md
 DOC-CAND-00f7fa87a240,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-2e72f1c89378,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
-DOC-CAND-f4ada711d023,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-f4ada711d023,covered_by_existing_claim,,DOC-CLAIM-0016,covered_by_broader_claim,2026-06-20,ACT 3.5: Run-scoped contents immutable; covered by DOC-CLAIM-0016
 DOC-CAND-3a26dc23737a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
 DOC-CAND-eea4c768693d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-8912e795bd5e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-1ffeca2a5d69,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-da71cd6a22d1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-8da90b844509,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
-DOC-CAND-fba2528fd7a1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
+DOC-CAND-fba2528fd7a1,covered_by_existing_claim,,DOC-CLAIM-0004,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident as aggregate root; covered by DOC-CLAIM-0004
 DOC-CAND-27ef2ced0c0c,registered_existing_claim,DOC-CLAIM-0039,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0039
 DOC-CAND-786eed152720,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-4f64409dfdd4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md

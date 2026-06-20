@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-a0341a9a3c2a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-c570afd3e8c5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-dc9ec1f620c8,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
@@ -24,11 +25,11 @@ DOC-CAND-7d57c95a4c38,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-7e4abef82ee7,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-b5b9b78d1058,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
 DOC-CAND-357c2339d469,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
-DOC-CAND-7a083ac7146c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
+DOC-CAND-7a083ac7146c,covered_by_existing_claim,,DOC-CLAIM-0031,covered_by_broader_claim,2026-06-20,ACT 3.5: Frontend threshold; covered by DOC-CLAIM-0031
 DOC-CAND-4edaa3d94d4b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
 DOC-CAND-294a66c5ffd6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
 DOC-CAND-c0f6f433f713,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
-DOC-CAND-3a85659b8930,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-3a85659b8930,covered_by_existing_claim,,DOC-CLAIM-0049,covered_by_broader_claim,2026-06-20,ACT 3.5: UI/API derived projections; covered by DOC-CLAIM-0049
 DOC-CAND-f6ac9d4ff4ff,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-7271bb8639ea,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-c61aa7d5fed3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md

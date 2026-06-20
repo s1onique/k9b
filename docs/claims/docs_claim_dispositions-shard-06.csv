@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-e89c1320276d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/agent-run-review-template.md
 DOC-CAND-84cdcb39193a,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-8b66873bcf20,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -13,16 +14,16 @@ DOC-CAND-de618e0419dd,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-ed1e455557d9,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
 DOC-CAND-69639d482203,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-73ac271cb3b6,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
-DOC-CAND-de78d15d1f9b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
+DOC-CAND-de78d15d1f9b,covered_by_existing_claim,,DOC-CLAIM-0038,covered_by_broader_claim,2026-06-20,ACT 3.5: Verify.yml PR-only; covered by DOC-CLAIM-0038
 DOC-CAND-18364c011e3e,registered_existing_claim,DOC-CLAIM-0050,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0050
-DOC-CAND-1c7e28450a04,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
+DOC-CAND-1c7e28450a04,covered_by_existing_claim,,DOC-CLAIM-0051,covered_by_broader_claim,2026-06-20,ACT 3.5: Per-run overrides not authoritative; covered by DOC-CLAIM-0051
 DOC-CAND-de0b04738be6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
-DOC-CAND-42e9be16a1cb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-42e9be16a1cb,covered_by_existing_claim,,DOC-CLAIM-0004,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident as aggregate root; covered by DOC-CLAIM-0004
 DOC-CAND-9af6ac7b64e7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-20885ff04a4f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-6b3d909df752,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
 DOC-CAND-5573859c06b4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
-DOC-CAND-27d6486fb950,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
+DOC-CAND-27d6486fb950,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broader_claim,2026-06-20,ACT 3.5: Evidence-first discipline; covered by DOC-CLAIM-0003 source-of-truth-rules
 DOC-CAND-97a568335fe6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-f15a5599fdac,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-f12802b3330d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md

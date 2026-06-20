@@ -1,4 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
+
 DOC-CAND-b39221c0992f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-a070ca31915c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-9685e0f1513b,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
@@ -18,7 +19,7 @@ DOC-CAND-36df8313a464,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-39d8e67123d5,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-29736295825b,registered_existing_claim,DOC-CLAIM-0044,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0044
 DOC-CAND-6696169c1621,registered_existing_claim,DOC-CLAIM-0055,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0055
-DOC-CAND-de1f88f92f27,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
+DOC-CAND-de1f88f92f27,covered_by_existing_claim,,DOC-CLAIM-0058,covered_by_broader_claim,2026-06-20,ACT 3.5: UI/API must not write projections; covered by DOC-CLAIM-0058
 DOC-CAND-8899eec9be08,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-5fada44145a2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-87cc32c4edad,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
