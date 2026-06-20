@@ -386,35 +386,73 @@ def run_self_test() -> bool:
         print(f"[FAIL] expected pause_manual_tranches, got {pause_planning['recommended_next_action']}")
         all_passed = False
 
-    # Fixture 19: weak_covered entries prevent pause (recommendation logic tested via key_buckets)
-    weak_entries: list[dict[str, str | int | list[str]]] = []
-    for i in range(5):
-        weak_entries.append({
-            "candidate_id": f"DOC-CAND-{i:012d}",
-            "disposition": "covered_by_existing_claim",
-            "reason_code": "covered_by_broader_claim",
-            "source_doc_path": "docs/normal.md",
-            "candidate_text": "Test text.",
-            "reviewed_at": "",
-            "reviewer_notes": "Low-value prose fragment",
-            "score": 12,
-            "risk_reasons": ["covered_note_weak"],
-            "is_act_5_0_reviewed": False,
-            "is_act_5_2_reviewed": False,
-            "has_any_act_review_marker": False,
-            "is_generic_low_value_note": True,
-            "is_stale": False,
-            "is_historical": False,
-            "is_stale_doc": False,
-            "is_historical_doc": False,
-            "is_high_value_doc": False,
-        })
-    weak_planning = compute_planning_summary(weak_entries)
-    if weak_planning["key_risk_buckets"]["weak_covered_count"] == 5:
-        print("[PASS] weak_covered_count correctly tallied")
-    else:
-        print(f"[FAIL] expected weak_covered_count=5, got {weak_planning['key_risk_buckets']['weak_covered_count']}")
+    # Fixture 19: weak_covered entries prevent pause - recommend targeted tranche
+    weak_entries = [
+        dict(candidate_id=f"DOC-CAND-{i:012d}", disposition="covered_by_existing_claim",
+             reason_code="covered_by_broader_claim", source_doc_path="docs/normal.md",
+             candidate_text="Test.", reviewed_at="", reviewer_notes="Low-value",
+             score=12, risk_reasons=["covered_note_weak"], is_act_5_0_reviewed=False,
+             is_act_5_2_reviewed=False, has_any_act_review_marker=False,
+             is_generic_low_value_note=True, is_stale=False, is_historical=False,
+             is_stale_doc=False, is_historical_doc=False, is_high_value_doc=False)
+        for i in range(5)]
+    wp = compute_planning_summary(weak_entries)
+    if wp["key_risk_buckets"]["weak_covered_count"] != 5:
+        print(f"[FAIL] weak_covered_count=5, got {wp['key_risk_buckets']['weak_covered_count']}")
         all_passed = False
+    elif wp["recommended_next_action"] == ACTION_PAUSE_MANUAL_TRANCHES:
+        print("[FAIL] weak_covered must not pause_manual_tranches"); all_passed = False
+    elif wp["recommended_next_action"] != ACTION_CONTINUE_SMALL_TARGETED:
+        print(f"[FAIL] expected continue_small_targeted_tranche, got {wp['recommended_next_action']}"); all_passed = False
+    elif wp["recommended_tranche_size"] != 5:
+        print(f"[FAIL] tranche_size=5, got {wp['recommended_tranche_size']}"); all_passed = False
+    else:
+        print("[PASS] weak_covered entries recommend targeted tranche (not pause)")
+
+    # Fixture 19b: stale/high-value entries prevent pause - recommend targeted tranche
+    stale_entries = [
+        dict(candidate_id=f"DOC-CAND-{1000+i:012d}", disposition="historical",
+             reason_code="historical_doc", source_doc_path="docs/security/old-design.md",
+             candidate_text="Test.", reviewed_at="", reviewer_notes="From historical",
+             score=8, risk_reasons=[], is_act_5_0_reviewed=False, is_act_5_2_reviewed=False,
+             has_any_act_review_marker=False, is_generic_low_value_note=True, is_stale=False,
+             is_historical=True, is_stale_doc=False, is_historical_doc=True, is_high_value_doc=True)
+        for i in range(3)]
+    sp = compute_planning_summary(stale_entries)
+    if sp["key_risk_buckets"]["stale_or_historical_high_value_count"] != 3:
+        print(f"[FAIL] stale/high-value=3, got {sp['key_risk_buckets']['stale_or_historical_high_value_count']}")
+        all_passed = False
+    elif sp["recommended_next_action"] == ACTION_PAUSE_MANUAL_TRANCHES:
+        print("[FAIL] stale/high-value must not pause_manual_tranches"); all_passed = False
+    elif sp["recommended_next_action"] != ACTION_CONTINUE_SMALL_TARGETED:
+        print(f"[FAIL] expected continue_small_targeted_tranche, got {sp['recommended_next_action']}"); all_passed = False
+    elif sp["recommended_tranche_size"] != 3:
+        print(f"[FAIL] tranche_size=3, got {sp['recommended_tranche_size']}"); all_passed = False
+    else:
+        print("[PASS] stale/high-value entries recommend targeted tranche (not pause)")
+
+    # Fixture 19c: P0+P1 < 25 with both special buckets zero triggers pause
+    pause_clean_entries = [
+        dict(candidate_id=f"DOC-CAND-{2000+i:012d}", disposition="ignored_by_policy",
+             reason_code="low_value_context", source_doc_path="docs/old/design.md",
+             candidate_text="Test.", reviewed_at="", reviewer_notes="Low-value",
+             score=5, risk_reasons=[], is_act_5_0_reviewed=False, is_act_5_2_reviewed=False,
+             has_any_act_review_marker=False, is_generic_low_value_note=True, is_stale=False,
+             is_historical=False, is_stale_doc=False, is_historical_doc=False, is_high_value_doc=False)
+        for i in range(10)]
+    pp = compute_planning_summary(pause_clean_entries)
+    if pp["key_risk_buckets"]["weak_covered_count"] != 0:
+        print(f"[FAIL] pause_clean weak_covered_count=0, got {pp['key_risk_buckets']['weak_covered_count']}")
+        all_passed = False
+    elif pp["key_risk_buckets"]["stale_or_historical_high_value_count"] != 0:
+        print(f"[FAIL] pause_clean stale/high-value=0, got {pp['key_risk_buckets']['stale_or_historical_high_value_count']}")
+        all_passed = False
+    elif pp["recommended_next_action"] != ACTION_PAUSE_MANUAL_TRANCHES:
+        print(f"[FAIL] pause_clean expected pause_manual_tranches, got {pp['recommended_next_action']}"); all_passed = False
+    elif pp["recommended_tranche_size"] != 0:
+        print(f"[FAIL] pause_clean tranche_size=0, got {pp['recommended_tranche_size']}"); all_passed = False
+    else:
+        print("[PASS] pause triggers only when special buckets are zero")
 
     # Fixture 20: JSON planning block is deterministic
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:

@@ -534,8 +534,8 @@ Recommendation rules:
 | Action | Condition |
 |--------|-----------|
 | `continue_large_tranche` | P0+P1 >= 100 |
-| `continue_small_targeted_tranche` | P0+P1 >= 25 and < 100 |
-| `pause_manual_tranches` | P0+P1 < 25 with no weak-covered or stale-high-value entries |
+| `continue_small_targeted_tranche` | P0+P1 >= 25 and < 100, OR P0+P1 < 25 with nonzero weak-covered or stale/high-value entries |
+| `pause_manual_tranches` | P0+P1 < 25 AND weak_covered_count == 0 AND stale_or_historical_high_value_count == 0 |
 | `blocked_or_inconclusive` | Unable to determine recommendation |
 
 TSV output includes `priority_band` column for future tranche selection.

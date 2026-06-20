@@ -187,22 +187,23 @@ def compute_planning_summary(entries: list[BacklogEntry]) -> dict:
         )
         tranche_size = min(high_priority_count, 100)
     elif key_buckets["weak_covered_count"] > 0:
-        action = ACTION_PAUSE_MANUAL_TRANCHES
+        weak_count = key_buckets["weak_covered_count"]
+        action = ACTION_CONTINUE_SMALL_TARGETED
         reason = (
             f"High-priority backlog is low (P0+P1={high_priority_count}), "
-            f"but {key_buckets['weak_covered_count']} weak-covered entries remain. "
-            "Review weak-covered candidates before pausing."
+            f"but {weak_count} weak-covered entries remain. "
+            "Run a targeted weak-covered review before pausing."
         )
-        tranche_size = 0
+        tranche_size = min(weak_count, 100)
     elif key_buckets["stale_or_historical_high_value_count"] > 0:
-        action = ACTION_PAUSE_MANUAL_TRANCHES
+        stale_count = key_buckets["stale_or_historical_high_value_count"]
+        action = ACTION_CONTINUE_SMALL_TARGETED
         reason = (
             f"High-priority backlog is low (P0+P1={high_priority_count}), "
-            f"but {key_buckets['stale_or_historical_high_value_count']} "
-            "stale/historical high-value entries remain. "
-            "Consider targeted review before pausing."
+            f"but {stale_count} stale/historical high-value entries remain. "
+            "Run a targeted stale/high-value review before pausing."
         )
-        tranche_size = 0
+        tranche_size = min(stale_count, 100)
     elif high_priority_count < SMALL_TRANCHE_MIN_THRESHOLD:
         action = ACTION_PAUSE_MANUAL_TRANCHES
         reason = (
