@@ -27,6 +27,49 @@ from .model import (
 from .planning import get_priority_band
 
 
+def filter_entries(
+    entries: list[BacklogEntry],
+    *,
+    review_classes: set[str] | None = None,
+    priority_bands: set[str] | None = None,
+) -> list[BacklogEntry]:
+    """Filter entries by review_class and/or priority_band.
+
+    Args:
+        entries: List of backlog entries to filter.
+        review_classes: Set of allowed review classes (e.g., {"claim_candidate"}).
+            None means no review-class filter.
+        priority_bands: Set of allowed priority bands (e.g., {"P0", "P1"}).
+            None means no priority-band filter.
+            Priority band is computed from calibrated_score.
+
+    Returns:
+        Filtered list preserving original ranking order.
+        No mutation of entries.
+    """
+    if review_classes is None and priority_bands is None:
+        return list(entries)
+
+    result: list[BacklogEntry] = []
+    for entry in entries:
+        # Filter by review_class if specified
+        if review_classes is not None:
+            entry_class = entry.get("review_class", "unknown")
+            if entry_class not in review_classes:
+                continue
+
+        # Filter by priority_band if specified
+        if priority_bands is not None:
+            calibrated = entry.get("calibrated_score", entry.get("score", 0))
+            band = get_priority_band(calibrated)
+            if band not in priority_bands:
+                continue
+
+        result.append(entry)
+
+    return result
+
+
 def build_backlog(
     candidates: list[CandidateData],
     dispositions: list[CandidateData],
@@ -254,6 +297,7 @@ def write_json(
     output_path: Path,
     include_planning: bool = False,
     planning: dict | None = None,
+    filters: dict | None = None,
 ) -> None:
     """Write deterministic JSON output."""
     unreviewed = [
@@ -300,6 +344,10 @@ def write_json(
     # Add planning block if requested
     if include_planning and planning:
         output["planning"] = planning
+
+    # Add filters block if provided
+    if filters:
+        output["filters"] = filters
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, sort_keys=True)

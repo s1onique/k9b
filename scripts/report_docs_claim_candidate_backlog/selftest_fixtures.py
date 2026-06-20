@@ -1,6 +1,8 @@
 """Self-test fixtures for documentation claim candidate backlog reporter."""
 from __future__ import annotations
+
 from .model import REVIEW_CLASS_CLAIM_CANDIDATE, REVIEW_CLASS_NON_NORMATIVE_PROSE, REVIEW_CLASS_STRUCTURAL_FRAGMENT
+
 TestEntry = dict[str, str | int | list[str]]
 TestEntryList = list[dict[str, str | int | list[str]]]
 

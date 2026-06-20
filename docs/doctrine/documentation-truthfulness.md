@@ -579,8 +579,45 @@ A `cleanup-heavy` recommendation means the next tranche should be treated as rea
 
 TSV output includes `review_class` and `review_class_reasons` columns for future tranche selection.
 
+### Calibrated claim-discovery stop decision
+
+ACT 5.8 added first-class `--review-class` and `--priority-band` filters to the backlog reporter. The calibrated reporter can now directly produce targeted worklists.
+
+#### Live calibrated filter results
+
+| Filter | Total | P0+P1 | Recommendation |
+|--------|-------|-------|----------------|
+| `--review-class claim_candidate` | 373 | 369 | `continue_large_tranche` |
+| `--review-class structural_fragment` | 99 | 0 | `pause_manual_tranches` |
+| `--review-class non_normative_prose` | 852 | 0 | `pause_manual_tranches` |
+| `--review-class stale_or_historical` | 2227 | 0 | `continue_small_targeted_tranche` (for stale/high-value) |
+
+#### Decision
+
+**Claim discovery remains open.** The calibrated `claim_candidate` filter returned 373 candidates with 369 in P0+P1. Future claim-discovery tranches must use:
+
+```bash
+python scripts/run_backlog_report.py --review-class claim_candidate --planning --top 100
+```
+
+**Cleanup work is separate.** Remaining backlog is primarily non-normative prose (852), stale/historical (2227), and structural fragments (99). These are maintenance/cleanup classes:
+
+```bash
+# Structural fragment burn-down (low priority, P4)
+python scripts/run_backlog_report.py --review-class structural_fragment --top 100
+
+# Non-normative prose burn-down (low priority, P3+P4)
+python scripts/run_backlog_report.py --review-class non_normative_prose --top 100
+
+# Stale/historical maintenance (1336 in high-value docs)
+python scripts/run_backlog_report.py --review-class stale_or_historical --planning --top 100
+```
+
+**Stop rule:** If the calibrated `claim_candidate` filter ever returns zero candidates, manual claim-discovery tranches are paused until new candidates are generated.
+
 ## History
 
+- **2026-06-20** — ACT 5.8: Added `--review-class` and `--priority-band` filters to the backlog reporter with validation and deterministic JSON filters block. Formal stop/continue decision recorded: claim discovery remains open (373 claim_candidates, 369 in P0+P1). Cleanup classes (structural_fragment, non_normative_prose, stale_or_historical) are separate work.
 - **2026-06-20** — ACT 5.7: Calibrated claim candidate backlog scoring with review classes (claim_candidate, structural_fragment, non_normative_prose, etc.) and planning caveats (cleanup-heavy, claim-candidate-heavy, mixed). Structural/non-normative false positives now receive score penalties, preventing them from silently dominating P0 as claim-worthy work.
 - **2026-06-20** — ACT 5.3: Added claim candidate backlog reporter (`scripts/report_docs_claim_candidate_backlog/` package) with risk scoring, self-tests, wired into verify_all.sh gate
 - **2026-06-20** — ACT 5.3b: Split backlog reporter into LLM-friendly modules (loader, model, report, selftest, __main__, __init__)

@@ -1,19 +1,47 @@
 """Self-tests for documentation claim candidate backlog reporter."""
 from __future__ import annotations
-import json, os, tempfile
+
+import argparse
+import json
+import os
+import sys
+import tempfile
 from pathlib import Path
-from .model import (REVIEW_CLASS_CLAIM_CANDIDATE, REVIEW_CLASS_COVERED_OR_REGISTERED,
-    REVIEW_CLASS_NON_NORMATIVE_PROSE, REVIEW_CLASS_REVIEWED_LOW_VALUE,
-    REVIEW_CLASS_STALE_OR_HISTORICAL, REVIEW_CLASS_STRUCTURAL_FRAGMENT,
-    classify_review_class, compute_calibrated_score, compute_risk_score,
-    is_cleanup_class, is_generic_low_value_note)
-from .planning import (ACTION_CONTINUE_LARGE_TRANCHE, ACTION_CONTINUE_SMALL_TARGETED,
-    ACTION_PAUSE_MANUAL_TRANCHES, CAVEAT_CLAIM_CANDIDATE_HEAVY, CAVEAT_CLEANUP_HEAVY,
-    CAVEAT_MIXED, compute_planning_summary, get_priority_band)
-from .report import write_json, write_tsv
-from .selftest_fixtures import (make_claim_candidate_heavy_entries, make_cleanup_heavy_entries,
-    make_json_test_entries, make_json_test_summary, make_large_tranche_entries,
-    make_mixed_entries, make_pause_entries, make_small_tranche_entries)
+
+from .model import (
+    REVIEW_CLASS_CLAIM_CANDIDATE,
+    REVIEW_CLASS_COVERED_OR_REGISTERED,
+    REVIEW_CLASS_NON_NORMATIVE_PROSE,
+    REVIEW_CLASS_REVIEWED_LOW_VALUE,
+    REVIEW_CLASS_STALE_OR_HISTORICAL,
+    REVIEW_CLASS_STRUCTURAL_FRAGMENT,
+    classify_review_class,
+    compute_calibrated_score,
+    compute_risk_score,
+    is_cleanup_class,
+    is_generic_low_value_note,
+)
+from .planning import ACTION_CONTINUE_LARGE_TRANCHE, ACTION_CONTINUE_SMALL_TARGETED, ACTION_PAUSE_MANUAL_TRANCHES, CAVEAT_CLAIM_CANDIDATE_HEAVY, CAVEAT_CLEANUP_HEAVY, CAVEAT_MIXED, compute_planning_summary, get_priority_band
+from .report import filter_entries, write_json, write_tsv
+from .selftest_fixtures import (
+    make_claim_candidate_entry,
+    make_claim_candidate_heavy_entries,
+    make_cleanup_heavy_entries,
+    make_covered_entry,
+    make_generic_ignored_entry,
+    make_json_test_entries,
+    make_json_test_summary,
+    make_large_tranche_entries,
+    make_mixed_entries,
+    make_pause_entries,
+    make_small_tranche_entries,
+    make_stale_entry,
+    make_structural_fragment_entry,
+)
+
+# Valid priority bands for testing
+ALL_PRIORITY_BANDS = ["P0", "P1", "P2", "P3", "P4"]
+
 
 def run_self_test() -> bool:
     print("=== Self-Test Fixtures ===\n")
@@ -112,6 +140,76 @@ def run_self_test() -> bool:
     check("covered_note_weak flagged", "covered_note_weak" in r7)
     check("generic note pattern", is_generic_low_value_note("Low-value prose fragment from: docs/foo.md"))
 
+    # Filter tests
+    # Create mixed entries for filter testing
+    mixed_entries = [
+        make_claim_candidate_entry("DOC-CAND-001", 62),
+        make_claim_candidate_entry("DOC-CAND-002", 52),
+        make_generic_ignored_entry("DOC-CAND-003", score=32),
+        make_structural_fragment_entry("DOC-CAND-004", 22),
+        make_stale_entry("DOC-CAND-005", -12),
+        make_covered_entry("DOC-CAND-006", 0),
+    ]
+
+    # Test 1: filter by single review_class
+    filtered = filter_entries(mixed_entries, review_classes={"claim_candidate"})
+    check("filter by single review_class", len(filtered) == 2 and all(e["review_class"] == "claim_candidate" for e in filtered))
+
+    # Test 2: filter by multiple review_class values
+    filtered = filter_entries(mixed_entries, review_classes={"claim_candidate", "non_normative_prose"})
+    check("filter by multiple review_class values", len(filtered) == 3 and all(
+        e["review_class"] in ("claim_candidate", "non_normative_prose") for e in filtered))
+
+    # Test 3: filter by single priority_band (P0)
+    filtered = filter_entries(mixed_entries, priority_bands={"P0"})
+    check("filter by single priority_band (P0)", len(filtered) == 2)
+
+    # Test 4: filter by multiple priority_band values (P0, P3)
+    filtered = filter_entries(mixed_entries, priority_bands={"P0", "P3"})
+    check("filter by multiple priority_band values", len(filtered) == 3)
+
+    # Test 5: filter combines review_class + priority_band as AND
+    filtered = filter_entries(mixed_entries, review_classes={"claim_candidate"}, priority_bands={"P0"})
+    check("filter combines review_class + priority_band as AND", len(filtered) == 2)
+
+    # Test 6: filter preserves ranking order
+    filtered = filter_entries(mixed_entries, review_classes={"claim_candidate"})
+    ids = [e["candidate_id"] for e in filtered]
+    check("filter preserves ranking order", ids == ["DOC-CAND-001", "DOC-CAND-002"])
+
+    # Test 7: no filter returns copy (different list object, same contents)
+    filtered = filter_entries(mixed_entries)
+    check("no filter returns copy", len(filtered) == len(mixed_entries) and filtered is not mixed_entries)
+
+    # Test 8: claim_candidate filter returns only claim_candidate rows
+    filtered = filter_entries(mixed_entries, review_classes={"claim_candidate"})
+    check("claim_candidate filter returns only claim_candidate rows",
+        all(e["review_class"] == "claim_candidate" for e in filtered))
+
+    # Test 9: structural/non_normative filters return cleanup rows
+    filtered = filter_entries(mixed_entries, review_classes={"structural_fragment"})
+    check("structural_fragment filter returns structural rows",
+        all(e["review_class"] == "structural_fragment" for e in filtered))
+    filtered = filter_entries(mixed_entries, review_classes={"non_normative_prose"})
+    check("non_normative_prose filter returns non-normative rows",
+        all(e["review_class"] == "non_normative_prose" for e in filtered))
+
+    # Test 10: invalid review_class would fail (test validation logic indirectly)
+    try:
+        from .__main__ import _validate_review_classes
+        _validate_review_classes(["bogus"])
+        check("invalid review_class is rejected", False, "Should have raised")
+    except (SystemExit, argparse.ArgumentTypeError):
+        check("invalid review_class is rejected", True)
+
+    # Test 11: invalid priority_band would fail (test validation logic indirectly)
+    try:
+        from .__main__ import _validate_priority_bands
+        _validate_priority_bands(["P9"])
+        check("invalid priority_band is rejected", False, "Should have raised")
+    except (SystemExit, argparse.ArgumentTypeError):
+        check("invalid priority_band is rejected", True)
+
     # Planning caveat tests
     cleanup_planning = compute_planning_summary(make_cleanup_heavy_entries())
     check("cleanup-heavy caveat", cleanup_planning.get("planning_caveat") == CAVEAT_CLEANUP_HEAVY,
@@ -165,6 +263,28 @@ def run_self_test() -> bool:
         check("JSON has review_class", "review_class" in rec and "review_class_reasons" in rec)
     finally: os.unlink(json_rc_path)
 
+    # Test JSON filters block
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f: json_filter_path = Path(f.name)
+    try:
+        filters = {"disposition": None, "doc": None, "include_reviewed": False,
+                   "review_class": ["claim_candidate"], "priority_band": ["P0", "P1"]}
+        write_json(test_entries, test_summary, json_filter_path, filters=filters)
+        with open(json_filter_path) as f: data = json.load(f)
+        check("JSON filters block exists", "filters" in data)
+        check("JSON filters block is sorted", list(data["filters"].keys()) == sorted(data["filters"].keys()))
+        check("JSON filters block values", data["filters"]["review_class"] == ["claim_candidate"])
+    finally: os.unlink(json_filter_path)
+
+    # Test TSV output respects review_class filter
+    filtered_entries = filter_entries(test_entries, review_classes={"claim_candidate"})
+    if filtered_entries:
+        with tempfile.NamedTemporaryFile(suffix=".tsv", delete=False) as f: tsv_filter_path = Path(f.name)
+        try:
+            write_tsv(filtered_entries, tsv_filter_path)
+            with open(tsv_filter_path) as f: lines = f.readlines()
+            check("TSV output respects review_class filter", len(lines) == 2)
+        finally: os.unlink(tsv_filter_path)
+
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f: json_plan_path = Path(f.name)
     try:
         planning = compute_planning_summary(test_entries)
@@ -193,3 +313,8 @@ def run_self_test() -> bool:
         return True
     print("[FAIL] some self-tests failed")
     return False
+
+
+if __name__ == "__main__":
+    success = run_self_test()
+    sys.exit(0 if success else 1)
