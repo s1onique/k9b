@@ -43,7 +43,7 @@ docs/gate-timings-history-2.md,reference,historical,ci,,,false,Gate timings hist
 docs/gate-timings.md,reference,current,ci,,,false,Current gate timings
 docs/harbor-publishing.md,runbook,stale,release,,,false,Harbor publishing - needs update
 docs/in-cluster-deployment.md,runbook,current,deployment,,,false,In-cluster deployment guide
-docs/incidents/automatic-diagnosis-loop.md,architecture,stale,incidents,,,false,Automatic diagnosis loop - needs update
+docs/incidents/automatic-diagnosis-loop.md,architecture,current,incidents,,,false,Automatic diagnosis loop - incident-scoped model documented
 docs/logging-policy.md,doctrine,current,doctrine,,,false,Logging policy
 docs/post-beta-backlog.md,reference,current,planning,,,false,Post-beta backlog
 docs/post-beta-operator-feedback-and-live-integrations.md,reference,stale,beta,,,false,Post-beta feedback - needs review

@@ -4,7 +4,29 @@
 
 ## Purpose
 
-Document the current next-check/manual promotion flow and the target incident-scoped mapping.
+Document the current next-check/manual promotion flow and the **incident-scoped target model**.
+
+**Key principle:** Suggested checks, check executions, and evidence artifacts are **incident-scoped concepts**. Current artifacts are transitional; they map to the target incident model.
+
+## Incident-scoped target model
+
+```
+Incident (aggregate root)
+├─ signals: IncidentSignal[]
+├─ suggested_checks: IncidentSuggestedCheck[]
+├─ check_executions: IncidentCheckExecution[]
+├─ evidence_links: EvidenceLink[]
+│    └─ artifact_id → EvidenceArtifact
+├─ review_packet: ReviewPacketState
+└─ events: IncidentEvent[]
+```
+
+| Target concept | Maps from | Status |
+|---------------|-----------|--------|
+| `IncidentSuggestedCheck` | `next-check-plan` artifacts | Target |
+| `IncidentCheckExecution` | `next-check-promotion` + `next-check-execution` artifacts | Target |
+| `EvidenceArtifact` | Check result data | Target |
+| `IncidentEvent` | Promotion/execution timeline events | Target |
 
 ## Current reality
 
@@ -19,6 +41,7 @@ Each entry records:
 - `estimated_cost`, `confidence`
 - `gating_reason`, `duplicate_of_existing_evidence`
 - Rationale fields (`normalization_reason`, `safety_reason`, etc.)
+- **Linkage fields** (incident_id, source_candidate_id, etc.) for incident mapping
 
 ### Approval artifacts
 
@@ -45,59 +68,28 @@ Each execution artifact captures:
 
 The global next-check queue may still be derived from run/UI index.
 
-## Target direction
+## Incident-scoped mapping
 
-### Mapping to incident-scoped concepts
+### Artifact-to-incident linkage
 
-```
-Before:
-Run / Review / Enrichment
-→ next_check_plan
-→ approval / promotion
-→ next_check_execution artifact
+Next-check artifacts are linked to incidents via:
 
-Target:
-Incident
-→ IncidentSuggestedCheck
-→ IncidentCheckExecution
-→ EvidenceArtifact / EvidenceLink
-→ IncidentEvent timeline
-```
+| Linkage method | Status | Classification |
+|---------------|--------|----------------|
+| Direct `incident_id` match in candidate | **SAFE** | Deterministic |
+| `run_id` + `source_candidate_id` match | Conditionally Safe | Depends on uniqueness |
+| Complete entity identity (4 fields) | Conditionally Safe | Depends on uniqueness |
+| Title text similarity | **UNSAFE** | Not deterministic |
+| LLM summary similarity | **UNSAFE** | Not deterministic |
 
-### IncidentSuggestedCheck (future)
+See [next-check-mapping.md](./next-check-mapping.md) for full linkage contract.
 
-Maps from current `NextCheck` planning artifacts. The UI would display suggested checks attached to the incident rather than run-scoped.
+### UI integration
 
-### IncidentCheckExecution (future)
+The Incident detail view includes a "Suggested checks" section:
 
-Maps from current manual promotion/execution artifacts. Execution results would link to `EvidenceArtifact` and `EvidenceLink`.
-
-### IncidentEvent timeline (future)
-
-Promotion/execution should append `IncidentEvent` entries to the incident timeline for explainability.
-
-## Compatibility bridge
-
-- **Keep current artifacts as compatibility/evidence inputs.**
-- **Do not delete existing next-check artifacts.**
-- **Do not claim `IncidentSuggestedCheck` or `IncidentCheckExecution` are implemented unless they actually exist in code.**
-
-Current next-check artifacts remain valid and continue to work.
-
-## UI integration
-
-### Suggested checks compatibility projection
-
-The Incident detail view includes a read-only "Suggested checks" section that renders the `suggested_checks` field from `IncidentDetailPayload`.
-
-**Current state (fully implemented):**
-- `IncidentDetailPayload.suggested_checks` is populated at runtime when next-check plan artifacts with linked candidates exist
-- `handle_get_incident()` loads plan artifacts from `external-analysis/` directory based on incident signal run_ids
-- `build_incident_detail_payload()` accepts `next_check_plan_payloads` (iterable) for multiple artifacts
-- Suggestions from multiple run_ids are merged in deterministic order
-
-**SAFE population source**:
-- Only candidates where `candidate.linkage_status == "linked"` AND `candidate.incident_id == incident.incident_id`
+**SAFE population source:**
+- Only candidates where `linkage_status == "linked"` AND `incident_id == incident.incident_id`
 - All other candidates (partial, unlinked, old, text-derived) are ignored
 - No partial mapping, text similarity, or LLM-derived linkage
 
@@ -106,34 +98,39 @@ The Incident detail view includes a read-only "Suggested checks" section that re
 - Populated state: Read-only list with no execution, promotion, or remediation buttons
 - Hard UI boundary: No "Run", "Execute", "Promote", "Apply", "Remediate" buttons
 
-**Artifact loading** (`src/k8s_diag_agent/collect/incident_next_check_artifacts.py`):
-- `incident_signal_run_ids()`: Extracts run_id from incident signals
-- `load_next_check_plan_payloads_for_incident()`: Loads all plan artifacts for incident
-- Bounded file IO (max 16 artifacts)
-- Failure-tolerant (missing/malformed artifacts skipped)
+## Compatibility bridge
 
-**Extraction helper** (`src/k8s_diag_agent/ui/incident_suggested_checks.py`):
-- Pure functions, no file IO
-- Accepts pre-loaded plan payloads
-- Implements SAFE filter directly
+| Current pattern | Target pattern | Notes |
+|-----------------|----------------|-------|
+| `next-check-plan` artifacts | `IncidentSuggestedCheck` | Target: incident-scoped check suggestions |
+| `next-check-approval` artifacts | Operator approval in `IncidentCheckExecution` | Target: incident-scoped approval |
+| `next-check-promotion` artifacts | `IncidentCheckExecution.status=accepted` | Target: promotion tracking |
+| `next-check-execution` artifacts | `IncidentCheckExecution` with `EvidenceArtifact` | Target: execution + evidence |
+| Run-scoped plan artifacts | Incident-grouped suggestions | Current: via linkage fields |
 
-**Serializer integration** (`build_incident_detail_payload()`):
-- Accepts `next_check_plan_payloads: Iterable[Mapping[str, object]] | None`
-- Legacy `next_check_plan_payload` parameter preserved for backward compatibility
-- Flattens suggestions from multiple plan payloads
+**Compatibility:** Current artifacts remain valid and continue to work. The target model provides a unified incident-scoped view.
 
-**Handler integration** (implemented):
-- `handle_get_incident()` accepts optional `external_analysis_dir` parameter
-- Server route computes `external_analysis_dir` from `handler._health_root / "external-analysis"`
-- Loads plan artifacts for each run_id in incident signals
-- Passes payloads to serializer for SAFE linkage extraction
+**Do not claim `IncidentSuggestedCheck` or `IncidentCheckExecution` are implemented unless they actually exist in code.**
 
 ## Safety constraints
 
 - **operator approval remains required for risky or mutating work.**
 - **no autonomous remediation.**
+- **no Kubernetes mutation.**
 
 Next-check planning is advisory. All execution requires explicit operator action.
+
+### Safety boundary table
+
+| Action | k9b executes? | Notes |
+|--------|---------------|-------|
+| Read-only kubectl (logs, describe, get) | **No** | k9b only recommends; operators execute |
+| Mutating kubectl (apply, delete, patch, create, scale) | **No** | External human/operator procedure only |
+| Helm operations (install, upgrade, rollback) | **No** | External human/operator procedure only |
+| Cluster configuration changes | **No** | External human/operator procedure only |
+| Remediation execution | **No** | System is advisory only |
+
+**Product boundary:** k9b never executes mutating operations. All create, update, patch, delete, and scale verbs are outside k9b's scope and require external human/operator procedure.
 
 ## Batch execution
 
@@ -157,3 +154,28 @@ After batch execution, operators can evaluate the usefulness of executed checks:
 3. **Import:** `scripts/import_next_check_usefulness_feedback.py` writes classifications back into execution artifacts.
 
 This closes the feedback cycle: health runs produce candidates, batch execution runs them, usefulness review improves recommendation quality.
+
+## Future timeline events
+
+When `IncidentSuggestedCheck` and `IncidentCheckExecution` are implemented, the following `IncidentEventType` values should be added:
+
+- `SUGGESTED_CHECK_CREATED` — New suggested check added to incident
+- `CHECK_ACCEPTED` — Operator accepted suggested check
+- `CHECK_PROMOTED` — Check promoted to execution queue
+- `CHECK_EXECUTED` — Check execution completed
+- `CHECK_FAILED` — Check execution failed
+
+These events will provide explainability for the check lifecycle within the incident timeline.
+
+## Non-goals
+
+- **Autonomous execution without approval** — Forbidden
+- **Kubernetes mutation** — Forbidden
+- **Replacement of current artifacts** — Current artifacts remain valid
+- **LLM-derived incident linkage** — Unsafe, not implemented
+
+## References
+
+- [incidents.md](./incidents.md) — Incident aggregate root documentation
+- [next-check-mapping.md](./next-check-mapping.md) — Detailed mapping contract
+- [review-packets.md](./review-packets.md) — Review packet semantics
