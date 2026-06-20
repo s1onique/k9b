@@ -254,7 +254,9 @@
       "reason": "Disposition shard CSV integrity - local-only gate"
     },
     "docs-claim-disposition-semantic-diff-self-test": {
-      "ci_equivalent": {},
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": []
+      },
       "required_command_fragments": ["diff_docs_claim_dispositions.py --self-test"],
       "reason": "Semantic disposition diff self-test - local-only gate"
     },
@@ -431,6 +433,11 @@
       "gate": "docs-claim-disposition-csv-integrity",
       "workflow": ".github/workflows/harbor.yml",
       "reason": "Local-only gate; disposition CSV integrity verified locally"
+    },
+    {
+      "gate": "docs-claim-disposition-semantic-diff-self-test",
+      "workflow": ".github/workflows/harbor.yml",
+      "reason": "Local-only gate; semantic disposition diff self-test verified locally"
     },
     {
       "gate": "docs-inventory",
