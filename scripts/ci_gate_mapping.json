@@ -253,6 +253,11 @@
       "required_command_fragments": ["verify_docs_claim_disposition_csv_integrity.py"],
       "reason": "Disposition shard CSV integrity - local-only gate"
     },
+    "docs-claim-disposition-semantic-diff-self-test": {
+      "ci_equivalent": {},
+      "required_command_fragments": ["diff_docs_claim_dispositions.py --self-test"],
+      "reason": "Semantic disposition diff self-test - local-only gate"
+    },
     "docs-inventory": {
       "ci_equivalent": {
         ".github/workflows/harbor.yml": ["lint-policy"]

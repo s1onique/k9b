@@ -458,8 +458,21 @@ This doctrine complements:
 
 > **Note**: Section 8 (Candidate Disposition Ledger) has been moved to [documentation-truthfulness-dispositions.md](documentation-truthfulness-dispositions.md) to maintain LLM-friendly file size limits.
 
+## Semantic Disposition Diffs
+
+When CSV-safe tooling reserializes claim disposition shards, reviewers must rely on semantic CSV diff output rather than line-count churn. Use:
+
+```bash
+python scripts/diff_docs_claim_dispositions.py --base-ref HEAD~1 --target-ref HEAD
+```
+
+The report must be included in close reports for tranche ACTs when shard diffs are broad.
+
+The tool compares parsed disposition rows by `candidate_id` across git refs, reports changed fields, validates stable row sets and disposition counts, and emits optional deterministic JSON. Self-tests verify the tool's correctness against known fixtures.
+
 ## History
 
+- **2026-06-20** — ACT 5.1: Added semantic disposition diff reporter (`scripts/diff_docs_claim_dispositions.py`) with self-tests, wired into verify_all.sh gate
 - **2026-06-19** — Initial doctrine: classification system, truth status, claim tracing foundation
 - **2026-06-19** — ACT 2: Added claims registry (`docs/claims/docs_claims_registry.csv`) and verifier (`scripts/verify_docs_claims_registry.py`)
 - **2026-06-19** — ACT 3: Added traceability matrix (`docs/claims/docs_claim_traceability_matrix.csv`), verifier (`scripts/verify_docs_claim_traceability.py`), and evidence linkage for claims
