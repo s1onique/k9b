@@ -45,7 +45,7 @@ DOC-CAND-5d1c8140042f,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-p
 DOC-CAND-6b46796771ce,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-8dfa9d285d32,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/in-cluster-deployment.md
 DOC-CAND-dc96146291a8,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
-DOC-CAND-189f3364d0ea,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
+DOC-CAND-189f3364d0ea,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md (ACT 5.14 stale/historical review)
 DOC-CAND-dfe582ed3be4,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-c8c6d66148d9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md
 DOC-CAND-fbd83ce7887c,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/app-tsx-source-map.md

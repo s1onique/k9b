@@ -5,7 +5,7 @@ DOC-CAND-fb215105a9ce,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact
 DOC-CAND-ad0b352b385d,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-da5d514f8f1e,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-bf60b2445097,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-07570b92c6e7,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-07570b92c6e7,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-a506113e7234,covered_by_existing_claim,,DOC-CLAIM-0022,covered_by_broader_claim,2026-06-20,ACT 3.5: Session cookie attributes; covered by DOC-CLAIM-0022 (HttpOnly)
 DOC-CAND-977fe0d8319b,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-a52abd190274,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
@@ -50,7 +50,7 @@ DOC-CAND-0b992f7c4195,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-89f842da3f9e,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from gate-timings.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-1a4b10955877,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-e125c106dcff,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
-DOC-CAND-0985594f5f8d,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
+DOC-CAND-0985594f5f8d,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md (ACT 5.14 stale/historical review)
 DOC-CAND-68d758b31a17,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md
 DOC-CAND-4f780dd0f7e1,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/app-tsx-source-map.md
 DOC-CAND-5dacb5e331f1,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/app-tsx-source-map.md

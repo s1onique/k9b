@@ -2,10 +2,10 @@ candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,re
 DOC-CAND-68753c82f6cd,covered_by_existing_claim,,DOC-CLAIM-0059,covered_by_broader_claim,2026-06-19,Duplicate of DOC-CAND-fb097bff7fb5; both from README.md:88/261; no autonomous mutation covered by DOC-CLAIM-0059
 DOC-CAND-700cf506a2a2,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-57553b52a991,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
-DOC-CAND-52ed03ec77c6,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-52ed03ec77c6,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-882c3eb91862,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-83879475ebe3,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-481ad1b80921,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-481ad1b80921,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-8bd82c4b635d,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-5edcb2dcb83d,registered_existing_claim,DOC-CLAIM-0021,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0021
 DOC-CAND-46a8e40e8aff,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
@@ -53,7 +53,7 @@ DOC-CAND-e8a9c4ab8767,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-32efa2e961d7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md (ACT 5.12 review)
 DOC-CAND-980eb4c818df,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md (ACT 5.12 review)
 DOC-CAND-a82af41908b8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
-DOC-CAND-40b7dca8912a,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
+DOC-CAND-40b7dca8912a,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md (ACT 5.14 stale/historical review)
 DOC-CAND-3ba420c19130,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-a83815a45be0,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-605869216cad,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md

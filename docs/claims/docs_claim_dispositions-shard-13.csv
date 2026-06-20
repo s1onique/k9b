@@ -1,10 +1,10 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
 DOC-CAND-5fa11677dea9,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-47a34d5ccfe8,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
-DOC-CAND-0ecdd8800cce,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-0ecdd8800cce,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-48671495f94a,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-71c78ed7df23,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-3a17f4ac48f0,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-71c78ed7df23,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
+DOC-CAND-3a17f4ac48f0,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-9e96f5d4c1e0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
 DOC-CAND-71b6a4b4c695,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-b5fa9732d895,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-operator-guide.md

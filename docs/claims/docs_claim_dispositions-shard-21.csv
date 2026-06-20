@@ -7,7 +7,7 @@ DOC-CAND-442bc59794af,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact
 DOC-CAND-128a90eca536,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-be64e5cce6c7,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-d84d572c8eee,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-5f3624592da2,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-5f3624592da2,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-4cffe561f716,registered_existing_claim,DOC-CLAIM-0028,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0028
 DOC-CAND-17ce79d1b45e,stale,,,stale_doc,2026-06-19,From stale doc: docs/baseline_watch_practices.md
 DOC-CAND-df39bbefcd1d,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
@@ -45,8 +45,8 @@ DOC-CAND-e8318a307020,stale,,,stale_doc,2026-06-19,From stale doc: docs/incident
 DOC-CAND-cac093b72aec,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
 DOC-CAND-e5533ad1c2d1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md
 DOC-CAND-4ba260465575,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
-DOC-CAND-33ab7e111db3,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
-DOC-CAND-1a952adbb88b,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
+DOC-CAND-33ab7e111db3,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md (ACT 5.14 stale/historical review)
+DOC-CAND-1a952adbb88b,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md (ACT 5.14 stale/historical review)
 DOC-CAND-b5ca88e08839,stale,,,stale_doc,2026-06-19,From stale doc: docs/provenance-filtering.md
 DOC-CAND-621965e24558,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/app-tsx-source-map.md
 DOC-CAND-ee91d6e90ca2,stale,,,stale_doc,2026-06-19,From stale doc: docs/reports/current-agent-capabilities.md

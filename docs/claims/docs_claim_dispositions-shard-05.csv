@@ -4,7 +4,7 @@ DOC-CAND-09a133927581,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-04a74288cf38,covered_by_existing_claim,,DOC-CLAIM-0002,covered_by_broader_claim,2026-06-19,Covered by DOC-CLAIM-0002: agent never mutates live clusters
 DOC-CAND-606fe3e50cc0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-65818df67c8e,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-28cb4c246ad9,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-28cb4c246ad9,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-9c87f1ead11b,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-6ccc542492a2,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-fd258bca2ef4,registered_existing_claim,DOC-CLAIM-0023,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0023
@@ -52,10 +52,10 @@ DOC-CAND-3deb619759b2,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-257bfa921c88,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-2.md
 DOC-CAND-85904338f6f7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/gate-timings.md
 DOC-CAND-23a25d010c5b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/in-cluster-deployment.md
-DOC-CAND-7acef0167005,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
+DOC-CAND-7acef0167005,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/incidents/automatic-diagnosis-loop.md (ACT 5.14 stale/historical review)
 DOC-CAND-1574c0fb9232,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-535ac1e41bbe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
-DOC-CAND-72536143da87,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
+DOC-CAND-72536143da87,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md (ACT 5.14 stale/historical review)
 DOC-CAND-92d50990b10c,stale,,,stale_doc,2026-06-19,From stale doc: docs/provenance-filtering.md
 DOC-CAND-27a8cab5dc73,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md
 DOC-CAND-b3ac7d08527a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md

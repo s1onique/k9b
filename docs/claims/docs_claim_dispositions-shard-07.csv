@@ -3,7 +3,7 @@ DOC-CAND-b39221c0992f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-a070ca31915c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-9685e0f1513b,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
 DOC-CAND-e1f5ccc342c2,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
-DOC-CAND-580779fc3fee,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-580779fc3fee,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-e2a3c0eefeb0,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-3bb464acca7c,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-2853bc43ea8c,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md

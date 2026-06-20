@@ -4,9 +4,9 @@ DOC-CAND-217a6f9e098b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-2d6c197dcf92,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-615188c0b413,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-2689d4aa2258,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
-DOC-CAND-4c76d6bd55c9,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-7a27cdbc928b,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-42d355e79c1c,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-4c76d6bd55c9,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
+DOC-CAND-7a27cdbc928b,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
+DOC-CAND-42d355e79c1c,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-3a4ae1873e71,registered_existing_claim,DOC-CLAIM-0020,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0020
 DOC-CAND-b0752f452f76,registered_existing_claim,DOC-CLAIM-0025,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0025
 DOC-CAND-2aec33efe9c0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md

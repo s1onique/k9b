@@ -2,7 +2,7 @@ candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,re
 DOC-CAND-cda93cad4910,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md (ACT 5.12 review)
 DOC-CAND-e86d20d6c723,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-c3d75e842d9e,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
-DOC-CAND-46d15f6fb502,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-46d15f6fb502,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-954713332b09,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-00ef9a9e8b5b,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-41879a3d2f47,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md

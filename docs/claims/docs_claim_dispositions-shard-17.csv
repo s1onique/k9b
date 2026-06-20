@@ -6,9 +6,9 @@ DOC-CAND-4e2abb1ee877,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-do
 DOC-CAND-88c8f73cfb47,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-6af5d8ab5e80,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
 DOC-CAND-4d8bfe557d54,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-01b8da64bf7e,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-01b8da64bf7e,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-9f4eec60c21e,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-14dbdfa64a83,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-14dbdfa64a83,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-a1a4f72d42c4,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-8ab8670e33fc,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-dd77550feeba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
@@ -57,7 +57,7 @@ DOC-CAND-d130960dffaa,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-p
 DOC-CAND-82e638737a4e,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-b670a41d963a,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
 DOC-CAND-1a49d947acf2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
-DOC-CAND-152621b69944,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
+DOC-CAND-152621b69944,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md (ACT 5.14 stale/historical review)
 DOC-CAND-02055f7933e5,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-5d117bd8fdf5,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-c5436ee93bd6,stale,,,stale_doc,2026-06-19,From stale doc: docs/provenance-filtering.md

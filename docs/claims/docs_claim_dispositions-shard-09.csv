@@ -36,7 +36,7 @@ DOC-CAND-bfd0bbaf8436,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-bf6b0d680c29,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Gate timing documentation policy. Meta-documentation about gate performance, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-06f394b177c8,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-1fb8539f7f5c,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
-DOC-CAND-47581e245660,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
+DOC-CAND-47581e245660,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/incidents/automatic-diagnosis-loop.md (ACT 5.14 stale/historical review)
 DOC-CAND-ca8895f53b6c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md
 DOC-CAND-edc1ea766517,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-fdaf61a739e1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md

@@ -1,7 +1,7 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
 DOC-CAND-d64ddd819dd3,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
-DOC-CAND-571fe3c9ae1d,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-56be4e692f92,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
+DOC-CAND-571fe3c9ae1d,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
+DOC-CAND-56be4e692f92,stale,,,stale_doc,2026-06-20T08:32:00Z,From stale doc: docs/artifact-immutability-audit.md (ACT 5.14 stale/historical review)
 DOC-CAND-9ec9e257a32d,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-8352d36b1dfb,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-dfe185f943f8,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
