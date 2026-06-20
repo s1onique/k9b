@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from .claim_classification import classify_claim_candidate
+
 # High-value doc path terms (security-relevant or operator-facing)
 HIGH_VALUE_PATH_TERMS = {
     "security",
@@ -43,27 +45,6 @@ NORMATIVE_TEXT_TERMS = {
     "invariant",
     "production",
     "operator",
-}
-
-# Strong normative signal terms (these alone can indicate a real claim)
-STRONG_NORMATIVE_SIGNALS = {
-    "must",
-    "must not",
-    "cannot",
-    "never",
-    "only",
-    "required",
-    "invariant",
-    "source of truth",
-    "append-only",
-    "immutable",
-    "authenticated",
-    "authorization",
-    "no mutation",
-    "read-only",
-    "production evidence",
-    "verifier",
-    "gate",
 }
 
 # Generic note patterns to detect low-value ignored notes
@@ -272,27 +253,6 @@ def compute_risk_score(
     return score, reasons
 
 
-def _has_strong_claim_signal(candidate_text: str) -> list[str]:
-    """Check if candidate text contains strong normative claim signals.
-    
-    Returns list of signal tags found.
-    """
-    text_lower = candidate_text.lower()
-    signals: list[str] = []
-    
-    for signal in STRONG_NORMATIVE_SIGNALS:
-        # Multi-word signals need exact match
-        if " " in signal:
-            if signal in text_lower:
-                signals.append(f"claim_signal:{signal}")
-        else:
-            # Single word - use word boundary
-            if re.search(rf"\b{re.escape(signal)}\b", text_lower):
-                signals.append(f"claim_signal:{signal}")
-    
-    return signals
-
-
 def _is_structural_fragment(
     reason_code: str,
     notes: str,
@@ -363,9 +323,6 @@ def _is_non_normative_prose(
         if pattern in notes_lower:
             reasons.append(tag)
     
-    # NOTE: Do NOT classify generic low-value notes as non-normative here.
-    # Let classify_review_class() handle that case after checking for strong signals.
-    
     return len(reasons) > 0, reasons
 
 
@@ -387,7 +344,7 @@ def classify_review_class(
     2. stale_or_historical - disposition or doc indicates stale/historical
     3. reviewed_low_value - has ACT marker and is ignored_by_policy
     4. structural_fragment - table/heading/schema fragments
-    5. claim_candidate - strong normative signal (checked BEFORE non-normative prose)
+    5. claim_candidate - uses refined classification model
     6. non_normative_prose - descriptive/non-normative prose
     7. unknown - fallback
     """
@@ -414,11 +371,12 @@ def classify_review_class(
     if is_structural:
         return REVIEW_CLASS_STRUCTURAL_FRAGMENT, structural_reasons
     
-    # E. claim_candidate - strong normative signal
-    # Check this BEFORE non-normative prose so strong signals can override generic notes
-    claim_signals = _has_strong_claim_signal(candidate_text)
-    if claim_signals:
-        return REVIEW_CLASS_CLAIM_CANDIDATE, claim_signals
+    # E. claim_candidate - use refined classification model
+    is_claim_candidate, claim_reasons = classify_claim_candidate(
+        candidate_text, notes, doc_path
+    )
+    if is_claim_candidate:
+        return REVIEW_CLASS_CLAIM_CANDIDATE, claim_reasons
     
     # F. non_normative_prose - descriptive/non-normative content
     is_non_normative, non_normative_reasons = _is_non_normative_prose(

@@ -51,7 +51,9 @@ def run_self_test() -> bool:
         if cond: print(f"[PASS] {name}")
         else: print(f"[FAIL] {name}: {msg}"); all_passed = False
 
-    # Review class classification tests
+    # =====================================================================
+    # Basic review class classification tests
+    # =====================================================================
     check("table fragment -> structural_fragment",
         classify_review_class("ignored_by_policy", "generated_from_table_fragment",
             "Table fragment from docs/foo.md", False, "docs/foo.md", {}, "Table row data")[0]
@@ -77,41 +79,186 @@ def run_self_test() -> bool:
         classify_review_class("covered_by_existing_claim", "covered_by_broader_claim",
             "Already covered", False, "docs/foo.md", {}, "Some text")[0]
         == REVIEW_CLASS_COVERED_OR_REGISTERED)
-    check("MUST candidate -> claim_candidate",
-        classify_review_class("ignored_by_policy", "low_value_context", "Custom note",
-            False, "docs/security/auth.md", {},
-            "The system must handle authentication securely.")[0]
-        == REVIEW_CLASS_CLAIM_CANDIDATE)
     check("structural + MUST -> structural (not claim)",
         classify_review_class("ignored_by_policy", "generated_from_table_fragment",
             "Table fragment with MUST keyword", False, "docs/foo.md", {},
             "Table row must have field")[0]
         == REVIEW_CLASS_STRUCTURAL_FRAGMENT)
-    check("generic note + MUST -> claim_candidate",
-        classify_review_class("ignored_by_policy", "low_value_context",
-            "Low-value prose fragment from: docs/security/auth.md", False,
-            "docs/security/auth.md", {},
-            "The system must handle authentication securely.")[0]
-        == REVIEW_CLASS_CLAIM_CANDIDATE)
-    check("generic note + required -> claim_candidate",
-        classify_review_class("ignored_by_policy", "low_value_context",
-            "Low-value prose fragment from: docs/foo.md", False, "docs/foo.md", {},
-            "This field is required for operation.")[0]
-        == REVIEW_CLASS_CLAIM_CANDIDATE)
 
+    # =====================================================================
+    # True-positive claim_candidate tests (real behavioral claims)
+    # These MUST be classified as claim_candidate
+    # =====================================================================
+
+    # Test 1: generic note + strong real claim with system subject -> claim_candidate
+    result1, reasons1 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/security/auth.md", False,
+        "docs/security/auth.md", {},
+        "The backend must reject unauthenticated artifact requests"
+    )
+    check("generic note + backend must reject -> claim_candidate",
+        result1 == REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result1} {reasons1}")
+
+    # Test 2: generic note + evidence artifact + append-only -> claim_candidate
+    result2, reasons2 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/evidence/policy.md", False,
+        "docs/evidence/policy.md", {},
+        "Evidence artifacts must be append-only"
+    )
+    check("generic note + artifacts must be append-only -> claim_candidate",
+        result2 == REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result2} {reasons2}")
+
+    # Test 3: generic note + API + must not -> claim_candidate
+    result3, reasons3 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Custom note", False, "docs/api/security.md", {},
+        "The API must not expose raw secrets"
+    )
+    check("generic note + API must not expose -> claim_candidate",
+        result3 == REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result3} {reasons3}")
+
+    # Test 4: generic note + snapshots + source of truth -> claim_candidate
+    result4, reasons4 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/runtime/status.md", False,
+        "docs/runtime/status.md", {},
+        "Snapshots are the source of truth for runtime status"
+    )
+    check("generic note + snapshots source of truth -> claim_candidate",
+        result4 == REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result4} {reasons4}")
+
+    # Test 5: generic note + read-only checks + cannot -> claim_candidate
+    result5, reasons5 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/security/checks.md", False,
+        "docs/security/checks.md", {},
+        "Read-only checks cannot mutate the cluster"
+    )
+    check("generic note + read-only cannot mutate -> claim_candidate",
+        result5 == REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result5} {reasons5}")
+
+    # Test 6: generic note + system + must handle -> claim_candidate (original test)
+    result6, reasons6 = classify_review_class(
+        "ignored_by_policy", "low_value_context", "Custom note",
+        False, "docs/security/auth.md", {},
+        "The system must handle authentication securely."
+    )
+    check("generic note + MUST (with system subject) -> claim_candidate",
+        result6 == REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result6} {reasons6}")
+
+    # =====================================================================
+    # False-positive claim_candidate tests (generic prose with broad terms)
+    # These should NOT be classified as claim_candidate
+    # =====================================================================
+
+    # Test 7: schema field + required -> NOT claim_candidate (structural)
+    result7, reasons7 = classify_review_class(
+        "ignored_by_policy", "schema_field_label",
+        "Schema field label", False, "docs/schemas/incident.md", {},
+        "This field is required"
+    )
+    check("schema field + required -> NOT claim_candidate",
+        result7 != REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result7} {reasons7}")
+
+    # Test 8: policy doc + "never reused" -> NOT claim_candidate (policy/meta)
+    result8, reasons8 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md",
+        False, "docs/doctrine/documentation-truthfulness.md", {},
+        "IDs are never reused"
+    )
+    check("docs-truthfulness + never -> NOT claim_candidate",
+        result8 != REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result8} {reasons8}")
+
+    # Test 9: backlog/worklist + only include -> NOT claim_candidate (policy)
+    result9, reasons9 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/post-beta-backlog.md",
+        False, "docs/post-beta-backlog.md", {},
+        "Only include artifacts that are production-ready"
+    )
+    check("backlog + only include -> NOT claim_candidate",
+        result9 != REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result9} {reasons9}")
+
+    # Test 10: claim-process doc + must review -> NOT claim_candidate (meta)
+    result10, reasons10 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md",
+        False, "docs/doctrine/documentation-truthfulness.md", {},
+        "Claims must be reviewed manually before disposition"
+    )
+    check("claim-process + must review -> NOT claim_candidate",
+        result10 != REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result10} {reasons10}")
+
+    # Test 11: design doc + must -> NOT claim_candidate (design/future)
+    result11, reasons11 = classify_review_class(
+        "ignored_by_policy", "design_or_future_note",
+        "Design note", False, "docs/doctrine/playbooks/redesign_staging.md", {},
+        "If rollback is not possible, that must be treated as a one-way door"
+    )
+    check("design note + must -> NOT claim_candidate",
+        result11 != REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result11} {reasons11}")
+
+    # Test 12: impact scan + behavior risk + must -> NOT claim_candidate (design)
+    result12, reasons12 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/reports/impact-scan-ledger.md",
+        False, "docs/reports/impact-scan-ledger.md", {},
+        "Queue status filters must remain unchanged"
+    )
+    check("impact scan + must remain -> NOT claim_candidate",
+        result12 != REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result12} {reasons12}")
+
+    # Test 13: generic note + required (without claim shape) -> NOT claim_candidate
+    result13, reasons13 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/foo.md", False, "docs/foo.md", {},
+        "This field is required for operation."
+    )
+    check("generic note + required (no claim shape) -> NOT claim_candidate",
+        result13 != REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result13} {reasons13}")
+
+    # Test 14: CI gate drift doc + gate -> NOT claim_candidate (meta)
+    result14, reasons14 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/ci-gate-drift.md",
+        False, "docs/ci-gate-drift.md", {},
+        "Gate is not represented in CI but has a valid reason"
+    )
+    check("ci-gate-drift + gate -> NOT claim_candidate",
+        result14 != REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result14} {reasons14}")
+
+    # Test 15: documentation-truthfulness + verifier -> NOT claim_candidate (meta)
+    result15, reasons15 = classify_review_class(
+        "ignored_by_policy", "low_value_context",
+        "Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md",
+        False, "docs/doctrine/documentation-truthfulness.md", {},
+        "Coverage verifier: scripts/verifydocsclaimcandidatecoverage.py"
+    )
+    check("docs-truthfulness + verifier -> NOT claim_candidate",
+        result15 != REVIEW_CLASS_CLAIM_CANDIDATE, f"got {result15} {reasons15}")
+
+    # =====================================================================
     # Score calibration tests
+    # =====================================================================
     check("structural_fragment -30 penalty", compute_calibrated_score(42, REVIEW_CLASS_STRUCTURAL_FRAGMENT) == 12)
     check("non_normative_prose -25 penalty", compute_calibrated_score(42, REVIEW_CLASS_NON_NORMATIVE_PROSE) == 17)
     check("claim_candidate +20 boost", compute_calibrated_score(42, REVIEW_CLASS_CLAIM_CANDIDATE) == 62)
     check("reviewed_low_value -40 penalty", compute_calibrated_score(42, REVIEW_CLASS_REVIEWED_LOW_VALUE) == 2)
     check("stale_or_historical -30 penalty", compute_calibrated_score(42, REVIEW_CLASS_STALE_OR_HISTORICAL) == 12)
 
+    # =====================================================================
     # is_cleanup_class tests
+    # =====================================================================
     check("structural_fragment is cleanup", is_cleanup_class(REVIEW_CLASS_STRUCTURAL_FRAGMENT))
     check("non_normative_prose is cleanup", is_cleanup_class(REVIEW_CLASS_NON_NORMATIVE_PROSE))
     check("claim_candidate is NOT cleanup", not is_cleanup_class(REVIEW_CLASS_CLAIM_CANDIDATE))
 
+    # =====================================================================
     # Risk score tests
+    # =====================================================================
     score1, r1 = compute_risk_score("ignored_by_policy", "low_value_context",
         "Low-value prose fragment from: docs/foo.md", "docs/security/bar.md",
         "This must be handled securely.", {}, False, False)
@@ -140,7 +287,9 @@ def run_self_test() -> bool:
     check("covered_note_weak flagged", "covered_note_weak" in r7)
     check("generic note pattern", is_generic_low_value_note("Low-value prose fragment from: docs/foo.md"))
 
+    # =====================================================================
     # Filter tests
+    # =====================================================================
     # Create mixed entries for filter testing
     mixed_entries = [
         make_claim_candidate_entry("DOC-CAND-001", 62),
@@ -210,7 +359,9 @@ def run_self_test() -> bool:
     except (SystemExit, argparse.ArgumentTypeError):
         check("invalid priority_band is rejected", True)
 
+    # =====================================================================
     # Planning caveat tests
+    # =====================================================================
     cleanup_planning = compute_planning_summary(make_cleanup_heavy_entries())
     check("cleanup-heavy caveat", cleanup_planning.get("planning_caveat") == CAVEAT_CLEANUP_HEAVY,
         str(cleanup_planning.get("planning_caveat")))
@@ -221,14 +372,18 @@ def run_self_test() -> bool:
     check("mixed caveat", mixed_planning.get("planning_caveat") == CAVEAT_MIXED,
         str(mixed_planning.get("planning_caveat")))
 
+    # =====================================================================
     # Priority band tests
+    # =====================================================================
     check("score 42 -> P0", get_priority_band(42) == "P0")
     check("score 34 -> P1", get_priority_band(34) == "P1")
     check("score 24 -> P2", get_priority_band(24) == "P2")
     check("score 1 -> P3", get_priority_band(1) == "P3")
     check("score 0 -> P4", get_priority_band(0) == "P4")
 
+    # =====================================================================
     # JSON/TSV output tests
+    # =====================================================================
     test_entries = make_json_test_entries()
     test_summary = make_json_test_summary()
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f: json_path = Path(f.name)
@@ -296,7 +451,9 @@ def run_self_test() -> bool:
         check("planning has planning_caveat", "planning_caveat" in p)
     finally: os.unlink(json_plan_path)
 
+    # =====================================================================
     # Recommendation action tests
+    # =====================================================================
     large_planning = compute_planning_summary(make_large_tranche_entries())
     check("P0+P1>=100 -> continue_large_tranche",
         large_planning["recommended_next_action"] == ACTION_CONTINUE_LARGE_TRANCHE)
