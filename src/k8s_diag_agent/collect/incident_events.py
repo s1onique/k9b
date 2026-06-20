@@ -37,6 +37,10 @@ class IncidentEventType(StrEnum):
     SUPPRESSED = "suppressed"
     MARKED_DUPLICATE = "marked_duplicate"
     CLOSED = "closed"
+    # Diagnosis loop events - automatic diagnosis loop lifecycle
+    DIAGNOSIS_LOOP_STARTED = "diagnosis_loop_started"
+    DIAGNOSIS_LOOP_COMPLETED = "diagnosis_loop_completed"
+    DIAGNOSIS_LOOP_FAILED = "diagnosis_loop_failed"
 
 
 class IncidentEventActor(StrEnum):

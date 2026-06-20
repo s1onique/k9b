@@ -48,6 +48,7 @@ from .incident_diagnosis_review_packet import (
     write_diagnosis_review_packet,
 )
 from .incident_read_only_check_artifacts import is_safe_run_id
+from .incident_store import IncidentStore
 from .incident_store_provider import get_incident_store
 
 if TYPE_CHECKING:
@@ -183,7 +184,13 @@ def _process_incident(
 
     Returns:
         AutoLoopIncidentResult with processing outcome
+
+    Note:
+        Emits DIAGNOSIS_LOOP_STARTED, DIAGNOSIS_LOOP_COMPLETED, and
+        DIAGNOSIS_LOOP_FAILED events to the incident timeline.
     """
+    store: IncidentStore = get_incident_store()
+
     # Check eligibility (pass external_analysis_dir to count existing review packets)
     eligibility = check_incident_eligibility(
         incident_id=incident_id,
@@ -205,6 +212,13 @@ def _process_incident(
 
     # Validate run_id for safety
     if not is_safe_run_id(run_id):
+        # Emit failure event for unsafe run_id
+        store.mark_diagnosis_loop_failed(
+            incident_id=incident_id,
+            run_id=run_id,
+            collector_run_id=collector_run_id,
+            unavailable_reason="unsafe_run_id",
+        )
         return AutoLoopIncidentResult(
             incident_id=incident_id,
             eligible=True,
@@ -213,22 +227,43 @@ def _process_incident(
             error=f"Unsafe run_id generated: {run_id}",
         )
 
+    # Emit DIAGNOSIS_LOOP_STARTED event
+    store.mark_diagnosis_loop_started(
+        incident_id=incident_id,
+        run_id=run_id,
+        collector_run_id=collector_run_id,
+    )
+
     # Build case file
     try:
         case_file = build_incident_case_file(
             incident_id=incident_id,
             external_analysis_dir=external_analysis_dir,
         )
-    except (OSError, ValueError, KeyError) as exc:
+    except (OSError, ValueError, KeyError):
+        # Emit failure event for case file build failure
+        store.mark_diagnosis_loop_failed(
+            incident_id=incident_id,
+            run_id=run_id,
+            collector_run_id=collector_run_id,
+            unavailable_reason="case_file_error",
+        )
         return AutoLoopIncidentResult(
             incident_id=incident_id,
             eligible=True,
             eligibility_reason=eligibility.reason,
             run_id=run_id,
-            error=f"Failed to build case file: {exc}",
+            error="Failed to build case file",
         )
 
     if case_file is None:
+        # Emit failure event for None case file
+        store.mark_diagnosis_loop_failed(
+            incident_id=incident_id,
+            run_id=run_id,
+            collector_run_id=collector_run_id,
+            unavailable_reason="case_file_none",
+        )
         return AutoLoopIncidentResult(
             incident_id=incident_id,
             eligible=True,
@@ -250,13 +285,20 @@ def _process_incident(
             run_id=run_id,
             now=now,
         )
-    except (ValueError, RuntimeError, KeyError) as exc:
+    except (ValueError, RuntimeError, KeyError):
+        # Emit failure event for orchestrator error
+        store.mark_diagnosis_loop_failed(
+            incident_id=incident_id,
+            run_id=run_id,
+            collector_run_id=collector_run_id,
+            unavailable_reason="orchestrator_error",
+        )
         return AutoLoopIncidentResult(
             incident_id=incident_id,
             eligible=True,
             eligibility_reason=eligibility.reason,
             run_id=run_id,
-            error=f"Orchestrator error: {exc}",
+            error="Orchestrator error",
         )
 
     # Extract results
@@ -314,6 +356,17 @@ def _process_incident(
                 review_packet_name = str(review_packet_meta.get("name")) if review_packet_meta.get("name") else None
         except (OSError, ValueError):
             pass
+
+    # Emit DIAGNOSIS_LOOP_COMPLETED event
+    store.mark_diagnosis_loop_completed(
+        incident_id=incident_id,
+        run_id=run_id,
+        collector_run_id=collector_run_id,
+        review_packet_name=review_packet_name,
+        checks_requested=checks_requested,
+        checks_run=checks_run,
+        checks_rejected=checks_rejected,
+    )
 
     # Extract artifact flags
     read_only_check_artifact_written = (

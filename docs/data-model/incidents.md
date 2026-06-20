@@ -240,14 +240,14 @@ From `IncidentEventType` enum:
 - `SUPPRESSED` — Incident was suppressed
 - `MARKED_DUPLICATE` — Incident marked as duplicate
 - `CLOSED` — Incident was closed
+- `DIAGNOSIS_LOOP_STARTED` — Automatic diagnosis loop started for incident
+- `DIAGNOSIS_LOOP_COMPLETED` — Automatic diagnosis loop completed successfully
+- `DIAGNOSIS_LOOP_FAILED` — Automatic diagnosis loop failed
 
 ### Target event types (future)
 
 To be added when incident-scoped check model is implemented:
 
-- `DIAGNOSIS_LOOP_STARTED` — Automatic diagnosis loop started for incident
-- `DIAGNOSIS_LOOP_COMPLETED` — Automatic diagnosis loop completed successfully
-- `DIAGNOSIS_LOOP_FAILED` — Automatic diagnosis loop failed
 - `SUGGESTED_CHECK_CREATED` — New suggested check added to incident
 - `CHECK_ACCEPTED` — Operator accepted suggested check
 - `CHECK_PROMOTED` — Check promoted to execution queue

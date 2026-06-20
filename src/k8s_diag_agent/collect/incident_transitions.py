@@ -238,6 +238,161 @@ def attach_evidence_artifact(
     )
 
 
+def mark_diagnosis_loop_started(
+    incident: Incident,
+    run_id: str,
+    collector_run_id: str,
+    occurred_at: datetime | None = None,
+) -> Incident:
+    """Mark that automatic diagnosis loop started for an incident.
+
+    Safe metadata only - no raw packet contents, logs, or stack traces.
+
+    Args:
+        incident: The incident to update
+        run_id: The run_id for this diagnosis loop pass
+        collector_run_id: The batch collector run ID
+        occurred_at: Optional timestamp (defaults to now)
+
+    Returns:
+        Updated incident with diagnosis_loop_started event appended
+    """
+    now = occurred_at or datetime.now(UTC)
+
+    event_data = {
+        "run_id": run_id,
+        "collector_run_id": collector_run_id,
+        "read_only": True,
+        "review_required_before_any_action": True,
+        "no_remediation_attempted": True,
+    }
+
+    new_event = IncidentEvent(
+        event_id=make_event_id(incident.incident_id, "diagnosis_loop_started", now, event_data),
+        incident_id=incident.incident_id,
+        event_type=IncidentEventType.DIAGNOSIS_LOOP_STARTED,
+        actor=IncidentEventActor.SYSTEM,
+        occurred_at=now,
+        message="Automatic diagnosis loop started",
+        data=event_data,
+    )
+
+    return replace(incident, events=incident.events + [new_event])
+
+
+def mark_diagnosis_loop_completed(
+    incident: Incident,
+    run_id: str,
+    collector_run_id: str,
+    review_packet_name: str | None = None,
+    checks_requested: int = 0,
+    checks_run: int = 0,
+    checks_rejected: int = 0,
+    occurred_at: datetime | None = None,
+) -> Incident:
+    """Mark that automatic diagnosis loop completed successfully.
+
+    Safe metadata only - no raw packet contents, logs, or stack traces.
+
+    Args:
+        incident: The incident to update
+        run_id: The run_id for this diagnosis loop pass
+        collector_run_id: The batch collector run ID
+        review_packet_name: Optional review packet filename
+        checks_requested: Number of checks requested
+        checks_run: Number of checks actually run
+        checks_rejected: Number of checks rejected
+        occurred_at: Optional timestamp (defaults to now)
+
+    Returns:
+        Updated incident with diagnosis_loop_completed event appended
+    """
+    now = occurred_at or datetime.now(UTC)
+
+    event_data: dict[str, object] = {
+        "run_id": run_id,
+        "collector_run_id": collector_run_id,
+        "checks_requested": checks_requested,
+        "checks_run": checks_run,
+        "checks_rejected": checks_rejected,
+        "read_only": True,
+        "review_required_before_any_action": True,
+        "no_remediation_attempted": True,
+    }
+
+    if review_packet_name:
+        event_data["review_packet_id"] = review_packet_name
+
+    new_event = IncidentEvent(
+        event_id=make_event_id(incident.incident_id, "diagnosis_loop_completed", now, event_data),
+        incident_id=incident.incident_id,
+        event_type=IncidentEventType.DIAGNOSIS_LOOP_COMPLETED,
+        actor=IncidentEventActor.SYSTEM,
+        occurred_at=now,
+        message="Automatic diagnosis loop completed",
+        data=event_data,
+    )
+
+    return replace(incident, events=incident.events + [new_event])
+
+
+def mark_diagnosis_loop_failed(
+    incident: Incident,
+    run_id: str | None = None,
+    collector_run_id: str | None = None,
+    unavailable_reason: str | None = None,
+    occurred_at: datetime | None = None,
+) -> Incident:
+    """Mark that automatic diagnosis loop failed or produced unavailable state.
+
+    Safe metadata only - no raw packet contents, logs, stack traces, or prompts.
+    Uses bounded reason codes only for failure information.
+
+    Safe reason codes:
+        - unsafe_run_id: Generated run_id failed safety validation
+        - case_file_error: Failed to build case file
+        - case_file_none: Case file returned None
+        - orchestrator_error: Orchestrator raised an exception
+        - not_eligible: Incident not eligible for diagnosis loop
+
+    Args:
+        incident: The incident to update
+        run_id: Optional run_id for the failed pass
+        collector_run_id: Optional batch collector run ID
+        unavailable_reason: Safe bounded reason code
+        occurred_at: Optional timestamp (defaults to now)
+
+    Returns:
+        Updated incident with diagnosis_loop_failed event appended
+    """
+    now = occurred_at or datetime.now(UTC)
+
+    event_data: dict[str, object] = {
+        "read_only": True,
+        "review_required_before_any_action": True,
+        "no_remediation_attempted": True,
+    }
+
+    if run_id:
+        event_data["run_id"] = run_id
+    if collector_run_id:
+        event_data["collector_run_id"] = collector_run_id
+    if unavailable_reason:
+        event_data["unavailable_reason"] = unavailable_reason
+
+    new_event = IncidentEvent(
+        event_id=make_event_id(incident.incident_id, "diagnosis_loop_failed", now, event_data),
+        incident_id=incident.incident_id,
+        event_type=IncidentEventType.DIAGNOSIS_LOOP_FAILED,
+        actor=IncidentEventActor.SYSTEM,
+        occurred_at=now,
+        message="Automatic diagnosis loop failed or unavailable",
+        data=event_data,
+    )
+
+    return replace(incident, events=incident.events + [new_event])
+
+
 __all__ = [
     "merge_candidate_into_incident",
     "mark_collecting_evidence",
@@ -245,4 +400,7 @@ __all__ = [
     "suppress_incident",
     "mark_duplicate",
     "attach_evidence_artifact",
+    "mark_diagnosis_loop_started",
+    "mark_diagnosis_loop_completed",
+    "mark_diagnosis_loop_failed",
 ]

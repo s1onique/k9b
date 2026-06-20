@@ -219,6 +219,10 @@ const EVENT_TYPE_CATEGORIES: Record<string, string> = {
   suppressed: "Status",
   marked_duplicate: "Status",
   closed: "Lifecycle",
+  // Diagnosis loop events
+  diagnosis_loop_started: "Diagnosis Loop",
+  diagnosis_loop_completed: "Diagnosis Loop",
+  diagnosis_loop_failed: "Diagnosis Loop",
 };
 
 /**

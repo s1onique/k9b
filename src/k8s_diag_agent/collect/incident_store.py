@@ -215,35 +215,9 @@ class IncidentStore:
         return list(incident.evidence_links)
 
     def _snapshot_incident(self, incident: Incident) -> Incident:
-        """Create a snapshot copy of an incident.
-
-        This ensures internal mutable lists are not exposed.
-        """
-        return Incident(
-            incident_id=incident.incident_id,
-            source_candidate_id=incident.source_candidate_id,
-            namespace=incident.namespace,
-            object_kind=incident.object_kind,
-            object_name=incident.object_name,
-            raw_object_kind=incident.raw_object_kind,
-            candidate_class=incident.candidate_class,
-            severity=incident.severity,
-            status=incident.status,
-            first_observed_at=incident.first_observed_at,
-            last_observed_at=incident.last_observed_at,
-            signals=list(incident.signals),
-            evidence_needed=list(incident.evidence_needed),
-            evidence_links=list(incident.evidence_links),
-            latest_snapshot_bundle_id=incident.latest_snapshot_bundle_id,
-            review_packet=incident.review_packet,
-            signal_count=incident.signal_count,
-            evidence_count=incident.evidence_count,
-            events=list(incident.events),
-            suppressed_reason=incident.suppressed_reason,
-            duplicate_of=incident.duplicate_of,
-            resolved_at=incident.resolved_at,
-            resolution_notes=incident.resolution_notes,
-        )
+        """Create a snapshot copy of an incident."""
+        from .incident_snapshot_helpers import snapshot_incident as _snapshot_incident
+        return _snapshot_incident(incident)
 
     def mark_collecting_evidence(self, incident_id: str, bundle_id: str) -> Incident | None:
         """Transition incident to COLLECTING_EVIDENCE state.
@@ -423,6 +397,88 @@ class IncidentStore:
         updated = _attach_evidence_artifact(incident, artifact_id, role)
         self._incidents[incident_id] = updated
         return self._snapshot_incident(updated)
+
+    def mark_diagnosis_loop_started(
+        self,
+        incident_id: str,
+        run_id: str,
+        collector_run_id: str,
+    ) -> Incident | None:
+        """Mark that automatic diagnosis loop started for an incident.
+
+        Safe metadata only - no raw packet contents, logs, or stack traces.
+
+        Args:
+            incident_id: ID of the incident
+            run_id: The run_id for this diagnosis loop pass
+            collector_run_id: The batch collector run ID
+
+        Returns:
+            Updated incident snapshot, or None if not found
+        """
+        from .incident_diagnosis_loop_store_helpers import mark_diagnosis_loop_started as _helper
+
+        updated = _helper(self, incident_id, run_id, collector_run_id)
+        return self._snapshot_incident(updated) if updated else None
+
+    def mark_diagnosis_loop_completed(
+        self,
+        incident_id: str,
+        run_id: str,
+        collector_run_id: str,
+        review_packet_name: str | None = None,
+        checks_requested: int = 0,
+        checks_run: int = 0,
+        checks_rejected: int = 0,
+    ) -> Incident | None:
+        """Mark that automatic diagnosis loop completed successfully.
+
+        Safe metadata only - no raw packet contents, logs, or stack traces.
+
+        Args:
+            incident_id: ID of the incident
+            run_id: The run_id for this diagnosis loop pass
+            collector_run_id: The batch collector run ID
+            review_packet_name: Optional review packet filename
+            checks_requested: Number of checks requested
+            checks_run: Number of checks actually run
+            checks_rejected: Number of checks rejected
+
+        Returns:
+            Updated incident snapshot, or None if not found
+        """
+        from .incident_diagnosis_loop_store_helpers import mark_diagnosis_loop_completed as _helper
+
+        updated = _helper(
+            self, incident_id, run_id, collector_run_id,
+            review_packet_name, checks_requested, checks_run, checks_rejected,
+        )
+        return self._snapshot_incident(updated) if updated else None
+
+    def mark_diagnosis_loop_failed(
+        self,
+        incident_id: str,
+        run_id: str | None = None,
+        collector_run_id: str | None = None,
+        unavailable_reason: str | None = None,
+    ) -> Incident | None:
+        """Mark that automatic diagnosis loop failed or produced unavailable state.
+
+        Safe metadata only - no raw packet contents, logs, stack traces, or prompts.
+
+        Args:
+            incident_id: ID of the incident
+            run_id: Optional run_id for the failed pass
+            collector_run_id: Optional batch collector run ID
+            unavailable_reason: Safe reason code
+
+        Returns:
+            Updated incident snapshot, or None if not found
+        """
+        from .incident_diagnosis_loop_store_helpers import mark_diagnosis_loop_failed as _helper
+
+        updated = _helper(self, incident_id, run_id, collector_run_id, unavailable_reason)
+        return self._snapshot_incident(updated) if updated else None
 
     def __len__(self) -> int:
         """Return the number of incidents in the store."""

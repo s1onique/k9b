@@ -3,6 +3,7 @@
 Tests cover:
 - Run tests (collector behavior, orchestrator wiring)
 - Safety tests (no forbidden imports)
+- Event emission integration tests
 
 These tests do NOT:
 - Execute real Kubernetes collectors
@@ -215,3 +216,115 @@ class TestSafetyMetadata:
                 os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
             elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
                 del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
+
+
+# =============================================================================
+# Event Emission Integration Tests
+# =============================================================================
+
+
+class TestDiagnosisLoopEventEmission:
+    """Tests proving diagnosis loop events are emitted by the auto loop."""
+
+    def test_eligible_incident_emits_started_event(
+        self, temp_external_dir
+    ):
+        """Prove eligible incident causes DIAGNOSIS_LOOP_STARTED event."""
+        from datetime import UTC, datetime
+
+        from k8s_diag_agent.collect.incident_events import IncidentEventType
+        from k8s_diag_agent.collect.incident_store import IncidentStore
+        from k8s_diag_agent.collect.incident_store_provider import set_incident_store
+        from tests.unit.incident_store_fixtures import make_candidate
+
+        # Create a test incident via promote_candidates (standard pattern)
+        store = IncidentStore()
+        candidate = make_candidate(name="test-pod")
+        incidents = store.promote_candidates([candidate], datetime.now(UTC))
+        assert len(incidents) == 1
+        incident_id = incidents[0].incident_id
+
+        # Ensure incident has evidence link (so it's eligible for auto loop)
+        from k8s_diag_agent.collect.incident_transitions import mark_collecting_evidence
+        incident = store.get_incident(incident_id)
+        updated = mark_collecting_evidence(incident, bundle_id="test-bundle-001")
+        store._incidents[incident_id] = updated
+
+        set_incident_store(store)
+
+        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
+        try:
+            os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "true"
+
+            # Run the auto loop
+            _result = run_automatic_diagnosis_loop_evidence_collection(
+                external_analysis_dir=temp_external_dir,
+                incident_ids=[incident_id],
+            )
+
+            # Verify events were emitted
+            updated = store.get_incident(incident_id)
+            assert updated is not None
+
+            event_types = [e.event_type for e in updated.events]
+            assert IncidentEventType.DIAGNOSIS_LOOP_STARTED in event_types, (
+                f"Expected DIAGNOSIS_LOOP_STARTED event, got events: {event_types}"
+            )
+        finally:
+            if env_backup is not None:
+                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
+            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
+                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
+            # Reset store
+            set_incident_store(None)
+
+    def test_eligible_incident_emits_completed_event(
+        self, temp_external_dir
+    ):
+        """Prove eligible incident causes DIAGNOSIS_LOOP_COMPLETED event."""
+        from datetime import UTC, datetime
+
+        from k8s_diag_agent.collect.incident_events import IncidentEventType
+        from k8s_diag_agent.collect.incident_store import IncidentStore
+        from k8s_diag_agent.collect.incident_store_provider import set_incident_store
+        from tests.unit.incident_store_fixtures import make_candidate
+
+        # Create a test incident via promote_candidates (eligible per system criteria)
+        store = IncidentStore()
+        candidate = make_candidate(name="test-pod")
+        incidents = store.promote_candidates([candidate], datetime.now(UTC))
+        assert len(incidents) == 1
+        incident_id = incidents[0].incident_id
+
+        # Ensure incident has evidence link (so it's eligible for auto loop)
+        from k8s_diag_agent.collect.incident_transitions import mark_collecting_evidence
+        incident = store.get_incident(incident_id)
+        updated = mark_collecting_evidence(incident, bundle_id="test-bundle-001")
+        store._incidents[incident_id] = updated
+
+        set_incident_store(store)
+
+        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
+        try:
+            os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "true"
+
+            # Run the auto loop
+            _result = run_automatic_diagnosis_loop_evidence_collection(
+                external_analysis_dir=temp_external_dir,
+                incident_ids=[incident_id],
+            )
+
+            # Verify events were emitted including COMPLETED
+            updated = store.get_incident(incident_id)
+            assert updated is not None
+
+            event_types = [e.event_type for e in updated.events]
+            assert IncidentEventType.DIAGNOSIS_LOOP_STARTED in event_types
+            assert IncidentEventType.DIAGNOSIS_LOOP_COMPLETED in event_types
+        finally:
+            if env_backup is not None:
+                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
+            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
+                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
+            # Reset store
+            set_incident_store(None)
