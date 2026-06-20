@@ -22,14 +22,14 @@ DOC-CAND-09a2692da1f9,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z
 DOC-CAND-b918f1b24895,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
 DOC-CAND-3f3b77011b05,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/data-model/ui-model-boundaries.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-3595b652352c,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broader_claim,2026-06-19,Run artifacts source of truth covered by DOC-CLAIM-0003; identical substance to DOC-CAND-0ebf6e9e51e2 (diagnostic pack immutability in same doc)
-DOC-CAND-820d6d7f8591,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-820d6d7f8591,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from beta-real-incident-validation.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-0047e06388dd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
 DOC-CAND-58e34c73b368,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-32f8cc69876a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-83b401a8885d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-528af24b284f,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/documentation-truthfulness.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-f2bab370359e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-8af08d827173,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-8af08d827173,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from documentation-truthfulness.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-33d267c53bc4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-757e1cfe8430,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
 DOC-CAND-39be75872a7d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
@@ -47,7 +47,7 @@ DOC-CAND-769f59fe4349,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-0faf38b05b48,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-2.md
 DOC-CAND-d345edaed40c,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-2.md
 DOC-CAND-0b992f7c4195,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-2.md
-DOC-CAND-89f842da3f9e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/gate-timings.md
+DOC-CAND-89f842da3f9e,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from gate-timings.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-1a4b10955877,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-e125c106dcff,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-0985594f5f8d,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md

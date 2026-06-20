@@ -19,7 +19,7 @@ DOC-CAND-b82512c0a655,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-d18370e6c1bf,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-c1c40b8449f1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
 DOC-CAND-023d850f8c6c,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/doctrine/beta-real-incident-validation.md; structural element, not prose claim (ACT 5.4 review)."
-DOC-CAND-9d1f4b2a27bf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-9d1f4b2a27bf,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from beta-real-incident-validation.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-6b300a25f7d0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-51c7a0a9be6a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-8f614ff43276,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,"Ignored by policy: constitution principle; architectural guidance, not a testable claim."
@@ -91,7 +91,7 @@ DOC-CAND-c8b118b36c1a,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-24e0a20e7391,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design description, implementation detail not user-facing invariant (ACT 5.0 review)."
 DOC-CAND-450239d0266b,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design task item, implementation tracking not tracked claim (ACT 5.0 review)."
 DOC-CAND-e5b9a8c484d9,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
-DOC-CAND-aa974c5454ff,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-aa974c5454ff,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from rbac-deployment-guide.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-7063744f101d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-780541959e49,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-e70e2611d3fc,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md

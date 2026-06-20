@@ -29,12 +29,12 @@ DOC-CAND-212750e0af37,covered_by_existing_claim,,DOC-CLAIM-0065,covered_by_broad
 DOC-CAND-1cab9be767e6,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-e7f559b9f2ef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
 DOC-CAND-b962dbb88972,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
-DOC-CAND-a5c23983ff18,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-a5c23983ff18,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from beta-real-incident-validation.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-935407e13f7d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-e9ae72c06353,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-14c6c0188962,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/beta-real-incident-validation.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-9291b46bdacb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
-DOC-CAND-6a1e45959c8d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-6a1e45959c8d,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from documentation-truthfulness.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-b4fbbd3c5036,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-9f436b1817ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-8990e17c4256,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
@@ -69,10 +69,10 @@ DOC-CAND-d378065baf7d,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-212ab80669be,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/k8s-accelerator-real-cluster-demo-storyline-evidence.md
 DOC-CAND-0eb3f4114616,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/llm-friendly-production-burn-down-closeout.md
 DOC-CAND-1fec83c37ec0,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-audit-2026-05-31.md
-DOC-CAND-a54e285235b0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-a54e285235b0,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from incident-report-schema.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-c73266bf1f54,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
 DOC-CAND-fd8fc562df09,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/run-artifact-layout.md
-DOC-CAND-56d6026e5355,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/run-artifact-layout.md
+DOC-CAND-56d6026e5355,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from run-artifact-layout.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-7c72e76f6d63,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-llm-auto-drilldown-analysis.md
 DOC-CAND-0ad48b6caf97,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-llm-auto-drilldown-analysis.md
 DOC-CAND-8ec1152beb49,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-port-forward-history.md
@@ -92,7 +92,7 @@ DOC-CAND-4152c821ac9d,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-3e87b3de4567,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-8449e66e23cc,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-4d71e60bcc22,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/security/llm-anonymization-design.md; lacks standalone behavioral claim (ACT 5.4 review).
-DOC-CAND-81b461a9a2a5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-81b461a9a2a5,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from llm-anonymization-design.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-2ed81520e27c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-013d63864872,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design task table row, implementation tracking artifact not a claim (ACT 5.0 review)."
 DOC-CAND-a611a0d7a9ec,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
@@ -104,7 +104,7 @@ DOC-CAND-6951e95f32f7,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-3aa1886eee6b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-81a9cff2b3c5,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-fa9b55e3549e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-5b26648d4652,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-5b26648d4652,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from threat-model.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-ede1221c02f0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-8c2dcbb3e6a6,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-cfa256d4d384,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md

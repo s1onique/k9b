@@ -105,7 +105,7 @@ DOC-CAND-c51cb4a5c5b1,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-ace6c0959afa,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-18c878eebb19,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-2557982dd6b4,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
-DOC-CAND-933f8ebd6e65,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-933f8ebd6e65,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from threat-model.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-dee47d8b7040,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-b5861532bb70,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-4b0c2b2b4573,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md

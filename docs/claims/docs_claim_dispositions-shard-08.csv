@@ -33,7 +33,7 @@ DOC-CAND-6cae9ce93744,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-5151596cc374,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-a0ae2a4aaa46,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-556dbde1c64b,covered_by_existing_claim,,DOC-CLAIM-0041,covered_by_broader_claim,2026-06-19,"Covered by DOC-CLAIM-0041: immutable artifacts, not historical claim"
-DOC-CAND-98f15485cf6b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
+DOC-CAND-98f15485cf6b,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from path-security-doctrine.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-27f1a01eb020,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/path-security-doctrine.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-2a4a984cab6f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
 DOC-CAND-f01e52921547,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
@@ -97,7 +97,7 @@ DOC-CAND-a5073be2b08f,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-34b6241a9e42,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-f35aa122f75d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-fde3f6e96679,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-89dcfdd0f0dd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-89dcfdd0f0dd,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from llm-anonymization-design.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-374926d143cd,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-2374bb72773a,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-c4bcbd470575,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
@@ -120,8 +120,8 @@ DOC-CAND-35593d1bcc78,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-14b641469bf3,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-cb8c9ebd943d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-d544b0ae8dce,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-54ab19dd2999,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-7ee9eb5c5c0c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-54ab19dd2999,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from threat-model.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
+DOC-CAND-7ee9eb5c5c0c,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from threat-model.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-e9393b206cc7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-1745831bf83d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-e0e155313f27,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md

@@ -31,7 +31,7 @@ DOC-CAND-af27d0a2289a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-9e521021f4a1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
 DOC-CAND-0660b5932c5c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-2317d7ccd86b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
-DOC-CAND-901968ed7a30,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
+DOC-CAND-901968ed7a30,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from path-security-doctrine.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-756980bfb244,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-65afb26d144e,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,"Ignored by policy: precedence principle; guidance only, not a testable claim."
 DOC-CAND-7d4e42e45573,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
@@ -68,7 +68,7 @@ DOC-CAND-2de6100f6b40,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-e1dfc05d0227,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/k8s-accelerator-real-cluster-demo-storyline-flow.md
 DOC-CAND-1445c9cb133c,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-claims-ledger-2026-05-31.md
 DOC-CAND-b512c8688222,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
-DOC-CAND-8e7163baa0c4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-8e7163baa0c4,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from incident-report-schema.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-42e3ae61b42f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/run-artifact-layout.md
 DOC-CAND-7016595aa4ff,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
 DOC-CAND-88bb2f4fa843,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-alertmanager-discovery.md

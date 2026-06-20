@@ -26,7 +26,7 @@ DOC-CAND-faa7cf122bbd,covered_by_existing_claim,,DOC-CLAIM-0047,covered_by_broad
 DOC-CAND-ad1f3a48bf58,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-9b8d0ee464d1,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Descriptive prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-fa38fc4f878a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
-DOC-CAND-8d452a1daf0f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
+DOC-CAND-8d452a1daf0f,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from ui-model-boundaries.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-c327cf51760c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-15918d88ffbc,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/beta-real-incident-validation.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-93ab28a29921,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
@@ -75,7 +75,7 @@ DOC-CAND-2cedfbd5611e,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-b711957667b0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
 DOC-CAND-ba95bd8ef492,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/health-proposal-schema.md
 DOC-CAND-dce20ed11109,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
-DOC-CAND-5a9fb8b439d5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-5a9fb8b439d5,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from incident-report-schema.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-17c0a4396126,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/run-artifact-layout.md
 DOC-CAND-e7b34bb43eb6,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-assessment-comparison-orchestration.md
 DOC-CAND-5e3080abae69,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-drilldown-reason-wrapper.md

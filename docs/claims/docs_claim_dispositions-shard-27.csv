@@ -8,7 +8,7 @@ DOC-CAND-940a5948a23e,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact
 DOC-CAND-023bf307a10d,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-a8bc41f1fa57,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-c3f6ade5edfa,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-7428130089a1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
+DOC-CAND-7428130089a1,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from auth.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-c51ec123aaee,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-9bd0d8a6fb71,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-1df6668cb77a,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
@@ -29,7 +29,7 @@ DOC-CAND-6f660b7bebe4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-d3357b432167,registered_existing_claim,DOC-CLAIM-0052,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0052
 DOC-CAND-fde9941e996c,covered_by_existing_claim,,DOC-CLAIM-0052,covered_by_broader_claim,2026-06-20,ACT 3.5: Action artifacts append-only; covered by DOC-CLAIM-0052
 DOC-CAND-00d0d4eb1da4,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/data-model/alertmanager-sources.md; structural element, not prose claim (ACT 5.4 review)."
-DOC-CAND-7cc798b6d6ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-7cc798b6d6ae,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from artifacts.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-b9ab384f87fb,covered_by_existing_claim,,DOC-CLAIM-0057,covered_by_broader_claim,2026-06-20,ACT 3.5: Unknowns explicit; covered by DOC-CLAIM-0057
 DOC-CAND-2aedc93cf766,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-34bfe468548b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
@@ -123,7 +123,7 @@ DOC-CAND-03275d8a3ae1,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-5d9395d5dae7,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-7a375d02b7f1,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-d53283171b0c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
-DOC-CAND-9ec55737fd35,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
+DOC-CAND-9ec55737fd35,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from security-policy.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-93839672ff8a,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-subprocess-audit.md
 DOC-CAND-dd9b8d3f1796,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-subprocess-audit.md
 DOC-CAND-7f2e4e61e20a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md

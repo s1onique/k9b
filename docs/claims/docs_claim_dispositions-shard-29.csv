@@ -94,14 +94,14 @@ DOC-CAND-35417b850398,ignored_by_policy,,,non_normative_description,2026-06-20T1
 DOC-CAND-b23400e6ab34,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-e10ace907f67,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-fb6b560a1a4c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
-DOC-CAND-a7a18fcc8b9e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
+DOC-CAND-a7a18fcc8b9e,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from static-artifact-serving-contract.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-9a556f507af0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-505fc5a7f278,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-5571cbd44650,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-d9cdd58292fe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-d7041dfd18f4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-6606d12daa4a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-5895baedc682,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-5895baedc682,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from threat-model.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-922200da0097,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-c52df95229fa,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-8b847e3a5ad7,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
@@ -111,7 +111,7 @@ DOC-CAND-1494525ccce3,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-bc1e3a7300a4,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-16df0a19426a,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-bca550d536ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
-DOC-CAND-9ea2e37024f9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
+DOC-CAND-9ea2e37024f9,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from security-standards.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-a6ce889a69b2,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-subprocess-audit.md
 DOC-CAND-796206e28bc6,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/EPIC-TASK-BREAKDOWN.md
 DOC-CAND-dbb71cdcfa24,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/TEST-CLEANUP-INVENTORY.md
