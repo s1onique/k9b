@@ -10,6 +10,7 @@ Strict contract:
 - No extra named columns
 - No missing columns
 - No shorter-than-standard headers
+- No physical blank rows (detected by raw line scan before csv.DictReader)
 - No rows with fewer fields than header
 - Every row must have exactly the 7 required keys in correct order
 - candidate_id must match DOC-CAND-[0-9a-f]{12}
@@ -17,14 +18,11 @@ Strict contract:
 - disposition must be non-empty
 - No header-only (zero data row) shards
 
-Limitations (documented, not fixable with Python csv module):
-- Physical blank rows are silently skipped by csv.DictReader and cannot be
-  detected without reading raw file content line-by-line. This is a known
-  limitation of the csv module's lenient parsing.
-- Malformed unescaped quotes in field values are accepted by csv.DictReader
-  rather than raising csv.Error. The verifier catches structural defects
-  (extra/missing columns, wrong header) but does not claim to catch all
-  malformed quote patterns that csv.DictReader accepts.
+Limitations:
+- Physical blank rows are detected with a raw line scan before csv.DictReader.
+- Python csv.DictReader remains lenient with some malformed quote patterns;
+  this verifier catches structural CSV defects but does not claim to reject
+  every quote style accepted by csv.DictReader.
 """
 from __future__ import annotations
 
@@ -55,6 +53,21 @@ def shard_paths() -> Iterator[Path]:
     yield from sorted(SHARDS_DIR.glob(SHARD_PATTERN))
 
 
+def check_physical_blank_lines(path: Path, content: str) -> list[str]:
+    """Detect physical blank rows by raw line scan before csv.DictReader.
+
+    Uses splitlines() so a normal trailing newline does not produce a
+    phantom empty line. Whitespace-only lines are also rejected.
+
+    Returns a list of error messages, one per blank line found.
+    """
+    errors: list[str] = []
+    for line_num, line in enumerate(content.splitlines(), start=1):
+        if line.strip() == "":
+            errors.append(f"{path}:{line_num}: physical blank line")
+    return errors
+
+
 def parse_shards_strict() -> tuple[list[dict[str, str]], list[str]]:
     """Parse all shards with strict header and row validation.
 
@@ -79,6 +92,12 @@ def parse_shards_strict() -> tuple[list[dict[str, str]], list[str]]:
             # Reject empty files
             if not content.strip():
                 errors.append(f"{path}: empty file")
+                continue
+
+            # Reject physical blank rows (raw line scan before csv.DictReader)
+            blank_errors = check_physical_blank_lines(path, content)
+            if blank_errors:
+                errors.extend(blank_errors)
                 continue
 
             buf = io.StringIO(content)
@@ -257,7 +276,35 @@ FIXTURES: list[tuple[str, str, bool]] = [
         "candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes\n",
         False,
     ),
+    # --- Physical blank-line rejection cases ---
+    (
+        "physical blank line after header",
+        "candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes\n"
+        "\n"
+        "DOC-CAND-000000000009,ignored_by_policy,,,low_value_context,2026-06-19,test\n",
+        False,
+    ),
+    (
+        "physical blank line between data rows",
+        "candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes\n"
+        "DOC-CAND-000000000010,ignored_by_policy,,,low_value_context,2026-06-19,test1\n"
+        "\n"
+        "DOC-CAND-000000000011,ignored_by_policy,,,low_value_context,2026-06-19,test2\n",
+        False,
+    ),
+    (
+        "whitespace-only physical blank line",
+        "candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes\n"
+        "DOC-CAND-000000000012,ignored_by_policy,,,low_value_context,2026-06-19,test\n"
+        "   \n"
+        "DOC-CAND-000000000013,ignored_by_policy,,,low_value_context,2026-06-19,test2\n",
+        False,
+    ),
 ]
+
+
+# Stand-in path used only for physical blank-line reporting in self-test fixtures.
+_FIXTURE_PATH = Path("(fixture)")
 
 
 def _validate_fixture_content(content: str) -> tuple[list[dict[str, str]], list[str]]:
@@ -270,6 +317,12 @@ def _validate_fixture_content(content: str) -> tuple[list[dict[str, str]], list[
 
     if not content.strip():
         errors.append("empty CSV")
+        return [], errors
+
+    # Reject physical blank rows (raw line scan before csv.DictReader)
+    blank_errors = check_physical_blank_lines(_FIXTURE_PATH, content)
+    if blank_errors:
+        errors.extend(blank_errors)
         return [], errors
 
     try:

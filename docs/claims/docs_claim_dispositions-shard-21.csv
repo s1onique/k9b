@@ -1,5 +1,4 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-
 DOC-CAND-a0a366864c31,registered_existing_claim,DOC-CLAIM-0063,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0063
 DOC-CAND-4e6657c9132c,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-909bca2717dd,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md

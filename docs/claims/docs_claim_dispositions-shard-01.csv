@@ -1,5 +1,4 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-
 DOC-CAND-ac74b8db5695,registered_existing_claim,DOC-CLAIM-0060,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0060
 DOC-CAND-1ea3fb1e91bf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-30d4fe60737e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md

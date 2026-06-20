@@ -1,5 +1,4 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-
 DOC-CAND-202326dab603,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-4b8e373240e1,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-078365b3c842,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md

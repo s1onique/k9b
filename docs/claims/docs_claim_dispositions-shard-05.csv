@@ -1,5 +1,4 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-
 DOC-CAND-83083c7d764b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-09a133927581,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-04a74288cf38,covered_by_existing_claim,,DOC-CLAIM-0002,covered_by_broader_claim,2026-06-19,Covered by DOC-CLAIM-0002: agent never mutates live clusters
