@@ -115,7 +115,7 @@ DOC-CAND-611a295cbb20,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-5d10062e80cc,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-7a455297893f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-7fcbf4a966ea,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-10b6a2b568c1,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Source: threat-model.md INV-4. Implementation: prompts.py and drilldown_prompts.py use MetadataAnonymizer + sanitize_prompt(). Sanitizer catches token/bearer/api_key/secret patterns. Tests: test_metadata_anonymizer.py, test_prompt_anonymization.py prove credential patterns redacted.
+DOC-CAND-10b6a2b568c1,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,"ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Source: threat-model.md INV-4. Implementation: prompts.py and drilldown_prompts.py use MetadataAnonymizer + sanitize_prompt(). Sanitizer catches token/bearer/api_key/secret patterns. Tests: test_metadata_anonymizer.py, test_prompt_anonymization.py prove credential patterns redacted."
 DOC-CAND-a55aca436a43,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-4ae901908971,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-2dc99ee01703,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md

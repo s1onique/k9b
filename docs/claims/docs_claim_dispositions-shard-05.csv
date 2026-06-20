@@ -118,7 +118,7 @@ DOC-CAND-39df0a3680be,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-945a3e31ff57,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-38b6aa233784,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-151377ed7b09,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
-DOC-CAND-4e1efcf6646c,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Implementation: server_static.py uses static error strings ("Invalid artifact path", "Access denied", "Artifact not found", "Static assets unavailable"). Tests: test_server_http_routes.py prove error bodies do not leak host paths. No path leakage in HTTP responses.
+DOC-CAND-4e1efcf6646c,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,"ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Implementation: server_static.py uses static error strings (""Invalid artifact path"", ""Access denied"", ""Artifact not found"", ""Static assets unavailable""). Tests: test_server_http_routes.py prove error bodies do not leak host paths. No path leakage in HTTP responses."
 DOC-CAND-1e49c60982df,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-660955661fda,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-b3536aae4544,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
@@ -143,7 +143,7 @@ DOC-CAND-ff74e21b70d0,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-cc7359d3221f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-cd1c3a3b5f78,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-glob-audit.md
 DOC-CAND-efc9162b2461,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
-DOC-CAND-8450ed7b957d,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Source: docs/security-standards.md Section 5 prohibits stderr=DEVNULL. Code scan confirms only stdout=DEVNULL found (port-forward stdout noise suppression), not stderr. Diagnostic subprocesses capture stderr via capture_output=True or stderr=PIPE per standards.
+DOC-CAND-8450ed7b957d,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,"ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Source: docs/security-standards.md Section 5 prohibits stderr=DEVNULL. Code scan confirms only stdout=DEVNULL found (port-forward stdout noise suppression), not stderr. Diagnostic subprocesses capture stderr via capture_output=True or stderr=PIPE per standards."
 DOC-CAND-d147128b54a7,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/TEST-CLEANUP-INVENTORY.md
 DOC-CAND-99f2f2eb19a9,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/selected-run-refresh-regression-test-updates.md
 DOC-CAND-29c497d0a711,stale,,,stale_doc,2026-06-19,From stale doc: docs/verification.md
