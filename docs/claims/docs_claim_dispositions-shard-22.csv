@@ -24,9 +24,9 @@ DOC-CAND-ec6e358cfad2,registered_existing_claim,DOC-CLAIM-0051,,already_register
 DOC-CAND-c4351eca1977,covered_by_existing_claim,,DOC-CLAIM-0050,covered_by_broader_claim,2026-06-20,ACT 3.5: Registry authoritative source of truth; covered by DOC-CLAIM-0050
 DOC-CAND-54faf2cc03e9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
 DOC-CAND-fc5a1fe6c81f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
-DOC-CAND-09f24089f9f2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
+DOC-CAND-09f24089f9f2,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Schema field label from docs/data-model/next-check-mapping.md; metadata annotation, not behavioral claim (ACT 5.4 review)."
 DOC-CAND-68cfbd47bfa3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
-DOC-CAND-3e53ceadb9c8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
+DOC-CAND-3e53ceadb9c8,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/data-model/next-check-mapping.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-57036c4b400f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
 DOC-CAND-6ab707c5ee3f,covered_by_existing_claim,,DOC-CLAIM-0004,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident aggregate root; covered by DOC-CLAIM-0004
 DOC-CAND-eb8188d870fa,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
@@ -40,7 +40,7 @@ DOC-CAND-29bdd5936ce8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-2a96c7be0be8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-dfd08f2edc14,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-4ab184d250c0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/gate-timings.md
-DOC-CAND-47f451ee5f9b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/gate-timings.md
+DOC-CAND-47f451ee5f9b,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Example/exemplar from docs/gate-timings.md; not a behavioral claim (ACT 5.4 review).
 DOC-CAND-fe275b24e70d,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-e35eecb87671,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-04f82fbdc50d,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
@@ -75,7 +75,7 @@ DOC-CAND-14ec4224f501,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-7d2f16fe51c0,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-claims-ledger-2026-05-31.md
 DOC-CAND-b0f288daaa54,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-claims-ledger-2026-05-31.md
 DOC-CAND-480d164d12b3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/health-proposal-schema.md
-DOC-CAND-06fe067f79de,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-06fe067f79de,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/schemas/incident-report-schema.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-d4f6a1a3b07f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
 DOC-CAND-342394276f49,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-assessment-comparison-orchestration.md
 DOC-CAND-6d1f0ba7681b,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-drilldown-reason-wrapper.md
@@ -106,7 +106,7 @@ DOC-CAND-42fc0364d392,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-cb46b3bbe5b2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-d3eb482e309d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-3314f4d79422,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-1200e59c109b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-1200e59c109b,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/security/threat-model.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-faf5369f138e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-7028976de318,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-206285a51b0b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md

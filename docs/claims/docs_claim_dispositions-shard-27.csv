@@ -28,7 +28,7 @@ DOC-CAND-e58abfb328ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-6f660b7bebe4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-d3357b432167,registered_existing_claim,DOC-CLAIM-0052,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0052
 DOC-CAND-fde9941e996c,covered_by_existing_claim,,DOC-CLAIM-0052,covered_by_broader_claim,2026-06-20,ACT 3.5: Action artifacts append-only; covered by DOC-CLAIM-0052
-DOC-CAND-00d0d4eb1da4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
+DOC-CAND-00d0d4eb1da4,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/data-model/alertmanager-sources.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-7cc798b6d6ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
 DOC-CAND-b9ab384f87fb,covered_by_existing_claim,,DOC-CLAIM-0057,covered_by_broader_claim,2026-06-20,ACT 3.5: Unknowns explicit; covered by DOC-CLAIM-0057
 DOC-CAND-2aedc93cf766,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
@@ -44,7 +44,7 @@ DOC-CAND-07a77676f9d3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-e6aaa0d4bf09,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-1f982ad503cb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-4606a178907a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-24d0e251bdc9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
+DOC-CAND-24d0e251bdc9,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short prose fragment from docs/doctrine/path-security-doctrine.md; not a tracked behavioral invariant (ACT 5.4 review).
 DOC-CAND-5bc9e2d90ee8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-7775372268c1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
 DOC-CAND-911ca3e4e6bf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md

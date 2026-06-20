@@ -21,13 +21,13 @@ DOC-CAND-4dc77bca1aee,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-0557761a5411,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-1cbd5faac501,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-20,ACT 3.5: Planner evaluation claim; relates to DOC-CLAIM-0062 evidence boundary
 DOC-CAND-ad1313dc5c79,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
-DOC-CAND-39de19333a71,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
+DOC-CAND-39de19333a71,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/data-model/run-lifecycle.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-3497d5c0b835,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
 DOC-CAND-e9aa6f618492,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-6f426e622551,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-16d3ca466676,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
-DOC-CAND-31c90630ad19,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-0e72111aa29c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-31c90630ad19,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/documentation-truthfulness.md; lacks standalone behavioral claim (ACT 5.4 review).
+DOC-CAND-0e72111aa29c,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/doctrine/documentation-truthfulness.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-a7e651f8a45c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-448cef88bacf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
 DOC-CAND-bcf35af85658,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
@@ -107,7 +107,7 @@ DOC-CAND-82f15abfdfe1,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-be4fcd98ae0b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-6bd02309c4ed,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-31fc19710dc7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
-DOC-CAND-0df591d2fe0d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
+DOC-CAND-0df591d2fe0d,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/security/static-artifact-serving-contract.md; descriptive intent, not tracked invariant (ACT 5.4 review)."
 DOC-CAND-53617884aede,registered_existing_claim,DOC-CLAIM-0066,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0066
 DOC-CAND-796ffda0acab,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-60f41f6bcfb7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md

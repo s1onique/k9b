@@ -85,7 +85,7 @@ DOC-CAND-cd1c51d25bc1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-55ab73ead39a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-f3dd4f68c600,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-04219b3f488d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
-DOC-CAND-11a7de726dfc,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-11a7de726dfc,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/security/rbac-deployment-guide.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-6a8d8da9453a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-f3568f1b267b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-d57aa2d70092,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
@@ -93,7 +93,7 @@ DOC-CAND-d4a7d94df286,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-1a27cc902207,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-5efe93c5f6be,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-c1c90ebd19ab,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-27711de2ec47,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-27711de2ec47,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/security/threat-model.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-d30a5cb94681,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-601a5965feaa,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-8ef7edce91ef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md

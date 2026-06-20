@@ -38,16 +38,16 @@ DOC-CAND-09fd7326c0ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-cf3a76076eb8,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Descriptive prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-5eee9140ccab,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-9ddbb70552a1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
-DOC-CAND-46d6d44fb67e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
+DOC-CAND-46d6d44fb67e,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Schema field label from docs/data-model/ui-model-boundaries.md; metadata annotation, not behavioral claim (ACT 5.4 review)."
 DOC-CAND-5e4c98120e19,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
 DOC-CAND-ceb255b35b3e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-8b2a14cbcca4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-cedd7022d9b2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
-DOC-CAND-448ac8c23cb0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-448ac8c23cb0,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short prose fragment from docs/doctrine/beta-real-incident-validation.md; not a tracked behavioral invariant (ACT 5.4 review).
 DOC-CAND-81931893630d,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,"Ignored by policy: constitution principle; architectural guidance, not a testable claim."
 DOC-CAND-17b0fe320c2e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-3ee3752c1149,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-197d483d9e72,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-197d483d9e72,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/documentation-truthfulness.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-36037e986458,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-57cb95baee7b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-e0dcea7ca114,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
@@ -80,7 +80,7 @@ DOC-CAND-93eee6b00339,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-3d841ab7688d,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/k8s-accelerator-real-cluster-demo-storyline-flow.md
 DOC-CAND-339841646728,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/llm-friendly-production-burn-down-closeout.md
 DOC-CAND-9240d5ad8ab3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
-DOC-CAND-1fe3e2ee837d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-1fe3e2ee837d,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/schemas/incident-report-schema.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-c34a7521a226,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
 DOC-CAND-52763f90c92f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
 DOC-CAND-a257e636d2e4,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-alertmanager-discovery.md
@@ -108,7 +108,7 @@ DOC-CAND-80a53b4e2841,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-02291b123534,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-6481cbaa2e77,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-6666ebf778a8,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
-DOC-CAND-45e92202412a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
+DOC-CAND-45e92202412a,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Design/architecture note from docs/security/static-artifact-serving-contract.md; describes intent rather than implemented behavior (ACT 5.4 review).
 DOC-CAND-9c684ca2f3e9,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-d4cc87e6ce75,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-33429a77b5b2,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md

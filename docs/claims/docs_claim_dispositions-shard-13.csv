@@ -12,15 +12,15 @@ DOC-CAND-682006154d2f,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-2171e56c9bcb,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
 DOC-CAND-b641e32bc047,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
 DOC-CAND-77cce0d7d2ac,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
-DOC-CAND-2b8719f1956a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
+DOC-CAND-2b8719f1956a,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/data-model/alertmanager-sources.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-9ea96917bd09,registered_existing_claim,DOC-CLAIM-0054,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0054
 DOC-CAND-51ddfbd9cd28,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema field description, type annotation not tracked claim (ACT 5.0 review)."
 DOC-CAND-447ce25db445,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema table header label, formatting artifact not a claim (ACT 5.0 review)."
-DOC-CAND-46a880265cd5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
+DOC-CAND-46a880265cd5,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/data-model/next-check-mapping.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-22e587077d52,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
 DOC-CAND-aff1a2936d51,covered_by_existing_claim,,DOC-CLAIM-0039,covered_by_broader_claim,2026-06-20,ACT 3.5: Latest bundle pointer; covered by DOC-CLAIM-0039
 DOC-CAND-72e6eae3fc98,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
-DOC-CAND-4b2935aa2768,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-4b2935aa2768,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/doctrine/beta-real-incident-validation.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-60be758d4a2e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-cd7417ea3e8c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-7ce6357be293,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
@@ -62,7 +62,7 @@ DOC-CAND-3c1283afa14e,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-f6764b67aa6e,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/health-loop-extraction-map.md
 DOC-CAND-64092dc67cf0,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-claims-ledger-2026-05-31.md
 DOC-CAND-ac0df65ae6f8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
-DOC-CAND-2a40cdef59e7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-2a40cdef59e7,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short prose fragment from docs/schemas/incident-report-schema.md; not a tracked behavioral invariant (ACT 5.4 review).
 DOC-CAND-f24620216b5b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
 DOC-CAND-0c67cb564c27,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-health-loop-closure.md
 DOC-CAND-8c8ccdb0aa97,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-health-loop-closure.md
@@ -77,8 +77,8 @@ DOC-CAND-a286f8a871c4,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-ac8bb9d77326,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-fb1e06ad3625,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-78b47a44d8f1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
-DOC-CAND-54532fb458ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
-DOC-CAND-37c45747b542,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-54532fb458ba,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Descriptive prose fragment from docs/security/llm-anonymization-design.md; not a behavioral claim (ACT 5.4 review).
+DOC-CAND-37c45747b542,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/security/llm-anonymization-design.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-671dbf2fde11,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-dd2c9e8961e4,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-13f97d09ef77,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md

@@ -38,7 +38,7 @@ DOC-CAND-989bc09006b2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-b42795e76aff,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-f0a87020e6cb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-f8979234f829,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-32a6764a4238,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-32a6764a4238,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/documentation-truthfulness.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-470358cdb4ed,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-0d2605a93f60,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
 DOC-CAND-ac72ea626301,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
@@ -72,7 +72,7 @@ DOC-CAND-0f03e10d5a95,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-c8d3dd4b8add,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-audit-2026-05-31.md
 DOC-CAND-d54b4c1b5c1b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
 DOC-CAND-6c91ffcbae2c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
-DOC-CAND-3e976475b06f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-3e976475b06f,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Descriptive prose fragment from docs/schemas/incident-report-schema.md; not a behavioral claim (ACT 5.4 review).
 DOC-CAND-56632d9aaa15,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
 DOC-CAND-dcd3dd0598b2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
 DOC-CAND-efb34c2f723b,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-alertmanager-discovery.md
@@ -91,8 +91,8 @@ DOC-CAND-7bdaad81a9cd,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-62b64d053bb4,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/api-security-audit.md
 DOC-CAND-783a5c0206d9,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/api-security-audit.md
 DOC-CAND-83dacf7a2193,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-2cef2d6168cd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
-DOC-CAND-16841bfb8541,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-2cef2d6168cd,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/security/llm-anonymization-design.md; structural element, not prose claim (ACT 5.4 review)."
+DOC-CAND-16841bfb8541,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/security/llm-anonymization-design.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-fdb4f5f539b8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-eb965cff210e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-761f761440da,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md

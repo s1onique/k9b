@@ -24,8 +24,8 @@ DOC-CAND-bdd31004ce7e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-9d951692849f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-04bca14c03bd,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-294043fdfb9a,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
-DOC-CAND-37834fe8d410,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
-DOC-CAND-3733f960d367,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-37834fe8d410,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/beta-real-incident-validation.md; lacks standalone behavioral claim (ACT 5.4 review).
+DOC-CAND-3733f960d367,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Schema field label from docs/doctrine/beta-real-incident-validation.md; metadata annotation, not behavioral claim (ACT 5.4 review)."
 DOC-CAND-4cb1c9feb7f7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
 DOC-CAND-23c4d03e3992,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-83284f565eb7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
@@ -34,7 +34,7 @@ DOC-CAND-7dd1e40e59f9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-51a26f0aa4fd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
 DOC-CAND-c23b7e634b32,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
 DOC-CAND-9b24289dcb42,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
-DOC-CAND-36c47e4072f3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
+DOC-CAND-36c47e4072f3,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/doctrine/path-security-doctrine.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-398d4adf8171,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
 DOC-CAND-b296938ab867,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-8a30e70d9eae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
@@ -134,7 +134,7 @@ DOC-CAND-0a6b46bacf2b,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-d3c344c8ecef,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-b2b177581026,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
 DOC-CAND-ab7e2632392e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
-DOC-CAND-3409dbc1ad0e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
+DOC-CAND-3409dbc1ad0e,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/security-standards.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-1d035259caf1,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/TEST-CLEANUP-INVENTORY.md
 DOC-CAND-3c69e5d47ba9,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/TEST-CLEANUP-INVENTORY.md
 DOC-CAND-506bd5dda529,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/selected-run-refresh-regression-test-updates.md

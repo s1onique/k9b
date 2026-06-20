@@ -20,7 +20,7 @@ DOC-CAND-c38ef6879b45,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-aa271993a915,covered_by_existing_claim,,DOC-CLAIM-0053,covered_by_broader_claim,2026-06-20,ACT 3.5: Unique artifactid per action; covered by DOC-CLAIM-0053
 DOC-CAND-03d1223a2dc0,covered_by_existing_claim,,DOC-CLAIM-0055,covered_by_broader_claim,2026-06-20,ACT 3.5: Observed no causal language; covered by DOC-CLAIM-0055
 DOC-CAND-c7d5a036f823,covered_by_existing_claim,,DOC-CLAIM-0065,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident no autonomous remediation; covered by DOC-CLAIM-0065
-DOC-CAND-42ad0b8502bc,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
+DOC-CAND-42ad0b8502bc,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/data-model/next-check-mapping.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-e76ef9bdd5c8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-035ee9209ab7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-5195a78b6a28,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
@@ -90,7 +90,7 @@ DOC-CAND-265bdeef74cb,ignored_by_policy,,,low_value_context,2026-06-19,"Low-valu
 DOC-CAND-99062f65e895,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-6b73f6624a92,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: test case table row, verification artifact not a product claim (ACT 5.0 review)."
 DOC-CAND-cee7814ae285,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
-DOC-CAND-35417b850398,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-35417b850398,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/security/rbac-deployment-guide.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-b23400e6ab34,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-e10ace907f67,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-fb6b560a1a4c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md

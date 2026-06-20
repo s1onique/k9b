@@ -3,7 +3,7 @@ DOC-CAND-d885e1db84b1,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertman
 DOC-CAND-f309789c7b84,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-f04df65249b3,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-f430ffc6d9ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
-DOC-CAND-49270e62d3b1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
+DOC-CAND-49270e62d3b1,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short prose fragment from docs/auth.md; not a tracked behavioral invariant (ACT 5.4 review).
 DOC-CAND-472524b3ed09,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
 DOC-CAND-3cfb257fc88e,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-operator-guide.md
 DOC-CAND-cc2555f6b33b,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
@@ -18,7 +18,7 @@ DOC-CAND-21efcbd2a884,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-b82512c0a655,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-d18370e6c1bf,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-c1c40b8449f1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
-DOC-CAND-023d850f8c6c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-023d850f8c6c,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/doctrine/beta-real-incident-validation.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-9d1f4b2a27bf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-6b300a25f7d0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-51c7a0a9be6a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md

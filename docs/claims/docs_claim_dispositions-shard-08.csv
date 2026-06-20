@@ -34,7 +34,7 @@ DOC-CAND-5151596cc374,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-a0ae2a4aaa46,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-556dbde1c64b,covered_by_existing_claim,,DOC-CLAIM-0041,covered_by_broader_claim,2026-06-19,"Covered by DOC-CLAIM-0041: immutable artifacts, not historical claim"
 DOC-CAND-98f15485cf6b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
-DOC-CAND-27f1a01eb020,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
+DOC-CAND-27f1a01eb020,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/path-security-doctrine.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-2a4a984cab6f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
 DOC-CAND-f01e52921547,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
 DOC-CAND-626d5c937865,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md

@@ -35,7 +35,7 @@ DOC-CAND-697b5c4c336d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-dd184cf0622c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-4da9a48b0298,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-a9ba8f7f65a2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
-DOC-CAND-089bac4e8dfb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-089bac4e8dfb,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/doctrine/documentation-truthfulness.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-ebfa500d1f1b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-c31e66989cef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-5aae21bfc7cf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
@@ -95,7 +95,7 @@ DOC-CAND-68f84c2445c6,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-e2c01cc8cb88,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-c707322aaff8,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-3db68873a681,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-1f68feb13a40,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-1f68feb13a40,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/security/llm-anonymization-design.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-c54d1d04db39,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-0879563f6141,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-213e613dba95,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
@@ -107,7 +107,7 @@ DOC-CAND-b8205a47b69d,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z
 DOC-CAND-9fdb22e68504,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-05be81ee4b19,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-77e8e84ab0a8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
-DOC-CAND-0da89c25bc36,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-0da89c25bc36,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/security/rbac-deployment-guide.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-6e393573b110,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-873be2806745,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-2636c47bf03e,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
