@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom";
-import { beforeEach } from "vitest";
+import { beforeEach, afterEach, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
 
 // Mock localStorage for all tests
 const localStorageMock = (() => {
@@ -33,4 +34,16 @@ Object.defineProperty(globalThis, "localStorage", {
 
 beforeEach(() => {
   localStorage.clear();
+});
+
+afterEach(() => {
+  // Flush any pending async work and cleanup React Testing Library rendered elements
+  // This prevents async cleanup errors like "ReferenceError: window is not defined"
+  // when setTimeout callbacks from mock implementations fire after jsdom teardown
+  try {
+    vi.runOnlyPendingTimers();
+  } catch {
+    // Timers not mocked (real timers used), skip timer flushing
+  }
+  cleanup();
 });

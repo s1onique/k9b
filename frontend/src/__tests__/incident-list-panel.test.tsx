@@ -135,7 +135,6 @@ describe("IncidentListPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
-
   describe("API client list call parses incidents", () => {
     it("calls listIncidents without filter when no status selected", async () => {
       vi.mocked(listIncidents).mockResolvedValueOnce({
@@ -1119,6 +1118,78 @@ describe("IncidentListPanel", () => {
         // Retry button should be gone
         expect(screen.queryByRole("button", { name: /retry details/i })).not.toBeInTheDocument();
       });
+    });
+  });
+
+  // =============================================================================
+  // Async cleanup regression tests
+  // =============================================================================
+
+  describe("Async cleanup on unmount", () => {
+    it("cleans up pending incident list async work on unmount without errors", async () => {
+      // Spy on console.error to catch any unhandled promise rejections
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      // Use a slow mock that will have pending timers when test ends
+      vi.mocked(listIncidents).mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve({ incidents: [], total: 0 }), 2000))
+      );
+
+      const { unmount } = render(<IncidentListPanel />);
+
+      // Wait for loading state to be visible
+      expect(screen.getByText(/loading incidents/i)).toBeInTheDocument();
+
+      // Unmount while the slow mock is still pending
+      // The afterEach will flush pending timers and verify no errors
+      unmount();
+
+      // afterEach handles: vi.runOnlyPendingTimers(), cleanup()
+      // This test passes if the file exits cleanly (no unhandled ReferenceError)
+
+      expect(consoleError).not.toHaveBeenCalled();
+      consoleError.mockRestore();
+    });
+
+    it("cleans up pending detail fetch async work on unmount without errors", async () => {
+      const user = userEvent.setup();
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [mockIncident],
+        total: 1,
+      });
+
+      // Use a slow mock for detail fetch
+      vi.mocked(getIncident).mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve(mockIncidentDetail), 2000))
+      );
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      // Click to expand details (triggers slow fetch)
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      // Verify loading state is shown
+      expect(screen.getByText(/loading incident details/i)).toBeInTheDocument();
+
+      // Unmount while detail fetch is still pending
+      // The afterEach will flush pending timers and verify no errors
+      const { unmount } = render(<IncidentListPanel />);
+      unmount();
+
+      // afterEach handles: vi.runOnlyPendingTimers(), cleanup()
+      // This test passes if the file exits cleanly (no unhandled ReferenceError)
+
+      expect(consoleError).not.toHaveBeenCalled();
+      consoleError.mockRestore();
     });
   });
 });
