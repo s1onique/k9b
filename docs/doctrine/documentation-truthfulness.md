@@ -470,6 +470,43 @@ The report must be included in close reports for tranche ACTs when shard diffs a
 
 The tool compares parsed disposition rows by `candidate_id` across git refs, reports changed fields, validates stable row sets and disposition counts, and emits optional deterministic JSON. Self-tests verify the tool's correctness against known fixtures.
 
+## Candidate Backlog Reporting
+
+After completing long-tail review tranches (ACT 5.0, ACT 5.2, etc.), use the deterministic backlog reporter to plan future tranches:
+
+```bash
+# Summary with top 100 recommended candidates
+python scripts/report_docs_claim_candidate_backlog.py --top 100
+
+# Export to JSON for structured analysis
+python scripts/report_docs_claim_candidate_backlog.py --json /tmp/backlog.json
+
+# Export to TSV for future tranche selection
+python scripts/report_docs_claim_candidate_backlog.py --tsv /tmp/tranche-candidates.tsv
+
+# Include already-reviewed candidates in output
+python scripts/report_docs_claim_candidate_backlog.py --include-reviewed
+
+# Filter by disposition or doc path
+python scripts/report_docs_claim_candidate_backlog.py --disposition ignored_by_policy
+python scripts/report_docs_claim_candidate_backlog.py --doc docs/security/
+```
+
+The report ranks remaining unreviewed candidates by risk score, which considers:
+- Generic ignored notes (+20)
+- High-value doc paths (+10)
+- Normative candidate text (+8)
+- No ACT review marker (+4)
+- ACT 5.0/5.2 review (deprioritized: -20)
+
+Self-tests ensure scoring determinism:
+
+```bash
+python scripts/report_docs_claim_candidate_backlog.py --self-test
+```
+
+The self-test is wired into the standard gate via `docs-claim-candidate-backlog-report-self-test`.
+
 ## History
 
 - **2026-06-20** — ACT 5.1: Added semantic disposition diff reporter (`scripts/diff_docs_claim_dispositions.py`) with self-tests, wired into verify_all.sh gate

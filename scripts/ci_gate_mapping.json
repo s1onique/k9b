@@ -260,6 +260,13 @@
       "required_command_fragments": ["diff_docs_claim_dispositions.py --self-test"],
       "reason": "Semantic disposition diff self-test - local-only gate"
     },
+    "docs-claim-candidate-backlog-report-self-test": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": []
+      },
+      "required_command_fragments": ["report_docs_claim_candidate_backlog.py --self-test"],
+      "reason": "Documentation claim candidate backlog report self-test - local-only gate"
+    },
     "docs-inventory": {
       "ci_equivalent": {
         ".github/workflows/harbor.yml": ["lint-policy"]
@@ -438,6 +445,11 @@
       "gate": "docs-claim-disposition-semantic-diff-self-test",
       "workflow": ".github/workflows/harbor.yml",
       "reason": "Local-only gate; semantic disposition diff self-test verified locally"
+    },
+    {
+      "gate": "docs-claim-candidate-backlog-report-self-test",
+      "workflow": ".github/workflows/harbor.yml",
+      "reason": "Local-only gate; claim candidate backlog report self-test verified locally"
     },
     {
       "gate": "docs-inventory",

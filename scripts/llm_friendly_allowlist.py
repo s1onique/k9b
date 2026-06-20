@@ -181,6 +181,7 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [DOCS] Large documentation files
     ("charts/k9b/README.md", "[DOC] Helm chart reference - all content is related"),
     ("docs/beta-stakeholder-demo-script.md", "[DOC] Demo script - single-purpose"),
+    ("docs/doctrine/documentation-truthfulness.md", "[DOC] Policy document - grows with features and verification tools"),
     ("docs/doctrine/evals/seed_evals.yaml", "[DOC] Seed evals - data file"),
     ("docs/post-beta-operator-feedback-and-live-integrations.md", "[DOC] Feedback document"),
     ("docs/schemas/incident-report-schema.md", "[DOC] Schema reference - all content related"),
