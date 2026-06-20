@@ -540,8 +540,48 @@ Recommendation rules:
 
 TSV output includes `priority_band` column for future tranche selection.
 
+### Review class calibration
+
+The backlog reporter classifies candidates as one of the following review classes:
+
+| Class | Description |
+|-------|-------------|
+| `claim_candidate` | Strong normative signal (MUST, required, invariant, etc.), no structural/non-normative markers |
+| `structural_fragment` | Table cells, headings, schema fields, metadata annotations |
+| `non_normative_prose` | Descriptive prose, design notes, examples, non-normative requirement phrasing |
+| `covered_or_registered` | Already covered by existing claim or registered |
+| `stale_or_historical` | Stale or historical disposition or doc |
+| `reviewed_low_value` | Has ACT review marker and remains ignored_by_policy |
+| `unknown` | Cannot determine classification |
+
+Scoring is calibrated by review class:
+
+| Class | Score Adjustment |
+|-------|-----------------|
+| `claim_candidate` | +20 |
+| `structural_fragment` | -30 |
+| `non_normative_prose` | -25 |
+| `reviewed_low_value` | -40 |
+| `stale_or_historical` | -30 |
+| `covered_or_registered` | -20 |
+
+Planning output reports a `planning_caveat` indicating the composition of high-priority work:
+
+| Caveat | Meaning |
+|--------|---------|
+| `claim-candidate-heavy` | P0+P1 dominated by claim_candidate rows |
+| `cleanup-heavy` | P0+P1 dominated by structural/non-normative rows |
+| `mixed` | Both types present in significant numbers |
+| `low-backlog` | Very few high-priority entries |
+| `inconclusive` | Cannot determine |
+
+A `cleanup-heavy` recommendation means the next tranche should be treated as reason/note burn-down, not new claim discovery.
+
+TSV output includes `review_class` and `review_class_reasons` columns for future tranche selection.
+
 ## History
 
+- **2026-06-20** — ACT 5.7: Calibrated claim candidate backlog scoring with review classes (claim_candidate, structural_fragment, non_normative_prose, etc.) and planning caveats (cleanup-heavy, claim-candidate-heavy, mixed). Structural/non-normative false positives now receive score penalties, preventing them from silently dominating P0 as claim-worthy work.
 - **2026-06-20** — ACT 5.3: Added claim candidate backlog reporter (`scripts/report_docs_claim_candidate_backlog/` package) with risk scoring, self-tests, wired into verify_all.sh gate
 - **2026-06-20** — ACT 5.3b: Split backlog reporter into LLM-friendly modules (loader, model, report, selftest, __main__, __init__)
 - **2026-06-20** — ACT 5.1: Added semantic disposition diff reporter (`scripts/diff_docs_claim_dispositions.py`) with self-tests, wired into verify_all.sh gate

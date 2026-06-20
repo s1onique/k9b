@@ -5,14 +5,25 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import cast
 
-from .model import BacklogEntry
+from .model import (
+    REVIEW_CLASS_CLAIM_CANDIDATE,
+    BacklogEntry,
+    is_cleanup_class,
+)
 
-# Priority band score thresholds
-P0_MIN_SCORE = 42  # Highest priority: generic ignored + high-value doc + normative + no marker
-P1_MIN_SCORE = 34  # High priority: generic ignored + high-value or generic + normative
-P2_MIN_SCORE = 24  # Medium priority: generic ignored or weak covered with lower-risk context
-P3_MIN_SCORE = 1   # Low priority: low-confidence remaining backlog
-# P4: score <= 0 (deprioritized, reviewed, stale, historical, or low-risk)
+# Priority band score thresholds (based on calibrated score)
+P0_MIN_SCORE = 42  # Highest priority
+P1_MIN_SCORE = 34  # High priority
+P2_MIN_SCORE = 24  # Medium priority
+P3_MIN_SCORE = 1   # Low priority
+# P4: score <= 0 (deprioritized)
+
+# Planning caveat values
+CAVEAT_CLAIM_CANDIDATE_HEAVY = "claim-candidate-heavy"
+CAVEAT_CLEANUP_HEAVY = "cleanup-heavy"
+CAVEAT_MIXED = "mixed"
+CAVEAT_LOW_BACKLOG = "low-backlog"
+CAVEAT_INCONCLUSIVE = "inconclusive"
 
 
 def get_priority_band(score: int) -> str:
@@ -51,15 +62,103 @@ SMALL_TRANCHE_MIN_THRESHOLD = 25
 def _count_priority_bands(
     entries: list[BacklogEntry],
 ) -> dict[str, int]:
-    """Count entries in each priority band (unreviewed only)."""
+    """Count entries in each priority band based on calibrated_score (unreviewed only)."""
     band_counts: dict[str, int] = defaultdict(int)
     for entry in entries:
         if entry.get("has_any_act_review_marker"):
             continue  # Skip reviewed entries
-        score = cast(int, entry.get("score", 0))
-        band = get_priority_band(score)
+        # Use calibrated_score for priority band determination
+        calibrated = cast(int, entry.get("calibrated_score", entry.get("score", 0)))
+        band = get_priority_band(calibrated)
         band_counts[band] += 1
     return dict(sorted(band_counts.items()))
+
+
+def _count_review_class_counts(
+    entries: list[BacklogEntry],
+) -> dict[str, int]:
+    """Count entries by review class (unreviewed only)."""
+    class_counts: dict[str, int] = defaultdict(int)
+    for entry in entries:
+        if entry.get("has_any_act_review_marker"):
+            continue  # Skip reviewed entries
+        review_class = cast(str, entry.get("review_class", "unknown"))
+        class_counts[review_class] += 1
+    return dict(sorted(class_counts.items()))
+
+
+def _count_priority_by_review_class(
+    entries: list[BacklogEntry],
+) -> dict[str, dict[str, int]]:
+    """Count entries by priority band and review class (unreviewed only).
+    
+    Only counts P0 and P1 for high-priority composition analysis.
+    """
+    # Initialize structure for P0/P1
+    priority_by_class: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    
+    for entry in entries:
+        if entry.get("has_any_act_review_marker"):
+            continue
+        
+        # Use calibrated score for priority band
+        calibrated = cast(int, entry.get("calibrated_score", entry.get("score", 0)))
+        band = get_priority_band(calibrated)
+        
+        # Only track P0 and P1
+        if band not in ("P0", "P1"):
+            continue
+        
+        review_class = cast(str, entry.get("review_class", "unknown"))
+        priority_by_class[band][review_class] += 1
+    
+    # Convert to regular dict for JSON serialization
+    result: dict[str, dict[str, int]] = {}
+    for band in ("P0", "P1"):
+        if band in priority_by_class:
+            result[band] = dict(sorted(priority_by_class[band].items()))
+    
+    return result
+
+
+def _compute_planning_caveat(
+    priority_by_class: dict[str, dict[str, int]],
+    high_priority_count: int,
+) -> str:
+    """Determine planning caveat based on high-priority composition.
+    
+    Returns:
+        - claim-candidate-heavy: P0+P1 dominated by claim_candidate rows
+        - cleanup-heavy: P0+P1 dominated by cleanup rows (structural/non-normative/etc)
+        - mixed: both types present in significant numbers
+        - low-backlog: very few high-priority entries
+        - inconclusive: cannot determine
+    """
+    if high_priority_count == 0:
+        return CAVEAT_LOW_BACKLOG
+    
+    # Sum claim_candidate and cleanup classes for P0+P1
+    claim_candidate_count = 0
+    cleanup_count = 0
+    
+    for band in ("P0", "P1"):
+        band_data = priority_by_class.get(band, {})
+        claim_candidate_count += band_data.get(REVIEW_CLASS_CLAIM_CANDIDATE, 0)
+        for review_class, count in band_data.items():
+            if is_cleanup_class(review_class):
+                cleanup_count += count
+    
+    # Determine composition
+    if claim_candidate_count >= 50 and cleanup_count < 20:
+        return CAVEAT_CLAIM_CANDIDATE_HEAVY
+    elif cleanup_count >= 50 and claim_candidate_count < 20:
+        return CAVEAT_CLEANUP_HEAVY
+    elif claim_candidate_count >= 10 and cleanup_count >= 10:
+        return CAVEAT_MIXED
+    elif high_priority_count < 25:
+        return CAVEAT_LOW_BACKLOG
+    else:
+        return CAVEAT_INCONCLUSIVE
 
 
 def _count_key_risk_buckets(
@@ -151,9 +250,14 @@ def compute_planning_summary(entries: list[BacklogEntry]) -> dict:
     """Compute planning summary from backlog entries.
 
     Returns a dict with:
-    - priority_band_counts: counts per priority band
+    - priority_band_counts: counts per priority band (based on calibrated score)
     - priority_band_top_docs: top docs per band
     - key_risk_buckets: counts in key risk buckets
+    - review_class_counts: counts by review class
+    - priority_by_review_class: P0+P1 counts by review class
+    - claim_candidate_high_priority_count: P0+P1 claim_candidate count
+    - cleanup_high_priority_count: P0+P1 cleanup class count
+    - planning_caveat: claim-candidate-heavy/cleanup-heavy/mixed/low-backlog/inconclusive
     - recommended_next_action: stop/continue recommendation
     - recommended_next_action_reason: explanation
     - recommended_tranche_size: suggested tranche size
@@ -161,6 +265,8 @@ def compute_planning_summary(entries: list[BacklogEntry]) -> dict:
     band_counts = _count_priority_bands(entries)
     key_buckets = _count_key_risk_buckets(entries)
     band_top_docs = _top_docs_by_band(entries)
+    review_class_counts = _count_review_class_counts(entries)
+    priority_by_class = _count_priority_by_review_class(entries)
 
     p0_count = band_counts.get("P0", 0)
     p1_count = band_counts.get("P1", 0)
@@ -170,21 +276,55 @@ def compute_planning_summary(entries: list[BacklogEntry]) -> dict:
 
     high_priority_count = p0_count + p1_count
 
-    # Determine recommendation
+    # Compute claim_candidate and cleanup high-priority counts
+    claim_candidate_high_priority = 0
+    cleanup_high_priority = 0
+    for band in ("P0", "P1"):
+        band_data = priority_by_class.get(band, {})
+        claim_candidate_high_priority += band_data.get(REVIEW_CLASS_CLAIM_CANDIDATE, 0)
+        for review_class, count in band_data.items():
+            if is_cleanup_class(review_class):
+                cleanup_high_priority += count
+
+    # Determine planning caveat
+    planning_caveat = _compute_planning_caveat(priority_by_class, high_priority_count)
+
+    # Determine recommendation with calibrated reasoning
     if high_priority_count >= LARGE_TRANCHE_THRESHOLD:
         action = ACTION_CONTINUE_LARGE_TRANCHE
-        reason = (
-            f"P0+P1 has {high_priority_count} candidates, "
-            f"enough for another {LARGE_TRANCHE_THRESHOLD}-candidate tranche."
-        )
+        if planning_caveat == CAVEAT_CLEANUP_HEAVY:
+            reason = (
+                f"P0+P1 has {high_priority_count} candidates, "
+                f"but current high-priority set is cleanup-heavy. "
+                f"Use the tranche for reason/note burn-down, not new claim discovery."
+            )
+        elif planning_caveat == CAVEAT_CLAIM_CANDIDATE_HEAVY:
+            reason = (
+                f"P0+P1 has {high_priority_count} candidates, "
+                f"enough for another {LARGE_TRANCHE_THRESHOLD}-candidate tranche. "
+                f"High-priority set is claim-candidate-heavy."
+            )
+        else:
+            reason = (
+                f"P0+P1 has {high_priority_count} candidates, "
+                f"enough for another {LARGE_TRANCHE_THRESHOLD}-candidate tranche."
+            )
         tranche_size = LARGE_TRANCHE_THRESHOLD
     elif high_priority_count >= SMALL_TRANCHE_MIN_THRESHOLD:
         action = ACTION_CONTINUE_SMALL_TARGETED
-        reason = (
-            f"P0+P1 has {high_priority_count} candidates, "
-            f"suggesting a smaller targeted tranche. "
-            f"Remaining P2={p2_count}, P3={p3_count}, P4={p4_count}."
-        )
+        if planning_caveat == CAVEAT_CLEANUP_HEAVY:
+            reason = (
+                f"P0+P1 has {high_priority_count} candidates, "
+                f"but high-priority set is cleanup-heavy. "
+                f"Use targeted tranche for burn-down. "
+                f"Remaining P2={p2_count}, P3={p3_count}, P4={p4_count}."
+            )
+        else:
+            reason = (
+                f"P0+P1 has {high_priority_count} candidates, "
+                f"suggesting a smaller targeted tranche. "
+                f"Remaining P2={p2_count}, P3={p3_count}, P4={p4_count}."
+            )
         tranche_size = min(high_priority_count, 100)
     elif key_buckets["weak_covered_count"] > 0:
         weak_count = key_buckets["weak_covered_count"]
@@ -228,6 +368,11 @@ def compute_planning_summary(entries: list[BacklogEntry]) -> dict:
         },
         "priority_band_top_docs": band_top_docs,
         "key_risk_buckets": key_buckets,
+        "review_class_counts": review_class_counts,
+        "priority_by_review_class": priority_by_class,
+        "claim_candidate_high_priority_count": claim_candidate_high_priority,
+        "cleanup_high_priority_count": cleanup_high_priority,
+        "planning_caveat": planning_caveat,
         "recommended_next_action": action,
         "recommended_next_action_reason": reason,
         "recommended_tranche_size": tranche_size,
@@ -240,11 +385,11 @@ def print_planning_summary(planning: dict) -> None:
 
     print("Priority bands:")
     band_counts = planning["priority_band_counts"]
-    print(f"  P0 score>={P0_MIN_SCORE}: {band_counts['P0']}")
-    print(f"  P1 score>={P1_MIN_SCORE}: {band_counts['P1']}")
-    print(f"  P2 score>={P2_MIN_SCORE}: {band_counts['P2']}")
-    print(f"  P3 score>={P3_MIN_SCORE}: {band_counts['P3']}")
-    print(f"  P4 score<=0: {band_counts['P4']}")
+    print(f"  P0 score>={P0_MIN_SCORE}: {band_counts.get('P0', 0)}")
+    print(f"  P1 score>={P1_MIN_SCORE}: {band_counts.get('P1', 0)}")
+    print(f"  P2 score>={P2_MIN_SCORE}: {band_counts.get('P2', 0)}")
+    print(f"  P3 score>={P3_MIN_SCORE}: {band_counts.get('P3', 0)}")
+    print(f"  P4 score<=0: {band_counts.get('P4', 0)}")
 
     buckets = planning["key_risk_buckets"]
     print("\nKey risk buckets:")
@@ -254,6 +399,23 @@ def print_planning_summary(planning: dict) -> None:
     print(f"  normative generic ignored notes: {buckets['generic_ignored_normative_count']}")
     print(f"  weak covered-by-existing-claim notes: {buckets['weak_covered_count']}")
     print(f"  stale/historical in high-value docs: {buckets['stale_or_historical_high_value_count']}")
+
+    # Print review class counts if available
+    if "review_class_counts" in planning:
+        print("\nReview class counts:")
+        class_counts = planning["review_class_counts"]
+        for rc_class, count in sorted(class_counts.items()):
+            print(f"  {rc_class}: {count}")
+
+    # Print high-priority composition if available
+    if "claim_candidate_high_priority_count" in planning:
+        claim_count = planning["claim_candidate_high_priority_count"]
+        cleanup_count = planning["cleanup_high_priority_count"]
+        caveat = planning.get("planning_caveat", "unknown")
+        print("\nHigh-priority composition:")
+        print(f"  claim_candidate P0+P1: {claim_count}")
+        print(f"  cleanup P0+P1: {cleanup_count}")
+        print(f"  caveat: {caveat}")
 
     print("\nRecommendation:")
     print(f"  {planning['recommended_next_action']}")

@@ -11,6 +11,8 @@ from typing import cast
 from .model import (
     BacklogEntry,
     CandidateData,
+    classify_review_class,
+    compute_calibrated_score,
     compute_risk_score,
     has_act_5_0_marker,
     has_act_5_2_marker,
@@ -80,6 +82,18 @@ def build_backlog(
             has_act_5_2=has_5_2,
         )
 
+        # Classify review class and compute calibrated score
+        review_class, review_class_reasons = classify_review_class(
+            disposition=disposition,
+            reason_code=reason_code,
+            notes=notes,
+            has_any_act_marker=has_any,
+            doc_path=doc_path,
+            inventory=inventory,
+            candidate_text=candidate_text,
+        )
+        calibrated_score = compute_calibrated_score(risk_score, review_class)
+
         entry: BacklogEntry = {
             "candidate_id": cid,
             "disposition": disposition,
@@ -89,7 +103,10 @@ def build_backlog(
             "reviewed_at": reviewed_at,
             "reviewer_notes": notes[:150] + "..." if len(notes) > 150 else notes,
             "score": risk_score,
+            "calibrated_score": calibrated_score,
             "risk_reasons": risk_reasons,
+            "review_class": review_class,
+            "review_class_reasons": review_class_reasons,
             "is_act_5_0_reviewed": has_5_0,
             "is_act_5_2_reviewed": has_5_2,
             "has_any_act_review_marker": has_any,
@@ -103,7 +120,8 @@ def build_backlog(
 
         entries.append(entry)
 
-    entries.sort(key=lambda e: (-cast(int, e["score"]), cast(str, e["candidate_id"])))
+    # Sort by calibrated_score for final ranking
+    entries.sort(key=lambda e: (-cast(int, e.get("calibrated_score", e["score"])), cast(str, e["candidate_id"])))
     return entries
 
 
@@ -245,9 +263,21 @@ def write_json(
 
     recommended = []
     for entry in unreviewed[:100]:
+        # Use calibrated_score for ranking, but report base score as score
+        base_score = cast(int, entry.get("score", 0))
+        calibrated = cast(int, entry.get("calibrated_score", base_score))
+        score_for_output = calibrated if calibrated != base_score else base_score
+        
+        # Get priority band from calibrated score
+        priority_band = get_priority_band(calibrated)
+        
         recommended.append({
             "candidate_id": entry["candidate_id"],
-            "score": entry["score"],
+            "score": score_for_output,
+            "calibrated_score": calibrated,
+            "priority_band": priority_band,
+            "review_class": entry.get("review_class", "unknown"),
+            "review_class_reasons": entry.get("review_class_reasons", []),
             "risk_reasons": entry["risk_reasons"],
             "disposition": entry["disposition"],
             "reason_code": entry["reason_code"],
@@ -287,11 +317,12 @@ def write_tsv(
         if not e.get("has_any_act_review_marker")
     ]
 
-    # Always include score first (for sorting), then priority_band if requested
-    fieldnames: list[str] = ["score"]
-    if include_priority_band:
-        fieldnames.append("priority_band")
-    fieldnames.extend([
+    # TSV schema with review_class and review_class_reasons
+    fieldnames: list[str] = [
+        "score",
+        "priority_band",
+        "review_class",
+        "review_class_reasons",
         "candidate_id",
         "disposition",
         "reason_code",
@@ -300,7 +331,7 @@ def write_tsv(
         "reviewed_at",
         "reviewer_notes",
         "candidate_text",
-    ])
+    ]
 
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
@@ -313,8 +344,10 @@ def write_tsv(
         for entry in unreviewed:
             row: dict[str, str] = dict(entry)
             row["risk_reasons"] = ",".join(cast(list, entry["risk_reasons"]))
-            # Add priority_band if requested
-            if include_priority_band:
-                score = cast(int, entry.get("score", 0))
-                row["priority_band"] = get_priority_band(score)
+            # Use calibrated score for priority band
+            calibrated = cast(int, entry.get("calibrated_score", entry.get("score", 0)))
+            row["score"] = calibrated
+            row["priority_band"] = get_priority_band(calibrated)
+            # Add review_class_reasons as comma-separated
+            row["review_class_reasons"] = ",".join(cast(list, entry.get("review_class_reasons", [])))
             writer.writerow(row)
