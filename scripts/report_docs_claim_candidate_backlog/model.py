@@ -58,6 +58,7 @@ GENERIC_NOTE_PATTERNS = [
 # ACT review markers (case-insensitive, handles trailing punctuation)
 _ACT_5_0_RE = re.compile(r"\bACT\s*5\.0\s*review\b", re.IGNORECASE)
 _ACT_5_2_RE = re.compile(r"\bACT\s*5\.2\s*review\b", re.IGNORECASE)
+_ACT_5_12_RE = re.compile(r"\bACT\s*5\.12\s*review\b", re.IGNORECASE)
 
 # Structural/non-normative reason codes
 STRUCTURAL_REASON_CODES = {
@@ -119,9 +120,14 @@ def has_act_5_2_marker(notes: str) -> bool:
     return bool(_ACT_5_2_RE.search(notes))
 
 
+def has_act_5_12_marker(notes: str) -> bool:
+    """Check if reviewer notes contain ACT 5.12 marker."""
+    return bool(_ACT_5_12_RE.search(notes))
+
+
 def has_any_act_marker(notes: str) -> bool:
     """Check if reviewer notes contain any ACT review marker."""
-    return has_act_5_0_marker(notes) or has_act_5_2_marker(notes)
+    return has_act_5_0_marker(notes) or has_act_5_2_marker(notes) or has_act_5_12_marker(notes)
 
 
 def is_generic_low_value_note(notes: str) -> bool:
@@ -188,6 +194,7 @@ def compute_risk_score(
     inventory: dict[str, str],
     has_act_5_0: bool,
     has_act_5_2: bool,
+    has_act_5_12: bool = False,
 ) -> tuple[int, list[str]]:
     """Compute risk score and reasons for a candidate.
 
@@ -241,6 +248,9 @@ def compute_risk_score(
     elif has_act_5_2:
         score -= 20
         reasons.append("deprioritized:act_5_2_reviewed")
+    elif has_act_5_12:
+        score -= 20
+        reasons.append("deprioritized:act_5_12_reviewed")
 
     # Stale/historical doc deprioritization
     if is_stale_doc(doc_path, inventory) and not is_high_value_doc(doc_path):

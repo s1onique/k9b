@@ -587,7 +587,7 @@ ACT 5.8 added first-class `--review-class` and `--priority-band` filters to the 
 
 | Filter | Total | P0+P1 | Recommendation |
 |--------|-------|-------|----------------|
-| `--review-class claim_candidate` | 373 | 369 | `continue_large_tranche` |
+| `--review-class claim_candidate` | 1 | 0 | `pause_manual_tranches` |
 | `--review-class structural_fragment` | 99 | 0 | `pause_manual_tranches` |
 | `--review-class non_normative_prose` | 852 | 0 | `pause_manual_tranches` |
 | `--review-class stale_or_historical` | 2227 | 0 | `continue_small_targeted_tranche` (for stale/high-value) |
@@ -615,8 +615,34 @@ python scripts/run_backlog_report.py --review-class stale_or_historical --planni
 
 **Stop rule:** If the calibrated `claim_candidate` filter ever returns zero candidates, manual claim-discovery tranches are paused until new candidates are generated.
 
+### Post-ACT 5.12 claim-discovery pause state
+
+ACT 5.13 regenerated the calibrated backlog report after ACT 5.12 from the committed disposition shards.
+
+Result:
+
+| Filter | Total | P0+P1 | Recommendation |
+|--------|-------|-------|----------------|
+| `--review-class claim_candidate` | 1 | 0 | `pause_manual_tranches` |
+| `--review-class claim_candidate --priority-band P0 --priority-band P1` | 0 | 0 | `pause_manual_tranches` |
+
+Manual high-priority claim-discovery tranches are paused. Future documentation-truthfulness work must name a maintenance class explicitly, such as `stale_or_historical`, `non_normative_prose`, or `structural_fragment`.
+
+Claim discovery may resume only if a fresh run of:
+
+```bash
+python scripts/run_backlog_report.py --review-class claim_candidate --priority-band P0 --priority-band P1 --planning --top 100
+```
+
+returns nonzero candidates.
+
+**Root cause of prior residual:** ACT 5.12 markers (`(ACT 5.12 review)`) were not recognized by the reporter's `has_any_act_marker()` function, which only checked for `ACT 5.0 review` and `ACT 5.2 review` patterns. The fix adds `ACT 5.12 review` detection, deprioritizing these rows as `reviewed_low_value`.
+
+**Remaining claim_candidate:** 1 P2 row (DOC-CAND-ceffa68ab4e1) without ACT marker, classified as "debugging context; not a behavioral claim." Low priority.
+
 ## History
 
+- **2026-06-20** — ACT 5.13: Confirmed post-ACT 5.12 live calibrated backlog state from committed shards. Reporter bug: `has_any_act_marker()` only recognized `ACT 5.0 review` and `ACT 5.2 review` patterns, not `ACT 5.12 review`. Fixed by adding `ACT 5.12` detection to model.py and passing it to `compute_risk_score()` in report.py. After fix: high-priority `claim_candidate` P0/P1 backlog is zero (1 P2 row remaining, "debugging context; not a behavioral claim"). Manual high-priority claim-discovery tranches are paused. Remaining work uses explicit maintenance filters (`stale_or_historical`, `non_normative_prose`, `structural_fragment`).
 - **2026-06-20** — ACT 5.11: Tightened `claim_candidate` classification by splitting claim signals into high-confidence and broad categories. Broad normative words ("must", "required", "never", "only") no longer promote generic low-value prose by themselves. A candidate now requires claim-shaped context (system subjects, action terms) and must not match exclusion markers (meta-documentation, policy/process, design/future, schema/table, example, CI/gate docs). Post-repair calibrated report: claim_candidate total reduced from 318 to ~82 P0 candidates. Next recommended ACT: review remaining claim candidates or pause for backlog consolidation.
 - **2026-06-20** — ACT 5.10: **BLOCKED** - Discrepancy found between ACT 5.9 context and live state. ACT 5.9 context claimed "calibrated P0/P1 claim-candidate backlog is now empty" with "4 P2 candidates remaining." Live reporter shows 318 claim_candidate candidates (314 P0/P1 + 4 P2). Root cause: (1) The bugfix commit f9d2f5d changed classification order (claim_candidate now checked BEFORE non_normative_prose), (2) STRONG_NORMATIVE_SIGNALS includes common words ("must", "required", "never", "only", etc.), (3) Many low-value prose fragments with these words are now classified as claim_candidate, (4) ACT 5.9 reviewed only 100 of 373+ candidates, leaving residual backlog unreviewed. ACT 5.10 is blocked pending classification fix and full calibrated backlog validation. See: `python scripts/run_backlog_report.py --review-class claim_candidate --planning --top 50` for live state.
 - **2026-06-20** — ACT 5.8: Added `--review-class` and `--priority-band` filters to the backlog reporter with validation and deterministic JSON filters block. Formal stop/continue decision recorded: claim discovery remains open (373 claim_candidates, 369 in P0+P1). Cleanup classes (structural_fragment, non_normative_prose, stale_or_historical) are separate work.

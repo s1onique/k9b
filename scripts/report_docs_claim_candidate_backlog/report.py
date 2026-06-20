@@ -16,6 +16,7 @@ from .model import (
     compute_risk_score,
     has_act_5_0_marker,
     has_act_5_2_marker,
+    has_act_5_12_marker,
     has_any_act_marker,
     is_generic_low_value_note,
     is_high_value_doc,
@@ -109,6 +110,7 @@ def build_backlog(
 
         has_5_0 = has_act_5_0_marker(notes)
         has_5_2 = has_act_5_2_marker(notes)
+        has_5_12 = has_act_5_12_marker(notes)
         has_any = has_any_act_marker(notes)
 
         if not include_reviewed and has_any:
@@ -123,6 +125,7 @@ def build_backlog(
             inventory=inventory,
             has_act_5_0=has_5_0,
             has_act_5_2=has_5_2,
+            has_act_5_12=has_5_12,
         )
 
         # Classify review class and compute calibrated score
