@@ -203,7 +203,35 @@ const EvidenceLinksSection: React.FC<{ evidenceLinks: IncidentDetailPayload["evi
 };
 
 /**
+ * Known event types with their category labels.
+ * Unknown event types are rendered safely without category.
+ */
+const EVENT_TYPE_CATEGORIES: Record<string, string> = {
+  opened: "Lifecycle",
+  signal_merged: "Signals",
+  severity_changed: "Status",
+  evidence_collection_started: "Evidence",
+  snapshot_bundle_attached: "Evidence",
+  evidence_artifact_attached: "Evidence",
+  review_packet_generated: "Review",
+  review_packet_failed: "Review",
+  status_changed: "Status",
+  suppressed: "Status",
+  marked_duplicate: "Status",
+  closed: "Lifecycle",
+};
+
+/**
+ * Returns category label for an event type.
+ * Returns undefined for unknown/future event types.
+ */
+const getEventCategory = (eventType: string): string | undefined => {
+  return EVENT_TYPE_CATEGORIES[eventType.toLowerCase()];
+};
+
+/**
  * Renders timeline events section.
+ * Handles empty timeline honestly and unknown event types safely.
  */
 const TimelineSection: React.FC<{ events: IncidentDetailPayload["events"] }> = ({ events }) => {
   if (events.length === 0) {
@@ -219,25 +247,36 @@ const TimelineSection: React.FC<{ events: IncidentDetailPayload["events"] }> = (
     <div className="incident-detail-section">
       <h4>Timeline</h4>
       <ul className="incident-timeline-list">
-        {events.map((event) => (
-          <li key={event.event_id} className="timeline-event-item">
-            <div className="timeline-event-header">
-              <span className="timeline-event-type">{event.event_type}</span>
-              <span className="muted small">·</span>
-              <span className="timeline-actor">{event.actor}</span>
-              {event.actor_id && (
-                <>
-                  <span className="muted small">·</span>
-                  <span className="timeline-actor-id muted small">{event.actor_id}</span>
-                </>
-              )}
-            </div>
-            <div className="timeline-event-message">{event.message}</div>
-            <div className="timeline-event-time muted small">
-              {formatTimestamp(event.occurred_at)}
-            </div>
-          </li>
-        ))}
+        {events.map((event) => {
+          const category = getEventCategory(event.event_type);
+          return (
+            <li key={event.event_id} className="timeline-event-item">
+              <div className="timeline-event-header">
+                {category && (
+                  <>
+                    <span className={`timeline-event-category category-${category.toLowerCase()}`}>
+                      {category}
+                    </span>
+                    <span className="muted small">·</span>
+                  </>
+                )}
+                <span className="timeline-event-type">{event.event_type}</span>
+                <span className="muted small">·</span>
+                <span className="timeline-actor">{event.actor}</span>
+                {event.actor_id && (
+                  <>
+                    <span className="muted small">·</span>
+                    <span className="timeline-actor-id muted small">{event.actor_id}</span>
+                  </>
+                )}
+              </div>
+              <div className="timeline-event-message">{event.message}</div>
+              <div className="timeline-event-time muted small">
+                {formatTimestamp(event.occurred_at)}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
