@@ -59,6 +59,7 @@ GENERIC_NOTE_PATTERNS = [
 _ACT_5_0_RE = re.compile(r"\bACT\s*5\.0\s*review\b", re.IGNORECASE)
 _ACT_5_2_RE = re.compile(r"\bACT\s*5\.2\s*review\b", re.IGNORECASE)
 _ACT_5_12_RE = re.compile(r"\bACT\s*5\.12\s*review\b", re.IGNORECASE)
+_ACT_5_14_STALE_RE = re.compile(r"\bACT\s*5\.14\s*stale/historical\s*review\b", re.IGNORECASE)
 
 # Structural/non-normative reason codes
 STRUCTURAL_REASON_CODES = {
@@ -125,8 +126,17 @@ def has_act_5_12_marker(notes: str) -> bool:
     return bool(_ACT_5_12_RE.search(notes))
 
 
+def has_act_5_14_stale_marker(notes: str) -> bool:
+    """Check if reviewer notes contain ACT 5.14 stale/historical review marker."""
+    return bool(_ACT_5_14_STALE_RE.search(notes))
+
+
 def has_any_act_marker(notes: str) -> bool:
-    """Check if reviewer notes contain any ACT review marker."""
+    """Check if reviewer notes contain any ACT review marker.
+    
+    Note: Does NOT include ACT 5.14 stale/historical markers, as those rows
+    have disposition=stale/historical and are handled separately in planning.
+    """
     return has_act_5_0_marker(notes) or has_act_5_2_marker(notes) or has_act_5_12_marker(notes)
 
 

@@ -17,6 +17,7 @@ from .model import (
     has_act_5_0_marker,
     has_act_5_2_marker,
     has_act_5_12_marker,
+    has_act_5_14_stale_marker,
     has_any_act_marker,
     is_generic_low_value_note,
     is_high_value_doc,
@@ -25,7 +26,7 @@ from .model import (
     is_stale_disposition,
     is_stale_doc,
 )
-from .planning import get_priority_band
+from .planning_helpers import get_priority_band
 
 
 def filter_entries(
@@ -111,6 +112,7 @@ def build_backlog(
         has_5_0 = has_act_5_0_marker(notes)
         has_5_2 = has_act_5_2_marker(notes)
         has_5_12 = has_act_5_12_marker(notes)
+        has_5_14_stale = has_act_5_14_stale_marker(notes)
         has_any = has_any_act_marker(notes)
 
         if not include_reviewed and has_any:
@@ -156,6 +158,7 @@ def build_backlog(
             "is_act_5_0_reviewed": has_5_0,
             "is_act_5_2_reviewed": has_5_2,
             "has_any_act_review_marker": has_any,
+            "is_act_5_14_stale_reviewed": has_5_14_stale,
             "is_generic_low_value_note": is_generic_low_value_note(notes),
             "is_stale": is_stale_disposition(disposition),
             "is_historical": is_historical_disposition(disposition),

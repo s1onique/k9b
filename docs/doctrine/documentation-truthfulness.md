@@ -534,8 +534,10 @@ Recommendation rules:
 | Action | Condition |
 |--------|-----------|
 | `continue_large_tranche` | P0+P1 >= 100 |
-| `continue_small_targeted_tranche` | P0+P1 >= 25 and < 100, OR P0+P1 < 25 with nonzero weak-covered or stale/high-value entries |
-| `pause_manual_tranches` | P0+P1 < 25 AND weak_covered_count == 0 AND stale_or_historical_high_value_count == 0 |
+| `continue_small_targeted_tranche` | P0+P1 >= 25 and < 100, OR P0+P1 < 25 with nonzero weak-covered entries |
+| `continue_small_targeted_tranche` | P0+P1 stale_or_historical > 0 (ACT 5.15) |
+| `continue_small_targeted_tranche` | P2-only stale_or_historical > 0 (ACT 5.15, bounded to 25) |
+| `pause_manual_tranches` | P0+P1 < 25 AND weak_covered_count == 0 AND (no actionable stale_or_historical OR P3/P4-only residue) (ACT 5.15) |
 | `blocked_or_inconclusive` | Unable to determine recommendation |
 
 TSV output includes `priority_band` column for future tranche selection.
@@ -640,8 +642,38 @@ returns nonzero candidates.
 
 **Remaining claim_candidate:** 1 P2 row (DOC-CAND-ceffa68ab4e1) without ACT marker, classified as "debugging context; not a behavioral claim." Low priority.
 
+### Stale/historical maintenance stop criteria (ACT 5.15)
+
+After ACT 5.14 showed that the first `stale_or_historical` maintenance tranche contained P4-only low-value stale residue (all 50 reviewed rows stayed `stale_doc`, no disposition changes), ACT 5.15 added deterministic stop/continue criteria to the planner.
+
+Policy:
+
+- P0/P1 `stale_or_historical` rows may justify a small bounded targeted tranche.
+- P2 `stale_or_historical` rows may justify a bounded tranche (max 25) if they are unreviewed and high-value enough.
+- P3/P4-only `stale_or_historical` residue does not justify repeated manual tranches.
+- Already-reviewed `stale_or_historical` rows (marked by ACT 5.14) must not keep the maintenance loop alive.
+- Claim discovery remains paused unless `claim_candidate` P0+P1 becomes nonzero again.
+
+The reporter now recognizes ACT 5.14 stale/historical review markers (`(ACT 5.14 stale/historical review)`) via `has_act_5_14_stale_marker()` and excludes them from unreviewed actionable counts. The planning output includes `maintenance_actionable_count`, `maintenance_low_priority_count`, `maintenance_reviewed_count`, `maintenance_unreviewed_count`, and `maintenance_stop_reason` fields.
+
+Fresh command:
+
+```bash
+python scripts/run_backlog_report.py --review-class stale_or_historical --planning --top 100
+```
+
+Current result (ACT 5.15 post-fix):
+
+| Filter | Total | P0+P1 | Recommendation |
+|--------|-------|-------|----------------|
+| `--review-class claim_candidate --priority-band P0 --priority-band P1` | 0 | 0 | `pause_manual_tranches` |
+| `--review-class stale_or_historical` | 2227 | 0 | `pause_manual_tranches` (P3/P4 residue + 50 ACT 5.14 markers) |
+
+Claim discovery remains paused. Stale/historical maintenance shows `pause_manual_tranches` with tranche=0 and clear stop reason.
+
 ## History
 
+- **2026-06-20** — ACT 5.15: Added stale/historical maintenance stop criteria after ACT 5.14 showed repeated P4 stale rows do not change disposition. Planner now pauses low-priority stale/historical residue instead of recommending endless manual tranches. Claim discovery remains paused. Changes: model.py (has_act_5_14_stale_marker, is_act_5_14_stale_reviewed field), report.py (added field to entries), planning_helpers.py (new helper module), planning.py (refactored as thin wrapper; split to stay under LLM-friendly 500-line limit), doctrine updated. Python lane: self-test PASS, py_compile OK, ruff OK (pre-existing issues only), mypy OK (pre-existing errors only), llm-friendly PASS (planning.py 211 lines), docs verifiers PASS, ci-gate-drift PASS. Full gate: npm-test-ui has pre-existing Vitest unhandled-rejection failure (ReferenceError: window is not defined in incident-list-panel.test.tsx; 108 test files, 1847 tests all PASS; only the async cleanup error causes non-zero exit). All ACT 5.15 code changes are Python-only. No disposition shards, registry, or traceability files changed in 3cda4f2.
 - **2026-06-20** — ACT 5.13: Confirmed post-ACT 5.12 live calibrated backlog state from committed shards. Reporter bug: `has_any_act_marker()` only recognized `ACT 5.0 review` and `ACT 5.2 review` patterns, not `ACT 5.12 review`. Fixed by adding `ACT 5.12` detection to model.py and passing it to `compute_risk_score()` in report.py. After fix: high-priority `claim_candidate` P0/P1 backlog is zero (1 P2 row remaining, "debugging context; not a behavioral claim"). Manual high-priority claim-discovery tranches are paused. Remaining work uses explicit maintenance filters (`stale_or_historical`, `non_normative_prose`, `structural_fragment`).
 - **2026-06-20** — ACT 5.14: Reviewed a small `stale_or_historical` maintenance tranche after claim-discovery pause. Selected 50 rows from `python scripts/run_backlog_report.py --review-class stale_or_historical --planning --top 100`; applied explicit stale/historical review markers and kept claim discovery paused. No registry, traceability, generated candidate, or script changes. Sources: docs/artifact-immutability-audit.md (39 rows), docs/post-beta-operator-feedback-and-live-integrations.md (9 rows), docs/incidents/automatic-diagnosis-loop.md (2 rows).
 - **2026-06-20** — ACT 5.11: Tightened `claim_candidate` classification by splitting claim signals into high-confidence and broad categories. Broad normative words ("must", "required", "never", "only") no longer promote generic low-value prose by themselves. A candidate now requires claim-shaped context (system subjects, action terms) and must not match exclusion markers (meta-documentation, policy/process, design/future, schema/table, example, CI/gate docs). Post-repair calibrated report: claim_candidate total reduced from 318 to ~82 P0 candidates. Next recommended ACT: review remaining claim candidates or pause for backlog consolidation.
