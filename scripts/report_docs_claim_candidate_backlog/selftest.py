@@ -8,6 +8,13 @@ import tempfile
 from pathlib import Path
 
 from .model import compute_risk_score, is_generic_low_value_note
+from .planning import (
+    ACTION_CONTINUE_LARGE_TRANCHE,
+    ACTION_CONTINUE_SMALL_TARGETED,
+    ACTION_PAUSE_MANUAL_TRANCHES,
+    compute_planning_summary,
+    get_priority_band,
+)
 from .report import write_json, write_tsv
 
 
@@ -251,6 +258,197 @@ def run_self_test() -> bool:
     else:
         print("[FAIL] generic note pattern detection")
         all_passed = False
+
+    # === Planning-specific self-tests ===
+
+    # Fixture 11: score 42 maps to P0
+    if get_priority_band(42) == "P0":
+        print("[PASS] maps score 42 to P0")
+    else:
+        print(f"[FAIL] score 42 should map to P0, got {get_priority_band(42)}")
+        all_passed = False
+
+    # Fixture 12: score 34 maps to P1
+    if get_priority_band(34) == "P1":
+        print("[PASS] maps score 34 to P1")
+    else:
+        print(f"[FAIL] score 34 should map to P1, got {get_priority_band(34)}")
+        all_passed = False
+
+    # Fixture 13: score 24 maps to P2
+    if get_priority_band(24) == "P2":
+        print("[PASS] maps score 24 to P2")
+    else:
+        print(f"[FAIL] score 24 should map to P2, got {get_priority_band(24)}")
+        all_passed = False
+
+    # Fixture 14: score 1 maps to P3
+    if get_priority_band(1) == "P3":
+        print("[PASS] maps score 1 to P3")
+    else:
+        print(f"[FAIL] score 1 should map to P3, got {get_priority_band(1)}")
+        all_passed = False
+
+    # Fixture 15: score 0 maps to P4
+    if get_priority_band(0) == "P4":
+        print("[PASS] maps score 0 to P4")
+    else:
+        print(f"[FAIL] score 0 should map to P4, got {get_priority_band(0)}")
+        all_passed = False
+
+    # Fixture 16: P0+P1 >= 100 recommends continue_large_tranche
+    large_tranche_entries: list[dict[str, str | int | list[str]]] = []
+    for i in range(100):
+        large_tranche_entries.append({
+            "candidate_id": f"DOC-CAND-{i:012d}",
+            "disposition": "ignored_by_policy",
+            "reason_code": "low_value_context",
+            "source_doc_path": "docs/security/auth.md",
+            "candidate_text": "Test text.",
+            "reviewed_at": "",
+            "reviewer_notes": "Low-value prose fragment",
+            "score": 42,
+            "risk_reasons": ["generic_ignored_note"],
+            "is_act_5_0_reviewed": False,
+            "is_act_5_2_reviewed": False,
+            "has_any_act_review_marker": False,
+            "is_generic_low_value_note": True,
+            "is_stale": False,
+            "is_historical": False,
+            "is_stale_doc": False,
+            "is_historical_doc": False,
+            "is_high_value_doc": True,
+        })
+    large_planning = compute_planning_summary(large_tranche_entries)
+    if large_planning["recommended_next_action"] == ACTION_CONTINUE_LARGE_TRANCHE:
+        print("[PASS] P0+P1 >= 100 recommends continue_large_tranche")
+    else:
+        print(f"[FAIL] expected continue_large_tranche, got {large_planning['recommended_next_action']}")
+        all_passed = False
+
+    # Fixture 17: P0+P1 between 25 and 99 recommends continue_small_targeted_tranche
+    small_tranche_entries: list[dict[str, str | int | list[str]]] = []
+    for i in range(50):
+        small_tranche_entries.append({
+            "candidate_id": f"DOC-CAND-{i:012d}",
+            "disposition": "ignored_by_policy",
+            "reason_code": "low_value_context",
+            "source_doc_path": "docs/security/auth.md",
+            "candidate_text": "Test text.",
+            "reviewed_at": "",
+            "reviewer_notes": "Low-value prose fragment",
+            "score": 42,
+            "risk_reasons": ["generic_ignored_note"],
+            "is_act_5_0_reviewed": False,
+            "is_act_5_2_reviewed": False,
+            "has_any_act_review_marker": False,
+            "is_generic_low_value_note": True,
+            "is_stale": False,
+            "is_historical": False,
+            "is_stale_doc": False,
+            "is_historical_doc": False,
+            "is_high_value_doc": True,
+        })
+    small_planning = compute_planning_summary(small_tranche_entries)
+    if small_planning["recommended_next_action"] == ACTION_CONTINUE_SMALL_TARGETED:
+        print("[PASS] P0+P1 between 25 and 99 recommends continue_small_targeted_tranche")
+    else:
+        print(f"[FAIL] expected continue_small_targeted_tranche, got {small_planning['recommended_next_action']}")
+        all_passed = False
+
+    # Fixture 18: P0+P1 < 25 with no weak/stale-high-value recommends pause_manual_tranches
+    pause_entries: list[dict[str, str | int | list[str]]] = []
+    for i in range(10):
+        pause_entries.append({
+            "candidate_id": f"DOC-CAND-{i:012d}",
+            "disposition": "ignored_by_policy",
+            "reason_code": "low_value_context",
+            "source_doc_path": "docs/old/design.md",
+            "candidate_text": "Test text.",
+            "reviewed_at": "",
+            "reviewer_notes": "Low-value prose fragment",
+            "score": 5,
+            "risk_reasons": [],
+            "is_act_5_0_reviewed": False,
+            "is_act_5_2_reviewed": False,
+            "has_any_act_review_marker": False,
+            "is_generic_low_value_note": True,
+            "is_stale": False,
+            "is_historical": False,
+            "is_stale_doc": False,
+            "is_historical_doc": False,
+            "is_high_value_doc": False,
+        })
+    pause_planning = compute_planning_summary(pause_entries)
+    if pause_planning["recommended_next_action"] == ACTION_PAUSE_MANUAL_TRANCHES:
+        print("[PASS] P0+P1 < 25 recommends pause_manual_tranches")
+    else:
+        print(f"[FAIL] expected pause_manual_tranches, got {pause_planning['recommended_next_action']}")
+        all_passed = False
+
+    # Fixture 19: weak_covered entries prevent pause (recommendation logic tested via key_buckets)
+    weak_entries: list[dict[str, str | int | list[str]]] = []
+    for i in range(5):
+        weak_entries.append({
+            "candidate_id": f"DOC-CAND-{i:012d}",
+            "disposition": "covered_by_existing_claim",
+            "reason_code": "covered_by_broader_claim",
+            "source_doc_path": "docs/normal.md",
+            "candidate_text": "Test text.",
+            "reviewed_at": "",
+            "reviewer_notes": "Low-value prose fragment",
+            "score": 12,
+            "risk_reasons": ["covered_note_weak"],
+            "is_act_5_0_reviewed": False,
+            "is_act_5_2_reviewed": False,
+            "has_any_act_review_marker": False,
+            "is_generic_low_value_note": True,
+            "is_stale": False,
+            "is_historical": False,
+            "is_stale_doc": False,
+            "is_historical_doc": False,
+            "is_high_value_doc": False,
+        })
+    weak_planning = compute_planning_summary(weak_entries)
+    if weak_planning["key_risk_buckets"]["weak_covered_count"] == 5:
+        print("[PASS] weak_covered_count correctly tallied")
+    else:
+        print(f"[FAIL] expected weak_covered_count=5, got {weak_planning['key_risk_buckets']['weak_covered_count']}")
+        all_passed = False
+
+    # Fixture 20: JSON planning block is deterministic
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:
+        json_planning_path = Path(f.name)
+    try:
+        test_planning = compute_planning_summary(small_tranche_entries)
+        write_json(small_tranche_entries, test_summary, json_planning_path, include_planning=True, planning=test_planning)
+        with open(json_planning_path) as f:
+            data1 = json.load(f)
+        with open(json_planning_path) as f:
+            data2 = json.load(f)
+        if data1 == data2 and "planning" in data1:
+            print("[PASS] JSON planning block is deterministic")
+        else:
+            print("[FAIL] JSON planning block not deterministic")
+            all_passed = False
+    finally:
+        os.unlink(json_planning_path)
+
+    # Fixture 21: TSV includes priority_band when requested
+    with tempfile.NamedTemporaryFile(suffix=".tsv", delete=False, mode="w") as f:
+        tsv_priority_path = Path(f.name)
+    try:
+        write_tsv(small_tranche_entries, tsv_priority_path, include_priority_band=True)
+        with open(tsv_priority_path) as f:
+            lines = f.readlines()
+        expected_header = "score\tpriority_band\tcandidate_id\tdisposition\treason_code\tsource_doc_path\trisk_reasons\treviewed_at\treviewer_notes\tcandidate_text\n"
+        if lines and lines[0] == expected_header:
+            print("[PASS] TSV includes priority_band when requested")
+        else:
+            print(f"[FAIL] TSV priority_band header mismatch: {lines[0] if lines else 'empty'}")
+            all_passed = False
+    finally:
+        os.unlink(tsv_priority_path)
 
     print()
     if all_passed:

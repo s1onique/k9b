@@ -22,6 +22,7 @@ from .model import (
     is_stale_disposition,
     is_stale_doc,
 )
+from .planning import get_priority_band
 
 
 def build_backlog(
@@ -229,7 +230,13 @@ def print_recommended(entries: list[BacklogEntry], top_n: int = 50) -> None:
             print(f"    note: {notes[:100]}")
 
 
-def write_json(entries: list[BacklogEntry], summary: dict, output_path: Path) -> None:
+def write_json(
+    entries: list[BacklogEntry],
+    summary: dict,
+    output_path: Path,
+    include_planning: bool = False,
+    planning: dict | None = None,
+) -> None:
     """Write deterministic JSON output."""
     unreviewed = [
         e for e in entries
@@ -249,7 +256,7 @@ def write_json(entries: list[BacklogEntry], summary: dict, output_path: Path) ->
             "candidate_text": entry["candidate_text"],
         })
 
-    output = {
+    output: dict = {
         "total_candidates": summary["total_candidates"],
         "disposition_counts": summary["disposition_counts"],
         "reason_code_counts": summary["reason_code_counts"],
@@ -260,20 +267,31 @@ def write_json(entries: list[BacklogEntry], summary: dict, output_path: Path) ->
         "recommended_candidates": recommended,
     }
 
+    # Add planning block if requested
+    if include_planning and planning:
+        output["planning"] = planning
+
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, sort_keys=True)
         f.write("\n")
 
 
-def write_tsv(entries: list[BacklogEntry], output_path: Path) -> None:
+def write_tsv(
+    entries: list[BacklogEntry],
+    output_path: Path,
+    include_priority_band: bool = False,
+) -> None:
     """Write TSV output for future tranche selection."""
     unreviewed = [
         e for e in entries
         if not e.get("has_any_act_review_marker")
     ]
 
-    fieldnames = [
-        "score",
+    # Always include score first (for sorting), then priority_band if requested
+    fieldnames: list[str] = ["score"]
+    if include_priority_band:
+        fieldnames.append("priority_band")
+    fieldnames.extend([
         "candidate_id",
         "disposition",
         "reason_code",
@@ -282,7 +300,7 @@ def write_tsv(entries: list[BacklogEntry], output_path: Path) -> None:
         "reviewed_at",
         "reviewer_notes",
         "candidate_text",
-    ]
+    ])
 
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
@@ -293,6 +311,10 @@ def write_tsv(entries: list[BacklogEntry], output_path: Path) -> None:
         )
         writer.writeheader()
         for entry in unreviewed:
-            row = dict(entry)
+            row: dict[str, str] = dict(entry)
             row["risk_reasons"] = ",".join(cast(list, entry["risk_reasons"]))
+            # Add priority_band if requested
+            if include_priority_band:
+                score = cast(int, entry.get("score", 0))
+                row["priority_band"] = get_priority_band(score)
             writer.writerow(row)

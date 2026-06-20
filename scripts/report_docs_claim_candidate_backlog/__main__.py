@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from .loader import read_candidates, read_dispositions, read_inventory
+from .planning import compute_planning_summary, print_planning_summary
 from .report import (
     build_backlog,
     compute_summary,
@@ -64,6 +65,11 @@ def main() -> int:
         metavar="PATH",
         help="Filter by doc path (substring match)",
     )
+    parser.add_argument(
+        "--planning",
+        action="store_true",
+        help="Print planning/stop-continue assessment",
+    )
 
     args = parser.parse_args()
 
@@ -103,14 +109,19 @@ def main() -> int:
     print_summary(entries, summary)
     print_recommended(entries, args.top)
 
+    # Planning output
+    if args.planning:
+        planning = compute_planning_summary(entries)
+        print_planning_summary(planning)
+
     # Write JSON if requested
     if args.json:
-        write_json(entries, summary, args.json)
+        write_json(entries, summary, args.json, include_planning=args.planning, planning=compute_planning_summary(entries) if args.planning else None)
         print(f"\n[INFO] JSON output written to {args.json}")
 
     # Write TSV if requested
     if args.tsv:
-        write_tsv(entries, args.tsv)
+        write_tsv(entries, args.tsv, include_priority_band=True)
         print(f"\n[INFO] TSV output written to {args.tsv}")
 
     return 0

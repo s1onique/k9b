@@ -507,6 +507,39 @@ python scripts/run_backlog_report.py --self-test
 
 The self-test is wired into the standard gate via `docs-claim-candidate-backlog-report-self-test`.
 
+### Stop/continue planning
+
+The `--planning` flag enables deterministic stop/continue assessment:
+
+```bash
+# Human-readable planning output
+python scripts/run_backlog_report.py --planning --top 100
+
+# JSON/TSV with planning block
+python scripts/run_backlog_report.py --planning --json /tmp/backlog-planning.json --tsv /tmp/backlog-planning.tsv --top 100
+```
+
+The planning section groups remaining candidates into priority bands:
+
+| Band | Score range | Description |
+|------|-------------|-------------|
+| P0 | >= 42 | Highest priority: generic ignored + high-value doc + normative + no marker |
+| P1 | 34-41 | High priority: generic ignored + high-value or generic + normative |
+| P2 | 24-33 | Medium priority: generic ignored or weak covered with lower-risk context |
+| P3 | 1-23 | Low priority: low-confidence remaining backlog |
+| P4 | <= 0 | Deprioritized: reviewed, stale, historical, or low-risk |
+
+Recommendation rules:
+
+| Action | Condition |
+|--------|-----------|
+| `continue_large_tranche` | P0+P1 >= 100 |
+| `continue_small_targeted_tranche` | P0+P1 >= 25 and < 100 |
+| `pause_manual_tranches` | P0+P1 < 25 with no weak-covered or stale-high-value entries |
+| `blocked_or_inconclusive` | Unable to determine recommendation |
+
+TSV output includes `priority_band` column for future tranche selection.
+
 ## History
 
 - **2026-06-20** — ACT 5.3: Added claim candidate backlog reporter (`scripts/report_docs_claim_candidate_backlog/` package) with risk scoring, self-tests, wired into verify_all.sh gate

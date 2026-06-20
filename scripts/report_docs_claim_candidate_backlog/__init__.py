@@ -17,6 +17,11 @@ from .model import (
     is_stale_disposition,
     is_stale_doc,
 )
+from .planning import (
+    compute_planning_summary,
+    get_priority_band,
+    print_planning_summary,
+)
 from .report import (
     build_backlog,
     compute_summary,
@@ -31,8 +36,10 @@ __all__ = [
     "BacklogEntry",
     "CandidateData",
     "build_backlog",
+    "compute_planning_summary",
     "compute_risk_score",
     "compute_summary",
+    "get_priority_band",
     "has_act_5_0_marker",
     "has_act_5_2_marker",
     "has_any_act_marker",
@@ -42,6 +49,7 @@ __all__ = [
     "is_historical_doc",
     "is_stale_disposition",
     "is_stale_doc",
+    "print_planning_summary",
     "print_recommended",
     "print_summary",
     "read_candidates",
