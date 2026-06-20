@@ -1,5 +1,4 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-
 DOC-CAND-164b680b4bf0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-3aee07d810c9,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-55fff0d8d5cd,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
@@ -39,7 +38,7 @@ DOC-CAND-8b3402e89db4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-900ec8963582,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-f4295f853228,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-800a989f4314,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
-DOC-CAND-ca7708e3ca37,ignored_by_policy,,,low_value_context,2026-06-19,"Constitution principle; architectural guidance, not testable claim"
+"DOC-CAND-ca7708e3ca37","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: constitution principle; architectural constraint, not a testable claim."
 DOC-CAND-e4e24c106665,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-07a77676f9d3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-e6aaa0d4bf09,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md

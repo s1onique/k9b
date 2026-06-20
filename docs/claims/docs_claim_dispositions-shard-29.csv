@@ -1,5 +1,4 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-
 DOC-CAND-08c39ee44281,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-b2f6613df802,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-296a52c77fe3,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -33,7 +32,7 @@ DOC-CAND-10cbf1323b47,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-888717c92fbe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-117118f6097a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-8e678e46cd09,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
-DOC-CAND-d5ea493b6437,ignored_by_policy,,,low_value_context,2026-06-19,Implementation detail guidance; not a behavioral claim
+"DOC-CAND-d5ea493b6437","ignored_by_policy","","","implementation_detail","2026-06-20T03:58:35Z","Ignored by policy: implementation detail guidance; not a testable behavioral claim."
 DOC-CAND-d84b8c465ee9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-133bfa5a9626,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-638b0ac74a79,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md

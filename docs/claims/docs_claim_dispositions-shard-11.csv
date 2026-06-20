@@ -1,5 +1,4 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-
 DOC-CAND-420717455949,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-430ce0aa18e5,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
 DOC-CAND-fb215105a9ce,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -7,7 +6,7 @@ DOC-CAND-ad0b352b385d,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact
 DOC-CAND-da5d514f8f1e,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-bf60b2445097,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-07570b92c6e7,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
-DOC-CAND-a506113e7234,covered_by_existing_claim,,DOC-CLAIM-0022,covered_by_broader_claim,2026-06-20,ACT 3.5: Session cookie attributes; covered by DOC-CLAIM-0022 (HttpOnly), DOC-CLAIM-0023 (SameSite), DOC-CLAIM-0024 (Secure)
+DOC-CAND-a506113e7234,covered_by_existing_claim,,DOC-CLAIM-0022,covered_by_broader_claim,2026-06-20,ACT 3.5: Session cookie attributes; covered by DOC-CLAIM-0022 (HttpOnly)
 DOC-CAND-977fe0d8319b,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-a52abd190274,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-c6382bb9c38f,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-release-notes.md
@@ -37,8 +36,8 @@ DOC-CAND-39be75872a7d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-45bbe81a9e7a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-827688f9606e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-5afa2e7d58b4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
-DOC-CAND-cb004d158ff0,ignored_by_policy,,,low_value_context,2026-06-19,"Constitution principle; labeled in output, not testable claim"
-DOC-CAND-4be69696b93e,ignored_by_policy,,,low_value_context,2026-06-19,Design principle; not a testable claim
+"DOC-CAND-cb004d158ff0","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: constitution principle; labeled in output rendering, not a testable claim."
+"DOC-CAND-4be69696b93e","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: design completeness principle; not a testable behavioral claim."
 DOC-CAND-42fbee1e16ef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-24234e1a70b5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-e1c80adaacea,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md

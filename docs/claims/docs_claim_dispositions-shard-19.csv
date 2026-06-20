@@ -1,5 +1,4 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-
 DOC-CAND-a6813930f61c,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-c6160e4e343a,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-d3023eef95bb,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
@@ -48,7 +47,7 @@ DOC-CAND-6c3b4310808e,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-bet
 DOC-CAND-ff24162b62f2,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-e7091edf392f,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-a8be9a65d02b,stale,,,stale_doc,2026-06-19,From stale doc: docs/provenance-filtering.md
-DOC-CAND-ceffa68ab4e1,ignored_by_policy,,,low_value_context,2026-06-19,Debugging context; not a behavioral claim
+"DOC-CAND-ceffa68ab4e1","ignored_by_policy","","","non_normative_description","2026-06-20T03:58:35Z","Ignored by policy: debugging context; explains why something doesn't appear, not a behavioral claim."
 DOC-CAND-6d747e5c35d7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md
 DOC-CAND-a60de35d9372,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md
 DOC-CAND-73a58e545b65,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/app-tsx-source-map.md
@@ -119,7 +118,7 @@ DOC-CAND-16bc72bd62f8,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-08da2e1b8334,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-f19c8817bc76,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
 DOC-CAND-720ebe80dce4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
-DOC-CAND-bf0ef3082227,ignored_by_policy,,,low_value_context,2026-06-19,"Constraint design note; covered by DOC-CLAIM-0002, DOC-CLAIM-0059"
+"DOC-CAND-bf0ef3082227","covered_by_existing_claim","","DOC-CLAIM-0002","covered_by_broader_claim","2026-06-20T03:58:35Z","Covered by DOC-CLAIM-0002: no autonomous mutation/remediation without operator confirmation."
 DOC-CAND-d90c0e03fb89,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/EPIC-TASK-BREAKDOWN.md
 DOC-CAND-f068e60ae255,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/TEST-CLEANUP-INVENTORY.md
 DOC-CAND-2dba0fe54836,stale,,,stale_doc,2026-06-19,From stale doc: docs/verification.md

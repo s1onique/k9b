@@ -1,5 +1,4 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-
 DOC-CAND-e72d144d6de4,registered_existing_claim,DOC-CLAIM-0064,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0064
 DOC-CAND-217a6f9e098b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-2d6c197dcf92,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
@@ -45,7 +44,7 @@ DOC-CAND-ceb255b35b3e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-8b2a14cbcca4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-cedd7022d9b2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-448ac8c23cb0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
-DOC-CAND-81931893630d,ignored_by_policy,,,low_value_context,2026-06-19,"Constitution principle; architectural guidance, not testable claim"
+"DOC-CAND-81931893630d","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: constitution principle; architectural guidance, not a testable claim."
 DOC-CAND-17b0fe320c2e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-3ee3752c1149,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-197d483d9e72,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md

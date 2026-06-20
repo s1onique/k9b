@@ -1,5 +1,4 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-
 DOC-CAND-c3939db8f885,covered_by_existing_claim,,DOC-CLAIM-0059,covered_by_broader_claim,2026-06-19,Product description with embedded safety claim (without autonomous cluster mutation); safety part covered by DOC-CLAIM-0059
 DOC-CAND-9c1ae2c4b94b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-a66f11ba1448,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
@@ -43,7 +42,7 @@ DOC-CAND-a3c1c25e3d1e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-1531ba8301ed,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-9261c681d4e3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-1803a60ec76a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
-DOC-CAND-9009f2fc866b,ignored_by_policy,,,low_value_context,2026-06-19,CSS ownership guideline; not a testable claim
+"DOC-CAND-9009f2fc866b","ignored_by_policy","","","implementation_detail","2026-06-20T03:58:35Z","Ignored by policy: CSS ownership guideline; not a testable behavioral claim."
 DOC-CAND-4b2c94d58bc0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
 DOC-CAND-358c3618cba5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-7a268cbc5e58,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
