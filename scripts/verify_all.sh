@@ -448,7 +448,7 @@ _run_python_lane() {
     _run_and_record "python" "docs-claim-candidate-dispositions" "Verifying docs claim candidate dispositions" "$PYTHON" scripts/verify_docs_claim_candidate_dispositions.py
     _run_and_record "python" "docs-claim-disposition-csv-integrity" "Verifying disposition shard CSV integrity" "$PYTHON" scripts/verify_docs_claim_disposition_csv_integrity.py
     _run_and_record "python" "docs-claim-disposition-semantic-diff-self-test" "Verifying disposition semantic diff self-test" "$PYTHON" scripts/diff_docs_claim_dispositions.py --self-test
-    _run_and_record "python" "docs-claim-candidate-backlog-report-self-test" "Verifying claim candidate backlog report self-test" "$PYTHON" scripts/report_docs_claim_candidate_backlog.py --self-test
+    _run_and_record "python" "docs-claim-candidate-backlog-report-self-test" "Verifying claim candidate backlog report self-test" "$PYTHON" scripts/run_backlog_report.py --self-test
     _run_and_record "python" "incident-report-quality" "Verifying incident report quality invariants" "$PYTHON" scripts/verify_incident_report_quality.py
     _run_and_record "python" "artifact-immutability" "Verifying artifact immutability enforcement" "$PYTHON" scripts/verify_artifact_immutability.py
     _run_and_record "python" "production-readiness-disclaimer" "Verifying production readiness disclaimers" "$PYTHON" scripts/verify_production_readiness_disclaimer.py

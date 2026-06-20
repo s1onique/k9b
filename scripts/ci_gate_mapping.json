@@ -264,7 +264,7 @@
       "ci_equivalent": {
         ".github/workflows/harbor.yml": []
       },
-      "required_command_fragments": ["report_docs_claim_candidate_backlog.py --self-test"],
+      "required_command_fragments": ["run_backlog_report.py --self-test"],
       "reason": "Documentation claim candidate backlog report self-test - local-only gate"
     },
     "docs-inventory": {
