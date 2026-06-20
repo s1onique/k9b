@@ -246,6 +246,13 @@
       "required_command_fragments": ["verify_docs_claim_candidate_dispositions.py"],
       "reason": "Docs claim candidate disposition ledger verifier"
     },
+    "docs-claim-disposition-csv-integrity": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"]
+      },
+      "required_command_fragments": ["verify_docs_claim_disposition_csv_integrity.py"],
+      "reason": "Disposition shard CSV integrity - local-only gate"
+    },
     "docs-inventory": {
       "ci_equivalent": {
         ".github/workflows/harbor.yml": ["lint-policy"]
@@ -414,6 +421,11 @@
       "gate": "docs-claim-candidate-coverage",
       "workflow": ".github/workflows/harbor.yml",
       "reason": "Local-only gate; docs truthfulness verified locally"
+    },
+    {
+      "gate": "docs-claim-disposition-csv-integrity",
+      "workflow": ".github/workflows/harbor.yml",
+      "reason": "Local-only gate; disposition CSV integrity verified locally"
     },
     {
       "gate": "docs-inventory",
