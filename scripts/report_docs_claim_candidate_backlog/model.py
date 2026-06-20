@@ -334,6 +334,10 @@ def _is_non_normative_prose(
     """Check if candidate is non-normative prose.
     
     Returns (is_non_normative, reasons).
+    
+    Note: Does NOT classify generic low-value notes as non-normative.
+    That classification is handled separately in classify_review_class()
+    to allow strong claim signals to override.
     """
     reasons: list[str] = []
     
@@ -359,9 +363,8 @@ def _is_non_normative_prose(
         if pattern in notes_lower:
             reasons.append(tag)
     
-    # Check for generic low-value note that suggests non-normative
-    if is_generic_low_value_note(notes) and not reasons:
-        reasons.append("non_normative:generic_low_value")
+    # NOTE: Do NOT classify generic low-value notes as non-normative here.
+    # Let classify_review_class() handle that case after checking for strong signals.
     
     return len(reasons) > 0, reasons
 
@@ -384,8 +387,8 @@ def classify_review_class(
     2. stale_or_historical - disposition or doc indicates stale/historical
     3. reviewed_low_value - has ACT marker and is ignored_by_policy
     4. structural_fragment - table/heading/schema fragments
-    5. non_normative_prose - descriptive/non-normative prose
-    6. claim_candidate - strong normative signal, no structural markers
+    5. claim_candidate - strong normative signal (checked BEFORE non-normative prose)
+    6. non_normative_prose - descriptive/non-normative prose
     7. unknown - fallback
     """
     # A. covered_or_registered
@@ -405,34 +408,30 @@ def classify_review_class(
     if has_any_act_marker and disposition == "ignored_by_policy":
         return REVIEW_CLASS_REVIEWED_LOW_VALUE, ["deprioritized:act_review_marker"]
     
-    # D. structural_fragment
+    # D. structural_fragment - check BEFORE claim signals
+    # A structural fragment with normative words is still structural, not claim_candidate
     is_structural, structural_reasons = _is_structural_fragment(reason_code, notes)
     if is_structural:
         return REVIEW_CLASS_STRUCTURAL_FRAGMENT, structural_reasons
     
-    # E. non_normative_prose
+    # E. claim_candidate - strong normative signal
+    # Check this BEFORE non-normative prose so strong signals can override generic notes
+    claim_signals = _has_strong_claim_signal(candidate_text)
+    if claim_signals:
+        return REVIEW_CLASS_CLAIM_CANDIDATE, claim_signals
+    
+    # F. non_normative_prose - descriptive/non-normative content
     is_non_normative, non_normative_reasons = _is_non_normative_prose(
         reason_code, notes, candidate_text
     )
     if is_non_normative:
         return REVIEW_CLASS_NON_NORMATIVE_PROSE, non_normative_reasons
     
-    # F. claim_candidate - strong normative signal, no structural markers
-    claim_signals = _has_strong_claim_signal(candidate_text)
-    if claim_signals:
-        # Verify it's not just a structural fragment with normative words
-        if not is_structural and not is_non_normative:
-            return REVIEW_CLASS_CLAIM_CANDIDATE, claim_signals
-    
-    # Check if it's at least a generic ignored note (may still be claim_candidate)
+    # G. Generic low-value note without strong signals
     if is_generic_low_value_note(notes):
-        # If it has strong signals, classify as claim_candidate despite generic note
-        if claim_signals:
-            return REVIEW_CLASS_CLAIM_CANDIDATE, claim_signals
-        # Otherwise classify as non_normative_prose
         return REVIEW_CLASS_NON_NORMATIVE_PROSE, ["structural:generic_ignored_note"]
     
-    # G. unknown
+    # H. unknown
     return REVIEW_CLASS_UNKNOWN, ["unknown"]
 
 
