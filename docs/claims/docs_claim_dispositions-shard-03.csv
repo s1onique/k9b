@@ -21,9 +21,9 @@ DOC-CAND-7bcac73b73f4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-10b484b41130,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
 DOC-CAND-e73bcdda71e0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
 DOC-CAND-755bf9e0eb10,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
-DOC-CAND-e7b36236f69f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-e7b36236f69f,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Lead-in sentence for evidence-status rules. Introductory structural text, not a standalone claim (ACT 5.9 review)."
 DOC-CAND-f7c19296a4be,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-e59f806b6cac,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-e59f806b6cac,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Self-referential policy about duplicate candidate ID handling. Advisory-only verification policy, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-754b8f7bc92b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
 DOC-CAND-c2169ba6c2b2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-8afaa023a458,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
@@ -91,7 +91,7 @@ DOC-CAND-d0c0001008e0,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-27f1d3e26aee,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-1d4f4c66a52d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-8e44de55c2fb,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
-DOC-CAND-eb7957ff8545,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-eb7957ff8545,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Operator auth design feature specification. Design document note, not current verifiable system behavior (ACT 5.9 review)."
 DOC-CAND-4f65e6c35b53,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design evaluation table cell, assessment not tracked claim (ACT 5.0 review)."
 DOC-CAND-d2666973743f,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-0f15724077b9,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design assumption, acknowledgment note not an invariant (ACT 5.0 review)."

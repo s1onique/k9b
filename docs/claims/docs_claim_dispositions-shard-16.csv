@@ -24,7 +24,7 @@ DOC-CAND-b43234b1ad4d,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z
 DOC-CAND-4ed872c4ac34,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-070ed0af96cd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-96df3ccebc4d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
-DOC-CAND-f31d03b33762,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
+DOC-CAND-f31d03b33762,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Run lifecycle state machine guidance. Policy guidance, not a standalone behavioral claim (ACT 5.9 review)."
 DOC-CAND-f11bec940b12,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-e4f09368a6a0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
 DOC-CAND-af27d0a2289a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
@@ -81,7 +81,7 @@ DOC-CAND-6ca9d7906e90,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-87132c24e6b8,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-a60d02e4ad10,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-c089fb0adf1f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-cd1c51d25bc1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-cd1c51d25bc1,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Alias mapping never leaves process; only aliases in prompts. Covered by DOC-CLAIM-0062 evidence boundary discipline (ACT 5.9 review).
 DOC-CAND-55ab73ead39a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-f3dd4f68c600,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-04219b3f488d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md

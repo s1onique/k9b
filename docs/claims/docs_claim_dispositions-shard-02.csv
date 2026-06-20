@@ -26,9 +26,9 @@ DOC-CAND-40ec2aec495f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-8d5cd474d64a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-4a03e39a3db0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
 DOC-CAND-4abf4798a3a8,covered_by_existing_claim,,DOC-CLAIM-0040,covered_by_broader_claim,2026-06-20,ACT 3.5: Latest directory mutable; covered by DOC-CLAIM-0040
-DOC-CAND-d176de6be414,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-d176de6be414,covered_by_existing_claim,,DOC-CLAIM-0002,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Artifact name uniqueness requirement. Covered by DOC-CLAIM-0002 data model artifact naming claim (ACT 5.9 review).
 DOC-CAND-b1a58560b94a,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/data-model/incident-report-quality.md, not a tracked behavioral invariant (ACT 5.2 review)."
-DOC-CAND-e851edb3fa36,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
+DOC-CAND-e851edb3fa36,ignored_by_policy,,,too_granular_for_registry,2026-06-20T18:00Z,"(ACT 5.9 review) Incident report quality rule example. Example/instance, not a standalone claim (ACT 5.9 review)."
 DOC-CAND-a59f409b3055,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/data-model/incident-report-quality.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-7406a1ee0284,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Test file reference from docs/data-model/incident-report-quality.md, not a behavioral claim (ACT 5.2 review)."
 DOC-CAND-2c97f2a5bc78,covered_by_existing_claim,,DOC-CLAIM-0006,covered_by_broader_claim,2026-06-20,ACT 3.5: Ready for review not downgraded; covered by DOC-CLAIM-0006

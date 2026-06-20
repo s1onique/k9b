@@ -94,7 +94,7 @@ DOC-CAND-815f1d943492,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-67ceb949190d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-b0ffdfab312f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-8b5ae0f8764c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-ef6b21fba228,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-ef6b21fba228,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,(ACT 5.9 review) Deferred optional feature section heading. Document explicitly states this feature is not implemented. Design/future note (ACT 5.9 review).
 DOC-CAND-a9cf0cac6b76,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from llm-anonymization-design.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-0de9ff6b77c8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-44a782173e9f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
@@ -110,7 +110,7 @@ DOC-CAND-414135beed95,ignored_by_policy,,,low_value_context,2026-06-19,"Low-valu
 DOC-CAND-5710d5bad8d4,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design task table row, implementation tracking not tracked claim (ACT 5.0 review)."
 DOC-CAND-8a5e1d421bf2,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-66552f36ab9a,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
-DOC-CAND-c0abc84726d3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-c0abc84726d3,covered_by_existing_claim,,DOC-CLAIM-0060,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) RBAC should restrict secrets access. Covered by DOC-CLAIM-0060 security data handling claim (ACT 5.9 review).
 DOC-CAND-d2f6ad5282ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-7f0dbdaaffb6,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from rbac-deployment-guide.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-2bcb718a80ac,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
@@ -121,7 +121,7 @@ DOC-CAND-2f93535e33bb,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-9c69883c5aea,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-650b63fa6ffa,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-530e005c0248,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
-DOC-CAND-fbefcc00f29b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
+DOC-CAND-fbefcc00f29b,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Artifact serving contract requirement. Covered by DOC-CLAIM-0062 evidence boundary discipline (ACT 5.9 review).
 DOC-CAND-4ed21bfe7197,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T10:15:00Z,Table cell/row fragment from docs/security/static-artifact-serving-contract.md; column enumeration not a standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-6376b9bee60b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-b31f2eba0df7,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md

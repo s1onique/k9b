@@ -14,7 +14,7 @@ DOC-CAND-05c14affe0f4,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-9811c0babd49,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-14755f3bed2a,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-510934fdd1fd,covered_by_existing_claim,,DOC-CLAIM-0038,covered_by_broader_claim,2026-06-20,ACT 3.5: Verify.yml PR trigger; covered by DOC-CLAIM-0038
-DOC-CAND-fc266436bf16,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-fc266436bf16,covered_by_existing_claim,,DOC-CLAIM-0002,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Artifact naming uniqueness. Covered by DOC-CLAIM-0002 artifact naming claim (ACT 5.9 review).
 DOC-CAND-08f4b9858bc9,covered_by_existing_claim,,DOC-CLAIM-0056,covered_by_broader_claim,2026-06-20,ACT 3.5: Hypothesis basis required; covered by DOC-CLAIM-0056
 DOC-CAND-0faefacc1e9b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-ef34fe482ab1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
@@ -30,7 +30,7 @@ DOC-CAND-83b401a8885d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-528af24b284f,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/documentation-truthfulness.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-f2bab370359e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-8af08d827173,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from documentation-truthfulness.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
-DOC-CAND-33d267c53bc4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-33d267c53bc4,ignored_by_policy,,,historical_doc,2026-06-20T18:00Z,"(ACT 5.9 review) Historical changelog entry from 2026-06-19 about adding claim scanner. Past event, not a current behavioral claim (ACT 5.9 review)."
 DOC-CAND-757e1cfe8430,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
 DOC-CAND-39be75872a7d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
 DOC-CAND-45bbe81a9e7a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
@@ -93,7 +93,7 @@ DOC-CAND-a9e7e5ed6a6c,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-fdcf4eb44195,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-0ea1043956f9,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-2f038080e5c9,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-4abb5269f578,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-4abb5269f578,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) CI gate acceptance criteria statement about targeting verifyall.sh. Meta-documentation about verification, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-164a3c9b0f79,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-e073840b87c2,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-7fb4d8810532,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
@@ -114,7 +114,7 @@ DOC-CAND-40ffa9d28f02,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-2948dc610db9,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Descriptive prose fragment from docs/security/threat-model.md; not a behavioral claim (ACT 5.4 review).
 DOC-CAND-9d682a3755da,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-2e58247d8839,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-eace73164b87,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-eace73164b87,covered_by_existing_claim,,DOC-CLAIM-0025,duplicate_cross_doc,2026-06-20T18:00Z,(ACT 5.9 review) LLM09 overreliance threat: Advisory only policy. Covered by DOC-CLAIM-0025 LLM output advisory claim (ACT 5.9 review).
 DOC-CAND-5ea23d7df8ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-c717156f0685,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-abc54236be2c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md

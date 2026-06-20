@@ -25,10 +25,10 @@ DOC-CAND-60be758d4a2e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-cd7417ea3e8c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-7ce6357be293,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-a8f7c99d7dea,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
-DOC-CAND-be109315d45f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-be109315d45f,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Only include artifacts with status != 'skipped' - same as G7, explicitly P3 Nice to Have backlog item. Design/future note, not current behavior (ACT 5.9 review)."
 DOC-CAND-0e918d759222,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
 DOC-CAND-8007643004d9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
-DOC-CAND-da77159c4a5c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-da77159c4a5c,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Table cell defining 'gatename' trace matrix field semantics. Schema field label, not a system claim (ACT 5.9 review)."
 DOC-CAND-a16bb7676219,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-b2b03e87a22b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md
 DOC-CAND-add45781d64e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
@@ -85,7 +85,7 @@ DOC-CAND-13f97d09ef77,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-c740b4c90042,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-b9e5acb8fea6,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-82e7e34f0f0a,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
-DOC-CAND-ea373eb38f35,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-ea373eb38f35,ignored_by_policy,,,too_granular_for_registry,2026-06-20T18:00Z,"(ACT 5.9 review) RBAC rule example describing permission requirements. Example/instance, not a standalone claim (ACT 5.9 review)."
 DOC-CAND-b41fac2ac6f2,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-c1b5cae2327b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-fab8971d7ffe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md

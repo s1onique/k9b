@@ -40,7 +40,7 @@ DOC-CAND-33b18eb61134,ignored_by_policy,,,generated_from_heading,2026-06-20T10:1
 DOC-CAND-4a76d774ab97,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short prose fragment from docs/doctrine/documentation-truthfulness.md; not a tracked behavioral invariant (ACT 5.4 review).
 DOC-CAND-1625e53fe0ef,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/doctrine/documentation-truthfulness.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-144f4102f29c,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/doctrine/documentation-truthfulness.md; structural element, not prose claim (ACT 5.4 review)."
-DOC-CAND-b3041e787d65,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-b3041e787d65,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Advisory policy for high-severity unregistered candidates. Verification policy, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-28d080d98c6a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md
 DOC-CAND-93a7c8f01ef1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-9353a7354470,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,Ignored by policy: playbook guidance; not a behavioral invariant.
@@ -129,7 +129,7 @@ DOC-CAND-e402b687a13c,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-6c00535b003e,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-def2f1d70847,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-40e7989206bc,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/security-policy.md; structural element, not prose claim (ACT 5.4 review)."
-DOC-CAND-f18b29df1beb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
+DOC-CAND-f18b29df1beb,covered_by_existing_claim,,DOC-CLAIM-0060,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Live snapshots only for untracked local configs. Covered by DOC-CLAIM-0060 security data handling claim (ACT 5.9 review).
 DOC-CAND-09c85874cfdd,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/EPIC-TASK-BREAKDOWN.md
 DOC-CAND-5397719f043e,stale,,,stale_doc,2026-06-19,From stale doc: docs/verification.md
 DOC-CAND-d0d41bffb28e,stale,,,stale_doc,2026-06-19,From stale doc: docs/verification.md

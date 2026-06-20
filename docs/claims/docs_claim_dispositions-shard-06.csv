@@ -66,7 +66,7 @@ DOC-CAND-efcdb41a788e,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-51921df3db1d,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/llm-prompt-builder-inventory-2026-06-03.md
 DOC-CAND-26e02a13c9fc,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-audit-2026-05-31.md
 DOC-CAND-d8c0f3f9603c,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-audit-2026-05-31.md
-DOC-CAND-eec79def90bd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-eec79def90bd,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Schema table cell from incident-report-schema. Field definition, not a standalone claim (ACT 5.9 review)."
 DOC-CAND-533472fa767c,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/schemas/incident-report-schema.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-1e8808606f1a,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-alertmanager-discovery.md
 DOC-CAND-a2efa5b41be2,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-port-forward-history.md
@@ -89,14 +89,14 @@ DOC-CAND-582b1635f7b0,ignored_by_policy,,,low_value_context,2026-06-19,"Low-valu
 DOC-CAND-ce0a39752169,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-9efeb0121378,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-e3197efd6016,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
-DOC-CAND-bf49ec33e769,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
+DOC-CAND-bf49ec33e769,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Artifact serving contract: must not expose raw secrets. Covered by DOC-CLAIM-0062 evidence boundary discipline (ACT 5.9 review).
 DOC-CAND-698e71a0959b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-4c7892008844,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-9ab55973b5a1,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-7d3831bb33a3,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-8ef1945aaf3f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-3331e020cfc0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-af94785e7116,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-af94785e7116,covered_by_existing_claim,,DOC-CLAIM-0062,duplicate_cross_doc,2026-06-20T18:00Z,(ACT 5.9 review) Table row fragment about environment variables and log redaction is covered by existing DOC-CLAIM-0062 (evidence-boundary-discipline) (ACT 5.9 review).
 DOC-CAND-587e16b38cee,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from threat-model.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-c101f0f87448,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-af028bf48d02,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md

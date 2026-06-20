@@ -27,7 +27,7 @@ DOC-CAND-ad1f3a48bf58,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-9b8d0ee464d1,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Descriptive prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-fa38fc4f878a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-8d452a1daf0f,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from ui-model-boundaries.md; not a standalone behavioral claim (ACT 5.6 review)
-DOC-CAND-c327cf51760c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-c327cf51760c,covered_by_existing_claim,,DOC-CLAIM-0001,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Cluster-scoped incident reports must identify specific affected resources. Covered by DOC-CLAIM-0001 (ACT 5.9 review).
 DOC-CAND-15918d88ffbc,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/beta-real-incident-validation.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-93ab28a29921,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-acb92f26a5ef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
@@ -74,7 +74,7 @@ DOC-CAND-643f1f641c7d,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-2cedfbd5611e,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-audit-2026-05-31.md
 DOC-CAND-b711957667b0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
 DOC-CAND-ba95bd8ef492,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/health-proposal-schema.md
-DOC-CAND-dce20ed11109,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-dce20ed11109,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Test reference for unknown claims. Meta-documentation about test coverage, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-5a9fb8b439d5,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from incident-report-schema.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-17c0a4396126,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/run-artifact-layout.md
 DOC-CAND-e7b34bb43eb6,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-assessment-comparison-orchestration.md
@@ -92,10 +92,10 @@ DOC-CAND-d0874ff6f4a9,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-341dc4578419,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-e690518409ab,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-57783445fdb8,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-d3803ec234aa,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-d3803ec234aa,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,(ACT 5.9 review) Document goal statement - describes design intent rather than current behavioral claim. llm-anonymization-design.md is a design document with open items (ACT 5.9 review).
 DOC-CAND-0cfce738646d,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Descriptive prose fragment from docs/security/llm-anonymization-design.md; not a behavioral claim (ACT 5.4 review).
 DOC-CAND-385f9d6b8021,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
-DOC-CAND-befa4c2ebf13,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-befa4c2ebf13,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Self-referential claim registration advisory policy. Meta-documentation about claims being advisory, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-bd683177c766,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-61275eb5d29c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-12a75cbd62df,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
@@ -130,7 +130,7 @@ DOC-CAND-bde5606d7d34,covered_by_existing_claim,,DOC-CLAIM-0010,covered_by_broad
 DOC-CAND-2bf93cfd4fbe,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/security/threat-model.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-db5e8a57f78e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-4248cb6943c4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-eb11dec97576,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-eb11dec97576,covered_by_existing_claim,,DOC-CLAIM-0025,duplicate_cross_doc,2026-06-20T18:00Z,(ACT 5.9 review) LLM output treated as advisory only. Covered by DOC-CLAIM-0025 LLM output advisory claim (ACT 5.9 review).
 DOC-CAND-837f67e68213,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-42b14b064752,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-6b467269a69e,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
@@ -141,7 +141,7 @@ DOC-CAND-b0e5429d649f,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-ff74e21b70d0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-cc7359d3221f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-cd1c3a3b5f78,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-glob-audit.md
-DOC-CAND-efc9162b2461,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
+DOC-CAND-efc9162b2461,covered_by_existing_claim,,DOC-CLAIM-0010,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Agent must never perform direct mutations on live clusters. Covered by DOC-CLAIM-0010 cluster mutation authorization claim (ACT 5.9 review).
 DOC-CAND-8450ed7b957d,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,"ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Source: docs/security-standards.md Section 5 prohibits stderr=DEVNULL. Code scan confirms only stdout=DEVNULL found (port-forward stdout noise suppression), not stderr. Diagnostic subprocesses capture stderr via capture_output=True or stderr=PIPE per standards."
 DOC-CAND-d147128b54a7,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/TEST-CLEANUP-INVENTORY.md
 DOC-CAND-99f2f2eb19a9,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/selected-run-refresh-regression-test-updates.md

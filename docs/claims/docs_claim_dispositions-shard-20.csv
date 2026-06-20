@@ -88,7 +88,7 @@ DOC-CAND-028f52cfac5b,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-1c12a239b744,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
 DOC-CAND-ac887906ef54,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from feedback-artifact-schema.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-7c3489883d62,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
-DOC-CAND-f7c87334b226,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-f7c87334b226,covered_by_existing_claim,,DOC-CLAIM-0034,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Missing evidence mapped to unknowns array. Schema field mapping rule covered by DOC-CLAIM-0034 data model claim (ACT 5.9 review).
 DOC-CAND-79be1a8a2b0f,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-port-forward-history.md
 DOC-CAND-188f3967b855,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-record-notification.md
 DOC-CAND-550ac12685a1,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-review-artifact.md
@@ -131,7 +131,7 @@ DOC-CAND-c76d891c0a98,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-74a698d16239,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-34eb747e6d9c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-3df97713e40c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-glob-audit.md
-DOC-CAND-ed58ab89a073,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
+DOC-CAND-ed58ab89a073,covered_by_existing_claim,,DOC-CLAIM-0060,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) File access operations must resolve under trusted root. Covered by DOC-CLAIM-0060 security data handling claim (ACT 5.9 review).
 DOC-CAND-a726ec94b399,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Source: security-standards.md Section 9. Implementation: sanitizer.py sanitize_log_entry() uses sanitize_payload() with token/bearer/api_key/secret patterns. structured_logging.py wraps all logging via sanitize_log_entry. Tests: test_next_check_output_sanitization.py proves sentinel patterns redacted.
 DOC-CAND-4bbdf35d98ba,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/selected-run-refresh-regression-test-updates.md
 DOC-CAND-012a3c332ce8,stale,,,stale_doc,2026-06-19,From stale doc: docs/worklist-ranking-rationale.md

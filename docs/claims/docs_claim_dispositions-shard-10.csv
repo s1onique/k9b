@@ -28,7 +28,7 @@ DOC-CAND-80ded315808b,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z
 DOC-CAND-212750e0af37,covered_by_existing_claim,,DOC-CLAIM-0065,covered_by_broader_claim,2026-06-20,ACT 3.5: Approval artifact claim; relates to DOC-CLAIM-0065 no autonomous mutation
 DOC-CAND-1cab9be767e6,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-e7f559b9f2ef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
-DOC-CAND-b962dbb88972,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-b962dbb88972,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) sourceArtifactRefs must be real links or empty - identified gap (G7) in backlog marked as P3 Nice to Have. Design/future note, not current enforced behavior (ACT 5.9 review)."
 DOC-CAND-a5c23983ff18,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from beta-real-incident-validation.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-935407e13f7d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-e9ae72c06353,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
@@ -116,7 +116,7 @@ DOC-CAND-16aeb17e078e,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-456c90cf7ca0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-c05f4571bda5,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-fc07a1774472,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
-DOC-CAND-e1ac651c7e9d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
+DOC-CAND-e1ac651c7e9d,covered_by_existing_claim,,DOC-CLAIM-0060,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Local config files must remain untracked. Covered by DOC-CLAIM-0060 security data handling claim (ACT 5.9 review).
 DOC-CAND-5350c88bd716,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-subprocess-audit.md
 DOC-CAND-53a93850b59a,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/TEST-CLEANUP-INVENTORY.md
 DOC-CAND-8f6c7c836d61,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/typing.md

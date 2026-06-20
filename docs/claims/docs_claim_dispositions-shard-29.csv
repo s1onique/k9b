@@ -21,11 +21,11 @@ DOC-CAND-aa271993a915,covered_by_existing_claim,,DOC-CLAIM-0053,covered_by_broad
 DOC-CAND-03d1223a2dc0,covered_by_existing_claim,,DOC-CLAIM-0055,covered_by_broader_claim,2026-06-20,ACT 3.5: Observed no causal language; covered by DOC-CLAIM-0055
 DOC-CAND-c7d5a036f823,covered_by_existing_claim,,DOC-CLAIM-0065,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident no autonomous remediation; covered by DOC-CLAIM-0065
 DOC-CAND-42ad0b8502bc,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/data-model/next-check-mapping.md; structural element, not prose claim (ACT 5.4 review)."
-DOC-CAND-e76ef9bdd5c8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
+DOC-CAND-e76ef9bdd5c8,ignored_by_policy,,,too_granular_for_registry,2026-06-20T18:00Z,"(ACT 5.9 review) Next-check mapping candidate type example. Example/classification, not a behavioral claim (ACT 5.9 review)."
 DOC-CAND-035ee9209ab7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-5195a78b6a28,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-0d8bd42e6a2b,covered_by_existing_claim,,DOC-CLAIM-0006,covered_by_broader_claim,2026-06-20,ACT 3.5: Protected states claim; covered by DOC-CLAIM-0006
-DOC-CAND-e139f05ac5f0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-e139f05ac5f0,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Issue note: comparison findings only in individual assessments, not cross-cluster report. Identified gap, not current behavior (ACT 5.9 review)."
 DOC-CAND-f27e506e7b50,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-6c69040b5b9d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
 DOC-CAND-10cbf1323b47,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md
@@ -91,7 +91,7 @@ DOC-CAND-99062f65e895,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z
 DOC-CAND-6b73f6624a92,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: test case table row, verification artifact not a product claim (ACT 5.0 review)."
 DOC-CAND-cee7814ae285,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-35417b850398,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/security/rbac-deployment-guide.md; lacks standalone behavioral claim (ACT 5.4 review).
-DOC-CAND-b23400e6ab34,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-b23400e6ab34,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Table header row from RBAC deployment guide port table. Schema structure, not a claim (ACT 5.9 review)."
 DOC-CAND-e10ace907f67,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-fb6b560a1a4c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-a7a18fcc8b9e,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from static-artifact-serving-contract.md; not a standalone behavioral claim (ACT 5.6 review)
@@ -110,7 +110,7 @@ DOC-CAND-1633813afec8,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-1494525ccce3,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-bc1e3a7300a4,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-16df0a19426a,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
-DOC-CAND-bca550d536ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
+DOC-CAND-bca550d536ae,covered_by_existing_claim,,DOC-CLAIM-0060,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Silent exception swallowing is banned. Covered by DOC-CLAIM-0060 security data handling claim (ACT 5.9 review).
 DOC-CAND-9ea2e37024f9,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from security-standards.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-a6ce889a69b2,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-subprocess-audit.md
 DOC-CAND-796206e28bc6,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/EPIC-TASK-BREAKDOWN.md

@@ -39,9 +39,9 @@ DOC-CAND-900ec8963582,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-f4295f853228,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-800a989f4314,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
 DOC-CAND-ca7708e3ca37,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,"Ignored by policy: constitution principle; architectural constraint, not a testable claim."
-DOC-CAND-e4e24c106665,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-e4e24c106665,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Table cell defining 'linked' evidence_status enum value semantics. Schema field label/definition, not a system claim (ACT 5.9 review)."
 DOC-CAND-07a77676f9d3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-e6aaa0d4bf09,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-e6aaa0d4bf09,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Internal policy: IDs are never reused or renumbered. Meta-documentation policy, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-1f982ad503cb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-4606a178907a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-24d0e251bdc9,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short prose fragment from docs/doctrine/path-security-doctrine.md; not a tracked behavioral invariant (ACT 5.4 review).

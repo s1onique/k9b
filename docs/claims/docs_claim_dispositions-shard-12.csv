@@ -17,13 +17,13 @@ DOC-CAND-44797470b470,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-6192a9a97a38,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-c778d918d852,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-d8daced825a2,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
-DOC-CAND-b732691733f6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
+DOC-CAND-b732691733f6,covered_by_existing_claim,,DOC-CLAIM-0059,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) CI gate requires must-fix style/import checks. Covered by DOC-CLAIM-0059 CI gate claim (ACT 5.9 review).
 DOC-CAND-8ac47d7d24a2,stale,,,stale_doc,2026-06-19,From stale doc: docs/cluster_snapshot_plan.md
 DOC-CAND-77ef769c075e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-c1c50a2f45ba,covered_by_existing_claim,,DOC-CLAIM-0032,covered_by_broader_claim,2026-06-20,ACT 3.5: Branch/function tracked; covered by DOC-CLAIM-0032
 DOC-CAND-e3c0c4894ccc,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-8445abf22c41,registered_existing_claim,DOC-CLAIM-0053,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0053
-DOC-CAND-f4119450f4d2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
+DOC-CAND-f4119450f4d2,ignored_by_policy,,,too_granular_for_registry,2026-06-20T18:00Z,"(ACT 5.9 review) Incident report quality rule example. Example/instance, not a standalone claim (ACT 5.9 review)."
 DOC-CAND-1fbc11a6d70b,covered_by_existing_claim,,DOC-CLAIM-0048,covered_by_broader_claim,2026-06-20,ACT 3.5: Events append-only; covered by DOC-CLAIM-0048
 DOC-CAND-f4137d72f87d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-4cf186c4ba30,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
@@ -38,7 +38,7 @@ DOC-CAND-a9ba8f7f65a2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-089bac4e8dfb,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/doctrine/documentation-truthfulness.md; structural element, not prose claim (ACT 5.4 review)."
 DOC-CAND-ebfa500d1f1b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-c31e66989cef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-5aae21bfc7cf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-5aae21bfc7cf,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Hard-gate claim about inventory verifier. Self-referential CI-gate policy, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-337c2af89151,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
 DOC-CAND-527f11e7867d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
 DOC-CAND-43ea9f6add48,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md

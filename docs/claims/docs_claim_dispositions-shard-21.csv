@@ -18,7 +18,7 @@ DOC-CAND-350ca69bd8eb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-ee933dc2c025,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
 DOC-CAND-a8a11b6666cf,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from artifacts.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-64ec6a3666a7,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from next-check-mapping.md; not a standalone behavioral claim (ACT 5.6 review)
-DOC-CAND-ba9b78ed48f5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
+DOC-CAND-ba9b78ed48f5,ignored_by_policy,,,too_granular_for_registry,2026-06-20T18:00Z,"(ACT 5.9 review) List item describing candidate type. Example/classification, not a behavioral claim (ACT 5.9 review)."
 DOC-CAND-926c94b8f4ce,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-ad9f4562b4aa,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from next-checks.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-bac7537ac663,covered_by_existing_claim,,DOC-CLAIM-0002,covered_by_broader_claim,2026-06-19,No autonomous remediation or cluster mutation covered by DOC-CLAIM-0002 safety gate invariant; DOC-CLAIM-0010 also covers this
@@ -66,7 +66,7 @@ DOC-CAND-3c58c744f1de,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-e58425676076,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-claims-ledger-2026-05-31.md
 DOC-CAND-6a00ad018185,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/fixture-schema.md
 DOC-CAND-5f1c40d5f1e9,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from incident-report-schema.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
-DOC-CAND-c2737bd2d08e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-c2737bd2d08e,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Rule 5: Provider-assisted content is never classified as deterministic fact. Schema/data-quality policy, not a standalone system claim (ACT 5.9 review)."
 DOC-CAND-a7eb66c5a354,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from incident-report-schema.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-c31b823a48f3,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-health-loop-closure.md
 DOC-CAND-ce19d9c16cf3,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-llm-auto-drilldown-analysis.md
@@ -81,7 +81,7 @@ DOC-CAND-b577fb8cc735,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-c1febda16672,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-868346614721,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-db6650904d34,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-fe89501218d9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
+DOC-CAND-fe89501218d9,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Local-provider bypass is deferred per design (NOT implemented). Future/deferred feature, not current behavior (ACT 5.9 review)."
 DOC-CAND-c6740b4b4330,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-52bf8985be1c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-0967c68c724a,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design impact table cell, impact assessment not tracked claim (ACT 5.0 review)."
@@ -93,7 +93,7 @@ DOC-CAND-654774eaf5a5,ignored_by_policy,,,low_value_context,2026-06-19,"Low-valu
 DOC-CAND-332ab73c5b08,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design question, scope clarification not tracked claim (ACT 5.0 review)."
 DOC-CAND-43bed7ec5c43,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-99d269748a28,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
-DOC-CAND-c04ad451010e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-c04ad451010e,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Required RBAC permission specification. Covered by DOC-CLAIM-0003 operator access control claim (ACT 5.9 review).
 DOC-CAND-7246e79da7d1,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from rbac-deployment-guide.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-7e8d78af7dc5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
 DOC-CAND-503a12d9dcb8,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/security/static-artifact-serving-contract.md; descriptive intent, not tracked invariant (ACT 5.4 review)."

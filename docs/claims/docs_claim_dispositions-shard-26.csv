@@ -24,15 +24,15 @@ DOC-CAND-f2ed32e7a755,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-006e6d271075,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-1355ddb52312,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-e3478cc73e29,registered_existing_claim,DOC-CLAIM-0038,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0038
-DOC-CAND-d4e41ff0bf34,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
+DOC-CAND-d4e41ff0bf34,covered_by_existing_claim,,DOC-CLAIM-0059,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) CI gate about must-fix style/import rules. Covered by DOC-CLAIM-0059 CI gate claim (ACT 5.9 review).
 DOC-CAND-fbc28f93a7ac,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/ci-gate-drift.md
 DOC-CAND-e143675e99a4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
-DOC-CAND-ff0b684f59ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-ff0b684f59ae,covered_by_existing_claim,,DOC-CLAIM-0004,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Artifact provenance: must reference producing run. Covered by DOC-CLAIM-0004 provenance claim (ACT 5.9 review).
 DOC-CAND-61d2129dfbbb,registered_existing_claim,DOC-CLAIM-0056,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0056
 DOC-CAND-3dfe82d6bfb2,covered_by_existing_claim,,DOC-CLAIM-0047,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident not evidence store; covered by DOC-CLAIM-0047
 DOC-CAND-cf5e73cb975f,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/data-model/incidents.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-615297300611,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema field description, type annotation not tracked (ACT 5.0 review)."
-DOC-CAND-f95edb8b04ed,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-f95edb8b04ed,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Schema field from incidents data model. Schema field label, not a standalone claim (ACT 5.9 review)."
 DOC-CAND-00d5315491cb,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema field description, not a user-facing invariant (ACT 5.0 review)."
 DOC-CAND-09fd7326c0ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-cf3a76076eb8,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Descriptive prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
@@ -40,9 +40,9 @@ DOC-CAND-5eee9140ccab,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-9ddbb70552a1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-46d6d44fb67e,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Schema field label from docs/data-model/ui-model-boundaries.md; metadata annotation, not behavioral claim (ACT 5.4 review)."
 DOC-CAND-5e4c98120e19,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
-DOC-CAND-ceb255b35b3e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-ceb255b35b3e,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Worklist item requirement: all required fields present. Process/validation rule, not a standalone behavioral claim about k9b (ACT 5.9 review)."
 DOC-CAND-8b2a14cbcca4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
-DOC-CAND-cedd7022d9b2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
+DOC-CAND-cedd7022d9b2,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) P0 priority label for a backlog item. Priority classification, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-448ac8c23cb0,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short prose fragment from docs/doctrine/beta-real-incident-validation.md; not a tracked behavioral invariant (ACT 5.4 review).
 DOC-CAND-81931893630d,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,"Ignored by policy: constitution principle; architectural guidance, not a testable claim."
 DOC-CAND-17b0fe320c2e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
@@ -50,8 +50,8 @@ DOC-CAND-3ee3752c1149,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-197d483d9e72,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/documentation-truthfulness.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-36037e986458,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-57cb95baee7b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-e0dcea7ca114,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-0ccd585aece1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-e0dcea7ca114,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Table cell defining 'historical' evidence_status enum value. Schema field label, not a system claim (ACT 5.9 review)."
+DOC-CAND-0ccd585aece1,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Advisory-to-hard-gate migration intent. Future enforcement policy, not current system behavior (ACT 5.9 review)."
 DOC-CAND-c403f15c2f64,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-d29c813555fe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-b3843ad680fa,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
@@ -115,7 +115,7 @@ DOC-CAND-33429a77b5b2,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-4bc256c776eb,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-954d050c0e5f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-51696492c265,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-f8d579396d02,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-f8d579396d02,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Table header row from data-crossing threat model (From, To, Data Crossing, Trust Level, Controls Required). Schema structure, not a standalone claim (ACT 5.9 review)."
 DOC-CAND-56e6e4ab4f5d,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from threat-model.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-9bab9e7d35cd,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from threat-model.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-571bbeebb2fe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md

@@ -9,7 +9,7 @@ DOC-CAND-3bb464acca7c,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact
 DOC-CAND-2853bc43ea8c,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-ec75ab039de7,registered_existing_claim,DOC-CLAIM-0024,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0024
 DOC-CAND-46fae2e8b895,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
-DOC-CAND-c9e09eba01c1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/auth.md
+DOC-CAND-c9e09eba01c1,covered_by_existing_claim,,DOC-CLAIM-0053,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Auth mechanism requirement. Covered by DOC-CLAIM-0053 auth mechanism claim (ACT 5.9 review).
 DOC-CAND-479342e2dbc6,stale,,,stale_doc,2026-06-19,From stale doc: docs/baseline_watch_practices.md
 DOC-CAND-24a77e63f903,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
 DOC-CAND-c5b23c543058,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-demo-readiness-checklist.md
@@ -37,7 +37,7 @@ DOC-CAND-f16e53665557,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-989bc09006b2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-b42795e76aff,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-f0a87020e6cb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
-DOC-CAND-f8979234f829,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
+DOC-CAND-f8979234f829,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Core evidence-backed claim rule but describes a requirement on documentation claims, not a behavioral claim about the system. Policy requirement, not system behavior (ACT 5.9 review)."
 DOC-CAND-32a6764a4238,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/documentation-truthfulness.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-470358cdb4ed,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-0d2605a93f60,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md

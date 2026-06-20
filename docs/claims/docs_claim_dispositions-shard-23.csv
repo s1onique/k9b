@@ -113,7 +113,7 @@ DOC-CAND-796ffda0acab,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-60f41f6bcfb7,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from threat-model.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-d3a70c0f08fa,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-c03a6c397da0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-b4e903a4aa7c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-b4e903a4aa7c,ignored_by_policy,,,too_granular_for_registry,2026-06-20T18:00Z,(ACT 5.9 review) Table row fragment from threat table describing subprocess command injection - too granular for standalone claim. Implementation-level examples (ACT 5.9 review).
 DOC-CAND-ab700f24a55a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-26f4a9d927cf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-ca3f5ebb8dcc,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md

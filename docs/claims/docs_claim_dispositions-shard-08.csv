@@ -26,7 +26,7 @@ DOC-CAND-19bf1a6a853e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-80c992c17811,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-711b1272b0ea,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-bcbcde98f92c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
-DOC-CAND-f11683b3dd17,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
+DOC-CAND-f11683b3dd17,covered_by_existing_claim,,DOC-CLAIM-0006,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Must not be marked as duplicateOfExistingEvidence. Covered by DOC-CLAIM-0006 duplicate detection claim (ACT 5.9 review).
 DOC-CAND-0ebf6e9e51e2,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broader_claim,2026-06-19,Duplicate of DOC-CAND-3595b652352c; both from docs/data-model.md:13/14; run artifacts source of truth covered by DOC-CLAIM-0003
 DOC-CAND-09ec61d44ba7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
 DOC-CAND-6cae9ce93744,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
@@ -113,7 +113,7 @@ DOC-CAND-717f6a292547,ignored_by_policy,,,low_value_context,2026-06-19,"Low-valu
 DOC-CAND-f0afa1247e82,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-b7c3d17a9aef,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-10a06a5ddd65,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
-DOC-CAND-dcfea517ec53,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
+DOC-CAND-dcfea517ec53,ignored_by_policy,,,implementation_detail,2026-06-20T18:00Z,"(ACT 5.9 review) RBAC deployment port table row fragment. Schema structure/implementation detail, not a standalone claim (ACT 5.9 review)."
 DOC-CAND-342cf9979739,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-24be2d40b1c6,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-35593d1bcc78,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
@@ -134,7 +134,7 @@ DOC-CAND-25226eda10af,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-3a3312e20082,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-3102440f7cde,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-07d325aca9b7,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-glob-audit.md
-DOC-CAND-c36073ca946d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
+DOC-CAND-c36073ca946d,covered_by_existing_claim,,DOC-CLAIM-0060,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Service endpoint under operator control; not exposed to public networks. Covered by DOC-CLAIM-0060 security data handling claim (ACT 5.9 review).
 DOC-CAND-1ec5cd67ebd8,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-subprocess-audit.md
 DOC-CAND-df80dfaa7db2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md
 DOC-CAND-224e783bf61d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/testing/unit-test-feedback-loop-guidelines.md

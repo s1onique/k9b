@@ -17,14 +17,14 @@ DOC-CAND-dcea9319d667,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-08e875a7ae73,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-a0afe925765c,historical,,,historical_doc,2026-06-19,From historical doc: docs/beta-stakeholder-demo-script.md
 DOC-CAND-63e3f0c6b6ba,stale,,,stale_doc,2026-06-19,From stale doc: docs/cluster_snapshot_plan.md
-DOC-CAND-e35cecf7a896,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
+DOC-CAND-e35cecf7a896,covered_by_existing_claim,,DOC-CLAIM-0005,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Alertmanager source designation. Covered by DOC-CLAIM-0005 data model source identification claim (ACT 5.9 review).
 DOC-CAND-4d3908163443,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T10:15:00Z,Table cell/row fragment from docs/data-model/artifacts.md; column enumeration not a standalone behavioral claim (ACT 5.4 review).
-DOC-CAND-d9f21a20aaad,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
+DOC-CAND-d9f21a20aaad,covered_by_existing_claim,,DOC-CLAIM-0004,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Artifact must reference the run that produced it. Covered by DOC-CLAIM-0004 data model provenance claim (ACT 5.9 review).
 DOC-CAND-661c3778d89b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
 DOC-CAND-eff09de83b3b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-fb32c62643af,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-20d4d20d2156,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/data-model/next-checks.md; structural element, not prose claim (ACT 5.4 review)."
-DOC-CAND-cad7cf88d04f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
+DOC-CAND-cad7cf88d04f,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Required check field specification. Schema/data-model policy, not a standalone behavioral claim (ACT 5.9 review)."
 DOC-CAND-1749a5a48cef,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-ff65154ac95c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-46fd8cf794e3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
@@ -33,7 +33,7 @@ DOC-CAND-9aac5fd2b133,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-6179cc54d946,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-ce9e7775f2b5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-bfd0bbaf8436,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
-DOC-CAND-bf6b0d680c29,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/gate-timings.md
+DOC-CAND-bf6b0d680c29,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Gate timing documentation policy. Meta-documentation about gate performance, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-06f394b177c8,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-1fb8539f7f5c,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-47581e245660,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
@@ -67,7 +67,7 @@ DOC-CAND-d5974c4c7090,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-d1a76fe62544,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-claims-ledger-2026-05-31.md
 DOC-CAND-dfa6d66326cc,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
 DOC-CAND-8e1b4717ce46,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
-DOC-CAND-eefdd53c2be4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
+DOC-CAND-eefdd53c2be4,covered_by_existing_claim,,DOC-CLAIM-0034,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Unknowns never omitted or converted to confident statements. Covered by DOC-CLAIM-0034 about uncertainty representation (ACT 5.9 review).
 DOC-CAND-41aab8fc0889,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
 DOC-CAND-49fa965d7fe6,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/schemas/incident-report-schema.md; descriptive intent, not tracked invariant (ACT 5.4 review)."
 DOC-CAND-0f4d160e2b9b,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-alertmanager-discovery.md
@@ -102,7 +102,7 @@ DOC-CAND-657404792ab2,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-5fdf915914ed,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-3377ba062510,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-388987f48846,ignored_by_policy,,,generated_from_heading,2026-06-20T10:15:00Z,"Heading or list item from docs/security/threat-model.md; structural element, not prose claim (ACT 5.4 review)."
-DOC-CAND-c0fc70c7dbdf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-c0fc70c7dbdf,covered_by_existing_claim,,DOC-CLAIM-0062,duplicate_cross_doc,2026-06-20T18:00Z,(ACT 5.9 review) Threat table row about environment variables with redaction controls. Covered by DOC-CLAIM-0062 evidence boundary discipline (ACT 5.9 review).
 DOC-CAND-17738142bbb7,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Design/architecture note from docs/security/threat-model.md; describes intent rather than implemented behavior (ACT 5.4 review).
 DOC-CAND-81a8eb257d3f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-b24e2ec8798f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
