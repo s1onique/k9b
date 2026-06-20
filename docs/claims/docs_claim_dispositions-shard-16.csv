@@ -19,7 +19,7 @@ DOC-CAND-c820e7733600,registered_existing_claim,DOC-CLAIM-0032,,already_register
 DOC-CAND-31ae049462cb,covered_by_existing_claim,,DOC-CLAIM-0033,covered_by_broader_claim,2026-06-20,ACT 3.5: CI artifacts; covered by DOC-CLAIM-0033
 DOC-CAND-b74db22307cd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
 DOC-CAND-bac512c53802,registered_existing_claim,DOC-CLAIM-0041,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0041
-DOC-CAND-0ae1baf46a80,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-0ae1baf46a80,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema table cell, enumerates field-purpose mapping (ACT 5.0 review)."
 DOC-CAND-b43234b1ad4d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-4ed872c4ac34,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-070ed0af96cd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
@@ -33,7 +33,7 @@ DOC-CAND-0660b5932c5c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-2317d7ccd86b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
 DOC-CAND-901968ed7a30,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
 DOC-CAND-756980bfb244,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
-"DOC-CAND-65afb26d144e","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: precedence principle; guidance only, not a testable claim."
+DOC-CAND-65afb26d144e,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,"Ignored by policy: precedence principle; guidance only, not a testable claim."
 DOC-CAND-7d4e42e45573,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
 DOC-CAND-cd5defe02983,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
 DOC-CAND-61bb11608da5,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-2.md

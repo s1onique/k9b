@@ -38,7 +38,7 @@ DOC-CAND-d9127b1308bf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-ff0d184fbe9f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/in-cluster-deployment.md
 DOC-CAND-d81a19b0b9a3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/in-cluster-deployment.md
 DOC-CAND-ae913d2b181e,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
-"DOC-CAND-e7f884b5b812","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: limitation/proviso statement in backlog; not a testable behavioral invariant."
+DOC-CAND-e7f884b5b812,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,Ignored by policy: limitation/proviso statement in backlog; not a testable behavioral invariant.
 DOC-CAND-7937286e132c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-af7f16336a22,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-86d775957aa4,stale,,,stale_doc,2026-06-19,From stale doc: docs/provenance-filtering.md
@@ -92,9 +92,9 @@ DOC-CAND-27f1d3e26aee,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-1d4f4c66a52d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-8e44de55c2fb,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-eb7957ff8545,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-4f65e6c35b53,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-4f65e6c35b53,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design evaluation table cell, assessment not tracked claim (ACT 5.0 review)."
 DOC-CAND-d2666973743f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-0f15724077b9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-0f15724077b9,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design assumption, acknowledgment note not an invariant (ACT 5.0 review)."
 DOC-CAND-877f5e1e5060,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-650ed8f67704,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-21ca0117dd73,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md

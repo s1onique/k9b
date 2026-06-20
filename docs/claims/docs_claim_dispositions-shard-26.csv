@@ -31,9 +31,9 @@ DOC-CAND-ff0b684f59ae,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-61d2129dfbbb,registered_existing_claim,DOC-CLAIM-0056,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0056
 DOC-CAND-3dfe82d6bfb2,covered_by_existing_claim,,DOC-CLAIM-0047,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident not evidence store; covered by DOC-CLAIM-0047
 DOC-CAND-cf5e73cb975f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
-DOC-CAND-615297300611,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-615297300611,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema field description, type annotation not tracked (ACT 5.0 review)."
 DOC-CAND-f95edb8b04ed,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
-DOC-CAND-00d5315491cb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-00d5315491cb,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema field description, not a user-facing invariant (ACT 5.0 review)."
 DOC-CAND-09fd7326c0ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-cf3a76076eb8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
 DOC-CAND-5eee9140ccab,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
@@ -44,7 +44,7 @@ DOC-CAND-ceb255b35b3e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-8b2a14cbcca4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-cedd7022d9b2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-448ac8c23cb0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
-"DOC-CAND-81931893630d","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: constitution principle; architectural guidance, not a testable claim."
+DOC-CAND-81931893630d,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,"Ignored by policy: constitution principle; architectural guidance, not a testable claim."
 DOC-CAND-17b0fe320c2e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-3ee3752c1149,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-197d483d9e72,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
@@ -99,7 +99,7 @@ DOC-CAND-4b121aab7fa3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-656743560a0c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-77778f280591,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-5f1c8eb25749,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
-DOC-CAND-68bdffb47e52,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-68bdffb47e52,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design section title, section identifier not a claim (ACT 5.0 review)."
 DOC-CAND-f4ed9c4003e5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-b8bc58de2ae0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-d9840c617fc2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md

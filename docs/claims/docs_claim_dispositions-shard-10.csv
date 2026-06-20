@@ -94,7 +94,7 @@ DOC-CAND-8449e66e23cc,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-4d71e60bcc22,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-81b461a9a2a5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-2ed81520e27c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
-DOC-CAND-013d63864872,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-013d63864872,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design task table row, implementation tracking artifact not a claim (ACT 5.0 review)."
 DOC-CAND-a611a0d7a9ec,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-f03faeb80634,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-bae88c2f888b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md

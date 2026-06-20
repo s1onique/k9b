@@ -17,7 +17,7 @@ DOC-CAND-5d21b133a943,covered_by_existing_claim,,DOC-CLAIM-0029,covered_by_broad
 DOC-CAND-c5b99da56415,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
 DOC-CAND-a75b451bb23b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
 DOC-CAND-3040b83fc541,registered_existing_claim,DOC-CLAIM-0047,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0047
-DOC-CAND-10bd65c2895d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-10bd65c2895d,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema field identifier, type annotation not a behavioral claim (ACT 5.0 review)."
 DOC-CAND-c061f7a857ca,covered_by_existing_claim,,DOC-CLAIM-0065,covered_by_broader_claim,2026-06-20,ACT 3.5: No Kubernetes mutation; covered by DOC-CLAIM-0065
 DOC-CAND-45a088a8d9a8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-6073af214ea1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
@@ -47,7 +47,7 @@ DOC-CAND-6c3b4310808e,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-bet
 DOC-CAND-ff24162b62f2,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-e7091edf392f,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-a8be9a65d02b,stale,,,stale_doc,2026-06-19,From stale doc: docs/provenance-filtering.md
-"DOC-CAND-ceffa68ab4e1","ignored_by_policy","","","non_normative_description","2026-06-20T03:58:35Z","Ignored by policy: debugging context; explains why something doesn't appear, not a behavioral claim."
+DOC-CAND-ceffa68ab4e1,ignored_by_policy,,,non_normative_description,2026-06-20T03:58:35Z,"Ignored by policy: debugging context; explains why something doesn't appear, not a behavioral claim."
 DOC-CAND-6d747e5c35d7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md
 DOC-CAND-a60de35d9372,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md
 DOC-CAND-73a58e545b65,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/app-tsx-source-map.md
@@ -87,7 +87,7 @@ DOC-CAND-6073240bc49b,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-b07dc70c353f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-af17b9b12e58,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-ad8af037513e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-68d60bd772cd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-68d60bd772cd,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design evaluation table cell, assessment not tracked claim (ACT 5.0 review)."
 DOC-CAND-e93c9f1b697e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-e5739a42dab1,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-caf7beb62bd1,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
@@ -118,7 +118,7 @@ DOC-CAND-16bc72bd62f8,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-08da2e1b8334,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-f19c8817bc76,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
 DOC-CAND-720ebe80dce4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
-"DOC-CAND-bf0ef3082227","covered_by_existing_claim","","DOC-CLAIM-0002","covered_by_broader_claim","2026-06-20T03:58:35Z","Covered by DOC-CLAIM-0002: no autonomous mutation/remediation without operator confirmation."
+DOC-CAND-bf0ef3082227,covered_by_existing_claim,,DOC-CLAIM-0002,covered_by_broader_claim,2026-06-20T03:58:35Z,Covered by DOC-CLAIM-0002: no autonomous mutation/remediation without operator confirmation.
 DOC-CAND-d90c0e03fb89,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/EPIC-TASK-BREAKDOWN.md
 DOC-CAND-f068e60ae255,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/TEST-CLEANUP-INVENTORY.md
 DOC-CAND-2dba0fe54836,stale,,,stale_doc,2026-06-19,From stale doc: docs/verification.md

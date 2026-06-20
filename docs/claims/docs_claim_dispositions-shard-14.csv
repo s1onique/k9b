@@ -44,7 +44,7 @@ DOC-CAND-c1bc76302f0e,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-7842ae34862c,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-3a0aff24b3f4,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
 DOC-CAND-9e3d3191d19e,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
-"DOC-CAND-ad830ee077ae","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: limitation statement in backlog; not a testable behavioral invariant."
+DOC-CAND-ad830ee077ae,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,Ignored by policy: limitation statement in backlog; not a testable behavioral invariant.
 DOC-CAND-cdbc45077a37,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-d3f15acbc58d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-d1c4e466e118,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
@@ -88,17 +88,17 @@ DOC-CAND-cb4bfe79d5f6,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-c0e737ad076f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-9a75655ccc6f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-bd730bf5a400,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-"DOC-CAND-a3f9eec5eb1a","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: design section header; not a standalone behavioral claim."
+DOC-CAND-a3f9eec5eb1a,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,Ignored by policy: design section header; not a standalone behavioral claim.
 DOC-CAND-017a77057db5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-9306e9925338,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-b3d49c965e5d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-534d1af069eb,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-b98c13691154,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-301084a75eab,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-493a042fcf32,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-715ca47b91d8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-67bbc53c423b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-614b4e1ce24d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-301084a75eab,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design risk notation, risk acknowledgment not an invariant (ACT 5.0 review)."
+DOC-CAND-493a042fcf32,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design impact table cell, impact assessment not tracked claim (ACT 5.0 review)."
+DOC-CAND-715ca47b91d8,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design future consideration, aspirational note not current invariant (ACT 5.0 review)."
+DOC-CAND-67bbc53c423b,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design rationale, trade-off explanation not an invariant (ACT 5.0 review)."
+DOC-CAND-614b4e1ce24d,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design table header, formatting artifact not a claim (ACT 5.0 review)."
 DOC-CAND-b0b99381aba0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-2d540c2f73d4,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-b24e0f0ee4bc,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md

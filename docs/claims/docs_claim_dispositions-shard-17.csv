@@ -26,7 +26,7 @@ DOC-CAND-b5b9b78d1058,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-357c2339d469,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/coverage.md
 DOC-CAND-7a083ac7146c,covered_by_existing_claim,,DOC-CLAIM-0031,covered_by_broader_claim,2026-06-20,ACT 3.5: Frontend threshold; covered by DOC-CLAIM-0031
 DOC-CAND-4edaa3d94d4b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
-DOC-CAND-294a66c5ffd6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
+DOC-CAND-294a66c5ffd6,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incident-report-quality.md: schema quality rule name, rule definition not a tracked claim (ACT 5.0 review)."
 DOC-CAND-c0f6f433f713,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
 DOC-CAND-3a85659b8930,covered_by_existing_claim,,DOC-CLAIM-0049,covered_by_broader_claim,2026-06-20,ACT 3.5: UI/API derived projections; covered by DOC-CLAIM-0049
 DOC-CAND-f6ac9d4ff4ff,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
@@ -43,7 +43,7 @@ DOC-CAND-144f4102f29c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-b3041e787d65,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-28d080d98c6a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md
 DOC-CAND-93a7c8f01ef1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
-"DOC-CAND-9353a7354470","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: playbook guidance; not a behavioral invariant."
+DOC-CAND-9353a7354470,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,Ignored by policy: playbook guidance; not a behavioral invariant.
 DOC-CAND-22f4f23fc6c9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
 DOC-CAND-d9f5b93971e5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-76a88acad504,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
@@ -103,7 +103,7 @@ DOC-CAND-05498bb7f300,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-5ae8c9d69dac,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-974c6b0e23f5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-e8adce7715fb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-5660e79b33ca,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-5660e79b33ca,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design status notation, implementation note not tracked claim (ACT 5.0 review)."
 DOC-CAND-556148b3988f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-2e24fc2bf363,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-a895fc4d8936,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
@@ -118,7 +118,7 @@ DOC-CAND-f12d535b24cb,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-169d24148839,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-422ef265c070,covered_by_existing_claim,,DOC-CLAIM-0060,covered_by_broader_claim,2026-06-19,Covered by DOC-CLAIM-0060: LLM output advisory only
 DOC-CAND-776835e75b1f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-"DOC-CAND-dbe2df7f9c9c","covered_by_existing_claim","","DOC-CLAIM-0002","covered_by_broader_claim","2026-06-20T03:58:35Z","Covered by DOC-CLAIM-0002: no autonomous cluster mutation. Candidate is a rationale statement for that invariant."
+DOC-CAND-dbe2df7f9c9c,covered_by_existing_claim,,DOC-CLAIM-0002,covered_by_broader_claim,2026-06-20T03:58:35Z,Covered by DOC-CLAIM-0002: no autonomous cluster mutation. Candidate is a rationale statement for that invariant.
 DOC-CAND-83cfcac9d185,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-e6847357dacf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-01724602c210,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md

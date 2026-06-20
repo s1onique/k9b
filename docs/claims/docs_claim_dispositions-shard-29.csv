@@ -32,7 +32,7 @@ DOC-CAND-10cbf1323b47,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-888717c92fbe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-117118f6097a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-8e678e46cd09,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
-"DOC-CAND-d5ea493b6437","ignored_by_policy","","","implementation_detail","2026-06-20T03:58:35Z","Ignored by policy: implementation detail guidance; not a testable behavioral claim."
+DOC-CAND-d5ea493b6437,ignored_by_policy,,,implementation_detail,2026-06-20T03:58:35Z,Ignored by policy: implementation detail guidance; not a testable behavioral claim.
 DOC-CAND-d84b8c465ee9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-133bfa5a9626,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-638b0ac74a79,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
@@ -86,9 +86,9 @@ DOC-CAND-a264b5f8a55f,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broad
 DOC-CAND-2454147ca5f0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-bbe9ac4aa240,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-aa3701a81cbf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-265bdeef74cb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-265bdeef74cb,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design rationale, trade-off note not an invariant (ACT 5.0 review)."
 DOC-CAND-99062f65e895,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-6b73f6624a92,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-6b73f6624a92,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: test case table row, verification artifact not a product claim (ACT 5.0 review)."
 DOC-CAND-cee7814ae285,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-35417b850398,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-b23400e6ab34,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md

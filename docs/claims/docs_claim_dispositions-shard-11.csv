@@ -36,8 +36,8 @@ DOC-CAND-39be75872a7d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-45bbe81a9e7a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-827688f9606e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-5afa2e7d58b4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
-"DOC-CAND-cb004d158ff0","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: constitution principle; labeled in output rendering, not a testable claim."
-"DOC-CAND-4be69696b93e","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: design completeness principle; not a testable behavioral claim."
+DOC-CAND-cb004d158ff0,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,"Ignored by policy: constitution principle; labeled in output rendering, not a testable claim."
+DOC-CAND-4be69696b93e,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,Ignored by policy: design completeness principle; not a testable behavioral claim.
 DOC-CAND-42fbee1e16ef,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-24234e1a70b5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-e1c80adaacea,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
@@ -99,7 +99,7 @@ DOC-CAND-e073840b87c2,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-7fb4d8810532,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-07bf809a6393,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-cfe151e9d509,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-10969af07a76,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-10969af07a76,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design value assessment, impact note not tracked claim (ACT 5.0 review)."
 DOC-CAND-dab548d1dfe9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-adccb6f2669b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-efec6cd3b9c6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md

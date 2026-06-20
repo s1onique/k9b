@@ -19,7 +19,7 @@ DOC-CAND-1c7e28450a04,covered_by_existing_claim,,DOC-CLAIM-0051,covered_by_broad
 DOC-CAND-de0b04738be6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/artifacts.md
 DOC-CAND-42e9be16a1cb,covered_by_existing_claim,,DOC-CLAIM-0004,covered_by_broader_claim,2026-06-20,ACT 3.5: Incident as aggregate root; covered by DOC-CLAIM-0004
 DOC-CAND-9af6ac7b64e7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
-DOC-CAND-20885ff04a4f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-20885ff04a4f,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema field enumeration, type annotation not tracked (ACT 5.0 review)."
 DOC-CAND-6b3d909df752,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
 DOC-CAND-5573859c06b4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
 DOC-CAND-27d6486fb950,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broader_claim,2026-06-20,ACT 3.5: Evidence-first discipline; covered by DOC-CLAIM-0003 source-of-truth-rules
@@ -28,11 +28,11 @@ DOC-CAND-f15a5599fdac,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-f12802b3330d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
 DOC-CAND-24ed319f8a35,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-006f45c31d18,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
-"DOC-CAND-7213dd812373","ignored_by_policy","","","implementation_detail","2026-06-20T03:58:35Z","Ignored by policy: logging hygiene guidance; implementation detail, not a behavioral invariant."
+DOC-CAND-7213dd812373,ignored_by_policy,,,implementation_detail,2026-06-20T03:58:35Z,"Ignored by policy: logging hygiene guidance; implementation detail, not a behavioral invariant."
 DOC-CAND-ee6fc6f21600,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
 DOC-CAND-28043e3a7f13,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-135559920c82,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-"DOC-CAND-3be4ab2a8aaf","ignored_by_policy","","","policy_statement","2026-06-20T03:58:35Z","Ignored by policy: design philosophy statement; not a testable behavioral claim."
+DOC-CAND-3be4ab2a8aaf,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,Ignored by policy: design philosophy statement; not a testable behavioral claim.
 DOC-CAND-77935dbd5d77,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
 DOC-CAND-41148d86ec90,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-70c29b1e6172,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
@@ -84,8 +84,8 @@ DOC-CAND-e3a194f96fa4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-3bc346f7d347,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-88804ef50bd1,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-f11cba8f20f9,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
-DOC-CAND-4c7c26b0e3d5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-582b1635f7b0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-4c7c26b0e3d5,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design impact table cell, impact assessment not tracked claim (ACT 5.0 review)."
+DOC-CAND-582b1635f7b0,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design future consideration, aspirational note not current invariant (ACT 5.0 review)."
 DOC-CAND-ce0a39752169,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-9efeb0121378,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-e3197efd6016,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
