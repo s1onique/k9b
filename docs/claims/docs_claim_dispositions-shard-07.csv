@@ -42,7 +42,7 @@ DOC-CAND-32a6764a4238,ignored_by_policy,,,non_normative_description,2026-06-20T1
 DOC-CAND-470358cdb4ed,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-0d2605a93f60,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
 DOC-CAND-ac72ea626301,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
-DOC-CAND-19b68c52d71e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
+DOC-CAND-19b68c52d71e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md (ACT 5.12 review)
 DOC-CAND-9b6a52f2633f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-8394361d4291,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-ac98cadab71b,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
@@ -73,7 +73,7 @@ DOC-CAND-c8d3dd4b8add,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-d54b4c1b5c1b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
 DOC-CAND-6c91ffcbae2c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
 DOC-CAND-3e976475b06f,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Descriptive prose fragment from docs/schemas/incident-report-schema.md; not a behavioral claim (ACT 5.4 review).
-DOC-CAND-56632d9aaa15,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
+DOC-CAND-56632d9aaa15,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md (ACT 5.12 review)
 DOC-CAND-dcd3dd0598b2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
 DOC-CAND-efb34c2f723b,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-alertmanager-discovery.md
 DOC-CAND-060c417cd21d,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-assessment-comparison-orchestration.md

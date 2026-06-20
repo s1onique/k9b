@@ -50,8 +50,8 @@ DOC-CAND-c7f905d89727,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-46f1cd6ec163,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
 DOC-CAND-be2d23be2128,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
 DOC-CAND-e8a9c4ab8767,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md
-DOC-CAND-32efa2e961d7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md
-DOC-CAND-980eb4c818df,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md
+DOC-CAND-32efa2e961d7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md (ACT 5.12 review)
+DOC-CAND-980eb4c818df,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md (ACT 5.12 review)
 DOC-CAND-a82af41908b8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-40b7dca8912a,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-3ba420c19130,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
@@ -110,7 +110,7 @@ DOC-CAND-745ffe55c805,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-40685d8735e0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-406521266cd8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-3d0a22f64910,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
-DOC-CAND-439d6adc6869,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Descriptive prose fragment from docs/security/threat-model.md; not a behavioral claim (ACT 5.4 review).
+DOC-CAND-439d6adc6869,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Descriptive prose fragment from docs/security/threat-model.md; not a behavioral claim (ACT 5.12 review)
 DOC-CAND-32e067a5e45c,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short prose fragment from docs/security/threat-model.md; not a tracked behavioral invariant (ACT 5.4 review).
 DOC-CAND-31e2e35b75f3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-07a624cc9e72,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
@@ -118,7 +118,7 @@ DOC-CAND-050d0e4036d4,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-156010cd00b4,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-01ce5e093a69,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-2a358c323b5d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-glob-audit.md
-DOC-CAND-707b1cb3037c,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from security-policy.md; not a standalone behavioral claim (ACT 5.6 review)
+DOC-CAND-707b1cb3037c,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from security-policy.md; not a standalone behavioral claim (ACT 5.12 review)
 DOC-CAND-ca2d50e5204f,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Validate required fields before use. General coding guideline, not a standalone system behavioral claim (ACT 5.9 review)."
 DOC-CAND-54af2d329088,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
 DOC-CAND-b0d075505365,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/selected-run-refresh-regression-test-updates.md

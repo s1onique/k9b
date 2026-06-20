@@ -1,5 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-DOC-CAND-164b680b4bf0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
+DOC-CAND-164b680b4bf0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md (ACT 5.12 review)
 DOC-CAND-3aee07d810c9,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-55fff0d8d5cd,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-9fa98e5230b4,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -48,7 +48,7 @@ DOC-CAND-24d0e251bdc9,ignored_by_policy,,,non_normative_description,2026-06-20T1
 DOC-CAND-5bc9e2d90ee8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-7775372268c1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
 DOC-CAND-911ca3e4e6bf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
-DOC-CAND-570cceddf0c2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
+DOC-CAND-570cceddf0c2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md (ACT 5.12 review)
 DOC-CAND-348155a368f7,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
 DOC-CAND-e0f89ffa3f7a,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
 DOC-CAND-c7de24edd037,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-2.md
@@ -56,7 +56,7 @@ DOC-CAND-819ac62de904,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-0d2604cccba1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/gate-timings.md
 DOC-CAND-8322853feb2c,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-d2b9effd8ae7,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
-DOC-CAND-4e97177ee02d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/in-cluster-deployment.md
+DOC-CAND-4e97177ee02d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/in-cluster-deployment.md (ACT 5.12 review)
 DOC-CAND-a4d46998f76e,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
 DOC-CAND-e5e66c908ea1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-b1c378b746a8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md

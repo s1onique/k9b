@@ -31,7 +31,7 @@ DOC-CAND-0ebf6e9e51e2,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broad
 DOC-CAND-09ec61d44ba7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model.md
 DOC-CAND-6cae9ce93744,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-5151596cc374,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
-DOC-CAND-a0ae2a4aaa46,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
+DOC-CAND-a0ae2a4aaa46,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md (ACT 5.12 review)
 DOC-CAND-556dbde1c64b,covered_by_existing_claim,,DOC-CLAIM-0041,covered_by_broader_claim,2026-06-19,"Covered by DOC-CLAIM-0041: immutable artifacts, not historical claim"
 DOC-CAND-98f15485cf6b,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from path-security-doctrine.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-27f1a01eb020,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/doctrine/path-security-doctrine.md; lacks standalone behavioral claim (ACT 5.4 review).
@@ -46,7 +46,7 @@ DOC-CAND-4916b1df2f24,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-4cc66afcde75,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-81aab6be0046,covered_by_existing_claim,,DOC-CLAIM-0002,covered_by_broader_claim,2026-06-20T03:58:35Z,Covered by DOC-CLAIM-0002: agent never mutates autonomously. Candidate is an instance of that registered claim.
 DOC-CAND-1ec71121b9fa,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
-DOC-CAND-1699970e1d8f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
+DOC-CAND-1699970e1d8f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md (ACT 5.12 review)
 DOC-CAND-565a07e4b057,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
 DOC-CAND-c006fea23d5b,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-87ab4111bd0f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md

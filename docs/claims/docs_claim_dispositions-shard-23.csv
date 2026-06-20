@@ -70,7 +70,7 @@ DOC-CAND-3307f8b62aa6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-e2286a666745,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
 DOC-CAND-85c10458fb75,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from incident-report-schema.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-abd2d2bded7e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/run-artifact-layout.md
-DOC-CAND-efb8464454bb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
+DOC-CAND-efb8464454bb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md (ACT 5.12 review)
 DOC-CAND-0e1f4ebc0ef3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
 DOC-CAND-cc2a9c596b73,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
 DOC-CAND-770be836bb0c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/usefulness-feedback-schema.md
@@ -107,9 +107,9 @@ DOC-CAND-82f15abfdfe1,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-be4fcd98ae0b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-6bd02309c4ed,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-31fc19710dc7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
-DOC-CAND-0df591d2fe0d,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/security/static-artifact-serving-contract.md; descriptive intent, not tracked invariant (ACT 5.4 review)."
+DOC-CAND-0df591d2fe0d,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/security/static-artifact-serving-contract.md; descriptive intent, not tracked invariant (ACT 5.12 review)"
 DOC-CAND-53617884aede,registered_existing_claim,DOC-CLAIM-0066,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0066
-DOC-CAND-796ffda0acab,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-796ffda0acab,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md (ACT 5.12 review)
 DOC-CAND-60f41f6bcfb7,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from threat-model.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-d3a70c0f08fa,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-c03a6c397da0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md

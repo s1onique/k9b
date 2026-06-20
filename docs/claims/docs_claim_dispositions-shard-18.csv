@@ -1,11 +1,11 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
 DOC-CAND-c3939db8f885,covered_by_existing_claim,,DOC-CLAIM-0059,covered_by_broader_claim,2026-06-19,Product description with embedded safety claim (without autonomous cluster mutation); safety part covered by DOC-CLAIM-0059
-DOC-CAND-9c1ae2c4b94b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
+DOC-CAND-9c1ae2c4b94b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md (ACT 5.12 review)
 DOC-CAND-a66f11ba1448,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-539d2f9e9982,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-9a781b460a24,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-dfcdebd82d57,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
-DOC-CAND-f14d0c881845,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/agent-run-review-template.md
+DOC-CAND-f14d0c881845,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/agent-run-review-template.md (ACT 5.12 review)
 DOC-CAND-9cae35610780,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
 DOC-CAND-665509ac87a5,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
 DOC-CAND-81f06ba63c15,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -50,11 +50,11 @@ DOC-CAND-2cfc9fc4a726,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(A
 DOC-CAND-f16093c59e6e,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Advisory-to-hard-gate migration guidance. Future enforcement contingency, not current system behavior (ACT 5.9 review)."
 DOC-CAND-94b63ed602fb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md
 DOC-CAND-64577a8f6ee8,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/path-security-doctrine.md
-DOC-CAND-e9b4e5265321,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
+DOC-CAND-e9b4e5265321,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md (ACT 5.12 review)
 DOC-CAND-58c4e27ab015,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-f25a6c350e2e,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-2.md
 DOC-CAND-5e329a601d81,stale,,,stale_doc,2026-06-19,From stale doc: docs/incidents/automatic-diagnosis-loop.md
-DOC-CAND-b12c267ef606,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md
+DOC-CAND-b12c267ef606,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md (ACT 5.12 review)
 DOC-CAND-88bf49bbf5a9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-38f35a41683b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-cc22bb59fce1,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md

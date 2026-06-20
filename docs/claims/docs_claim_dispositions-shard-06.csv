@@ -26,7 +26,7 @@ DOC-CAND-27d6486fb950,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broad
 DOC-CAND-97a568335fe6,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from beta-real-incident-validation.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-f15a5599fdac,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-f12802b3330d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
-DOC-CAND-24ed319f8a35,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
+DOC-CAND-24ed319f8a35,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md (ACT 5.12 review)
 DOC-CAND-006f45c31d18,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-7213dd812373,ignored_by_policy,,,implementation_detail,2026-06-20T03:58:35Z,"Ignored by policy: logging hygiene guidance; implementation detail, not a behavioral invariant."
 DOC-CAND-ee6fc6f21600,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
@@ -37,7 +37,7 @@ DOC-CAND-77935dbd5d77,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-41148d86ec90,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-70c29b1e6172,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-7fa3fdf65df0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
-DOC-CAND-e1a3d4fd3a0e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
+DOC-CAND-e1a3d4fd3a0e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md (ACT 5.12 review)
 DOC-CAND-0ec02ab5208e,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
 DOC-CAND-116814c89938,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-2.md
 DOC-CAND-07c95a7c305c,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-2.md

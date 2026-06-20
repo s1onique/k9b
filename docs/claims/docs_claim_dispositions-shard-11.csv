@@ -1,5 +1,5 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
-DOC-CAND-420717455949,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
+DOC-CAND-420717455949,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md (ACT 5.12 review)
 DOC-CAND-430ce0aa18e5,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
 DOC-CAND-fb215105a9ce,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
 DOC-CAND-ad0b352b385d,stale,,,stale_doc,2026-06-19,From stale doc: docs/artifact-immutability-audit.md
@@ -22,7 +22,7 @@ DOC-CAND-09a2692da1f9,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z
 DOC-CAND-b918f1b24895,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md
 DOC-CAND-3f3b77011b05,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/data-model/ui-model-boundaries.md; lacks standalone behavioral claim (ACT 5.4 review).
 DOC-CAND-3595b652352c,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broader_claim,2026-06-19,Run artifacts source of truth covered by DOC-CLAIM-0003; identical substance to DOC-CAND-0ebf6e9e51e2 (diagnostic pack immutability in same doc)
-DOC-CAND-820d6d7f8591,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from beta-real-incident-validation.md; not a standalone behavioral claim (ACT 5.6 review)
+DOC-CAND-820d6d7f8591,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from beta-real-incident-validation.md; not a standalone behavioral claim (ACT 5.12 review)
 DOC-CAND-0047e06388dd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
 DOC-CAND-58e34c73b368,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
 DOC-CAND-32f8cc69876a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
@@ -74,7 +74,7 @@ DOC-CAND-8db1788156e9,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-c04d6a0b3e6d,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/llm-prompt-builder-inventory-2026-06-03.md
 DOC-CAND-6d8fc01ffbdb,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-claims-ledger-2026-05-31.md
 DOC-CAND-3459b0826b5b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/feedback-artifact-schema.md
-DOC-CAND-53883b1d350e,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/schemas/incident-report-schema.md; lacks standalone behavioral claim (ACT 5.4 review).
+DOC-CAND-53883b1d350e,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short requirement fragment from docs/schemas/incident-report-schema.md; lacks standalone behavioral claim (ACT 5.12 review)
 DOC-CAND-d819c40a6de5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/schemas/incident-report-schema.md
 DOC-CAND-c1a495015c63,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-assessment-comparison-orchestration.md
 DOC-CAND-4aab749ec112,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-assessment-comparison-orchestration.md

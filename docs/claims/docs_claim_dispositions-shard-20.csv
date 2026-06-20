@@ -31,7 +31,7 @@ DOC-CAND-199a50ee87c2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-d940a0f0c9bd,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/css-ownership.md
 DOC-CAND-d648198e35ad,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
 DOC-CAND-941adc82021a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
-DOC-CAND-2e7c242ff870,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md
+DOC-CAND-2e7c242ff870,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/discovery_logging_hygiene.md (ACT 5.12 review)
 DOC-CAND-e81efb3f02cb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-6883f911e616,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-bdc83566af9c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
@@ -104,7 +104,7 @@ DOC-CAND-47314d0260de,ignored_by_policy,,,low_value_context,2026-06-19,"Low-valu
 DOC-CAND-d76ed3a16cdc,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-53bfbaffc751,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-ed71654db9f5,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
-DOC-CAND-7cc1641393ce,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from rbac-deployment-guide.md; not a standalone behavioral claim (ACT 5.6 review)
+DOC-CAND-7cc1641393ce,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from rbac-deployment-guide.md; not a standalone behavioral claim (ACT 5.12 review)
 DOC-CAND-eb1ca7a95548,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-a47c81b35817,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-112ed07b26e8,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
@@ -115,10 +115,10 @@ DOC-CAND-5d10062e80cc,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-7a455297893f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-7fcbf4a966ea,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-10b6a2b568c1,covered_by_existing_claim,,DOC-CLAIM-0062,covered_by_broader_claim,2026-06-19,"ACT 3.2: Covered by DOC-CLAIM-0062 (evidence boundary discipline). Source: threat-model.md INV-4. Implementation: prompts.py and drilldown_prompts.py use MetadataAnonymizer + sanitize_prompt(). Sanitizer catches token/bearer/api_key/secret patterns. Tests: test_metadata_anonymizer.py, test_prompt_anonymization.py prove credential patterns redacted."
-DOC-CAND-a55aca436a43,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from threat-model.md; not a standalone behavioral claim (ACT 5.6 review)
+DOC-CAND-a55aca436a43,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from threat-model.md; not a standalone behavioral claim (ACT 5.12 review)
 DOC-CAND-4ae901908971,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-2dc99ee01703,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,Short prose fragment from docs/security/threat-model.md; not a tracked behavioral invariant (ACT 5.4 review).
-DOC-CAND-6ebc3f6ab6c7,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from threat-model.md; not a standalone behavioral claim (ACT 5.6 review)
+DOC-CAND-6ebc3f6ab6c7,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from threat-model.md; not a standalone behavioral claim (ACT 5.12 review)
 DOC-CAND-70f7b347f2b7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-b40c33e00435,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-3db315610784,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md

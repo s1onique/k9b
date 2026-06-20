@@ -29,7 +29,7 @@ DOC-CAND-54ef91446ed8,ignored_by_policy,,,non_normative_description,2026-06-20T0
 DOC-CAND-91e7de5c6bdc,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/beta-real-incident-validation.md
 DOC-CAND-3f952681eef2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
 DOC-CAND-32c1c1cecdf7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/blockstor-derived-rules.md
-DOC-CAND-aaad1c750b9f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md
+DOC-CAND-aaad1c750b9f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/constitution.md (ACT 5.12 review)
 DOC-CAND-77fce1a1de7a,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from documentation-truthfulness.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-595fe7938591,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
 DOC-CAND-bcf19e7a1a2d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md
@@ -94,9 +94,9 @@ DOC-CAND-332ab73c5b08,ignored_by_policy,,,low_value_context,2026-06-19,"Low-valu
 DOC-CAND-43bed7ec5c43,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-99d269748a28,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-c04ad451010e,covered_by_existing_claim,,DOC-CLAIM-0003,covered_by_broader_claim,2026-06-20T18:00Z,(ACT 5.9 review) Required RBAC permission specification. Covered by DOC-CLAIM-0003 operator access control claim (ACT 5.9 review).
-DOC-CAND-7246e79da7d1,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from rbac-deployment-guide.md; not a standalone behavioral claim (ACT 5.6 review)
-DOC-CAND-7e8d78af7dc5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
-DOC-CAND-503a12d9dcb8,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/security/static-artifact-serving-contract.md; descriptive intent, not tracked invariant (ACT 5.4 review)."
+DOC-CAND-7246e79da7d1,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from rbac-deployment-guide.md; not a standalone behavioral claim (ACT 5.12 review)
+DOC-CAND-7e8d78af7dc5,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md (ACT 5.12 review)
+DOC-CAND-503a12d9dcb8,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/security/static-artifact-serving-contract.md; descriptive intent, not tracked invariant (ACT 5.12 review)"
 DOC-CAND-b41c0ac1315d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-f72cde59833a,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-b8bc03826e38,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md

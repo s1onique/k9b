@@ -1,6 +1,6 @@
 candidate_id,disposition,claim_id,covered_by_claim_id,reason_code,reviewed_at,reviewer_notes
 DOC-CAND-e72d144d6de4,registered_existing_claim,DOC-CLAIM-0064,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0064
-DOC-CAND-217a6f9e098b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
+DOC-CAND-217a6f9e098b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md (ACT 5.12 review)
 DOC-CAND-2d6c197dcf92,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: README.md
 DOC-CAND-615188c0b413,stale,,,stale_doc,2026-06-19,From stale doc: docs/agent-docs-audit.md
 DOC-CAND-2689d4aa2258,stale,,,stale_doc,2026-06-19,From stale doc: docs/alertmanager-source-distinction-audit.md
@@ -62,7 +62,7 @@ DOC-CAND-5b348614b867,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-bddb6f4a86c0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
 DOC-CAND-0d8f246bf6da,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md
 DOC-CAND-bfd51012f4b9,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
-DOC-CAND-3ab59a9e91a2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md
+DOC-CAND-3ab59a9e91a2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/recent-runs-execution-debugging.md (ACT 5.12 review)
 DOC-CAND-9531cdc4f3ba,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/app-tsx-source-map.md
 DOC-CAND-73e167562260,stale,,,stale_doc,2026-06-19,From stale doc: docs/reports/current-agent-capabilities.md
 DOC-CAND-f5afdf139b4b,stale,,,stale_doc,2026-06-19,From stale doc: docs/reports/current-agent-capabilities.md

@@ -28,7 +28,7 @@ DOC-CAND-2845ce3c85ee,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-ef2968ee4088,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Internal policy: IDs are never reused or renumbered. Meta-documentation policy, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-dae5450dd4de,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-b3944c4f5f34,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) sourceOfTruth classification guidance. Documentation classification prose, not a system behavioral claim (ACT 5.9 review)."
-DOC-CAND-28c449b31f63,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
+DOC-CAND-28c449b31f63,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md (ACT 5.12 review)
 DOC-CAND-bee99e9362b9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
 DOC-CAND-90c1868a970a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-83510278e22b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
@@ -91,7 +91,7 @@ DOC-CAND-3ce2cd04fe5a,ignored_by_policy,,,low_value_context,2026-06-19,"Low-valu
 DOC-CAND-4659efa7ef70,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design option label, section identifier not a claim (ACT 5.0 review)."
 DOC-CAND-f9cd02104e53,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-92a0e5918f49,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
-DOC-CAND-e78f1ecd0f4b,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Operator auth design feature specification. Design document note, not current verifiable system behavior (ACT 5.9 review)."
+DOC-CAND-e78f1ecd0f4b,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"Operator auth design feature specification. Design document note, not current verifiable system behavior (ACT 5.12 review)"
 DOC-CAND-a759b2ed4f2c,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-2081b0a02717,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-c90d185118b0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md

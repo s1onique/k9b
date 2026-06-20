@@ -103,7 +103,7 @@ DOC-CAND-04bf32f317a1,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-e8f3a4ce6d43,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-b735b9292618,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-a3f832af712a,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
-DOC-CAND-60e09fd5e307,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from security-policy.md; not a standalone behavioral claim (ACT 5.6 review)
+DOC-CAND-60e09fd5e307,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from security-policy.md; not a standalone behavioral claim (ACT 5.12 review)
 DOC-CAND-6a57e9eed6db,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md
 DOC-CAND-be45dfc9a8eb,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/EPIC-TASK-BREAKDOWN.md
 DOC-CAND-6503cac34570,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/TEST-CLEANUP-INVENTORY.md

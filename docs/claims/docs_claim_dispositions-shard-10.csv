@@ -37,7 +37,7 @@ DOC-CAND-9291b46bdacb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-6a1e45959c8d,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from documentation-truthfulness.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-b4fbbd3c5036,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-9f436b1817ba,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
-DOC-CAND-8990e17c4256,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
+DOC-CAND-8990e17c4256,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md (ACT 5.12 review)
 DOC-CAND-2be741937bd2,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md
 DOC-CAND-a3da48552a34,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-da50a39d2c24,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/redesign_staging.md

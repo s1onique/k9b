@@ -101,6 +101,6 @@ DOC-CAND-49dc36d792d4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-9de57c92cf92,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-62175f3e556c,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-3f3b97c38835,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
-DOC-CAND-30d85166d771,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md
-DOC-CAND-287c5d3cb8ce,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md
+DOC-CAND-30d85166d771,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md (ACT 5.12 review)
+DOC-CAND-287c5d3cb8ce,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md (ACT 5.12 review)
 DOC-CAND-a1d47f4d9b84,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/testing/unit-test-feedback-loop-guidelines.md

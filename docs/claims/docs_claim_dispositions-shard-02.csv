@@ -57,7 +57,7 @@ DOC-CAND-a3f39492f10c,ignored_by_policy,,,non_normative_description,2026-06-20T0
 DOC-CAND-d99c5c96c9ec,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-335e228b8b69,stale,,,stale_doc,2026-06-19,From stale doc: docs/harbor-publishing.md
 DOC-CAND-b4d5e6cb6b85,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md
-DOC-CAND-6f694ea910d7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md
+DOC-CAND-6f694ea910d7,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/logging-policy.md (ACT 5.12 review)
 DOC-CAND-2ead6f321bdb,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/post-beta-backlog.md
 DOC-CAND-88e789301a8a,stale,,,stale_doc,2026-06-19,From stale doc: docs/post-beta-operator-feedback-and-live-integrations.md
 DOC-CAND-957e344efc4b,stale,,,stale_doc,2026-06-19,From stale doc: docs/provenance-filtering.md
@@ -126,10 +126,10 @@ DOC-CAND-f725f0f7ccaf,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-6dc0997c4a65,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-ae0366b9f2f7,registered_existing_claim,DOC-CLAIM-0065,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0065
 DOC-CAND-93e3c501d0ac,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
-DOC-CAND-402451b24165,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/security-policy.md; descriptive intent, not tracked invariant (ACT 5.4 review)."
+DOC-CAND-402451b24165,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/security-policy.md; descriptive intent, not tracked invariant (ACT 5.12 review)"
 DOC-CAND-bb2482203f2b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
 DOC-CAND-54f9c6c8b751,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-policy.md
-DOC-CAND-2e9462fb175f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md
+DOC-CAND-2e9462fb175f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/self-contained-constraint.md (ACT 5.12 review)
 DOC-CAND-217cc5c48b11,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/selected-run-refresh-regression-test-updates.md
 DOC-CAND-58029637811c,historical,,,historical_doc,2026-06-19,From historical doc: docs/testing/selected-run-refresh-regression-test-updates.md
 DOC-CAND-159e80074529,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/testing/unit-test-feedback-loop-guidelines.md

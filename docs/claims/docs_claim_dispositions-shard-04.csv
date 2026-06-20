@@ -82,14 +82,14 @@ DOC-CAND-bb9449b2e9f4,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-39bb1af47dc5,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-f63879dcc786,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-ddc0b29292e8,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
-DOC-CAND-79e6c6954a2c,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from llm-anonymization-design.md; not a standalone behavioral claim (ACT 5.6 review)
+DOC-CAND-79e6c6954a2c,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from llm-anonymization-design.md; not a standalone behavioral claim (ACT 5.12 review)
 DOC-CAND-ecef5e43db0d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-a8095c413673,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-41a9fc03190f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-82ac4c33608d,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-8e0f0d1516e7,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,Ignored by policy: local dev compatibility guidance; not a production behavioral claim.
 DOC-CAND-f97b0e4eacb3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-e8f90949b892,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Operator auth design feature specification. Design document note, not current verifiable system behavior (ACT 5.9 review)."
+DOC-CAND-e8f90949b892,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"Operator auth design feature specification. Design document note, not current verifiable system behavior (ACT 5.12 review)"
 DOC-CAND-7ae0a3a99dc9,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-d31f83f729b8,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-3372bd2c9fc6,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design impact table cell, impact assessment not tracked claim (ACT 5.0 review)."

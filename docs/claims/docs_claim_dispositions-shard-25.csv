@@ -25,7 +25,7 @@ DOC-CAND-978f5fd19012,registered_existing_claim,DOC-CLAIM-0045,,already_register
 DOC-CAND-9ed52e6b5da8,covered_by_existing_claim,,DOC-CLAIM-0042,covered_by_broader_claim,2026-06-20,ACT 3.5: Immutable history fact artifacts; covered by DOC-CLAIM-0042
 DOC-CAND-173e3128adc4,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema field definition, type signature not tracked (ACT 5.0 review)."
 DOC-CAND-bc9cb6cfb7f1,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/data-model/incidents.md, not a tracked behavioral invariant (ACT 5.2 review)."
-DOC-CAND-dcda94df0a87,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,"Ignored by policy: classification label; internal classification marker, not a behavioral claim."
+DOC-CAND-dcda94df0a87,ignored_by_policy,,,policy_statement,2026-06-20T03:58:35Z,"Ignored by policy: classification label; internal classification marker, not a behavioral claim. (ACT 5.12 review)"
 DOC-CAND-284b69f7ed69,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Schema field label from docs/data-model/next-check-mapping.md; metadata annotation, not behavioral claim (ACT 5.4 review)."
 DOC-CAND-5dfc41134ac8,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Descriptive prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-a0e8d4dc7fa1,ignored_by_policy,,,generated_from_table_fragment,2026-06-20T08:09:45Z,Table cell/row fragment from beta-real-incident-validation.md; column enumeration not a standalone behavioral claim (ACT 5.6 review)
@@ -46,9 +46,9 @@ DOC-CAND-e03657b42ead,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-c8123fce4b28,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/precedence.md
 DOC-CAND-e22aed638e5f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
 DOC-CAND-a1855dc5fffe,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
-DOC-CAND-33becf199256,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md
+DOC-CAND-33becf199256,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md (ACT 5.12 review)
 DOC-CAND-2d7e3d535857,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
-DOC-CAND-9128a2196d45,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md
+DOC-CAND-9128a2196d45,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/frontend/elmish-controller-pattern.md (ACT 5.12 review)
 DOC-CAND-e581407c3841,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
 DOC-CAND-054773142658,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
 DOC-CAND-e493e9a455fa,historical,,,historical_doc,2026-06-19,From historical doc: docs/gate-timings-history-1.md
@@ -135,5 +135,5 @@ DOC-CAND-ead4810d5e8b,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-b4e1a5f3be6f,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-8b833385d106,historical,,,historical_doc,2026-06-19,From historical doc: docs/security-exception-audit.md
 DOC-CAND-19cce73d4313,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md
-DOC-CAND-79e3cc9524ca,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from security-standards.md; not a standalone behavioral claim (ACT 5.6 review)
+DOC-CAND-79e3cc9524ca,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from security-standards.md; not a standalone behavioral claim (ACT 5.12 review)
 DOC-CAND-7f230b7ccc71,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security-standards.md

@@ -31,7 +31,7 @@ DOC-CAND-c9658c6037cc,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-7d0d9641e601,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from documentation-truthfulness.md; not a standalone behavioral claim (ACT 5.6 review)
 DOC-CAND-151f90c8838f,ignored_by_policy,,,policy_statement,2026-06-20T18:00Z,"(ACT 5.9 review) Inventory verification gate integration statement. CI-gate policy prose, not a system behavioral claim (ACT 5.9 review)."
 DOC-CAND-577a4d1dc4c3,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/identity-primer.md
-DOC-CAND-59b136dd80f9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md
+DOC-CAND-59b136dd80f9,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/llm-friendly-files.md (ACT 5.12 review)
 DOC-CAND-2a4db2218291,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-55e06f08ff31,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/playbooks/design_review.md
 DOC-CAND-55cc4ae320cf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/seed_rules.md

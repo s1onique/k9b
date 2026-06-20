@@ -22,7 +22,7 @@ DOC-CAND-6c0ecc288c29,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-1d2e7a9ce040,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-b211db28f124,ignored_by_policy,,,too_granular_for_registry,2026-06-20T18:00Z,"(ACT 5.9 review) List item describing candidate types in next-check-mapping. Example/classification, not behavioral claim (ACT 5.9 review)."
 DOC-CAND-269ce70edd20,covered_by_existing_claim,,DOC-CLAIM-0058,covered_by_broader_claim,2026-06-20,ACT 3.5: Read-only suggested checks claim; covered by DOC-CLAIM-0058
-DOC-CAND-806e4eaa743d,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from next-checks.md; not a standalone behavioral claim (ACT 5.6 review)
+DOC-CAND-806e4eaa743d,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from next-checks.md; not a standalone behavioral claim (ACT 5.12 review)
 DOC-CAND-6949635a9c3f,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Descriptive prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-7fcf98edde39,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-98f67c3aa104,ignored_by_policy,,,non_normative_description,2026-06-20T08:09:45Z,Descriptive prose fragment from run-lifecycle.md; not a standalone behavioral claim (ACT 5.6 review)
@@ -83,7 +83,7 @@ DOC-CAND-f5fc35a8152f,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-7c4569cd2f6d,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/llm-friendly-production-burn-down-closeout.md
 DOC-CAND-5f3e3dc38b54,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-audit-2026-05-31.md
 DOC-CAND-eb7cfb3050d4,historical,,,historical_doc,2026-06-19,From historical doc: docs/reports/security-claims-ledger-2026-05-31.md
-DOC-CAND-1e83dc1d9737,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/schemas/incident-report-schema.md; descriptive intent, not tracked invariant (ACT 5.4 review)."
+DOC-CAND-1e83dc1d9737,ignored_by_policy,,,non_normative_description,2026-06-20T10:15:00Z,"Non-normative requirement phrasing from docs/schemas/incident-report-schema.md; descriptive intent, not tracked invariant (ACT 5.12 review)"
 DOC-CAND-2faff17ef460,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-drilldown-reason-wrapper.md
 DOC-CAND-44f4cb08ad7c,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-health-loop-closure.md
 DOC-CAND-1f04e7540662,stale,,,stale_doc,2026-06-19,From stale doc: docs/seam-map-health-loop-closure.md
@@ -123,10 +123,10 @@ DOC-CAND-39a704b15a16,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-270a3a07f662,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-202e0e70fdec,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-34371d02de2a,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
-DOC-CAND-36446885989d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md
+DOC-CAND-36446885989d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/static-artifact-serving-contract.md (ACT 5.12 review)
 DOC-CAND-e61719e2edc3,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
 DOC-CAND-d848de3d3bde,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/subprocess-security-audit.md
-DOC-CAND-e8fc57223882,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
+DOC-CAND-e8fc57223882,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md (ACT 5.12 review)
 DOC-CAND-08f3d94161c4,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/threat-model.md
 DOC-CAND-c8b351aa1560,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Table header row from threat model operations table (Operation, Privilege Level, Authorization, Audit Required). Schema structure, not a claim (ACT 5.9 review)."
 DOC-CAND-dda34aa4f0f8,ignored_by_policy,,,not_a_claim,2026-06-20T18:00Z,"(ACT 5.9 review) Table row fragment from data-crossing threat table (UI HTTP Server row). Schema structure/table cell, not a standalone claim (ACT 5.9 review)."
