@@ -476,20 +476,20 @@ After completing long-tail review tranches (ACT 5.0, ACT 5.2, etc.), use the det
 
 ```bash
 # Summary with top 100 recommended candidates
-python scripts/report_docs_claim_candidate_backlog.py --top 100
+python scripts/run_backlog_report.py --top 100
 
 # Export to JSON for structured analysis
-python scripts/report_docs_claim_candidate_backlog.py --json /tmp/backlog.json
+python scripts/run_backlog_report.py --json /tmp/backlog.json
 
 # Export to TSV for future tranche selection
-python scripts/report_docs_claim_candidate_backlog.py --tsv /tmp/tranche-candidates.tsv
+python scripts/run_backlog_report.py --tsv /tmp/tranche-candidates.tsv
 
 # Include already-reviewed candidates in output
-python scripts/report_docs_claim_candidate_backlog.py --include-reviewed
+python scripts/run_backlog_report.py --include-reviewed
 
 # Filter by disposition or doc path
-python scripts/report_docs_claim_candidate_backlog.py --disposition ignored_by_policy
-python scripts/report_docs_claim_candidate_backlog.py --doc docs/security/
+python scripts/run_backlog_report.py --disposition ignored_by_policy
+python scripts/run_backlog_report.py --doc docs/security/
 ```
 
 The report ranks remaining unreviewed candidates by risk score, which considers:
@@ -502,13 +502,15 @@ The report ranks remaining unreviewed candidates by risk score, which considers:
 Self-tests ensure scoring determinism:
 
 ```bash
-python scripts/report_docs_claim_candidate_backlog.py --self-test
+python scripts/run_backlog_report.py --self-test
 ```
 
 The self-test is wired into the standard gate via `docs-claim-candidate-backlog-report-self-test`.
 
 ## History
 
+- **2026-06-20** — ACT 5.3: Added claim candidate backlog reporter (`scripts/report_docs_claim_candidate_backlog/` package) with risk scoring, self-tests, wired into verify_all.sh gate
+- **2026-06-20** — ACT 5.3b: Split backlog reporter into LLM-friendly modules (loader, model, report, selftest, __main__, __init__)
 - **2026-06-20** — ACT 5.1: Added semantic disposition diff reporter (`scripts/diff_docs_claim_dispositions.py`) with self-tests, wired into verify_all.sh gate
 - **2026-06-19** — Initial doctrine: classification system, truth status, claim tracing foundation
 - **2026-06-19** — ACT 2: Added claims registry (`docs/claims/docs_claims_registry.csv`) and verifier (`scripts/verify_docs_claims_registry.py`)

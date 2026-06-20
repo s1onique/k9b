@@ -7,8 +7,15 @@ from pathlib import Path
 
 
 def get_repo_root() -> Path:
-    """Get repository root path."""
-    return Path(__file__).parent.parent
+    """Get repository root path.
+    
+    From scripts/report_docs_claim_candidate_backlog/loader.py:
+    - __file__ = scripts/report_docs_claim_candidate_backlog/loader.py
+    - .parent = scripts/report_docs_claim_candidate_backlog
+    - .parent = scripts
+    - .parent = repo root
+    """
+    return Path(__file__).resolve().parents[2]
 
 
 def get_disposition_shard_paths() -> list[Path]:
