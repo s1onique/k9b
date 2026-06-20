@@ -93,9 +93,9 @@ DOC-CAND-1d4f4c66a52d,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-8e44de55c2fb,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-eb7957ff8545,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-4f65e6c35b53,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design evaluation table cell, assessment not tracked claim (ACT 5.0 review)."
-DOC-CAND-d2666973743f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-d2666973743f,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-0f15724077b9,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design assumption, acknowledgment note not an invariant (ACT 5.0 review)."
-DOC-CAND-877f5e1e5060,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-877f5e1e5060,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-650ed8f67704,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-21ca0117dd73,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-67a292cc4446,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md

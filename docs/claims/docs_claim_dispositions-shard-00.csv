@@ -22,7 +22,7 @@ DOC-CAND-49a09e000a77,ignored_by_policy,,,low_value_context,2026-06-19,"Low-valu
 DOC-CAND-bf0dc7f05e7c,covered_by_existing_claim,,DOC-CLAIM-0047,covered_by_broader_claim,2026-06-20,ACT 3.5: Evidence in artifact store; covered by DOC-CLAIM-0047
 DOC-CAND-446017170bf1,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: design note about queue structure, internal architecture detail not user-facing invariant (ACT 5.0 review)."
 DOC-CAND-ffaddf697bbf,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
-DOC-CAND-50a69879fa0d,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
+DOC-CAND-50a69879fa0d,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Descriptive prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-e140c5d987d0,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-2845ce3c85ee,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
 DOC-CAND-ef2968ee4088,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/doctrine/documentation-truthfulness.md
@@ -85,14 +85,14 @@ DOC-CAND-e96c9d55ad9b,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-799f84a0f850,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-e529bc954a54,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-33207f5d3312,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
-DOC-CAND-8f27f6e4609a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-a2ee10530447,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-8f27f6e4609a,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
+DOC-CAND-a2ee10530447,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-3ce2cd04fe5a,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design risk notation, risk acknowledgment not an invariant (ACT 5.0 review)."
 DOC-CAND-4659efa7ef70,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design option label, section identifier not a claim (ACT 5.0 review)."
 DOC-CAND-f9cd02104e53,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-92a0e5918f49,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-92a0e5918f49,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-e78f1ecd0f4b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-a759b2ed4f2c,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-a759b2ed4f2c,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-2081b0a02717,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-c90d185118b0,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md
 DOC-CAND-508768c62528,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md

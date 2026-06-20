@@ -27,13 +27,13 @@ DOC-CAND-13463fe2910c,registered_existing_claim,DOC-CLAIM-0058,,already_register
 DOC-CAND-d20e434d19d6,covered_by_existing_claim,,DOC-CLAIM-0058,covered_by_broader_claim,2026-06-20,ACT 3.5: Report derived projection; covered by DOC-CLAIM-0058
 DOC-CAND-63f7ba17960b,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: design note about artifact storage, architectural description not tracked invariant (ACT 5.0 review)."
 DOC-CAND-0bf650f3a5bb,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema field description, descriptive metadata not an invariant (ACT 5.0 review)."
-DOC-CAND-a882ac5d7d03,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incidents.md
+DOC-CAND-a882ac5d7d03,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/data-model/incidents.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-62b5ed1716db,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema table header label, formatting artifact not a claim (ACT 5.0 review)."
 DOC-CAND-bf80617c9345,covered_by_existing_claim,,DOC-CLAIM-0065,covered_by_broader_claim,2026-06-20,ACT 3.5: No remediation claim; covered by DOC-CLAIM-0065
 DOC-CAND-0d520e498520,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-check-mapping.md
 DOC-CAND-e369a0036312,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
 DOC-CAND-6d2e0435811e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/next-checks.md
-DOC-CAND-9d0bca3c992b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/review-packets.md
+DOC-CAND-9d0bca3c992b,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Descriptive prose fragment from docs/data-model/review-packets.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-8bd21336865e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-5a837ad17bd6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/run-lifecycle.md
 DOC-CAND-a51fe4fa095a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/ui-model-boundaries.md

@@ -15,7 +15,7 @@ DOC-CAND-576b6a7d231b,registered_existing_claim,DOC-CLAIM-0030,,already_register
 DOC-CAND-bf706ade7870,covered_by_existing_claim,,DOC-CLAIM-0030,covered_by_broader_claim,2026-06-20,ACT 3.5: Backend threshold; covered by DOC-CLAIM-0030
 DOC-CAND-5d21b133a943,covered_by_existing_claim,,DOC-CLAIM-0029,covered_by_broader_claim,2026-06-20,ACT 3.5: Coverage CI job; relates to DOC-CLAIM-0029
 DOC-CAND-c5b99da56415,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/alertmanager-sources.md
-DOC-CAND-a75b451bb23b,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/data-model/incident-report-quality.md
+DOC-CAND-a75b451bb23b,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/data-model/incident-report-quality.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-3040b83fc541,registered_existing_claim,DOC-CLAIM-0047,,already_registered,2026-06-19,Already registered to DOC-CLAIM-0047
 DOC-CAND-10bd65c2895d,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/data-model/incidents.md: schema field identifier, type annotation not a behavioral claim (ACT 5.0 review)."
 DOC-CAND-c061f7a857ca,covered_by_existing_claim,,DOC-CLAIM-0065,covered_by_broader_claim,2026-06-20,ACT 3.5: No Kubernetes mutation; covered by DOC-CLAIM-0065
@@ -86,7 +86,7 @@ DOC-CAND-aa44c7f658cc,historical,,,historical_doc,2026-06-19,From historical doc
 DOC-CAND-6073240bc49b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/artifact-integrity-audit.md
 DOC-CAND-b07dc70c353f,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/llm-anonymization-design.md
 DOC-CAND-af17b9b12e58,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
-DOC-CAND-ad8af037513e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-ad8af037513e,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Descriptive prose fragment from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-68d60bd772cd,ignored_by_policy,,,low_value_context,2026-06-19,"Low-value prose fragment from docs/security/operator-auth-design.md: design evaluation table cell, assessment not tracked claim (ACT 5.0 review)."
 DOC-CAND-e93c9f1b697e,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
 DOC-CAND-e5739a42dab1,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/operator_facing_projection_leak_audit.md

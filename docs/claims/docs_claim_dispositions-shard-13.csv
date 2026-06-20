@@ -83,8 +83,8 @@ DOC-CAND-671dbf2fde11,ignored_by_policy,,,low_value_context,2026-06-19,Low-value
 DOC-CAND-dd2c9e8961e4,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-13f97d09ef77,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
 DOC-CAND-c740b4c90042,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/llm-prompt-security-audit.md
-DOC-CAND-b9e5acb8fea6,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
-DOC-CAND-82e7e34f0f0a,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/operator-auth-design.md
+DOC-CAND-b9e5acb8fea6,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Short prose fragment from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
+DOC-CAND-82e7e34f0f0a,ignored_by_policy,,,low_value_context,2026-06-20T06:08:33Z,"Table header/column label from docs/security/operator-auth-design.md, not a tracked behavioral invariant (ACT 5.2 review)."
 DOC-CAND-ea373eb38f35,ignored_by_policy,,,low_value_context,2026-06-19,Low-value prose fragment from: docs/security/rbac-deployment-guide.md
 DOC-CAND-b41fac2ac6f2,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
 DOC-CAND-c1b5cae2327b,historical,,,historical_doc,2026-06-19,From historical doc: docs/security/security-audit-closeout.md
