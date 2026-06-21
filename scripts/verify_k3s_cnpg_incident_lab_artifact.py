@@ -11,6 +11,7 @@ This script validates:
 - k9b incident evidence was captured (if incident_detected=true)
 - No secrets appear in artifacts
 - incident_detected=true is consistent with artifacts
+- Namespace-mode fields are present when cluster_mode=existing
 
 Exit codes:
   0 - All checks passed
@@ -132,6 +133,32 @@ def verify_artifact_dir(artifact_dir: Path, verbose: bool = False) -> tuple[bool
     for field in required_fields:
         if field not in lab_result:
             errors.append(f"lab-result.json missing required field: {field}")
+    
+    # --- Validate namespace-mode specific fields ---
+    cluster_mode = lab_result.get("cluster_mode", "")
+    if cluster_mode == "existing":
+        # Namespace mode requires lab_namespace field
+        if "lab_namespace" not in lab_result:
+            errors.append("lab-result.json missing required field: lab_namespace (required when cluster_mode=existing)")
+        
+        # Namespace mode requires cnpg_operator_mode field
+        if "cnpg_operator_mode" not in lab_result:
+            errors.append("lab-result.json missing required field: cnpg_operator_mode (required when cluster_mode=existing)")
+        
+        # Namespace mode should have runner_mode
+        if "runner_mode" not in lab_result:
+            errors.append("lab-result.json missing required field: runner_mode (required when cluster_mode=existing)")
+        
+        # Image metadata should be present
+        if "k9b_image_repository" not in lab_result:
+            errors.append("lab-result.json missing required field: k9b_image_repository")
+        if "k9b_image_tag" not in lab_result:
+            errors.append("lab-result.json missing required field: k9b_image_tag")
+        if "k9b_image_ref" not in lab_result:
+            errors.append("lab-result.json missing required field: k9b_image_ref")
+    elif cluster_mode == "provision":
+        # Legacy provision mode - these are optional
+        pass
     
     # --- Check baseline artifacts ---
     baseline_dir = artifact_dir / "baseline"

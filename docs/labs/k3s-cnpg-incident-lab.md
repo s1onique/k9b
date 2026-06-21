@@ -4,30 +4,11 @@
 
 This lab provides a canonical, reproducible environment for testing k9b's ability to detect and triage incidents in a CloudNativePG-managed PostgreSQL cluster running on K3s.
 
-The lab is designed to:
-
-1. Provision a K3s cluster (or connect to an existing one)
-2. Build the current k9b container image from the repository checkout
-3. Import the image into K3s containerd runtime
-4. Deploy k9b via the project Helm chart with chart image overrides
-5. Install the CloudNativePG operator
-6. Deploy a minimal PostgreSQL cluster managed by CNPG
-7. Inject a controlled, reversible incident using a tracked manifest
-8. Capture diagnostic artifacts proving the incident was detected
-9. Optionally exercise LLM-based triage (wired but dry-run in this scaffold ACT)
-
-## Current Status
-
-**This lab scaffold builds k9b from current checkout and deploys via Helm chart.**
-
-- The Go-based lab runner and artifact structure are implemented
-- The GitHub Actions workflow builds a fresh k9b image from current checkout
-- The image is imported into K3s containerd for local use
-- k9b is deployed via the project Helm chart with image value overrides
-- Live K3s provisioning in CI is available via manual `workflow_dispatch` with `run_live_lab=true`
-- Incident manifests are tracked in the repository, not embedded in workflows
-- LLM triage integration is wired but not implemented
-- Full autonomous triage loop is deferred to future ACTs
+The lab is designed to run in **existing-cluster namespace mode**, where:
+- The GitHub Actions runner runs inside the target K3s cluster
+- CloudNativePG is already preinstalled in `cnpg-system`
+- Harbor is already running in-cluster
+- k9b images are built by the canonical Harbor image-build workflow and consumed by the lab
 
 ## Architecture
 
@@ -40,21 +21,34 @@ The lab is designed to:
 │  └──────────────────┘  └──────────────────┘  └──────────────┘   │
 │                                                              │
 │  ┌──────────────────┐  (only when run_live_lab=true)         │
-│  │   Live K3s Lab   │→ Build Image → Import → Helm → Inject  │
-│  │                  │  → Artifacts → Verify → Upload          │
+│  │   Build Lab      │→ k9b-image-builder (Harbor) → Deploy   │
+│  │   Images         │  via Helm → Inject → Artifacts → Upload  │
 │  └──────────────────┘                                         │
 └─────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼ (when live lab runs)
+                                     │
+                                     ▼ (when live lab runs)
 ┌─────────────────────────────────────────────────────────────────┐
-│                      K3s Cluster (lab)                          │
+│                 Existing K3s Cluster (self-hosted runner)          │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │  GitHub Actions Runner (in-cluster)                       │ │
+│  │  ┌────────────────────────────────────────────────────┐ │ │
+│  │  │  k9b-cnpg-incident-lab-live.yml                     │ │ │
+│  │  │  - Preflights existing CNPG operator                │ │ │
+│  │  │  - Creates unique lab namespace                     │ │ │
+│  │  │  - Deploys k9b via Helm (consumes Harbor image)     │ │ │
+│  │  │  - Deploys CNPG Cluster in lab namespace           │ │ │
+│  │  │  - Injects incident, collects artifacts             │ │ │
+│  │  └────────────────────────────────────────────────────┘ │ │
+│  └──────────────────────────────────────────────────────────┘ │
+│                                                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐ │
 │  │   CNPG       │  │   k9b        │  │   PostgreSQL         │ │
 │  │   Operator   │  │   (Helm)     │  │   Cluster            │ │
+│  │   (existing) │  │   (lab ns)   │  │   (lab ns)          │ │
 │  └──────────────┘  └──────────────┘  └──────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
+                                     │
+                                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Artifact Directory                            │
 │  lab-result.json                                                │
@@ -68,12 +62,40 @@ The lab is designed to:
 │    k9b-pods.json                                                   │
 │  logs/                                                             │
 │    lab-runner.log                                                │
-│    k3s.log (live only)                                          │
-│    cnpg-operator.log (live only)                                 │
+│    cnpg-operator-preflight.txt                                   │
 │    k9b.log (live only)                                          │
 │    helm-k9b-status.txt (live only)                              │
+│    k9b-images.txt (live only)                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+## Key Design Decisions
+
+### Existing-Cluster Namespace Mode
+
+The lab was converted from nested K3s provisioning to existing-cluster namespace mode because:
+
+1. **GitHub Actions runners already run inside the target K3s cluster** - No need to provision a nested K3s
+2. **CloudNativePG is preinstalled** - No need to install the CNPG operator
+3. **Harbor is available in-cluster** - Images are built by the canonical workflow and pushed to Harbor
+4. **No Docker socket in runner pods** - Cannot build images in the live workflow
+
+### Image-Builder Ownership
+
+The canonical `k9b-image-builder.yml` workflow owns:
+- Harbor registry/project conventions
+- Harbor authentication
+- BuildKit/rootless build implementation
+- Image tags, digests, build cache settings
+- CA trust for Harbor
+- Build-platform settings
+
+The live lab workflow **only consumes** image outputs and must not contain:
+- `docker build` / `docker push` / `docker save`
+- `/var/run/docker.sock`
+- `buildctl` / `buildctl-daemonless.sh`
+- Harbor auth material construction
+- Registry password handling
 
 ## CI Workflow
 
@@ -82,18 +104,18 @@ The lab is designed to:
 The workflow runs on:
 - **Manual dispatch**: `workflow_dispatch` with configurable inputs
   - `artifact_retention_days`: Number of days to keep CI artifacts (default: 7)
-  - `run_live_lab`: Whether to run live K3s provisioning (default: false)
+  - `run_live_lab`: Whether to run live namespace-mode lab (default: false)
   - `incident_scenario`: Which incident scenario to run (default: pod-failure)
 - **PR**: When lab-related files change (workflow, Go code, Python verifier, fixtures)
 - **Push to main**: When lab-related files change
 
-**Important**: Live K3s provisioning only runs when `run_live_lab=true` is explicitly set in manual dispatch. PR/push runs only build-and-verify.
+**Important**: Live lab only runs when `run_live_lab=true` is explicitly set in manual dispatch.
 
 ### CI Jobs
 
 #### build-and-verify Job
 
-The `build-and-verify` job always runs:
+The `build-and-verify` job runs on `ubuntu-latest` and:
 1. Builds the Go lab runner (`dist/k9b-cnpg-incident-lab`)
 2. Runs Go unit tests for `internal/lab/cnpg`
 3. Runs Python verifier tests
@@ -101,161 +123,59 @@ The `build-and-verify` job always runs:
 5. Verifies failing fixtures fail for intended reasons
 6. Uploads build outputs and verification logs as artifacts
 
-#### live-k3s-lab Job
+#### build-lab-images Job (only when live lab requested)
 
-The `live-k3s-lab` job runs **only** when manually requested (`run_live_lab=true`):
-1. Depends on `build-and-verify` completing successfully
-2. Builds a fresh k9b container image from the current checkout using `Dockerfile.python`
-3. Imports the image into K3s containerd runtime
-4. Provisions a real K3s cluster on the runner
-5. Installs the real CloudNativePG operator from official manifest
-6. Deploys a minimal CNPG PostgreSQL cluster
-7. Sets up Helm
-8. Deploys k9b via the project Helm chart (`./charts/k9b`) with image overrides:
-   - `image.backend.repository=k9b-lab`
-   - `image.backend.tag=${GITHUB_SHA}`
-   - `image.backend.pullPolicy=Never`
-   - `backend.auth.enabled=false`
-9. Asserts that k9b pods use the run-built image (fatal check)
-10. Injects the `pod-failure` incident using a tracked manifest (`fixtures/lab/live/pod-failure/injected-change.yaml`)
-11. Verifies the incident symptom (pod should be NotReady)
-12. Collects live artifacts including Helm release status
-13. Verifies artifacts with the existing verifier
-14. Uploads live lab artifacts with distinct naming
+The `build-lab-images` job:
+1. Calls the reusable `k9b-image-builder.yml` workflow
+2. Builds and pushes k9b backend/frontend images to Harbor
+3. Exposes image repository/tag/ref/digest as outputs
 
-### Build Commands
+#### live-k3s-lab Job (only when live lab requested)
+
+The `live-k3s-lab` job runs on self-hosted runner with cluster access and:
+1. Preflights existing cluster access
+2. Preflights existing CNPG operator/CRD
+3. Creates unique lab namespace (`k9b-cnpg-lab-${GITHUB_RUN_ID}`)
+4. Deploys k9b via Helm chart using image-builder outputs
+5. Asserts k9b pod image matches image-builder output
+6. Deploys CNPG Cluster in lab namespace
+7. Injects pod-failure incident using tracked manifest
+8. Verifies incident symptom (pod NotReady)
+9. Collects artifacts and runs verifier
+10. Cleans up lab namespace (always runs)
+11. Uploads artifacts
+
+## Required Self-Hosted Runner Labels
+
+The live lab runs on GitHub-hosted runners inside the target K3s cluster:
+
+```yaml
+runs-on:
+  - self-hosted
+  - linux
+  - x64
+  - github-actions-runner
+```
+
+The runner must have:
+- Cluster access via service account
+- CNPG operator visible in `cnpg-system`
+- Harbor access for image pulls
+
+## Required CNPG Operator Prerequisite
+
+The lab requires the CloudNativePG operator to be preinstalled:
 
 ```bash
-# Sync workspace and build
-go work sync
-go build -o dist/k9b-cnpg-incident-lab ./cmd/k9b-cnpg-incident-lab
-
-# Run Go tests
-go test -v ./internal/lab/cnpg/...
-
-# Run Python verifier tests
-.venv/bin/python -m pytest tests/test_verify_k3s_cnpg_incident_lab.py -v
+kubectl get crd clusters.postgresql.cnpg.io
+kubectl get pods -n cnpg-system
+kubectl get deployments -n cnpg-system
 ```
 
-## How to Run
-
-### Manual Execution (Local)
-
-Prerequisites:
-- K3s cluster accessible via `kubectl`
-- `KUBECONFIG` environment variable set
-- Go 1.25+ installed
-- Docker installed (for building k9b image)
-
-```bash
-# Build the lab runner (requires go.work workspace)
-go work sync
-go build -o dist/k9b-cnpg-incident-lab ./cmd/k9b-cnpg-incident-lab
-
-# Build k9b image locally (for local lab testing)
-docker build -f Dockerfile.python -t k9b-lab:local .
-
-# Import image into K3s (if using local K3s)
-docker save k9b-lab:local | sudo k3s ctr images import -
-
-# Install Helm chart with local image
-helm upgrade --install k9b ./charts/k9b \
-  --namespace k9b \
-  --create-namespace \
-  --set image.backend.repository="k9b-lab" \
-  --set image.backend.tag="local" \
-  --set image.backend.pullPolicy=Never \
-  --set backend.auth.enabled=false
-
-# Run the incident lab against an existing cluster.
-make lab-k9b-cnpg-incident-live KUBECONFIG=/path/to/kubeconfig SCENARIO=pod-failure
-
-# Verify artifacts.
-make verify-lab-k9b-cnpg-incident-live ARTIFACT_DIR=./lab-artifacts/live
+If CNPG CRD/operator is missing, the lab fails with:
 ```
-
-### GitHub Actions (Manual Dispatch)
-
-1. Navigate to **Actions** → **K3s CNPG Incident Lab**
-2. Click **Run workflow**
-3. Configure inputs:
-   - `artifact_retention_days`: Number of days to keep CI artifacts (default: 7)
-   - `run_live_lab`: Set to `true` to run live K3s provisioning (default: false)
-   - `incident_scenario`: Choose incident scenario (default: pod-failure)
-4. Click **Run workflow**
-
-**Example**: Running with live K3s:
-- Set `run_live_lab` to `true`
-- Set `incident_scenario` to `pod-failure`
-- The workflow will build k9b from checkout, import into K3s, deploy via Helm, inject the incident, and verify artifacts
-
-### GitHub Actions (CI)
-
-The workflow automatically runs on:
-- PRs that modify lab-related files
-- Pushes to main that modify lab-related files
-
-No manual configuration required for CI runs. Live K3s is **not** run automatically.
-
-### Artifact Verification (Local)
-
-```bash
-# Verify passing fixture.
-make verify-lab-fixture-pass
-
-# Verify fail fixture (missing k9b incident).
-make verify-lab-fixture-fail-no-incident
-
-# Verify fail fixture (secret leakage).
-make verify-lab-fixture-fail-secret
-
-# Verify live lab artifacts.
-make verify-lab-k9b-cnpg-incident-live ARTIFACT_DIR=./lab-artifacts/live
+Existing CNPG operator/CRD not found; namespace-mode lab requires preinstalled CNPG.
 ```
-
-## Pinned Versions
-
-| Component | Version | Manifest URL |
-|-----------|---------|--------------|
-| K3s | v1.31.0+k3s1 | https://get.k3s.io |
-| CNPG Operator | 1.26.0 | https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v1.26.0/releases/cnpg-1.26.0.yaml |
-| PostgreSQL | 17.5 | ghcr.io/cloudnative-pg/postgresql:17.5 |
-| Helm | 3.16.3 | azure/setup-helm@v4 |
-| k9b | `${GITHUB_SHA}` (built from checkout) | Built from `Dockerfile.python` |
-
-## Live Lab Artifact Upload
-
-Live lab artifacts are uploaded with a distinct name:
-```
-k9b-cnpg-incident-lab-live-{run_id}
-```
-
-This distinguishes them from build-and-verify artifacts:
-```
-k9b-cnpg-incident-lab-ci-{run_id}
-```
-
-## Required Secrets
-
-| Secret | Required For | Notes |
-|--------|-------------|-------|
-| `OPENROUTER_API_KEY` | LLM triage | Only needed if `enable_llm_triage=true` |
-
-The CI workflow does NOT require:
-- Kubernetes credentials (kubeconfig is generated by K3s)
-- CNPG credentials (lab uses ephemeral test secrets)
-- Container registry credentials (image is built locally and imported)
-- Any other secrets for the scaffold implementation
-
-**Secret Hygiene**: The live lab explicitly avoids uploading:
-- kubeconfig contents
-- service account tokens
-- generated database passwords
-- OpenRouter keys
-- GitHub tokens
-- bearer tokens
-- private keys
-- full Secret resources
 
 ## Incident Scenarios
 
@@ -265,40 +185,40 @@ The CI workflow does NOT require:
 
 **Mechanism**:
 1. Apply the tracked manifest: `fixtures/lab/live/pod-failure/injected-change.yaml`
-2. The manifest creates a Pod named `cnpg-lab-failing-app` in the `cnpg-lab` namespace
+2. The manifest creates a Pod named `cnpg-lab-failing-app` in the lab namespace
 3. The pod has a readiness probe that always fails (`/bin/false`)
 4. The pod remains in `Running` phase but `NotReady` condition
-5. Observe k9b incident detection (deferred to future ACT)
+5. k9b incident detection is deferred to future ACT
 
 **Expected Symptom**: Pod reports NotReady, k9b detects incident (when implemented).
 
 **Recovery**: Delete the pod.
 
-**Safety**: Non-destructive, reversible, no data loss (single-pod test cluster, not CNPG internal mutation).
+**Safety**: Non-destructive, reversible, no data loss.
 
 ## Artifact Schema
 
-### lab-result.json
+### lab-result.json (Namespace Mode)
 
 ```json
 {
   "ok": true,
   "scenario": "pod-failure",
-  "started_at": "2026-06-16T10:00:00Z",
-  "finished_at": "2026-06-16T10:15:00Z",
-  "cluster_mode": "provision",
-  "k3s_version": "v1.31.0+k3s1",
-  "cnpg_operator_version": "1.26.0",
-  "k9b_version": "605cda253d90029b57965292d8127be22efab248",
-  "k9b_image_repository": "k9b-lab",
-  "k9b_image_tag": "605cda253d90029b57965292d8127be22efab248",
+  "started_at": "2026-06-21T20:00:00Z",
+  "finished_at": "2026-06-21T20:15:00Z",
+  "cluster_mode": "existing",
+  "runner_mode": "self-hosted",
+  "cnpg_operator_mode": "existing",
+  "lab_namespace": "k9b-cnpg-lab-123456",
+  "k9b_image_repository": "harbor-pve1.spbnix.local/k9b/k9b-backend",
+  "k9b_image_tag": "c29014919519ed1fa1a0d12aadf291f23f932fa2",
+  "k9b_image_ref": "harbor-pve1.spbnix.local/k9b/k9b-backend:c29014919519ed1fa1a0d12aadf291f23f932fa2",
+  "k9b_image_digest": "sha256:...",
   "incident_detected": false,
-  "incident_id": null,
-  "artifact_dir": "/path/to/artifacts",
+  "artifact_dir": "./lab-artifacts/live",
   "failure_reason": "k9b live detection deferred",
   "llm_triage_enabled": false,
-  "llm_triage_attempted": false,
-  "llm_triage_artifact": null
+  "llm_triage_attempted": false
 }
 ```
 
@@ -309,21 +229,20 @@ artifact-dir/
 ├── lab-result.json           # Lab outcome and metadata
 ├── baseline/                 # Pre-incident cluster state
 │   ├── nodes.txt             # kubectl get nodes -o wide
-│   ├── nodes.json            # Structured node data
-│   ├── pods.txt              # kubectl get pods -o wide
-│   ├── events.txt            # kubectl get events (live only)
+│   ├── pods.txt              # kubectl get pods -n <lab_ns> -o wide
+│   ├── events.txt            # kubectl get events -n <lab_ns>
 │   ├── cnpg-clusters.json    # CNPG operator/cluster status
 │   ├── k9b-status.json       # Helm release status
-│   ├── k9b-all.txt           # kubectl get all -n k9b
-│   ├── k9b-describe.txt      # kubectl describe deployment -n k9b
-│   └── k9b-pods.json          # kubectl get pods -n k9b -o json
+│   ├── k9b-all.txt           # kubectl get all -n <lab_ns>
+│   ├── k9b-describe.txt     # kubectl describe deployment -n <lab_ns>
+│   └── k9b-pods.json         # kubectl get pods -n <lab_ns> -o json
 ├── incident/                 # Post-injection cluster state
-│   ├── injected-change.yaml  # The tracked manifest that caused the incident
+│   ├── injected-change.yaml  # The tracked manifest (namespace replaced)
 │   ├── pods.txt              # Pod status during incident
 │   ├── events.txt            # Kubernetes events during incident
 │   ├── cnpg-clusters.json    # CNPG status during incident
-│   ├── cnpg-cluster.yaml     # CNPG cluster manifest (live only)
-│   ├── describe-pods.txt     # Detailed pod descriptions (live only)
+│   ├── cnpg-cluster.yaml     # CNPG cluster manifest
+│   ├── describe-pods.txt     # Detailed pod descriptions
 │   ├── k9b-incidents.json    # k9b detected incidents
 │   └── k9b-incident-detail.json  # Detailed incident info
 ├── recovery-or-final/        # Post-recovery or final state
@@ -332,121 +251,82 @@ artifact-dir/
 │   └── cnpg-clusters.json
 └── logs/
     ├── lab-runner.log        # Timestamped lab execution log
-    ├── k3s.log               # K3s journal logs (live only)
-    ├── cnpg-operator.log     # CNPG operator logs (live only)
-    ├── k9b.log               # k9b agent logs (live only)
-    └── helm-k9b-status.txt   # Helm release status (live only)
+    ├── cnpg-operator.log     # CNPG operator logs
+    ├── cnpg-operator-preflight.txt  # CNPG preflight results
+    ├── k9b.log               # k9b agent logs
+    ├── helm-k9b-status.txt   # Helm release status
+    └── k9b-images.txt        # Observed k9b pod images
 ```
+
+## Secret Hygiene
+
+The lab explicitly avoids uploading:
+- kubeconfig contents
+- service account tokens
+- generated database passwords
+- OpenRouter keys
+- GitHub tokens
+- bearer tokens
+- private keys
+- full Secret resources
 
 ## Safety Boundaries
 
-1. **No production data**: Lab uses ephemeral storage and test credentials
-2. **Reversible incidents**: All incidents have documented recovery steps
-3. **No node-level operations**: No destructive node behavior
-4. **No external dependencies**: All components are self-contained (except K3s)
-5. **Secret hygiene**: API keys and tokens never logged or included in artifacts
-6. **CI-only live runs**: Live K3s only runs when explicitly requested
-7. **Lab-owned workloads**: Incident manifests create separate lab workloads, not CNPG internal mutations
+1. **Lab namespace cleanup**: Always runs via `if: always()` - deletes only `${LAB_NAMESPACE}`
+2. **No system namespace mutation**: Does not touch `cnpg-system`, `kube-system`, `harbor`
+3. **No CNPG operator installation**: Accepts preinstalled operator only
+4. **No nested K3s**: Runs on existing cluster infrastructure
+5. **k9b live detection deferred**: Not implemented in this ACT
 
-## Current Limitations
-
-1. **k9b live detection deferred**: Full k9b incident detection against live CNPG deferred to future ACT
-2. **No LLM triage implementation**: OpenRouter wiring exists but calls are no-ops
-3. **Single scenario**: Only `pod-failure` is implemented
-4. **No autonomous loop**: Full multi-pass diagnosis is deferred
-5. **Timing dependencies**: Uses sleeps instead of proper condition waits in some places
-6. **CNPG CRD assumptions**: Assumes k9b Incident CRD exists (not implemented in scaffold)
-7. **Intentionally workspace-built**: The lab runner requires `go.work` and cannot be built outside the workspace (e.g., `GOWORK=off go build` will fail). This is expected behavior for a nested module scaffold.
-
-## Next ACTs (Deferred)
-
-1. **ACT 2**: k9b live incident detection against CNPG cluster
-2. **ACT 3**: LLM triage integration with OpenRouter
-3. **ACT 4**: Additional incident scenarios (connection blocked, PVC failure, etc.)
-4. **ACT 5**: Autonomous multi-pass diagnosis loop
-5. **ACT 6**: Result comparison and triage quality scoring
-
-## CI / Testing
-
-Lab tests run automatically in GitHub Actions CI on PR/push when lab files change.
+## Build Commands
 
 ```bash
-# Run Go unit tests for lab package.
+# Sync workspace and build
+go work sync
+go build -o dist/k9b-cnpg-incident-lab ./cmd/k9b-cnpg-incident-lab
+
+# Run Go tests
 go test -v ./internal/lab/cnpg/...
-
-# Python verifier tests run in CI via pytest
-make test-lab
-
-# Local verification
-./scripts/verify_all.sh --act-local
 ```
+
+## Manual GitHub Actions Dispatch
+
+1. Navigate to **Actions** → **K3s CNPG Incident Lab**
+2. Click **Run workflow**
+3. Configure inputs:
+   - `artifact_retention_days`: Number of days (default: 7)
+   - `run_live_lab`: Set to `true` to run live namespace-mode lab
+   - `incident_scenario`: Choose incident scenario (default: pod-failure)
+4. Click **Run workflow**
 
 ## Files Changed
 
 | File | Purpose |
 |------|---------|
-| `cmd/k9b-cnpg-incident-lab/main.go` | Lab runner entrypoint |
-| `internal/lab/cnpg/config.go` | Configuration types and validation |
-| `internal/lab/cnpg/artifacts.go` | Artifact writing and secret detection |
-| `internal/lab/cnpg/k3s.go` | K3s cluster client and provisioning |
-| `internal/lab/cnpg/cnpg.go` | CloudNativePG operator and cluster management |
-| `internal/lab/cnpg/k9b.go` | k9b deployment and incident detection |
-| `internal/lab/cnpg/incident.go` | Incident scenario definitions |
-| `internal/lab/cnpg/runner.go` | Main lab orchestration |
-| `internal/lab/cnpg/config_test.go` | Go unit tests |
-| `.github/workflows/k9b-cnpg-incident-lab.yml` | CI workflow (build-and-verify + live K3s) |
-| `.github/workflows/k9b-cnpg-incident-lab-live.yml` | Live workflow with Docker build, Helm deploy |
-| `go.work` | Go workspace for local CI builds |
-| `scripts/verify_k3s_cnpg_incident_lab_artifact.py` | Artifact verifier |
-| `tests/test_verify_k3s_cnpg_incident_lab.py` | Verifier unit tests |
-| `tests/test_live_lab_config.py` | Live lab config tests (Docker build, Helm deploy, etc.) |
+| `.github/workflows/k9b-image-builder.yml` | Reusable image-build workflow (new) |
+| `.github/workflows/k9b-cnpg-incident-lab.yml` | Main CI workflow with image-builder integration |
+| `.github/workflows/k9b-cnpg-incident-lab-live.yml` | Live workflow in namespace mode |
+| `scripts/verify_k3s_cnpg_incident_lab_artifact.py` | Artifact verifier with namespace-mode support |
+| `tests/test_live_lab_config.py` | Workflow config tests (namespace mode) |
 | `fixtures/lab/live/pod-failure/injected-change.yaml` | Tracked incident manifest |
-| `fixtures/lab/pass/` | Passing fixture for verifier tests |
-| `fixtures/lab/fail-no-incident/` | Fail fixture (missing k9b incident) |
-| `fixtures/lab/fail-secret/` | Fail fixture (secret leakage) |
-| `Makefile` | Lab targets including live lab |
 | `docs/labs/k3s-cnpg-incident-lab.md` | This documentation |
 
 ## Verification
 
+### CI / Manual
+
+These verification commands are for CI and manual testing purposes only:
+
 ```bash
-# Verify artifact fixture passes.
+# Run lab config tests
+.venv/bin/python -m pytest tests/test_live_lab_config.py -v
+# Run verifier tests
+.venv/bin/python -m pytest tests/test_verify_k3s_cnpg_incident_lab.py -v
+
+# Verify passing fixture
 .venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py \
   --artifact-dir fixtures/lab/pass
 
-# Verify fail fixture fails as expected.
-.venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py \
-  --artifact-dir fixtures/lab/fail-no-incident
-# Expected: exit code 1, mentions missing k9b-incidents.json
-
-# Verify secret fixture fails as expected.
-.venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py \
-  --artifact-dir fixtures/lab/fail-secret
-# Expected: exit code 1, mentions password/secret detection
-
-# Verify live lab artifacts (after running live lab).
-make verify-lab-k9b-cnpg-incident-live ARTIFACT_DIR=./lab-artifacts/live
+# Run ACT-local verification
+./scripts/verify_all.sh --act-local
 ```
-
-## Commit Information
-
-- **ACT Type**: Product-faithful k9b deployment via Helm chart (no hardcoded image, tracked incident manifest)
-- **Scenario**: pod-failure
-- **OpenRouter**: Wired, not called
-- **Workflow**: `.github/workflows/k9b-cnpg-incident-lab.yml`
-- **Trigger mode**: workflow_dispatch + path-scoped PR/push
-- **Live K3s trigger**: workflow_dispatch with run_live_lab=true
-- **Go module/workspace strategy**: go.work with local workspace
-- **CI build command**: `go work sync && go build -o dist/k9b-cnpg-incident-lab ./cmd/k9b-cnpg-incident-lab`
-- **CI test command**: `go test -v ./internal/lab/cnpg/...` + pytest (via `make test-lab`)
-- **Artifact upload names**:
-  - Build-and-verify: `k9b-cnpg-incident-lab-ci-{run_id}`
-  - Live lab: `k9b-cnpg-incident-lab-live-{run_id}`
-- **K3s version**: v1.31.0+k3s1
-- **CNPG operator version**: 1.26.0
-- **Helm version**: 3.16.3
-- **k9b image**: Built from current checkout via `Dockerfile.python`, tagged with `${GITHUB_SHA}`
-- **Image import**: `docker save k9b-lab:${SHA} | sudo k3s ctr images import -`
-- **Helm deployment**: `helm upgrade --install k9b ./charts/k9b --set image.backend.repository=k9b-lab --set image.backend.tag=${SHA} --set image.backend.pullPolicy=Never`
-- **Incident manifest**: `fixtures/lab/live/pod-failure/injected-change.yaml` (tracked in repo)
-- **k9b live detection**: Deferred to future ACT

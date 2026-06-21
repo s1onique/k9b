@@ -1,7 +1,8 @@
 name: K3s CNPG Incident Lab
 
 # Build-and-verify workflow for the K3s/CNPG incident lab scaffold.
-# Live K3s provisioning is available via manual workflow_dispatch with run_live_lab=true.
+# Live namespace-mode lab is available via manual workflow_dispatch with run_live_lab=true.
+# The live lab runs in an existing K3s cluster with preinstalled CNPG operator.
 
 on:
   # Manual workflow dispatch for ad-hoc runs
@@ -13,7 +14,7 @@ on:
         default: '7'
         type: string
       run_live_lab:
-        description: 'Run live K3s/CNPG lab after build-and-verify'
+        description: 'Run live namespace-mode lab after build-and-verify'
         required: false
         default: false
         type: boolean
@@ -25,11 +26,12 @@ on:
         options:
           - pod-failure
 
-  # CI on PR when lab files change (build-and-verify only, no live K3s)
+  # CI on PR when lab files change (build-and-verify only, no live lab)
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
       - ".github/workflows/k9b-cnpg-incident-lab*.yml"
+      - ".github/workflows/k9b-image-builder.yml"
       - "cmd/k9b-cnpg-incident-lab/**"
       - "internal/lab/cnpg/**"
       - "scripts/verify_k3s_cnpg_incident_lab_artifact.py"
@@ -45,6 +47,7 @@ on:
       - main
     paths:
       - ".github/workflows/k9b-cnpg-incident-lab*.yml"
+      - ".github/workflows/k9b-image-builder.yml"
       - "cmd/k9b-cnpg-incident-lab/**"
       - "internal/lab/cnpg/**"
       - "scripts/verify_k3s_cnpg_incident_lab_artifact.py"
@@ -60,7 +63,7 @@ env:
 
 jobs:
   # ===========================================================================
-  # Build and Verify Job (always runs)
+  # Build and Verify Job (always runs on ubuntu-latest)
   # ===========================================================================
   build-and-verify:
     name: Build and Verify Lab
@@ -176,21 +179,46 @@ jobs:
           echo "Passing fixture: PASSED"
           echo "Fail fixtures: Correctly rejected"
           if [[ "${{ inputs.run_live_lab }}" == "true" ]]; then
-            echo "Live K3s lab will run in 'live-k3s-lab' job."
+            echo "Live namespace-mode lab will run in 'live-k3s-lab' job."
           else
-            echo "NOTE: Live K3s not requested. Use workflow_dispatch with run_live_lab=true."
+            echo "NOTE: Live lab not requested. Use workflow_dispatch with run_live_lab=true."
           fi
 
   # ===========================================================================
+  # Build Lab Images (only when live lab is requested)
+  # Reuses the canonical k9b-image-builder workflow - does NOT include
+  # Docker/buildctl/registry logic here.
+  # ===========================================================================
+  build-lab-images:
+    name: Build Lab Images
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_lab == true
+    needs: build-and-verify
+    uses: ./.github/workflows/k9b-image-builder.yml
+    with:
+      image_tag: ${{ github.sha }}
+      push: true
+      purpose: k3s-cnpg-lab
+    secrets: inherit
+
+  # ===========================================================================
   # Live K3s Lab Job (only runs when manually requested)
+  # Reuses Harbor image-build workflow outputs and deploys to existing cluster.
   # ===========================================================================
   live-k3s-lab:
-    name: Live K3s CNPG Lab
-    needs: build-and-verify
+    name: Live K3s CNPG Lab (Namespace Mode)
     if: github.event_name == 'workflow_dispatch' && inputs.run_live_lab == true
+    needs:
+      - build-and-verify
+      - build-lab-images
     uses: ./.github/workflows/k9b-cnpg-incident-lab-live.yml
     with:
-      k3s_version: 'v1.31.0+k3s1'
-      cnpg_version: '1.26.0'
       incident_scenario: ${{ inputs.incident_scenario || 'pod-failure' }}
       artifact_retention_days: ${{ inputs.artifact_retention_days || '7' }}
+      backend_image_repository: ${{ needs.build-lab-images.outputs.backend_image_repository }}
+      backend_image_tag: ${{ needs.build-lab-images.outputs.backend_image_tag }}
+      backend_image_ref: ${{ needs.build-lab-images.outputs.backend_image_ref }}
+      backend_image_digest: ${{ needs.build-lab-images.outputs.backend_image_digest }}
+      frontend_image_repository: ${{ needs.build-lab-images.outputs.frontend_image_repository }}
+      frontend_image_tag: ${{ needs.build-lab-images.outputs.frontend_image_tag }}
+      frontend_image_ref: ${{ needs.build-lab-images.outputs.frontend_image_ref }}
+    secrets: inherit

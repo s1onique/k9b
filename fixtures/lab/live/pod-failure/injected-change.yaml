@@ -1,18 +1,14 @@
 # Tracked pod-failure incident manifest for live K3s/CNPG incident lab.
 #
+# Namespace-mode compatible: This manifest is applied with -n flag in the workflow.
+# The hardcoded namespace "cnpg-lab" will be replaced with $LAB_NAMESPACE via sed.
+#
 # Lab-owned failing app pod with deterministic readiness probe failure.
 # This is NOT a CNPG internal mutation - it's a separate lab-owned workload.
 #
 # Applied by: .github/workflows/k9b-cnpg-incident-lab-live.yml
 # Copied to:  lab-artifacts/live/incident/injected-change.yaml
 #
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: cnpg-lab
-  labels:
-    lab.k9b.io/managed: "true"
 ---
 apiVersion: v1
 kind: Pod

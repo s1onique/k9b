@@ -1,0 +1,264 @@
+# Reusable workflow for building k9b images and pushing to Harbor.
+#
+# This workflow is owned by the image-builder team and encapsulates:
+# - Harbor registry/project conventions
+# - Harbor authentication
+# - BuildKit/rootless build implementation
+# - image tags, digests, build cache settings
+# - CA trust for Harbor
+# - build-platform settings
+#
+# Callers MUST NOT include:
+# - docker build / docker push
+# - docker save / docker version
+# - /var/run/docker.sock
+# - buildctl / buildctl-daemonless.sh
+# - Harbor auth material construction
+# - registry password handling
+#
+# Callers MUST only consume image outputs.
+
+name: k9b-image-builder
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: 'Image tag to use (typically github.sha)'
+        required: true
+        type: string
+      push:
+        description: 'Whether to push images to registry'
+        required: false
+        type: boolean
+        default: true
+      purpose:
+        description: 'Purpose identifier (e.g., lab, production)'
+        required: false
+        type: string
+        default: lab
+    outputs:
+      backend_image_repository:
+        description: 'Backend image repository (full registry path)'
+        value: ${{ jobs.build-push.outputs.backend_image_repository }}
+      backend_image_tag:
+        description: 'Backend image tag'
+        value: ${{ jobs.build-push.outputs.backend_image_tag }}
+      backend_image_ref:
+        description: 'Backend image reference (repository:tag)'
+        value: ${{ jobs.build-push.outputs.backend_image_ref }}
+      backend_image_digest:
+        description: 'Backend image digest (sha256:...)'
+        value: ${{ jobs.build-push.outputs.backend_image_digest }}
+      frontend_image_repository:
+        description: 'Frontend image repository (full registry path)'
+        value: ${{ jobs.build-push.outputs.frontend_image_repository }}
+      frontend_image_tag:
+        description: 'Frontend image tag'
+        value: ${{ jobs.build-push.outputs.frontend_image_tag }}
+      frontend_image_ref:
+        description: 'Frontend image reference (repository:tag)'
+        value: ${{ jobs.build-push.outputs.frontend_image_ref }}
+      frontend_image_digest:
+        description: 'Frontend image digest (sha256:...)'
+        value: ${{ jobs.build-push.outputs.frontend_image_digest }}
+
+env:
+  # Harbor registry configuration
+  REGISTRY: harbor-pve1.spbnix.local
+  HARBOR_PROJECT: k9b
+  BACKEND_IMAGE_NAME: k9b-backend
+  FRONTEND_IMAGE_NAME: k9b-frontend
+
+jobs:
+  build-push:
+    name: Build and Push k9b Images
+    # Docker-capable runner required for QEMU, Buildx, build, and push operations.
+    runs-on: spbnix-k8s-docker
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    outputs:
+      backend_image_repository: ${{ steps.meta-backend.outputs.image_repository }}
+      backend_image_tag: ${{ steps.meta-backend.outputs.image_tag }}
+      backend_image_ref: ${{ steps.meta-backend.outputs.image_ref }}
+      backend_image_digest: ${{ steps.backend-digest.outputs.digest }}
+      frontend_image_repository: ${{ steps.meta-frontend.outputs.image_repository }}
+      frontend_image_tag: ${{ steps.meta-frontend.outputs.image_tag }}
+      frontend_image_ref: ${{ steps.meta-frontend.outputs.image_ref }}
+      frontend_image_digest: ${{ steps.frontend-digest.outputs.digest }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # =============================================================================
+      # Docker preflight
+      # =============================================================================
+      - name: Docker preflight
+        run: |
+          set -eux
+          echo "runner=${RUNNER_NAME:-unknown}"
+          echo "os=${RUNNER_OS:-unknown}"
+          echo "arch=${RUNNER_ARCH:-unknown}"
+          which docker
+          docker version
+          docker info
+          docker buildx version
+          ls -l /var/run/docker.sock
+
+      # =============================================================================
+      # CA Trust setup (MUST be before QEMU/Buildx because they pull from Harbor)
+      # =============================================================================
+      - name: Install SPbNIX Harbor CA
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+          SKIP_RUNNER_DOCKER_CERTS_D: "1"
+        run: .github/scripts/install-spbnix-harbor-ca.sh
+
+      # =============================================================================
+      # Verify Docker daemon trusts Harbor
+      # =============================================================================
+      - name: Verify Docker daemon trusts Harbor
+        run: |
+          set -euo pipefail
+          echo "Runner-side Docker cert path:"
+          ls -l /etc/docker/certs.d/harbor-pve1.spbnix.local/ca.crt 2>/dev/null || echo "NOT FOUND in runner"
+          echo ""
+          echo "Docker daemon probe (pulls from Harbor):"
+          docker pull harbor-pve1.spbnix.local/dockerhub-cache/library/busybox:latest || {
+            echo "ERROR: docker pull failed - Docker daemon does not trust Harbor CA"
+            echo "If runner:/etc/docker/certs.d exists but dind sidecar does not,"
+            echo "the ARC runner scale set pod template needs CA volume mount."
+            exit 1
+          }
+
+      # =============================================================================
+      # QEMU setup for multi-arch builds
+      # =============================================================================
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+          image: harbor-pve1.spbnix.local/dockerhub-cache/tonistiigi/binfmt:latest
+          # Use Harbor proxy cache instead of GitHub Actions cache for faster, local-first pulls
+          cache-image: false
+
+      # =============================================================================
+      # BuildKit setup
+      # =============================================================================
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1
+
+      # =============================================================================
+      # Patch BuildKit containers with Harbor CA
+      # =============================================================================
+      - name: Patch BuildKit containers with Harbor CA
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+          BUILDX_BUILDER_NAME: ${{ steps.buildx.outputs.name }}
+          SKIP_RUNNER_DOCKER_CERTS_D: "1"
+        run: .github/scripts/install-spbnix-harbor-ca.sh
+
+      # =============================================================================
+      # Harbor login
+      # =============================================================================
+      - name: Login to Harbor
+        if: inputs.push == true
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_TOKEN }}
+
+      # =============================================================================
+      # Build and push backend image
+      # =============================================================================
+      - name: Extract backend metadata
+        id: meta-backend
+        run: |
+          echo "image_repository=${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}" >> $GITHUB_OUTPUT
+          echo "image_tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          echo "image_ref=${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.python
+          platforms: linux/amd64,linux/arm64
+          push: ${{ inputs.push }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${{ inputs.image_tag }}
+          cache-from: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-backend:buildcache
+          cache-to: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-backend:buildcache,mode=max
+          build-args: |
+            KUBECTL_VERSION=v1.29.6
+            HELM_VERSION=3.20.1
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${{ inputs.image_tag }},push=true
+
+      - name: Get backend image digest
+        id: backend-digest
+        if: inputs.push == true
+        run: |
+          echo "Fetching digest for ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${{ inputs.image_tag }}"
+          DIGEST=$(docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${{ inputs.image_tag }} --format '{{.digest}}')
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "Backend image digest: $DIGEST"
+
+      # =============================================================================
+      # Build and push frontend image
+      # =============================================================================
+      - name: Extract frontend metadata
+        id: meta-frontend
+        run: |
+          echo "image_repository=${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}" >> $GITHUB_OUTPUT
+          echo "image_tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          echo "image_ref=${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ inputs.push }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ inputs.image_tag }}
+          cache-from: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-frontend:buildcache
+          cache-to: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-frontend:buildcache,mode=max
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ inputs.image_tag }},push=true
+
+      - name: Get frontend image digest
+        id: frontend-digest
+        if: inputs.push == true
+        run: |
+          echo "Fetching digest for ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ inputs.image_tag }}"
+          DIGEST=$(docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ inputs.image_tag }} --format '{{.digest}}')
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "Frontend image digest: $DIGEST"
+
+      # =============================================================================
+      # Summary
+      # =============================================================================
+      - name: Summary
+        run: |
+          echo "=== k9b Image Build Summary ==="
+          echo "Purpose: ${{ inputs.purpose }}"
+          echo "Tag: ${{ inputs.image_tag }}"
+          echo "Push: ${{ inputs.push }}"
+          echo ""
+          echo "Backend image:"
+          echo "  Repository: ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}"
+          echo "  Tag: ${{ inputs.image_tag }}"
+          echo "  Ref: ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${{ inputs.image_tag }}"
+          echo ""
+          echo "Frontend image:"
+          echo "  Repository: ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}"
+          echo "  Tag: ${{ inputs.image_tag }}"
+          echo "  Ref: ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ inputs.image_tag }}"
