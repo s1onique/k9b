@@ -113,6 +113,13 @@
       "required_command_fragments": ["ruff check"],
       "reason": "Ruff linting"
     },
+    "shell-containment": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"]
+      },
+      "required_command_fragments": ["verify_shell_containment.py"],
+      "reason": "Shell containment policy enforcement"
+    },
     "structured-output": {
       "ci_equivalent": {
         ".github/workflows/harbor.yml": ["lint-policy"]
@@ -455,6 +462,11 @@
       "gate": "docs-inventory",
       "workflow": ".github/workflows/harbor.yml",
       "reason": "Local-only gate; docs truthfulness verified locally"
+    },
+    {
+      "gate": "shell-containment",
+      "workflow": ".github/workflows/harbor.yml",
+      "reason": "Local-only gate; shell containment policy verified locally"
     }
   ]
 }

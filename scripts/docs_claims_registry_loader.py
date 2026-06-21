@@ -6,6 +6,7 @@ Handles CSV reading, header validation, and row normalization.
 from __future__ import annotations
 
 import csv
+from pathlib import Path
 
 from docs_claims_registry_contract import (
     INVENTORY_CSV,
@@ -43,6 +44,24 @@ def read_inventory_paths() -> tuple[set[str], str | None]:
         return set(), f"Inventory CSV parse error: {e}"
     except Exception as e:
         return set(), f"Error reading inventory: {e}"
+
+
+def read_csv_header(csv_path: Path) -> tuple[list[str], str | None]:
+    """Read the CSV header row. Returns (header_columns, error_msg)."""
+    if not csv_path.exists():
+        return [], f"File not found: {csv_path}"
+
+    try:
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            header = next(reader, None)
+            if header is None:
+                return [], "CSV file is empty"
+            return header, None
+    except csv.Error as e:
+        return [], f"CSV parse error: {e}"
+    except Exception as e:
+        return [], f"Error reading CSV: {e}"
 
 
 def get_inventory_status(doc_path: str) -> str | None:

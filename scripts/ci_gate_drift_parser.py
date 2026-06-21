@@ -3,31 +3,58 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
+# Add scripts to path for imports
+SCRIPT_DIR = Path(__file__).parent
+sys.path.insert(0, str(SCRIPT_DIR))
 
-def parse_verify_all_gate_ids(verify_all_path: Path) -> set[str]:
-    """Parse gate IDs from verify_all.sh.
 
-    Extracts step IDs from _run_and_record calls in all lanes (python, frontend, helm).
-    Returns a set of gate IDs found in verify_all.sh.
+def parse_verify_all_gate_ids(repo_root: Path) -> set[str]:
+    """Parse gate IDs from verification source of truth.
+
+    The canonical source of truth for gate IDs is now verify_profile_model.py STEPS dict.
+    We also check verify_all.sh for any gates that might be defined there.
+
+    Returns a set of gate IDs found in the verification system.
     """
-    if not verify_all_path.exists():
-        return set()
+    gate_ids: set[str] = set()
 
-    with open(verify_all_path, encoding="utf-8") as f:
-        content = f.read()
+    # Primary source: verify_profile_model.py STEPS dict
+    profile_model_path = repo_root / "scripts" / "verify_profile_model.py"
+    if profile_model_path.exists():
+        try:
+            # Import STEPS from verify_profile_model
+            # We need to be careful about imports, so we'll parse the file directly
+            with open(profile_model_path, encoding="utf-8") as f:
+                content = f.read()
 
-    gate_ids = set()
+            # Extract step IDs from STEPS dict definitions
+            # Pattern: "gate-id": { ... }
+            step_pattern = re.compile(r'^\s+"([^"]+)":\s*\{', re.MULTILINE)
+            for match in step_pattern.finditer(content):
+                gate_id = match.group(1)
+                # Skip internal keys that look like metadata
+                if not gate_id.startswith("_"):
+                    gate_ids.add(gate_id)
+        except Exception:
+            pass  # Fall back to verify_all.sh parsing
 
-    # Pattern to match _run_and_record calls across all lanes:
-    # _run_and_record "python" "gate-id" "message" ...
-    # _run_and_record "frontend" "gate-id" "message" ...
-    # _run_and_record "helm" "gate-id" "message" ...
-    # We extract the second quoted argument as the gate ID
-    pattern = re.compile(r'_run_and_record\s+"[^"]+"\s+"([^"]+)"', re.MULTILINE)
-    for match in pattern.finditer(content):
-        gate_ids.add(match.group(1))
+    # Secondary source: verify_all.sh (legacy, for any gates defined there)
+    verify_all_path = repo_root / "scripts" / "verify_all.sh"
+    if verify_all_path.exists():
+        try:
+            with open(verify_all_path, encoding="utf-8") as f:
+                content = f.read()
+
+            # Pattern to match _run_and_record calls across all lanes:
+            # _run_and_record "python" "gate-id" "message" ...
+            pattern = re.compile(r'_run_and_record\s+"[^"]+"\s+"([^"]+)"', re.MULTILINE)
+            for match in pattern.finditer(content):
+                gate_ids.add(match.group(1))
+        except Exception:
+            pass
 
     return gate_ids
 

@@ -5,7 +5,7 @@ Validation checks for candidate CSV content.
 
 from __future__ import annotations
 
-from scripts.docs_claim_candidate_coverage_contract import (
+from docs_claim_candidate_coverage_contract import (
     REGISTRATION_STATUS_VALUES,
     SEVERITY_VALUES,
     CoverageCheckResult,

@@ -68,9 +68,8 @@ def run_verification(verbose: bool = False) -> int:
             print(f"  - {err}")
         return 1
 
-    # Parse verify_all.sh gate IDs and compare with manifest
-    verify_all_path = REPO_ROOT / "scripts" / "verify_all.sh"
-    verify_all_gates = parse_verify_all_gate_ids(verify_all_path)
+    # Parse gate IDs from verification source of truth (verify_profile_model.py)
+    verify_all_gates = parse_verify_all_gate_ids(REPO_ROOT)
     manifest_gates = set(manifest.get("required_gates", {}).keys())
     explicit_extras = {"ci-gate-drift"}
 

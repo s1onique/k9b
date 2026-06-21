@@ -30,5 +30,5 @@ def read_csv(path: Path) -> tuple[list[dict[str, str]], str | None]:
 def load_candidates() -> tuple[list[dict[str, str]], str | None]:
     """Load candidates from generated CSV (shards or single file)."""
     # Import here to avoid circular imports
-    from scripts.docs_claim_candidates_shard import read_all_shards
+    from docs_claim_candidates_shard import read_all_shards
     return read_all_shards()

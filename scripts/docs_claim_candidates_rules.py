@@ -9,14 +9,14 @@ import hashlib
 import re
 from pathlib import Path
 
-from scripts.docs_claim_candidates_contract import (
+from docs_claim_candidates_contract import (
     CLAIM_TYPE_PATTERNS,
     MIN_PROSE_LENGTH,
     REPO_ROOT,
     SEVERITY_BY_TYPE,
     ScanResult,
 )
-from scripts.docs_claim_candidates_loader import (
+from docs_claim_candidates_loader import (
     get_claim_trace_required,
     get_doc_class,
     get_truth_status,

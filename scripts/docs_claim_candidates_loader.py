@@ -8,7 +8,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from scripts.docs_claim_candidates_contract import (
+from docs_claim_candidates_contract import (
     DOCS_DIR,
     INVENTORY_CSV,
     REPO_ROOT,

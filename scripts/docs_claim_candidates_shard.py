@@ -8,8 +8,8 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from scripts.docs_claim_candidates_contract import GENERATED_CSV, GENERATED_CSV_DIR
-from scripts.docs_claim_candidates_rules import CSV_FIELDS
+from docs_claim_candidates_contract import GENERATED_CSV, GENERATED_CSV_DIR
+from docs_claim_candidates_rules import CSV_FIELDS
 
 NUM_SHARDS = 30
 
