@@ -4,11 +4,7 @@
 # Minimal permissions required for the k9b-cnpg-incident-lab-live workflow
 # to run on the spbnix-k8s ARC runner scale set.
 #
-# IMPORTANT: Replace the placeholder service account namespace/name below
-# with the actual values from the live lab run:
-#   1. Run the live workflow once to identify the runner service account
-#   2. Check the output of "Kubernetes Subject Diagnostics" step
-#   3. Update the ClusterRoleBinding and RoleBinding subjects below
+# Runner ServiceAccount: system:serviceaccount:github-actions-runner:spbnix-k8s-gha-rs-no-permission
 #
 # Application (one-time, by cluster admin):
 #   kubectl apply -f deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml
@@ -116,18 +112,9 @@ roleRef:
   kind: ClusterRole
   name: k9b-cnpg-live-lab-runner-cluster
 subjects:
-  # =============================================================================
-  # TODO: Replace with actual runner service account from live lab run
-  #
-  # To identify the correct service account:
-  # 1. Run the live workflow once
-  # 2. Check "ServiceAccount namespace:" in "Kubernetes Subject Diagnostics" step
-  # 3. Check "kubectl auth whoami" output for the exact service account name
-  # 4. Update the namespace and name below
-  # =============================================================================
   - kind: ServiceAccount
-    name: <RUNNER_SERVICE_ACCOUNT>
-    namespace: <RUNNER_NAMESPACE>
+    name: spbnix-k8s-gha-rs-no-permission
+    namespace: github-actions-runner
 
 ---
 # ClusterRoleBinding for lab namespace resources
@@ -146,12 +133,9 @@ roleRef:
   kind: ClusterRole
   name: k9b-cnpg-live-lab-runner-lab-namespace
 subjects:
-  # =============================================================================
-  # TODO: Replace with actual runner service account from live lab run
-  # =============================================================================
   - kind: ServiceAccount
-    name: <RUNNER_SERVICE_ACCOUNT>
-    namespace: <RUNNER_NAMESPACE>
+    name: spbnix-k8s-gha-rs-no-permission
+    namespace: github-actions-runner
 
 ---
 # RoleBinding for cnpg-system namespace (read-only CNPG operator access)
@@ -169,12 +153,9 @@ roleRef:
   kind: Role
   name: k9b-cnpg-live-lab-runner-cnpg-system
 subjects:
-  # =============================================================================
-  # TODO: Replace with actual runner service account from live lab run
-  # =============================================================================
   - kind: ServiceAccount
-    name: <RUNNER_SERVICE_ACCOUNT>
-    namespace: <RUNNER_NAMESPACE>
+    name: spbnix-k8s-gha-rs-no-permission
+    namespace: github-actions-runner
 
 # =============================================================================
 # Design Notes:
@@ -192,6 +173,10 @@ subjects:
 # Secrets policy:
 # - secrets create/update: Required for Helm chart resource creation
 # - secrets get/list/watch: NOT granted (would leak credentials)
+#
+# Helm ConfigMap driver:
+# - The live workflow uses HELM_DRIVER=configmap to avoid reading Secret resources
+#   that would require additional permissions not granted here
 #
 # What's intentionally NOT granted:
 # - No cluster-admin binding

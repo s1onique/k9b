@@ -68,6 +68,8 @@ env:
   PYTHON_VERSION: '3.13'
   # Lab namespace derived from run ID
   LAB_NAMESPACE: k9b-cnpg-lab-${{ github.run_id }}
+  # Use ConfigMap driver to avoid Secret read permissions for Helm release metadata
+  HELM_DRIVER: configmap
 
 jobs:
   live-k3s-lab:

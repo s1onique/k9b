@@ -8,6 +8,7 @@ WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-cn
 WORKFLOW_LIVE_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-cnpg-incident-lab-live.yml"
 IMAGE_BUILDER_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-image-builder.yml"
 INCIDENT_MANIFEST = Path(__file__).parent.parent / "fixtures" / "lab" / "live" / "pod-failure" / "injected-change.yaml"
+RBAC_MANIFEST = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
 
 
 def _strip_comments(content: str) -> str:
@@ -754,6 +755,14 @@ class TestHelmDeployment:
         assert "--timeout" in content, \
             "Should use --timeout flag"
 
+    def test_live_workflow_uses_helm_configmap_driver(self) -> None:
+        """Live workflow should use HELM_DRIVER=configmap to avoid Secret read permissions."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "HELM_DRIVER" in content, \
+            "Should set HELM_DRIVER environment variable"
+        assert "configmap" in content, \
+            "Should use configmap driver for Helm"
+
 
 class TestImageAssertion:
     """Test that live workflow asserts k9b pod uses image-builder output."""
@@ -779,27 +788,23 @@ class TestRBACManifest:
 
     def test_rbac_manifest_exists(self) -> None:
         """RBAC manifest should exist."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        assert rbac_manifest.exists(), f"RBAC manifest should exist at {rbac_manifest}"
+        assert RBAC_MANIFEST.exists(), f"RBAC manifest should exist at {RBAC_MANIFEST}"
 
     def test_rbac_manifest_contains_cluster_role(self) -> None:
         """RBAC manifest should contain ClusterRole."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        content = rbac_manifest.read_text()
+        content = RBAC_MANIFEST.read_text()
         assert "kind: ClusterRole" in content, \
             "Manifest should contain ClusterRole"
 
     def test_rbac_manifest_contains_cluster_role_binding(self) -> None:
         """RBAC manifest should contain ClusterRoleBinding."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        content = rbac_manifest.read_text()
+        content = RBAC_MANIFEST.read_text()
         assert "kind: ClusterRoleBinding" in content, \
             "Manifest should contain ClusterRoleBinding"
 
     def test_rbac_manifest_no_cluster_admin(self) -> None:
         """RBAC manifest should NOT bind cluster-admin."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        content = rbac_manifest.read_text()
+        content = RBAC_MANIFEST.read_text()
         # Check only non-comment lines
         lines = content.split('\n')
         for line in lines:
@@ -811,8 +816,7 @@ class TestRBACManifest:
 
     def test_rbac_manifest_no_wildcard_verbs(self) -> None:
         """RBAC manifest should NOT use wildcard verbs."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        content = rbac_manifest.read_text()
+        content = RBAC_MANIFEST.read_text()
         # Check for wildcard verbs in rules (not in comments)
         lines = content.split('\n')
         for line in lines:
@@ -825,8 +829,7 @@ class TestRBACManifest:
 
     def test_rbac_manifest_no_wildcard_resources(self) -> None:
         """RBAC manifest should NOT use wildcard resources."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        content = rbac_manifest.read_text()
+        content = RBAC_MANIFEST.read_text()
         # Check for wildcard resources in rules
         lines = content.split('\n')
         for line in lines:
@@ -839,8 +842,7 @@ class TestRBACManifest:
 
     def test_rbac_manifest_has_service_account_subject(self) -> None:
         """RBAC manifest should have ServiceAccount subject."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        content = rbac_manifest.read_text()
+        content = RBAC_MANIFEST.read_text()
         assert "kind: ServiceAccount" in content, \
             "Manifest should have ServiceAccount subject"
         assert "- kind: ServiceAccount" in content, \
@@ -848,25 +850,15 @@ class TestRBACManifest:
 
     def test_rbac_manifest_has_proper_labels(self) -> None:
         """RBAC manifest should have proper labels."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        content = rbac_manifest.read_text()
+        content = RBAC_MANIFEST.read_text()
         assert "app.kubernetes.io/name: k9b-cnpg-incident-lab" in content, \
             "Manifest should have app label"
         assert "app.kubernetes.io/component: ci-rbac" in content, \
             "Manifest should have component label"
 
-    def test_rbac_manifest_documents_service_account_placeholder(self) -> None:
-        """RBAC manifest should document the placeholder for service account."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        content = rbac_manifest.read_text()
-        # Should have a comment or documentation about replacing the placeholder
-        assert "<RUNNER_SERVICE_ACCOUNT>" in content or "TODO" in content, \
-            "Manifest should document placeholder for service account"
-
     def test_rbac_manifest_has_namespace_lifecycle(self) -> None:
         """RBAC manifest should include namespace lifecycle permissions."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        content = rbac_manifest.read_text()
+        content = RBAC_MANIFEST.read_text()
         assert '"namespaces"' in content, \
             "Manifest should include namespaces resource"
         assert "create" in content and "delete" in content, \
@@ -874,9 +866,90 @@ class TestRBACManifest:
 
     def test_rbac_manifest_has_cnpg_permissions(self) -> None:
         """RBAC manifest should include CNPG Cluster permissions."""
-        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
-        content = rbac_manifest.read_text()
+        content = RBAC_MANIFEST.read_text()
         assert "clusters.postgresql.cnpg.io" in content or "clusters" in content, \
             "Manifest should include CNPG Cluster permissions"
         assert "postgresql.cnpg.io" in content, \
             "Manifest should include CNPG API group"
+
+    def test_rbac_manifest_has_actual_runner_service_account(self) -> None:
+        """RBAC manifest should have actual runner service account, not placeholder."""
+        content = RBAC_MANIFEST.read_text()
+        # Check no placeholders remain
+        assert "<RUNNER_SERVICE_ACCOUNT>" not in content, \
+            "Manifest should not contain <RUNNER_SERVICE_ACCOUNT> placeholder"
+        assert "<RUNNER_NAMESPACE>" not in content, \
+            "Manifest should not contain <RUNNER_NAMESPACE> placeholder"
+        # Check actual values are present
+        assert "name: spbnix-k8s-gha-rs-no-permission" in content, \
+            "Manifest should contain actual service account name"
+        assert "namespace: github-actions-runner" in content, \
+            "Manifest should contain actual service account namespace"
+
+    def test_rbac_manifest_no_invalid_namespace_rule_field(self) -> None:
+        """RBAC manifest should NOT have 'namespaces:' field inside RBAC rules."""
+        content = RBAC_MANIFEST.read_text()
+        # The word "namespaces" should only appear as a resource, not as a field key
+        lines = content.split('\n')
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            # Check that we don't have "namespaces:" as a rule field (it would mean someone tried to
+            # grant namespace-level scoping incorrectly)
+            assert not re.match(r'^\s*namespaces:\s*$', stripped), \
+                f"Manifest should not have 'namespaces:' field in RBAC rules: {stripped}"
+
+    def test_rbac_manifest_does_not_grant_secret_read(self) -> None:
+        """RBAC manifest should NOT grant Secret get/list/watch verbs."""
+        content = RBAC_MANIFEST.read_text()
+        # Check that secrets are only granted create/update/delete
+        assert 'resources: ["secrets"]' in content, \
+            "Manifest should grant secrets permissions"
+        # Check that we have create, delete, patch, update for secrets
+        assert 'verbs: ["create", "delete", "patch", "update"]' in content, \
+            "Manifest should grant only create/update/delete for secrets"
+        # Check that we don't have get/list/watch on secrets
+        # Look for patterns like 'verbs: ["get"]' or 'verbs: ["get", "list", "watch"]' after secrets resource
+        secret_block_match = re.search(
+            r'resources:\s*\[\s*["\']?secrets["\']?\s*\].*?verbs:\s*\[(.*?)\]',
+            content,
+            re.DOTALL
+        )
+        if secret_block_match:
+            verbs = secret_block_match.group(1)
+            assert "get" not in verbs.lower(), \
+                f"Manifest should NOT grant 'get' verb on secrets: found {verbs}"
+            assert "list" not in verbs.lower(), \
+                f"Manifest should NOT grant 'list' verb on secrets: found {verbs}"
+            assert "watch" not in verbs.lower(), \
+                f"Manifest should NOT grant 'watch' verb on secrets: found {verbs}"
+
+    def test_rbac_manifest_documents_actual_service_account(self) -> None:
+        """RBAC manifest should document the actual runner service account."""
+        content = RBAC_MANIFEST.read_text()
+        # Should document the actual service account in comments
+        assert "spbnix-k8s-gha-rs-no-permission" in content, \
+            "Manifest should document actual service account name"
+        assert "github-actions-runner" in content, \
+            "Manifest should document actual service account namespace"
+        # Full subject format in comments
+        assert "system:serviceaccount:github-actions-runner:spbnix-k8s-gha-rs-no-permission" in content, \
+            "Manifest should document full service account subject"
+
+    def test_rbac_manifest_deployments_under_apps_api_group(self) -> None:
+        """RBAC manifest should grant deployments under apiGroups: apps for cnpg-system."""
+        content = RBAC_MANIFEST.read_text()
+        # Find the Role for cnpg-system
+        role_match = re.search(
+            r'kind: Role.*?name: k9b-cnpg-live-lab-runner-cnpg-system.*?rules:(.*?)(?=---\s*#|$)',
+            content,
+            re.DOTALL
+        )
+        assert role_match, "Should have Role for cnpg-system"
+        role_rules = role_match.group(1)
+        # Check that deployments are under apps apiGroup
+        assert 'apiGroups: ["apps"]' in role_rules, \
+            "Role for cnpg-system should use apiGroups: [\"apps\"] for deployments"
+        assert 'resources: ["deployments"]' in role_rules, \
+            "Role for cnpg-system should grant deployments"

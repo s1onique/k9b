@@ -166,10 +166,11 @@ The live lab does NOT grant itself permissions. To run the live lab, a cluster a
 kubectl apply -f deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml
 ```
 
-**Important**: Replace the placeholder service account in the manifest:
-1. Run the live workflow once to identify the runner service account
-2. Check the "Kubernetes Subject Diagnostics" step output for: `system:serviceaccount:<namespace>:<name>`
-3. Update the `ClusterRoleBinding` and `RoleBinding` subjects with the actual namespace and name
+**Runner ServiceAccount**: `system:serviceaccount:github-actions-runner:spbnix-k8s-gha-rs-no-permission`
+
+The manifest is now apply-ready with the actual runner ServiceAccount substituted. No manual replacement is required.
+
+**Helm ConfigMap Driver**: The live workflow uses `HELM_DRIVER=configmap` to avoid granting Secret read access for Helm release metadata. This allows Helm to store release information in ConfigMaps instead of Secrets.
 
 The manifest structure:
 - **ClusterRole + ClusterRoleBinding** for cluster-scoped resources (namespaces, nodes, CRD)
