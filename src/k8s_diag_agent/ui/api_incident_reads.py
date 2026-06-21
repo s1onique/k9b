@@ -16,7 +16,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .api_incident_diagnosis_loop_summary import build_automatic_diagnosis_loop_summary
 from .api_payloads_incident_reads import (
+    AutomaticDiagnosisLoopSummary,
     AutomaticDiagnosisReviewPayload,
     IncidentDetailPayload,
     IncidentEventPayload,
@@ -305,6 +307,17 @@ def build_incident_detail_payload(
     # Build automatic diagnosis review payload
     auto_review = build_automatic_diagnosis_review_payload(external_analysis_dir, incident.incident_id)
 
+    # Build automatic diagnosis loop summary from timeline events
+    # Serialize events for the summary builder
+    events_data = [build_incident_event_payload(e) for e in incident.get_timeline()]
+    review_packet_available = auto_review.get("available", False)
+    review_packet_id = auto_review.get("artifact_name")  # Use artifact_name as ID
+    loop_summary = build_automatic_diagnosis_loop_summary(
+        events=events_data,
+        review_packet_available=review_packet_available,
+        review_packet_id=review_packet_id,
+    )
+
     # Build the payload explicitly to avoid type: ignore
     result: IncidentDetailPayload = {
         "incident_id": incident.incident_id,
@@ -336,5 +349,7 @@ def build_incident_detail_payload(
         "suggested_checks": suggested_checks,
         # Automatic diagnosis review - bounded summary only
         "automatic_diagnosis_review": auto_review,
+        # Automatic diagnosis loop summary - derived from timeline events
+        "automatic_diagnosis_loop_summary": loop_summary,
     }
     return result

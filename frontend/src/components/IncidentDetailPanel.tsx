@@ -18,6 +18,7 @@
  */
 
 import type { IncidentDetailPayload } from "../api";
+import { IncidentAutomaticDiagnosisLoopCard } from "./IncidentAutomaticDiagnosisLoopCard";
 import { IncidentAutomaticDiagnosisReviewPanel } from "./IncidentAutomaticDiagnosisReviewPanel";
 import { IncidentDiagnosisLoopPanel } from "./IncidentDiagnosisLoopPanel";
 
@@ -472,6 +473,11 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({ incide
       {/* Automatic diagnosis review - bounded summary only */}
       <IncidentAutomaticDiagnosisReviewPanel
         automaticDiagnosisReview={incident.automatic_diagnosis_review}
+      />
+
+      {/* Automatic diagnosis loop summary - current-state summary from timeline */}
+      <IncidentAutomaticDiagnosisLoopCard
+        loopSummary={incident.automatic_diagnosis_loop_summary}
       />
 
       {/* Read-only notice */}

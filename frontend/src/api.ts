@@ -881,6 +881,8 @@ export type IncidentDetailPayload = IncidentSummaryPayload & {
   events: IncidentEvent[];
   suggested_checks: IncidentSuggestedCheck[];
   automatic_diagnosis_review: AutomaticDiagnosisReviewPayload;
+  // Automatic diagnosis loop summary - derived from timeline events
+  automatic_diagnosis_loop_summary: AutomaticDiagnosisLoopSummary;
 };
 
 export type IncidentsListResponse = {
@@ -954,6 +956,73 @@ export const getIncident = async (incidentId: string): Promise<IncidentDetailPay
   }
 
   return (await response.json()) as IncidentDetailPayload;
+};
+
+/**
+ * Automatic diagnosis loop summary status values.
+ */
+export type DiagnosisLoopStatus =
+  | "not_run"
+  | "running_or_started"
+  | "completed"
+  | "failed_or_unavailable";
+
+/**
+ * Read-only summary of the latest automatic diagnosis loop run.
+ * 
+ * This payload provides a compact current-state summary derived from
+ * incident timeline events and existing automatic diagnosis review metadata.
+ * 
+ * The summary answers:
+ * - Has automatic diagnosis run for this incident?
+ * - Is the latest known state started/running, completed, or failed/unavailable?
+ * - Was a review packet produced?
+ * - How many checks were requested/run/rejected?
+ * - Did the system remain read-only and non-remediating?
+ * 
+ * Status values:
+ * - "not_run": No diagnosis-loop lifecycle events exist
+ * - "running_or_started": Latest event is diagnosis_loop_started
+ * - "completed": Latest event is diagnosis_loop_completed
+ * - "failed_or_unavailable": Latest event is diagnosis_loop_failed
+ * 
+ * "Latest" is based on occurred_at, not input list order.
+ * 
+ * Hard constraints:
+ * - NO remediation actions
+ * - NO raw event data
+ * - NO raw packet contents
+ * - NO logs, stdout/stderr, stack traces
+ */
+export type AutomaticDiagnosisLoopSummary = {
+  // Status of the latest diagnosis loop run
+  status: DiagnosisLoopStatus;
+
+  // Timestamps (ISO format) - null if that event hasn't occurred
+  latest_started_at: string | null;
+  latest_completed_at: string | null;
+  latest_failed_at: string | null;
+
+  // Latest event metadata
+  latest_event_id: string | null;
+  latest_event_type: string | null;
+
+  // Failure information (from failed events)
+  unavailable_reason: string | null;
+
+  // Check counts (from completed events)
+  checks_requested: number | null;
+  checks_run: number | null;
+  checks_rejected: number | null;
+
+  // Review packet availability
+  review_packet_available: boolean;
+  review_packet_id: string | null;
+
+  // Safety flags - always True
+  read_only: boolean;
+  review_required_before_any_action: boolean;
+  no_remediation_attempted: boolean;
 };
 
 /**

@@ -30,6 +30,7 @@ __all__ = [
     "IncidentDetailPayload",
     "AutomaticDiagnosisReviewPayload",
     "AutomaticDiagnosisReviewHandoffPayload",
+    "AutomaticDiagnosisLoopSummary",
 ]
 
 
@@ -289,3 +290,75 @@ class IncidentDetailPayload(TypedDict, total=False):
     # Automatic diagnosis review - bounded summary only
     # Returns unavailable state when no packet exists or packet is malformed
     automatic_diagnosis_review: AutomaticDiagnosisReviewPayload
+    # Automatic diagnosis loop summary - derived from timeline events
+    # Provides current-state summary without opening raw artifacts
+    automatic_diagnosis_loop_summary: AutomaticDiagnosisLoopSummary
+
+
+class AutomaticDiagnosisLoopSummary(TypedDict, total=False):
+    """Read-only summary of the latest automatic diagnosis loop run.
+
+    This payload provides a compact current-state summary derived from
+    incident timeline events and existing automatic diagnosis review metadata.
+
+    The summary answers:
+    - Has automatic diagnosis run for this incident?
+    - Is the latest known state started/running, completed, or failed/unavailable?
+    - Was a review packet produced?
+    - How many checks were requested/run/rejected?
+    - Did the system remain read-only and non-remediating?
+
+    Status values:
+    - "not_run": No diagnosis-loop lifecycle events exist
+    - "running_or_started": Latest event is diagnosis_loop_started
+    - "completed": Latest event is diagnosis_loop_completed
+    - "failed_or_unavailable": Latest event is diagnosis_loop_failed
+
+    "Latest" is based on occurred_at, not input list order.
+
+    Safety constraints enforced:
+    - read_only is always True
+    - review_required_before_any_action is always True
+    - no_remediation_attempted is always True
+
+    Hard constraints:
+    - NO remediation actions
+    - NO raw event data
+    - NO raw packet contents
+    - NO logs, stdout/stderr, stack traces
+    - NO kubectl/Helm command text
+    """
+
+    # Status of the latest diagnosis loop run
+    status: Literal[
+        "not_run",
+        "running_or_started",
+        "completed",
+        "failed_or_unavailable",
+    ]
+
+    # Timestamps (ISO format) - null if that event hasn't occurred
+    latest_started_at: str | None
+    latest_completed_at: str | None
+    latest_failed_at: str | None
+
+    # Latest event metadata
+    latest_event_id: str | None
+    latest_event_type: str | None
+
+    # Failure information (from failed events)
+    unavailable_reason: str | None
+
+    # Check counts (from completed events)
+    checks_requested: int | None
+    checks_run: int | None
+    checks_rejected: int | None
+
+    # Review packet availability
+    review_packet_available: bool
+    review_packet_id: str | None
+
+    # Safety flags - always True
+    read_only: bool
+    review_required_before_any_action: bool
+    no_remediation_attempted: bool
