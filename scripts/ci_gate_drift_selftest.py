@@ -228,25 +228,39 @@ def run_self_tests() -> int:
         failures.append("Test 14: Should fail on stale allowlist entry")
         print(f"  FAIL: expected failure, got {valid}\n")
 
-    # Test 15: Negative fixture - verify_all.sh gate not in manifest fails
-    print("Test 15: Negative fixture - verify_all.sh gate not in manifest fails")
-    fake_verify_all = '''
-_run_and_record "python" "new-gate-xyz" "message"
+    # Test 15: Negative fixture - verify_profile_model.py gate not in manifest fails
+    print("Test 15: Negative fixture - verify_profile_model.py gate not in manifest fails")
+    # parse_verify_all_gate_ids reads verify_profile_model.py as primary source
+    fake_profile_model = '''
+# Fake profile model for testing
+STEPS = {
+    "existing-gate": {"command": "echo existing", "lane": "test", "description": "Existing gate"},
+    "new-gate-xyz": {"command": "echo new", "lane": "test", "description": "New gate"},
+}
 '''
-    fake_verify_path = REPO_ROOT / "scripts" / "fake_verify_all.sh"
-    fake_verify_path.write_text(fake_verify_all)
+    fake_profile_path = REPO_ROOT / "scripts" / "verify_profile_model_test.py"
+    fake_profile_path.write_text(fake_profile_model)
     try:
-        gate_ids = parse_verify_all_gate_ids(fake_verify_path)
-        manifest_gates = {"existing-gate"}
-        missing, extra = compare_gate_ids(gate_ids, manifest_gates, set())
-        if "new-gate-xyz" in missing:
-            passes.append("Test 15: New verify_all gate not in manifest correctly detected")
-            print("  PASS\n")
-        else:
-            failures.append("Test 15: Should detect gate in verify_all but not manifest")
-            print(f"  FAIL: expected 'new-gate-xyz' in missing, got {missing}\n")
+        # Create a temp directory structure that points to our fake file
+        import shutil
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Copy fake_profile_model to the temp location
+            tmp_scripts = Path(tmpdir) / "scripts"
+            tmp_scripts.mkdir()
+            shutil.copy(fake_profile_path, tmp_scripts / "verify_profile_model.py")
+            # verify_all.sh is not needed since verify_profile_model.py succeeds
+            gate_ids = parse_verify_all_gate_ids(Path(tmpdir))
+            manifest_gates = {"existing-gate"}
+            missing, extra = compare_gate_ids(gate_ids, manifest_gates, set())
+            if "new-gate-xyz" in missing:
+                passes.append("Test 15: New verify_profile_model gate not in manifest correctly detected")
+                print("  PASS\n")
+            else:
+                failures.append("Test 15: Should detect gate in verify_profile_model but not manifest")
+                print(f"  FAIL: expected 'new-gate-xyz' in missing, got {missing}\n")
     finally:
-        fake_verify_path.unlink()
+        fake_profile_path.unlink()
 
     # Test 16: Negative fixture - shard matrix without shard union fails
     print("Test 16: Negative fixture - shard matrix without shard union fails")
@@ -342,8 +356,8 @@ _run_and_record "python" "new-gate-xyz" "message"
 
     if failures:
         print("\nFailures:")
-        for f in failures:
-            print(f"  - {f}")
+        for failure in failures:
+            print(f"  - {failure}")
         return 2
 
     print("\nVERIFICATION PASSED: All self-tests passed")

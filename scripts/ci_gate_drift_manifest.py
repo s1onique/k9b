@@ -4,18 +4,50 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, TypedDict, cast
 
 
-def load_manifest(path: Path) -> dict:
+class GateConfig(TypedDict, total=False):
+    """Type for gate configuration in manifest."""
+    ci_equivalent: list[str] | dict[str, list[str]]
+    required_command_fragments: list[str]
+    reason: str
+    shard_required: bool
+    shard_union_required: bool
+
+
+class AllowlistEntry(TypedDict):
+    """Type for allowlist entry in manifest."""
+    gate: str
+    workflow: str
+    reason: str
+
+
+class ManifestMetadata(TypedDict):
+    """Type for manifest metadata."""
+    version: str
+    description: str | None
+
+
+class Manifest(TypedDict):
+    """Type for the complete CI gate mapping manifest."""
+    _metadata: ManifestMetadata
+    required_gates: dict[str, GateConfig]
+    workflows_to_check: list[str]
+    allowlist: list[AllowlistEntry]
+
+
+def load_manifest(path: Path) -> Manifest:
     """Load the CI gate mapping manifest."""
     if not path.exists():
         raise FileNotFoundError(f"Manifest not found: {path}")
 
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        raw: dict[str, Any] = json.load(f)
+        return cast(Manifest, raw)  # Cast JSON dict to Manifest type
 
 
-def validate_manifest(manifest: dict) -> list[str]:
+def validate_manifest(manifest: Manifest) -> list[str]:
     """Validate manifest structure. Returns list of error messages."""
     errors = []
 
@@ -30,7 +62,7 @@ def validate_manifest(manifest: dict) -> list[str]:
         errors.append("'required_gates' must be a dictionary")
     else:
         # workflows_to_check: reserved for future per-workflow validation
-        _ = manifest.get("workflows_to_check", [])
+        _: list[str] = manifest.get("workflows_to_check", [])
         for gate_id, gate_config in manifest["required_gates"].items():
             ci_equiv = gate_config.get("ci_equivalent")
             if ci_equiv is None:

@@ -228,7 +228,8 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.self_test:
-        return run_self_tests()
+        result: int = run_self_tests()
+        return result
     return run_verification(verbose=args.verbose)
 
 
