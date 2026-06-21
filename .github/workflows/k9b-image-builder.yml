@@ -187,6 +187,7 @@ jobs:
           echo "image_ref=${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
 
       - name: Build and push backend image
+        id: build-backend
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -206,9 +207,20 @@ jobs:
         id: backend-digest
         if: inputs.push == true
         run: |
-          echo "Fetching digest for ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${{ inputs.image_tag }}"
-          DIGEST=$(docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${{ inputs.image_tag }} --format '{{.digest}}')
-          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          DIGEST="${{ steps.build-backend.outputs.digest }}"
+          if [ -z "$DIGEST" ]; then
+            echo "ERROR: docker/build-push-action did not return backend digest"
+            exit 1
+          fi
+          case "$DIGEST" in
+            sha256:*) ;;
+            *)
+              echo "ERROR: backend digest does not look like sha256 digest: $DIGEST"
+              exit 1
+              ;;
+          esac
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "Backend image digest: $DIGEST"
 
       # =============================================================================
@@ -222,6 +234,7 @@ jobs:
           echo "image_ref=${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
 
       - name: Build and push frontend image
+        id: build-frontend
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -238,9 +251,20 @@ jobs:
         id: frontend-digest
         if: inputs.push == true
         run: |
-          echo "Fetching digest for ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ inputs.image_tag }}"
-          DIGEST=$(docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ inputs.image_tag }} --format '{{.digest}}')
-          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          DIGEST="${{ steps.build-frontend.outputs.digest }}"
+          if [ -z "$DIGEST" ]; then
+            echo "ERROR: docker/build-push-action did not return frontend digest"
+            exit 1
+          fi
+          case "$DIGEST" in
+            sha256:*) ;;
+            *)
+              echo "ERROR: frontend digest does not look like sha256 digest: $DIGEST"
+              exit 1
+              ;;
+          esac
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "Frontend image digest: $DIGEST"
 
       # =============================================================================
