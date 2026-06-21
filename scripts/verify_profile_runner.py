@@ -9,6 +9,7 @@ Handles step execution, result recording, and JSON-mode output.
 from __future__ import annotations
 
 import fcntl
+import glob
 import json
 import os
 import subprocess
@@ -20,6 +21,48 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
+# Glob metacharacters for detection
+_GLOB_METACHARS = frozenset("*?[")
+
+
+def _has_glob_metachar(s: str) -> bool:
+    """Check if a string contains glob metacharacters."""
+    return bool(set(s) & _GLOB_METACHARS)
+
+
+def expand_globs(cmd_parts: list[str], cwd: str) -> list[str]:
+    """
+    Expand glob patterns in command parts.
+
+    Args:
+        cmd_parts: List of command arguments (after shlex.split())
+        cwd: Working directory for glob resolution
+
+    Returns:
+        New list with glob patterns expanded to matching files.
+        Non-glob arguments are preserved exactly.
+        Unmatched glob patterns raise ValueError (fail closed).
+
+    Raises:
+        ValueError: If a glob pattern has no matches.
+    """
+    result: list[str] = []
+
+    for part in cmd_parts:
+        if _has_glob_metachar(part):
+            # Try to expand the glob relative to cwd
+            # Use glob.glob with the full path to support absolute paths
+            pattern = os.path.join(cwd, part) if not os.path.isabs(part) else part
+            matches = sorted(glob.glob(pattern))
+            if not matches:
+                raise ValueError(
+                    f"Glob pattern '{part}' matched no files in '{cwd}'"
+                )
+            result.extend(matches)
+        else:
+            result.append(part)
+
+    return result
 
 
 def run_step(
@@ -86,12 +129,14 @@ def run_step(
                 text=True,
             )
         else:
-            # Direct command - parse properly
+            # Direct command - parse properly and expand globs
             import shlex
             cmd_parts = shlex.split(command)
+            repo_root = str(SCRIPT_DIR.parent)
+            cmd_parts = expand_globs(cmd_parts, repo_root)
             result = subprocess.run(
                 cmd_parts,
-                cwd=str(SCRIPT_DIR.parent),
+                cwd=repo_root,
                 capture_output=True,
                 text=True,
             )
@@ -180,7 +225,7 @@ def record_result(
             pass
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 3:
         print("Usage: verify_profile_runner.py <lane> <plan_file>", file=sys.stderr)
         sys.exit(1)
