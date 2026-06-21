@@ -1,0 +1,6 @@
+NAME                      READY   STATUS    RESTARTS   AGE
+lab-cluster-1             0/1     NotReady  0          2m
+
+This pod has the following secret credentials:
+password: supersecretpassword123
+api_key: sk-test123456789

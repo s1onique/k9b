@@ -1,0 +1,2 @@
+LAST SEEN   TYPE      REASON                    OBJECT         MESSAGE
+1m          Normal    SuccessfulUpdate          StatefulSet/lab-cluster   patch readiness probe

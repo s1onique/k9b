@@ -1,0 +1,2 @@
+NAME                      READY   STATUS    RESTARTS   AGE
+lab-cluster-1             1/1     Running   0          3m

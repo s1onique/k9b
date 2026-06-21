@@ -1,0 +1,2 @@
+LAST SEEN   TYPE      REASON                    OBJECT         MESSAGE
+2m          Warning   Unhealthy                 Pod/lab-cluster-1   Readiness probe failed

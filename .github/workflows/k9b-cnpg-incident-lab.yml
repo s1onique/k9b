@@ -1,0 +1,98 @@
+name: K3s CNPG Incident Lab
+
+# Manual workflow for running the canonical K3s/CNPG incident lab.
+# NOTE: This is a SCAFFOLD-ONLY implementation. Live K3s execution requires
+# a CI environment with K3s provisioning capability.
+
+on:
+  workflow_dispatch:
+    inputs:
+      openrouter_base_url:
+        description: 'OpenRouter API base URL'
+        required: false
+        default: ''
+        type: string
+      openrouter_model:
+        description: 'OpenRouter model'
+        required: false
+        default: ''
+        type: string
+      enable_llm_triage:
+        description: 'Enable LLM triage (requires OPENROUTER_API_KEY secret)'
+        required: false
+        default: 'false'
+        type: boolean
+      incident_scenario:
+        description: 'Incident scenario'
+        required: false
+        default: 'pod-failure'
+        type: choice
+        options:
+          - pod-failure
+      artifact_retention_days:
+        description: 'Artifact retention days'
+        required: false
+        default: '7'
+        type: string
+      cluster_mode:
+        description: 'Cluster mode'
+        required: false
+        default: 'local'
+        type: choice
+        options:
+          - local
+          - provision
+
+env:
+  GO_VERSION: '1.23'
+  K3S_VERSION: 'v1.31.0+k3s1'
+  CNPG_VERSION: '1.26.0'
+  K9B_VERSION: '0.1.0'
+
+jobs:
+  preflight:
+    name: Preflight Check
+    runs-on: ubuntu-latest
+    outputs:
+      can_run: ${{ steps.check.outputs.can_run }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check kubectl
+        id: check
+        run: |
+          if ! command -v kubectl &> /dev/null; then
+            echo "kubectl not found"
+            echo "can_run=false" >> $GITHUB_OUTPUT
+            echo "error=kubectl not found" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "can_run=true" >> $GITHUB_OUTPUT
+
+  scaffold-report:
+    name: Scaffold Status
+    needs: preflight
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate scaffold report
+        run: |
+          echo "=== K3s CNPG Incident Lab Scaffold Status ==="
+          echo ""
+          echo "Status: SCAFFOLD-ONLY (not live-lab-proven)"
+          echo ""
+          echo "This workflow is a scaffold. Live K3s execution requires:"
+          echo "1. A CI runner with K3s provisioning capability"
+          echo "2. kubectl configured with cluster access"
+          echo ""
+          echo "Implemented components:"
+          echo "  - Go lab runner under cmd/k9b-cnpg-incident-lab/"
+          echo "  - Lab package under internal/lab/cnpg/"
+          echo "  - Artifact structure and writing utilities"
+          echo "  - Pod failure incident scenario"
+          echo "  - Artifact verification script"
+          echo ""
+          echo "Workflow: k9b-cnpg-incident-lab"
+          echo "Scenario: pod-failure"
+          echo "OpenRouter: wired, dry-run only"

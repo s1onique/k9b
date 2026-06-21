@@ -1,0 +1,15 @@
+{
+  "apiVersion": "k9b.s1onique.dev/v1",
+  "kind": "Incident",
+  "metadata": {
+    "name": "inc-pod-failure-001"
+  },
+  "spec": {
+    "title": "CNPG Pod NotReady",
+    "severity": "warning"
+  },
+  "status": {
+    "detected_at": "2026-06-16T10:10:00Z",
+    "state": "detected"
+  }
+}

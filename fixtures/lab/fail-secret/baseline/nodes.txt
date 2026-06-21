@@ -1,0 +1,2 @@
+NAME              STATUS   ROLES           AGE   VERSION
+k3s-lab-node-1    Ready    control-plane   5m    v1.31.0+k3s1

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "inc-pod-failure-001",
+    "title": "CNPG Pod NotReady",
+    "detected_at": "2026-06-16T10:10:00Z",
+    "severity": "warning",
+    "status": "detected"
+  }
+]

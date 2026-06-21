@@ -1,0 +1,93 @@
+# Makefile for k9b CNPG incident lab
+
+# Go commands
+GOCMD=go
+GOBUILD=$(GOCMD) build
+GOTEST=$(GOCMD) test
+GOMODTIDY=$(GOCMD) mod tidy
+GOVET=$(GOCMD) vet
+
+# Lab runner
+LAB_BIN=dist/k9b-cnpg-incident-lab
+LAB_CMD=cmd/k9b-cnpg-incident-lab
+
+# Python for verifier
+PYTHON=.venv/bin/python
+
+# Default target
+.PHONY: help
+help:
+	@echo "K3s CNPG Incident Lab Targets"
+	@echo ""
+	@echo "  make lab-k9b-cnpg-incident        - Build the lab runner"
+	@echo "  make test-lab                     - Run Go unit tests for lab package"
+	@echo "  make verify-lab-k9b-cnpg-incident - Verify lab artifacts"
+	@echo "  make lab-clean                    - Clean build artifacts"
+	@echo ""
+
+# Build the lab runner
+.PHONY: lab-k9b-cnpg-incident
+lab-k9b-cnpg-incident:
+	@echo "Building k9b-cnpg-incident-lab..."
+	@mkdir -p dist
+	cd $(LAB_CMD) && $(GOMODTIDY) && $(GOBUILD) -o ../../$(LAB_BIN) .
+	@echo "Lab runner built at $(LAB_BIN)"
+
+# Run Go unit tests for the lab package
+.PHONY: test-lab
+test-lab:
+	@echo "Running lab package unit tests..."
+	cd $(LAB_CMD) && $(GOTEST) -v ./...
+	cd internal/lab/cnpg && $(GOTEST) -v ./...
+
+# Verify lab artifacts
+# Usage: make verify-lab-k9b-cnpg-incident ARTIFACT_DIR=/path/to/artifacts
+.PHONY: verify-lab-k9b-cnpg-incident
+verify-lab-k9b-cnpg-incident:
+ifndef ARTIFACT_DIR
+	$(error ARTIFACT_DIR is undefined - point to artifact directory)
+endif
+	@echo "Verifying lab artifacts at $(ARTIFACT_DIR)..."
+	$(PYTHON) scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir $(ARTIFACT_DIR)
+
+# Verify with passing fixture
+.PHONY: verify-lab-fixture-pass
+verify-lab-fixture-pass:
+	@echo "Verifying passing fixture..."
+	$(PYTHON) scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir fixtures/lab/pass
+
+# Verify with failing fixture (missing k9b incident)
+.PHONY: verify-lab-fixture-fail-no-incident
+verify-lab-fixture-fail-no-incident:
+	@echo "Verifying fail fixture (missing k9b incident)..."
+	$(PYTHON) scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir fixtures/lab/fail-no-incident
+	@echo "Expected: verification should FAIL"
+
+# Verify with failing fixture (secret leakage)
+.PHONY: verify-lab-fixture-fail-secret
+verify-lab-fixture-fail-secret:
+	@echo "Verifying fail fixture (secret leakage)..."
+	$(PYTHON) scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir fixtures/lab/fail-secret
+	@echo "Expected: verification should FAIL"
+
+# Clean build artifacts
+.PHONY: lab-clean
+lab-clean:
+	@echo "Cleaning lab artifacts..."
+	rm -rf dist/
+	rm -rf lab-artifacts/
+
+# Check Go syntax/formatting
+.PHONY: lab-lint
+lab-lint:
+	@echo "Checking lab Go code..."
+	cd $(LAB_CMD) && $(GOVET) ./...
+	cd internal/lab/cnpg && $(GOVET) ./...
+
+# Local check - verify lab can build (without running)
+.PHONY: lab-check
+lab-check:
+	@echo "Checking lab runner can build..."
+	cd $(LAB_CMD) && $(GOMODTIDY)
+	cd $(LAB_CMD) && $(GOVET) ./...
+	@echo "Lab runner check complete."

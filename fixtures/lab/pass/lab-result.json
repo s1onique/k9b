@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "scenario": "pod-failure",
+  "started_at": "2026-06-16T10:00:00Z",
+  "finished_at": "2026-06-16T10:15:00Z",
+  "cluster_mode": "local",
+  "k3s_version": "v1.31.0+k3s1",
+  "cnpg_operator_version": "1.26.0",
+  "k9b_version": "0.1.0",
+  "incident_detected": true,
+  "incident_id": "inc-pod-failure-001",
+  "artifact_dir": "/tmp/lab-artifacts",
+  "llm_triage_enabled": false,
+  "llm_triage_attempted": false
+}

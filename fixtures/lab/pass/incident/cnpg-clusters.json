@@ -1,0 +1,15 @@
+{
+  "operator_installed": true,
+  "operator_version": "1.26.0",
+  "operator_ready": true,
+  "clusters_installed": 1,
+  "cluster_details": [
+    {
+      "name": "lab-cluster",
+      "namespace": "cnpg-lab",
+      "ready": false,
+      "instances": 1,
+      "phase": "Cluster is configuring"
+    }
+  ]
+}

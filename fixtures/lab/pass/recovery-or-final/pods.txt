@@ -1,0 +1,4 @@
+NAME                      READY   STATUS    RESTARTS   AGE
+cnpg-operator-abc123      1/1     Running   0          4m
+lab-cluster-1             1/1     Running   0          3m
+k9b-agent-xyz789          1/1     Running   0          2m

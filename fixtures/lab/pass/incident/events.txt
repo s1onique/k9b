@@ -1,0 +1,4 @@
+LAST SEEN   TYPE      REASON                    OBJECT         MESSAGE
+2m          Warning   Unhealthy                 Pod/lab-cluster-1   Readiness probe failed
+1m          Normal    SuccessfulCreate          StatefulSet/lab-cluster   create Pod lab-cluster-1
+30s         Warning   DisasterRecoveryFails     Cluster/lab-cluster   Primary instance is not ready

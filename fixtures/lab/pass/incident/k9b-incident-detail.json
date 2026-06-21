@@ -1,0 +1,31 @@
+{
+  "apiVersion": "k9b.s1onique.dev/v1",
+  "kind": "Incident",
+  "metadata": {
+    "name": "inc-pod-failure-001"
+  },
+  "spec": {
+    "title": "CNPG Pod NotReady",
+    "severity": "warning",
+    "affected_resources": [
+      {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "namespace": "cnpg-lab",
+        "name": "lab-cluster-1"
+      }
+    ]
+  },
+  "status": {
+    "detected_at": "2026-06-16T10:10:00Z",
+    "state": "detected",
+    "symptoms": [
+      {
+        "type": "pod_not_ready",
+        "namespace": "cnpg-lab",
+        "pod": "lab-cluster-1",
+        "reason": "Readiness probe failed"
+      }
+    ]
+  }
+}
