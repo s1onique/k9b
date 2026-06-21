@@ -17,12 +17,14 @@ PYTHON=.venv/bin/python
 # Default target
 .PHONY: help
 help:
-	@echo "K3s CNPG Incident Lab Targets"
+	@echo "K9b CNPG Incident Lab Targets"
 	@echo ""
-	@echo "  make lab-k9b-cnpg-incident        - Build the lab runner"
-	@echo "  make test-lab                     - Run Go unit tests for lab package"
-	@echo "  make verify-lab-k9b-cnpg-incident - Verify lab artifacts"
-	@echo "  make lab-clean                    - Clean build artifacts"
+	@echo "  make lab-k9b-cnpg-incident           - Build the lab runner"
+	@echo "  make test-lab                        - Run Go unit tests for lab package"
+	@echo "  make verify-lab-k9b-cnpg-incident    - Verify lab artifacts"
+	@echo "  make lab-k9b-cnpg-incident-live      - Run live lab (requires KUBECONFIG)"
+	@echo "  make verify-lab-k9b-cnpg-incident-live - Verify live lab artifacts"
+	@echo "  make lab-clean                       - Clean build artifacts"
 	@echo ""
 
 # Build the lab runner
@@ -91,3 +93,38 @@ lab-check:
 	cd $(LAB_CMD) && $(GOMODTIDY)
 	cd $(LAB_CMD) && $(GOVET) ./...
 	@echo "Lab runner check complete."
+
+# =============================================================================
+# Live Lab Targets
+# =============================================================================
+
+# Run live lab against an existing K3s cluster
+# Usage: make lab-k9b-cnpg-incident-live KUBECONFIG=/path/to/kubeconfig SCENARIO=pod-failure
+.PHONY: lab-k9b-cnpg-incident-live
+lab-k9b-cnpg-incident-live:
+ifndef KUBECONFIG
+	$(error KUBECONFIG is undefined - point to kubeconfig file)
+endif
+	@echo "Running live K3s/CNPG incident lab..."
+	@echo "KUBECONFIG=$(KUBECONFIG)"
+	@echo "SCENARIO=$(or $(SCENARIO),pod-failure)"
+	@echo "ARTIFACT_DIR=$(or $(ARTIFACT_DIR),./lab-artifacts/live)"
+	@mkdir -p dist
+	cd $(LAB_CMD) && $(GOMODTIDY) && $(GOBUILD) -o ../../$(LAB_BIN) .
+	$(LAB_BIN) run \
+		--kubeconfig $(KUBECONFIG) \
+		--cluster-mode local \
+		--artifact-dir $(or $(ARTIFACT_DIR),./lab-artifacts/live) \
+		--scenario $(or $(SCENARIO),pod-failure) \
+		--timeout 30m \
+		-v
+
+# Verify live lab artifacts
+# Usage: make verify-lab-k9b-cnpg-incident-live ARTIFACT_DIR=./lab-artifacts/live
+.PHONY: verify-lab-k9b-cnpg-incident-live
+verify-lab-k9b-cnpg-incident-live:
+ifndef ARTIFACT_DIR
+	$(error ARTIFACT_DIR is undefined - point to live artifact directory)
+endif
+	@echo "Verifying live lab artifacts at $(ARTIFACT_DIR)..."
+	$(PYTHON) scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir $(ARTIFACT_DIR) --verbose

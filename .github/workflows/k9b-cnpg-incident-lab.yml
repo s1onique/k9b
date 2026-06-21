@@ -1,7 +1,7 @@
 name: K3s CNPG Incident Lab
 
 # Build-and-verify workflow for the K3s/CNPG incident lab scaffold.
-# NOTE: This does NOT provision live K3s. Live K3s execution is deferred to a future ACT.
+# Live K3s provisioning is available via manual workflow_dispatch with run_live_lab=true.
 
 on:
   # Manual workflow dispatch for ad-hoc runs
@@ -12,30 +12,44 @@ on:
         required: false
         default: '7'
         type: string
+      run_live_lab:
+        description: 'Run live K3s/CNPG lab after build-and-verify'
+        required: false
+        default: false
+        type: boolean
+      incident_scenario:
+        description: 'Incident scenario'
+        required: false
+        default: 'pod-failure'
+        type: choice
+        options:
+          - pod-failure
 
-  # CI on PR when lab files change
+  # CI on PR when lab files change (build-and-verify only, no live K3s)
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - ".github/workflows/k9b-cnpg-incident-lab.yml"
+      - ".github/workflows/k9b-cnpg-incident-lab*.yml"
       - "cmd/k9b-cnpg-incident-lab/**"
       - "internal/lab/cnpg/**"
       - "scripts/verify_k3s_cnpg_incident_lab_artifact.py"
       - "tests/test_verify_k3s_cnpg_incident_lab.py"
+      - "tests/test_live_lab_config.py"
       - "fixtures/lab/**"
       - "Makefile"
       - "go.work"
 
-  # CI on push to main when lab files change
+  # CI on push to main when lab files change (build-and-verify only)
   push:
     branches:
       - main
     paths:
-      - ".github/workflows/k9b-cnpg-incident-lab.yml"
+      - ".github/workflows/k9b-cnpg-incident-lab*.yml"
       - "cmd/k9b-cnpg-incident-lab/**"
       - "internal/lab/cnpg/**"
       - "scripts/verify_k3s_cnpg_incident_lab_artifact.py"
       - "tests/test_verify_k3s_cnpg_incident_lab.py"
+      - "tests/test_live_lab_config.py"
       - "fixtures/lab/**"
       - "Makefile"
       - "go.work"
@@ -45,6 +59,9 @@ env:
   PYTHON_VERSION: '3.13'
 
 jobs:
+  # ===========================================================================
+  # Build and Verify Job (always runs)
+  # ===========================================================================
   build-and-verify:
     name: Build and Verify Lab
     runs-on: ubuntu-latest
@@ -77,7 +94,7 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/pip install pytest
 
-      # Sync Go workspace (needed for local development, not for published module)
+      # Sync Go workspace
       - name: Sync Go workspace
         run: go work sync
 
@@ -97,7 +114,7 @@ jobs:
       - name: Run Python verifier tests
         run: |
           echo "=== Running Python verifier tests ==="
-          .venv/bin/python -m pytest tests/test_verify_k3s_cnpg_incident_lab.py -v
+          .venv/bin/python -m pytest tests/test_verify_k3s_cnpg_incident_lab.py tests/test_live_lab_config.py -v
 
       # Verify passing fixture
       - name: Verify passing fixture
@@ -119,7 +136,6 @@ jobs:
             exit 1
           fi
           echo "fail-no-incident correctly failed with exit code $rc"
-          # Assert fixture fails for intended reason (no fallback)
           grep -E "k9b-incidents.json|k9b incident evidence" /tmp/fail-no-incident.log
 
       # Verify fail-secret fixture fails
@@ -136,11 +152,10 @@ jobs:
             exit 1
           fi
           echo "fail-secret correctly failed with exit code $rc"
-          # Assert fixture fails for intended reason (no fallback)
           grep -Ei "secret|password|api" /tmp/fail-secret.log
 
-      # Upload artifacts
-      - name: Upload artifacts
+      # Upload build artifacts
+      - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -155,12 +170,27 @@ jobs:
       - name: Summary
         run: |
           echo "=== K3s CNPG Incident Lab CI Summary ==="
-          echo ""
           echo "Lab runner built: dist/k9b-cnpg-incident-lab"
           echo "Go tests: PASSED"
           echo "Python verifier tests: PASSED"
           echo "Passing fixture: PASSED"
           echo "Fail fixtures: Correctly rejected"
-          echo ""
-          echo "NOTE: This CI workflow does NOT provision live K3s."
-          echo "Live K3s execution remains deferred to a future ACT."
+          if [[ "${{ inputs.run_live_lab }}" == "true" ]]; then
+            echo "Live K3s lab will run in 'live-k3s-lab' job."
+          else
+            echo "NOTE: Live K3s not requested. Use workflow_dispatch with run_live_lab=true."
+          fi
+
+  # ===========================================================================
+  # Live K3s Lab Job (only runs when manually requested)
+  # ===========================================================================
+  live-k3s-lab:
+    name: Live K3s CNPG Lab
+    needs: build-and-verify
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_lab == true
+    uses: ./.github/workflows/k9b-cnpg-incident-lab-live.yml@v1
+    with:
+      k3s_version: 'v1.31.0+k3s1'
+      cnpg_version: '1.26.0'
+      incident_scenario: ${{ inputs.incident_scenario || 'pod-failure' }}
+      artifact_retention_days: ${{ inputs.artifact_retention_days || '7' }}

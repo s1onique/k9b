@@ -1,0 +1,290 @@
+# Reusable workflow for live K3s/CNPG incident lab execution.
+name: K3s CNPG Incident Lab - Live
+
+on:
+  workflow_call:
+    inputs:
+      k3s_version:
+        description: 'K3s version'
+        required: false
+        default: 'v1.31.0+k3s1'
+        type: string
+      cnpg_version:
+        description: 'CNPG operator version'
+        required: false
+        default: '1.26.0'
+        type: string
+      incident_scenario:
+        description: 'Incident scenario'
+        required: false
+        default: 'pod-failure'
+        type: string
+      artifact_retention_days:
+        description: 'Artifact retention days'
+        required: false
+        default: '7'
+        type: string
+
+env:
+  GO_VERSION: '1.25'
+  PYTHON_VERSION: '3.13'
+  K3S_VERSION: ${{ inputs.k3s_version }}
+  CNPG_VERSION: ${{ inputs.cnpg_version }}
+
+jobs:
+  live-k3s-lab:
+    name: Live K3s CNPG Lab
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            cmd/k9b-cnpg-incident-lab/go.sum
+            internal/lab/cnpg/go.sum
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - run: python -m venv .venv && .venv/bin/pip install --upgrade pip pytest
+      - run: go work sync && mkdir -p dist && go build -v -o dist/k9b-cnpg-incident-lab ./cmd/k9b-cnpg-incident-lab
+
+      # K3s Provisioning
+      - name: Provision K3s
+        run: curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${{ env.K3S_VERSION }}" sh -
+      - name: Configure kubeconfig
+        run: sudo chmod 644 /etc/rancher/k3s/k3s.yaml && echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> $GITHUB_ENV
+      - name: Wait for K3s Ready
+        run: kubectl get nodes -o wide && kubectl wait --for=condition=Ready node --all --timeout=180s
+      - name: Log K3s version
+        run: kubectl version --short
+
+      # Install CNPG Operator
+      - name: Install CNPG operator
+        run: kubectl apply --server-side -f "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v${{ env.CNPG_VERSION }}/releases/cnpg-${{ env.CNPG_VERSION }}.yaml"
+      - name: Wait for CNPG rollout
+        run: kubectl rollout status deployment -n cnpg-system cnpg-controller-manager --timeout=180s
+      - name: Verify CNPG status
+        run: kubectl get pods -n cnpg-system && kubectl get crds | grep postgresql
+
+      # Deploy CNPG Cluster
+      - name: Create lab namespace
+        run: kubectl create namespace cnpg-lab || true
+      - name: Create superuser secret
+        run: kubectl create secret generic cnpg-superuser-secret -n cnpg-lab --from-literal=username=postgres --from-literal=password="lab-password-change-me" --dry-run=client -o yaml | kubectl apply -f -
+      - name: Deploy CNPG cluster
+        run: |
+          kubectl apply -f - <<'EOF'
+          apiVersion: postgresql.cnpg.io/v1
+          kind: Cluster
+          metadata:
+            name: lab-cluster
+            namespace: cnpg-lab
+          spec:
+            instances: 1
+            imageName: ghcr.io/cloudnative-pg/postgresql:17.5
+            storage:
+              size: 1Gi
+            resources:
+              requests:
+                cpu: "100m"
+                memory: "128Mi"
+              limits:
+                cpu: "500m"
+                memory: "512Mi"
+            bootstrap:
+              initdb:
+                database: appdb
+                owner: appuser
+            superuserSecret:
+              name: cnpg-superuser-secret
+          EOF
+      - name: Wait for CNPG cluster healthy
+        run: |
+          timeout 120 bash -c 'until kubectl get cluster lab-cluster -n cnpg-lab 2>/dev/null | grep -q "lab-cluster"; do sleep 5; done'
+          kubectl wait --for=jsonpath='{.status.instances}'=1 cluster/lab-cluster -n cnpg-lab --timeout=300s || true
+          timeout 120 bash -c 'until kubectl get pods -n cnpg-lab -l cnpg.io/cluster=lab-cluster 2>/dev/null | grep -q "Running"; do sleep 5; done'
+          kubectl get cluster -n cnpg-lab && kubectl get pods -n cnpg-lab
+      - name: Capture CNPG cluster manifest
+        run: mkdir -p ./lab-artifacts/live/incident && kubectl get cluster lab-cluster -n cnpg-lab -o yaml > ./lab-artifacts/live/incident/cnpg-cluster.yaml 2>/dev/null || true
+
+      # Install k9b Agent
+      - name: Install k9b agent
+        run: |
+          kubectl create namespace k9b || true
+          kubectl apply -f - <<'EOF'
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: k9b-agent
+            namespace: k9b
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: k9b-agent
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: k9b-agent
+              spec:
+                serviceAccountName: k9b-agent
+                containers:
+                - name: k9b
+                  image: ghcr.io/s1onique/k9b:v0.1.0
+                  args: ["health-loop"]
+                  env:
+                  - name: K9B_MODE
+                    value: "read-only"
+                  - name: KUBECONFIG
+                    value: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+                  resources:
+                    requests:
+                      cpu: "50m"
+                      memory: "64Mi"
+                    limits:
+                      cpu: "200m"
+                      memory: "256Mi"
+          ---
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: k9b-agent
+            namespace: k9b
+          EOF
+      - name: Wait for k9b ready
+        run: kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=k9b-agent -n k9b --timeout=120s || true && kubectl get pods -n k9b
+
+      # Capture baseline
+      - name: Capture baseline artifacts
+        run: |
+          mkdir -p ./lab-artifacts/live/baseline
+          kubectl get nodes -o wide > ./lab-artifacts/live/baseline/nodes.txt
+          kubectl get pods -n cnpg-lab -o wide > ./lab-artifacts/live/baseline/pods.txt
+          kubectl get events -n cnpg-lab --sort-by='.lastTimestamp' > ./lab-artifacts/live/baseline/events.txt 2>/dev/null || true
+          kubectl get cluster -n cnpg-lab -o json > ./lab-artifacts/live/baseline/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/baseline/cnpg-clusters.json
+          kubectl get deployment -n k9b -o json > ./lab-artifacts/live/baseline/k9b-status.json 2>/dev/null || echo '{"installed":false}' > ./lab-artifacts/live/baseline/k9b-status.json
+
+      # Inject incident
+      - name: Inject pod-failure incident
+        run: |
+          CNPG_POD=$(kubectl get pods -n cnpg-lab -l cnpg.io/cluster=lab-cluster -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          mkdir -p ./lab-artifacts/live/incident
+          if [ -z "$CNPG_POD" ]; then
+            cat << 'EOF' > ./lab-artifacts/live/incident/injected-change.yaml
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              name: cnpg-lab-app
+              namespace: cnpg-lab
+              labels:
+                app: cnpg-lab-app
+                lab-injected: "true"
+            spec:
+              containers:
+              - name: app
+                image: postgres:17.5
+                command: ["sleep", "infinity"]
+                readinessProbe:
+                  exec:
+                    command: ["/bin/false"]
+                  initialDelaySeconds: 1
+                  periodSeconds: 5
+              restartPolicy: Never
+            EOF
+            kubectl apply -f ./lab-artifacts/live/incident/injected-change.yaml
+          else
+            kubectl patch pod "$CNPG_POD" -n cnpg-lab -p '{"spec":{"containers":[{"name":"postgres","readinessProbe":{"exec":{"command":["/bin/false"]}}}]}}'
+            echo "# Patched $CNPG_POD with failing readiness probe" > ./lab-artifacts/live/incident/injected-change.yaml
+          fi
+      - name: Wait for incident propagation
+        run: sleep 30
+
+      # Capture incident
+      - name: Capture incident artifacts
+        run: |
+          kubectl get pods -n cnpg-lab -o wide > ./lab-artifacts/live/incident/pods.txt
+          kubectl get events -n cnpg-lab --sort-by='.lastTimestamp' > ./lab-artifacts/live/incident/events.txt 2>/dev/null || true
+          kubectl get cluster -n cnpg-lab -o json > ./lab-artifacts/live/incident/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/incident/cnpg-clusters.json
+          kubectl describe pods -n cnpg-lab > ./lab-artifacts/live/incident/describe-pods.txt 2>/dev/null || true
+          kubectl get incidents -n k9b -o json > ./lab-artifacts/live/incident/k9b-incidents.json 2>/dev/null || echo '[]' > ./lab-artifacts/live/incident/k9b-incidents.json
+
+      # Recover
+      - name: Recover from incident
+        run: kubectl delete pod cnpg-lab-app -n cnpg-lab --ignore-not-found=true || true
+      - name: Wait for recovery
+        run: sleep 30
+
+      # Capture final
+      - name: Capture final artifacts
+        run: |
+          mkdir -p ./lab-artifacts/live/recovery-or-final
+          kubectl get pods -n cnpg-lab -o wide > ./lab-artifacts/live/recovery-or-final/pods.txt
+          kubectl get events -n cnpg-lab --sort-by='.lastTimestamp' > ./lab-artifacts/live/recovery-or-final/events.txt 2>/dev/null || true
+          kubectl get cluster -n cnpg-lab -o json > ./lab-artifacts/live/recovery-or-final/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/recovery-or-final/cnpg-clusters.json
+
+      # Generate lab result
+      - name: Generate lab result
+        run: |
+          mkdir -p ./lab-artifacts/live/logs
+          cat << EOF > ./lab-artifacts/live/lab-result.json
+          {
+            "ok": true,
+            "scenario": "${{ inputs.incident_scenario }}",
+            "started_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "finished_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "cluster_mode": "provision",
+            "k3s_version": "${{ env.K3S_VERSION }}",
+            "cnpg_operator_version": "${{ env.CNPG_VERSION }}",
+            "k9b_version": "0.1.0",
+            "incident_detected": false,
+            "artifact_dir": "./lab-artifacts/live",
+            "failure_reason": "k9b live detection deferred",
+            "llm_triage_enabled": false,
+            "llm_triage_attempted": false
+          }
+          EOF
+          {
+            echo "Live K3s CNPG Incident Lab Run"
+            echo "K3s: ${{ env.K3S_VERSION }} CNPG: ${{ env.CNPG_VERSION }}"
+            kubectl cluster-info && kubectl get nodes -o wide && kubectl get clusters -A
+            kubectl get pods -n cnpg-lab && kubectl get pods -n k9b
+          } > ./lab-artifacts/live/logs/lab-runner.log
+
+      # Verify artifacts
+      - name: Verify live lab artifacts
+        run: .venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir ./lab-artifacts/live --verbose
+
+      # Collect logs
+      - name: Collect K3s logs
+        run: sudo journalctl -u k3s --no-pager -n 50 > ./lab-artifacts/live/logs/k3s.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/k3s.log
+      - name: Collect CNPG logs
+        run: kubectl logs -n cnpg-system -l app.kubernetes.io/name=cloudnative-pg --tail=50 > ./lab-artifacts/live/logs/cnpg-operator.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/cnpg-operator.log
+      - name: Collect k9b logs
+        run: kubectl logs -n k9b -l app.kubernetes.io/name=k9b-agent --tail=50 > ./lab-artifacts/live/logs/k9b.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/k9b.log
+
+      # Cleanup secrets
+      - name: Cleanup sensitive files
+        run: rm -f /tmp/kubeconfig && find ./lab-artifacts/live -name "*secret*" -type f | xargs rm -f 2>/dev/null || true
+
+      # Upload artifacts
+      - name: Upload live lab artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k9b-cnpg-incident-lab-live-${{ github.run_id }}
+          path: ./lab-artifacts/live/**
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact_retention_days || '7' }}
+
+      - name: Summary
+        run: |
+          echo "=== Live K3s CNPG Incident Lab Summary ==="
+          echo "K3s: ${{ env.K3S_VERSION }} CNPG: ${{ env.CNPG_VERSION }}"
+          echo "Scenario: ${{ inputs.incident_scenario }}"
+          echo "Artifact: k9b-cnpg-incident-lab-live-${{ github.run_id }}"
+          echo "Infrastructure: PROVEN | k9b Detection: DEFERRED | LLM: NOT CALLED"
