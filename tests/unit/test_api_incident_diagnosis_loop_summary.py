@@ -27,13 +27,10 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from k8s_diag_agent.ui.api_incident_diagnosis_loop_summary import (
     DiagnosisLoopStatus,
     build_automatic_diagnosis_loop_summary,
 )
-
 
 # =============================================================================
 # Helper: create diagnosis loop event

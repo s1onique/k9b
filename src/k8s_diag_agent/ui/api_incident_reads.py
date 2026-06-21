@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 
 from .api_incident_diagnosis_loop_summary import build_automatic_diagnosis_loop_summary
 from .api_payloads_incident_reads import (
-    AutomaticDiagnosisLoopSummary,
     AutomaticDiagnosisReviewPayload,
     IncidentDetailPayload,
     IncidentEventPayload,
