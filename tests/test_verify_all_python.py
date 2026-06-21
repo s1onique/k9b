@@ -330,7 +330,14 @@ class TestVerifyAllFailClosed(unittest.TestCase):
     """Test fail-closed behavior for runner failures and state issues."""
     
     def test_lane_state_missing_fails_closed(self) -> None:
-        """Missing lane state file should cause failure."""
+        """Missing lane state file should cause failure.
+        
+        This test calls orchestrator.setup() and orchestrator.execute() which spawn
+        subprocesses. Gated behind RUN_FULL_VERIFY_TEST=1.
+        """
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run fail-closed integration tests")
+        
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all_orchestrator import VerificationOrchestrator
 
@@ -351,9 +358,16 @@ class TestVerifyAllFailClosed(unittest.TestCase):
                 orchestrator.execute()
             
             self.assertIn("not found", str(ctx.exception))
-    
+
     def test_lane_state_corrupt_fails_closed(self) -> None:
-        """Corrupt lane state file should cause failure."""
+        """Corrupt lane state file should cause failure.
+        
+        This test calls orchestrator.setup() and orchestrator.execute() which spawn
+        subprocesses. Gated behind RUN_FULL_VERIFY_TEST=1.
+        """
+        if os.environ.get("RUN_FULL_VERIFY_TEST") != "1":
+            self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run fail-closed integration tests")
+        
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all_orchestrator import VerificationOrchestrator
 

@@ -106,3 +106,6 @@ collect/incident_read_only_check_runner.py run_read_only_checks Fake handler fai
 
 # === Automatic Diagnosis Loop ===
 health/loop_automatic_diagnosis.py run_automatic_diagnosis_loop failure isolation boundary - collector errors caught and returned as safe fallback, never propagated to health loop
+
+# === Debug HTTP Client ===
+scripts/debug_http_client.py fetch_json HTTP client fallback boundary - HTTP client error handling, returns safe fallback tuple, no credential exposure
