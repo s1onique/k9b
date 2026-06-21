@@ -16,11 +16,11 @@ The lab is designed to:
 
 ## Current Status
 
-**This is a scaffold-only implementation (ACT 1 of N).**
+**This lab scaffold is now wired into CI.** The GitHub Actions workflow builds and verifies the lab artifacts on every PR and push.
 
 - The Go-based lab runner and artifact structure are implemented
-- The GitHub Actions workflow is implemented as `workflow_dispatch`
-- Live K3s provisioning in CI is not yet functional
+- The GitHub Actions workflow builds and verifies scaffold artifacts in CI
+- Live K3s provisioning in CI is not yet functional (deferred to future ACT)
 - LLM triage integration is wired but not implemented
 - Full autonomous triage loop is deferred to future ACTs
 
@@ -28,13 +28,14 @@ The lab is designed to:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    GitHub Actions (workflow_dispatch)            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
-│  │   Preflight  │→ │  Run Lab     │→ │  Upload Artifacts    │   │
-│  └──────────────┘  └──────────────┘  └──────────────────────┘   │
+│               GitHub Actions (workflow_dispatch + CI)            │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐   │
+│  │   Build Lab      │→ │   Run Tests      │→ │   Upload     │   │
+│  │   Runner         │  │   Verify Fixtures│  │   Artifacts  │   │
+│  └──────────────────┘  └──────────────────┘  └──────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+                               │
+                               ▼ (future ACT)
 ┌─────────────────────────────────────────────────────────────────┐
 │                      K3s Cluster (lab)                          │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
@@ -42,8 +43,8 @@ The lab is designed to:
 │  │   Operator   │  │   Agent      │  │   Cluster            │   │
 │  └──────────────┘  └──────────────┘  └──────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+                               │
+                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Artifact Directory                            │
 │  lab-result.json                                                │
@@ -59,6 +60,39 @@ The lab is designed to:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## CI Workflow
+
+### Triggers
+
+The workflow runs on:
+- **Manual dispatch**: `workflow_dispatch` with artifact retention input
+- **PR**: When lab-related files change (workflow, Go code, Python verifier, fixtures)
+- **Push to main**: When lab-related files change
+
+### CI Jobs
+
+The `build-and-verify` job:
+1. Builds the Go lab runner (`dist/k9b-cnpg-incident-lab`)
+2. Runs Go unit tests for `internal/lab/cnpg`
+3. Runs Python verifier tests
+4. Verifies passing fixture (`fixtures/lab/pass`)
+5. Verifies failing fixtures fail for intended reasons
+6. Uploads build outputs and verification logs as artifacts
+
+### Build Commands
+
+```bash
+# Sync workspace and build
+go work sync
+go build -o dist/k9b-cnpg-incident-lab ./cmd/k9b-cnpg-incident-lab
+
+# Run Go tests
+go test -v ./internal/lab/cnpg/...
+
+# Run Python verifier tests
+.venv/bin/python -m pytest tests/test_verify_k3s_cnpg_incident_lab.py -v
+```
+
 ## How to Run
 
 ### Manual Execution (Local)
@@ -66,11 +100,12 @@ The lab is designed to:
 Prerequisites:
 - K3s cluster accessible via `kubectl`
 - `KUBECONFIG` environment variable set
-- Go 1.23+ installed
+- Go 1.25+ installed
 
 ```bash
-# Build the lab runner.
-make lab-k9b-cnpg-incident
+# Build the lab runner (uses go.work for local development)
+go work sync
+go build -o dist/k9b-cnpg-incident-lab ./cmd/k9b-cnpg-incident-lab
 
 # Run the incident lab.
 make run-lab KUBECONFIG=/path/to/kubeconfig SCENARIO=pod-failure
@@ -84,13 +119,18 @@ make verify-lab-k9b-cnpg-incident ARTIFACT_DIR=./lab-artifacts
 1. Navigate to **Actions** → **K3s CNPG Incident Lab**
 2. Click **Run workflow**
 3. Configure inputs:
-   - `cluster_mode`: `local` (requires `kubeconfig_content`) or `provision` (K3s provisioning in CI)
-   - `incident_scenario`: `pod-failure`
-   - `enable_llm_triage`: `false` (LLM triage not yet implemented)
-4. For local mode, provide base64-encoded kubeconfig in `kubeconfig_content`
-5. Click **Run workflow**
+   - `artifact_retention_days`: Number of days to keep CI artifacts (default: 7)
+4. Click **Run workflow**
 
-### Artifact Verification
+### GitHub Actions (CI)
+
+The workflow automatically runs on:
+- PRs that modify lab-related files
+- Pushes to main that modify lab-related files
+
+No manual configuration required for CI runs.
+
+### Artifact Verification (Local)
 
 ```bash
 # Verify passing fixture.
@@ -109,8 +149,8 @@ make verify-lab-fixture-fail-secret
 |--------|-------------|-------|
 | `OPENROUTER_API_KEY` | LLM triage | Only needed if `enable_llm_triage=true` |
 
-The workflow does NOT require:
-- Kubernetes credentials (use `kubeconfig_content` input instead)
+The CI workflow does NOT require:
+- Kubernetes credentials (no live K3s in CI yet)
 - CNPG credentials (lab uses ephemeral test secrets)
 - Any other secrets for the scaffold implementation
 
@@ -192,7 +232,7 @@ artifact-dir/
 
 ## Current Limitations
 
-1. **No live K3s provisioning**: CI cannot provision K3s in this scaffold ACT
+1. **No live K3s provisioning**: CI builds and verifies artifacts but does not provision K3s
 2. **No LLM triage implementation**: OpenRouter wiring exists but calls are no-ops
 3. **Single scenario**: Only `pod-failure` is implemented
 4. **No autonomous loop**: Full multi-pass diagnosis is deferred
@@ -207,16 +247,15 @@ artifact-dir/
 4. **ACT 5**: Autonomous multi-pass diagnosis loop
 5. **ACT 6**: Result comparison and triage quality scoring
 
-## Testing
+## CI / Testing
+
+Lab tests run automatically in GitHub Actions CI on PR/push when lab files change.
 
 ```bash
 # Run Go unit tests for lab package.
-cd internal/lab/cnpg && go test -v ./...
+go test -v ./internal/lab/cnpg/...
 
-# Run Python verifier tests.
-.venv/bin/python -m pytest tests/test_verify_k3s_cnpg_incident_lab.py -v
-
-# Run all lab-related tests.
+# Python verifier tests run in CI via pytest
 make test-lab
 ```
 
@@ -233,7 +272,8 @@ make test-lab
 | `internal/lab/cnpg/incident.go` | Incident scenario definitions |
 | `internal/lab/cnpg/runner.go` | Main lab orchestration |
 | `internal/lab/cnpg/config_test.go` | Go unit tests |
-| `.github/workflows/k9b-cnpg-incident-lab.yml` | Manual GitHub Actions workflow |
+| `.github/workflows/k9b-cnpg-incident-lab.yml` | CI workflow (build-and-verify) |
+| `go.work` | Go workspace for local CI builds |
 | `scripts/verify_k3s_cnpg_incident_lab_artifact.py` | Artifact verifier |
 | `tests/test_verify_k3s_cnpg_incident_lab.py` | Verifier unit tests |
 | `fixtures/lab/pass/` | Passing fixture for verifier tests |
@@ -262,7 +302,13 @@ make test-lab
 
 ## Commit Information
 
-- **ACT Type**: Scaffold (not live-lab-proven)
+- **ACT Type**: CI-wired (not live-lab-proven)
 - **Scenario**: pod-failure
 - **OpenRouter**: Wired, dry-run only
-- **Workflow**: `.github/workflows/k9b-cnpg-incident-lab.yml` (workflow_dispatch)
+- **Workflow**: `.github/workflows/k9b-cnpg-incident-lab.yml`
+- **Trigger mode**: workflow_dispatch + path-scoped PR/push
+- **Go module/workspace strategy**: go.work with local workspace
+- **CI build command**: `go work sync && go build -o dist/k9b-cnpg-incident-lab ./cmd/k9b-cnpg-incident-lab`
+- **CI test command**: `go test -v ./internal/lab/cnpg/...` + pytest (via `make test-lab`)
+- **Artifact upload name**: `k9b-cnpg-incident-lab-ci-{run_id}`
+- **Live K3s execution**: Deferred to future ACT

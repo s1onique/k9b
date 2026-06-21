@@ -1,0 +1,8 @@
+// go.work - Workspace file for k9b incident lab modules
+// This allows building the lab runner and internal lab package together.
+go 1.25.8
+
+use (
+	./cmd/k9b-cnpg-incident-lab
+	./internal/lab/cnpg
+)

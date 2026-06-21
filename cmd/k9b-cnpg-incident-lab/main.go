@@ -22,7 +22,7 @@ func main() {
 	enableLLMTriage := runCmd.Bool("enable-llm-triage", false, "Enable LLM triage")
 	openRouterBaseURL := runCmd.String("openrouter-base-url", "", "OpenRouter base URL")
 	openRouterModel := runCmd.String("openrouter-model", "", "OpenRouter model")
-	openRouterAPIKey := runCmd.String("openrouter-api-key", "", "OpenRouter API key")
+	_ = runCmd.String("openrouter-api-key", "", "OpenRouter API key (unused in scaffold)")
 	timeout := runCmd.Duration("timeout", 30*time.Minute, "Lab timeout")
 	verbose := runCmd.Bool("v", false, "Verbose output")
 
