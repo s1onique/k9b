@@ -1,49 +1,36 @@
 #!/usr/bin/env bash
 # Canonical verification gate for the k9b repository.
-# Runs all verification steps and emits VERIFICATION GATE: PASSED on success.
 #
-# FAILURE BEHAVIOR POLICY: Continue through all steps for maximum diagnostics.
-# - Uses step_run_continue to track all step results
-# - Uses step_check_failed to determine final exit code
-# - This policy prioritizes complete diagnostics over fast failure
+# Profile options:
+#   --fast        Fast local profile (≤60s, policy + smoke checks) - LOCAL DEFAULT
+#   --full        Exhaustive merge-grade verification (preserves current behavior)
+#
+# Legacy scope options (preserved):
+#   --python-only    Run only Python lane steps
+#   --frontend-only  Run only Frontend lane steps
+#   --helm-only      Run only Helm lane steps
+#
+# Output modes:
+#   --json            Emit only JSON summary to stdout
+#   STEP_VERBOSE=1   Stream full step output to console
+#
+# Every run prints:
+#   - Profile name
+#   - Elapsed time
+#   - Checks run
+#   - Checks intentionally skipped
+#   - Exact escalation command for merge-grade evidence
 #
 # Usage:
-#   scripts/verify_all.sh                    # full gate (all steps)
-#   scripts/verify_all.sh --json              # full gate, JSON output only
-#   scripts/verify_all.sh --python-only      # Python lane only
-#   scripts/verify_all.sh --frontend-only    # Frontend lane only
-#   scripts/verify_all.sh --helm-only        # Helm chart verification only
-#   scripts/verify_all.sh --python-only --json
-#   STEP_VERBOSE=1 scripts/verify_all.sh     # verbose output
+#   ./scripts/verify_all.sh                    # fast profile (local default)
+#   ./scripts/verify_all.sh --fast             # explicit fast profile
+#   ./scripts/verify_all.sh --full             # exhaustive merge-grade gate
+#   ./scripts/verify_all.sh --json             # fast profile, JSON output
+#   ./scripts/verify_all.sh --full --json      # full gate, JSON output
+#   ./scripts/verify_all.sh --python-only      # legacy: Python lane only
 #
-# Scope options:
-#   --python-only    Run only ruff-lint, unit-tests, mypy (Python lane)
-#   --frontend-only  Run only npm-ci, npm-test-ui, npm-build (Frontend lane)
-#   --helm-only      Run only helm-lint, helm-template, helm-selector (Helm lane)
-#   (no flag)        Run all steps (full canonical gate)
-#
-# Output contract:
-#   - Compact mode: one line per step (PASS/FAIL with duration)
-#   - Success: VERIFICATION GATE: PASSED
-#   - Failure: step name, exit code, log excerpt, log path
-#   - JSON mode: pure JSON summary on stdout (no progress output)
-#   - Scoped runs: only intended lane's steps run; other lane is not referenced
-#   - Parallel full-gate: steps in the non-failed lane continue; steps that haven't
-#     started when a failure is detected show as SKIP
-#
-# JSON mode output contract (--json flag):
-#   - stdout: valid JSON only (no compact progress lines, no VERIFICATION GATE text)
-#   - stderr: quiet except for truly fatal wrapper/preflight errors
-#   - Fatal errors that go to stderr:
-#     * Recursion detection (VERIFY_ALL_ACTIVE already set)
-#     * Lock conflicts (another verification run active)
-#     * Missing interpreter (python not found)
-#     * Missing npm (npm not installed)
-#     * Argument parsing errors
-#   - Non-fatal errors (step failures): ONLY in stdout JSON, never on stderr
-#   - Exit code: 0 on success, non-zero on any failure
-#
-# Logs are stored in runs/verification/ with timestamped per-step files.
+# Policy: Only --full may be called "full gate green".
+#         --fast and lane scopes must report with their exact profile name.
 
 set -uo pipefail
 
@@ -52,9 +39,19 @@ set -uo pipefail
 # ---------------------------------------------------------------------------
 
 STEP_JSON_MODE=""
-STEP_SCOPE="all"  # Default: run all steps
+STEP_SCOPE="all"  # Default: all steps
+STEP_PROFILE=""   # Current profile (fast, full, or empty for legacy)
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --fast)
+            STEP_PROFILE="fast"
+            shift
+            ;;
+        --full)
+            STEP_PROFILE="full"
+            shift
+            ;;
         --json)
             STEP_JSON_MODE=1
             export STEP_JSON_MODE
@@ -73,25 +70,49 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            echo "Usage: $0 [--json] [--python-only] [--frontend-only] [--helm-only]"
-            echo "  --json           Emit only JSON summary to stdout"
+            echo "Usage: $0 [--fast|--full] [--json] [--python-only] [--frontend-only] [--helm-only]"
+            echo ""
+            echo "Profiles:"
+            echo "  --fast       Fast local profile (≤60s, policy + smoke checks) [DEFAULT]"
+            echo "  --full       Exhaustive merge-grade verification"
+            echo ""
+            echo "Output modes:"
+            echo "  --json       Emit only JSON summary to stdout"
+            echo ""
+            echo "Legacy scope options:"
             echo "  --python-only    Run only Python lane steps"
             echo "  --frontend-only  Run only Frontend lane steps"
-            echo "  --helm-only      Run only Helm chart verification"
+            echo "  --helm-only      Run only Helm lane steps"
             echo ""
-            echo "Without scope flags, runs all steps (full gate)."
+            echo "Without --fast or --full, defaults to --fast for local development."
             echo ""
             echo "Environment variables:"
             echo "  STEP_VERBOSE=1    Stream full step output to console"
+            echo ""
+            echo "Evidence policy:"
+            echo "  Only --full may be called 'full gate green'."
+            echo "  --fast and lane scopes must report with their exact profile name."
             exit 0
             ;;
         *)
             echo "Unknown option: $1" >&2
-            echo "Usage: $0 [--json] [--python-only] [--frontend-only] [--helm-only]" >&2
+            echo "Usage: $0 [--fast|--full] [--json] [--python-only] [--frontend-only] [--helm-only]" >&2
             exit 1
             ;;
     esac
 done
+
+# Default profile behavior:
+# - Lane scope (--python-only, etc.): always use full (legacy-compatible)
+# - With --fast or --full: use explicit profile
+# - With no flags: default to fast (local development default)
+if [[ "$STEP_SCOPE" != "all" ]]; then
+    # Lane scope commands always run full to preserve legacy behavior
+    STEP_PROFILE="full"
+elif [[ -z "$STEP_PROFILE" ]]; then
+    # No scope = local default = fast
+    STEP_PROFILE="fast"
+fi
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PYTHON="$REPO_ROOT/.venv/bin/python"
@@ -417,41 +438,163 @@ _run_and_record() {
     _STEP_RESULTS["$step_id"]="${result}|${duration_ms}|${exit_code}"
 }
 
+# ---------------------------------------------------------------------------
+# Profile-based step filtering
+# ---------------------------------------------------------------------------
+# Steps to skip for fast profile (expensive/full-suite steps)
+_FAST_SKIP_PYTHON=(
+    "unit-tests"
+    "docs-claim-traceability"
+    "docs-claim-candidates"
+    "data-model-docs"
+    "docs-claim-candidate-coverage"
+    "docs-claim-candidate-dispositions"
+    "docs-claim-disposition-csv-integrity"
+    "docs-claim-disposition-semantic-diff-self-test"
+    "docs-claim-candidate-backlog-report-self-test"
+)
+_FAST_SKIP_FRONTEND=(
+    "npm-ci"
+    "npm-test-ui"
+    "npm-build"
+)
+_FAST_SKIP_HELM=()
+
+# Check if a step should be skipped for current profile
+_should_skip_step() {
+    local step_id="$1"
+    local lane="$2"
+    
+    if [[ "$STEP_PROFILE" == "full" ]]; then
+        # Full profile: run everything
+        return 1
+    fi
+    
+    if [[ "$STEP_PROFILE" == "fast" ]]; then
+        # Fast profile: skip expensive steps
+        case "$lane" in
+            python)
+                for skip in "${_FAST_SKIP_PYTHON[@]}"; do
+                    [[ "$step_id" == "$skip" ]] && return 0
+                done
+                ;;
+            frontend)
+                for skip in "${_FAST_SKIP_FRONTEND[@]}"; do
+                    [[ "$step_id" == "$skip" ]] && return 0
+                done
+                ;;
+            helm)
+                for skip in "${_FAST_SKIP_HELM[@]}"; do
+                    [[ "$step_id" == "$skip" ]] && return 0
+                done
+                ;;
+        esac
+    fi
+    
+    return 1
+}
+
 # Run Python lane in background
 _run_python_lane() {
-    _run_and_record "python" "doctrine" "Verifying Factory blockstor-derived doctrine" bash "$SCRIPT_DIR/verify_factory_doctrine.sh"
-    _run_and_record "python" "dockerhub-base-images" "Verifying Dockerfiles use Harbor proxy cache" bash "$SCRIPT_DIR/verify_dockerhub_base_images.sh"
-    _run_and_record "python" "docker-workflow-hygiene" "Verifying Docker workflow registry hygiene" bash "$SCRIPT_DIR/verify_docker_workflow_hygiene.sh"
-    _run_and_record "python" "helm-workflow-hygiene" "Verifying Helm version pin hygiene" bash "$SCRIPT_DIR/verify_helm_workflow_hygiene.sh"
-    _run_and_record "python" "docker-build-locality" "Verifying Docker build locality hygiene" bash "$SCRIPT_DIR/verify_docker_build_locality.sh"
-    _run_and_record "python" "agent-pipeline" "Verifying agentic doctrine pipeline" "$PYTHON" scripts/verify_agentic_pipeline.py
-    _run_and_record "python" "llm-evidence-boundaries" "Verifying LLM evidence boundaries" "$PYTHON" scripts/verify_llm_evidence_boundaries.py
-    _run_and_record "python" "llm-semantic-injection" "Verifying semantic injection detection" "$PYTHON" scripts/verify_llm_semantic_injection_detection.py
-    _run_and_record "python" "discovery-logging-hygiene" "Verifying discovery strategy logging hygiene" "$PYTHON" scripts/verify_discovery_logging_hygiene.py
-    _run_and_record "python" "pvc-rollout-policy" "Verifying PVC rollout policy (Recreate for single-writer)" "$PYTHON" scripts/verify_pvc_rollout_policy.py
-    _run_and_record "python" "shared-pvc-colocation" "Verifying shared PVC colocation policy" "$PYTHON" scripts/verify_shared_pvc_colocation.py
-    _run_and_record "python" "next-check-sanitization" "Verifying next-check sanitization hygiene" "$PYTHON" scripts/verify_next_check_sanitization_hygiene.py
-    _run_and_record "python" "operator-projection-hygiene" "Verifying operator projection sanitization hygiene" "$PYTHON" scripts/verify_operator_projection_hygiene.py
-    _run_and_record "python" "llm-friendly" "Checking file sizes for LLM-friendly limits" "$PYTHON" scripts/check_llm_friendly_files.py --quiet
-    _run_and_record "python" "ruff-lint" "Running Ruff lint" "$PYTHON" -m ruff check src tests
-    _run_and_record "python" "structured-output" "Verifying health-loop structured output hygiene" bash "$SCRIPT_DIR/verify_health_loop_structured_output.sh"
-    _run_and_record "python" "unit-tests" "Running unit tests" env PYTHON="$PYTHON" VERIFY_ALL_ACTIVE=1 RUN_FULL_VERIFY_TEST= bash "$SCRIPT_DIR/run_unit_tests.sh"
-    _run_and_record "python" "mypy" "Running mypy" "$PYTHON" -m mypy src/k8s_diag_agent
-    _run_and_record "python" "mypy-tests" "Running mypy on tests" "$PYTHON" -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py
-    _run_and_record "python" "ci-gate-drift" "Verifying CI workflow gate mappings" "$PYTHON" scripts/verify_ci_gate_drift.py
-    _run_and_record "python" "data-model-docs" "Verifying data model documentation hygiene" "$PYTHON" scripts/verify_data_model_docs.py
-    _run_and_record "python" "docs-inventory" "Verifying docs inventory integrity" "$PYTHON" scripts/verify_docs_inventory.py
-    _run_and_record "python" "docs-claims-registry" "Verifying docs claims registry integrity" "$PYTHON" scripts/verify_docs_claims_registry.py
-    _run_and_record "python" "docs-claim-traceability" "Verifying docs claim traceability matrix" "$PYTHON" scripts/verify_docs_claim_traceability.py
-    _run_and_record "python" "docs-claim-candidates" "Scanning docs for claim candidates" "$PYTHON" scripts/scan_docs_claim_candidates.py
-    _run_and_record "python" "docs-claim-candidate-coverage" "Verifying docs claim candidate coverage" "$PYTHON" scripts/verify_docs_claim_candidate_coverage.py
-    _run_and_record "python" "docs-claim-candidate-dispositions" "Verifying docs claim candidate dispositions" "$PYTHON" scripts/verify_docs_claim_candidate_dispositions.py
-    _run_and_record "python" "docs-claim-disposition-csv-integrity" "Verifying disposition shard CSV integrity" "$PYTHON" scripts/verify_docs_claim_disposition_csv_integrity.py
-    _run_and_record "python" "docs-claim-disposition-semantic-diff-self-test" "Verifying disposition semantic diff self-test" "$PYTHON" scripts/diff_docs_claim_dispositions.py --self-test
-    _run_and_record "python" "docs-claim-candidate-backlog-report-self-test" "Verifying claim candidate backlog report self-test" "$PYTHON" scripts/run_backlog_report.py --self-test
-    _run_and_record "python" "incident-report-quality" "Verifying incident report quality invariants" "$PYTHON" scripts/verify_incident_report_quality.py
-    _run_and_record "python" "artifact-immutability" "Verifying artifact immutability enforcement" "$PYTHON" scripts/verify_artifact_immutability.py
-    _run_and_record "python" "production-readiness-disclaimer" "Verifying production readiness disclaimers" "$PYTHON" scripts/verify_production_readiness_disclaimer.py
+    if ! _should_skip_step "doctrine" "python"; then
+        _run_and_record "python" "doctrine" "Verifying Factory blockstor-derived doctrine" bash "$SCRIPT_DIR/verify_factory_doctrine.sh"
+    fi
+    if ! _should_skip_step "dockerhub-base-images" "python"; then
+        _run_and_record "python" "dockerhub-base-images" "Verifying Dockerfiles use Harbor proxy cache" bash "$SCRIPT_DIR/verify_dockerhub_base_images.sh"
+    fi
+    if ! _should_skip_step "docker-workflow-hygiene" "python"; then
+        _run_and_record "python" "docker-workflow-hygiene" "Verifying Docker workflow registry hygiene" bash "$SCRIPT_DIR/verify_docker_workflow_hygiene.sh"
+    fi
+    if ! _should_skip_step "helm-workflow-hygiene" "python"; then
+        _run_and_record "python" "helm-workflow-hygiene" "Verifying Helm version pin hygiene" bash "$SCRIPT_DIR/verify_helm_workflow_hygiene.sh"
+    fi
+    if ! _should_skip_step "docker-build-locality" "python"; then
+        _run_and_record "python" "docker-build-locality" "Verifying Docker build locality hygiene" bash "$SCRIPT_DIR/verify_docker_build_locality.sh"
+    fi
+    if ! _should_skip_step "agent-pipeline" "python"; then
+        _run_and_record "python" "agent-pipeline" "Verifying agentic doctrine pipeline" "$PYTHON" scripts/verify_agentic_pipeline.py
+    fi
+    if ! _should_skip_step "llm-evidence-boundaries" "python"; then
+        _run_and_record "python" "llm-evidence-boundaries" "Verifying LLM evidence boundaries" "$PYTHON" scripts/verify_llm_evidence_boundaries.py
+    fi
+    if ! _should_skip_step "llm-semantic-injection" "python"; then
+        _run_and_record "python" "llm-semantic-injection" "Verifying semantic injection detection" "$PYTHON" scripts/verify_llm_semantic_injection_detection.py
+    fi
+    if ! _should_skip_step "discovery-logging-hygiene" "python"; then
+        _run_and_record "python" "discovery-logging-hygiene" "Verifying discovery strategy logging hygiene" "$PYTHON" scripts/verify_discovery_logging_hygiene.py
+    fi
+    if ! _should_skip_step "pvc-rollout-policy" "python"; then
+        _run_and_record "python" "pvc-rollout-policy" "Verifying PVC rollout policy (Recreate for single-writer)" "$PYTHON" scripts/verify_pvc_rollout_policy.py
+    fi
+    if ! _should_skip_step "shared-pvc-colocation" "python"; then
+        _run_and_record "python" "shared-pvc-colocation" "Verifying shared PVC colocation policy" "$PYTHON" scripts/verify_shared_pvc_colocation.py
+    fi
+    if ! _should_skip_step "next-check-sanitization" "python"; then
+        _run_and_record "python" "next-check-sanitization" "Verifying next-check sanitization hygiene" "$PYTHON" scripts/verify_next_check_sanitization_hygiene.py
+    fi
+    if ! _should_skip_step "operator-projection-hygiene" "python"; then
+        _run_and_record "python" "operator-projection-hygiene" "Verifying operator projection sanitization hygiene" "$PYTHON" scripts/verify_operator_projection_hygiene.py
+    fi
+    if ! _should_skip_step "llm-friendly" "python"; then
+        _run_and_record "python" "llm-friendly" "Checking file sizes for LLM-friendly limits" "$PYTHON" scripts/check_llm_friendly_files.py --quiet
+    fi
+    if ! _should_skip_step "ruff-lint" "python"; then
+        _run_and_record "python" "ruff-lint" "Running Ruff lint" "$PYTHON" -m ruff check src tests
+    fi
+    if ! _should_skip_step "structured-output" "python"; then
+        _run_and_record "python" "structured-output" "Verifying health-loop structured output hygiene" bash "$SCRIPT_DIR/verify_health_loop_structured_output.sh"
+    fi
+    if ! _should_skip_step "unit-tests" "python"; then
+        _run_and_record "python" "unit-tests" "Running unit tests" env PYTHON="$PYTHON" VERIFY_ALL_ACTIVE=1 RUN_FULL_VERIFY_TEST= bash "$SCRIPT_DIR/run_unit_tests.sh"
+    fi
+    if ! _should_skip_step "mypy" "python"; then
+        _run_and_record "python" "mypy" "Running mypy" "$PYTHON" -m mypy src/k8s_diag_agent
+    fi
+    if ! _should_skip_step "mypy-tests" "python"; then
+        _run_and_record "python" "mypy-tests" "Running mypy on tests" "$PYTHON" -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py
+    fi
+    if ! _should_skip_step "ci-gate-drift" "python"; then
+        _run_and_record "python" "ci-gate-drift" "Verifying CI workflow gate mappings" "$PYTHON" scripts/verify_ci_gate_drift.py
+    fi
+    if ! _should_skip_step "data-model-docs" "python"; then
+        _run_and_record "python" "data-model-docs" "Verifying data model documentation hygiene" "$PYTHON" scripts/verify_data_model_docs.py
+    fi
+    if ! _should_skip_step "docs-inventory" "python"; then
+        _run_and_record "python" "docs-inventory" "Verifying docs inventory integrity" "$PYTHON" scripts/verify_docs_inventory.py
+    fi
+    if ! _should_skip_step "docs-claims-registry" "python"; then
+        _run_and_record "python" "docs-claims-registry" "Verifying docs claims registry integrity" "$PYTHON" scripts/verify_docs_claims_registry.py
+    fi
+    if ! _should_skip_step "docs-claim-traceability" "python"; then
+        _run_and_record "python" "docs-claim-traceability" "Verifying docs claim traceability matrix" "$PYTHON" scripts/verify_docs_claim_traceability.py
+    fi
+    if ! _should_skip_step "docs-claim-candidates" "python"; then
+        _run_and_record "python" "docs-claim-candidates" "Scanning docs for claim candidates" "$PYTHON" scripts/scan_docs_claim_candidates.py
+    fi
+    if ! _should_skip_step "docs-claim-candidate-coverage" "python"; then
+        _run_and_record "python" "docs-claim-candidate-coverage" "Verifying docs claim candidate coverage" "$PYTHON" scripts/verify_docs_claim_candidate_coverage.py
+    fi
+    if ! _should_skip_step "docs-claim-candidate-dispositions" "python"; then
+        _run_and_record "python" "docs-claim-candidate-dispositions" "Verifying docs claim candidate dispositions" "$PYTHON" scripts/verify_docs_claim_candidate_dispositions.py
+    fi
+    if ! _should_skip_step "docs-claim-disposition-csv-integrity" "python"; then
+        _run_and_record "python" "docs-claim-disposition-csv-integrity" "Verifying disposition shard CSV integrity" "$PYTHON" scripts/verify_docs_claim_disposition_csv_integrity.py
+    fi
+    if ! _should_skip_step "docs-claim-disposition-semantic-diff-self-test" "python"; then
+        _run_and_record "python" "docs-claim-disposition-semantic-diff-self-test" "Verifying disposition semantic diff self-test" "$PYTHON" scripts/diff_docs_claim_dispositions.py --self-test
+    fi
+    if ! _should_skip_step "docs-claim-candidate-backlog-report-self-test" "python"; then
+        _run_and_record "python" "docs-claim-candidate-backlog-report-self-test" "Verifying claim candidate backlog report self-test" "$PYTHON" scripts/run_backlog_report.py --self-test
+    fi
+    if ! _should_skip_step "incident-report-quality" "python"; then
+        _run_and_record "python" "incident-report-quality" "Verifying incident report quality invariants" "$PYTHON" scripts/verify_incident_report_quality.py
+    fi
+    if ! _should_skip_step "artifact-immutability" "python"; then
+        _run_and_record "python" "artifact-immutability" "Verifying artifact immutability enforcement" "$PYTHON" scripts/verify_artifact_immutability.py
+    fi
+    if ! _should_skip_step "production-readiness-disclaimer" "python"; then
+        _run_and_record "python" "production-readiness-disclaimer" "Verifying production readiness disclaimers" "$PYTHON" scripts/verify_production_readiness_disclaimer.py
+    fi
 }
 
 # Emit gate timings JSON sorted by duration
@@ -566,9 +709,15 @@ for step in data['steps'][:10]:
 # Run Frontend lane in background
 _run_frontend_lane() {
     pushd "$REPO_ROOT/frontend" >/dev/null
-    _run_and_record "frontend" "npm-ci" "Installing frontend deps (npm ci)" npm ci
-    _run_and_record "frontend" "npm-test-ui" "Running frontend UI tests" bash "$REPO_ROOT/scripts/run_frontend_ui_tests.sh"
-    _run_and_record "frontend" "npm-build" "Building frontend" npm run build
+    if ! _should_skip_step "npm-ci" "frontend"; then
+        _run_and_record "frontend" "npm-ci" "Installing frontend deps (npm ci)" npm ci
+    fi
+    if ! _should_skip_step "npm-test-ui" "frontend"; then
+        _run_and_record "frontend" "npm-test-ui" "Running frontend UI tests" bash "$REPO_ROOT/scripts/run_frontend_ui_tests.sh"
+    fi
+    if ! _should_skip_step "npm-build" "frontend"; then
+        _run_and_record "frontend" "npm-build" "Building frontend" npm run build
+    fi
     popd >/dev/null
 }
 
@@ -593,9 +742,16 @@ python_exit=0
 frontend_exit=0
 helm_exit=0
 
+# Lane semantics:
+# - --python-only, --frontend-only, --helm-only: run FULL lane (legacy-compatible)
+# - Without scope flags: respect STEP_PROFILE (fast skips expensive, full runs all)
+#
+# This ensures legacy commands are not silently weakened by fast profile.
+
 case "$STEP_SCOPE" in
     all)
         # Run all lanes concurrently
+        # Profile affects step selection within lanes
         _run_python_lane &
         python_pid=$!
         _run_frontend_lane &
@@ -612,18 +768,18 @@ case "$STEP_SCOPE" in
         helm_exit=$?
         ;;
     python)
-        # Run only Python lane
-        _run_python_lane
+        # Legacy Python lane: always run full Python suite (ignore profile for lane scope)
+        _RUN_FULL_LANE=1 _run_python_lane
         python_exit=$?
         ;;
     frontend)
-        # Run only Frontend lane
-        _run_frontend_lane
+        # Legacy Frontend lane: always run full frontend suite (ignore profile for lane scope)
+        _RUN_FULL_LANE=1 _run_frontend_lane
         frontend_exit=$?
         ;;
     helm)
-        # Run only Helm lane
-        _run_helm_lane
+        # Legacy Helm lane: always run full Helm suite (ignore profile for lane scope)
+        _RUN_FULL_LANE=1 _run_helm_lane
         helm_exit=$?
         ;;
 esac
@@ -689,6 +845,89 @@ fi
 if [[ -z "${STEP_JSON_MODE:-}" ]]; then
     export _LANE_STATE_FILE _TIMINGS_FILE
     _emit_gate_timings
+fi
+
+# ---------------------------------------------------------------------------
+# Profile-aware finalization
+# ---------------------------------------------------------------------------
+
+# Get steps that were run and skipped
+if [[ -f "$_LANE_STATE_FILE" ]]; then
+    # Count steps that ran
+    steps_run=$("$PYTHON" -c "
+import json
+with open('$_LANE_STATE_FILE', 'r') as f:
+    state = json.load(f)
+count = len(state['python']) + len(state['frontend']) + len(state.get('helm', []))
+print(count)
+")
+    
+    # Get elapsed time
+    start_file="$STEP_DATA_DIR/${_RUN_TIMESTAMP}-start.txt"
+    if [[ -f "$start_file" ]]; then
+        start_ts=$(cat "$start_file")
+        elapsed=$("$PYTHON" -c "
+from datetime import datetime, timezone
+try:
+    start = datetime.fromisoformat('$start_ts'.replace('Z', '+00:00'))
+    now = datetime.now(timezone.utc)
+    elapsed = (now - start).total_seconds()
+    print(f'{elapsed:.1f}')
+except:
+    print('N/A')
+")
+    else
+        elapsed="N/A"
+    fi
+else
+    steps_run=0
+    elapsed="N/A"
+fi
+
+# Print profile-aware footer (unless JSON mode)
+if [[ -z "${STEP_JSON_MODE:-}" ]]; then
+    echo ""
+    echo "═══════════════════════════════════════════════════════════"
+    echo "VERIFICATION PROFILE: ${STEP_PROFILE}"
+    echo "═══════════════════════════════════════════════════════════"
+    echo "Profile: ${STEP_PROFILE}"
+    echo "Steps run: ${steps_run}"
+    echo "Elapsed: ${elapsed}s"
+    
+    # Show skipped steps based on profile
+    if [[ "$STEP_PROFILE" == "fast" ]]; then
+        echo ""
+        echo "Skipped (fast profile excludes expensive suites):"
+        echo "  - unit-tests (Python full test suite)"
+        echo "  - npm-ci, npm-test-ui, npm-build (Frontend full suite)"
+        echo "  - docs-claim-* (Heavy docs scans)"
+        echo ""
+        echo "For merge-grade verification:"
+        echo "  ./scripts/verify_all.sh --full"
+    elif [[ "$STEP_PROFILE" == "full" ]]; then
+        echo ""
+        echo "Full profile: All verification steps executed."
+    fi
+    echo "═══════════════════════════════════════════════════════════"
+fi
+
+# Final exit with profile-specific message
+if [[ "$final_exit" == "0" ]]; then
+    if [[ -n "${STEP_JSON_MODE:-}" ]]; then
+        # JSON mode: handled by step_finalize
+        :
+    else
+        echo ""
+        echo "VERIFICATION GATE [${STEP_PROFILE}]: PASSED"
+    fi
+else
+    if [[ -n "${STEP_JSON_MODE:-}" ]]; then
+        # JSON mode: handled by step_finalize
+        :
+    else
+        echo ""
+        echo "VERIFICATION GATE [${STEP_PROFILE}]: FAILED" >&2
+    fi
 fi
 
 step_finalize $final_exit

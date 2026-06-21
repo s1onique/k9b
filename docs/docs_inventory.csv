@@ -109,3 +109,5 @@ docs/testing/unit-test-feedback-loop-guidelines.md,reference,current,testing,,,f
 docs/typing.md,doctrine,current,doctrine,,,false,Type annotation conventions
 docs/verification.md,reference,stale,quality,,,false,Verification documentation - needs update
 docs/worklist-ranking-rationale.md,reference,stale,agents,,,false,Worklist ranking rationale - needs update
+docs/doctrine/local-verification-profiles.md,doctrine,current,doctrine,,,true,Local verification profile definitions and evidence policy
+docs/generated/verification_profiles.md,reference,current,quality,,,false,Verification profiles reference - manually maintained
