@@ -30,7 +30,7 @@ VERIFY_ALL_PY = SCRIPT_DIR / "verify_all.py"
 class TestVerifyAllShimOnly(unittest.TestCase):
     """Test that verify_all.sh is a pure shim with no orchestration logic."""
     
-    def test_shell_is_executable_shim(self):
+    def test_shell_is_executable_shim(self) -> None:
         """verify_all.sh should be an executable shim that execs Python."""
         if not VERIFY_ALL_SH.exists():
             self.skipTest("verify_all.sh not found")
@@ -41,7 +41,7 @@ class TestVerifyAllShimOnly(unittest.TestCase):
         self.assertIn("exec", content.lower())
         self.assertIn("verify_all.py", content)
     
-    def test_shell_has_no_profile_semantics(self):
+    def test_shell_has_no_profile_semantics(self) -> None:
         """Shell should have no profile/scope/lane semantics."""
         if not VERIFY_ALL_SH.exists():
             self.skipTest("verify_all.sh not found")
@@ -66,7 +66,7 @@ class TestVerifyAllShimOnly(unittest.TestCase):
         self.assertEqual(found_forbidden, [], 
             f"Shell should not contain profile semantics: {found_forbidden}")
     
-    def test_shell_has_no_hardcoded_steps(self):
+    def test_shell_has_no_hardcoded_steps(self) -> None:
         """Shell should not have hardcoded step arrays."""
         if not VERIFY_ALL_SH.exists():
             self.skipTest("verify_all.sh not found")
@@ -82,7 +82,7 @@ class TestVerifyAllShimOnly(unittest.TestCase):
         self.assertEqual(found_forbidden, [],
             f"Shell should not have hardcoded steps: {found_forbidden}")
     
-    def test_shell_has_no_step_execution(self):
+    def test_shell_has_no_step_execution(self) -> None:
         """Shell should not call step runners directly."""
         if not VERIFY_ALL_SH.exists():
             self.skipTest("verify_all.sh not found")
@@ -101,7 +101,7 @@ class TestVerifyAllShimOnly(unittest.TestCase):
 class TestVerifyAllPyArgumentParsing(unittest.TestCase):
     """Test verify_all.py argument parsing and default behavior."""
     
-    def test_fast_flag_accepted(self):
+    def test_fast_flag_accepted(self) -> None:
         """--fast should be accepted."""
         result = subprocess.run(
             [sys.executable, str(VERIFY_ALL_PY), "--fast", "--help"],
@@ -110,7 +110,7 @@ class TestVerifyAllPyArgumentParsing(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
     
-    def test_full_flag_accepted(self):
+    def test_full_flag_accepted(self) -> None:
         """--full should be accepted."""
         result = subprocess.run(
             [sys.executable, str(VERIFY_ALL_PY), "--full", "--help"],
@@ -119,7 +119,7 @@ class TestVerifyAllPyArgumentParsing(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
     
-    def test_json_flag_accepted(self):
+    def test_json_flag_accepted(self) -> None:
         """--json should be accepted."""
         result = subprocess.run(
             [sys.executable, str(VERIFY_ALL_PY), "--json", "--help"],
@@ -128,7 +128,7 @@ class TestVerifyAllPyArgumentParsing(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
     
-    def test_python_only_flag_accepted(self):
+    def test_python_only_flag_accepted(self) -> None:
         """--python-only should be accepted."""
         result = subprocess.run(
             [sys.executable, str(VERIFY_ALL_PY), "--python-only", "--help"],
@@ -137,7 +137,7 @@ class TestVerifyAllPyArgumentParsing(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
     
-    def test_frontend_only_flag_accepted(self):
+    def test_frontend_only_flag_accepted(self) -> None:
         """--frontend-only should be accepted."""
         result = subprocess.run(
             [sys.executable, str(VERIFY_ALL_PY), "--frontend-only", "--help"],
@@ -146,7 +146,7 @@ class TestVerifyAllPyArgumentParsing(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
     
-    def test_helm_only_flag_accepted(self):
+    def test_helm_only_flag_accepted(self) -> None:
         """--helm-only should be accepted."""
         result = subprocess.run(
             [sys.executable, str(VERIFY_ALL_PY), "--helm-only", "--help"],
@@ -155,7 +155,7 @@ class TestVerifyAllPyArgumentParsing(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
     
-    def test_default_is_fast(self):
+    def test_default_is_fast(self) -> None:
         """Default profile should be fast (not --full)."""
         # We can't run the full gate here, but we can check the argument parsing
         result = subprocess.run(
@@ -173,11 +173,11 @@ class TestVerifyAllJsonMode(unittest.TestCase):
     """Test JSON output purity."""
     
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """Check if we should run full tests."""
         cls._should_run = os.environ.get("RUN_FULL_VERIFY_TEST") == "1"
     
-    def test_json_mode_requires_valid_json(self):
+    def test_json_mode_requires_valid_json(self) -> None:
         """--json should emit valid JSON only to stdout."""
         if not self._should_run:
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verification")
@@ -200,7 +200,7 @@ class TestVerifyAllJsonMode(unittest.TestCase):
         except json.JSONDecodeError as e:
             self.fail(f"stdout is not valid JSON: {e}\nstdout: {result.stdout[:500]}")
     
-    def test_json_mode_quiet_stderr(self):
+    def test_json_mode_quiet_stderr(self) -> None:
         """--json should not emit human output to stderr on success."""
         if not self._should_run:
             self.skipTest("Set RUN_FULL_VERIFY_TEST=1 to run full verification")
@@ -231,7 +231,7 @@ class TestVerifyAllJsonMode(unittest.TestCase):
 class TestVerifyAllLaneScopes(unittest.TestCase):
     """Test lane scope behavior."""
     
-    def test_python_only_runs_full_python_lane(self):
+    def test_python_only_runs_full_python_lane(self) -> None:
         """--python-only should run full Python lane (not fast profile)."""
         # This test verifies the contract behavior
         # When scope is not 'all', profile should be 'full'
@@ -246,7 +246,7 @@ class TestVerifyAllLaneScopes(unittest.TestCase):
         self.assertEqual(profile, "full")
         self.assertEqual(scope, "python")
 
-    def test_frontend_only_runs_full_frontend_lane(self):
+    def test_frontend_only_runs_full_frontend_lane(self) -> None:
         """--frontend-only should run full Frontend lane (not fast profile)."""
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all import resolve_profile_and_scope
@@ -259,7 +259,7 @@ class TestVerifyAllLaneScopes(unittest.TestCase):
         self.assertEqual(profile, "full")
         self.assertEqual(scope, "frontend")
 
-    def test_helm_only_runs_full_helm_lane(self):
+    def test_helm_only_runs_full_helm_lane(self) -> None:
         """--helm-only should run full Helm lane (not fast profile)."""
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all import resolve_profile_and_scope
@@ -276,7 +276,7 @@ class TestVerifyAllLaneScopes(unittest.TestCase):
 class TestVerifyAllLockBehavior(unittest.TestCase):
     """Test lock behavior."""
     
-    def test_recursion_protection(self):
+    def test_recursion_protection(self) -> None:
         """Recursion should be detected and rejected."""
         env = os.environ.copy()
         env["VERIFY_ALL_ACTIVE"] = "1"
@@ -296,7 +296,7 @@ class TestVerifyAllLockBehavior(unittest.TestCase):
 class TestVerifyAllOutput(unittest.TestCase):
     """Test output formatting."""
     
-    def test_profile_footer_shows_profile_name(self):
+    def test_profile_footer_shows_profile_name(self) -> None:
         """Profile footer should always show the profile name."""
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_profile_plan import emit_full_plan
@@ -309,7 +309,7 @@ class TestVerifyAllOutput(unittest.TestCase):
         plan = emit_full_plan("full", "all")
         self.assertEqual(plan["profile"], "full")
     
-    def test_skipped_reported_honestly(self):
+    def test_skipped_reported_honestly(self) -> None:
         """Skipped steps should be reported with profile name."""
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_profile_plan import emit_full_plan
@@ -329,7 +329,7 @@ class TestVerifyAllOutput(unittest.TestCase):
 class TestVerifyAllFailClosed(unittest.TestCase):
     """Test fail-closed behavior for runner failures and state issues."""
     
-    def test_lane_state_missing_fails_closed(self):
+    def test_lane_state_missing_fails_closed(self) -> None:
         """Missing lane state file should cause failure."""
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all_orchestrator import VerificationOrchestrator
@@ -352,7 +352,7 @@ class TestVerifyAllFailClosed(unittest.TestCase):
             
             self.assertIn("not found", str(ctx.exception))
     
-    def test_lane_state_corrupt_fails_closed(self):
+    def test_lane_state_corrupt_fails_closed(self) -> None:
         """Corrupt lane state file should cause failure."""
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all_orchestrator import VerificationOrchestrator
@@ -376,7 +376,7 @@ class TestVerifyAllFailClosed(unittest.TestCase):
             
             self.assertIn("corrupt", str(ctx.exception).lower())
     
-    def test_runner_failure_propagates(self):
+    def test_runner_failure_propagates(self) -> None:
         """Verify runner failure propagates - tests the code path, not full gate."""
         # This test verifies the contract by checking that runner subprocess
         # failures propagate. We test this by examining the lane state structure.
@@ -389,7 +389,7 @@ class TestVerifyAllFailClosed(unittest.TestCase):
         self.assertIn("python", plan["lanes"])
         # The runner will set exit_code on failure which propagates
     
-    def test_json_mode_emits_valid_json_on_failure(self):
+    def test_json_mode_emits_valid_json_on_failure(self) -> None:
         """JSON mode should emit valid JSON even on failure."""
         # This test is skipped because running the full gate is expensive
         # JSON validity is tested indirectly via contract checks
