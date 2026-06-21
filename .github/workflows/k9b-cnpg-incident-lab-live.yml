@@ -61,7 +61,7 @@ jobs:
       - name: Wait for K3s Ready
         run: kubectl get nodes -o wide && kubectl wait --for=condition=Ready node --all --timeout=180s
       - name: Log K3s version
-        run: kubectl version --short
+        run: kubectl version
 
       # Install CNPG Operator
       - name: Install CNPG operator
@@ -255,11 +255,7 @@ jobs:
             kubectl get pods -n cnpg-lab && kubectl get pods -n k9b
           } > ./lab-artifacts/live/logs/lab-runner.log
 
-      # Verify artifacts
-      - name: Verify live lab artifacts
-        run: .venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir ./lab-artifacts/live --verbose
-
-      # Collect logs
+      # Collect logs (before cleanup to capture real state)
       - name: Collect K3s logs
         run: sudo journalctl -u k3s --no-pager -n 50 > ./lab-artifacts/live/logs/k3s.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/k3s.log
       - name: Collect CNPG logs
@@ -267,9 +263,13 @@ jobs:
       - name: Collect k9b logs
         run: kubectl logs -n k9b -l app.kubernetes.io/name=k9b-agent --tail=50 > ./lab-artifacts/live/logs/k9b.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/k9b.log
 
-      # Cleanup secrets
+      # Cleanup secrets (must happen before verifier scans artifacts)
       - name: Cleanup sensitive files
         run: rm -f /tmp/kubeconfig && find ./lab-artifacts/live -name "*secret*" -type f | xargs rm -f 2>/dev/null || true
+
+      # Verify artifacts (runs on final artifact directory after cleanup)
+      - name: Verify live lab artifacts
+        run: .venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir ./lab-artifacts/live --verbose
 
       # Upload artifacts
       - name: Upload live lab artifacts

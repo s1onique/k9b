@@ -133,6 +133,18 @@ class TestWorkflowLiveLabImplementation:
         assert "rm -f" in content or "cleanup" in content.lower(), \
             "Cleanup step not found"
 
+    def test_live_workflow_verifier_runs_after_cleanup(self) -> None:
+        """Verifier must run after log collection and cleanup to scan final artifact tree."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        # Extract step order: find positions of key steps
+        collect_logs_pos = content.find("Collect K3s logs")
+        cleanup_pos = content.find("Cleanup sensitive files")
+        verify_pos = content.find("Verify live lab artifacts")
+        upload_pos = content.find("Upload live lab artifacts")
+        # Correct order: collect logs -> cleanup -> verify -> upload
+        assert collect_logs_pos < cleanup_pos < verify_pos < upload_pos, \
+            f"Step order wrong: logs={collect_logs_pos}, cleanup={cleanup_pos}, verify={verify_pos}, upload={upload_pos}"
+
 
 class TestArtifactVerifierLiveMode:
     """Test that artifact verifier works with live lab artifacts."""

@@ -188,7 +188,7 @@ jobs:
     name: Live K3s CNPG Lab
     needs: build-and-verify
     if: github.event_name == 'workflow_dispatch' && inputs.run_live_lab == true
-    uses: ./.github/workflows/k9b-cnpg-incident-lab-live.yml@v1
+    uses: ./.github/workflows/k9b-cnpg-incident-lab-live.yml
     with:
       k3s_version: 'v1.31.0+k3s1'
       cnpg_version: '1.26.0'
