@@ -47,6 +47,23 @@ const createIncidentFixture = (overrides: Partial<IncidentDetailPayload> = {}): 
     available: false,
     unavailable_reason: "no_review_packet",
   },
+  automatic_diagnosis_loop_summary: {
+    status: "not_run",
+    latest_started_at: null,
+    latest_completed_at: null,
+    latest_failed_at: null,
+    latest_event_id: null,
+    latest_event_type: null,
+    unavailable_reason: null,
+    checks_requested: null,
+    checks_run: null,
+    checks_rejected: null,
+    review_packet_available: false,
+    review_packet_id: null,
+    read_only: true,
+    review_required_before_any_action: true,
+    no_remediation_attempted: true,
+  },
   ...overrides,
 });
 
