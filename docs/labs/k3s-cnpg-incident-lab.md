@@ -168,14 +168,21 @@ kubectl apply -f deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml
 
 **Important**: Replace the placeholder service account in the manifest:
 1. Run the live workflow once to identify the runner service account
-2. Check the "Kubernetes Subject Diagnostics" step output
-3. Update the `ClusterRoleBinding` subjects with the actual namespace and name
+2. Check the "Kubernetes Subject Diagnostics" step output for: `system:serviceaccount:<namespace>:<name>`
+3. Update the `ClusterRoleBinding` and `RoleBinding` subjects with the actual namespace and name
+
+The manifest structure:
+- **ClusterRole + ClusterRoleBinding** for cluster-scoped resources (namespaces, nodes, CRD)
+- **ClusterRole + ClusterRoleBinding** for lab namespace resources (grants cluster-wide to any namespace the runner creates)
+- **Role + RoleBinding** for cnpg-system namespace (read-only CNPG operator visibility)
+
+**Cluster-wide grant note**: The lab namespace ClusterRoleBinding grants namespaced permissions cluster-wide because lab namespaces are dynamically generated per run (`k9b-cnpg-lab-${GITHUB_RUN_ID}`). This is a conscious tradeoff since Kubernetes cannot pre-bind RoleBindings to namespaces that do not yet exist.
 
 The manifest intentionally:
 - Does NOT bind `cluster-admin`
 - Does NOT use wildcard verbs or resources
+- Does NOT grant secrets read access (only create/update)
 - Grants minimal permissions required for the lab
-- Is scoped to lab namespace resources where practical
 
 ### Runner Service Account Requirements
 
