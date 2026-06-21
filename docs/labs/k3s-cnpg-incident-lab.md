@@ -103,7 +103,7 @@ Prerequisites:
 - Go 1.25+ installed
 
 ```bash
-# Build the lab runner (uses go.work for local development)
+# Build the lab runner (requires go.work workspace)
 go work sync
 go build -o dist/k9b-cnpg-incident-lab ./cmd/k9b-cnpg-incident-lab
 
@@ -238,6 +238,7 @@ artifact-dir/
 4. **No autonomous loop**: Full multi-pass diagnosis is deferred
 5. **Timing dependencies**: Uses sleeps instead of proper condition waits in some places
 6. **CNPG CRD assumptions**: Assumes k9b Incident CRD exists
+7. **Intentionally workspace-built**: The lab runner requires `go.work` and cannot be built outside the workspace (e.g., `GOWORK=off go build` will fail). This is expected behavior for a nested module scaffold.
 
 ## Next ACTs (Deferred)
 

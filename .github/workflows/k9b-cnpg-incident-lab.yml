@@ -119,7 +119,8 @@ jobs:
             exit 1
           fi
           echo "fail-no-incident correctly failed with exit code $rc"
-          grep -E "k9b-incidents.json|k9b incident evidence" /tmp/fail-no-incident.log || echo "Warning: expected pattern not found in output"
+          # Assert fixture fails for intended reason (no fallback)
+          grep -E "k9b-incidents.json|k9b incident evidence" /tmp/fail-no-incident.log
 
       # Verify fail-secret fixture fails
       - name: Verify fail-secret fixture fails as expected
@@ -135,7 +136,8 @@ jobs:
             exit 1
           fi
           echo "fail-secret correctly failed with exit code $rc"
-          grep -Ei "secret|password|api" /tmp/fail-secret.log || echo "Warning: expected pattern not found in output"
+          # Assert fixture fails for intended reason (no fallback)
+          grep -Ei "secret|password|api" /tmp/fail-secret.log
 
       # Upload artifacts
       - name: Upload artifacts
