@@ -10,7 +10,11 @@
 
 | Command | When to Use |
 |---------|-------------|
-| `./scripts/verify_all.sh --act-local` | Default close-check for local ACT work |
+| `./scripts/verify_all.sh --act-local` | Default close-check for local agent ACT work |
+| `./scripts/verify_all.sh --lock-status` | Check lock status and owner diagnostics |
+| `./scripts/verify_all.sh --lock-status --json` | Machine-parseable lock status output |
+| `./scripts/verify_all.sh --act-local --wait-for-lock 300` | Wait for lock with timeout |
+| `./scripts/verify_all.sh --unlock-stale` | Remove proven stale/orphaned lock |
 | `pytest tests/test_X.py` | Targeted tests for changed test files only |
 | `./scripts/verify_all.sh --fast` | When explicitly requested by human |
 | `./scripts/verify_all.sh --full` | CI/manual merge-grade verification only |
@@ -26,6 +30,75 @@ Local agents MUST NOT run:
 - `./scripts/verify_all.sh --full`
 - `rm -rf .verify_lock`
 - `pkill -f`
+
+## Lock Contention Handling
+
+When encountering lock contention errors:
+
+1. **Check lock status first:**
+   ```bash
+   ./scripts/verify_all.sh --lock-status
+   ```
+   
+   This shows:
+   - Whether lock exists
+   - Owner PID and command
+   - Lock age
+   - Whether lock is active, stale, or orphaned
+   - Safe to remove status
+   - Recommended next action
+
+2. **Wait for lock (if owner is active):**
+   ```bash
+   ./scripts/verify_all.sh --act-local --wait-for-lock 300
+   ```
+   
+   This polls lock status with bounded backoff and prints periodic diagnostics.
+
+3. **Remove stale lock (only when safe):**
+   ```bash
+   ./scripts/verify_all.sh --unlock-stale
+   ```
+   
+   Only succeeds when:
+   - Owner process is absent, OR
+   - Owner process identity mismatch proves stale/orphaned
+   
+   **Policy: Never use direct lock deletion (forbidden pattern documented in command table above).**
+
+4. **JSON status output:**
+   ```bash
+   ./scripts/verify_all.sh --lock-status --json > /tmp/lock-status.json
+   python -m json.tool /tmp/lock-status.json > /dev/null
+   ```
+
+## Lock Metadata Schema
+
+The lock system stores rich metadata for diagnostics:
+
+```json
+{
+  "owner_pid": 12345,
+  "parent_pid": 12344,
+  "process_group_id": 12345,
+  "command_line": ["python", "scripts/verify_all.py", "--fast"],
+  "cwd": "/path/to/repo",
+  "hostname": "machine.local",
+  "user": "username",
+  "created_at": "2026-06-16T10:00:00+00:00",
+  "last_heartbeat": "2026-06-16T10:05:00+00:00",
+  "profile": "fast"
+}
+```
+
+## Lock Status Values
+
+| Status | Meaning | Safe to Remove |
+|--------|---------|----------------|
+| `active` | Owner process is running | No |
+| `stale` | Owner absent, lock older than threshold | Yes |
+| `orphaned` | Owner absent, heartbeat was recent | Yes |
+| `no_lock` | No lock file exists | N/A |
 
 ## Exceptions
 

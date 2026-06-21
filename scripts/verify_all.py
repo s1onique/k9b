@@ -7,6 +7,9 @@ The shell script verify_all.sh is now a compatibility shim that execs this modul
 
 Usage:
     python scripts/verify_all.py [--fast|--full|--act-local] [--json] [--python-only|--frontend-only|--helm-only]
+    python scripts/verify_all.py --lock-status [--json]
+    python scripts/verify_all.py [--fast|--act-local] --wait-for-lock <seconds>
+    python scripts/verify_all.py --unlock-stale
 
 For backward compatibility, the shell shim delegates all arguments:
     ./scripts/verify_all.sh ... → .venv/bin/python scripts/verify_all.py ...
@@ -22,6 +25,7 @@ ACT-Local mode:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -38,9 +42,13 @@ from act_local_verification import (
 )
 from verify_all_lock import (
     LockError,
+    LockStatus,
     acquire_verify_lock,
     check_recursion,
+    get_lock_status,
     set_recursion_guard,
+    unlock_stale_lock,
+    wait_for_lock,
 )
 from verify_all_orchestrator import run_verification
 from verify_all_output import print_result
@@ -67,11 +75,18 @@ Without -f or --full, defaults to --fast for local development.
 Output modes:
   --json       Emit only JSON summary to stdout
 
+Lock management commands:
+  --lock-status              Show lock status and owner diagnostics
+  --lock-status --json       Show lock status in JSON format
+  --wait-for-lock <seconds>  Wait for lock to be released (with timeout)
+  --unlock-stale             Remove a stale/orphaned lock (safe operation)
+
 Policy: Only --full may be called "full gate green".
 ACT-Local: Use --act-local as the default close-check for local agent ACTs.
         """,
     )
     
+    # Profile group (mutually exclusive)
     profile_group = parser.add_mutually_exclusive_group()
     profile_group.add_argument(
         "--fast",
@@ -101,6 +116,26 @@ ACT-Local: Use --act-local as the default close-check for local agent ACTs.
         help="Emit only JSON summary to stdout",
     )
     
+    # Lock management commands (mutually exclusive with profile)
+    lock_group = parser.add_mutually_exclusive_group()
+    lock_group.add_argument(
+        "--lock-status",
+        action="store_true",
+        help="Show lock status and owner diagnostics",
+    )
+    lock_group.add_argument(
+        "--unlock-stale",
+        action="store_true",
+        help="Remove a stale/orphaned lock (safe operation only)",
+    )
+    
+    parser.add_argument(
+        "--wait-for-lock",
+        type=int,
+        metavar="SECONDS",
+        help="Wait for lock to be released with timeout (default: 300s)",
+    )
+    
     # Legacy scope options (preserved)
     scope_group = parser.add_mutually_exclusive_group()
     scope_group.add_argument(
@@ -125,7 +160,7 @@ ACT-Local: Use --act-local as the default close-check for local agent ACTs.
         help="Run only Helm lane steps",
     )
     
-    parser.set_defaults(profile=None, scope="all")
+    parser.set_defaults(profile=None, scope="all", wait_for_lock=None)
     
     return parser.parse_args(argv)
 
@@ -151,6 +186,70 @@ def resolve_profile_and_scope(args: argparse.Namespace) -> tuple[str, str]:
     return "fast", scope
 
 
+def format_lock_status_human(status: LockStatus) -> str:
+    """Format lock status for human-readable output."""
+    lines = [
+        "=== Lock Status ===",
+        f"Locked: {'Yes' if status.locked else 'No'}",
+        f"Status: {status.status}",
+        f"Lock age: {int(status.lock_age_seconds)}s",
+    ]
+    
+    if status.owner_pid is not None:
+        lines.append(f"Owner PID: {status.owner_pid}")
+        lines.append(f"Owner exists: {'Yes' if status.owner_exists else 'No'}")
+        if status.owner_command:
+            lines.append(f"Owner command: {status.owner_command}")
+    
+    lines.extend([
+        "",
+        f"Reason: {status.reason}",
+        f"Safe to remove: {'Yes' if status.safe_to_remove else 'No'}",
+        "",
+        f"Recommended action: {status.recommended_action}",
+    ])
+    
+    return "\n".join(lines)
+
+
+def handle_lock_status(repo_root: Path, json_mode: bool) -> int:
+    """Handle --lock-status command."""
+    status = get_lock_status(repo_root)
+    
+    if json_mode:
+        print(json.dumps(status.to_dict(), indent=2))
+        return 0
+    else:
+        print(format_lock_status_human(status))
+        return 0
+
+
+def handle_unlock_stale(repo_root: Path) -> int:
+    """Handle --unlock-stale command."""
+    success, message = unlock_stale_lock(repo_root)
+    print(message)
+    return 0 if success else 1
+
+
+def handle_wait_for_lock(repo_root: Path, timeout_seconds: int, profile: str) -> tuple[bool, int | None]:
+    """
+    Handle --wait-for-lock command.
+    
+    Returns:
+        Tuple of (proceed, exit_code)
+        - proceed=True means lock was acquired, caller should continue
+        - proceed=False means timeout or error, exit_code is the error code
+    """
+    acquired, message = wait_for_lock(repo_root, timeout_seconds=timeout_seconds)
+    
+    if acquired:
+        return True, None
+    
+    print(f"ERROR: {message}", file=sys.stderr)
+    print("Hint: Run ./scripts/verify_all.sh --lock-status for more diagnostics", file=sys.stderr)
+    return False, 4
+
+
 def main(argv: list[str] | None = None) -> int:
     """Main entry point."""
     # Recursion protection - check before argument parsing
@@ -165,11 +264,18 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit:
         raise  # Re-raise argparse's SystemExit
     
-    # Resolve profile and scope
-    profile, scope = resolve_profile_and_scope(args)
-    
     # Get repo root
     repo_root = get_repo_root()
+    
+    # Handle lock-only commands (don't need full setup)
+    if args.lock_status:
+        return handle_lock_status(repo_root, args.json)
+    
+    if args.unlock_stale:
+        return handle_unlock_stale(repo_root)
+    
+    # Resolve profile and scope
+    profile, scope = resolve_profile_and_scope(args)
     
     # Check for Python availability
     python_path = repo_root / ".venv" / "bin" / "python"
@@ -186,6 +292,17 @@ def main(argv: list[str] | None = None) -> int:
     
     # Handle ACT-local profile separately (bypasses lock and normal gate infrastructure)
     if profile == "act-local":
+        # Check for wait-for-lock
+        if args.wait_for_lock is not None:
+            proceed, exit_code = handle_wait_for_lock(
+                repo_root, 
+                args.wait_for_lock, 
+                profile
+            )
+            if not proceed:
+                assert exit_code is not None
+                return exit_code
+        
         act_result = run_act_local_verification(json_mode=args.json)
         
         if args.json:
@@ -195,13 +312,24 @@ def main(argv: list[str] | None = None) -> int:
         
         return 0 if act_result.success else 1
     
-    # Acquire lock (not needed for act-local)
-    try:
-        lock = acquire_verify_lock(repo_root)
-    except LockError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 4
-    
+    # For fast/full profiles, optionally wait for lock
+    if args.wait_for_lock is not None:
+        proceed, exit_code = handle_wait_for_lock(
+            repo_root, 
+            args.wait_for_lock, 
+            profile
+        )
+        if not proceed:
+            assert exit_code is not None
+            return exit_code
+    else:
+        # Default: fail fast on lock contention with owner diagnostics
+        try:
+            lock = acquire_verify_lock(repo_root, profile=profile)
+        except LockError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            print("Hint: Run ./scripts/verify_all.sh --lock-status for diagnostics", file=sys.stderr)
+            return 4
     # Set recursion guard
     set_recursion_guard()
     
@@ -226,7 +354,6 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as e:
         if args.json:
             # In JSON mode, emit error as JSON
-            import json
             print(json.dumps({
                 "success": False,
                 "profile": profile,
@@ -238,8 +365,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     
     finally:
-        # Release lock
-        lock.release()
+        # Release lock (if we acquired it directly)
+        if args.wait_for_lock is not None:
+            # We used wait_for_lock, so we acquired the lock ourselves
+            lock = acquire_verify_lock(repo_root, profile=profile)
+            lock.release()
+        elif 'lock' in dir():
+            lock.release()
 
 
 if __name__ == "__main__":
