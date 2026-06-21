@@ -27,24 +27,36 @@ Design notes:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    pass  # Types imported for documentation purposes
+    from .api_payloads_incident_reads import (
+        AutomaticDiagnosisLoopSummary,
+        IncidentEventPayload,
+    )
 
 
 # =============================================================================
-# Status enum (matches frontend)
+# Status literal type (matches AutomaticDiagnosisLoopSummary TypedDict)
 # =============================================================================
+
+DiagnosisLoopStatusLiteral = Literal[
+    "not_run",
+    "running_or_started",
+    "completed",
+    "failed_or_unavailable",
+]
+
 
 class DiagnosisLoopStatus:
     """Status values for automatic diagnosis loop summary."""
 
-    NOT_RUN = "not_run"
-    RUNNING_OR_STARTED = "running_or_started"
-    COMPLETED = "completed"
-    FAILED_OR_UNAVAILABLE = "failed_or_unavailable"
+    NOT_RUN: DiagnosisLoopStatusLiteral = "not_run"
+    RUNNING_OR_STARTED: DiagnosisLoopStatusLiteral = "running_or_started"
+    COMPLETED: DiagnosisLoopStatusLiteral = "completed"
+    FAILED_OR_UNAVAILABLE: DiagnosisLoopStatusLiteral = "failed_or_unavailable"
 
 
 # =============================================================================
@@ -79,7 +91,7 @@ def _is_diagnosis_loop_event(event_type: str) -> bool:
     )
 
 
-def _get_event_status(event_type: str) -> str | None:
+def _get_event_status(event_type: str) -> DiagnosisLoopStatusLiteral | None:
     """Map diagnosis loop event type to status.
 
     Returns None for non-diagnosis-loop event types.
@@ -171,10 +183,10 @@ def _extract_reason(event_data: dict | None) -> str | None:
 
 
 def build_automatic_diagnosis_loop_summary(
-    events: list[dict],
+    events: Sequence[IncidentEventPayload],
     review_packet_available: bool,
     review_packet_id: str | None = None,
-) -> dict:
+) -> AutomaticDiagnosisLoopSummary:
     """Build AutomaticDiagnosisLoopSummary from incident events and review state.
 
     This function derives a read-only summary of the latest automatic diagnosis
@@ -218,7 +230,7 @@ def build_automatic_diagnosis_loop_summary(
     - NO logs, stdout/stderr, stack traces
     """
     # Filter to only diagnosis loop lifecycle events
-    diagnosis_events: list[tuple[datetime, dict]] = []
+    diagnosis_events: list[tuple[datetime, IncidentEventPayload]] = []
     for event in events:
         event_type = event.get("event_type", "")
         if not _is_diagnosis_loop_event(event_type):
@@ -261,7 +273,9 @@ def build_automatic_diagnosis_loop_summary(
     latest_event_id = _bound_string(latest_event.get("event_id"), MAX_EVENT_ID_LENGTH)
 
     # Determine status from event type
-    status = _get_event_status(latest_event_type or "") or DiagnosisLoopStatus.FAILED_OR_UNAVAILABLE
+    status: DiagnosisLoopStatusLiteral = (
+        _get_event_status(latest_event_type or "") or DiagnosisLoopStatus.FAILED_OR_UNAVAILABLE
+    )
 
     # Extract timestamps for each event type
     latest_started_at: str | None = None
