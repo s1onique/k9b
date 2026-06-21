@@ -783,6 +783,34 @@ class TestImageAssertion:
             "Image assertion should exit 1 on failure"
 
 
+class TestRBACPreflightNamedResource:
+    """Test that RBAC preflight uses named-resource TYPE/NAME form for resourceNames-restricted rules."""
+
+    def test_rbac_preflight_uses_named_crd_resource_check(self) -> None:
+        """RBAC preflight should use named TYPE/NAME form for resourceNames-restricted CRD check."""
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        script_content = rbac_script.read_text()
+        # Should use fully qualified TYPE/NAME form
+        assert "customresourcedefinitions.apiextensions.k8s.io/clusters.postgresql.cnpg.io" in script_content, \
+            "Should use named resource TYPE/NAME form for CRD check"
+        # Should NOT use the ambiguous broad form
+        assert "get crd clusters.postgresql.cnpg.io" not in script_content, \
+            "Should NOT use broad 'get crd' form"
+
+    def test_rbac_manifest_keeps_cnpg_crd_resource_name_scope(self) -> None:
+        """RBAC manifest should keep resourceNames-restricted scope for CNPG CRD."""
+        content = RBAC_MANIFEST.read_text()
+        # Should have resourceNames restriction
+        assert 'resourceNames: ["clusters.postgresql.cnpg.io"]' in content, \
+            "Manifest should keep resourceNames restriction for CNPG CRD"
+        # Should grant only get verb
+        assert 'verbs: ["get"]' in content, \
+            "Manifest should grant only get verb for CRD"
+        # Should NOT grant wildcard resources
+        assert not re.search(r'resources:\s*\[\s*["\']?\*["\']?\s*\]', content), \
+            "Manifest should NOT use wildcard resources"
+
+
 class TestRBACManifest:
     """Test the RBAC manifest for live lab runner."""
 

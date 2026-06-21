@@ -108,7 +108,7 @@ The workflow includes mandatory RBAC preflight checks that fail the job if permi
 **Before namespace creation:**
 - `get pods --all-namespaces`
 - `get nodes`
-- `get crd clusters.postgresql.cnpg.io`
+- `get customresourcedefinitions.apiextensions.k8s.io/clusters.postgresql.cnpg.io`
 - `get pods -n cnpg-system`
 - `get deployments -n cnpg-system`
 - `create namespaces`
@@ -193,7 +193,7 @@ The `spbnix-k8s` runner's service account must have the following RBAC permissio
 |------------|-------|---------|
 | get pods | all namespaces | Cluster-wide pod visibility for diagnostics |
 | get nodes | cluster | Node health checks |
-| get crd clusters.postgresql.cnpg.io | cluster | CNPG CRD existence check |
+| get customresourcedefinitions.apiextensions.k8s.io/clusters.postgresql.cnpg.io | cluster | CNPG CRD existence check |
 | get pods/deployments | cnpg-system | CNPG operator visibility |
 | create/delete namespaces | cluster | Lab namespace lifecycle |
 | create/get/delete pods | lab namespace | Incident injection and cleanup |
