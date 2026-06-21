@@ -80,6 +80,7 @@ run_cluster_checks() {
     check_can_i "get CNPG operator pods" get pods -n cnpg-system || failed=$((failed + 1))
     check_can_i "get CNPG operator deployments" get deployments -n cnpg-system || failed=$((failed + 1))
     check_can_i "create namespaces" create namespaces || failed=$((failed + 1))
+    check_can_i "patch namespaces" patch namespaces || failed=$((failed + 1))
     check_can_i "delete namespaces" delete namespaces || failed=$((failed + 1))
 
     if [ $failed -gt 0 ]; then

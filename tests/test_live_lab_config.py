@@ -519,6 +519,13 @@ class TestRBACPreflight:
         assert "delete namespaces" in script_content, \
             "Script should check delete namespaces permission"
 
+    def test_live_workflow_checks_patch_namespaces(self) -> None:
+        """Live workflow should check patch namespaces permission (via script)."""
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        script_content = rbac_script.read_text()
+        assert "patch namespaces" in script_content, \
+            "Script should check patch namespaces permission (required for kubectl label)"
+
     def test_live_workflow_checks_cnpg_crd_access(self) -> None:
         """Live workflow should check CNPG CRD access permissions (via script)."""
         rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
