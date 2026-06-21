@@ -42,6 +42,7 @@ from act_local_verification import (
 )
 from verify_all_lock import (
     LockError,
+    VerifyLock,
     acquire_verify_lock,
     check_recursion,
     get_lock_status,
@@ -288,33 +289,29 @@ def main(argv: list[str] | None = None) -> int:
     
     # For fast/full profiles, optionally wait for lock
     # After waiting, we MUST acquire the lock before proceeding
-    if args.wait_for_lock is not None:
-        # First wait for the lock to be released
-        proceed, exit_code = handle_wait_for_lock(
-            repo_root, 
-            args.wait_for_lock, 
-            profile
-        )
-        if not proceed:
-            assert exit_code is not None
-            return exit_code
-        
-        # Lock was released - now acquire it before proceeding
-        # This prevents races between wait completion and actual acquisition
-        try:
+    lock: VerifyLock | None = None
+    try:
+        if args.wait_for_lock is not None:
+            # First wait for the lock to be released
+            proceed, exit_code = handle_wait_for_lock(
+                repo_root, 
+                args.wait_for_lock, 
+                profile
+            )
+            if not proceed:
+                assert exit_code is not None
+                return exit_code
+            
+            # Lock was released - now acquire it before proceeding
+            # This prevents races between wait completion and actual acquisition
             lock = acquire_verify_lock(repo_root, profile=profile)
-        except LockError as e:
-            print(f"ERROR: {e}", file=sys.stderr)
-            print("Hint: Run ./scripts/verify_all.sh --lock-status for diagnostics", file=sys.stderr)
-            return 4
-    else:
-        # Default: fail fast on lock contention with owner diagnostics
-        try:
+        else:
+            # Default: fail fast on lock contention with owner diagnostics
             lock = acquire_verify_lock(repo_root, profile=profile)
-        except LockError as e:
-            print(f"ERROR: {e}", file=sys.stderr)
-            print("Hint: Run ./scripts/verify_all.sh --lock-status for diagnostics", file=sys.stderr)
-            return 4
+    except LockError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        print("Hint: Run ./scripts/verify_all.sh --lock-status for diagnostics", file=sys.stderr)
+        return 4
     # Set recursion guard
     set_recursion_guard()
     
@@ -350,12 +347,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     
     finally:
-        # Release lock (if we acquired it directly)
-        if args.wait_for_lock is not None:
-            # We used wait_for_lock, so we acquired the lock ourselves
-            lock = acquire_verify_lock(repo_root, profile=profile)
-            lock.release()
-        elif 'lock' in dir():
+        # Release the lock we acquired - NOT a new lock
+        if lock is not None:
             lock.release()
 
 
