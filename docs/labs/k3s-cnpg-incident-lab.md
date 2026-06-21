@@ -25,14 +25,17 @@ The lab is designed to run in **existing-cluster namespace mode**, where:
 │  │   Images         │  via Helm → Inject → Artifacts → Upload  │
 │  └──────────────────┘                                         │
 └─────────────────────────────────────────────────────────────────┘
-                                     │
-                                     ▼ (when live lab runs)
+                                      │
+                                      ▼ (when live lab runs)
 ┌─────────────────────────────────────────────────────────────────┐
 │                 Existing K3s Cluster (self-hosted runner)          │
 │  ┌──────────────────────────────────────────────────────────┐ │
 │  │  GitHub Actions Runner (in-cluster)                       │ │
 │  │  ┌────────────────────────────────────────────────────┐ │ │
 │  │  │  k9b-cnpg-incident-lab-live.yml                     │ │ │
+│  │  │  - Installs kubectl v1.31.0                         │ │ │
+│  │  │  - Configures in-cluster kubeconfig from SA mount   │ │ │
+│  │  │  - Verifies RBAC permissions (fatal preflight)      │ │ │
 │  │  │  - Preflights existing CNPG operator                │ │ │
 │  │  │  - Creates unique lab namespace                     │ │ │
 │  │  │  - Deploys k9b via Helm (consumes Harbor image)     │ │ │
@@ -47,8 +50,8 @@ The lab is designed to run in **existing-cluster namespace mode**, where:
 │  │   (existing) │  │   (lab ns)   │  │   (lab ns)          │ │
 │  └──────────────┘  └──────────────┘  └──────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
-                                     │
-                                     ▼
+                                      │
+                                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Artifact Directory                            │
 │  lab-result.json                                                │
@@ -79,6 +82,60 @@ The lab was converted from nested K3s provisioning to existing-cluster namespace
 2. **CloudNativePG is preinstalled** - No need to install the CNPG operator
 3. **Harbor is available in-cluster** - Images are built by the canonical workflow and pushed to Harbor
 4. **No Docker socket in runner pods** - Cannot build images in the live workflow
+
+### kubectl and In-Cluster kubeconfig Bootstrap
+
+The live workflow bootstraps kubectl and kubeconfig entirely within the workflow:
+
+1. **kubectl installation**: Uses `azure/setup-kubectl@v4` with a pinned version (`v1.31.0`) compatible with the cluster. No kubectl baked into the runner image is required.
+
+2. **In-cluster kubeconfig**: Constructs kubeconfig from the in-cluster service account mount at `/var/run/secrets/kubernetes.io/serviceaccount/`:
+   - Reads `KUBERNETES_SERVICE_HOST` to determine API server address
+   - Uses `token` file for authentication
+   - Uses `ca.crt` for certificate verification
+   - Configures context `in-cluster` with `runner-sa` credentials
+
+3. **Security hygiene**:
+   - Token is never echoed or printed
+   - `kubectl config view --raw` is not used (would leak embedded tokens)
+   - kubeconfig is not uploaded as an artifact
+   - `KUBECONFIG` is exported to `$GITHUB_ENV` for subsequent steps
+
+### RBAC Preflight (Fatal)
+
+The workflow includes mandatory RBAC preflight checks that fail the job if permissions are missing:
+
+**Before namespace creation:**
+- `get pods --all-namespaces`
+- `get nodes`
+- `get crd clusters.postgresql.cnpg.io`
+- `get pods -n cnpg-system`
+- `get deployments -n cnpg-system`
+- `create namespaces`
+- `delete namespaces`
+
+**After namespace creation (lab namespace-scoped):**
+- `create pods -n $LAB_NAMESPACE`
+- `delete pods -n $LAB_NAMESPACE`
+- `create configmaps -n $LAB_NAMESPACE`
+- `create secrets -n $LAB_NAMESPACE`
+- `create clusters.postgresql.cnpg.io -n $LAB_NAMESPACE`
+- `get clusters.postgresql.cnpg.io -n $LAB_NAMESPACE`
+
+### Runner Service Account Requirements
+
+The `spbnix-k8s` runner's service account must have the following RBAC permissions:
+
+| Permission | Scope | Purpose |
+|------------|-------|---------|
+| get pods | all namespaces | Cluster-wide pod visibility for diagnostics |
+| get nodes | cluster | Node health checks |
+| get crd clusters.postgresql.cnpg.io | cluster | CNPG CRD existence check |
+| get pods/deployments | cnpg-system | CNPG operator visibility |
+| create/delete namespaces | cluster | Lab namespace lifecycle |
+| create/get/delete pods | lab namespace | Incident injection and cleanup |
+| create configmaps/secrets | lab namespace | Helm chart resource creation |
+| create/get clusters.postgresql.cnpg.io | lab namespace | CNPG Cluster lifecycle |
 
 ### Image-Builder Ownership
 
@@ -133,17 +190,20 @@ The `build-lab-images` job:
 #### live-k3s-lab Job (only when live lab requested)
 
 The `live-k3s-lab` job runs on self-hosted runner with cluster access and:
-1. Preflights existing cluster access
-2. Preflights existing CNPG operator/CRD
-3. Creates unique lab namespace (`k9b-cnpg-lab-${GITHUB_RUN_ID}`)
-4. Deploys k9b via Helm chart using image-builder outputs
-5. Asserts k9b pod image matches image-builder output
-6. Deploys CNPG Cluster in lab namespace
-7. Injects pod-failure incident using tracked manifest
-8. Verifies incident symptom (pod NotReady)
-9. Collects artifacts and runs verifier
-10. Cleans up lab namespace (always runs)
-11. Uploads artifacts
+1. Installs kubectl (pinned v1.31.0)
+2. Configures in-cluster kubeconfig from service account mount
+3. Verifies RBAC permissions (fatal preflight)
+4. Preflights existing CNPG operator/CRD
+5. Creates unique lab namespace (`k9b-cnpg-lab-${GITHUB_RUN_ID}`)
+6. Verifies namespace-scoped RBAC permissions
+7. Deploys k9b via Helm chart using image-builder outputs
+8. Asserts k9b pod image matches image-builder output
+9. Deploys CNPG Cluster in lab namespace
+10. Injects pod-failure incident using tracked manifest
+11. Verifies incident symptom (pod NotReady)
+12. Collects artifacts and runs verifier
+13. Cleans up lab namespace (always runs)
+14. Uploads artifacts
 
 ## Required Runner Scale Sets
 
@@ -176,10 +236,12 @@ runs-on: spbnix-k8s
 ```
 
 This runner scale set provides:
-- Cluster access via in-cluster service account
-- kubectl, Helm, Python
+- In-cluster service account mount for kubeconfig bootstrap
+- kubectl, Helm, Python (via workflow installation)
 - CNPG operator visibility in `cnpg-system`
 - Harbor access for image pulls
+
+**Note**: The `spbnix-k8s` runner does NOT need kubectl baked in. The workflow installs kubectl via `azure/setup-kubectl@v4`.
 
 **Important**: The live lab does not need Docker and must not run on the Docker builder scale set.
 
@@ -282,14 +344,19 @@ artifact-dir/
 ## Secret Hygiene
 
 The lab explicitly avoids uploading:
-- kubeconfig contents
-- service account tokens
+- kubeconfig contents (generated in-memory from service account)
+- service account tokens (used only for kubectl config, never echoed)
 - generated database passwords
 - OpenRouter keys
 - GitHub tokens
 - bearer tokens
 - private keys
 - full Secret resources
+
+**kubeconfig security**: The kubeconfig is generated from the in-cluster service account mount and stored at `$HOME/.kube/config`. It is:
+- Never echoed or printed
+- Not uploaded as an artifact
+- Used only for kubectl operations within the workflow
 
 ## Safety Boundaries
 
@@ -298,6 +365,7 @@ The lab explicitly avoids uploading:
 3. **No CNPG operator installation**: Accepts preinstalled operator only
 4. **No nested K3s**: Runs on existing cluster infrastructure
 5. **k9b live detection deferred**: Not implemented in this ACT
+6. **RBAC preflight is fatal**: Missing permissions cause immediate job failure
 
 ## Build Commands
 
@@ -324,11 +392,11 @@ go test -v ./internal/lab/cnpg/...
 
 | File | Purpose |
 |------|---------|
-| `.github/workflows/k9b-image-builder.yml` | Reusable image-build workflow (new) |
+| `.github/workflows/k9b-image-builder.yml` | Reusable image-build workflow |
 | `.github/workflows/k9b-cnpg-incident-lab.yml` | Main CI workflow with image-builder integration |
-| `.github/workflows/k9b-cnpg-incident-lab-live.yml` | Live workflow in namespace mode |
+| `.github/workflows/k9b-cnpg-incident-lab-live.yml` | Live workflow with kubectl bootstrap and RBAC preflight |
 | `scripts/verify_k3s_cnpg_incident_lab_artifact.py` | Artifact verifier with namespace-mode support |
-| `tests/test_live_lab_config.py` | Workflow config tests (namespace mode) |
+| `tests/test_live_lab_config.py` | Workflow config tests (kubectl bootstrap, RBAC, secret hygiene) |
 | `fixtures/lab/live/pod-failure/injected-change.yaml` | Tracked incident manifest |
 | `docs/labs/k3s-cnpg-incident-lab.md` | This documentation |
 
@@ -339,8 +407,9 @@ go test -v ./internal/lab/cnpg/...
 These verification commands are for CI and manual testing purposes only:
 
 ```bash
-# Run lab config tests
+# Run lab config tests (includes kubectl bootstrap and RBAC tests)
 .venv/bin/python -m pytest tests/test_live_lab_config.py -v
+
 # Run verifier tests
 .venv/bin/python -m pytest tests/test_verify_k3s_cnpg_incident_lab.py -v
 
@@ -351,3 +420,16 @@ These verification commands are for CI and manual testing purposes only:
 # Run ACT-local verification
 ./scripts/verify_all.sh --act-local
 ```
+
+### Live Lab Acceptance Criteria
+
+For a successful live lab run:
+
+1. **Runner pickup**: Job is picked up by `spbnix-k8s` runner
+2. **kubectl setup**: `Set up kubectl` step completes successfully
+3. **kubeconfig bootstrap**: `Configure in-cluster kubeconfig` step completes
+4. **kubectl availability**: `kubectl version --client` passes
+5. **RBAC preflight**: `kubectl auth can-i` checks pass (or fail with clear missing permission error)
+6. **CNPG preflight**: CNPG operator visibility check passes
+7. **No token leakage**: No tokens or kubeconfig printed or uploaded
+8. **Namespace-mode preserved**: Lab uses unique namespace, not cluster-wide resources

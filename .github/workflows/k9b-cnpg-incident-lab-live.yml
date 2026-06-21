@@ -83,15 +83,95 @@ jobs:
       # =======================================================================
       - uses: actions/checkout@v4
 
+      # =======================================================================
+      # Setup kubectl (pinned version compatible with cluster)
+      # =======================================================================
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.31.0'
+
+      # =======================================================================
+      # Configure in-cluster kubeconfig from service account mount
+      # =======================================================================
+      - name: Configure in-cluster kubeconfig
+        run: |
+          set -euo pipefail
+
+          SA_DIR="/var/run/secrets/kubernetes.io/serviceaccount"
+          KUBECONFIG_PATH="$HOME/.kube/config"
+
+          if [ -z "${KUBERNETES_SERVICE_HOST:-}" ]; then
+            echo "ERROR: KUBERNETES_SERVICE_HOST is not set; runner does not appear to be running in Kubernetes"
+            exit 1
+          fi
+
+          if [ ! -f "$SA_DIR/token" ]; then
+            echo "ERROR: service account token not mounted at $SA_DIR/token"
+            exit 1
+          fi
+
+          if [ ! -f "$SA_DIR/ca.crt" ]; then
+            echo "ERROR: service account CA not mounted at $SA_DIR/ca.crt"
+            exit 1
+          fi
+
+          mkdir -p "$HOME/.kube"
+
+          APISERVER="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS:-${KUBERNETES_SERVICE_PORT:-443}}"
+
+          kubectl config set-cluster in-cluster \
+            --server="$APISERVER" \
+            --certificate-authority="$SA_DIR/ca.crt" \
+            --embed-certs=true
+
+          kubectl config set-credentials runner-sa \
+            --token="$(cat "$SA_DIR/token")"
+
+          kubectl config set-context in-cluster \
+            --cluster=in-cluster \
+            --user=runner-sa \
+            --namespace=default
+
+          kubectl config use-context in-cluster
+
+          chmod 0600 "$KUBECONFIG_PATH"
+
+          echo "KUBECONFIG=$KUBECONFIG_PATH" >> "$GITHUB_ENV"
+          echo "In-cluster kubeconfig configured"
+
+      # =======================================================================
+      # Runner preflight diagnostics (bounded - no token/kubeconfig leakage)
+      # =======================================================================
       - name: Runner preflight diagnostics
         run: |
           echo "=== Runner Preflight Diagnostics ==="
           echo "Runner name: ${RUNNER_NAME:-unknown}"
           echo "Runner OS: ${RUNNER_OS:-unknown}"
           echo "Runner arch: ${RUNNER_ARCH:-unknown}"
+          command -v kubectl
           kubectl version --client
-          kubectl auth can-i get pods --all-namespaces
+          kubectl config current-context
           echo "=== Runner diagnostics complete ==="
+
+      # =======================================================================
+      # Fatal RBAC preflight - verify required permissions exist
+      # =======================================================================
+      - name: Verify live lab Kubernetes permissions
+        run: |
+          set -euo pipefail
+
+          echo "=== Verifying live lab Kubernetes permissions ==="
+
+          kubectl auth can-i get pods --all-namespaces
+          kubectl auth can-i get nodes
+          kubectl auth can-i get crd clusters.postgresql.cnpg.io
+          kubectl auth can-i get pods -n cnpg-system
+          kubectl auth can-i get deployments -n cnpg-system
+          kubectl auth can-i create namespaces
+          kubectl auth can-i delete namespaces
+
+          echo "Kubernetes permission preflight passed"
 
       - uses: actions/setup-python@v5
         with:
@@ -185,6 +265,24 @@ jobs:
           echo "LAB_NAMESPACE=$LAB_NAMESPACE" >> $GITHUB_ENV
           echo "Lab namespace created and labeled"
           kubectl get namespace "$LAB_NAMESPACE"
+
+      # =======================================================================
+      # Verify namespace-scoped permissions after namespace creation
+      # =======================================================================
+      - name: Verify namespace-scoped Kubernetes permissions
+        run: |
+          set -euo pipefail
+
+          echo "=== Verifying namespace-scoped Kubernetes permissions ==="
+
+          kubectl auth can-i create pods -n "$LAB_NAMESPACE"
+          kubectl auth can-i delete pods -n "$LAB_NAMESPACE"
+          kubectl auth can-i create configmaps -n "$LAB_NAMESPACE"
+          kubectl auth can-i create secrets -n "$LAB_NAMESPACE"
+          kubectl auth can-i create clusters.postgresql.cnpg.io -n "$LAB_NAMESPACE"
+          kubectl auth can-i get clusters.postgresql.cnpg.io -n "$LAB_NAMESPACE"
+
+          echo "Namespace-scoped permission preflight passed"
 
       # =======================================================================
       # Deploy k9b via Helm chart using image-builder outputs

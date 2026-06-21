@@ -335,6 +335,151 @@ class TestWorkflowLiveLabNamespaceMode:
             f"Step order wrong: collect={collect_logs_pos}, cleanup={cleanup_pos}, verify={verify_pos}, upload={upload_pos}"
 
 
+class TestKubectlBootstrap:
+    """Test kubectl bootstrap and in-cluster kubeconfig configuration."""
+
+    def test_live_workflow_installs_kubectl_before_preflight(self) -> None:
+        """Live workflow should install kubectl using azure/setup-kubectl before preflight."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        setup_pos = content.find("azure/setup-kubectl@v4")
+        preflight_pos = content.find("Runner preflight diagnostics")
+        assert setup_pos != -1, "azure/setup-kubectl@v4 not found"
+        assert preflight_pos != -1, "Runner preflight diagnostics not found"
+        assert setup_pos < preflight_pos, \
+            f"kubectl setup ({setup_pos}) must come before preflight ({preflight_pos})"
+
+    def test_live_workflow_uses_pinned_kubectl_version(self) -> None:
+        """Live workflow should use a pinned kubectl version, not 'latest'."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        # Should have a version like 'v1.31.0'
+        assert re.search(r"version:\s*['\"]v\d+\.\d+", content), \
+            "Should use pinned kubectl version (e.g., v1.31.0)"
+        # Should NOT use 'latest'
+        assert "version: 'latest'" not in content, \
+            "Should NOT use 'latest' for kubectl version"
+
+    def test_live_workflow_configures_in_cluster_kubeconfig(self) -> None:
+        """Live workflow should configure in-cluster kubeconfig from service account mount."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "/var/run/secrets/kubernetes.io/serviceaccount" in content, \
+            "Should reference service account mount path"
+        assert "KUBERNETES_SERVICE_HOST" in content, \
+            "Should check KUBERNETES_SERVICE_HOST environment variable"
+        assert "kubectl config set-cluster in-cluster" in content, \
+            "Should configure in-cluster context"
+        assert "kubectl config set-credentials runner-sa" in content, \
+            "Should configure runner-sa credentials"
+        assert "kubectl config use-context in-cluster" in content, \
+            "Should set in-cluster as current context"
+
+    def test_live_workflow_checks_sa_token_exists(self) -> None:
+        """Live workflow should verify service account token file exists."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert 'if [ ! -f "$SA_DIR/token" ]' in content or "$SA_DIR/token" in content, \
+            "Should check that service account token exists"
+        assert "ERROR: service account token not mounted" in content, \
+            "Should emit error if token is missing"
+
+    def test_live_workflow_checks_sa_ca_exists(self) -> None:
+        """Live workflow should verify service account CA file exists."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert 'if [ ! -f "$SA_DIR/ca.crt" ]' in content or "$SA_DIR/ca.crt" in content, \
+            "Should check that service account CA exists"
+        assert "ERROR: service account CA not mounted" in content, \
+            "Should emit error if CA is missing"
+
+    def test_live_workflow_does_not_echo_token(self) -> None:
+        """Live workflow should NOT echo or print the service account token."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        # The token is used inline in --token="$(cat "$SA_DIR/token")" which is OK
+        # but there should be no echo of the token
+        assert "echo.*token" not in content.lower() or "token not mounted" in content.lower(), \
+            "Should not echo service account token"
+        # The pattern cat "$SA_DIR/token" inside set-credentials is OK
+        # But standalone echo with token variable is not
+        assert not re.search(r'echo\s+["\']?\$\{?SA_DIR\}?/token\}?', content), \
+            "Should not echo service account token path either"
+
+    def test_live_workflow_does_not_run_kubectl_config_view_raw(self) -> None:
+        """Live workflow should NOT run 'kubectl config view --raw' which can leak tokens."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "kubectl config view --raw" not in content, \
+            "Should NOT run kubectl config view --raw (can leak tokens)"
+
+    def test_live_workflow_exports_kubeconfig_path(self) -> None:
+        """Live workflow should export KUBECONFIG path to GITHUB_ENV."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert 'KUBECONFIG=$KUBECONFIG_PATH" >> "$GITHUB_ENV' in content, \
+            "Should export KUBECONFIG path to GITHUB_ENV"
+
+    def test_live_workflow_configures_readonly_diagnostics(self) -> None:
+        """Live workflow should have bounded preflight diagnostics without token exposure."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        # Should have command -v kubectl check
+        assert "command -v kubectl" in content, \
+            "Should verify kubectl is available"
+        # Should have kubectl version --client
+        assert "kubectl version --client" in content, \
+            "Should check kubectl client version"
+        # Should have kubectl config current-context
+        assert "kubectl config current-context" in content, \
+            "Should check current context"
+
+
+class TestRBACPreflight:
+    """Test fatal RBAC preflight checks for live lab permissions."""
+
+    def test_live_workflow_has_fatal_rbac_preflight(self) -> None:
+        """Live workflow should have fatal RBAC preflight step."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "Verify live lab Kubernetes permissions" in content, \
+            "Should have RBAC preflight step"
+
+    def test_live_workflow_checks_get_pods_all_namespaces(self) -> None:
+        """Live workflow should check get pods permission across all namespaces."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "kubectl auth can-i get pods --all-namespaces" in content, \
+            "Should check get pods --all-namespaces permission"
+
+    def test_live_workflow_checks_get_nodes(self) -> None:
+        """Live workflow should check get nodes permission."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "kubectl auth can-i get nodes" in content, \
+            "Should check get nodes permission"
+
+    def test_live_workflow_checks_create_namespaces(self) -> None:
+        """Live workflow should check create namespaces permission."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "kubectl auth can-i create namespaces" in content, \
+            "Should check create namespaces permission"
+
+    def test_live_workflow_checks_delete_namespaces(self) -> None:
+        """Live workflow should check delete namespaces permission."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "kubectl auth can-i delete namespaces" in content, \
+            "Should check delete namespaces permission"
+
+    def test_live_workflow_checks_cnpg_crd_access(self) -> None:
+        """Live workflow should check CNPG CRD access permissions."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "kubectl auth can-i get crd clusters.postgresql.cnpg.io" in content, \
+            "Should check get CRD permission for CNPG clusters"
+        assert "cnpg-system" in content, \
+            "Should check cnpg-system namespace access"
+
+    def test_live_workflow_has_namespace_scoped_permissions(self) -> None:
+        """Live workflow should verify namespace-scoped permissions after namespace creation."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "Verify namespace-scoped Kubernetes permissions" in content, \
+            "Should have namespace-scoped permission check step"
+        assert "kubectl auth can-i create pods -n" in content, \
+            "Should check create pods permission in lab namespace"
+        assert "kubectl auth can-i delete pods -n" in content, \
+            "Should check delete pods permission in lab namespace"
+        assert "kubectl auth can-i create clusters.postgresql.cnpg.io -n" in content, \
+            "Should check create CNPG cluster permission in lab namespace"
+
+
 class TestArtifactVerifierNamespaceMode:
     """Test that artifact verifier works with namespace mode artifacts."""
 
