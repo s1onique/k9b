@@ -145,22 +145,43 @@ The `live-k3s-lab` job runs on self-hosted runner with cluster access and:
 10. Cleans up lab namespace (always runs)
 11. Uploads artifacts
 
-## Required Self-Hosted Runner Labels
+## Required Runner Scale Sets
 
-The live lab runs on GitHub-hosted runners inside the target K3s cluster:
+The lab uses two distinct ARC runner scale sets:
+
+| Runner Scale Set | Purpose | Docker/Buildx |
+|-----------------|---------|---------------|
+| `spbnix-k8s-docker` | Image-builder workflow only | Required |
+| `spbnix-k8s` | Live namespace lab workflow | Not needed |
+
+### Image-Builder Runner: `spbnix-k8s-docker`
+
+The `k9b-image-builder.yml` reusable workflow runs on `spbnix-k8s-docker`:
 
 ```yaml
-runs-on:
-  - self-hosted
-  - linux
-  - x64
-  - github-actions-runner
+runs-on: spbnix-k8s-docker
 ```
 
-The runner must have:
-- Cluster access via service account
-- CNPG operator visible in `cnpg-system`
+This runner scale set has Docker/Buildx capability for:
+- Building multi-arch images (linux/amd64, linux/arm64)
+- Pushing to Harbor registry
+- Running QEMU for cross-arch builds
+
+### Live Lab Runner: `spbnix-k8s`
+
+The `k9b-cnpg-incident-lab-live.yml` workflow runs on `spbnix-k8s`:
+
+```yaml
+runs-on: spbnix-k8s
+```
+
+This runner scale set provides:
+- Cluster access via in-cluster service account
+- kubectl, Helm, Python
+- CNPG operator visibility in `cnpg-system`
 - Harbor access for image pulls
+
+**Important**: The live lab does not need Docker and must not run on the Docker builder scale set.
 
 ## Required CNPG Operator Prerequisite
 

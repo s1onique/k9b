@@ -131,12 +131,33 @@ class TestWorkflowLiveLabNamespaceMode:
         """The live workflow file should exist."""
         assert WORKFLOW_LIVE_FILE.exists(), f"Live workflow file not found at {WORKFLOW_LIVE_FILE}"
 
-    def test_live_workflow_runs_on_self_hosted_runner(self) -> None:
-        """Live workflow should run on self-hosted runner with cluster access."""
+    def test_live_workflow_runs_on_spbnix_k8s_scale_set(self) -> None:
+        """Live workflow should run on spbnix-k8s ARC runner scale set."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert "self-hosted" in content, "Should run on self-hosted runner"
-        assert "github-actions-runner" in content, \
-            "Should run on github-actions-runner label"
+        assert "runs-on: spbnix-k8s" in content, \
+            "Should run on spbnix-k8s runner scale set"
+        assert "github-actions-runner" not in content, \
+            "Should NOT run on github-actions-runner label"
+        assert "runs-on:\n      - self-hosted" not in content, \
+            "Should NOT use multi-label self-hosted runner"
+
+    def test_live_workflow_does_not_use_docker_scale_set(self) -> None:
+        """Live workflow should NOT run on Docker-capable runner scale set."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "spbnix-k8s-docker" not in content, \
+            "Should NOT run on spbnix-k8s-docker scale set (no Docker needed)"
+
+    def test_live_workflow_has_runner_preflight_diagnostics(self) -> None:
+        """Live workflow should have runner preflight diagnostics."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "Runner preflight diagnostics" in content, \
+            "Should have runner preflight diagnostics step"
+        assert "RUNNER_NAME" in content, \
+            "Should print runner name"
+        assert "kubectl version --client" in content, \
+            "Should verify kubectl version"
+        assert "kubectl auth can-i get pods" in content, \
+            "Should verify cluster access"
 
     def test_live_workflow_uses_workflow_call(self) -> None:
         """Live workflow should be a reusable workflow with workflow_call."""

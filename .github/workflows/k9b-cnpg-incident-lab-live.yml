@@ -72,12 +72,8 @@ env:
 jobs:
   live-k3s-lab:
     name: Live K3s CNPG Lab
-    # Run on internal self-hosted runner with cluster access
-    runs-on:
-      - self-hosted
-      - linux
-      - x64
-      - github-actions-runner
+    # Run on ARC runner scale set spbnix-k8s (cluster access, no Docker)
+    runs-on: spbnix-k8s
     timeout-minutes: 60
     permissions:
       contents: read
@@ -86,6 +82,16 @@ jobs:
       # Setup
       # =======================================================================
       - uses: actions/checkout@v4
+
+      - name: Runner preflight diagnostics
+        run: |
+          echo "=== Runner Preflight Diagnostics ==="
+          echo "Runner name: ${RUNNER_NAME:-unknown}"
+          echo "Runner OS: ${RUNNER_OS:-unknown}"
+          echo "Runner arch: ${RUNNER_ARCH:-unknown}"
+          kubectl version --client
+          kubectl auth can-i get pods --all-namespaces
+          echo "=== Runner diagnostics complete ==="
 
       - uses: actions/setup-python@v5
         with:

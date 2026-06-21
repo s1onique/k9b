@@ -6,6 +6,26 @@ from pathlib import Path
 IMAGE_BUILDER_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-image-builder.yml"
 
 
+class TestImageBuilderRunnerConfig:
+    """Test that k9b-image-builder.yml runs on Docker-capable runner."""
+
+    def test_image_builder_runs_on_docker_scale_set(self) -> None:
+        """Image builder should run on spbnix-k8s-docker runner scale set."""
+        content = IMAGE_BUILDER_FILE.read_text()
+        assert "runs-on: spbnix-k8s-docker" in content, \
+            "Should run on spbnix-k8s-docker runner scale set (Docker/Buildx required)"
+
+    def test_image_builder_has_docker_preflight(self) -> None:
+        """Image builder should have Docker preflight diagnostics."""
+        content = IMAGE_BUILDER_FILE.read_text()
+        assert "Docker preflight" in content, \
+            "Should have Docker preflight step"
+        assert "docker version" in content, \
+            "Should verify docker version"
+        assert "docker buildx version" in content, \
+            "Should verify docker buildx"
+
+
 class TestImageBuilderDigestOutputs:
     """Test that k9b-image-builder.yml uses docker/build-push-action digest outputs."""
 
