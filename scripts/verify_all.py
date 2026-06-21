@@ -42,7 +42,6 @@ from act_local_verification import (
 )
 from verify_all_lock import (
     LockError,
-    LockStatus,
     acquire_verify_lock,
     check_recursion,
     get_lock_status,
@@ -50,6 +49,7 @@ from verify_all_lock import (
     unlock_stale_lock,
     wait_for_lock,
 )
+from verify_all_lock_types import format_lock_status_human
 from verify_all_orchestrator import run_verification
 from verify_all_output import print_result
 
@@ -186,32 +186,6 @@ def resolve_profile_and_scope(args: argparse.Namespace) -> tuple[str, str]:
     return "fast", scope
 
 
-def format_lock_status_human(status: LockStatus) -> str:
-    """Format lock status for human-readable output."""
-    lines = [
-        "=== Lock Status ===",
-        f"Locked: {'Yes' if status.locked else 'No'}",
-        f"Status: {status.status}",
-        f"Lock age: {int(status.lock_age_seconds)}s",
-    ]
-    
-    if status.owner_pid is not None:
-        lines.append(f"Owner PID: {status.owner_pid}")
-        lines.append(f"Owner exists: {'Yes' if status.owner_exists else 'No'}")
-        if status.owner_command:
-            lines.append(f"Owner command: {status.owner_command}")
-    
-    lines.extend([
-        "",
-        f"Reason: {status.reason}",
-        f"Safe to remove: {'Yes' if status.safe_to_remove else 'No'}",
-        "",
-        f"Recommended action: {status.recommended_action}",
-    ])
-    
-    return "\n".join(lines)
-
-
 def handle_lock_status(repo_root: Path, json_mode: bool) -> int:
     """Handle --lock-status command."""
     status = get_lock_status(repo_root)
@@ -313,7 +287,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if act_result.success else 1
     
     # For fast/full profiles, optionally wait for lock
+    # After waiting, we MUST acquire the lock before proceeding
     if args.wait_for_lock is not None:
+        # First wait for the lock to be released
         proceed, exit_code = handle_wait_for_lock(
             repo_root, 
             args.wait_for_lock, 
@@ -322,6 +298,15 @@ def main(argv: list[str] | None = None) -> int:
         if not proceed:
             assert exit_code is not None
             return exit_code
+        
+        # Lock was released - now acquire it before proceeding
+        # This prevents races between wait completion and actual acquisition
+        try:
+            lock = acquire_verify_lock(repo_root, profile=profile)
+        except LockError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            print("Hint: Run ./scripts/verify_all.sh --lock-status for diagnostics", file=sys.stderr)
+            return 4
     else:
         # Default: fail fast on lock contention with owner diagnostics
         try:

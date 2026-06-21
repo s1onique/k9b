@@ -16,86 +16,20 @@ Features:
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import os
 import signal
-import socket
 import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Lock file age threshold for considering a lock stale (seconds)
-# Only used when owner PID is absent AND heartbeat is too old
-STALE_LOCK_THRESHOLD = 3600  # 1 hour
-
-# Heartbeat interval (seconds) - lock owner should update this
-HEARTBEAT_INTERVAL = 60  # 1 minute
-
-
-@dataclasses.dataclass
-class LockMetadata:
-    """Rich lock metadata stored in JSON format."""
-    owner_pid: int
-    parent_pid: int | None
-    process_group_id: int | None
-    command_line: list[str]
-    cwd: str
-    hostname: str
-    user: str
-    created_at: str  # ISO format timestamp
-    last_heartbeat: str | None  # ISO format timestamp
-    profile: str | None  # act-local, fast, full, etc.
-    
-    def to_dict(self) -> dict:
-        return dataclasses.asdict(self)
-    
-    @classmethod
-    def from_dict(cls, data: dict) -> LockMetadata:
-        return cls(**data)
-    
-    @classmethod
-    def create_current(cls, profile: str | None = None) -> LockMetadata:
-        """Create metadata from current process."""
-        return cls(
-            owner_pid=os.getpid(),
-            parent_pid=os.getppid() if hasattr(os, 'getppid') else None,
-            process_group_id=os.getpgid(os.getpid()) if hasattr(os, 'getpgid') else None,
-            command_line=sys.argv[:],
-            cwd=os.getcwd(),
-            hostname=socket.gethostname(),
-            user=os.environ.get('USER', os.environ.get('USERNAME', 'unknown')),
-            created_at=datetime.now(UTC).isoformat(),
-            last_heartbeat=None,
-            profile=profile,
-        )
-    
-    def update_heartbeat(self) -> None:
-        """Update the heartbeat timestamp."""
-        self.last_heartbeat = datetime.now(UTC).isoformat()
-
-
-@dataclasses.dataclass
-class LockStatus:
-    """Lock status for diagnostics and machine parsing."""
-    locked: bool
-    owner_pid: int | None
-    owner_exists: bool
-    owner_command: str | None
-    lock_age_seconds: float
-    status: str  # active, stale, orphaned, invalid, no_lock
-    safe_to_remove: bool
-    reason: str
-    recommended_action: str
-    
-    def to_dict(self) -> dict:
-        return dataclasses.asdict(self)
-
-
-class LockError(Exception):
-    """Raised when lock acquisition fails."""
-    pass
+from verify_all_lock_types import (
+    STALE_LOCK_THRESHOLD,
+    LockError,
+    LockMetadata,
+    LockStatus,
+)
 
 
 class VerifyLock:
@@ -288,7 +222,7 @@ class VerifyLock:
                     return True
             else:
                 # No metadata or no PID - use age threshold
-                return age >= STALE_LOCK_THRESHOLD
+                return bool(age >= STALE_LOCK_THRESHOLD)
                 
         except OSError:
             pass
@@ -393,18 +327,34 @@ class VerifyLock:
                     recommended_action=f"Owner PID {metadata.owner_pid} is absent. Run: ./scripts/verify_all.sh --unlock-stale to remove",
                 )
         else:
-            # No metadata or PID - orphaned by default
-            return LockStatus(
-                locked=True,
-                owner_pid=None,
-                owner_exists=False,
-                owner_command=None,
-                lock_age_seconds=age,
-                status="orphaned",
-                safe_to_remove=True,
-                reason="Lock exists but no owner metadata found",
-                recommended_action="Lock has no owner metadata. Run: ./scripts/verify_all.sh --unlock-stale to remove",
-            )
+            # No metadata - conservative handling
+            # Missing metadata is NOT proof that owner is absent
+            # Only consider safe to remove if lock is provably stale (> threshold age)
+            if age >= STALE_LOCK_THRESHOLD:
+                return LockStatus(
+                    locked=True,
+                    owner_pid=None,
+                    owner_exists=False,
+                    owner_command=None,
+                    lock_age_seconds=age,
+                    status="stale",
+                    safe_to_remove=True,
+                    reason="Lock is old and has no owner metadata - treating as stale",
+                    recommended_action="Lock has no metadata and is old. Run: ./scripts/verify_all.sh --unlock-stale to remove",
+                )
+            else:
+                # Lock is recent but no metadata - could be active owner with failed metadata write
+                return LockStatus(
+                    locked=True,
+                    owner_pid=None,
+                    owner_exists=False,
+                    owner_command=None,
+                    lock_age_seconds=age,
+                    status="unknown",
+                    safe_to_remove=False,
+                    reason="Lock exists but no owner metadata found - may be active owner with failed metadata write",
+                    recommended_action="Lock exists with no metadata. Run: ./scripts/verify_all.sh --lock-status for more diagnostics, or wait for owner to complete",
+                )
     
     def unlock_stale(self) -> tuple[bool, str]:
         """

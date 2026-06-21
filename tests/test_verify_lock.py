@@ -397,7 +397,7 @@ class TestLockMetadata(unittest.TestCase):
     def test_metadata_create_current(self) -> None:
         """LockMetadata.create_current should capture process info."""
         sys.path.insert(0, str(SCRIPT_DIR))
-        from verify_all_lock import LockMetadata
+        from verify_all_lock_types import LockMetadata
         
         metadata = LockMetadata.create_current(profile="fast")
         
@@ -410,7 +410,7 @@ class TestLockMetadata(unittest.TestCase):
     def test_metadata_serialization(self) -> None:
         """LockMetadata should serialize and deserialize correctly."""
         sys.path.insert(0, str(SCRIPT_DIR))
-        from verify_all_lock import LockMetadata
+        from verify_all_lock_types import LockMetadata
         
         original = LockMetadata.create_current(profile="test")
         data = original.to_dict()
@@ -425,7 +425,7 @@ class TestLockMetadata(unittest.TestCase):
     def test_metadata_update_heartbeat(self) -> None:
         """LockMetadata.update_heartbeat should update timestamp."""
         sys.path.insert(0, str(SCRIPT_DIR))
-        from verify_all_lock import LockMetadata
+        from verify_all_lock_types import LockMetadata
         
         metadata = LockMetadata.create_current(profile="test")
         self.assertIsNone(metadata.last_heartbeat)
