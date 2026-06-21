@@ -103,7 +103,7 @@ The live workflow bootstraps kubectl and kubeconfig entirely within the workflow
 
 ### RBAC Preflight (Fatal)
 
-The workflow includes mandatory RBAC preflight checks that fail the job if permissions are missing:
+The workflow includes mandatory RBAC preflight checks that fail the job if permissions are missing. These checks use a helper script (`scripts/k9b_cnpg_live_lab_rbac_preflight.sh`) that provides actionable error output identifying exactly which permission is missing.
 
 **Before namespace creation:**
 - `get pods --all-namespaces`
@@ -117,10 +117,65 @@ The workflow includes mandatory RBAC preflight checks that fail the job if permi
 **After namespace creation (lab namespace-scoped):**
 - `create pods -n $LAB_NAMESPACE`
 - `delete pods -n $LAB_NAMESPACE`
+- `list pods -n $LAB_NAMESPACE`
+- `get pods/log -n $LAB_NAMESPACE`
+- `get events -n $LAB_NAMESPACE`
+- `get services -n $LAB_NAMESPACE`
+- `get deployments.apps -n $LAB_NAMESPACE`
+- `get statefulsets.apps -n $LAB_NAMESPACE`
 - `create configmaps -n $LAB_NAMESPACE`
 - `create secrets -n $LAB_NAMESPACE`
 - `create clusters.postgresql.cnpg.io -n $LAB_NAMESPACE`
 - `get clusters.postgresql.cnpg.io -n $LAB_NAMESPACE`
+- `get jobs.batch -n $LAB_NAMESPACE`
+
+#### Reading RBAC Preflight Failures
+
+When RBAC preflight fails, the workflow outputs actionable diagnostics:
+
+```text
+Checking: create namespaces ... NO
+ERROR: missing permission for: create namespaces
+Command: kubectl auth can-i create namespaces --quiet
+```
+
+This output:
+1. Identifies which permission check failed (`create namespaces`)
+2. Shows the exact `kubectl auth can-i` command that was run
+3. Is printed before the job exits with failure
+
+The workflow also prints Kubernetes subject diagnostics before RBAC checks:
+
+```text
+=== Kubernetes Subject Diagnostics ===
+ServiceAccount namespace: actions-runner
+Current context: in-cluster
+Authenticated subject:
+system:serviceaccount:actions-runner:github-actions-runner
+Subject info captured
+```
+
+This helps identify which service account is being used when permissions fail.
+
+#### One-Time RBAC Manifest Application
+
+The live lab does NOT grant itself permissions. To run the live lab, a cluster admin must apply the RBAC manifest once:
+
+```bash
+# Apply the RBAC manifest (one-time setup)
+kubectl apply -f deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml
+```
+
+**Important**: Replace the placeholder service account in the manifest:
+1. Run the live workflow once to identify the runner service account
+2. Check the "Kubernetes Subject Diagnostics" step output
+3. Update the `ClusterRoleBinding` subjects with the actual namespace and name
+
+The manifest intentionally:
+- Does NOT bind `cluster-admin`
+- Does NOT use wildcard verbs or resources
+- Grants minimal permissions required for the lab
+- Is scoped to lab namespace resources where practical
 
 ### Runner Service Account Requirements
 
@@ -395,9 +450,11 @@ go test -v ./internal/lab/cnpg/...
 | `.github/workflows/k9b-image-builder.yml` | Reusable image-build workflow |
 | `.github/workflows/k9b-cnpg-incident-lab.yml` | Main CI workflow with image-builder integration |
 | `.github/workflows/k9b-cnpg-incident-lab-live.yml` | Live workflow with kubectl bootstrap and RBAC preflight |
+| `scripts/k9b_cnpg_live_lab_rbac_preflight.sh` | Helper script for self-identifying RBAC failures |
 | `scripts/verify_k3s_cnpg_incident_lab_artifact.py` | Artifact verifier with namespace-mode support |
 | `tests/test_live_lab_config.py` | Workflow config tests (kubectl bootstrap, RBAC, secret hygiene) |
 | `fixtures/lab/live/pod-failure/injected-change.yaml` | Tracked incident manifest |
+| `deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml` | Minimal RBAC manifest for spbnix-k8s runner |
 | `docs/labs/k3s-cnpg-incident-lab.md` | This documentation |
 
 ## Verification

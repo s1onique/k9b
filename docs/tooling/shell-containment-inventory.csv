@@ -33,3 +33,4 @@ scripts/debug_alertmanager_cluster_attribution.sh,legacy-debt,diagnostics-team,C
 scripts/debug_recent_runs_execution_state.sh,shim,diagnostics-team,Migrated to Python; delegates to debug_recent_runs_execution_state.py,Python,migrated,Migrated 2026-06-21 via ACT
 docker/python-entrypoint.sh,legacy-debt,platform-team,Docker entrypoint; container initialization,Python,pending,ACT-2024-shell-migration
 .github/scripts/install-spbnix-harbor-ca.sh,legacy-debt,platform-team,CA certificate installation; system configuration,Python,pending,ACT-2024-shell-migration
+scripts/k9b_cnpg_live_lab_rbac_preflight.sh,legacy-debt,k9b-team,RBAC preflight helper for live lab; kubectl auth can-i wrapper,Python,pending,Live-lab-RBAC-ACT

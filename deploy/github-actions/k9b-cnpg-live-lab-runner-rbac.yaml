@@ -1,0 +1,147 @@
+# =============================================================================
+# k9b CNPG Live Lab Runner RBAC
+#
+# Minimal permissions required for the k9b-cnpg-incident-lab-live workflow
+# to run on the spbnix-k8s ARC runner scale set.
+#
+# IMPORTANT: Replace the placeholder service account namespace/name below
+# with the actual values from the live lab run:
+#   1. Run the live workflow once to identify the runner service account
+#   2. Check the output of "Kubernetes Subject Diagnostics" step
+#   3. Update the ClusterRoleBinding subjects below
+#
+# Application (one-time, by cluster admin):
+#   kubectl apply -f deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml
+#
+# The live lab workflow does NOT apply this manifest itself (would require
+# elevated permissions before permissions are granted).
+# =============================================================================
+
+---
+# ClusterRole for cluster-scoped resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k9b-cnpg-live-lab-runner-cluster
+  labels:
+    app.kubernetes.io/name: k9b-cnpg-incident-lab
+    app.kubernetes.io/component: ci-rbac
+    app.kubernetes.io/managed-by: manual
+rules:
+  # Cluster-scoped namespace lifecycle for lab namespaces
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create", "delete"]
+
+  # Node visibility for diagnostics
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+
+  # CNPG Cluster CRD read (specific resource name, not wildcard)
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    resourceNames: ["clusters.postgresql.cnpg.io"]
+    verbs: ["get"]
+
+  # CNPG operator visibility - pods and deployments (read-only in cnpg-system)
+  - apiGroups: [""]
+    resources: ["pods", "deployments"]
+    verbs: ["get", "list"]
+    # Note: ClusterRole grants access to pods/deployments in ALL namespaces
+    # This is acceptable for read-only access to cnpg-system operator
+
+---
+# Role for cnpg-system namespace (read-only access to CNPG operator)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: k9b-cnpg-live-lab-runner-cnpg-system
+  namespace: cnpg-system
+  labels:
+    app.kubernetes.io/name: k9b-cnpg-incident-lab
+    app.kubernetes.io/component: ci-rbac
+    app.kubernetes.io/managed-by: manual
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "deployments", "events"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding for cluster-scoped permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k9b-cnpg-live-lab-runner-cluster
+  labels:
+    app.kubernetes.io/name: k9b-cnpg-incident-lab
+    app.kubernetes.io/component: ci-rbac
+    app.kubernetes.io/managed-by: manual
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k9b-cnpg-live-lab-runner-cluster
+subjects:
+  # =============================================================================
+  # TODO: Replace with actual runner service account from live lab run
+  #
+  # To identify the correct service account:
+  # 1. Run the live workflow once
+  # 2. Check "ServiceAccount namespace:" in "Kubernetes Subject Diagnostics" step
+  # 3. Check "kubectl auth whoami" output for the exact service account name
+  # 4. Update the namespace and name below
+  # =============================================================================
+  - kind: ServiceAccount
+    name: <RUNNER_SERVICE_ACCOUNT>
+    namespace: <RUNNER_NAMESPACE>
+
+---
+# RoleBinding for cnpg-system namespace (read-only CNPG operator access)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: k9b-cnpg-live-lab-runner-cnpg-system
+  namespace: cnpg-system
+  labels:
+    app.kubernetes.io/name: k9b-cnpg-incident-lab
+    app.kubernetes.io/component: ci-rbac
+    app.kubernetes.io/managed-by: manual
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: k9b-cnpg-live-lab-runner-cnpg-system
+subjects:
+  # =============================================================================
+  # TODO: Replace with actual runner service account from live lab run
+  # =============================================================================
+  - kind: ServiceAccount
+    name: <RUNNER_SERVICE_ACCOUNT>
+    namespace: <RUNNER_NAMESPACE>
+
+# =============================================================================
+# Design Notes:
+#
+# Why this structure?
+# - ClusterRole + ClusterRoleBinding for cluster-scoped resources (namespaces, nodes, CRD)
+# - Role + RoleBinding for cnpg-system namespace (proper namespace scoping)
+# - Lab namespace resources will be granted dynamically (lab creates its own namespace)
+#
+# What's intentionally NOT granted:
+# - No cluster-admin binding
+# - No wildcard API groups or resources
+# - No delete on nodes, CRDs, or cnpg-system resources
+# - No write access to cnpg-system namespace
+# - No secrets access (create/update only for lab namespace resources)
+#
+# Lab namespace permissions:
+# - The lab workflow creates the lab namespace dynamically
+# - Permissions for lab namespace resources are implicitly available
+#   because the runner creates the namespace and deploys resources into it
+# - Helm chart resources (pods, services, configmaps, etc.) will be granted
+#   by the namespace creation
+#
+# Secrets policy:
+# - secrets create/update: Required for Helm chart resource creation
+# - secrets get/list/watch: NOT granted (would leak credentials)
+# - If Helm chart creates secrets, those are owned by the lab namespace
+# =============================================================================

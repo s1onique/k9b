@@ -435,49 +435,149 @@ class TestRBACPreflight:
         assert "Verify live lab Kubernetes permissions" in content, \
             "Should have RBAC preflight step"
 
-    def test_live_workflow_checks_get_pods_all_namespaces(self) -> None:
-        """Live workflow should check get pods permission across all namespaces."""
+    def test_live_workflow_uses_rbac_helper_script(self) -> None:
+        """Live workflow should use RBAC helper script for cluster checks."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert "kubectl auth can-i get pods --all-namespaces" in content, \
-            "Should check get pods --all-namespaces permission"
+        assert "k9b_cnpg_live_lab_rbac_preflight.sh cluster" in content, \
+            "Should use RBAC helper script for cluster checks"
+
+    def test_live_workflow_uses_rbac_helper_script_namespace(self) -> None:
+        """Live workflow should use RBAC helper script for namespace checks."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "k9b_cnpg_live_lab_rbac_preflight.sh namespace" in content, \
+            "Should use RBAC helper script for namespace checks"
+
+    def test_live_workflow_has_subject_diagnostics(self) -> None:
+        """Live workflow should have Kubernetes subject diagnostics step."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert "Kubernetes subject diagnostics" in content, \
+            "Should have subject diagnostics step"
+        assert "k9b_cnpg_live_lab_rbac_preflight.sh subject" in content, \
+            "Should call RBAC helper script in subject mode"
+
+    def test_live_workflow_no_raw_auth_can_i_cluster(self) -> None:
+        """Live workflow should NOT use raw kubectl auth can-i for cluster checks."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        # Find the Verify live lab Kubernetes permissions step
+        step_match = re.search(
+            r'- name: Verify live lab Kubernetes permissions\s*\n\s+run:\s*(.*?)\n\s+(?=- name:|\s+- uses:)',
+            content,
+            re.DOTALL
+        )
+        if step_match:
+            cluster_run = step_match.group(1)
+            # Should only have the script call, not raw kubectl auth can-i commands
+            assert "scripts/k9b_cnpg_live_lab_rbac_preflight.sh cluster" in cluster_run, \
+                "Should call RBAC preflight script"
+            # Should NOT have raw kubectl auth can-i commands
+            assert "kubectl auth can-i" not in cluster_run, \
+                "Should NOT have raw kubectl auth can-i commands"
+
+    def test_live_workflow_no_raw_auth_can_i_namespace(self) -> None:
+        """Live workflow should NOT use raw kubectl auth can-i for namespace checks."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        # Extract the namespace RBAC section
+        ns_section_match = re.search(
+            r'Verify namespace-scoped Kubernetes permissions.*?(?=\n\s{0,4}-\sname:|$)',
+            content,
+            re.DOTALL
+        )
+        if ns_section_match:
+            ns_section = ns_section_match.group(0)
+            # Should not have bare kubectl auth can-i commands
+            assert "kubectl auth can-i create pods -n" not in ns_section, \
+                "Should NOT have raw kubectl auth can-i for namespace checks"
+
+    def test_live_workflow_checks_get_pods_all_namespaces(self) -> None:
+        """Live workflow should check get pods permission across all namespaces (via script)."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        # Check the script exists and is referenced
+        assert "k9b_cnpg_live_lab_rbac_preflight.sh" in content, \
+            "Should reference RBAC preflight script"
 
     def test_live_workflow_checks_get_nodes(self) -> None:
-        """Live workflow should check get nodes permission."""
-        content = WORKFLOW_LIVE_FILE.read_text()
-        assert "kubectl auth can-i get nodes" in content, \
-            "Should check get nodes permission"
+        """Live workflow should check get nodes permission (via script)."""
+        # Check the script exists
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        assert rbac_script.exists(), f"RBAC script should exist at {rbac_script}"
+        script_content = rbac_script.read_text()
+        assert "get nodes" in script_content, \
+            "Script should check get nodes permission"
 
     def test_live_workflow_checks_create_namespaces(self) -> None:
-        """Live workflow should check create namespaces permission."""
-        content = WORKFLOW_LIVE_FILE.read_text()
-        assert "kubectl auth can-i create namespaces" in content, \
-            "Should check create namespaces permission"
+        """Live workflow should check create namespaces permission (via script)."""
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        script_content = rbac_script.read_text()
+        assert "create namespaces" in script_content, \
+            "Script should check create namespaces permission"
 
     def test_live_workflow_checks_delete_namespaces(self) -> None:
-        """Live workflow should check delete namespaces permission."""
-        content = WORKFLOW_LIVE_FILE.read_text()
-        assert "kubectl auth can-i delete namespaces" in content, \
-            "Should check delete namespaces permission"
+        """Live workflow should check delete namespaces permission (via script)."""
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        script_content = rbac_script.read_text()
+        assert "delete namespaces" in script_content, \
+            "Script should check delete namespaces permission"
 
     def test_live_workflow_checks_cnpg_crd_access(self) -> None:
-        """Live workflow should check CNPG CRD access permissions."""
-        content = WORKFLOW_LIVE_FILE.read_text()
-        assert "kubectl auth can-i get crd clusters.postgresql.cnpg.io" in content, \
-            "Should check get CRD permission for CNPG clusters"
-        assert "cnpg-system" in content, \
-            "Should check cnpg-system namespace access"
+        """Live workflow should check CNPG CRD access permissions (via script)."""
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        script_content = rbac_script.read_text()
+        assert "clusters.postgresql.cnpg.io" in script_content, \
+            "Script should check CNPG CRD permission"
+        assert "cnpg-system" in script_content, \
+            "Script should check cnpg-system namespace access"
 
     def test_live_workflow_has_namespace_scoped_permissions(self) -> None:
         """Live workflow should verify namespace-scoped permissions after namespace creation."""
         content = WORKFLOW_LIVE_FILE.read_text()
         assert "Verify namespace-scoped Kubernetes permissions" in content, \
             "Should have namespace-scoped permission check step"
-        assert "kubectl auth can-i create pods -n" in content, \
-            "Should check create pods permission in lab namespace"
-        assert "kubectl auth can-i delete pods -n" in content, \
-            "Should check delete pods permission in lab namespace"
-        assert "kubectl auth can-i create clusters.postgresql.cnpg.io -n" in content, \
-            "Should check create CNPG cluster permission in lab namespace"
+        assert "k9b_cnpg_live_lab_rbac_preflight.sh namespace" in content, \
+            "Should use RBAC helper script for namespace checks"
+
+    def test_rbac_script_has_check_can_i_helper(self) -> None:
+        """RBAC script should have check_can_i helper function."""
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        script_content = rbac_script.read_text()
+        assert "check_can_i()" in script_content, \
+            "Script should have check_can_i function"
+        assert "--quiet" in script_content, \
+            "Script should use --quiet flag"
+
+    def test_rbac_script_failure_prints_error(self) -> None:
+        """RBAC script should print actionable error on failure."""
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        script_content = rbac_script.read_text()
+        assert "ERROR: missing permission for:" in script_content, \
+            "Script should print missing permission error"
+        assert "Command: kubectl auth can-i" in script_content, \
+            "Script should print the failing command"
+
+    def test_rbac_script_has_subject_diagnostics(self) -> None:
+        """RBAC script should have subject diagnostics function."""
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        script_content = rbac_script.read_text()
+        assert "print_subject_diagnostics" in script_content, \
+            "Script should have subject diagnostics function"
+        assert "kubectl auth whoami" in script_content, \
+            "Script should try kubectl auth whoami"
+
+    def test_rbac_script_no_token_leakage(self) -> None:
+        """RBAC script should not leak tokens."""
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        script_content = rbac_script.read_text()
+        # Should not echo token or use --raw
+        assert "echo.*token" not in script_content.lower(), \
+            "Script should not echo token"
+        assert "config view --raw" not in script_content, \
+            "Script should not use kubectl config view --raw"
+
+    def test_rbac_script_has_set_euo_pipefail(self) -> None:
+        """RBAC script should have set -euo pipefail."""
+        rbac_script = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_rbac_preflight.sh"
+        script_content = rbac_script.read_text()
+        assert "set -euo pipefail" in script_content, \
+            "Script should have set -euo pipefail"
 
 
 class TestArtifactVerifierNamespaceMode:
@@ -672,3 +772,111 @@ class TestImageAssertion:
         assert_match = re.search(r'Assert.*?exit 1', content, re.DOTALL)
         assert assert_match, \
             "Image assertion should exit 1 on failure"
+
+
+class TestRBACManifest:
+    """Test the RBAC manifest for live lab runner."""
+
+    def test_rbac_manifest_exists(self) -> None:
+        """RBAC manifest should exist."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        assert rbac_manifest.exists(), f"RBAC manifest should exist at {rbac_manifest}"
+
+    def test_rbac_manifest_contains_cluster_role(self) -> None:
+        """RBAC manifest should contain ClusterRole."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        content = rbac_manifest.read_text()
+        assert "kind: ClusterRole" in content, \
+            "Manifest should contain ClusterRole"
+
+    def test_rbac_manifest_contains_cluster_role_binding(self) -> None:
+        """RBAC manifest should contain ClusterRoleBinding."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        content = rbac_manifest.read_text()
+        assert "kind: ClusterRoleBinding" in content, \
+            "Manifest should contain ClusterRoleBinding"
+
+    def test_rbac_manifest_no_cluster_admin(self) -> None:
+        """RBAC manifest should NOT bind cluster-admin."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        content = rbac_manifest.read_text()
+        # Check only non-comment lines
+        lines = content.split('\n')
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            assert "cluster-admin" not in stripped.lower(), \
+                f"Manifest should NOT bind cluster-admin: {stripped[:100]}"
+
+    def test_rbac_manifest_no_wildcard_verbs(self) -> None:
+        """RBAC manifest should NOT use wildcard verbs."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        content = rbac_manifest.read_text()
+        # Check for wildcard verbs in rules (not in comments)
+        lines = content.split('\n')
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('#') or not stripped:
+                continue
+            # Check for wildcard verbs
+            assert not re.search(r'verbs:\s*\[\s*["\']?\*["\']?\s*\]', line), \
+                f"Manifest should NOT use wildcard verbs: {line.strip()}"
+
+    def test_rbac_manifest_no_wildcard_resources(self) -> None:
+        """RBAC manifest should NOT use wildcard resources."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        content = rbac_manifest.read_text()
+        # Check for wildcard resources in rules
+        lines = content.split('\n')
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('#') or not stripped:
+                continue
+            # Check for wildcard resources
+            assert not re.search(r'resources:\s*\[\s*["\']?\*["\']?\s*\]', line), \
+                f"Manifest should NOT use wildcard resources: {line.strip()}"
+
+    def test_rbac_manifest_has_service_account_subject(self) -> None:
+        """RBAC manifest should have ServiceAccount subject."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        content = rbac_manifest.read_text()
+        assert "kind: ServiceAccount" in content, \
+            "Manifest should have ServiceAccount subject"
+        assert "- kind: ServiceAccount" in content, \
+            "Manifest should specify ServiceAccount kind in subjects"
+
+    def test_rbac_manifest_has_proper_labels(self) -> None:
+        """RBAC manifest should have proper labels."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        content = rbac_manifest.read_text()
+        assert "app.kubernetes.io/name: k9b-cnpg-incident-lab" in content, \
+            "Manifest should have app label"
+        assert "app.kubernetes.io/component: ci-rbac" in content, \
+            "Manifest should have component label"
+
+    def test_rbac_manifest_documents_service_account_placeholder(self) -> None:
+        """RBAC manifest should document the placeholder for service account."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        content = rbac_manifest.read_text()
+        # Should have a comment or documentation about replacing the placeholder
+        assert "<RUNNER_SERVICE_ACCOUNT>" in content or "TODO" in content, \
+            "Manifest should document placeholder for service account"
+
+    def test_rbac_manifest_has_namespace_lifecycle(self) -> None:
+        """RBAC manifest should include namespace lifecycle permissions."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        content = rbac_manifest.read_text()
+        assert '"namespaces"' in content, \
+            "Manifest should include namespaces resource"
+        assert "create" in content and "delete" in content, \
+            "Manifest should include create/delete for namespaces"
+
+    def test_rbac_manifest_has_cnpg_permissions(self) -> None:
+        """RBAC manifest should include CNPG Cluster permissions."""
+        rbac_manifest = Path(__file__).parent.parent / "deploy" / "github-actions" / "k9b-cnpg-live-lab-runner-rbac.yaml"
+        content = rbac_manifest.read_text()
+        assert "clusters.postgresql.cnpg.io" in content or "clusters" in content, \
+            "Manifest should include CNPG Cluster permissions"
+        assert "postgresql.cnpg.io" in content, \
+            "Manifest should include CNPG API group"

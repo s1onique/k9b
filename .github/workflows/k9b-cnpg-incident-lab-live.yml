@@ -155,23 +155,17 @@ jobs:
           echo "=== Runner diagnostics complete ==="
 
       # =======================================================================
+      # Kubernetes subject diagnostics (no token/kubeconfig leakage)
+      # =======================================================================
+      - name: Kubernetes subject diagnostics
+        run: |
+          scripts/k9b_cnpg_live_lab_rbac_preflight.sh subject
+
+      # =======================================================================
       # Fatal RBAC preflight - verify required permissions exist
       # =======================================================================
       - name: Verify live lab Kubernetes permissions
-        run: |
-          set -euo pipefail
-
-          echo "=== Verifying live lab Kubernetes permissions ==="
-
-          kubectl auth can-i get pods --all-namespaces
-          kubectl auth can-i get nodes
-          kubectl auth can-i get crd clusters.postgresql.cnpg.io
-          kubectl auth can-i get pods -n cnpg-system
-          kubectl auth can-i get deployments -n cnpg-system
-          kubectl auth can-i create namespaces
-          kubectl auth can-i delete namespaces
-
-          echo "Kubernetes permission preflight passed"
+        run: scripts/k9b_cnpg_live_lab_rbac_preflight.sh cluster
 
       - uses: actions/setup-python@v5
         with:
@@ -270,19 +264,7 @@ jobs:
       # Verify namespace-scoped permissions after namespace creation
       # =======================================================================
       - name: Verify namespace-scoped Kubernetes permissions
-        run: |
-          set -euo pipefail
-
-          echo "=== Verifying namespace-scoped Kubernetes permissions ==="
-
-          kubectl auth can-i create pods -n "$LAB_NAMESPACE"
-          kubectl auth can-i delete pods -n "$LAB_NAMESPACE"
-          kubectl auth can-i create configmaps -n "$LAB_NAMESPACE"
-          kubectl auth can-i create secrets -n "$LAB_NAMESPACE"
-          kubectl auth can-i create clusters.postgresql.cnpg.io -n "$LAB_NAMESPACE"
-          kubectl auth can-i get clusters.postgresql.cnpg.io -n "$LAB_NAMESPACE"
-
-          echo "Namespace-scoped permission preflight passed"
+        run: scripts/k9b_cnpg_live_lab_rbac_preflight.sh namespace "$LAB_NAMESPACE"
 
       # =======================================================================
       # Deploy k9b via Helm chart using image-builder outputs
