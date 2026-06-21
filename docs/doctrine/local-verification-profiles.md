@@ -155,13 +155,14 @@ CI workflows must use `--full` (or their own exhaustive gate). The fast profile 
 
 ```
 scripts/
-  verify_all.sh           # Canonical gate entrypoint
-  verify_profiles.py      # Profile definitions
-  recommend_verification.py # Changed-file advisor
-  verify_profile_contract.py # Profile contract validator
+  verify_all.sh                    # Canonical gate entrypoint (thin shell glue)
+  verify_profile_executor.py        # Authoritative profile semantics in Python
+  verify_profiles.py               # Profile definitions (imports from executor)
+  recommend_verification.py        # Changed-file advisor
+  verify_profile_contract.py       # Profile contract validator
 
 tests/unit/
-  test_verify_profile_contract.py # Profile contract tests
+  test_verify_profile_contract.py  # Profile contract tests
 
 docs/
   doctrine/
@@ -181,3 +182,6 @@ docs/
 - [x] Profile contract self-tests prove fast excludes expensive suites
 - [x] Changed-file recommendation command exists
 - [x] CI remains merge-grade (does not silently downgrade to fast)
+- [x] Profile semantics moved from shell to Python (verify_profile_executor.py)
+- [x] Shell delegates to Python for profile resolution (no hardcoded skip arrays)
+- [x] Contract checker validates shell/Python alignment
