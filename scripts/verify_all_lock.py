@@ -2,8 +2,8 @@
 """
 Single-run lock and stale-lock handling for verify_all.
 
-Provides exclusive locking to prevent concurrent verification runs,
-with automatic cleanup of stale locks left behind by crashed processes.
+This module is a thin compatibility facade that re-exports the public API
+from the modular lock components.
 
 Features:
 - Rich lock metadata (PID, PPID, PGID, cmdline, cwd, hostname, user, timestamps, profile)
@@ -16,399 +16,79 @@ Features:
 
 from __future__ import annotations
 
-import json
 import os
-import signal
 import sys
-import time
-from datetime import UTC, datetime
 from pathlib import Path
 
-from verify_all_lock_types import (
-    STALE_LOCK_THRESHOLD,
-    LockError,
-    LockMetadata,
-    LockStatus,
+from verify_all_lock_core import VerifyLock
+from verify_all_lock_types import LockError, LockMetadata, LockStatus  # noqa: F401
+from verify_all_lock_wait import (
+    get_lock_status as _get_lock_status,
+)
+from verify_all_lock_wait import (
+    unlock_stale_lock as _unlock_stale_lock,
+)
+from verify_all_lock_wait import (
+    wait_for_lock as _wait_for_lock,
 )
 
 
-class VerifyLock:
+def get_lock_status(repo_root: str | Path) -> LockStatus:
     """
-    Single-run lock with rich metadata and stale-lock handling.
+    Get lock status for diagnostics.
     
-    Uses mkdir for atomic lock acquisition (race-safe).
-    Stores rich JSON metadata for diagnostics.
-    Cleans up on exit via atexit handler.
+    Args:
+        repo_root: Repository root directory
+        
+    Returns:
+        LockStatus with detailed lock information
     """
+    lock_dir = Path(repo_root) / ".verify_lock"
+    return _get_lock_status(lock_dir)
+
+
+def unlock_stale_lock(repo_root: str | Path) -> tuple[bool, str]:
+    """
+    Safely remove a stale lock.
     
-    def __init__(self, lock_dir: str | Path):
-        self.lock_dir = Path(lock_dir)
-        self.lock_file = self.lock_dir / "lock"
-        self.metadata_file = self.lock_dir / "metadata.json"
-        self._acquired = False
-        self._profile: str | None = None
+    Args:
+        repo_root: Repository root directory
+        
+    Returns:
+        Tuple of (success, message)
+    """
+    lock_dir = Path(repo_root) / ".verify_lock"
+    success: bool
+    message: str
+    success, message = _unlock_stale_lock(lock_dir)
+    return (success, message)
+
+
+def wait_for_lock(
+    repo_root: str | Path,
+    timeout_seconds: int = 300,
+    poll_interval: int = 5,
+) -> tuple[bool, str]:
+    """
+    Wait for lock to be released with bounded backoff.
     
-    def acquire(self, profile: str | None = None) -> bool:
-        """
-        Attempt to acquire the lock.
+    Args:
+        repo_root: Repository root directory
+        timeout_seconds: Maximum time to wait
+        poll_interval: Time between status checks
         
-        Args:
-            profile: The verification profile (act-local, fast, full)
-            
-        Returns True if lock acquired, False if already locked.
-        Raises LockError on unexpected errors.
-        """
-        self._profile = profile
-        
-        # Ensure lock directory exists
-        try:
-            self.lock_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            raise LockError(f"Cannot create lock directory: {e}")
-        
-        # Check for stale lock first
-        if self._is_stale():
-            self._cleanup_stale()
-        
-        # Try to acquire lock atomically using mkdir
-        try:
-            os.mkdir(str(self.lock_file))
-        except FileExistsError:
-            # Lock is held by another process
-            return False
-        except OSError as e:
-            raise LockError(f"Cannot acquire lock: {e}")
-        
-        # Write rich metadata
-        try:
-            metadata = LockMetadata.create_current(profile=profile)
-            with open(self.metadata_file, "w") as f:
-                json.dump(metadata.to_dict(), f, indent=2)
-        except OSError:
-            # Non-fatal, lock is still valid
-            pass
-        
-        self._acquired = True
-        
-        # Register cleanup handler
-        try:
-            import atexit
-            atexit.register(self.release)
-        except Exception:
-            pass
-        
-        # Register signal handlers for clean exit
-        def cleanup_handler(signum: int, frame: object) -> None:
-            self.release()
-            sys.exit(128 + signum)
-        
-        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
-            try:
-                signal.signal(sig, cleanup_handler)
-            except (ValueError, OSError):
-                pass
-        
-        return True
-    
-    def release(self) -> None:
-        """Release the lock if held."""
-        if not self._acquired:
-            return
-        
-        self._acquired = False
-        
-        try:
-            if self.lock_file.exists():
-                self.lock_file.unlink()
-        except OSError:
-            pass
-        
-        try:
-            if self.metadata_file.exists():
-                self.metadata_file.unlink()
-        except OSError:
-            pass
-    
-    def _read_metadata(self) -> LockMetadata | None:
-        """Read lock metadata from file."""
-        if not self.metadata_file.exists():
-            return None
-        try:
-            with open(self.metadata_file) as f:
-                data = json.load(f)
-            return LockMetadata.from_dict(data)
-        except (OSError, json.JSONDecodeError, TypeError):
-            return None
-    
-    def _check_owner_exists(self, pid: int) -> bool:
-        """Check if owner process exists."""
-        try:
-            os.kill(pid, 0)
-            return True
-        except (OSError, ProcessLookupError):
-            return False
-    
-    def _get_process_command(self, pid: int) -> str | None:
-        """Get process command line for diagnostics."""
-        try:
-            # Try /proc on Linux/Unix
-            cmdline_file = Path(f"/proc/{pid}/cmdline")
-            if cmdline_file.exists():
-                with open(cmdline_file) as f:
-                    cmdline = f.read().replace('\x00', ' ').strip()
-                return cmdline if cmdline else None
-        except (OSError, PermissionError):
-            pass
-        
-        # Fallback: try ps command
-        try:
-            import subprocess
-            result = subprocess.run(
-                ["ps", "-p", str(pid), "-o", "comm="],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except Exception:
-            pass
-        
-        return None
-    
-    def _is_stale(self) -> bool:
-        """
-        Check if the lock is stale.
-        
-        A lock is considered stale ONLY if:
-        1. Owner PID no longer exists, OR
-        2. Owner PID exists but command/cwd clearly doesn't match recorded identity
-        3. Heartbeat is older than threshold AND owner process is absent
-        
-        Note: Age alone is NOT enough to consider a lock stale if owner PID is alive.
-        """
-        if not self.lock_file.exists():
-            return False
-        
-        metadata = self._read_metadata()
-        
-        # Check lock file age
-        try:
-            mtime = self.lock_file.stat().st_mtime
-            age = time.time() - mtime
-            
-            if metadata and metadata.owner_pid:
-                # Check if owner process is still running
-                owner_exists = self._check_owner_exists(metadata.owner_pid)
-                
-                if owner_exists:
-                    # Owner PID is alive - lock is valid regardless of age
-                    return False
-                
-                # Owner PID is absent - check if heartbeat is too old
-                if metadata.last_heartbeat:
-                    try:
-                        hb_time = datetime.fromisoformat(metadata.last_heartbeat.replace('Z', '+00:00'))
-                        hb_age = (datetime.now(UTC) - hb_time).total_seconds()
-                        if hb_age < STALE_LOCK_THRESHOLD:
-                            # Heartbeat is recent, lock might still be valid
-                            # but owner is gone - consider orphaned
-                            return True
-                    except ValueError:
-                        pass
-                
-                # No heartbeat or heartbeat is old - consider stale
-                if age >= STALE_LOCK_THRESHOLD:
-                    return True
-            else:
-                # No metadata or no PID - use age threshold
-                return bool(age >= STALE_LOCK_THRESHOLD)
-                
-        except OSError:
-            pass
-        
-        return True
-    
-    def _cleanup_stale(self) -> None:
-        """Remove a stale lock (handles both file and directory-based locks)."""
-        try:
-            if self.lock_file.exists():
-                # Could be a file or directory (old lock uses mkdir)
-                import shutil
-                if self.lock_file.is_dir():
-                    shutil.rmtree(self.lock_file)
-                else:
-                    self.lock_file.unlink()
-        except OSError:
-            pass
-        
-        try:
-            if self.metadata_file.exists():
-                self.metadata_file.unlink()
-        except OSError:
-            pass
-    
-    def get_status(self) -> LockStatus:
-        """
-        Get the current lock status for diagnostics.
-        
-        Returns LockStatus with detailed information about the lock state.
-        """
-        if not self.lock_file.exists():
-            return LockStatus(
-                locked=False,
-                owner_pid=None,
-                owner_exists=False,
-                owner_command=None,
-                lock_age_seconds=0.0,
-                status="no_lock",
-                safe_to_remove=False,
-                reason="No lock file exists",
-                recommended_action="No action needed - lock is available",
-            )
-        
-        # Lock exists - get metadata and check status
-        metadata = self._read_metadata()
-        try:
-            mtime = self.lock_file.stat().st_mtime
-            age = time.time() - mtime
-        except OSError:
-            age = 0.0
-        
-        if metadata and metadata.owner_pid:
-            owner_exists = self._check_owner_exists(metadata.owner_pid)
-            owner_command = self._get_process_command(metadata.owner_pid)
-            
-            if owner_exists:
-                # Owner PID is alive - lock is active
-                return LockStatus(
-                    locked=True,
-                    owner_pid=metadata.owner_pid,
-                    owner_exists=True,
-                    owner_command=owner_command or " ".join(metadata.command_line),
-                    lock_age_seconds=age,
-                    status="active",
-                    safe_to_remove=False,
-                    reason=f"Owner process {metadata.owner_pid} is running",
-                    recommended_action="Run: ./scripts/verify_all.sh --wait-for-lock <seconds> to wait, or ./scripts/verify_all.sh --lock-status for diagnostics",
-                )
-            else:
-                # Owner PID is absent - check heartbeat
-                if metadata.last_heartbeat:
-                    try:
-                        hb_time = datetime.fromisoformat(metadata.last_heartbeat.replace('Z', '+00:00'))
-                        hb_age = (datetime.now(UTC) - hb_time).total_seconds()
-                        if hb_age < STALE_LOCK_THRESHOLD:
-                            # Heartbeat recent but owner gone - orphaned
-                            return LockStatus(
-                                locked=True,
-                                owner_pid=metadata.owner_pid,
-                                owner_exists=False,
-                                owner_command=" ".join(metadata.command_line),
-                                lock_age_seconds=age,
-                                status="orphaned",
-                                safe_to_remove=True,
-                                reason=f"Owner process {metadata.owner_pid} is gone but heartbeat was recent ({int(hb_age)}s ago)",
-                                recommended_action=f"Owner PID {metadata.owner_pid} is absent. Run: ./scripts/verify_all.sh --unlock-stale to remove",
-                            )
-                    except ValueError:
-                        pass
-                
-                # Owner gone, heartbeat old or missing - stale
-                return LockStatus(
-                    locked=True,
-                    owner_pid=metadata.owner_pid,
-                    owner_exists=False,
-                    owner_command=" ".join(metadata.command_line),
-                    lock_age_seconds=age,
-                    status="stale",
-                    safe_to_remove=True,
-                    reason=f"Owner process {metadata.owner_pid} is absent and lock is older than threshold",
-                    recommended_action=f"Owner PID {metadata.owner_pid} is absent. Run: ./scripts/verify_all.sh --unlock-stale to remove",
-                )
-        else:
-            # No metadata - conservative handling
-            # Missing metadata is NOT proof that owner is absent
-            # Only consider safe to remove if lock is provably stale (> threshold age)
-            if age >= STALE_LOCK_THRESHOLD:
-                return LockStatus(
-                    locked=True,
-                    owner_pid=None,
-                    owner_exists=False,
-                    owner_command=None,
-                    lock_age_seconds=age,
-                    status="stale",
-                    safe_to_remove=True,
-                    reason="Lock is old and has no owner metadata - treating as stale",
-                    recommended_action="Lock has no metadata and is old. Run: ./scripts/verify_all.sh --unlock-stale to remove",
-                )
-            else:
-                # Lock is recent but no metadata - could be active owner with failed metadata write
-                return LockStatus(
-                    locked=True,
-                    owner_pid=None,
-                    owner_exists=False,
-                    owner_command=None,
-                    lock_age_seconds=age,
-                    status="unknown",
-                    safe_to_remove=False,
-                    reason="Lock exists but no owner metadata found - may be active owner with failed metadata write",
-                    recommended_action="Lock exists with no metadata. Run: ./scripts/verify_all.sh --lock-status for more diagnostics, or wait for owner to complete",
-                )
-    
-    def unlock_stale(self) -> tuple[bool, str]:
-        """
-        Safely remove a stale lock.
-        
-        Returns:
-            Tuple of (success, message)
-            
-        Only removes lock if:
-        - Owner process is absent, OR
-        - Owner process identity mismatch proves stale/orphaned
-        """
-        status = self.get_status()
-        
-        if status.status == "no_lock":
-            return True, "No lock to remove"
-        
-        if status.status == "active":
-            return False, f"Cannot remove active lock - owner process {status.owner_pid} is running"
-        
-        if not status.safe_to_remove:
-            return False, f"Lock removal not safe: {status.reason}"
-        
-        # Safe to remove
-        self._cleanup_stale()
-        
-        # Verify removal
-        if self.lock_file.exists():
-            return False, "Failed to remove lock file"
-        
-        return True, f"Successfully removed stale lock (was: {status.status})"
-    
-    def is_locked(self) -> bool:
-        """Check if the lock is currently held (by any process)."""
-        return self.lock_file.exists()
-    
-    def update_heartbeat(self) -> None:
-        """Update the heartbeat timestamp in metadata."""
-        metadata = self._read_metadata()
-        if metadata:
-            metadata.update_heartbeat()
-            try:
-                with open(self.metadata_file, "w") as f:
-                    json.dump(metadata.to_dict(), f, indent=2)
-            except OSError:
-                pass
-    
-    def __enter__(self) -> VerifyLock:
-        if not self.acquire(profile=self._profile):
-            raise LockError("Another verification run is active")
-        return self
-    
-    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        self.release()
+    Returns:
+        Tuple of (acquired, message)
+    """
+    lock_dir = Path(repo_root) / ".verify_lock"
+    acquired: bool
+    message: str
+    acquired, message = _wait_for_lock(
+        lock_dir,
+        timeout_seconds=timeout_seconds,
+        poll_interval=poll_interval,
+    )
+    return (acquired, message)
 
 
 def acquire_verify_lock(repo_root: str | Path, profile: str | None = None) -> VerifyLock:
@@ -452,68 +132,3 @@ def check_recursion() -> bool:
 def set_recursion_guard() -> None:
     """Set the recursion guard environment variable."""
     os.environ["VERIFY_ALL_ACTIVE"] = "1"
-
-
-def get_lock_status(repo_root: str | Path) -> LockStatus:
-    """
-    Get lock status for diagnostics.
-    
-    Args:
-        repo_root: Repository root directory
-        
-    Returns:
-        LockStatus with detailed lock information
-    """
-    lock_dir = Path(repo_root) / ".verify_lock"
-    lock = VerifyLock(lock_dir)
-    return lock.get_status()
-
-
-def unlock_stale_lock(repo_root: str | Path) -> tuple[bool, str]:
-    """
-    Safely remove a stale lock.
-    
-    Args:
-        repo_root: Repository root directory
-        
-    Returns:
-        Tuple of (success, message)
-    """
-    lock_dir = Path(repo_root) / ".verify_lock"
-    lock = VerifyLock(lock_dir)
-    return lock.unlock_stale()
-
-
-def wait_for_lock(repo_root: str | Path, timeout_seconds: int = 300, poll_interval: int = 5) -> tuple[bool, str]:
-    """
-    Wait for lock to be released with bounded backoff.
-    
-    Args:
-        repo_root: Repository root directory
-        timeout_seconds: Maximum time to wait
-        poll_interval: Time between status checks
-        
-    Returns:
-        Tuple of (acquired, message)
-    """
-    start_time = time.time()
-    poll_count = 0
-    
-    while time.time() - start_time < timeout_seconds:
-        status = get_lock_status(repo_root)
-        
-        if not status.locked:
-            return True, "Lock released - proceeding"
-        
-        poll_count += 1
-        elapsed = int(time.time() - start_time)
-        
-        # Print periodic diagnostics
-        if poll_count % 3 == 1:  # Every ~15 seconds
-            print(f"Waiting for lock... ({elapsed}s elapsed, owner PID: {status.owner_pid})", file=sys.stderr)
-        
-        time.sleep(poll_interval)
-    
-    # Timeout
-    status = get_lock_status(repo_root)
-    return False, f"Timeout after {timeout_seconds}s - lock still held by PID {status.owner_pid}"
