@@ -8,7 +8,7 @@
 # with the actual values from the live lab run:
 #   1. Run the live workflow once to identify the runner service account
 #   2. Check the output of "Kubernetes Subject Diagnostics" step
-#   3. Update the ClusterRoleBinding subjects below
+#   3. Update the ClusterRoleBinding and RoleBinding subjects below
 #
 # Application (one-time, by cluster admin):
 #   kubectl apply -f deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml
@@ -44,12 +44,42 @@ rules:
     resourceNames: ["clusters.postgresql.cnpg.io"]
     verbs: ["get"]
 
-  # CNPG operator visibility - pods and deployments (read-only in cnpg-system)
+---
+# ClusterRole for lab namespace resources
+# Since lab namespace is generated per-run, use ClusterRole for namespaced resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k9b-cnpg-live-lab-runner-lab-namespace
+  labels:
+    app.kubernetes.io/name: k9b-cnpg-incident-lab
+    app.kubernetes.io/component: ci-rbac
+    app.kubernetes.io/managed-by: manual
+rules:
+  # Core workload resources for lab namespace
   - apiGroups: [""]
-    resources: ["pods", "deployments"]
-    verbs: ["get", "list"]
-    # Note: ClusterRole grants access to pods/deployments in ALL namespaces
-    # This is acceptable for read-only access to cnpg-system operator
+    resources: ["pods", "pods/log", "events", "services", "configmaps", "serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+
+  # Secrets: create/update only, no read access (would leak credentials)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "delete", "patch", "update"]
+
+  # Workload controllers
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+
+  # CNPG Cluster custom resources
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["clusters"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+
+  # Jobs (may be needed by Helm charts)
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
 
 ---
 # Role for cnpg-system namespace (read-only access to CNPG operator)
@@ -64,7 +94,11 @@ metadata:
     app.kubernetes.io/managed-by: manual
 rules:
   - apiGroups: [""]
-    resources: ["pods", "deployments", "events"]
+    resources: ["pods", "events"]
+    verbs: ["get", "list", "watch"]
+  # Note: deployments are in the apps API group
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
     verbs: ["get", "list", "watch"]
 
 ---
@@ -90,6 +124,30 @@ subjects:
   # 2. Check "ServiceAccount namespace:" in "Kubernetes Subject Diagnostics" step
   # 3. Check "kubectl auth whoami" output for the exact service account name
   # 4. Update the namespace and name below
+  # =============================================================================
+  - kind: ServiceAccount
+    name: <RUNNER_SERVICE_ACCOUNT>
+    namespace: <RUNNER_NAMESPACE>
+
+---
+# ClusterRoleBinding for lab namespace resources
+# Grants namespaced permissions cluster-wide (pods, services, configmaps, etc.)
+# Lab namespaces are created dynamically by the runner
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k9b-cnpg-live-lab-runner-lab-namespace
+  labels:
+    app.kubernetes.io/name: k9b-cnpg-incident-lab
+    app.kubernetes.io/component: ci-rbac
+    app.kubernetes.io/managed-by: manual
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k9b-cnpg-live-lab-runner-lab-namespace
+subjects:
+  # =============================================================================
+  # TODO: Replace with actual runner service account from live lab run
   # =============================================================================
   - kind: ServiceAccount
     name: <RUNNER_SERVICE_ACCOUNT>
@@ -123,25 +181,21 @@ subjects:
 #
 # Why this structure?
 # - ClusterRole + ClusterRoleBinding for cluster-scoped resources (namespaces, nodes, CRD)
+# - ClusterRole + ClusterRoleBinding for lab namespace resources (grants apply cluster-wide)
 # - Role + RoleBinding for cnpg-system namespace (proper namespace scoping)
-# - Lab namespace resources will be granted dynamically (lab creates its own namespace)
 #
-# What's intentionally NOT granted:
-# - No cluster-admin binding
-# - No wildcard API groups or resources
-# - No delete on nodes, CRDs, or cnpg-system resources
-# - No write access to cnpg-system namespace
-# - No secrets access (create/update only for lab namespace resources)
-#
-# Lab namespace permissions:
-# - The lab workflow creates the lab namespace dynamically
-# - Permissions for lab namespace resources are implicitly available
-#   because the runner creates the namespace and deploys resources into it
-# - Helm chart resources (pods, services, configmaps, etc.) will be granted
-#   by the namespace creation
+# Lab namespace permissions strategy:
+# - Since lab namespace is generated per-run (k9b-cnpg-lab-${GITHUB_RUN_ID}),
+#   we use ClusterRoleBinding for lab namespace resources
+# - This grants permissions to any namespace the runner creates
 #
 # Secrets policy:
 # - secrets create/update: Required for Helm chart resource creation
 # - secrets get/list/watch: NOT granted (would leak credentials)
-# - If Helm chart creates secrets, those are owned by the lab namespace
+#
+# What's intentionally NOT granted:
+# - No cluster-admin binding
+# - No wildcard API groups or resources
+# - No delete on nodes, CRDs
+# - No secrets read access
 # =============================================================================

@@ -71,13 +71,13 @@ run_cluster_checks() {
 
     local failed=0
 
-    check_can_i "get pods across all namespaces" get pods --all-namespaces || ((failed++))
-    check_can_i "get nodes" get nodes || ((failed++))
-    check_can_i "get CNPG Cluster CRD" get crd clusters.postgresql.cnpg.io || ((failed++))
-    check_can_i "get CNPG operator pods" get pods -n cnpg-system || ((failed++))
-    check_can_i "get CNPG operator deployments" get deployments -n cnpg-system || ((failed++))
-    check_can_i "create namespaces" create namespaces || ((failed++))
-    check_can_i "delete namespaces" delete namespaces || ((failed++))
+    check_can_i "get pods across all namespaces" get pods --all-namespaces || failed=$((failed + 1))
+    check_can_i "get nodes" get nodes || failed=$((failed + 1))
+    check_can_i "get CNPG Cluster CRD" get crd clusters.postgresql.cnpg.io || failed=$((failed + 1))
+    check_can_i "get CNPG operator pods" get pods -n cnpg-system || failed=$((failed + 1))
+    check_can_i "get CNPG operator deployments" get deployments -n cnpg-system || failed=$((failed + 1))
+    check_can_i "create namespaces" create namespaces || failed=$((failed + 1))
+    check_can_i "delete namespaces" delete namespaces || failed=$((failed + 1))
 
     if [ $failed -gt 0 ]; then
         echo ""
@@ -101,29 +101,29 @@ run_namespace_checks() {
     local failed=0
 
     # Core workload permissions
-    check_can_i "create pods in lab namespace" create pods -n "$namespace" || ((failed++))
-    check_can_i "delete pods in lab namespace" delete pods -n "$namespace" || ((failed++))
-    check_can_i "list pods in lab namespace" list pods -n "$namespace" || ((failed++))
-    check_can_i "get pods/log in lab namespace" get pods/log -n "$namespace" || ((failed++))
+    check_can_i "create pods in lab namespace" create pods -n "$namespace" || failed=$((failed + 1))
+    check_can_i "delete pods in lab namespace" delete pods -n "$namespace" || failed=$((failed + 1))
+    check_can_i "list pods in lab namespace" list pods -n "$namespace" || failed=$((failed + 1))
+    check_can_i "get pods/log in lab namespace" get pods/log -n "$namespace" || failed=$((failed + 1))
 
     # Event and service visibility
-    check_can_i "get events in lab namespace" get events -n "$namespace" || ((failed++))
-    check_can_i "get services in lab namespace" get services -n "$namespace" || ((failed++))
+    check_can_i "get events in lab namespace" get events -n "$namespace" || failed=$((failed + 1))
+    check_can_i "get services in lab namespace" get services -n "$namespace" || failed=$((failed + 1))
 
     # Workload controllers
-    check_can_i "get deployments in lab namespace" get deployments.apps -n "$namespace" || ((failed++))
-    check_can_i "get statefulsets in lab namespace" get statefulsets.apps -n "$namespace" || ((failed++))
+    check_can_i "get deployments in lab namespace" get deployments.apps -n "$namespace" || failed=$((failed + 1))
+    check_can_i "get statefulsets in lab namespace" get statefulsets.apps -n "$namespace" || failed=$((failed + 1))
 
     # Config and secrets for Helm
-    check_can_i "create configmaps in lab namespace" create configmaps -n "$namespace" || ((failed++))
-    check_can_i "create secrets in lab namespace" create secrets -n "$namespace" || ((failed++))
+    check_can_i "create configmaps in lab namespace" create configmaps -n "$namespace" || failed=$((failed + 1))
+    check_can_i "create secrets in lab namespace" create secrets -n "$namespace" || failed=$((failed + 1))
 
     # CNPG Cluster CRD
-    check_can_i "create CNPG clusters in lab namespace" create clusters.postgresql.cnpg.io -n "$namespace" || ((failed++))
-    check_can_i "get CNPG clusters in lab namespace" get clusters.postgresql.cnpg.io -n "$namespace" || ((failed++))
+    check_can_i "create CNPG clusters in lab namespace" create clusters.postgresql.cnpg.io -n "$namespace" || failed=$((failed + 1))
+    check_can_i "get CNPG clusters in lab namespace" get clusters.postgresql.cnpg.io -n "$namespace" || failed=$((failed + 1))
 
     # Jobs (may be needed by Helm charts)
-    check_can_i "get jobs in lab namespace" get jobs.batch -n "$namespace" || ((failed++))
+    check_can_i "get jobs in lab namespace" get jobs.batch -n "$namespace" || failed=$((failed + 1))
 
     if [ $failed -gt 0 ]; then
         echo ""
