@@ -126,6 +126,12 @@ Prefer commands that:
 - are scoped,
 - and directly support the current task.
 
+## Shell containment
+
+Apply `docs/doctrine/shell-containment.md` before creating, editing, invoking, or reviewing shell scripts.
+
+Shell is allowed only for simple shims and glue. Complex logic must be implemented in Python or Go and registered through the shell containment inventory/verifier path.
+
 ## Test-first verification rule
 
 After changing behavior, run the smallest relevant verification step.
