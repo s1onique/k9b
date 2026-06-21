@@ -35,7 +35,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from docs_claims_registry_loader import read_registry, read_inventory_paths
+from docs_claims_registry_loader import read_inventory_paths, read_registry
 from docs_claims_registry_rules import get_all_checks
 from docs_claims_registry_selftest import run_self_test as run_selftest
 

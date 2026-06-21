@@ -46,6 +46,7 @@ select = ["E", "F", "I", "UP"]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "scripts/*" = ["E402"]
+"scripts/report_docs_claim_candidate_backlog/selftest.py" = ["E701", "E702"]
 
 [tool.coverage.run]
 branch = true

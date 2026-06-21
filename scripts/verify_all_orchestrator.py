@@ -19,7 +19,6 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 # Add scripts to path
 SCRIPT_DIR = Path(__file__).parent
@@ -53,7 +52,7 @@ class VerificationResult:
     lane_results: list[LaneResult] = field(default_factory=list)
     lane_state: dict = field(default_factory=dict)
     skipped: list[dict] = field(default_factory=list)
-    error_message: Optional[str] = None
+    error_message: str | None = None
     
     def to_json(self) -> dict:
         """Convert to JSON-serializable dict."""
@@ -103,11 +102,11 @@ class VerificationOrchestrator:
         self.scope = scope
         self.json_mode = json_mode
         self.timestamp = time.strftime("%Y%m%d-%H%M%S")
-        self.plan_file: Optional[Path] = None
-        self.lane_state_file: Optional[Path] = None
+        self.plan_file: Path | None = None
+        self.lane_state_file: Path | None = None
         self.step_log_dir = self.repo_root / "runs" / "verification"
-        self._plan: Optional[dict] = None
-        self._start_time: Optional[float] = None
+        self._plan: dict | None = None
+        self._start_time: float | None = None
     
     def setup(self) -> None:
         """Set up the verification run (directories, plan, state)."""

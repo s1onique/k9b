@@ -21,12 +21,10 @@ import re
 import sys
 from pathlib import Path
 
-from verify_profile_model import STEPS, FAST_EXCLUDES
+from verify_profile_model import FAST_EXCLUDES, STEPS
 from verify_profile_plan import (
-    resolve_profile,
-    get_profile_metadata,
-    get_skipped_reasons,
     emit_full_plan,
+    resolve_profile,
 )
 
 
@@ -45,8 +43,6 @@ def check_shell_drift() -> tuple[bool, list[str]]:
     
     content = shell_script.read_text()
     
-    # Check Python canonical steps
-    python_step_ids = set(STEPS.keys())
     
     # 1. Verify shell delegates to Python runner for execution
     has_python_runner = bool(re.search(r'verify_profile_runner\.py', content))

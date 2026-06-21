@@ -15,7 +15,6 @@ from scripts.docs_claim_candidate_coverage_rules import (
     check_severity_valid,
 )
 
-
 SELF_TEST_CASES: list[dict[str, object]] = [
     {
         "name": "registered candidate passes",

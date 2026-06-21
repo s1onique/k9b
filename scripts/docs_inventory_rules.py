@@ -8,16 +8,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from docs_inventory_contract import (
-    REPO_ROOT,
-    INVENTORY_CSV,
     ALLOWED_DOC_CLASS,
     ALLOWED_TRUTH_STATUS,
     ARCHIVED_STATUSES,
     BOOLEAN_VALUES,
+    REPO_ROOT,
     InventoryCheckResult,
 )
-from docs_inventory_loader import get_scope_files
-
 
 # Required columns
 REQUIRED_COLUMNS = {

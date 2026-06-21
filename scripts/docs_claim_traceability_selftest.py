@@ -6,11 +6,10 @@ Contains self-test cases and runner.
 from __future__ import annotations
 
 import json
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from docs_claim_traceability_loader import read_matrix, read_registry
-
 
 SELF_TEST_CASES: list[dict[str, object]] = [
     {

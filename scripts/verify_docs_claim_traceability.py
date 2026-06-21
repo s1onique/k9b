@@ -32,7 +32,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from docs_claim_traceability_loader import read_matrix, read_registry, read_ci_gate_mapping
+from docs_claim_traceability_loader import read_ci_gate_mapping, read_matrix, read_registry
 from docs_claim_traceability_rules import get_all_checks
 from docs_claim_traceability_rules_linked import print_coverage_report
 from docs_claim_traceability_selftest import run_self_test as run_selftest

@@ -25,10 +25,8 @@ import json
 import re
 import sys
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Optional
-
 
 # =============================================================================
 # Configuration
@@ -101,13 +99,13 @@ CRITICAL_SHIM_ONLY = [
 # Data Models
 # =============================================================================
 
-class Classification(str, Enum):
+class Classification(StrEnum):
     SHIM = "shim"
     LEGACY_DEBT = "legacy-debt"
     BLOCKED = "blocked"
 
 
-class MigrationStatus(str, Enum):
+class MigrationStatus(StrEnum):
     REGISTERED = "registered"
     MIGRATED = "migrated"
     PENDING = "pending"
@@ -115,7 +113,7 @@ class MigrationStatus(str, Enum):
     DONE = "done"  # Alias for migrated, used for completed migrations
 
 
-class RiskLevel(str, Enum):
+class RiskLevel(StrEnum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
@@ -201,7 +199,7 @@ def is_shim_compliant(content: str, max_lines: int = 50) -> tuple[bool, list[str
     lines = content.split('\n')
     
     # Remove comments and empty lines for analysis
-    code_lines = [l.strip() for l in lines if l.strip() and not l.strip().startswith('#')]
+    code_lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith('#')]
     
     if len(code_lines) > max_lines:
         violations.append(f"Exceeds {max_lines} lines of code ({len(code_lines)} non-comment lines)")
@@ -236,7 +234,7 @@ def scan_shell_file(path: Path) -> ShellScript:
         relative_path=str(path.relative_to(REPO_ROOT)),
         line_count=len(lines),
         detected_patterns=findings,
-        is_complex=len(findings) > 0 or len([l for l in lines if l.strip() and not l.strip().startswith('#')]) > 50,
+        is_complex=len(findings) > 0 or len([line for line in lines if line.strip() and not line.strip().startswith('#')]) > 50,
         risk_score=risk_score,
         risk_level=get_risk_level(risk_score),
     )
@@ -283,7 +281,7 @@ def load_inventory(path: Path) -> dict[str, InventoryEntry]:
                     follow_up_act=row['follow_up_act'],
                 )
                 entries[row['path']] = entry
-            except (KeyError, ValueError) as e:
+            except (KeyError, ValueError):
                 # Skip malformed rows
                 continue
     
@@ -312,7 +310,7 @@ def check_verify_all_shim(content: str) -> list[str]:
     ]
     
     # Remove comment lines for pattern check
-    code_lines = [l for l in content.split('\n') if not l.strip().startswith('#')]
+    code_lines = [line for line in content.split('\n') if not line.strip().startswith('#')]
     code_only = '\n'.join(code_lines)
     
     for pattern, description in forbidden_in_shim:

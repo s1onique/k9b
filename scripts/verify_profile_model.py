@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class StepCategory(Enum):
@@ -28,21 +27,21 @@ class StepCategory(Enum):
 # Canonical step definitions
 STEPS: dict[str, dict] = {
     "ruff-lint": {
-        "command": "python -m ruff check src tests",
+        "command": "ruff check src tests",
         "lane": "python",
         "category": StepCategory.POLICY,
         "description": "Ruff linting",
         "is_expensive": False,
     },
     "mypy": {
-        "command": "python -m mypy src/k8s_diag_agent",
+        "command": ".venv/bin/python -m mypy src/k8s_diag_agent",
         "lane": "python",
         "category": StepCategory.POLICY,
         "description": "Mypy type checking on main package",
         "is_expensive": False,
     },
     "mypy-tests": {
-        "command": "python -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py",
+        "command": ".venv/bin/python -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py",
         "lane": "python",
         "category": StepCategory.POLICY,
         "description": "Mypy type checking on tests",

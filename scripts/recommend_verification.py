@@ -22,8 +22,6 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
-
 
 # =============================================================================
 # Path Mappings
@@ -192,7 +190,7 @@ class RecommendationSet:
         return list(seen.values())
 
 
-def get_changed_files(ref: Optional[str] = None) -> list[str]:
+def get_changed_files(ref: str | None = None) -> list[str]:
     """
     Get list of changed files compared to ref (default: HEAD).
     Includes both modified/tracked AND untracked files.

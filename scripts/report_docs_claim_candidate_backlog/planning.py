@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
-from .planning_helpers import (
+from .model import BacklogEntry
+
+# Re-export for backwards compatibility with existing imports
+from .planning_helpers import (  # noqa: F401
+    ACTION_BLOCKED_INCONCLUSIVE,
+    ACTION_CONTINUE_LARGE_TRANCHE,
+    ACTION_CONTINUE_SMALL_TARGETED,
+    ACTION_PAUSE_MANUAL_TRANCHES,
+    CAVEAT_CLAIM_CANDIDATE_HEAVY,
+    CAVEAT_CLEANUP_HEAVY,
+    CAVEAT_INCONCLUSIVE,
+    CAVEAT_LOW_BACKLOG,
+    CAVEAT_MIXED,
+    LARGE_TRANCHE_THRESHOLD,
+    SMALL_TRANCHE_MIN_THRESHOLD,
     _compute_planning_caveat,
     _count_key_risk_buckets,
     _count_priority_bands,
@@ -13,19 +27,6 @@ from .planning_helpers import (
     get_priority_band,
     print_planning_summary,
 )
-from .planning_helpers import (
-    ACTION_BLOCKED_INCONCLUSIVE,
-    ACTION_CONTINUE_LARGE_TRANCHE,
-    ACTION_CONTINUE_SMALL_TARGETED,
-    ACTION_PAUSE_MANUAL_TRANCHES,
-    LARGE_TRANCHE_THRESHOLD,
-    SMALL_TRANCHE_MIN_THRESHOLD,
-    CAVEAT_CLEANUP_HEAVY,
-    CAVEAT_CLAIM_CANDIDATE_HEAVY,
-)
-
-# Re-export for backwards compatibility with existing imports
-from .planning_helpers import CAVEAT_MIXED, CAVEAT_LOW_BACKLOG, CAVEAT_INCONCLUSIVE  # noqa: F401
 
 
 def compute_planning_summary(entries: list[BacklogEntry]) -> dict:

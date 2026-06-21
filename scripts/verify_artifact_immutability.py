@@ -25,7 +25,6 @@ import sys
 from pathlib import Path
 from typing import NamedTuple
 
-
 # Artifact families that must use immutable write path
 IMMUTABLE_ARTIFACT_FAMILIES: list[tuple[str, str]] = [
     ("ClusterSnapshot", "runs/health/snapshots/"),

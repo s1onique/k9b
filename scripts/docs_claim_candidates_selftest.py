@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import re
 import sys
-from tempfile import TemporaryDirectory
-from pathlib import Path
 
 # Import from modules under test
 from scripts.docs_claim_candidates_rules import (
@@ -16,7 +14,6 @@ from scripts.docs_claim_candidates_rules import (
     determine_severity,
     generate_candidate_id,
 )
-
 
 SELF_TEST_CASES: list[dict[str, object]] = [
     {

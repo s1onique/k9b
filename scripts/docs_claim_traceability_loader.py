@@ -9,9 +9,9 @@ import csv
 import json
 
 from docs_claim_traceability_contract import (
+    CI_GATE_MAPPING,
     MATRIX_CSV,
     REGISTRY_CSV,
-    CI_GATE_MAPPING,
 )
 
 

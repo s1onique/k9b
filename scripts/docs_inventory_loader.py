@@ -8,7 +8,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from docs_inventory_contract import REPO_ROOT, INVENTORY_CSV
+from docs_inventory_contract import INVENTORY_CSV, REPO_ROOT
 
 
 def read_inventory() -> tuple[list[dict[str, str]], str | None]:

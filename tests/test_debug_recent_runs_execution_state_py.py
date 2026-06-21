@@ -184,7 +184,7 @@ class TestRunDebugInProcess(unittest.TestCase):
     @patch('debug_recent_runs_execution_state.HttpClient')
     def test_worklist_failure_graceful(self, mock_client_cls: MagicMock) -> None:
         call_count = [0]
-        def side_effect(url):
+        def side_effect(url: str) -> tuple[dict[str, list[object] | None] | None, int, str | None]:
             call_count[0] += 1
             if "/api/run?" in url:
                 return None, 404, "Not Found"

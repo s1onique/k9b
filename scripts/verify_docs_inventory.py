@@ -23,8 +23,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from docs_inventory_contract import REPO_ROOT
-from docs_inventory_loader import read_inventory, get_scope_files
+from docs_inventory_loader import get_scope_files, read_inventory
 from docs_inventory_rules import get_all_checks
 from docs_inventory_selftest import run_self_test as run_selftest
 

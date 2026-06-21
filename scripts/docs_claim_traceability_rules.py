@@ -6,18 +6,17 @@ Contains all validation logic for claim traceability checks.
 from __future__ import annotations
 
 from docs_claim_traceability_contract import (
-    REPO_ROOT,
-    MATRIX_CSV,
-    ALLOWED_EVIDENCE_KIND,
     ALLOWED_COVERAGE_STRENGTH,
+    ALLOWED_EVIDENCE_KIND,
     ALLOWED_VERIFICATION_STATUS,
-    TRACE_ID_PATTERN,
+    MATRIX_CSV,
     PATH_VALIDATED_KINDS,
+    REPO_ROOT,
     REQUIRED_COLUMNS,
+    TRACE_ID_PATTERN,
     TraceabilityCheckResult,
     read_csv_header,
 )
-from docs_claim_traceability_loader import read_ci_gate_mapping
 from docs_claim_traceability_rules_linked import check_linked_claims_valid
 
 

@@ -6,9 +6,9 @@ Validation checks for candidate CSV content.
 from __future__ import annotations
 
 from scripts.docs_claim_candidate_coverage_contract import (
-    CoverageCheckResult,
     REGISTRATION_STATUS_VALUES,
     SEVERITY_VALUES,
+    CoverageCheckResult,
 )
 
 
@@ -95,7 +95,7 @@ def check_high_severity_unregistered_current_trace_required(
 
     if warnings:
         result.add_warning(
-            f"High-severity unregistered current claims with trace_required=true (advisory):\n"
+            "High-severity unregistered current claims with trace_required=true (advisory):\n"
             + "\n".join(warnings)
         )
     return result
@@ -125,7 +125,7 @@ def check_high_severity_unregistered_current_not_required(
 
     if warnings:
         result.add_warning(
-            f"High-severity unregistered current claims with trace_required=false (warning only):\n"
+            "High-severity unregistered current claims with trace_required=false (warning only):\n"
             + "\n".join(warnings)
         )
     return result

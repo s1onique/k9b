@@ -48,8 +48,8 @@ def run_self_test() -> bool:
     all_passed = True
     def check(name: str, cond: bool, msg: str = ""):
         nonlocal all_passed
-        if cond: print(f"[PASS] {name}")
-        else: print(f"[FAIL] {name}: {msg}"); all_passed = False
+        if cond: print(f"[PASS] {name}")  # noqa: E701
+        else: print(f"[FAIL] {name}: {msg}"); all_passed = False  # noqa: E701,E702
 
     # =====================================================================
     # Basic review class classification tests

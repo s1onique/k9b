@@ -15,8 +15,6 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import NamedTuple
-
 
 # Suspicious production readiness phrases (require evidence or disclaimer)
 SUSPICIOUS_PATTERNS: list[re.Pattern[str]] = [

@@ -5,25 +5,22 @@ Contains all validation logic for claim registry checks.
 
 from __future__ import annotations
 
-import re
-
 from docs_claims_registry_contract import (
-    REPO_ROOT,
-    ALLOWED_CLAIM_TYPE,
     ALLOWED_CLAIM_STATUS,
+    ALLOWED_CLAIM_TYPE,
     ALLOWED_EVIDENCE_STATUS,
     ALLOWED_FRESHNESS_POLICY,
     BOOLEAN_VALUES,
     CLAIM_ID_PATTERN,
+    REPO_ROOT,
     REQUIRED_COLUMNS,
     RegistryCheckResult,
 )
 from docs_claims_registry_loader import (
-    read_csv_header,
     get_inventory_status,
+    read_csv_header,
 )
 from docs_claims_registry_rules_candidates import check_candidate_ids_valid
-
 
 # Valid archived/deleted statuses that exempt existence check
 ARCHIVED_STATUSES = {"historical", "superseded"}

@@ -188,7 +188,7 @@ def check_signal_finding_separation(source_code: str) -> CheckResult:
 
     for field in required_fields:
         # Look for field in payload dict or return statements
-        if not re.search(rf'["\'](?:facts|derived|inferences|recommendations|unknowns)["\'](?:\s*[:=])', source_code):
+        if not re.search(r'["\'](?:facts|derived|inferences|recommendations|unknowns)["\'](?:\s*[:=])', source_code):
             missing_fields.append(field)
 
     if missing_fields:

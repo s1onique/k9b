@@ -21,7 +21,6 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 # Import from verify_profiles
 sys.path.insert(0, str(__file__).rsplit("/", 1)[0] if "/" in __file__ else ".")
@@ -29,9 +28,7 @@ from verify_profiles import (
     get_all_steps,
     get_profiles,
     resolve_profile,
-    StepCategory,
 )
-
 
 # =============================================================================
 # Contract Definitions
@@ -212,7 +209,7 @@ class ContractResult:
     severity: str
 
 
-def run_contract_checks(check_ids: Optional[list[str]] = None) -> list[ContractResult]:
+def run_contract_checks(check_ids: list[str] | None = None) -> list[ContractResult]:
     """Run contract checks, optionally filtered by IDs."""
     results = []
     for check in CONTRACT_CHECKS:

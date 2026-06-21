@@ -7,15 +7,12 @@ This module handles profile resolution and plan generation.
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
-
 from verify_profile_model import (
-    STEPS,
     FAST_EXCLUDES,
     LANE_SCOPES,
-    StepPlan,
+    STEPS,
     ProfileMetadata,
+    StepPlan,
     get_skipped_reasons,
 )
 

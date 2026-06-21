@@ -20,8 +20,6 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from verify_profile_model import STEPS
-from verify_profile_plan import emit_full_plan
 
 
 def run_step(
@@ -93,6 +91,7 @@ def run_step(
             cmd_parts = shlex.split(command)
             result = subprocess.run(
                 cmd_parts,
+                cwd=str(SCRIPT_DIR.parent),
                 capture_output=True,
                 text=True,
             )
@@ -151,7 +150,7 @@ def record_result(
             try:
                 with open(lane_state_file) as f:
                     state = json.load(f)
-            except:
+            except Exception:
                 state = {"python": [], "frontend": [], "helm": []}
         else:
             state = {"python": [], "frontend": [], "helm": []}
@@ -177,7 +176,7 @@ def record_result(
         lock_fd.close()
         try:
             os.unlink(lock_file)
-        except:
+        except OSError:
             pass
 
 

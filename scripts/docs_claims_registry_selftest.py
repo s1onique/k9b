@@ -5,13 +5,11 @@ Contains all self-test cases and the self-test runner.
 
 from __future__ import annotations
 
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from docs_claims_registry_contract import REPO_ROOT
-from docs_claims_registry_loader import read_registry, read_inventory_paths
+from docs_claims_registry_loader import read_inventory_paths, read_registry
 from docs_claims_registry_rules import get_all_checks
-
 
 # Self-test fixtures
 SELF_TEST_CASES: list[dict[str, object]] = [
@@ -257,9 +255,8 @@ def run_self_test() -> bool:
                         f.write_text("# Test file\n")
 
             # Override paths for this test
-            from docs_claims_registry_contract import (
-                REGISTRY_CSV, INVENTORY_CSV, REPO_ROOT as CONTRACT_REPO_ROOT
-            )
+            from docs_claims_registry_contract import INVENTORY_CSV, REGISTRY_CSV
+            from docs_claims_registry_contract import REPO_ROOT as CONTRACT_REPO_ROOT
             old_registry = REGISTRY_CSV
             old_inventory = INVENTORY_CSV
             old_repo_root = CONTRACT_REPO_ROOT

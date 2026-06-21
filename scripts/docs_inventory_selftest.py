@@ -5,12 +5,11 @@ Contains self-test cases and runner.
 
 from __future__ import annotations
 
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from docs_inventory_loader import read_inventory
 from docs_inventory_rules import get_all_checks
-
 
 # Self-test fixtures
 SELF_TEST_CASES: list[dict[str, object]] = [

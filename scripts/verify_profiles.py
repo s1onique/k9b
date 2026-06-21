@@ -23,19 +23,13 @@ import json
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 # Import from the authoritative modules
 from verify_profile_model import (
-    STEPS,
     FAST_EXCLUDES,
+    STEPS,
     StepCategory,
 )
-from verify_profile_plan import (
-    resolve_profile as plan_resolve_profile,
-    get_profile_metadata as plan_get_profile_metadata,
-)
-
 
 # =============================================================================
 # Profile Enums and Dataclasses (for backward compatibility)
@@ -61,7 +55,7 @@ class VerificationStep:
     is_expensive: bool = False
 
     @classmethod
-    def from_registry(cls, step_id: str) -> "VerificationStep":
+    def from_registry(cls, step_id: str) -> VerificationStep:
         """Create VerificationStep from registry."""
         step_def = STEPS[step_id]
         return cls(
@@ -151,7 +145,7 @@ def get_profiles() -> dict[str, VerificationProfile]:
 # =============================================================================
 
 
-def resolve_profile(profile_name: str, step_filter: Optional[list[str]] = None) -> tuple[list[VerificationStep], list[str]]:
+def resolve_profile(profile_name: str, step_filter: list[str] | None = None) -> tuple[list[VerificationStep], list[str]]:
     """Resolve a profile name to a list of steps."""
     all_steps = {step.id: step for step in get_all_steps()}
     profiles = get_profiles()

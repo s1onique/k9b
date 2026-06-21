@@ -13,7 +13,6 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 # Lock file age threshold for considering a lock stale (seconds)
 STALE_LOCK_THRESHOLD = 3600  # 1 hour
@@ -158,7 +157,7 @@ class VerifyLock:
         """Check if the lock is currently held (by any process)."""
         return self.lock_file.exists()
     
-    def __enter__(self) -> "VerifyLock":
+    def __enter__(self) -> VerifyLock:
         if not self.acquire():
             raise LockError("Another verification run is active")
         return self

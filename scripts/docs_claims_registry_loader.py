@@ -6,12 +6,10 @@ Handles CSV reading, header validation, and row normalization.
 from __future__ import annotations
 
 import csv
-from pathlib import Path
 
 from docs_claims_registry_contract import (
-    REGISTRY_CSV,
     INVENTORY_CSV,
-    read_csv_header,
+    REGISTRY_CSV,
 )
 
 

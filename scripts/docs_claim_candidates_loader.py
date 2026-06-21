@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Optional
 
 from scripts.docs_claim_candidates_contract import (
     DOCS_DIR,
@@ -33,7 +32,7 @@ def get_inventory_cache() -> dict[str, dict[str, str]]:
     return cache
 
 
-def get_doc_class(doc_path: str, cache: Optional[dict[str, dict[str, str]]] = None) -> str:
+def get_doc_class(doc_path: str, cache: dict[str, dict[str, str]] | None = None) -> str:
     """Get doc_class from inventory."""
     if cache is not None:
         if doc_path in cache:
@@ -52,7 +51,7 @@ def get_doc_class(doc_path: str, cache: Optional[dict[str, dict[str, str]]] = No
         return "unknown"
 
 
-def get_truth_status(doc_path: str, cache: Optional[dict[str, dict[str, str]]] = None) -> str:
+def get_truth_status(doc_path: str, cache: dict[str, dict[str, str]] | None = None) -> str:
     """Get truth_status from inventory."""
     if cache is not None:
         if doc_path in cache:
@@ -71,7 +70,7 @@ def get_truth_status(doc_path: str, cache: Optional[dict[str, dict[str, str]]] =
         return "unknown"
 
 
-def get_claim_trace_required(doc_path: str, cache: Optional[dict[str, dict[str, str]]] = None) -> bool:
+def get_claim_trace_required(doc_path: str, cache: dict[str, dict[str, str]] | None = None) -> bool:
     """Get claim_trace_required from inventory."""
     if cache is not None:
         if doc_path in cache:

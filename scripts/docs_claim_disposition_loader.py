@@ -10,7 +10,6 @@ import csv
 from pathlib import Path
 
 from docs_claim_disposition_contract import (
-    DISPOSITION_SHARD_COUNT,
     REQUIRED_COLUMNS,
     get_all_disposition_shard_paths,
     read_csv_header,

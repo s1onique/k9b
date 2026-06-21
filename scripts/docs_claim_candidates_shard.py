@@ -6,7 +6,6 @@ Splits large CSV into multiple shard files for LLM-friendly gate compliance.
 from __future__ import annotations
 
 import csv
-import re
 from pathlib import Path
 
 from scripts.docs_claim_candidates_contract import GENERATED_CSV, GENERATED_CSV_DIR

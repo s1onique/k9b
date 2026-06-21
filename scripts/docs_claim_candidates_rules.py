@@ -129,7 +129,6 @@ def scan_document(doc_path: Path) -> ScanResult:
     truth_status = get_truth_status(rel_path)
     doc_class = get_doc_class(rel_path)
     claim_trace_required = get_claim_trace_required(rel_path)
-    is_stale = is_stale_historical_doc(rel_path, truth_status, doc_class)
 
     try:
         content = doc_path.read_text(encoding="utf-8")
