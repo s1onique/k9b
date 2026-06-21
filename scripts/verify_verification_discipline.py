@@ -73,21 +73,14 @@ FORBIDDEN_PATTERNS = [
 ]
 
 # Section markers that indicate the content is NOT default-local
-# (e.g., examples, CI sections, manual sections)
+# Dangerous commands are allowed ONLY in explicit sections
 ALLOWED_SECTION_MARKERS = [
-    r'```python',  # Code block - could be an example
-    r'```bash',    # Bash block - could be an example
-    r'```$',       # End of code block
-    r'# Example',  # Example comment
     r'# Bad [Ee]xample',  # Explicit bad example (case insensitive)
-    r'# Good [Ee]xample',  # Explicit good example
     r'## CI',  # CI section
     r'## Manual',  # Manual section
     r'## Human',  # Human authorization section
     r'<!-- ',  # HTML comment start
     r'-->',  # HTML comment end
-    r'#: ',  # Comment annotation
-    r'\{#',  # Sphinx label or similar
 ]
 
 
@@ -157,6 +150,9 @@ def scan_file(file_path: Path) -> tuple[list[Violation], list[str]]:
         errors.append(f"Error reading {file_path}: {e}")
         return violations, errors
     
+    rel_path = str(file_path.relative_to(REPO_ROOT))
+    is_clinerules = rel_path.startswith('.clinerules/')
+    
     lines = content.split('\n')
     
     for line_num, line in enumerate(lines, start=1):
@@ -167,6 +163,11 @@ def scan_file(file_path: Path) -> tuple[list[Violation], list[str]]:
         
         # Skip lines in excluded sections
         if is_in_excluded_section(content, line_num):
+            continue
+        
+        # For .clinerules/ files, skip lines that appear to be documenting
+        # forbidden commands (in tables, lists, or explicitly marked sections)
+        if is_clinerules and is_documenting_forbidden_command(line):
             continue
         
         # Check for forbidden patterns
@@ -181,6 +182,36 @@ def scan_file(file_path: Path) -> tuple[list[Violation], list[str]]:
                 ))
     
     return violations, errors
+
+
+def is_documenting_forbidden_command(line: str) -> bool:
+    """Check if a line is documenting a forbidden command (not instructing to run it).
+    
+    This is allowed in rules files where we document what's forbidden.
+    Returns True for:
+    - Table rows (contain |)
+    - List items documenting forbidden commands (start with - or * and contain backtick-wrapped commands)
+    - Lines in sections explicitly documenting policy
+    """
+    stripped = line.strip()
+    
+    # Table rows in documentation
+    if '|' in stripped:
+        return True
+    
+    # List items documenting forbidden commands
+    # Match patterns like: - `command`, - rm -rf .verify_lock, * `command`
+    if stripped.startswith('- ') or stripped.startswith('* '):
+        # Contains backtick-wrapped command (indicates documentation)
+        if '`' in stripped:
+            return True
+        # Known forbidden command patterns in list items
+        forbidden_patterns = ['rm -rf', 'pkill', 'pytest tests/', 'verify_all.sh --full']
+        for pattern in forbidden_patterns:
+            if pattern in stripped.lower():
+                return True
+    
+    return False
 
 
 def scan_directory(dir_path: Path) -> tuple[list[Violation], int]:
@@ -255,30 +286,30 @@ def run_self_test() -> tuple[bool, list[str]]:
     """
     errors = []
     
-    # Test 1: Good example (should NOT be flagged)
-    good_content = '''
+    # Test 1: Generic code block with dangerous command (should be flagged)
+    # Generic code blocks without explicit section markers are not allowed
+    bad_code_block_content = '''
 # Good Example
-
-When running tests locally, use:
 
 ```bash
 pytest tests/test_my_feature.py
 ```
 '''
-    # Simulate scanning
-    violations, _ = scan_file_content(good_content, "good_example.md")
-    if violations:
-        errors.append(f"Self-test: good example was incorrectly flagged: {violations}")
-    
-    # Test 2: Bad example (should be flagged)
-    bad_content = '''
-# Local Verification
-
-Run: pytest tests/
-'''
-    violations, _ = scan_file_content(bad_content, "bad_example.md")
+    violations, _ = scan_file_content(bad_code_block_content, "bad_code_block.md")
     if not violations:
-        errors.append("Self-test: bad example was NOT flagged")
+        errors.append("Self-test: dangerous command in generic code block was NOT flagged")
+    
+    # Test 2: Bad example section (should NOT be flagged)
+    bad_example_content = '''
+# Bad Example
+
+pytest tests/
+
+This is a bad example showing what NOT to do.
+'''
+    violations, _ = scan_file_content(bad_example_content, "bad_example.md")
+    if violations:
+        errors.append(f"Self-test: bad example section was incorrectly flagged: {violations}")
     
     # Test 3: Full gate as local acceptance (should be flagged)
     bad_full_content = '''
@@ -309,6 +340,26 @@ pkill -f verify
     violations, _ = scan_file_content(bad_pkill_content, "bad_pkill.md")
     if not violations:
         errors.append("Self-test: pkill -f was NOT flagged")
+    
+    # Test 6: CI section (should NOT be flagged)
+    ci_content = '''
+## CI
+
+Run pytest tests/ in CI pipeline.
+'''
+    violations, _ = scan_file_content(ci_content, "ci.md")
+    if violations:
+        errors.append(f"Self-test: CI section was incorrectly flagged: {violations}")
+    
+    # Test 7: Manual section (should NOT be flagged)
+    manual_content = '''
+## Manual
+
+Run pytest tests/ manually.
+'''
+    violations, _ = scan_file_content(manual_content, "manual.md")
+    if violations:
+        errors.append(f"Self-test: Manual section was incorrectly flagged: {violations}")
     
     return len(errors) == 0, errors
 

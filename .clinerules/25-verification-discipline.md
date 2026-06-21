@@ -29,11 +29,14 @@ Local agents MUST NOT run:
 
 ## Exceptions
 
-These are ALLOWED only in:
+These dangerous commands are ALLOWED only in:
 - Explicit bad examples (marked `# Bad Example:`)
 - CI/manual sections (marked `## CI` or `## Manual`)
-- Code blocks (```bash ...)
 - Human-authorized full verification sections
+- Code blocks marked with explicit purpose (see below)
+
+**Note:** Generic code blocks (```bash ...) are NOT sufficient to allow dangerous commands.
+Commands in code blocks must still be in an explicitly allowed section type.
 
 ## ACT-Local Profile
 
@@ -88,6 +91,7 @@ The `verify_verification_discipline.py` script scans docs/rules for:
 - pkill -f
 
 It fails if found outside of:
-- Code blocks (```bash ...)
 - Bad example sections
 - CI/Manual sections
+- Human-authorized sections
+- **NOT** generic code blocks alone

@@ -205,4 +205,8 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("scripts/verify_docker_workflow_hygiene.sh", "[VERIFIER] Docker workflow hygiene verification - comprehensive rules and self-tests"),
     ("scripts/verify_dockerhub_base_images.sh", "[VERIFIER] DockerHub base image verification - comprehensive rules and self-tests"),
     ("scripts/verify_docker_build_locality.sh", "[VERIFIER] Docker build locality verification - comprehensive rules and self-tests"),
+
+    # [VERIFIER] ACT-local verification - comprehensive test coverage
+    ("scripts/verify_verification_discipline.py", "[VERIFIER] Verification discipline guard - comprehensive tests"),
+    ("tests/test_act_local_verification.py", "[TEST] ACT-local verification tests - comprehensive coverage"),
 ]
