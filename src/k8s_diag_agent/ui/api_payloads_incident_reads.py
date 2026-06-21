@@ -28,6 +28,7 @@ __all__ = [
     "IncidentSuggestedCheckPayload",
     "IncidentSummaryPayload",
     "IncidentDetailPayload",
+    "EvidenceArtifactPayload",
     "AutomaticDiagnosisReviewPayload",
     "AutomaticDiagnosisReviewHandoffPayload",
     "AutomaticDiagnosisLoopSummary",
@@ -243,6 +244,73 @@ class IncidentSummaryPayload(TypedDict, total=False):
     resolution_notes: str | None
 
 
+class EvidenceArtifactPayload(TypedDict, total=False):
+    """Bounded evidence artifact metadata for incident detail views.
+
+    This payload provides safe, read-only metadata about evidence artifacts
+    linked to an incident. It exposes identifying information only and does NOT
+    include raw artifact contents, logs, stdout/stderr, stack traces, prompts,
+    or secrets.
+
+    Fields exposed:
+    - artifact_id: Unique identifier
+    - artifact_kind: Type of artifact (snapshot_bundle, review_packet, etc.)
+    - evidence_role: Role in the incident (primary, supporting, snapshot, etc.)
+    - source: Origin system
+    - created_at: When artifact was created
+    - attached_at: When artifact was linked to incident
+    - run_id: Associated run ID if available
+    - collector_run_id: Batch collector run ID if available
+    - summary: Safe human-readable summary if available
+    - safe_reference: Safe reference identifier
+    - available: Whether artifact metadata is accessible
+    - unavailable_reason: Why artifact is unavailable
+
+    Safety constraints enforced:
+    - All fields are bounded metadata only
+    - read_only is always True
+    - raw_content_available is always False
+    - no_remediation_attempted is always True
+
+    Hard constraints:
+    - NO raw artifact contents
+    - NO raw Kubernetes object JSON/YAML
+    - NO logs, stdout/stderr, stack traces
+    - NO prompts, secrets, tokens, kubeconfig
+    - NO kubectl/Helm command text
+    - NO action/remediation controls
+    """
+
+    # Identity
+    artifact_id: str
+    artifact_kind: str | None  # e.g., "snapshot_bundle", "review_packet"
+
+    # Role in incident
+    evidence_role: str | None  # e.g., "primary", "supporting", "snapshot", "review_packet"
+
+    # Provenance
+    source: str | None  # Origin system (e.g., "k9b-collector", "system")
+    created_at: str | None  # ISO timestamp when artifact was created
+    attached_at: str | None  # ISO timestamp when linked to incident
+
+    # Run linkage
+    run_id: str | None  # Associated run ID
+    collector_run_id: str | None  # Batch collector run ID
+
+    # Safe display fields
+    summary: str | None  # Safe human-readable summary (bounded)
+    safe_reference: str | None  # Safe reference identifier
+
+    # Availability
+    available: bool  # Always True in this implementation
+    unavailable_reason: str | None  # Always None
+
+    # Safety flags - always present and True
+    read_only: bool  # Always True
+    raw_content_available: bool  # Always False
+    no_remediation_attempted: bool  # Always True
+
+
 class IncidentDetailPayload(TypedDict, total=False):
     """Full incident payload for detail views.
 
@@ -257,6 +325,9 @@ class IncidentDetailPayload(TypedDict, total=False):
 
     Note: automatic_diagnosis_review provides a bounded summary of the latest
     automatic diagnosis loop review packet. Raw packet contents are not exposed.
+
+    Note: evidence_artifacts provides bounded metadata for evidence artifacts
+    linked to the incident. No raw artifact contents are exposed.
     """
 
     # Inherited from summary
@@ -284,6 +355,9 @@ class IncidentDetailPayload(TypedDict, total=False):
     evidence_needed: list[str]
     evidence_links: list[IncidentEvidenceLinkPayload]
     events: list[IncidentEventPayload]
+    # Evidence artifacts - bounded metadata for linked artifacts
+    # No raw artifact contents, logs, stdout/stderr, stack traces, or secrets
+    evidence_artifacts: list[EvidenceArtifactPayload]
     # Suggested checks - read-only compatibility projection
     # Returns empty list when no next-check-to-incident mapping exists
     suggested_checks: list[IncidentSuggestedCheckPayload]

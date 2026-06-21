@@ -21,6 +21,7 @@ import type { IncidentDetailPayload } from "../api";
 import { IncidentAutomaticDiagnosisLoopCard } from "./IncidentAutomaticDiagnosisLoopCard";
 import { IncidentAutomaticDiagnosisReviewPanel } from "./IncidentAutomaticDiagnosisReviewPanel";
 import { IncidentDiagnosisLoopPanel } from "./IncidentDiagnosisLoopPanel";
+import { EvidenceArtifactsSection } from "./EvidenceArtifactsSection";
 
 export interface IncidentDetailPanelProps {
   incident: IncidentDetailPayload;
@@ -454,6 +455,9 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({ incide
 
       {/* Evidence links */}
       <EvidenceLinksSection evidenceLinks={incident.evidence_links} />
+
+      {/* Evidence artifacts - bounded metadata */}
+      <EvidenceArtifactsSection evidenceArtifacts={incident.evidence_artifacts} />
 
       {/* Timeline */}
       <TimelineSection events={incident.events} />

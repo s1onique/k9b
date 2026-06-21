@@ -862,6 +862,59 @@ export type IncidentSummaryPayload = {
 };
 
 /**
+ * Bounded evidence artifact metadata for incident detail views.
+ * 
+ * This payload provides safe, read-only metadata about evidence artifacts
+ * linked to an incident. It exposes identifying information only and does NOT
+ * include raw artifact contents, logs, stdout/stderr, stack traces, prompts,
+ * or secrets.
+ * 
+ * Safety constraints enforced:
+ * - All fields are bounded metadata only
+ * - read_only is always True
+ * - raw_content_available is always False
+ * - no_remediation_attempted is always True
+ * 
+ * Hard constraints:
+ * - NO raw artifact contents
+ * - NO raw Kubernetes object JSON/YAML
+ * - NO logs, stdout/stderr, stack traces
+ * - NO prompts, secrets, tokens, kubeconfig
+ * - NO kubectl/Helm command text
+ * - NO action/remediation controls
+ */
+export type EvidenceArtifact = {
+  // Identity
+  artifact_id: string;
+  artifact_kind: string | null;  // e.g., "snapshot_bundle", "review_packet"
+
+  // Role in incident
+  evidence_role: string | null;  // e.g., "primary", "supporting", "snapshot", "review_packet"
+
+  // Provenance
+  source: string | null;  // Origin system (e.g., "k9b-collector", "system")
+  created_at: string | null;  // ISO timestamp when artifact was created
+  attached_at: string | null;  // ISO timestamp when linked to incident
+
+  // Run linkage
+  run_id: string | null;  // Associated run ID
+  collector_run_id: string | null;  // Batch collector run ID
+
+  // Safe display fields
+  summary: string | null;  // Safe human-readable summary (bounded)
+  safe_reference: string | null;  // Safe reference identifier
+
+  // Availability
+  available: boolean;  // Always True in this implementation
+  unavailable_reason: string | null;  // Always None
+
+  // Safety flags - always present and True
+  read_only: boolean;  // Always True
+  raw_content_available: boolean;  // Always False
+  no_remediation_attempted: boolean;  // Always True
+};
+
+/**
  * Incident detail payload - full case view.
  * Includes signals, evidence links, timeline, suggested checks, and
  * automatic diagnosis review summary.
@@ -872,6 +925,9 @@ export type IncidentSummaryPayload = {
  *
  * Note: automatic_diagnosis_review provides a bounded summary of the latest
  * automatic diagnosis loop review packet. Raw packet contents are not exposed.
+ *
+ * Note: evidence_artifacts provides bounded metadata for evidence artifacts
+ * linked to the incident. No raw artifact contents are exposed.
  */
 export type IncidentDetailPayload = IncidentSummaryPayload & {
   source_candidate_id: string;
@@ -879,6 +935,9 @@ export type IncidentDetailPayload = IncidentSummaryPayload & {
   evidence_needed: string[];
   evidence_links: IncidentEvidenceLink[];
   events: IncidentEvent[];
+  // Evidence artifacts - bounded metadata for linked artifacts
+  // No raw artifact contents, logs, stdout/stderr, stack traces, or secrets
+  evidence_artifacts: EvidenceArtifact[];
   suggested_checks: IncidentSuggestedCheck[];
   automatic_diagnosis_review: AutomaticDiagnosisReviewPayload;
   // Automatic diagnosis loop summary - derived from timeline events

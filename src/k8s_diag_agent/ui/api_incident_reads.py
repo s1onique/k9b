@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 from .api_incident_diagnosis_loop_summary import build_automatic_diagnosis_loop_summary
 from .api_payloads_incident_reads import (
     AutomaticDiagnosisReviewPayload,
+    EvidenceArtifactPayload,
     IncidentDetailPayload,
     IncidentEventPayload,
     IncidentEvidenceLinkPayload,
@@ -45,6 +46,8 @@ __all__ = [
     "build_incident_event_payload",
     "build_incident_summary_payload",
     "build_incident_detail_payload",
+    "build_evidence_artifact_payload",
+    "build_evidence_artifacts_payload",
     "build_automatic_diagnosis_review_payload",
 ]
 
@@ -254,6 +257,102 @@ def build_incident_summary_payload(incident: Incident) -> IncidentSummaryPayload
     }
 
 
+def build_evidence_artifact_payload(link: EvidenceLink) -> EvidenceArtifactPayload:
+    """Build EvidenceArtifactPayload from EvidenceLink model.
+
+    This function derives bounded evidence artifact metadata from an evidence link.
+    It does NOT load raw artifact contents, logs, stdout/stderr, stack traces,
+    prompts, or secrets.
+
+    Args:
+        link: The evidence link to derive metadata from
+
+    Returns:
+        EvidenceArtifactPayload with bounded metadata fields
+
+    Safety constraints enforced:
+    - read_only is always True
+    - raw_content_available is always False
+    - no_remediation_attempted is always True
+    - No raw artifact contents, logs, stdout/stderr, stack traces, or secrets
+    """
+    # Infer artifact_kind from role
+    role = link.role.value
+    if role == "review_packet":
+        artifact_kind = "review_packet"
+    elif role == "snapshot":
+        artifact_kind = "snapshot_bundle"
+    elif role == "primary":
+        artifact_kind = "evidence_artifact"
+    elif role == "supporting":
+        artifact_kind = "evidence_artifact"
+    elif role == "debug":
+        artifact_kind = "debug_artifact"
+    else:
+        # Unknown role - treat as unknown artifact kind
+        artifact_kind = "unknown"
+
+    return {
+        # Identity
+        "artifact_id": link.artifact_id,
+        "artifact_kind": artifact_kind,
+        # Role
+        "evidence_role": role,
+        # Provenance
+        "source": None,  # Not available from link alone
+        "created_at": None,  # Not available from link alone
+        "attached_at": link.attached_at.isoformat(),
+        # Run linkage (from artifact_id if it looks like a run_id)
+        "run_id": None,  # Not available from link alone
+        "collector_run_id": None,  # Not available from link alone
+        # Safe display fields
+        "summary": None,  # Not available from link alone
+        "safe_reference": link.artifact_id,  # Use artifact_id as safe reference
+        # Availability
+        "available": True,
+        "unavailable_reason": None,
+        # Safety flags - always present and True
+        "read_only": True,
+        "raw_content_available": False,
+        "no_remediation_attempted": True,
+    }
+
+
+def build_evidence_artifacts_payload(
+    incident: Incident,
+) -> list[EvidenceArtifactPayload]:
+    """Build list of EvidenceArtifactPayload from incident evidence links.
+
+    This function derives bounded evidence artifact metadata from all evidence
+    links attached to an incident. It does NOT load raw artifact contents,
+    logs, stdout/stderr, stack traces, prompts, or secrets.
+
+    Artifacts are sorted deterministically by artifact_id.
+
+    Args:
+        incident: The incident to extract evidence artifacts from
+
+    Returns:
+        List of EvidenceArtifactPayload sorted by artifact_id
+
+    Safety constraints enforced:
+    - read_only is always True
+    - raw_content_available is always False
+    - no_remediation_attempted is always True
+    - No raw artifact contents, logs, stdout/stderr, stack traces, or secrets
+    """
+    artifacts: list[EvidenceArtifactPayload] = []
+
+    for link in incident.evidence_links:
+        artifact = build_evidence_artifact_payload(link)
+        artifacts.append(artifact)
+
+    # Sort deterministically by artifact_id
+    artifacts.sort(key=lambda a: a["artifact_id"])
+
+    return artifacts
+
+
 def build_incident_detail_payload(
     incident: Incident,
     *,
@@ -285,6 +384,9 @@ def build_incident_detail_payload(
 
     Note: automatic_diagnosis_review provides a bounded summary of the latest
     automatic diagnosis loop review packet. Raw packet contents are not exposed.
+
+    Note: evidence_artifacts provides bounded metadata for evidence artifacts
+    linked to the incident. No raw artifact contents are exposed.
     """
     # Build suggested checks from plan payloads if available
     # Handle both new iterable parameter and legacy single-payload parameter
@@ -317,6 +419,9 @@ def build_incident_detail_payload(
         review_packet_id=review_packet_id,
     )
 
+    # Build evidence artifacts from incident evidence links
+    evidence_artifacts = build_evidence_artifacts_payload(incident)
+
     # Build the payload explicitly to avoid type: ignore
     result: IncidentDetailPayload = {
         "incident_id": incident.incident_id,
@@ -343,6 +448,9 @@ def build_incident_detail_payload(
         "evidence_needed": list(incident.evidence_needed),
         "evidence_links": [build_incident_evidence_link_payload(e) for e in incident.evidence_links],
         "events": [build_incident_event_payload(e) for e in incident.get_timeline()],
+        # Evidence artifacts - bounded metadata for linked artifacts
+        # No raw artifact contents, logs, stdout/stderr, stack traces, or secrets
+        "evidence_artifacts": evidence_artifacts,
         # Suggested checks - read-only compatibility projection
         # Populated from next-check plan artifacts with SAFE linkage
         "suggested_checks": suggested_checks,

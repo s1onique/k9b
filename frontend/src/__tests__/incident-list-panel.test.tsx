@@ -98,6 +98,8 @@ const mockIncidentDetail: IncidentDetailPayload = {
       message: "Incident created",
     },
   ],
+  evidence_artifacts: [],
+  suggested_checks: [],
   automatic_diagnosis_review: {
     available: false,
     unavailable_reason: "no_review_packet",
@@ -859,6 +861,8 @@ describe("IncidentListPanel", () => {
         evidence_needed: [],
         evidence_links: [],
         events: [],
+        evidence_artifacts: [],
+        suggested_checks: [],
         automatic_diagnosis_review: {
           available: false,
           unavailable_reason: "no_review_packet",

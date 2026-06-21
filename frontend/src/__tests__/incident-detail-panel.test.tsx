@@ -58,6 +58,7 @@ const createIncidentFixture = (overrides: Partial<IncidentDetailPayload> = {}): 
   evidence_needed: [],
   evidence_links: [],
   events: [],
+  evidence_artifacts: [],
   suggested_checks: [],
   automatic_diagnosis_review: {
     available: false,
