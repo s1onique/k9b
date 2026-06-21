@@ -23,6 +23,25 @@ import sys
 from pathlib import Path
 
 
+def _get_venv_python() -> Path:
+    """Get the path to the .venv Python interpreter.
+
+    Returns:
+        Path to .venv/bin/python
+
+    Raises:
+        RuntimeError: If .venv Python is not available.
+    """
+    repo_root = Path(__file__).parent.parent
+    venv_python = repo_root / ".venv" / "bin" / "python"
+    if not venv_python.exists():
+        raise RuntimeError(
+            f"Virtual environment Python not found: {venv_python}. "
+            "Run scripts/verify_all.sh from the repo root, which ensures .venv is used."
+        )
+    return venv_python
+
+
 def run_tests(verbose: bool = False) -> tuple[int, str]:
     """Run the LLM evidence boundaries tests.
 
@@ -35,8 +54,9 @@ def run_tests(verbose: bool = False) -> tuple[int, str]:
     if not test_file.exists():
         return 1, f"ERROR: Test file not found: {test_file}"
 
+    venv_python = _get_venv_python()
     cmd = [
-        sys.executable,
+        str(venv_python),
         "-m",
         "pytest",
         str(test_file),
@@ -73,8 +93,9 @@ def run_prompt_boundaries_tests(verbose: bool = False) -> tuple[int, str]:
     if not test_file.exists():
         return 0, f"SKIP: Test file not found: {test_file}"
 
+    venv_python = _get_venv_python()
     cmd = [
-        sys.executable,
+        str(venv_python),
         "-m",
         "pytest",
         str(test_file),
