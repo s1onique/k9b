@@ -129,6 +129,11 @@ run_namespace_checks() {
     # Jobs (may be needed by Helm charts)
     check_can_i "get jobs in lab namespace" get jobs.batch -n "$namespace" || failed=$((failed + 1))
 
+    # PersistentVolumeClaims for k9b Helm chart storage
+    check_can_i "get persistentvolumeclaims in lab namespace" get persistentvolumeclaims -n "$namespace" || failed=$((failed + 1))
+    check_can_i "create persistentvolumeclaims in lab namespace" create persistentvolumeclaims -n "$namespace" || failed=$((failed + 1))
+    check_can_i "delete persistentvolumeclaims in lab namespace" delete persistentvolumeclaims -n "$namespace" || failed=$((failed + 1))
+
     if [ $failed -gt 0 ]; then
         echo ""
         echo "Namespace-scoped permission preflight FAILED: $failed check(s) missing permissions"

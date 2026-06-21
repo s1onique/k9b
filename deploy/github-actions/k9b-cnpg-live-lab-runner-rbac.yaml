@@ -78,6 +78,11 @@ rules:
     resources: ["jobs"]
     verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
 
+  # PersistentVolumeClaims for k9b chart storage (Helm needs get for ownership check)
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+
 ---
 # Role for cnpg-system namespace (read-only access to CNPG operator)
 apiVersion: rbac.authorization.k8s.io/v1
@@ -184,4 +189,9 @@ subjects:
 # - No wildcard API groups or resources
 # - No delete on nodes, CRDs
 # - No secrets read access
+#
+# PersistentVolumeClaims added for k9b Helm chart storage (2026-06-22):
+# - Helm needs get to check existing PVC ownership before creating/adopting
+# - create/delete for chart lifecycle management
+# - patch/update for Helm reconciliation
 # =============================================================================
