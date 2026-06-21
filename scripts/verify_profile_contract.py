@@ -20,6 +20,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 # Import from verify_profiles
@@ -132,12 +133,52 @@ def check_no_duplicate_step_ids() -> tuple[bool, str]:
 
 
 def check_shell_gate_drift() -> tuple[bool, str]:
-    """Contract: Shell delegates to Python for profile semantics."""
-    from verify_profile_executor import check_shell_drift as executor_check_shell_drift
-    passed, errors = executor_check_shell_drift()
-    if passed:
-        return True, "shell and Python aligned (verified by verify_profile_executor)"
-    return False, "; ".join(errors)
+    """Contract: Shell is shim-only, delegates to Python for all orchestration."""
+    shell_script = Path(__file__).parent / "verify_all.sh"
+    
+    if not shell_script.exists():
+        return False, "verify_all.sh not found"
+    
+    content = shell_script.read_text()
+    
+    errors = []
+    
+    # Check shell is shim-only: should only exec Python
+    if "exec" not in content.lower() or "verify_all.py" not in content:
+        errors.append("Shell should exec verify_all.py")
+    
+    # Check no profile/scope semantics in shell (allow doc comments)
+    # Only flag actual runtime code patterns, not documentation
+    runtime_patterns = [
+        "STEP_PROFILE=", "STEP_SCOPE=", "STEP_JSON_MODE=",
+        "step_runner.sh", "source ", "emit_full_plan",
+        "case ", "--fast", "--full",  # Command-line args in code (not just comments)
+        "python-only", "frontend-only", "helm-only",
+        "step_count", "VERIFY_PROFILE=", "IS_FULL_GATE=",
+    ]
+    # Remove comment lines before checking for runtime patterns
+    code_lines = [line for line in content.split('\n') if not line.strip().startswith('#')]
+    code_only = '\n'.join(code_lines)
+    if any(pattern in code_only for pattern in runtime_patterns):
+        errors.append("Shell should have no profile/scope/lane semantics (shim-only)")
+    
+    # Check no hardcoded step arrays
+    if any(pattern in content for pattern in [
+        "python_steps=", "frontend_steps=", "helm_steps=",
+        "ruff-lint", "mypy", "unit-tests",
+    ]):
+        errors.append("Shell should not have hardcoded step arrays")
+    
+    # Check no step execution logic
+    if any(pattern in content for pattern in [
+        "verify_profile_runner.py", "run_step", "step_run",
+    ]):
+        errors.append("Shell should not call step runners directly")
+    
+    if errors:
+        return False, "; ".join(errors)
+    
+    return True, "shell is shim-only (verified by verify_profile_contract)"
 
 
 # =============================================================================
@@ -200,7 +241,7 @@ def format_results(results: list[ContractResult], json_output: bool = False) -> 
     lines.append(f"Total: {len(results)} | Passed: {sum(1 for r in results if r.passed)} | Failed: {sum(1 for r in results if not r.passed)}")
     lines.append("")
     for r in results:
-        status = "✓ PASS" if r.passed else "✗ FAIL"
+        status = "PASS" if r.passed else "FAIL"
         lines.append(f"{status} [{r.severity}] {r.id}")
         lines.append(f"  {r.description}")
         if not r.passed:
