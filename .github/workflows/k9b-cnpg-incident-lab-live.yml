@@ -30,12 +30,14 @@ env:
   PYTHON_VERSION: '3.13'
   K3S_VERSION: ${{ inputs.k3s_version }}
   CNPG_VERSION: ${{ inputs.cnpg_version }}
+  K9B_IMAGE_REPOSITORY: "k9b-lab"
+  K9B_IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   live-k3s-lab:
     name: Live K3s CNPG Lab
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -53,7 +55,45 @@ jobs:
       - run: python -m venv .venv && .venv/bin/pip install --upgrade pip pytest
       - run: go work sync && mkdir -p dist && go build -v -o dist/k9b-cnpg-incident-lab ./cmd/k9b-cnpg-incident-lab
 
+      # =======================================================================
+      # Build k9b image from current checkout
+      # =======================================================================
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verify Dockerfile.python exists
+        id: check_dockerfile
+        run: |
+          if [ ! -f "Dockerfile.python" ]; then
+            echo "ERROR: Dockerfile.python not found at repository root"
+            exit 1
+          fi
+          echo "dockerfile_exists=true" >> $GITHUB_OUTPUT
+
+      - name: Build k9b container image
+        run: |
+          echo "Building k9b image: ${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}"
+          echo "Commit: ${GITHUB_SHA}"
+          echo "Dockerfile: Dockerfile.python"
+          docker build \
+            --file Dockerfile.python \
+            --tag "${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}" \
+            --build-arg BUILDPLATFORM=linux/amd64 \
+            --build-arg TARGETPLATFORM=linux/amd64 \
+            --build-arg TARGETARCH=amd64 \
+            --progress=plain \
+            .
+          echo "Docker image built successfully"
+
+      - name: Verify built image exists locally
+        run: |
+          docker image ls "${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}"
+          echo "Image size:"
+          docker image inspect "${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}" --format='{{.Size}}'
+
+      # =======================================================================
       # K3s Provisioning
+      # =======================================================================
       - name: Provision K3s
         run: curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${{ env.K3S_VERSION }}" sh -
       - name: Configure kubeconfig
@@ -63,7 +103,33 @@ jobs:
       - name: Log K3s version
         run: kubectl version
 
+      # =======================================================================
+      # Import k9b image into K3s containerd
+      # =======================================================================
+      - name: Import image into K3s containerd
+        run: |
+          echo "Importing k9b image into K3s containerd..."
+          docker save "${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}" | sudo k3s ctr images import -
+          echo "Image import completed"
+
+      - name: Verify image imported into K3s
+        id: verify_image_import
+        run: |
+          echo "Verifying image is present in K3s..."
+          IMPORTED_IMAGE=$(sudo k3s ctr images ls | grep "${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}" || true)
+          if [ -z "$IMPORTED_IMAGE" ]; then
+            echo "ERROR: Image ${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG} not found in K3s containerd"
+            echo "Available images:"
+            sudo k3s ctr images ls | head -20
+            exit 1
+          fi
+          echo "SUCCESS: Image verified in K3s containerd"
+          echo "$IMPORTED_IMAGE"
+          echo "image_import_verified=true" >> $GITHUB_OUTPUT
+
+      # =======================================================================
       # Install CNPG Operator
+      # =======================================================================
       - name: Install CNPG operator
         run: kubectl apply --server-side -f "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v${{ env.CNPG_VERSION }}/releases/cnpg-${{ env.CNPG_VERSION }}.yaml"
       - name: Wait for CNPG rollout
@@ -71,7 +137,9 @@ jobs:
       - name: Verify CNPG status
         run: kubectl get pods -n cnpg-system && kubectl get crds | grep postgresql
 
+      # =======================================================================
       # Deploy CNPG Cluster
+      # =======================================================================
       - name: Create lab namespace
         run: kubectl create namespace cnpg-lab || true
       - name: Create superuser secret
@@ -112,54 +180,87 @@ jobs:
       - name: Capture CNPG cluster manifest
         run: mkdir -p ./lab-artifacts/live/incident && kubectl get cluster lab-cluster -n cnpg-lab -o yaml > ./lab-artifacts/live/incident/cnpg-cluster.yaml 2>/dev/null || true
 
-      # Install k9b Agent
-      - name: Install k9b agent
-        run: |
-          kubectl create namespace k9b || true
-          kubectl apply -f - <<'EOF'
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: k9b-agent
-            namespace: k9b
-          spec:
-            replicas: 1
-            selector:
-              matchLabels:
-                app.kubernetes.io/name: k9b-agent
-            template:
-              metadata:
-                labels:
-                  app.kubernetes.io/name: k9b-agent
-              spec:
-                serviceAccountName: k9b-agent
-                containers:
-                - name: k9b
-                  image: ghcr.io/s1onique/k9b:v0.1.0
-                  args: ["health-loop"]
-                  env:
-                  - name: K9B_MODE
-                    value: "read-only"
-                  - name: KUBECONFIG
-                    value: "/var/run/secrets/kubernetes.io/serviceaccount/token"
-                  resources:
-                    requests:
-                      cpu: "50m"
-                      memory: "64Mi"
-                    limits:
-                      cpu: "200m"
-                      memory: "256Mi"
-          ---
-          apiVersion: v1
-          kind: ServiceAccount
-          metadata:
-            name: k9b-agent
-            namespace: k9b
-          EOF
-      - name: Wait for k9b ready
-        run: kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=k9b-agent -n k9b --timeout=120s || true && kubectl get pods -n k9b
+      # =======================================================================
+      # Install Helm
+      # =======================================================================
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.16.3'
 
+      - name: Verify Helm installation
+        run: helm version --short
+
+      # =======================================================================
+      # Deploy k9b via Helm chart
+      # =======================================================================
+      - name: Deploy k9b via Helm chart
+        run: |
+          echo "Deploying k9b via Helm chart with image: ${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}"
+          helm upgrade --install k9b ./charts/k9b \
+            --namespace k9b \
+            --create-namespace \
+            --wait \
+            --timeout 5m \
+            --set image.backend.repository="${K9B_IMAGE_REPOSITORY}" \
+            --set image.backend.tag="${K9B_IMAGE_TAG}" \
+            --set image.backend.pullPolicy=Never \
+            --set backend.auth.enabled=false \
+            --set backend.unsafeBind=true
+          echo "Helm deployment completed"
+
+      - name: Verify Helm release
+        run: |
+          helm status k9b -n k9b
+          helm get values k9b -n k9b
+
+      - name: Wait for k9b deployment
+        run: |
+          echo "Waiting for k9b deployment to be ready..."
+          kubectl rollout status deployment -n k9b --timeout=180s || true
+          kubectl get pods -n k9b -o wide
+          echo "Rollout status check completed"
+
+      - name: Collect k9b deployment diagnostics
+        run: |
+          mkdir -p ./lab-artifacts/live/baseline ./lab-artifacts/live/logs
+          kubectl get all -n k9b -o wide > ./lab-artifacts/live/baseline/k9b-all.txt 2>&1 || echo "unavailable" > ./lab-artifacts/live/baseline/k9b-all.txt
+          kubectl describe deployment -n k9b > ./lab-artifacts/live/baseline/k9b-describe.txt 2>&1 || echo "unavailable" > ./lab-artifacts/live/baseline/k9b-describe.txt
+          kubectl get pods -n k9b -o json > ./lab-artifacts/live/baseline/k9b-pods.json 2>&1 || echo '{"pods":[]}' > ./lab-artifacts/live/baseline/k9b-pods.json
+          echo "K9b diagnostics collected"
+
+      # =======================================================================
+      # Assert deployed k9b pod uses run-built image
+      # =======================================================================
+      - name: Assert k9b pod uses run-built image
+        id: assert_image
+        run: |
+          echo "Verifying k9b pods use image: ${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}"
+          EXPECTED_IMAGE="${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}"
+          
+          # Get actual pod images
+          ACTUAL_IMAGES=$(kubectl get pods -n k9b -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' 2>/dev/null || echo "")
+          
+          echo "Expected image: $EXPECTED_IMAGE"
+          echo "Actual pod images:"
+          echo "$ACTUAL_IMAGES"
+          
+          # Check if expected image is used
+          if echo "$ACTUAL_IMAGES" | grep -q "${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}"; then
+            echo "SUCCESS: k9b pod is using the run-built image"
+            echo "assertion_passed=true" >> $GITHUB_OUTPUT
+          else
+            echo "ERROR: k9b pod does NOT use the expected run-built image"
+            echo "Expected: ${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}"
+            echo "Actual images found:"
+            echo "$ACTUAL_IMAGES"
+            echo "assertion_passed=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      # =======================================================================
       # Capture baseline
+      # =======================================================================
       - name: Capture baseline artifacts
         run: |
           mkdir -p ./lab-artifacts/live/baseline
@@ -167,44 +268,55 @@ jobs:
           kubectl get pods -n cnpg-lab -o wide > ./lab-artifacts/live/baseline/pods.txt
           kubectl get events -n cnpg-lab --sort-by='.lastTimestamp' > ./lab-artifacts/live/baseline/events.txt 2>/dev/null || true
           kubectl get cluster -n cnpg-lab -o json > ./lab-artifacts/live/baseline/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/baseline/cnpg-clusters.json
-          kubectl get deployment -n k9b -o json > ./lab-artifacts/live/baseline/k9b-status.json 2>/dev/null || echo '{"installed":false}' > ./lab-artifacts/live/baseline/k9b-status.json
+          # k9b status from Helm release
+          helm status k9b -n k9b > ./lab-artifacts/live/baseline/k9b-status.json 2>&1 || echo '{"installed":false}' > ./lab-artifacts/live/baseline/k9b-status.json
 
-      # Inject incident
+      # =======================================================================
+      # Inject incident using tracked manifest
+      # =======================================================================
       - name: Inject pod-failure incident
         run: |
-          CNPG_POD=$(kubectl get pods -n cnpg-lab -l cnpg.io/cluster=lab-cluster -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
           mkdir -p ./lab-artifacts/live/incident
-          if [ -z "$CNPG_POD" ]; then
-            cat << 'EOF' > ./lab-artifacts/live/incident/injected-change.yaml
-            apiVersion: v1
-            kind: Pod
-            metadata:
-              name: cnpg-lab-app
-              namespace: cnpg-lab
-              labels:
-                app: cnpg-lab-app
-                lab-injected: "true"
-            spec:
-              containers:
-              - name: app
-                image: postgres:17.5
-                command: ["sleep", "infinity"]
-                readinessProbe:
-                  exec:
-                    command: ["/bin/false"]
-                  initialDelaySeconds: 1
-                  periodSeconds: 5
-              restartPolicy: Never
-            EOF
-            kubectl apply -f ./lab-artifacts/live/incident/injected-change.yaml
+          
+          # Apply the tracked incident manifest
+          if [ -f "fixtures/lab/live/pod-failure/injected-change.yaml" ]; then
+            echo "Applying tracked incident manifest: fixtures/lab/live/pod-failure/injected-change.yaml"
+            kubectl apply -f fixtures/lab/live/pod-failure/injected-change.yaml
+            # Copy to incident artifacts
+            cp fixtures/lab/live/pod-failure/injected-change.yaml ./lab-artifacts/live/incident/injected-change.yaml
           else
-            kubectl patch pod "$CNPG_POD" -n cnpg-lab -p '{"spec":{"containers":[{"name":"postgres","readinessProbe":{"exec":{"command":["/bin/false"]}}}]}}'
-            echo "# Patched $CNPG_POD with failing readiness probe" > ./lab-artifacts/live/incident/injected-change.yaml
+            echo "ERROR: Tracked incident manifest not found: fixtures/lab/live/pod-failure/injected-change.yaml"
+            exit 1
           fi
+
       - name: Wait for incident propagation
         run: sleep 30
 
+      - name: Verify incident symptom - pod should be NotReady
+        run: |
+          echo "Verifying pod-failure incident symptom..."
+          # Wait for pod to be scheduled
+          timeout 60 bash -c 'until kubectl get pod cnpg-lab-failing-app -n cnpg-lab 2>/dev/null | grep -q "cnpg-lab-failing-app"; do sleep 2; done' || true
+          
+          # Check pod status - we EXPECT it to be NotReady (that's the incident)
+          POD_STATUS=$(kubectl get pod cnpg-lab-failing-app -n cnpg-lab -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+          READY_STATUS=$(kubectl get pod cnpg-lab-failing-app -n cnpg-lab -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+          
+          echo "Pod phase: $POD_STATUS"
+          echo "Ready condition: $READY_STATUS"
+          
+          if [ "$READY_STATUS" = "True" ]; then
+            echo "ERROR: Expected pod to remain NotReady, but it became Ready"
+            echo "This indicates the readiness probe failure was not applied correctly"
+            kubectl describe pod cnpg-lab-failing-app -n cnpg-lab
+            exit 1
+          else
+            echo "SUCCESS: Pod is NotReady as expected (incident symptom confirmed)"
+          fi
+
+      # =======================================================================
       # Capture incident
+      # =======================================================================
       - name: Capture incident artifacts
         run: |
           kubectl get pods -n cnpg-lab -o wide > ./lab-artifacts/live/incident/pods.txt
@@ -213,13 +325,17 @@ jobs:
           kubectl describe pods -n cnpg-lab > ./lab-artifacts/live/incident/describe-pods.txt 2>/dev/null || true
           kubectl get incidents -n k9b -o json > ./lab-artifacts/live/incident/k9b-incidents.json 2>/dev/null || echo '[]' > ./lab-artifacts/live/incident/k9b-incidents.json
 
+      # =======================================================================
       # Recover
+      # =======================================================================
       - name: Recover from incident
-        run: kubectl delete pod cnpg-lab-app -n cnpg-lab --ignore-not-found=true || true
+        run: kubectl delete pod cnpg-lab-failing-app -n cnpg-lab --ignore-not-found=true || true
       - name: Wait for recovery
         run: sleep 30
 
+      # =======================================================================
       # Capture final
+      # =======================================================================
       - name: Capture final artifacts
         run: |
           mkdir -p ./lab-artifacts/live/recovery-or-final
@@ -227,7 +343,9 @@ jobs:
           kubectl get events -n cnpg-lab --sort-by='.lastTimestamp' > ./lab-artifacts/live/recovery-or-final/events.txt 2>/dev/null || true
           kubectl get cluster -n cnpg-lab -o json > ./lab-artifacts/live/recovery-or-final/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/recovery-or-final/cnpg-clusters.json
 
+      # =======================================================================
       # Generate lab result
+      # =======================================================================
       - name: Generate lab result
         run: |
           mkdir -p ./lab-artifacts/live/logs
@@ -240,7 +358,9 @@ jobs:
             "cluster_mode": "provision",
             "k3s_version": "${{ env.K3S_VERSION }}",
             "cnpg_operator_version": "${{ env.CNPG_VERSION }}",
-            "k9b_version": "0.1.0",
+            "k9b_version": "${{ env.K9B_IMAGE_TAG }}",
+            "k9b_image_repository": "${{ env.K9B_IMAGE_REPOSITORY }}",
+            "k9b_image_tag": "${{ env.K9B_IMAGE_TAG }}",
             "incident_detected": false,
             "artifact_dir": "./lab-artifacts/live",
             "failure_reason": "k9b live detection deferred",
@@ -251,27 +371,38 @@ jobs:
           {
             echo "Live K3s CNPG Incident Lab Run"
             echo "K3s: ${{ env.K3S_VERSION }} CNPG: ${{ env.CNPG_VERSION }}"
+            echo "k9b Image: ${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}"
             kubectl cluster-info && kubectl get nodes -o wide && kubectl get clusters -A
             kubectl get pods -n cnpg-lab && kubectl get pods -n k9b
           } > ./lab-artifacts/live/logs/lab-runner.log
 
+      # =======================================================================
       # Collect logs (before cleanup to capture real state)
+      # =======================================================================
       - name: Collect K3s logs
         run: sudo journalctl -u k3s --no-pager -n 50 > ./lab-artifacts/live/logs/k3s.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/k3s.log
       - name: Collect CNPG logs
         run: kubectl logs -n cnpg-system -l app.kubernetes.io/name=cloudnative-pg --tail=50 > ./lab-artifacts/live/logs/cnpg-operator.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/cnpg-operator.log
       - name: Collect k9b logs
-        run: kubectl logs -n k9b -l app.kubernetes.io/name=k9b-agent --tail=50 > ./lab-artifacts/live/logs/k9b.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/k9b.log
+        run: kubectl logs -n k9b --all-containers --tail=100 > ./lab-artifacts/live/logs/k9b.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/k9b.log
+      - name: Collect Helm status
+        run: helm status k9b -n k9b > ./lab-artifacts/live/logs/helm-k9b-status.txt 2>&1 || echo "unavailable" > ./lab-artifacts/live/logs/helm-k9b-status.txt
 
+      # =======================================================================
       # Cleanup secrets (must happen before verifier scans artifacts)
+      # =======================================================================
       - name: Cleanup sensitive files
         run: rm -f /tmp/kubeconfig && find ./lab-artifacts/live -name "*secret*" -type f | xargs rm -f 2>/dev/null || true
 
+      # =======================================================================
       # Verify artifacts (runs on final artifact directory after cleanup)
+      # =======================================================================
       - name: Verify live lab artifacts
         run: .venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir ./lab-artifacts/live --verbose
 
+      # =======================================================================
       # Upload artifacts
+      # =======================================================================
       - name: Upload live lab artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -286,5 +417,6 @@ jobs:
           echo "=== Live K3s CNPG Incident Lab Summary ==="
           echo "K3s: ${{ env.K3S_VERSION }} CNPG: ${{ env.CNPG_VERSION }}"
           echo "Scenario: ${{ inputs.incident_scenario }}"
+          echo "k9b Image: ${K9B_IMAGE_REPOSITORY}:${K9B_IMAGE_TAG}"
           echo "Artifact: k9b-cnpg-incident-lab-live-${{ github.run_id }}"
           echo "Infrastructure: PROVEN | k9b Detection: DEFERRED | LLM: NOT CALLED"

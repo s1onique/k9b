@@ -1,0 +1,54 @@
+# Tracked pod-failure incident manifest for live K3s/CNPG incident lab.
+#
+# Lab-owned failing app pod with deterministic readiness probe failure.
+# This is NOT a CNPG internal mutation - it's a separate lab-owned workload.
+#
+# Applied by: .github/workflows/k9b-cnpg-incident-lab-live.yml
+# Copied to:  lab-artifacts/live/incident/injected-change.yaml
+#
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnpg-lab
+  labels:
+    lab.k9b.io/managed: "true"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cnpg-lab-failing-app
+  namespace: cnpg-lab
+  labels:
+    app: cnpg-lab-failing-app
+    lab.k9b.io/scenario: pod-failure
+    lab.k9b.io/managed: "true"
+  annotations:
+    lab.k9b.io/description: "Pod with failing readiness probe for lab testing"
+spec:
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: registry.spbnix.com/dockerhub-cache/library/alpine:3.19
+      command: ["sleep", "infinity"]
+      # Readiness probe that ALWAYS fails - this is intentional for lab testing.
+      # The pod will remain NotReady, which is the observable failure symptom.
+      readinessProbe:
+        exec:
+          command: ["/bin/false"]
+        initialDelaySeconds: 1
+        periodSeconds: 5
+        failureThreshold: 1
+      # Liveness probe that succeeds - pod should stay running but NotReady.
+      livenessProbe:
+        exec:
+          command: ["/bin/true"]
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      resources:
+        requests:
+          cpu: "10m"
+          memory: "16Mi"
+        limits:
+          cpu: "100m"
+          memory: "64Mi"
