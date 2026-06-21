@@ -221,7 +221,9 @@ class TestVerifyAllJsonMode(unittest.TestCase):
         if result.returncode == 0:
             # Should be empty or just contain error messages
             lines = result.stderr.strip().split("\n")
-            human_lines = [l for l in lines if l and not l.startswith("ERROR:")]
+            human_lines = [
+                line for line in lines if line and not line.startswith("ERROR:")
+            ]
             self.assertEqual(human_lines, [],
                 f"JSON mode should not have human output on stderr: {human_lines}")
 
@@ -235,36 +237,33 @@ class TestVerifyAllLaneScopes(unittest.TestCase):
         # When scope is not 'all', profile should be 'full'
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all import resolve_profile_and_scope
-        import argparse
-        
+
         class MockArgs:
             profile = None
             scope = "python"
-        
+
         profile, scope = resolve_profile_and_scope(MockArgs())
         self.assertEqual(profile, "full")
         self.assertEqual(scope, "python")
-    
+
     def test_frontend_only_runs_full_frontend_lane(self):
         """--frontend-only should run full Frontend lane (not fast profile)."""
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all import resolve_profile_and_scope
-        import argparse
-        
+
         class MockArgs:
             profile = None
             scope = "frontend"
-        
+
         profile, scope = resolve_profile_and_scope(MockArgs())
         self.assertEqual(profile, "full")
         self.assertEqual(scope, "frontend")
-    
+
     def test_helm_only_runs_full_helm_lane(self):
         """--helm-only should run full Helm lane (not fast profile)."""
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all import resolve_profile_and_scope
-        import argparse
-        
+
         class MockArgs:
             profile = None
             scope = "helm"
@@ -334,8 +333,7 @@ class TestVerifyAllFailClosed(unittest.TestCase):
         """Missing lane state file should cause failure."""
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all_orchestrator import VerificationOrchestrator
-        import tempfile
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             orchestrator = VerificationOrchestrator(
                 repo_root=tmpdir,
@@ -358,8 +356,7 @@ class TestVerifyAllFailClosed(unittest.TestCase):
         """Corrupt lane state file should cause failure."""
         sys.path.insert(0, str(SCRIPT_DIR))
         from verify_all_orchestrator import VerificationOrchestrator
-        import tempfile
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             orchestrator = VerificationOrchestrator(
                 repo_root=tmpdir,
