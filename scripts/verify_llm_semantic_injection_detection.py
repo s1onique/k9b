@@ -23,6 +23,25 @@ import sys
 from pathlib import Path
 
 
+def _get_venv_python() -> Path:
+    """Get the path to the virtual environment Python interpreter.
+
+    Returns:
+        Path to .venv/bin/python
+
+    Raises:
+        FileNotFoundError: If the virtual environment Python does not exist
+    """
+    repo_root = Path(__file__).parent.parent
+    venv_python = repo_root / ".venv" / "bin" / "python"
+    if not venv_python.exists():
+        raise FileNotFoundError(
+            f"Virtual environment Python not found: {venv_python}. "
+            "Please ensure the virtual environment is set up."
+        )
+    return venv_python
+
+
 def run_unit_tests(verbose: bool = False) -> tuple[int, str]:
     """Run the semantic injection detector unit tests.
 
@@ -35,8 +54,9 @@ def run_unit_tests(verbose: bool = False) -> tuple[int, str]:
     if not test_file.exists():
         return 1, f"ERROR: Test file not found: {test_file}"
 
+    venv_python = _get_venv_python()
     cmd = [
-        sys.executable,
+        str(venv_python),
         "-m",
         "pytest",
         str(test_file),
@@ -73,8 +93,9 @@ def run_prompt_integration_tests(verbose: bool = False) -> tuple[int, str]:
     if not test_file.exists():
         return 1, f"ERROR: Test file not found: {test_file}"
 
+    venv_python = _get_venv_python()
     cmd = [
-        sys.executable,
+        str(venv_python),
         "-m",
         "pytest",
         str(test_file),
@@ -167,7 +188,7 @@ def check_integration_in_prompt_builder(
             check_name, check_fn = item
             if not check_fn(content):
                 return 1, f"ERROR: Missing required integration item in {builder_name}: {check_name}"
-        elif item not in content:
+        elif item not in content:  # type: ignore[operator]  # pre-existing: list contains mixed str/tuple types
             return 1, f"ERROR: Missing required integration item in {builder_name}: {item}"
 
     return 0, f"OK: {builder_name} integrates detector ({len(required_items)} items)"
@@ -186,8 +207,9 @@ def run_test_file(test_file: Path, verbose: bool = False) -> tuple[int, str]:
     if not test_file.exists():
         return 1, f"ERROR: Test file not found: {test_file}"
 
+    venv_python = _get_venv_python()
     cmd = [
-        sys.executable,
+        str(venv_python),
         "-m",
         "pytest",
         str(test_file),
