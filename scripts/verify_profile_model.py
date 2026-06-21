@@ -55,6 +55,13 @@ STEPS: dict[str, dict] = {
         "description": "File size check for LLM-friendliness",
         "is_expensive": False,
     },
+    "shell-containment": {
+        "command": "python scripts/verify_shell_containment.py",
+        "lane": "python",
+        "category": StepCategory.POLICY,
+        "description": "Shell containment policy enforcement",
+        "is_expensive": False,
+    },
     "doctrine": {
         "command": "bash scripts/verify_factory_doctrine.sh",
         "lane": "python",

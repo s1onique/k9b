@@ -1,0 +1,35 @@
+path,classification,owner,reason,target_language,migration_status,follow_up_act
+scripts/verify_all.sh,shim,platform-team,Canonical verification shim delegating to Python,Python,migrated,N/A
+scripts/step_runner.sh,legacy-debt,platform-team,Shared step runner with state management; refactor deferred,Python,pending,ACT-2024-shell-migration
+scripts/start_backend.sh,legacy-debt,platform-team,Health loop launcher with config resolution; moderate complexity,Python,pending,ACT-2024-shell-migration
+scripts/start_frontend.sh,legacy-debt,platform-team,Frontend launcher; simple but needs Python reimplementation,Python,pending,ACT-2024-shell-migration
+scripts/operator-review.sh,legacy-debt,platform-team,Operator review workflow; argument parsing and delegation,Python,pending,ACT-2024-shell-migration
+scripts/operator-check.sh,legacy-debt,platform-team,Operator check workflow; argument parsing and delegation,Python,pending,ACT-2024-shell-migration
+scripts/run_health_once.sh,legacy-debt,platform-team,Health snapshot launcher; embedded Python for config resolution,Python,pending,ACT-2024-shell-migration
+scripts/run_unit_tests.sh,legacy-debt,platform-team,Test runner wrapper; basic delegation,Python,pending,ACT-2024-shell-migration
+scripts/run_coverage.sh,legacy-debt,platform-team,Coverage report generator; mode dispatch and pytest invocation,Python,pending,ACT-2024-shell-migration
+scripts/run_timed.sh,legacy-debt,platform-team,Timing wrapper with JSON output; moderate complexity,Python,pending,ACT-2024-shell-migration
+scripts/run_frontend_ui_tests.sh,legacy-debt,platform-team,Frontend test runner; basic npm delegation,Python,pending,ACT-2024-shell-migration
+scripts/make_health_digest.sh,legacy-debt,platform-team,Health digest generator; digest creation logic,Python,pending,ACT-2024-shell-migration
+scripts/make_targeted_digest.sh,legacy-debt,platform-team,Targeted digest generator; digest creation logic,Python,pending,ACT-2024-shell-migration
+scripts/bootstrap_health_baseline.sh,legacy-debt,platform-team,Health baseline bootstrap; cluster initialization,Go,pending,ACT-2024-shell-migration
+scripts/package_helm_chart.sh,legacy-debt,platform-team,Helm chart packaging; chart operations,Python,pending,ACT-2024-shell-migration
+scripts/check_security_baseline.sh,legacy-debt,security-team,Security pattern scanner; grep pipelines and logic,Python,pending,ACT-2024-shell-migration
+scripts/check_llamacpp_endpoint.sh,legacy-debt,platform-team,LLM endpoint checker; network call,Python,pending,ACT-2024-shell-migration
+scripts/sync-docker-requirements.sh,legacy-debt,platform-team,Docker requirements sync; file operations,Python,pending,ACT-2024-shell-migration
+scripts/impact_scan.sh,legacy-debt,platform-team,Impact scan script; git and file analysis,Python,pending,ACT-2024-shell-migration
+scripts/prepare_all_usefulness_review_packs.sh,legacy-debt,platform-team,Review pack preparation; orchestration,Python,pending,ACT-2024-shell-migration
+scripts/verify_helm_chart.sh,legacy-debt,platform-team,Helm chart verification; helm validation,Python,pending,ACT-2024-shell-migration
+scripts/verify_factory_doctrine.sh,legacy-debt,platform-team,Factory doctrine verification; file scanning,Python,pending,ACT-2024-shell-migration
+scripts/verify_dockerhub_base_images.sh,legacy-debt,platform-team,Docker image verification; curl and parsing,Python,pending,ACT-2024-shell-migration
+scripts/verify_docker_workflow_hygiene.sh,legacy-debt,platform-team,Docker workflow hygiene; file scanning,Python,pending,ACT-2024-shell-migration
+scripts/verify_docker_build_locality.sh,legacy-debt,platform-team,Docker build locality; path analysis,Python,pending,ACT-2024-shell-migration
+scripts/verify_helm_workflow_hygiene.sh,legacy-debt,platform-team,Helm workflow hygiene; version scanning,Python,pending,ACT-2024-shell-migration
+scripts/verify_helm_oci_login.sh,legacy-debt,platform-team,Helm OCI login verification; docker login check,Python,pending,ACT-2024-shell-migration
+scripts/verify_frontend_static_serving.sh,legacy-debt,platform-team,Frontend static serving check; file serving validation,Python,pending,ACT-2024-shell-migration
+scripts/verify_health_loop_structured_output.sh,legacy-debt,platform-team,Structured output verification; JSON validation,Python,pending,ACT-2024-shell-migration
+scripts/debug_alertmanager_attribution.sh,legacy-debt,diagnostics-team,Alertmanager attribution debug; complex parsing,Python,pending,ACT-2024-shell-migration
+scripts/debug_alertmanager_cluster_attribution.sh,legacy-debt,diagnostics-team,Cluster attribution debug; complex parsing,Python,pending,ACT-2024-shell-migration
+scripts/debug_recent_runs_execution_state.sh,shim,diagnostics-team,Migrated to Python; delegates to debug_recent_runs_execution_state.py,Python,migrated,Migrated 2026-06-21 via ACT
+docker/python-entrypoint.sh,legacy-debt,platform-team,Docker entrypoint; container initialization,Python,pending,ACT-2024-shell-migration
+.github/scripts/install-spbnix-harbor-ca.sh,legacy-debt,platform-team,CA certificate installation; system configuration,Python,pending,ACT-2024-shell-migration

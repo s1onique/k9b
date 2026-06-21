@@ -156,6 +156,23 @@ doctrines:
     manual_only: false
     notes: Enforced via scripts/verify_discovery_logging_hygiene.py.
 
+  - id: shell-containment
+    title: Shell Containment
+    file: docs/doctrine/shell-containment.md
+    applies_to:
+      - shell-scripting
+      - build-automation
+      - ci-hygiene
+    agent_rules:
+      - .kilocode/rules/40-tool-use.md
+    required_checks:
+      - run verify_shell_containment.py gate
+      - all shell scripts registered in inventory
+      - shim scripts contain no complex patterns
+      - verify_all.sh remains shim-only
+    manual_only: false
+    notes: Enforced via scripts/verify_shell_containment.py. All complex shell is registered as debt.
+
   # Planned doctrines (files to be created):
   - id: operator-path-truth
     title: Operator Path Truth

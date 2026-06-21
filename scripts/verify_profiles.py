@@ -119,7 +119,7 @@ def get_profiles() -> dict[str, VerificationProfile]:
         "production-readiness-disclaimer", "discovery-logging-hygiene",
         "next-check-sanitization", "operator-projection-hygiene",
         "pvc-rollout-policy", "shared-pvc-colocation",
-        "llm-friendly",
+        "llm-friendly", "shell-containment",
         "helm-chart", "helm-oci-login",
         "docs-inventory", "docs-claims-registry",
     ]
