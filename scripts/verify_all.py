@@ -6,18 +6,22 @@ This is the Python implementation of the verification gate orchestration.
 The shell script verify_all.sh is now a compatibility shim that execs this module.
 
 Usage:
-    python scripts/verify_all.py [--fast|--full] [--json] [--python-only|--frontend-only|--helm-only]
+    python scripts/verify_all.py [--fast|--full|--act-local] [--json] [--python-only|--frontend-only|--helm-only]
 
 For backward compatibility, the shell shim delegates all arguments:
     ./scripts/verify_all.sh ... → .venv/bin/python scripts/verify_all.py ...
 
 Policy: Only --full may be called "full gate green".
+
+ACT-Local mode:
+    --act-local runs bounded verification on changed files only.
+    It never runs broad pytest or full fast profile unless explicitly requested.
+    Use this as the default close-check for local agent ACTs.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -25,11 +29,18 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
+from act_local_verification import (
+    format_human_output,
+    run_act_local_verification,
+)
+from act_local_verification import (
+    format_json_output as act_local_format_json,
+)
 from verify_all_lock import (
+    LockError,
     acquire_verify_lock,
     check_recursion,
     set_recursion_guard,
-    LockError,
 )
 from verify_all_orchestrator import run_verification
 from verify_all_output import print_result
@@ -49,6 +60,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 Profiles:
   --fast       Fast local profile (≤60s, policy + smoke checks) [DEFAULT]
   --full       Exhaustive merge-grade verification
+  --act-local  Bounded verification on changed files only (local agent default)
 
 Without -f or --full, defaults to --fast for local development.
 
@@ -56,6 +68,7 @@ Output modes:
   --json       Emit only JSON summary to stdout
 
 Policy: Only --full may be called "full gate green".
+ACT-Local: Use --act-local as the default close-check for local agent ACTs.
         """,
     )
     
@@ -73,6 +86,13 @@ Policy: Only --full may be called "full gate green".
         const="full",
         dest="profile",
         help="Exhaustive merge-grade verification",
+    )
+    profile_group.add_argument(
+        "--act-local",
+        action="store_const",
+        const="act-local",
+        dest="profile",
+        help="Bounded verification on changed files only (local agent default)",
     )
     
     parser.add_argument(
@@ -164,7 +184,18 @@ def main(argv: list[str] | None = None) -> int:
         print("ERROR: verify_all.py recursion detected.", file=sys.stderr)
         return 2
     
-    # Acquire lock
+    # Handle ACT-local profile separately (bypasses lock and normal gate infrastructure)
+    if profile == "act-local":
+        act_result = run_act_local_verification(json_mode=args.json)
+        
+        if args.json:
+            print(act_local_format_json(act_result))
+        else:
+            print(format_human_output(act_result))
+        
+        return 0 if act_result.success else 1
+    
+    # Acquire lock (not needed for act-local)
     try:
         lock = acquire_verify_lock(repo_root)
     except LockError as e:
@@ -178,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
     (repo_root / "runs" / "verification").mkdir(parents=True, exist_ok=True)
     
     try:
-        # Run verification
+        # Run standard verification (fast/full profiles)
         result = run_verification(
             repo_root=repo_root,
             profile=profile,
