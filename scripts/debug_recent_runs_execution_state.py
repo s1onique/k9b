@@ -349,6 +349,38 @@ def run_debug(
 
 def main() -> int:
     """Main entry point."""
+    # Pre-scan for unknown options before argparse processes them.
+    # This preserves the CLI contract that unknown options emit "Unknown option".
+    known_prefixes = frozenset({
+        '--base-url', '--run-id', '--worklist-url', '--output-dir', '--insecure',
+        '--token', '--bearer-token', '--header', '--timeout', '--verbose', '-v',
+        '--help', '-h', '--',
+    })
+    unknown_args = []
+    args_to_parse = []
+    i = 1
+    while i < len(sys.argv):
+        arg = sys.argv[i]
+        # Stop at -- (end of options marker)
+        if arg == '--':
+            args_to_parse.append(arg)
+            i += 1
+            continue
+        # Check if this is a known option (starts with known prefix)
+        is_known = False
+        for prefix in known_prefixes:
+            if arg == prefix or arg.startswith(prefix + '='):
+                is_known = True
+                break
+        if not is_known and arg.startswith('-'):
+            unknown_args.append(arg)
+        args_to_parse.append(arg)
+        i += 1
+    
+    if unknown_args:
+        print(f"Unknown option: {unknown_args[0]}", file=sys.stderr)
+        return 2
+    
     parser = argparse.ArgumentParser(
         description="Debug Recent Runs vs Work List execution state discrepancies",
         formatter_class=argparse.RawDescriptionHelpFormatter,

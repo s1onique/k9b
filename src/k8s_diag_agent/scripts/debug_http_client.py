@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -39,51 +38,95 @@ class HttpClient:
         return urllib.request.Request(url, headers=headers_dict)
     
     def fetch_json(self, url: str) -> tuple[dict | None, int, str | None]:
-        """Fetch JSON from URL. Returns (data, status, error)."""
+        """Fetch JSON from URL using curl. Returns (data, status, error)."""
+        import subprocess
+        import tempfile
+        
         if self.verbose:
             print(f"[VERBOSE] Fetching: {url}", file=sys.stderr)
         
+        # Use a temp file to capture response body; curl writes status to stdout
+        with tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False) as tmp:
+            tmp_path = tmp.name
+        
         try:
-            request = self._build_request(url)
+            # Build curl command that writes body to temp file and status to stdout
+            cmd = [
+                'curl', '-sS', '-f', '-L',
+                '-o', tmp_path,
+                '-w', '%{http_code}',
+                url
+            ]
+            
+            if self.timeout:
+                cmd.extend(['--max-time', str(self.timeout)])
+            
             if self.insecure:
-                ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-                response = urllib.request.urlopen(request, timeout=self.timeout, context=ctx)
-            else:
-                response = urllib.request.urlopen(request, timeout=self.timeout)
+                cmd.insert(4, '-k')  # Insert -k after -L
             
-            http_code = response.getcode()
-            content = response.read().decode('utf-8')
+            for header in self.headers:
+                if ':' in header:
+                    name, value = header.split(':', 1)
+                    cmd.extend(['-H', f'{name.strip()}: {value.strip()}'])
             
-            if self.verbose:
-                print(f"[VERBOSE] HTTP Status: {http_code}", file=sys.stderr)
+            if self.token:
+                cmd.extend(['-H', f'Authorization: Bearer {self.token}'])
             
             try:
-                data = json.loads(content) if content.strip() else {}
-            except json.JSONDecodeError as e:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout + 5 if self.timeout else 35,
+                )
+                
+                # Parse HTTP status from stdout
+                try:
+                    http_code = int(result.stdout.strip())
+                except ValueError:
+                    if result.stderr:
+                        return None, 0, result.stderr.strip()
+                    return None, 0, f"Invalid curl output: {result.stdout[:100]}"
+                
                 if self.verbose:
-                    print(f"[VERBOSE] Response is not valid JSON: {e}", file=sys.stderr)
-                return None, http_code, None
-            
-            return data, http_code, None
-            
-        except urllib.error.HTTPError as e:
-            if self.verbose:
-                print(f"[VERBOSE] HTTP Error: {e.code} {e.reason}", file=sys.stderr)
-            return None, e.code, f"HTTP {e.code}: {e.reason}"
-        except urllib.error.URLError as e:
-            if self.verbose:
-                print(f"[VERBOSE] URL Error: {e.reason}", file=sys.stderr)
-            return None, 0, f"Connection error: {e.reason}"
-        except TimeoutError:
-            if self.verbose:
-                print(f"[VERBOSE] Timeout after {self.timeout}s", file=sys.stderr)
-            return None, 0, f"Timeout after {self.timeout}s"
-        except Exception as e:
-            if self.verbose:
-                print(f"[VERBOSE] Error: {e}", file=sys.stderr)
-            return None, 0, str(e)
+                    print(f"[VERBOSE] HTTP Status: {http_code}", file=sys.stderr)
+                
+                if http_code >= 400:
+                    return None, http_code, f"HTTP {http_code}"
+                
+                # Read response body from temp file
+                with open(tmp_path) as f:
+                    body = f.read()
+                
+                if not body.strip():
+                    return {}, http_code, None
+                
+                try:
+                    data = json.loads(body)
+                    return data, http_code, None
+                except json.JSONDecodeError as e:
+                    if self.verbose:
+                        print(f"[VERBOSE] Response is not valid JSON: {e}", file=sys.stderr)
+                    return None, http_code, None
+                    
+            except subprocess.TimeoutExpired:
+                if self.verbose:
+                    print(f"[VERBOSE] Timeout after {self.timeout}s", file=sys.stderr)
+                return None, 0, f"Timeout after {self.timeout}s"
+            except FileNotFoundError:
+                if self.verbose:
+                    print("[VERBOSE] curl not found", file=sys.stderr)
+                return None, 0, "curl not found"
+            except Exception as e:
+                if self.verbose:
+                    print(f"[VERBOSE] Error: {e}", file=sys.stderr)
+                return None, 0, str(e)
+        finally:
+            import os
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 def fetch_and_save(
