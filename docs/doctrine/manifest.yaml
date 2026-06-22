@@ -173,6 +173,24 @@ doctrines:
     manual_only: false
     notes: Enforced via scripts/verify_shell_containment.py. All complex shell is registered as debt.
 
+  - id: no-force-push
+    title: No Force Push / No History Rewrite
+    file: docs/doctrine/no-force-push.md
+    applies_to:
+      - git-operations
+      - ci-hygiene
+      - branch-protection
+    agent_rules:
+      - .kilocode/rules/40-tool-use.md
+    required_checks:
+      - run verify_no_force_push_policy.py gate
+      - local pre-push guard installer available
+      - doctrine manifest contains no-force-push
+      - agent rules reference no-force-push doctrine
+      - GitHub remote rules verified (CI mode)
+    manual_only: false
+    notes: Enforced via scripts/verify_no_force_push_policy.py and scripts/verify_github_no_force_push_rules.py. Local hooks are advisory only; GitHub branch protection is authoritative.
+
   # Planned doctrines (files to be created):
   - id: operator-path-truth
     title: Operator Path Truth

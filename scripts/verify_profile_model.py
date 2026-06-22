@@ -187,6 +187,13 @@ STEPS: dict[str, dict] = {
         "description": "Shared PVC colocation policy",
         "is_expensive": False,
     },
+    "no-force-push-policy": {
+        "command": "python scripts/verify_no_force_push_policy.py",
+        "lane": "python",
+        "category": StepCategory.POLICY,
+        "description": "No-force-push policy verification",
+        "is_expensive": False,
+    },
     "unit-tests": {
         "command": "bash scripts/run_unit_tests.sh",
         "lane": "python",

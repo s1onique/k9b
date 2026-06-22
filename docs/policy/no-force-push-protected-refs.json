@@ -1,0 +1,25 @@
+{
+  "_comment": "Protected branch configuration for no-force-push policy",
+  "version": "1",
+  "protected_refs": [
+    "refs/heads/main",
+    "refs/heads/master",
+    "refs/heads/release/*",
+    "refs/heads/deploy/*"
+  ],
+  "banned_force_flags": [
+    "--force",
+    "-f",
+    "--force-with-lease",
+    "--force-if-includes",
+    "--mirror"
+  ],
+  "banned_refspec_patterns": [
+    "^\\+",
+    "\\:\\w*$"
+  ],
+  "force_allowlist": {
+    "_comment": "Emergency exceptions require documented justification",
+    "enabled": false
+  }
+}

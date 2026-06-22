@@ -24,6 +24,7 @@ Use this together with:
 - `docs/doctrine/bug-fossils.md` — bug regression (planned)
 - `docs/doctrine/executable-claims.md` — claim standards (planned)
 - `docs/doctrine/testing-doctrine.md` — test guidance (planned)
+- `docs/doctrine/no-force-push.md` — no force-push / no history rewrite policy
 
 ## Default operating posture
 
