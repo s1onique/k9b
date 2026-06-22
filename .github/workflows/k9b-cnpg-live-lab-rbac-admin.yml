@@ -1,0 +1,468 @@
+# =============================================================================
+# K9B CNPG Live Lab RBAC Admin Workflow
+#
+# Purpose:
+# Applies the live-lab RBAC manifest safely with manual confirmation and
+# protected environment approval. This workflow is intentionally separate from
+# the normal live lab workflow to maintain RBAC integrity.
+#
+# Why separate?
+# - The live lab runner SA (spbnix-k8s-gha-rs-no-permission) must NOT be able
+#   to update ClusterRoles, ClusterRoleBindings, Roles, or RoleBindings.
+# - This prevents CI from granting itself new permissions.
+# - Only an admin workflow with protected environment approval can apply RBAC.
+#
+# Security model:
+# - Manual dispatch only (no push/PR triggers)
+# - Protected GitHub environment (k9b-live-lab-admin) requires manual approval
+# - Admin kubeconfig stored in protected environment secret
+# - Exact confirm_apply value required
+# - Fixed manifest path (no arbitrary paths)
+# - Server-side dry-run before apply
+#
+# Runner/reachability model:
+# - Uses ubuntu-latest runner with admin kubeconfig from protected environment
+# - The kubeconfig must point to an API server reachable from GitHub-hosted runners
+# - If the cluster API is private/in-cluster only, use a self-hosted runner instead
+#
+# Usage:
+# 1. Navigate to Actions → K9B CNPG Live Lab RBAC Admin
+# 2. Click "Run workflow"
+# 3. Set confirm_apply: APPLY
+# 4. Set dry_run: true (recommended first run)
+# 5. Wait for environment approval
+# 6. Review dry-run output
+# 7. If satisfied, re-run with dry_run: false
+#
+# Required environment setup:
+# - Environment: k9b-live-lab-admin
+# - Required reviewers: trusted maintainers/admins
+# - Environment secret: K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 (base64-encoded kubeconfig)
+# =============================================================================
+
+name: K9B CNPG Live Lab RBAC Admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_apply:
+        description: 'Type APPLY to apply live-lab RBAC manifest'
+        required: true
+        type: string
+      dry_run:
+        description: 'Run server-side dry-run only'
+        required: true
+        type: boolean
+        default: true
+
+# This job must run in the protected environment to require manual approval
+env:
+  KUBECTL_VERSION: 'v1.31.0'
+  MANIFEST: 'deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml'
+  RUNNER_SA: 'system:serviceaccount:github-actions-runner:spbnix-k8s-gha-rs-no-permission'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # RBAC Admin Job
+  # ---------------------------------------------------------------------------
+  rbac-admin:
+    name: Apply Live Lab RBAC
+    # Protected environment requires manual approval from trusted maintainers
+    environment: k9b-live-lab-admin
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      # =========================================================================
+      # Checkout
+      # =========================================================================
+      - uses: actions/checkout@v4
+
+      # =========================================================================
+      # Enforce exact confirm_apply value
+      # =========================================================================
+      - name: Enforce confirm_apply value
+        run: |
+          set -euo pipefail
+          
+          if [ "${{ inputs.confirm_apply }}" != "APPLY" ]; then
+            echo "ERROR: confirm_apply must be exactly 'APPLY'"
+            echo "Received: '${{ inputs.confirm_apply }}'"
+            exit 1
+          fi
+          echo "confirm_apply verification passed"
+
+      # =========================================================================
+      # Verify manifest exists
+      # =========================================================================
+      - name: Verify manifest exists
+        run: |
+          set -euo pipefail
+          
+          if [ ! -f "${{ env.MANIFEST }}" ]; then
+            echo "ERROR: RBAC manifest not found at ${{ env.MANIFEST }}"
+            exit 1
+          fi
+          echo "Manifest found: ${{ env.MANIFEST }}"
+          echo "Manifest size: $(wc -l < "${{ env.MANIFEST }}") lines"
+
+      # =========================================================================
+      # Validate manifest shape
+      # =========================================================================
+      - name: Validate manifest shape
+        run: |
+          set -euo pipefail
+          
+          MANIFEST="${{ env.MANIFEST }}"
+          
+          # Verify exact manifest path
+          if [ "$MANIFEST" != "deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml" ]; then
+            echo "ERROR: Only the fixed RBAC manifest path is allowed"
+            echo "Received: $MANIFEST"
+            exit 1
+          fi
+          
+          # Verify required RBAC object names exist
+          echo "=== Validating manifest contents ==="
+          
+          if ! grep -q "name: k9b-cnpg-live-lab-runner-cluster" "$MANIFEST"; then
+            echo "ERROR: Missing ClusterRole k9b-cnpg-live-lab-runner-cluster"
+            exit 1
+          fi
+          echo "✓ Contains ClusterRole k9b-cnpg-live-lab-runner-cluster"
+          
+          if ! grep -q "name: k9b-cnpg-live-lab-runner-lab-namespace" "$MANIFEST"; then
+            echo "ERROR: Missing ClusterRole k9b-cnpg-live-lab-runner-lab-namespace"
+            exit 1
+          fi
+          echo "✓ Contains ClusterRole k9b-cnpg-live-lab-runner-lab-namespace"
+          
+          if ! grep -q "name: k9b-cnpg-live-lab-runner-cnpg-system" "$MANIFEST"; then
+            echo "ERROR: Missing Role k9b-cnpg-live-lab-runner-cnpg-system"
+            exit 1
+          fi
+          echo "✓ Contains Role k9b-cnpg-live-lab-runner-cnpg-system"
+          
+          if ! grep -q "name: spbnix-k8s-gha-rs-no-permission" "$MANIFEST"; then
+            echo "ERROR: Missing runner ServiceAccount name spbnix-k8s-gha-rs-no-permission"
+            exit 1
+          fi
+          echo "✓ Contains runner ServiceAccount spbnix-k8s-gha-rs-no-permission"
+          
+          if ! grep -q "namespace: github-actions-runner" "$MANIFEST"; then
+            echo "ERROR: Missing runner namespace github-actions-runner"
+            exit 1
+          fi
+          echo "✓ Contains runner namespace github-actions-runner"
+          
+          # Verify no placeholders remain
+          if grep -q "<RUNNER_SERVICE_ACCOUNT>" "$MANIFEST"; then
+            echo "ERROR: Manifest contains placeholder <RUNNER_SERVICE_ACCOUNT>"
+            exit 1
+          fi
+          echo "✓ No <RUNNER_SERVICE_ACCOUNT> placeholder"
+          
+          if grep -q "<RUNNER_NAMESPACE>" "$MANIFEST"; then
+            echo "ERROR: Manifest contains placeholder <RUNNER_NAMESPACE>"
+            exit 1
+          fi
+          echo "✓ No <RUNNER_NAMESPACE> placeholder"
+          
+          # Verify no wildcard RBAC
+          if grep -q 'apiGroups: \["\*"\]' "$MANIFEST"; then
+            echo "ERROR: Manifest contains wildcard apiGroups"
+            exit 1
+          fi
+          echo "✓ No wildcard apiGroups"
+          
+          if grep -q 'resources: \["\*"\]' "$MANIFEST"; then
+            echo "ERROR: Manifest contains wildcard resources"
+            exit 1
+          fi
+          echo "✓ No wildcard resources"
+          
+          if grep -q 'verbs: \["\*"\]' "$MANIFEST"; then
+            echo "ERROR: Manifest contains wildcard verbs"
+            exit 1
+          fi
+          echo "✓ No wildcard verbs"
+          
+          # Verify no cluster-admin binding
+          if grep -qi "cluster-admin" "$MANIFEST"; then
+            echo "ERROR: Manifest contains cluster-admin binding"
+            exit 1
+          fi
+          echo "✓ No cluster-admin binding"
+          
+          echo "=== Manifest validation PASSED ==="
+
+      # =========================================================================
+      # Decode admin kubeconfig
+      # =========================================================================
+      - name: Decode admin kubeconfig
+        # Wire the protected environment secret into the step environment
+        # Environment secrets are only available when the environment is referenced
+        env:
+          K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64: ${{ secrets.K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          
+          KUBECONFIG_FILE="$RUNNER_TEMP/admin-kubeconfig"
+          
+          if [ -z "${K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64:-}" ]; then
+            echo "ERROR: K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 secret is not set"
+            exit 1
+          fi
+          
+          printf '%s' "$K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64" | base64 -d > "$KUBECONFIG_FILE"
+          chmod 0600 "$KUBECONFIG_FILE"
+          
+          # Export kubeconfig path for subsequent steps
+          echo "KUBECONFIG=$KUBECONFIG_FILE" >> "$GITHUB_ENV"
+          echo "KUBECONFIG_FILE=$KUBECONFIG_FILE" >> "$GITHUB_ENV"
+          echo "Admin kubeconfig decoded to temporary file"
+
+      # =========================================================================
+      # Set up kubectl
+      # =========================================================================
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: '${{ env.KUBECTL_VERSION }}'
+
+      # =========================================================================
+      # Pre-apply diagnostics
+      # =========================================================================
+      - name: Pre-apply diagnostics
+        run: |
+          set -euo pipefail
+          
+          echo "=== Pre-Apply Diagnostics ==="
+          kubectl version --client
+          kubectl config current-context
+          kubectl auth whoami || true
+          echo "=== Diagnostics complete ==="
+
+      # =========================================================================
+      # Server-side dry-run
+      # =========================================================================
+      - name: Server-side dry-run
+        id: dry-run
+        run: |
+          set -euo pipefail
+          
+          echo "=== Server-side dry-run ==="
+          echo "Manifest: ${{ env.MANIFEST }}"
+          echo "Dry-run: ${{ inputs.dry_run }}"
+          
+          kubectl apply --server-side --dry-run=server -f "${{ env.MANIFEST }}"
+          
+          echo "=== Dry-run complete ==="
+
+      # =========================================================================
+      # Apply manifest (only when dry_run is false)
+      # =========================================================================
+      - name: Apply RBAC manifest
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          set -euo pipefail
+          
+          echo "=== Applying RBAC manifest ==="
+          kubectl apply -f "${{ env.MANIFEST }}"
+          echo "=== Manifest applied ==="
+
+      # =========================================================================
+      # Show applied objects (only when dry_run is false)
+      # =========================================================================
+      - name: Show applied RBAC objects
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          set -euo pipefail
+          
+          echo "=== Applied RBAC Objects ==="
+          
+          echo "--- ClusterRole: k9b-cnpg-live-lab-runner-cluster ---"
+          kubectl get clusterrole k9b-cnpg-live-lab-runner-cluster -o name 2>/dev/null || echo "Not found"
+          
+          echo "--- ClusterRole: k9b-cnpg-live-lab-runner-lab-namespace ---"
+          kubectl get clusterrole k9b-cnpg-live-lab-runner-lab-namespace -o name 2>/dev/null || echo "Not found"
+          
+          echo "--- Role: k9b-cnpg-live-lab-runner-cnpg-system ---"
+          kubectl get role k9b-cnpg-live-lab-runner-cnpg-system -n cnpg-system -o name 2>/dev/null || echo "Not found"
+          
+          echo "--- ClusterRoleBinding: k9b-cnpg-live-lab-runner-cluster ---"
+          kubectl get clusterrolebinding k9b-cnpg-live-lab-runner-cluster -o name 2>/dev/null || echo "Not found"
+          
+          echo "--- ClusterRoleBinding: k9b-cnpg-live-lab-runner-lab-namespace ---"
+          kubectl get clusterrolebinding k9b-cnpg-live-lab-runner-lab-namespace -o name 2>/dev/null || echo "Not found"
+          
+          echo "--- RoleBinding: k9b-cnpg-live-lab-runner-cnpg-system ---"
+          kubectl get rolebinding k9b-cnpg-live-lab-runner-cnpg-system -n cnpg-system -o name 2>/dev/null || echo "Not found"
+          
+          echo "=== All RBAC objects shown ==="
+
+      # =========================================================================
+      # Verify live-lab runner permissions after apply
+      # =========================================================================
+      - name: Verify live-lab runner permissions
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          set -euo pipefail
+          
+          RUNNER_SA="${{ env.RUNNER_SA }}"
+          SMOKE_NS="k9b-cnpg-rbac-smoke-${GITHUB_RUN_ID}"
+          
+          echo "=== Verifying live-lab runner permissions ==="
+          echo "Runner SA: $RUNNER_SA"
+          echo "Smoke namespace: $SMOKE_NS"
+          
+          # Create smoke namespace
+          kubectl create namespace "$SMOKE_NS" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace "$SMOKE_NS" lab.k9b.io/rbac-smoke=true --overwrite
+          echo "Created smoke namespace: $SMOKE_NS"
+          
+          echo ""
+          echo "--- Required permissions (should be YES) ---"
+          
+          echo "get pods --all-namespaces:"
+          kubectl auth can-i get pods --all-namespaces --as="$RUNNER_SA"
+          
+          echo "get nodes:"
+          kubectl auth can-i get nodes --as="$RUNNER_SA"
+          
+          echo "get customresourcedefinitions.apiextensions.k8s.io/clusters.postgresql.cnpg.io:"
+          kubectl auth can-i get customresourcedefinitions.apiextensions.k8s.io/clusters.postgresql.cnpg.io --as="$RUNNER_SA"
+          
+          echo "get pods -n cnpg-system:"
+          kubectl auth can-i get pods -n cnpg-system --as="$RUNNER_SA"
+          
+          echo "get deployments.apps -n cnpg-system:"
+          kubectl auth can-i get deployments.apps -n cnpg-system --as="$RUNNER_SA"
+          
+          echo "create namespaces:"
+          kubectl auth can-i create namespaces --as="$RUNNER_SA"
+          
+          echo "patch namespaces:"
+          kubectl auth can-i patch namespaces --as="$RUNNER_SA"
+          
+          echo "delete namespaces:"
+          kubectl auth can-i delete namespaces --as="$RUNNER_SA"
+          
+          echo ""
+          echo "--- PVC permissions (smoke namespace) ---"
+          
+          echo "get persistentvolumeclaims -n $SMOKE_NS:"
+          kubectl auth can-i get persistentvolumeclaims -n "$SMOKE_NS" --as="$RUNNER_SA"
+          
+          echo "create persistentvolumeclaims -n $SMOKE_NS:"
+          kubectl auth can-i create persistentvolumeclaims -n "$SMOKE_NS" --as="$RUNNER_SA"
+          
+          echo "delete persistentvolumeclaims -n $SMOKE_NS:"
+          kubectl auth can-i delete persistentvolumeclaims -n "$SMOKE_NS" --as="$RUNNER_SA"
+          
+          echo ""
+          echo "--- CNPG Cluster permissions (smoke namespace) ---"
+          
+          echo "create clusters.postgresql.cnpg.io -n $SMOKE_NS:"
+          kubectl auth can-i create clusters.postgresql.cnpg.io -n "$SMOKE_NS" --as="$RUNNER_SA"
+          
+          echo "get clusters.postgresql.cnpg.io -n $SMOKE_NS:"
+          kubectl auth can-i get clusters.postgresql.cnpg.io -n "$SMOKE_NS" --as="$RUNNER_SA"
+          
+          echo ""
+          echo "--- Intentionally denied permissions (should be NO) ---"
+          
+          echo "get secrets -n $SMOKE_NS (should be NO):"
+          if kubectl auth can-i get secrets -n "$SMOKE_NS" --as="$RUNNER_SA"; then
+            echo "ERROR: runner should NOT be able to read secrets"
+            exit 1
+          else
+            echo "OK: secret read correctly denied"
+          fi
+          
+          echo "update clusterroles.rbac.authorization.k8s.io (should be NO):"
+          if kubectl auth can-i update clusterroles.rbac.authorization.k8s.io --as="$RUNNER_SA"; then
+            echo "ERROR: live runner should NOT be able to update ClusterRoles"
+            exit 1
+          else
+            echo "OK: ClusterRole update correctly denied"
+          fi
+          
+          echo "update clusterrolebindings.rbac.authorization.k8s.io (should be NO):"
+          if kubectl auth can-i update clusterrolebindings.rbac.authorization.k8s.io --as="$RUNNER_SA"; then
+            echo "ERROR: live runner should NOT be able to update ClusterRoleBindings"
+            exit 1
+          else
+            echo "OK: ClusterRoleBinding update correctly denied"
+          fi
+          
+          echo ""
+          echo "=== Permission verification complete ==="
+
+      # =========================================================================
+      # Cleanup smoke namespace (always runs)
+      # =========================================================================
+      - name: Cleanup RBAC smoke namespace
+        if: always()
+        run: |
+          set -euo pipefail
+          
+          SMOKE_NS="k9b-cnpg-rbac-smoke-${GITHUB_RUN_ID}"
+          
+          echo "=== Cleaning up smoke namespace: $SMOKE_NS ==="
+          kubectl delete namespace "$SMOKE_NS" --ignore-not-found=true --wait=false || true
+          echo "Smoke namespace cleanup initiated"
+
+      # =========================================================================
+      # Cleanup admin kubeconfig (always runs)
+      # =========================================================================
+      - name: Cleanup admin kubeconfig
+        if: always()
+        run: |
+          set -euo pipefail
+          
+          if [ -n "${KUBECONFIG_FILE:-}" ] && [ -f "$KUBECONFIG_FILE" ]; then
+            echo "Removing admin kubeconfig: $KUBECONFIG_FILE"
+            rm -f "$KUBECONFIG_FILE"
+            echo "Admin kubeconfig removed"
+          else
+            echo "No admin kubeconfig file to clean up"
+          fi
+
+      # =========================================================================
+      # Summary
+      # =========================================================================
+      - name: Summary
+        run: |
+          echo "=== RBAC Admin Workflow Summary ==="
+          echo "Manifest: ${{ env.MANIFEST }}"
+          echo "Dry-run mode: ${{ inputs.dry_run }}"
+          echo "confirm_apply: ${{ inputs.confirm_apply }}"
+          echo ""
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            echo "Status: Dry-run completed (no changes applied)"
+          else
+            echo "Status: Manifest applied successfully"
+          fi
+          echo "=== Workflow complete ==="
+
+# =============================================================================
+# Security Notes:
+#
+# 1. This workflow is manual-only (no push/PR triggers)
+# 2. Protected environment requires manual approval
+# 3. Admin kubeconfig is decoded to temp file with 0600 permissions
+# 4. Kubeconfig is cleaned up in always() step
+# 5. No kubeconfig or token material is printed or uploaded
+# 6. The normal live lab workflow cannot call this via workflow_call
+# 7. The normal live lab runner SA cannot update RBAC
+#
+# What this workflow does NOT do:
+# - Does not accept arbitrary manifest paths
+# - Does not run from push/PR triggers
+# - Does not print kubeconfig or token material
+# - Does not upload sensitive artifacts
+# - Does not grant cluster-admin
+# - Does not use wildcard RBAC
+# =============================================================================

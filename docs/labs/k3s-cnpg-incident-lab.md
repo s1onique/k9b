@@ -105,6 +105,86 @@ The live workflow bootstraps kubectl and kubeconfig entirely within the workflow
 
 The workflow includes mandatory RBAC preflight checks that fail the job if permissions are missing. These checks use a helper script (`scripts/k9b_cnpg_live_lab_rbac_preflight.sh`) that provides actionable error output identifying exactly which permission is missing.
 
+### RBAC Security Boundary
+
+The live lab runner service account (`system:serviceaccount:github-actions-runner:spbnix-k8s-gha-rs-no-permission`) **must not be able to update ClusterRoles, ClusterRoleBindings, Roles, or RoleBindings**. This is a deliberate security boundary to prevent CI from granting itself new permissions.
+
+**The live lab workflow does NOT apply RBAC itself.** Instead, a separate protected admin workflow handles RBAC changes.
+
+#### Admin RBAC Workflow
+
+A dedicated GitHub Actions workflow applies the live-lab RBAC manifest safely:
+
+```yaml
+name: K9B CNPG Live Lab RBAC Admin
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_apply:
+        description: 'Type APPLY to apply live-lab RBAC manifest'
+        required: true
+      dry_run:
+        description: 'Run server-side dry-run only'
+        required: true
+        default: true
+```
+
+**Location**: `.github/workflows/k9b-cnpg-live-lab-rbac-admin.yml`
+
+**Key security features:**
+
+1. **Manual-only trigger**: No push, PR, or schedule triggers
+2. **Protected environment**: Requires `k9b-live-lab-admin` environment with manual approval
+3. **Admin kubeconfig**: Uses `K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64` secret (base64-encoded)
+4. **Exact confirmation**: Requires `confirm_apply=APPLY` exactly
+5. **Fixed manifest path**: Only applies `deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml`
+6. **Server-side dry-run**: Always runs dry-run before apply
+7. **Manifest validation**: Verifies no placeholders, wildcards, or cluster-admin
+8. **Permission verification**: Confirms live runner permissions via `kubectl auth can-i --as`
+9. **Proper cleanup**: Removes temp kubeconfig and smoke namespace with `if: always()`
+
+**How to run:**
+
+1. Navigate to **Actions** → **K9B CNPG Live Lab RBAC Admin**
+2. Click **Run workflow**
+3. Set `confirm_apply: APPLY`
+4. Set `dry_run: true` (recommended first run to review changes)
+5. Wait for protected environment approval
+6. Review dry-run output in workflow logs
+7. If satisfied, re-run with `dry_run: false`
+
+**Required setup:**
+
+1. Create GitHub environment: `k9b-live-lab-admin`
+2. Add required reviewers (trusted maintainers/admins)
+3. Add environment secret: `K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64`
+   ```bash
+   # Encode kubeconfig:
+   cat ~/.kube/config | base64 -w 0
+   ```
+
+**Permission smoke checks:**
+
+The admin workflow verifies that the live lab runner has:
+- ✓ `get pods --all-namespaces`
+- ✓ `get nodes`
+- ✓ `get customresourcedefinitions.apiextensions.k8s.io/clusters.postgresql.cnpg.io`
+- ✓ `create/patch/delete namespaces`
+- ✓ `get/create/delete persistentvolumeclaims`
+- ✓ `get/create clusters.postgresql.cnpg.io`
+
+And that the live runner **cannot**:
+- ✗ `get secrets` (correctly denied)
+- ✗ `update clusterroles.rbac.authorization.k8s.io` (correctly denied)
+- ✗ `update clusterrolebindings.rbac.authorization.k8s.io` (correctly denied)
+
+**What must never be uploaded:**
+- kubeconfig contents
+- service account tokens
+- base64-decoded credentials
+
+**Manifest path:** `deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml`
+
 **Before namespace creation:**
 - `get pods --all-namespaces`
 - `get nodes`
@@ -459,9 +539,11 @@ go test -v ./internal/lab/cnpg/...
 | `.github/workflows/k9b-image-builder.yml` | Reusable image-build workflow |
 | `.github/workflows/k9b-cnpg-incident-lab.yml` | Main CI workflow with image-builder integration |
 | `.github/workflows/k9b-cnpg-incident-lab-live.yml` | Live workflow with kubectl bootstrap and RBAC preflight |
+| `.github/workflows/k9b-cnpg-live-lab-rbac-admin.yml` | Protected admin workflow for applying live-lab RBAC manifest |
 | `scripts/k9b_cnpg_live_lab_rbac_preflight.sh` | Helper script for self-identifying RBAC failures |
 | `scripts/verify_k3s_cnpg_incident_lab_artifact.py` | Artifact verifier with namespace-mode support |
 | `tests/test_live_lab_config.py` | Workflow config tests (kubectl bootstrap, RBAC, secret hygiene) |
+| `tests/test_live_lab_admin_rbac_workflow.py` | Tests for admin RBAC workflow |
 | `fixtures/lab/live/pod-failure/injected-change.yaml` | Tracked incident manifest |
 | `deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml` | Minimal RBAC manifest for spbnix-k8s runner |
 | `docs/labs/k3s-cnpg-incident-lab.md` | This documentation |
