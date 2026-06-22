@@ -4,6 +4,8 @@
 
 ## Policy Statement
 
+> Allowlists are legacy debt registers, not active escape hatches.
+>
 > The LLM-friendly allowlist is not a release valve. It is a debt ledger. New oversized files must be split, simplified, generated differently, or moved behind a better verifier contract. Adding a new allowlist entry is a gate failure.
 >
 > If an already-allowlisted file is modified in a transaction, that same transaction must remove it from the active allowlist by splitting, shrinking below threshold, deleting it, or replacing it with smaller focused files.

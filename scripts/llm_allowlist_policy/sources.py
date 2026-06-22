@@ -3,18 +3,78 @@
 This module handles reading allowlist entries from the actual sources:
 - scripts/llm_friendly_allowlist.py
 - .llm-friendly-ignore files
+
+Supports AST parsing for Python files where possible, with regex fallback.
 """
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
 from .baseline import normalize_path
 
 
+class AllowlistExtractor(ast.NodeVisitor):
+    """AST visitor that extracts ALLOWLIST entries from Python modules."""
+
+    def __init__(self) -> None:
+        self.paths: set[str] = set()
+        self.errors: list[str] = []
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        """Visit assignment nodes to find ALLOWLIST assignments."""
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "ALLOWLIST":
+                self._extract_from_list(node.value)
+        self.generic_visit(node)
+
+    def _extract_from_list(self, node: ast.expr) -> None:
+        """Extract tuple entries from a list expression.
+        
+        FAILS CLOSED: If ALLOWLIST is not a literal list, this is an error.
+        """
+        if isinstance(node, ast.List):
+            for elt in node.elts:
+                self._extract_tuple_entry(elt)
+        elif isinstance(node, ast.Name):
+            # FAIL CLOSED: Variable reference is not acceptable
+            # ALLOWLIST must be a literal list of tuples
+            self.errors.append(
+                f"ALLOWLIST is a variable reference ({node.id}), not a literal list. "
+                "Only literal ALLOWLIST = [(path, reason), ...] is acceptable."
+            )
+        else:
+            self.errors.append(f"Unexpected ALLOWLIST structure type: {type(node).__name__}")
+
+    def _extract_tuple_entry(self, node: ast.expr) -> None:
+        """Extract (path, reason) tuple entry."""
+        if isinstance(node, ast.Tuple):
+            if len(node.elts) >= 1:
+                first_elt = node.elts[0]
+                if isinstance(first_elt, ast.Constant) and isinstance(first_elt.value, str):
+                    normalized = normalize_path(first_elt.value)
+                    self.paths.add(normalized)
+                elif isinstance(first_elt, ast.Str):  # Python 3.7 compatibility
+                    if isinstance(first_elt.s, str):
+                        normalized = normalize_path(first_elt.s)
+                        self.paths.add(normalized)
+                    else:
+                        self.errors.append(f"Unexpected ast.Str value type: {type(first_elt.s).__name__}")
+                else:
+                    self.errors.append(f"Unexpected tuple first element type: {type(first_elt).__name__}")
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            # Single string (edge case)
+            normalized = normalize_path(node.value)
+            self.paths.add(normalized)
+
+
 def parse_allowlist_from_python(python_path: Path) -> tuple[set[str], list[str]]:
     """Parse the allowlist from the Python module.
+
+    Uses AST parsing where possible, with regex fallback for edge cases.
+    If AST parsing fails critically, falls back to regex-only.
 
     Returns:
         (paths, errors) where paths is a set of allowlisted paths
@@ -30,6 +90,23 @@ def parse_allowlist_from_python(python_path: Path) -> tuple[set[str], list[str]]
         with open(python_path, encoding="utf-8") as f:
             content = f.read()
 
+        # Try AST parsing first (preferred)
+        try:
+            tree = ast.parse(content, filename=str(python_path))
+            extractor = AllowlistExtractor()
+            extractor.visit(tree)
+            
+            # Only use AST results if we found the ALLOWLIST variable
+            if extractor.paths or "ALLOWLIST" in content:
+                paths.update(extractor.paths)
+                errors.extend(extractor.errors)
+                return paths, errors
+        except SyntaxError as e:
+            errors.append(f"AST parse error: {e} - falling back to regex")
+        except ValueError as e:
+            errors.append(f"AST value error: {e} - falling back to regex")
+
+        # Regex fallback
         pattern = r'\("([^"]+)",\s*"([^"]+)"\)'
         matches = re.findall(pattern, content)
 

@@ -25,6 +25,7 @@ from act_local_checks import (
     run_json_contract_check,
     run_llm_friendly_on_files,
     run_mypy_on_files,
+    run_no_new_llm_allowlist_check,
     run_ruff_on_files,
     run_shell_containment_on_files,
     run_verification_discipline_check,
@@ -73,6 +74,13 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(mypy_result)
     if mypy_result.status == "FAIL":
         failure_commands.append(mypy_result.command)
+    
+    # Run no-new-allowlist check BEFORE LLM-friendly check
+    # This gate rejects allowlist growth before the normal gate can accept it
+    no_new_allowlist_result = run_no_new_llm_allowlist_check()
+    checks.append(no_new_allowlist_result)
+    if no_new_allowlist_result.status == "FAIL":
+        failure_commands.append(no_new_allowlist_result.command)
     
     # Run LLM-friendly checks on changed files
     llm_result = run_llm_friendly_on_files(changed_files)

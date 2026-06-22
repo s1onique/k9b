@@ -18,6 +18,31 @@ REPO_ROOT = Path(__file__).parent.parent
 SCRIPTS_DIR = Path(__file__).parent
 
 
+def run_no_new_llm_allowlist_check() -> CheckResult:
+    """Run the no-new-allowlist gate before LLM-friendly check.
+    
+    This gate runs BEFORE the normal LLM-friendly check to reject
+    allowlist growth before the normal gate can accept it.
+    
+    CRITICAL: If the verifier is missing, this is a FAIL (not SKIP).
+    The no-new-allowlist policy is mandatory debt containment.
+    """
+    verifier_path = SCRIPTS_DIR / "verify_no_new_llm_allowlist.py"
+    if not verifier_path.exists():
+        # FAIL closed: missing verifier is a policy violation
+        return CheckResult(
+            name="no-new-llm-allowlist",
+            command="verify_no_new_llm_allowlist.py",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message="CRITICAL: scripts/verify_no_new_llm_allowlist.py not found - no-new-allowlist policy enforcement is missing",
+        )
+    
+    command = [str(REPO_ROOT / ".venv" / "bin" / "python"), str(verifier_path)]
+    return run_check("no-new-llm-allowlist", command)
+
+
 def run_check(
     name: str,
     command: list[str],

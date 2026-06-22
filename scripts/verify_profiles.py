@@ -104,6 +104,8 @@ def get_profiles() -> dict[str, VerificationProfile]:
     """Return all verification profile definitions."""
 
     # Fast profile includes
+    # NOTE: "no-new-llm-allowlist" MUST run BEFORE "llm-friendly" to reject
+    # allowlist growth before the normal gate can accept it.
     fast_includes = [
         "ruff-lint", "mypy", "mypy-tests",
         "doctrine", "dockerhub-base-images", "docker-workflow-hygiene",
@@ -113,7 +115,8 @@ def get_profiles() -> dict[str, VerificationProfile]:
         "production-readiness-disclaimer", "discovery-logging-hygiene",
         "next-check-sanitization", "operator-projection-hygiene",
         "pvc-rollout-policy", "shared-pvc-colocation",
-        "llm-friendly", "no-new-llm-allowlist", "shell-containment",
+        "no-new-llm-allowlist", "llm-friendly",  # ORDER MATTERS: no-new runs BEFORE llm-friendly
+        "shell-containment",
         "helm-chart", "helm-oci-login",
         "docs-inventory", "docs-claims-registry",
     ]

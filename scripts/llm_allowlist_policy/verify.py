@@ -5,6 +5,7 @@ This module contains the core comparison logic for verifying that:
 2. Baseline doesn't grow in a transaction
 3. Allowlisted files that are modified are removed from the active allowlist
 4. .llm-friendly-ignore entries don't escape the repo
+5. Changes to allowlist files are not comment-only when there are effective changes
 """
 
 from __future__ import annotations
@@ -23,6 +24,12 @@ from .changed_files import (
     get_changed_files,
 )
 from .sources import get_current_allowlist_entries
+
+# Files that are protected by this policy (deprecated, use comment_classifier.is_llm_allowlist_file)
+LLM_ALLOWLIST_FILES = [
+    "scripts/llm_friendly_allowlist.py",
+    ".llm-friendly-ignore",
+]
 
 
 def extract_actual_path(current_path: str) -> str:
@@ -190,6 +197,7 @@ def run_verification(
     old_baseline_paths: set[str] | None = None,
     verbose: bool = False,
     skip_baseline_growth_check: bool = False,
+    base_ref: str = "HEAD",
 ) -> tuple[bool, list[str], list[str]]:
     """Run the full verification.
 
@@ -199,6 +207,8 @@ def run_verification(
         old_baseline_paths: Old baseline paths for growth check (None for local/HEAD)
         verbose: Print verbose output
         skip_baseline_growth_check: Skip baseline growth check (for bootstrap mode)
+        base_ref: Git ref for comparing allowlist file changes (default: HEAD)
+                 Should be the resolved merge-base when running in CI mode.
 
     Returns:
         (success, errors, warnings)
@@ -243,7 +253,7 @@ def run_verification(
 
     # Get changed files if not provided
     if changed_files is None:
-        changed_files, changed_errors = get_changed_files(repo_root, mode="local")
+        changed_files, _resolved_base, changed_errors = get_changed_files(repo_root, mode="local")
         # CRITICAL: Fail closed on changed-file discovery errors
         errors.extend(changed_errors)
         if verbose:
@@ -313,6 +323,17 @@ def run_verification(
                     errors.append(
                         "    HINT: Split, shrink, delete, or remove from allowlist"
                     )
+
+            # Check if allowlist file changes are comment-only vs effective
+            # Wire the classifier into the real verifier path
+            from .comment_classifier import check_allowlist_change_is_comment_only
+            classification_msg, class_warnings, class_errors = check_allowlist_change_is_comment_only(
+                repo_root, changed_files, base_ref=base_ref
+            )
+            warnings.extend(class_warnings)
+            errors.extend(class_errors)
+            if classification_msg:
+                warnings.append(classification_msg)
 
     if verbose and not errors:
         print("No new entries - verification passed")

@@ -124,32 +124,88 @@ def get_changed_files_ci(
     repo_root: Path,
     base_ref: str | None = None,
     head_ref: str | None = None,
-) -> tuple[list[ChangedFile], list[str]]:
+) -> tuple[list[ChangedFile], str | None, list[str]]:
     """Get changed files using CI refs or environment variables.
 
     Uses --name-status -M for rename detection.
 
+    Environment variable precedence:
+    1. Explicit --base-ref / --head-ref arguments
+    2. K9B_LLM_ALLOWLIST_BASE_REF (base only, NOT head)
+    3. CI_BASE_REF, BASE_REF (base only)
+    4. CI_HEAD_REF, HEAD_REF (head only)
+    5. CI_MERGE_REQUEST_TARGET_BRANCH_NAME, CI_COMMIT_SHA
+
+    When K9B_LLM_ALLOWLIST_BASE_REF is set:
+    - It is used ONLY as the base ref
+    - head is always "HEAD"
+    - We compute merge-base <base> HEAD for the actual comparison
+
     Returns:
-        (changed_files, errors)
+        (changed_files, resolved_base_ref, errors)
+        - changed_files: List of ChangedFile objects
+        - resolved_base_ref: The resolved comparison base (merge-base if computed, else original)
+        - errors: List of error messages
     """
     errors: list[str] = []
     changed: list[ChangedFile] = []
+    resolved_base_ref: str | None = None
 
-    # Check environment variables first
+    # Determine base ref (never use K9B_LLM_ALLOWLIST_BASE_REF as head_ref)
+    configured_base = os.environ.get("K9B_LLM_ALLOWLIST_BASE_REF")
+    base_ref = base_ref or configured_base  # K9B_LLM_ALLOWLIST_BASE_REF only for base
     base_ref = base_ref or os.environ.get("CI_BASE_REF") or os.environ.get("BASE_REF")
+    base_ref = base_ref or os.environ.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
+
+    # Determine head ref (never use K9B_LLM_ALLOWLIST_BASE_REF here)
     head_ref = head_ref or os.environ.get("CI_HEAD_REF") or os.environ.get("HEAD_REF")
+    head_ref = head_ref or os.environ.get("CI_COMMIT_SHA") or "HEAD"
 
-    if not base_ref or not head_ref:
-        base_ref = base_ref or os.environ.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
-        head_ref = head_ref or os.environ.get("CI_COMMIT_SHA")
+    # If we have a configured base (including K9B_LLM_ALLOWLIST_BASE_REF),
+    # compute merge-base to get the actual comparison point
+    if base_ref and base_ref != "HEAD":
+        try:
+            merge_base_result = subprocess.run(
+                ["git", "merge-base", base_ref, head_ref],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            # FAIL CLOSED: merge-base failure means we cannot determine comparison base
+            if merge_base_result.returncode != 0 or not merge_base_result.stdout.strip():
+                errors.append(
+                    f"Failed to compute merge-base for {base_ref} and {head_ref}: "
+                    f"{merge_base_result.stderr.strip() or 'no output'}"
+                )
+                return changed, resolved_base_ref, errors
+            # Use merge-base as the actual comparison point
+            resolved_base_ref = merge_base_result.stdout.strip()
+        except Exception as e:
+            errors.append(f"Failed to compute merge-base: {e}")
+            return changed, resolved_base_ref, errors
+    else:
+        # No merge-base computation needed, use HEAD as the base
+        resolved_base_ref = "HEAD"
 
-    if not base_ref or not head_ref:
-        errors.append("No CI refs available. Use --base-ref and --head-ref or set CI env vars.")
-        return changed, errors
+    if not base_ref:
+        errors.append("No base ref available. Use --base-ref, set K9B_LLM_ALLOWLIST_BASE_REF, or set CI_BASE_REF.")
+        return changed, resolved_base_ref, errors
+
+    if not head_ref:
+        errors.append("No head ref available. Use --head-ref or set CI_HEAD_REF.")
+        return changed, resolved_base_ref, errors
+
+    # Ensure base and head are not the same
+    if base_ref == head_ref:
+        errors.append(f"Base ref and head ref cannot be the same: {base_ref}")
+        return changed, resolved_base_ref, errors
 
     try:
+        # Use resolved_base_ref (merge-base) for the diff to get correct comparison
+        diff_base_ref = resolved_base_ref or base_ref
         result = subprocess.run(
-            ["git", "diff", "--name-status", "-M", base_ref, head_ref],
+            ["git", "diff", "--name-status", "-M", diff_base_ref, head_ref],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -173,7 +229,7 @@ def get_changed_files_ci(
     except Exception as e:
         errors.append(f"git diff error: {e}")
 
-    return changed, errors
+    return changed, resolved_base_ref, errors
 
 
 def get_changed_files_from_fixture(
@@ -247,7 +303,7 @@ def get_changed_files(
     base_ref: str | None = None,
     head_ref: str | None = None,
     fixture_path: Path | None = None,
-) -> tuple[list[ChangedFile], list[str]]:
+) -> tuple[list[ChangedFile], str | None, list[str]]:
     """Get changed files based on mode.
 
     Args:
@@ -258,18 +314,23 @@ def get_changed_files(
         fixture_path: Path to fixture file (for fixture mode)
 
     Returns:
-        (changed_files, errors)
+        (changed_files, resolved_base_ref, errors)
+        - For local mode: resolved_base_ref is "HEAD"
+        - For ci mode: resolved_base_ref is the merge-base computed (or HEAD if not computed)
+        - For fixture mode: resolved_base_ref is None
     """
     if mode == "local":
-        return get_changed_files_local(repo_root)
+        changed, errors = get_changed_files_local(repo_root)
+        return changed, "HEAD", errors
     elif mode == "ci":
         return get_changed_files_ci(repo_root, base_ref, head_ref)
     elif mode == "fixture":
         if not fixture_path:
-            return [], ["Fixture mode requires --fixture-path"]
-        return get_changed_files_from_fixture(fixture_path)
+            return [], None, ["Fixture mode requires --fixture-path"]
+        changed, errors = get_changed_files_from_fixture(fixture_path)
+        return changed, None, errors
     else:
-        return [], [f"Unknown mode: {mode}"]
+        return [], None, [f"Unknown mode: {mode}"]
 
 
 def get_all_paths_from_changed(
