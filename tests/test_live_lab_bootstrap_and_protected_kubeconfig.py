@@ -416,6 +416,184 @@ class TestHelmErrorClassification:
             "Should use workload_not_ready classification"
 
 
+class TestHelmManifestSchemaClassification:
+    """Test Helm manifest schema error classification patterns."""
+
+    def test_classifies_unknown_field(self) -> None:
+        """Must classify 'unknown field' errors."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "unknown field" in content.lower(), \
+            "Should classify unknown field errors"
+        assert "helm_manifest_schema_warning" in content, \
+            "Should use helm_manifest_schema_warning classification"
+
+    def test_classifies_container_security_context_drift(self) -> None:
+        """Must detect container-level security/resource field drift."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        # Should detect when security fields are at wrong level
+        assert "allowPrivilegeEscalation" in content or "securityContext" in content, \
+            "Should detect allowPrivilegeEscalation securityContext issues"
+        assert "readOnlyRootFilesystem" in content or "securityContext" in content, \
+            "Should detect readOnlyRootFilesystem securityContext issues"
+        assert "capabilities" in content or "securityContext" in content, \
+            "Should detect capabilities securityContext issues"
+
+    def test_classifies_resources_limits_requests_drift(self) -> None:
+        """Must detect when limits/requests are at wrong level."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "limits" in content.lower() or "resources" in content.lower(), \
+            "Should detect limits/resources issues"
+
+    def test_has_classify_schema_error_function(self) -> None:
+        """Must have classify_schema_error function."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "classify_schema_error" in content, \
+            "Should have classify_schema_error function"
+
+
+class TestHelmServerDryRunClassification:
+    """Test Helm server-side dry-run validation failure classification."""
+
+    def test_classifies_dry_run_failure(self) -> None:
+        """Must classify kubectl --dry-run=server validation failures."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "dry-run" in content.lower() or "dry_run" in content, \
+            "Should handle dry-run validation"
+        assert "helm_manifest_server_dry_run_failed" in content, \
+            "Should use helm_manifest_server_dry_run_failed classification"
+
+    def test_classifies_validation_errors(self) -> None:
+        """Must classify error validating data errors."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "error validating" in content.lower() or "validation failed" in content.lower(), \
+            "Should classify validation errors"
+
+
+class TestHelmWaitTimeoutClassification:
+    """Test Helm wait timeout classification with cluster state analysis."""
+
+    def test_classifies_helm_wait_timeout_unknown(self) -> None:
+        """Must classify helm wait timeout with unknown cause."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "helm_wait_timeout_unknown" in content, \
+            "Should use helm_wait_timeout_unknown classification"
+
+    def test_classifies_pod_crash_loop(self) -> None:
+        """Must classify pod crash loop from cluster state."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "crashloopbackoff" in content.lower() or "pod_crash_loop" in content, \
+            "Should detect CrashLoopBackOff"
+        assert "pod_crash_loop" in content, \
+            "Should use pod_crash_loop classification"
+
+    def test_classifies_probe_failure(self) -> None:
+        """Must classify readiness/liveness probe failures."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "probe" in content.lower() or "readiness" in content.lower() or "liveness" in content.lower(), \
+            "Should detect probe failures"
+        assert "probe_failed" in content, \
+            "Should use probe_failed classification"
+
+    def test_classifies_deployment_not_available(self) -> None:
+        """Must classify deployment not available from cluster state."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "deployment_not_available" in content, \
+            "Should use deployment_not_available classification"
+
+    def test_has_classify_wait_timeout_function(self) -> None:
+        """Must have classify_wait_timeout function."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "classify_wait_timeout" in content, \
+            "Should have classify_wait_timeout function"
+
+    def test_watchdog_collects_cluster_state(self) -> None:
+        """Workflow must collect cluster state during Helm wait."""
+        content = WORKFLOW_FILE.read_text()
+        assert "watchdog" in content.lower(), \
+            "Workflow should have watchdog for Helm wait"
+        assert "get pods" in content.lower() and "-n" in content, \
+            "Watchdog should collect pods"
+        assert "get events" in content.lower(), \
+            "Watchdog should collect events"
+
+
+class TestPreHelmValidation:
+    """Test pre-Helm manifest validation steps."""
+
+    def test_workflow_renders_helm_template_before_install(self) -> None:
+        """Workflow must render Helm manifests before install."""
+        content = WORKFLOW_FILE.read_text()
+        assert "helm template" in content.lower(), \
+            "Workflow should render Helm manifests before install"
+        assert "helm-rendered.yaml" in content, \
+            "Workflow should save rendered manifests to helm-rendered.yaml"
+
+    def test_workflow_runs_server_side_dry_run(self) -> None:
+        """Workflow must run server-side dry-run validation."""
+        content = WORKFLOW_FILE.read_text()
+        assert "--dry-run=server" in content, \
+            "Workflow should run kubectl apply --dry-run=server"
+        assert "helm-server-dry-run.log" in content, \
+            "Workflow should save dry-run output to helm-server-dry-run.log"
+
+    def test_workflow_fails_on_schema_warning(self) -> None:
+        """Workflow must fail before install when schema warnings detected."""
+        content = WORKFLOW_FILE.read_text()
+        assert "unknown field" in content.lower(), \
+            "Workflow should detect unknown field warnings"
+        # Should fail the step, not proceed to install
+        assert "exit 1" in content or "exit 1" in content.lower(), \
+            "Workflow should exit with error when schema warnings found"
+
+    def test_workflow_fails_on_dry_run_failure(self) -> None:
+        """Workflow must fail before install when dry-run validation fails."""
+        content = WORKFLOW_FILE.read_text()
+        assert "DRY_RUN_RC" in content, \
+            "Workflow should check dry-run exit code"
+        # Should fail before proceeding with helm upgrade --install
+        dry_run_pos = content.find("DRY_RUN_RC")
+        assert dry_run_pos != -1, "Should have dry-run check"
+        # The check must be before helm install step
+        assert "exit 1" in content[dry_run_pos: dry_run_pos + 500] or "exit 1" in content.lower(), \
+            "Workflow should exit when dry-run fails"
+
+
+class TestWatchdogDirectory:
+    """Test watchdog artifact collection."""
+
+    def test_workflow_creates_watchdog_directory(self) -> None:
+        """Workflow must create watchdog directory for snapshots."""
+        content = WORKFLOW_FILE.read_text()
+        assert "mkdir -p" in content and "watchdog" in content.lower(), \
+            "Workflow should create watchdog directory"
+
+    def test_watchdog_collects_pods_deployments_events(self) -> None:
+        """Watchdog must collect pods, deployments, and events."""
+        content = WORKFLOW_FILE.read_text()
+        assert "get pods" in content.lower(), \
+            "Watchdog should collect pods"
+        assert "get deployments" in content.lower() or "get deployment" in content.lower(), \
+            "Watchdog should collect deployments"
+        assert "get events" in content.lower(), \
+            "Watchdog should collect events"
+
+    def test_watchdog_uses_explicit_kubeconfig(self) -> None:
+        """Watchdog kubectl commands must use explicit --kubeconfig."""
+        content = WORKFLOW_FILE.read_text()
+        # Find watchdog section
+        watchdog_start = content.find("Start Helm wait watchdog")
+        if watchdog_start != -1:
+            watchdog_section = content[watchdog_start:]
+            assert "--kubeconfig" in watchdog_section, \
+                "Watchdog should use --kubeconfig for kubectl commands"
+
+    def test_watchdog_logs_snapshots(self) -> None:
+        """Watchdog must log snapshot collection."""
+        content = WORKFLOW_FILE.read_text()
+        assert "watchdog.log" in content.lower() or "snapshot" in content.lower(), \
+            "Watchdog should log snapshot collection"
+
+
 class TestSummaryJsonFields:
     """Test summary.json required fields."""
 
@@ -508,3 +686,195 @@ class TestWorkflowRuntimeSetup:
         setup_pos = content.find("actions/setup-python@v5")
         assert setup_pos < verifier_pos, \
             "setup-python must come before artifact verifier"
+
+
+class TestPythonEnvironmentOrder:
+    """Regression tests for Python environment ordering."""
+
+    def test_python_environment_created_before_pre_helm_steps(self) -> None:
+        """Python env must be set up before pre-Helm render/dry-run steps."""
+        content = WORKFLOW_FILE.read_text()
+
+        # Find setup-python position
+        setup_positions = []
+        for i, line in enumerate(content.split('\n')):
+            if 'uses: actions/setup-python@v5' in line:
+                # Find the step containing this
+                step_start = content.rfind('- name:', 0, content[:i].rfind('\n'))
+                setup_positions.append(step_start)
+
+        # Find helm-template step position
+        helm_template_pos = content.find('- name: Render Helm manifests')
+        helm_dry_run_pos = content.find('- name: Validate manifests with server-side dry-run')
+
+        assert helm_template_pos != -1, "Should have helm-template step"
+        assert helm_dry_run_pos != -1, "Should have dry-run step"
+        assert len(setup_positions) > 0, "Should have setup-python step"
+
+        # setup-python should come before helm-template
+        assert setup_positions[0] < helm_template_pos, \
+            "setup-python must come before helm-template step"
+
+    def test_no_inline_python_c_blocks_in_workflow(self) -> None:
+        """Workflow must not use inline python -c blocks for classification."""
+        content = WORKFLOW_FILE.read_text()
+
+        # Check for python -c patterns
+        assert "python -c \"" not in content and "python -c '" not in content, \
+            "Workflow must not use inline python -c blocks - use CLI subcommands instead"
+
+        # Should use classify-schema and classify-wait-timeout subcommands
+        assert "classify-schema" in content, \
+            "Workflow should use classify-schema subcommand"
+        assert "classify-wait-timeout" in content, \
+            "Workflow should use classify-wait-timeout subcommand"
+
+    def test_python_subcommands_read_existing_preflight(self) -> None:
+        """Classification subcommands must read existing lab-preflight.json."""
+        content = BOOTSTRAP_PYTHON.read_text()
+
+        # main_classify_schema should read existing preflight
+        assert "read_json(artifact_dir / \"lab-preflight.json\")" in content, \
+            "classify-schema should read existing lab-preflight.json"
+
+        # main_classify_wait_timeout should read existing preflight
+        assert "read_json(artifact_dir / \"lab-preflight.json\")" in content, \
+            "classify-wait-timeout should read existing lab-preflight.json"
+
+
+class TestWatchdogLifecycle:
+    """Test watchdog lifecycle management."""
+
+    def test_watchdog_uses_trap_cleanup(self) -> None:
+        """Watchdog must use trap for reliable cleanup."""
+        content = WORKFLOW_FILE.read_text()
+
+        # Should have trap cleanup
+        assert "trap cleanup_watchdog EXIT" in content, \
+            "Watchdog should use trap EXIT for cleanup"
+
+        # Should not start watchdog in separate step
+        assert "Start Helm wait watchdog" not in content, \
+            "Watchdog should not be started in separate step"
+
+
+class TestDryRunWarningDetection:
+    """Test dry-run warning detection even on success exit code."""
+
+    def test_dry_run_checks_log_for_unknown_field_on_success(self) -> None:
+        """Dry-run must check log for 'unknown field' even when exit code is 0."""
+        content = WORKFLOW_FILE.read_text()
+
+        # Find the dry-run step
+        dry_run_section = content[content.find("Validate manifests with server-side dry-run"):]
+        dry_run_section = dry_run_section[:dry_run_section.find("\n      # =====", 1) if "\n      # =====" in dry_run_section else len(dry_run_section)]
+
+        # Should grep for unknown field
+        assert "grep" in dry_run_section and "unknown field" in dry_run_section, \
+            "Dry-run step should grep for 'unknown field'"
+
+        # Should check before exit 1
+        unknown_field_pos = dry_run_section.find("grep")
+        exit_1_pos = dry_run_section.find("exit 1")
+        assert unknown_field_pos < exit_1_pos, \
+            "grep for unknown field should come before exit 1"
+
+
+class TestTimeoutClassifierParsing:
+    """Test timeout classifier JSON parsing."""
+
+    def test_parse_crash_loop_requires_waiting_reason(self) -> None:
+        """Crash loop detection must parse JSON and check waiting.reason."""
+        content = BOOTSTRAP_PYTHON.read_text()
+
+        # Should NOT use naive string matching for crash loop detection
+        # (comment mentions are OK, but actual detection must parse JSON)
+        # The function should check waiting.reason, not just string search
+        assert "_parse_crash_loop_from_pods" in content, \
+            "Should have _parse_crash_loop_from_pods function"
+        
+        # Function should check waiting.reason specifically
+        assert '"waiting"' in content and '"reason"' in content, \
+            "Should check waiting.reason for CrashLoopBackOff"
+
+    def test_parse_image_pull_failure_checks_waiting_reason(self) -> None:
+        """Image pull failure must check waiting.reason for ImagePullBackOff."""
+        content = BOOTSTRAP_PYTHON.read_text()
+
+        assert "_parse_image_pull_failure_from_pods" in content, \
+            "Should have _parse_image_pull_failure_from_pods function"
+
+    def test_parse_deployment_not_ready_uses_status_json(self) -> None:
+        """Deployment not ready must use deployment status JSON."""
+        content = BOOTSTRAP_PYTHON.read_text()
+
+        assert "_parse_deployment_not_ready_from_deployments" in content, \
+            "Should have _parse_deployment_not_ready_from_deployments function"
+
+    def test_crash_loop_not_detected_for_normal_restartcount_0(self) -> None:
+        """Crash loop should not be detected when all pods have restartCount=0."""
+        content = BOOTSTRAP_PYTHON.read_text()
+
+        # The function should check waiting.reason, not restartCount
+        # If it checks restartCount, it should have a threshold > 0
+        assert '"CrashLoopBackOff"' in content, \
+            "Should check for CrashLoopBackOff reason in waiting state"
+
+
+class TestClassificationSubcommands:
+    """Test classification subcommand CLI interface."""
+
+    def test_classify_schema_subcommand_exists(self) -> None:
+        """classify-schema subcommand must exist."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "def main_classify_schema" in content, \
+            "Should have main_classify_schema function"
+
+    def test_classify_wait_timeout_subcommand_exists(self) -> None:
+        """classify-wait-timeout subcommand must exist."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        assert "def main_classify_wait_timeout" in content, \
+            "Should have main_classify_wait_timeout function"
+
+    def test_subcommands_preserve_preflight_context(self) -> None:
+        """Classification subcommands must preserve active_identity and namespace."""
+        content = BOOTSTRAP_PYTHON.read_text()
+
+        # Should read existing preflight
+        assert "existing = read_json(artifact_dir / \"lab-preflight.json\")" in content, \
+            "Subcommands should read existing preflight"
+
+        # Should preserve active_identity
+        assert "preflight.active_identity = existing.get(\"active_identity\")" in content, \
+            "Should preserve active_identity from existing preflight"
+
+        # Should preserve namespace
+        assert "preflight.namespace = existing.get(\"namespace\"" in content, \
+            "Should preserve namespace from existing preflight"
+
+
+class TestTimeoutClassifierRegression:
+    """Regression tests for timeout classifier - ensure no false positive string matching."""
+
+    def test_no_restartcount_false_positive_in_classify_wait_timeout(self) -> None:
+        """classify_wait_timeout must not use 'restartcount in pods_json' pattern."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        # The stale pattern that caused false positives
+        assert '"restartcount" in pods_json' not in content, \
+            "Must not use 'restartcount' string match - false positive on JSON field name"
+
+    def test_no_zero_slash_one_false_positive_in_classify_wait_timeout(self) -> None:
+        """classify_wait_timeout must not use '0/1 in pods_json' plain string pattern."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        # The stale pattern that matched JSON field names like "replicas: 0"
+        assert '"0/1" in pods_json' not in content, \
+            "Must not use '0/1' plain string match on pods_json"
+
+    def test_classify_wait_timeout_uses_json_parsers(self) -> None:
+        """classify_wait_timeout must use JSON-based parser helpers."""
+        content = BOOTSTRAP_PYTHON.read_text()
+        # Must use the JSON-based parser helpers
+        assert "_parse_crash_loop_from_pods(pods_json)" in content, \
+            "Should use _parse_crash_loop_from_pods for accurate crash loop detection"
+        assert "_parse_deployment_not_ready_from_deployments(deployments_json)" in content, \
+            "Should use _parse_deployment_not_ready_from_deployments for accurate deployment check"

@@ -235,7 +235,119 @@ jobs:
           }
 
       # =======================================================================
-      # Deploy k9b via Helm chart (resilient with error classification)
+      # Setup Python environment (needed for classification subcommands)
+      # =======================================================================
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install dependencies
+        run: |
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install pytest pyyaml
+
+      # =======================================================================
+      # Step 1: Pre-Helm render (capture manifests for schema validation)
+      # =======================================================================
+      - name: Render Helm manifests (pre-flight schema check)
+        id: helm-template
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Rendering Helm manifests ==="
+          echo "Backend image: ${{ inputs.backend_image_repository }}:${{ inputs.backend_image_tag }}"
+          
+          # Render manifests to file for schema validation
+          # Separate stdout (clean YAML) and stderr (warnings) for proper classification
+          # Wrap with set +e to capture exit code before classification runs
+          set +e
+          helm template k9b ./charts/k9b \
+            --namespace "$LAB_NAMESPACE" \
+            --values ./charts/k9b/values-live-lab.yaml \
+            --set image.backend.repository="${{ inputs.backend_image_repository }}" \
+            --set image.backend.tag="${{ inputs.backend_image_tag }}" \
+            --set image.backend.pullPolicy=IfNotPresent \
+            --set backend.auth.enabled=false \
+            --set kubernetes.auth.mode=inCluster \
+            --set serviceAccount.automountServiceAccountToken=true \
+            > ./lab-artifacts/live/logs/helm-rendered.yaml \
+            2> ./lab-artifacts/live/logs/helm-template.log
+          TEMPLATE_RC=$?
+          set -e
+          
+          if [ ${TEMPLATE_RC} -ne 0 ]; then
+            echo "Helm template failed with exit code ${TEMPLATE_RC}"
+            echo "Classifying as manifest schema error..."
+            # Pass both stderr log (warnings) and stdout (manifests) to classifier
+            cat ./lab-artifacts/live/logs/helm-template.log ./lab-artifacts/live/logs/helm-rendered.yaml > ./lab-artifacts/live/logs/helm-combined.txt
+            .venv/bin/python scripts/k9b_cnpg_live_lab_bootstrap.py \
+              classify-schema --input ./lab-artifacts/live/logs/helm-combined.txt
+            echo "Helm template validation FAILED"
+            exit 1
+          fi
+          
+          echo "Helm template succeeded - manifests rendered to helm-rendered.yaml"
+          echo "Checking for schema warnings in rendered output..."
+          
+          # Check for unknown field patterns in rendered YAML and stderr log
+          if grep -qi "unknown field" ./lab-artifacts/live/logs/helm-rendered.yaml 2>/dev/null || \
+             grep -qi "unknown field" ./lab-artifacts/live/logs/helm-template.log 2>/dev/null; then
+            echo "WARNING: 'unknown field' pattern detected in rendered manifests"
+            # Pass both stderr log (warnings) and stdout (manifests) to classifier
+            cat ./lab-artifacts/live/logs/helm-template.log ./lab-artifacts/live/logs/helm-rendered.yaml > ./lab-artifacts/live/logs/helm-combined.txt
+            .venv/bin/python scripts/k9b_cnpg_live_lab_bootstrap.py \
+              classify-schema --input ./lab-artifacts/live/logs/helm-combined.txt
+            echo "Schema warning detected - failing before Helm install"
+            exit 1
+          fi
+          
+          echo "No schema warnings detected in rendered manifests"
+
+      # =======================================================================
+      # Step 2: Server-side dry-run validation
+      # =======================================================================
+      - name: Validate manifests with server-side dry-run
+        id: helm-dry-run
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Running server-side dry-run validation ==="
+          
+          # Apply dry-run server-side to catch schema issues before real install
+          # Wrap with set +e to capture exit code before classification runs
+          set +e
+          kubectl --kubeconfig="${KUBECONFIG}" apply \
+            --dry-run=server \
+            --namespace "$LAB_NAMESPACE" \
+            -f ./lab-artifacts/live/logs/helm-rendered.yaml \
+            > ./lab-artifacts/live/logs/helm-server-dry-run.log 2>&1
+          DRY_RUN_RC=$?
+          set -e
+          
+          # kubectl apply --dry-run=server may exit 0 with warnings in output
+          # Always scan the log for schema issues
+          if grep -qi "unknown field\|error" ./lab-artifacts/live/logs/helm-server-dry-run.log 2>/dev/null; then
+            echo "Server-side dry-run has schema warnings or errors"
+            .venv/bin/python scripts/k9b_cnpg_live_lab_bootstrap.py \
+              classify-schema --input ./lab-artifacts/live/logs/helm-server-dry-run.log
+            echo "Dry-run validation FAILED - not proceeding with Helm install"
+            exit 1
+          fi
+          
+          # kubectl apply --dry-run=server returns non-zero on validation failure
+          if [ ${DRY_RUN_RC} -ne 0 ]; then
+            echo "Server-side dry-run validation failed with exit code ${DRY_RUN_RC}"
+            .venv/bin/python scripts/k9b_cnpg_live_lab_bootstrap.py \
+              classify-schema --input ./lab-artifacts/live/logs/helm-server-dry-run.log
+            echo "Dry-run validation FAILED - not proceeding with Helm install"
+            exit 1
+          fi
+          
+          echo "Server-side dry-run validation PASSED"
+
+      # =======================================================================
+      # Step 3: Deploy k9b via Helm chart (with watchdog)
       # =======================================================================
       - name: Deploy k9b via Helm chart
         id: helm-deploy
@@ -245,8 +357,52 @@ jobs:
           echo "Backend image: ${{ inputs.backend_image_repository }}:${{ inputs.backend_image_tag }}"
           echo "Using kubeconfig: ${KUBECONFIG}"
           
+          # Create watchdog directory
+          mkdir -p ./lab-artifacts/live/watchdog
+          
+          # Cleanup function for watchdog
+          cleanup_watchdog() {
+            if [ -n "${WATCHDOG_PID:-}" ]; then
+              echo "Stopping watchdog (PID: $WATCHDOG_PID)..."
+              kill $WATCHDOG_PID 2>/dev/null || true
+            fi
+          }
+          trap cleanup_watchdog EXIT
+          
+          # Start watchdog in background - captures cluster state every 25 seconds
+          (
+            WATCHDOG_INTERVAL=25
+            WATCHDOG_COUNT=0
+            while true; do
+              TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+              WATCHDOG_COUNT=$((WATCHDOG_COUNT + 1))
+              
+              echo "[watchdog:$TIMESTAMP] Collecting cluster state snapshot #$WATCHDOG_COUNT" >> ./lab-artifacts/live/watchdog/watchdog.log
+              
+              # Collect pods
+              kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE" -o wide \
+                >> ./lab-artifacts/live/watchdog/watchdog-pods-${TIMESTAMP}.txt 2>&1
+              
+              # Collect deployments
+              kubectl --kubeconfig="${KUBECONFIG}" get deployments -n "$LAB_NAMESPACE" -o wide \
+                >> ./lab-artifacts/live/watchdog/watchdog-deployments-${TIMESTAMP}.txt 2>&1
+              
+              # Collect events
+              kubectl --kubeconfig="${KUBECONFIG}" get events -n "$LAB_NAMESPACE" \
+                --sort-by='.lastTimestamp' \
+                >> ./lab-artifacts/live/watchdog/watchdog-events-${TIMESTAMP}.txt 2>&1
+              
+              echo "[watchdog:$TIMESTAMP] Snapshot #$WATCHDOG_COUNT saved" >> ./lab-artifacts/live/watchdog/watchdog.log
+              
+              sleep $WATCHDOG_INTERVAL
+            done
+          ) &
+          
+          # Save watchdog PID
+          WATCHDOG_PID=$!
+          
           # Capture Helm output to file for classification
-          HELM_LOG="./lab-artifacts/live/logs/helm-error.log"
+          HELM_LOG="./lab-artifacts/live/logs/helm-install.log"
           
           set +e
           helm upgrade --install k9b ./charts/k9b \
@@ -282,8 +438,15 @@ jobs:
             kubectl --kubeconfig="${KUBECONFIG}" get pvc -n "$LAB_NAMESPACE" \
               > ./lab-artifacts/live/pvc.txt 2>&1 || true
             
-            # Note: lab-preflight.json is updated by classify-error Python command below
-            # Do NOT append key=value lines here - it corrupts the JSON file
+            # Classify timeout using watchdog data if available
+            if grep -qi "timeout\|timed out" "${HELM_LOG}" 2>/dev/null; then
+              echo "Detected Helm timeout - running timeout classification..."
+              .venv/bin/python scripts/k9b_cnpg_live_lab_bootstrap.py \
+                classify-wait-timeout \
+                --helm-log ./lab-artifacts/live/logs/helm-install.log \
+                --namespace "$LAB_NAMESPACE" \
+                --kubeconfig "${KUBECONFIG}"
+            fi
             
             exit ${HELM_RC}
           fi

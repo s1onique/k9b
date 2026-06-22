@@ -10,7 +10,8 @@ Reusable bootstrap for the live lab workflow:
 
 Usage:
     python k9b_cnpg_live_lab_bootstrap.py <env_secret_name> <kubeconfig_out_var> [namespace]
-    python k9b_cnpg_live_lab_bootstrap.py classify-error <helm_output>
+    python k9b_cnpg_live_lab_bootstrap.py classify-schema --input <path>
+    python k9b_cnpg_live_lab_bootstrap.py classify-wait-timeout --helm-log <path> --namespace <name> [--kubeconfig <path>]
 
 Exit codes:
     0 - Bootstrap succeeded, KUBECONFIG exported
@@ -37,10 +38,17 @@ FAILURE_KUBECONFIG_DECODE_FAILED = "kubeconfig_decode_failed"
 FAILURE_KUBECONFIG_AUTH_FAILED = "kubeconfig_auth_failed"
 FAILURE_CREDENTIAL_SOURCE_WRONG = "credential_source_wrong"
 FAILURE_HELM_RBAC_DENIED = "helm_rbac_denied"
+FAILURE_HELM_MANIFEST_SCHEMA_WARNING = "helm_manifest_schema_warning"
+FAILURE_HELM_MANIFEST_SERVER_DRY_RUN_FAILED = "helm_manifest_server_dry_run_failed"
 FAILURE_IMAGE_PULL_FAILED = "image_pull_failed"
 FAILURE_CNPG_CRD_MISSING = "cnpg_crd_missing"
 FAILURE_STORAGE_OR_CAPACITY = "storageclass_or_capacity_issue"
 FAILURE_WORKLOAD_NOT_READY = "workload_not_ready"
+FAILURE_DEPLOYMENT_NOT_AVAILABLE = "deployment_not_available"
+FAILURE_POD_CRASH_LOOP = "pod_crash_loop"
+FAILURE_PROBE_FAILED = "probe_failed"
+FAILURE_PVC_PENDING = "pvc_pending"
+FAILURE_HELM_WAIT_TIMEOUT_UNKNOWN = "helm_wait_timeout_unknown"
 FAILURE_HELM_UNKNOWN = "helm_unknown_error"
 
 
@@ -430,11 +438,193 @@ def run_preflight_checks(
     preflight.rbac_checks_complete = True
 
 
+def classify_schema_error(
+    output: str,
+    artifact_dir: Path,
+    preflight: PreflightData,
+    diagnosis: DiagnosisGenerator,
+) -> str:
+    """Classify Kubernetes schema/dry-run error and return failure class.
+
+    Used for both helm template and kubectl apply --dry-run=server failures.
+    """
+    diagnosis.heading(2, "Helm Manifest Schema Classification")
+
+    failure_class = FAILURE_HELM_UNKNOWN
+    output_lower = output.lower()
+
+    # Schema warning - "unknown field" pattern
+    unknown_field_patterns = [
+        r"unknown field",
+        r"spec\.template\.spec\.containers\[0\]\.(allowPrivilegeEscalation|capabilities|limits|requests|readOnlyRootFilesystem)",
+    ]
+    has_unknown_field = any(re.search(p, output_lower) for p in unknown_field_patterns)
+    if has_unknown_field:
+        failure_class = FAILURE_HELM_MANIFEST_SCHEMA_WARNING
+        diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+        diagnosis.text(f"{diagnosis.bold('Cause')}: Helm chart renders container security/resource fields")
+        diagnosis.text("at the wrong level (directly under containers[0]) instead of nested under")
+        diagnosis.text("securityContext or resources.")
+        diagnosis.text("")
+        diagnosis.text(f"{diagnosis.bold('Common mistakes')}:")
+        diagnosis.text("- `allowPrivilegeEscalation: false` should be `securityContext.allowPrivilegeEscalation: false`")
+        diagnosis.text("- `capabilities:` should be `securityContext.capabilities:`")
+        diagnosis.text("- `limits:`/`requests:` should be `resources.limits:`/`resources.requests:`")
+        diagnosis.text("- `readOnlyRootFilesystem: true` should be `securityContext.readOnlyRootFilesystem: true`")
+        diagnosis.text("")
+        diagnosis.text(f"{diagnosis.bold('Evidence file')}: helm-rendered.yaml")
+        diagnosis.text(f"{diagnosis.bold('Suggested action')}: Fix chart templates to nest securityContext/resources fields.")
+
+    # Server dry-run validation failed
+    elif any(pattern in output_lower for pattern in [
+        "error: error validating",
+        "error validating data",
+        "dry-run failed",
+        "validation failed",
+    ]):
+        failure_class = FAILURE_HELM_MANIFEST_SERVER_DRY_RUN_FAILED
+        diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+        diagnosis.text(f"{diagnosis.bold('Cause')}: Server-side dry-run validation failed for rendered manifests.")
+        diagnosis.text(f"{diagnosis.bold('Evidence file')}: helm-server-dry-run.log")
+        diagnosis.text(f"{diagnosis.bold('Suggested action')}: Review rendered manifests and fix schema issues.")
+
+    else:
+        diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+        diagnosis.text(f"{diagnosis.bold('Cause')}: Unknown manifest validation error.")
+
+    # Set failure class
+    if preflight.failure_class is None:
+        preflight.failure_class = failure_class
+        preflight.failure_stage = "helm_deploy"
+
+    preflight.save()
+    diagnosis.save()
+    return failure_class
+
+
+def classify_wait_timeout(
+    helm_output: str,
+    kubeconfig: str | None,
+    namespace: str,
+    artifact_dir: Path,
+    preflight: PreflightData,
+    diagnosis: DiagnosisGenerator,
+) -> str:
+    """Classify Helm wait timeout using JSON-based parser helpers.
+
+    Delegates to the parser helpers from main_classify_wait_timeout() for
+    accurate crash loop, probe failure, and deployment-not-ready detection.
+    """
+    diagnosis.heading(2, "Helm Wait Timeout Classification")
+
+    failure_class = FAILURE_HELM_WAIT_TIMEOUT_UNKNOWN
+
+    if kubeconfig and namespace:
+        # Collect kubectl artifacts
+        kubectl_artifacts = [
+            ("watchdog/pods.txt", ["get", "pods", "-n", namespace, "-o", "wide"]),
+            ("watchdog/deployments.txt", ["get", "deployments", "-n", namespace, "-o", "wide"]),
+            ("watchdog/events.txt", ["get", "events", "-n", namespace, "--sort-by=.lastTimestamp"]),
+        ]
+
+        for filename, cmd in kubectl_artifacts:
+            result = subprocess.run(
+                ["kubectl", "--kubeconfig", kubeconfig] + cmd,
+                capture_output=True,
+                text=True,
+            )
+            (artifact_dir / filename).write_text(result.stdout or "(empty)")
+
+        # Get JSON for proper parsing
+        pods_result = subprocess.run(
+            ["kubectl", "--kubeconfig", kubeconfig, "get", "pods", "-n", namespace, "-o", "json"],
+            capture_output=True,
+            text=True,
+        )
+        deployments_result = subprocess.run(
+            ["kubectl", "--kubeconfig", kubeconfig, "get", "deployments", "-n", namespace, "-o", "json"],
+            capture_output=True,
+            text=True,
+        )
+        events_result = subprocess.run(
+            ["kubectl", "--kubeconfig", kubeconfig, "get", "events", "-n", namespace, "--sort-by=.lastTimestamp"],
+            capture_output=True,
+            text=True,
+        )
+
+        pods_json = pods_result.stdout
+        deployments_json = deployments_result.stdout
+        events_text = events_result.stdout
+        helm_lower = helm_output.lower()
+
+        # Use JSON-based parsers for accurate detection (no false positives)
+        if _parse_crash_loop_from_pods(pods_json):
+            failure_class = FAILURE_POD_CRASH_LOOP
+            diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+            diagnosis.text(f"{diagnosis.bold('Cause')}: Pod is in CrashLoopBackOff state.")
+            diagnosis.text(f"{diagnosis.bold('Evidence')}: watchdog/pods.txt")
+
+        elif _parse_image_pull_failure_from_pods(pods_json):
+            failure_class = FAILURE_IMAGE_PULL_FAILED
+            diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+            diagnosis.text(f"{diagnosis.bold('Cause')}: Container image could not be pulled.")
+            diagnosis.text(f"{diagnosis.bold('Evidence')}: watchdog/pods.txt")
+
+        elif _parse_probe_failure_from_pods(pods_json):
+            failure_class = FAILURE_PROBE_FAILED
+            diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+            diagnosis.text(f"{diagnosis.bold('Cause')}: Container probe failed (exit code != 0).")
+            diagnosis.text(f"{diagnosis.bold('Evidence')}: watchdog/pods.txt")
+
+        elif _parse_deployment_not_ready_from_deployments(deployments_json):
+            failure_class = FAILURE_DEPLOYMENT_NOT_AVAILABLE
+            diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+            diagnosis.text(f"{diagnosis.bold('Cause')}: Deployment has no available replicas.")
+            diagnosis.text(f"{diagnosis.bold('Evidence')}: watchdog/deployments.txt")
+
+        elif _parse_pvc_pending_from_pods(pods_json, events_text):
+            failure_class = FAILURE_PVC_PENDING
+            diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+            diagnosis.text(f"{diagnosis.bold('Cause')}: PVC is stuck in Pending state.")
+            diagnosis.text(f"{diagnosis.bold('Evidence')}: watchdog/pods.txt, watchdog/events.txt")
+
+        elif "unknown field" in helm_lower:
+            failure_class = FAILURE_HELM_MANIFEST_SCHEMA_WARNING
+            diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+            diagnosis.text(f"{diagnosis.bold('Cause')}: Helm chart has schema drift (unknown field warnings).")
+            diagnosis.text(f"{diagnosis.bold('Evidence')}: logs/helm-install.log")
+
+        else:
+            diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+            diagnosis.text(f"{diagnosis.bold('Cause')}: Helm wait timed out but specific cause unknown.")
+            diagnosis.text(f"{diagnosis.bold('Evidence')}: watchdog/ directory")
+
+    else:
+        diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+        diagnosis.text(f"{diagnosis.bold('Cause')}: Helm wait timed out without cluster state data.")
+        diagnosis.text(f"{diagnosis.bold('Evidence')}: logs/helm-install.log")
+
+    diagnosis.text("")
+    diagnosis.text(f"{diagnosis.bold('Suggested action')}: Review watchdog/ artifacts and helm-install.log")
+    diagnosis.text("to determine the root cause of the timeout.")
+
+    # Set failure class
+    if preflight.failure_class is None:
+        preflight.failure_class = failure_class
+        preflight.failure_stage = "helm_deploy"
+
+    preflight.save()
+    diagnosis.save()
+    return failure_class
+
+
 def classify_helm_error(
     helm_output: str,
     artifact_dir: Path,
     preflight: PreflightData,
     diagnosis: DiagnosisGenerator,
+    kubeconfig: str | None = None,
+    namespace: str = "",
 ) -> str:
     """Classify Helm error and return failure class.
 
@@ -445,17 +635,51 @@ def classify_helm_error(
     failure_class = FAILURE_HELM_UNKNOWN
     helm_lower = helm_output.lower()
 
+    # Schema warning - "unknown field" pattern (highest priority for manifest issues)
+    unknown_field_patterns = [
+        r"unknown field",
+        r"spec\.template\.spec\.containers\[0\]\.(allowPrivilegeEscalation|capabilities|limits|requests|readOnlyRootFilesystem)",
+    ]
+    has_unknown_field = any(re.search(p, helm_lower) for p in unknown_field_patterns)
+    if has_unknown_field:
+        failure_class = FAILURE_HELM_MANIFEST_SCHEMA_WARNING
+        diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+        diagnosis.text(f"{diagnosis.bold('Cause')}: Helm chart renders container security/resource fields")
+        diagnosis.text("at the wrong level (directly under containers[0]) instead of nested under")
+        diagnosis.text("securityContext or resources.")
+        diagnosis.text("")
+        diagnosis.text(f"{diagnosis.bold('Common mistakes')}:")
+        diagnosis.text("- `allowPrivilegeEscalation: false` should be `securityContext.allowPrivilegeEscalation: false`")
+        diagnosis.text("- `capabilities:` should be `securityContext.capabilities:`")
+        diagnosis.text("- `limits:`/`requests:` should be `resources.limits:`/`resources.requests:`")
+        diagnosis.text("- `readOnlyRootFilesystem: true` should be `securityContext.readOnlyRootFilesystem: true`")
+        diagnosis.text("")
+        diagnosis.text(f"{diagnosis.bold('Evidence file')}: helm-rendered.yaml")
+        diagnosis.text(f"{diagnosis.bold('Suggested action')}: Fix chart templates to nest securityContext/resources fields.")
+
     # RBAC denied - highest priority (use regex for proper pattern matching)
     # Must have both forbidden/cannot AND rbac-related keywords
-    has_rbac_error = any(re.search(p, helm_lower) for p in [r"forbidden", r"is forbidden", r"cannot get resource"])
-    has_rbac_keyword = any(re.search(p, helm_lower) for p in [r"roles?", r"rolebindings?", r"rbac"])
-    if has_rbac_error and has_rbac_keyword:
+    elif any(re.search(p, helm_lower) for p in [r"forbidden", r"is forbidden", r"cannot get resource"]) and \
+         any(re.search(p, helm_lower) for p in [r"roles?", r"rolebindings?", r"rbac"]):
         failure_class = FAILURE_HELM_RBAC_DENIED
         diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
         diagnosis.text(f"{diagnosis.bold('Cause')}: Helm command failed due to missing RBAC permissions for")
         diagnosis.text("Role/RoleBinding resources.")
         diagnosis.text(f"{diagnosis.bold('Suggested action')}: Ensure the kubeconfig has permissions for")
         diagnosis.text("roles.rbac.authorization.k8s.io and rolebindings.rbac.authorization.k8s.io.")
+
+    # Server dry-run validation failed
+    elif any(pattern in helm_lower for pattern in [
+        "error: error validating",
+        "error validating data",
+        "dry-run failed",
+        "validation failed",
+    ]):
+        failure_class = FAILURE_HELM_MANIFEST_SERVER_DRY_RUN_FAILED
+        diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+        diagnosis.text(f"{diagnosis.bold('Cause')}: Server-side dry-run validation failed for rendered manifests.")
+        diagnosis.text(f"{diagnosis.bold('Evidence file')}: helm-server-dry-run.log")
+        diagnosis.text(f"{diagnosis.bold('Suggested action')}: Review rendered manifests and fix schema issues.")
 
     # Image pull errors
     elif any(pattern in helm_lower for pattern in [
@@ -676,11 +900,353 @@ def main_classify_error() -> int:
     return 0
 
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "classify-error":
-        sys.exit(main_classify_error())
+def main_classify_schema() -> int:
+    """Classify manifest schema error from file.
+
+    Usage: classify-schema --input <path>
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Classify manifest schema error")
+    parser.add_argument("--input", required=True, help="Path to manifest file")
+    parser.add_argument(
+        "--artifact-dir",
+        default=os.environ.get("ARTIFACT_DIR", "./lab-artifacts/live"),
+        help="Artifact directory",
+    )
+    args = parser.parse_args(sys.argv[2:])
+
+    artifact_dir = Path(args.artifact_dir)
+    input_path = Path(args.input)
+
+    # Read manifest file
+    if input_path.exists():
+        output = input_path.read_text()
     else:
-        env_secret = sys.argv[1] if len(sys.argv) > 1 else "K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64"
-        out_var = sys.argv[2] if len(sys.argv) > 2 else "KUBECONFIG"
-        namespace = sys.argv[3] if len(sys.argv) > 3 else os.environ.get("LAB_NAMESPACE", "")
-        sys.exit(main_bootstrap(env_secret, out_var, namespace))
+        output = ""
+
+    preflight = PreflightData(artifact_dir)
+    diagnosis = DiagnosisGenerator(artifact_dir)
+
+    # Read existing preflight to preserve context
+    existing = read_json(artifact_dir / "lab-preflight.json")
+    if existing:
+        preflight.active_identity = existing.get("active_identity")
+        preflight.failure_class = existing.get("failure_class")
+        preflight.namespace = existing.get("namespace", "")
+        preflight.timestamp = existing.get("bootstrap_timestamp", preflight.timestamp)
+
+    failure_class = classify_schema_error(output, artifact_dir, preflight, diagnosis)
+    print(failure_class)
+    return 0
+
+
+def _parse_crash_loop_from_pods(pods_json_str: str) -> bool:
+    """Parse pod JSON and detect actual CrashLoopBackOff state.
+
+    Returns True only if we find containerStatuses with waiting.reason == CrashLoopBackOff.
+    """
+    try:
+        pods_data = json.loads(pods_json_str)
+        if not isinstance(pods_data, dict):
+            return False
+
+        items = pods_data.get("items", [])
+        for pod in items:
+            # Check containerStatuses for CrashLoopBackOff
+            container_statuses = pod.get("status", {}).get("containerStatuses", [])
+            for cs in container_statuses:
+                state = cs.get("state", {})
+                waiting = state.get("waiting", {})
+                reason = waiting.get("reason", "")
+                if reason == "CrashLoopBackOff":
+                    return True
+
+            # Also check initContainerStatuses
+            init_container_statuses = pod.get("status", {}).get("initContainerStatuses", [])
+            for cs in init_container_statuses:
+                state = cs.get("state", {})
+                waiting = state.get("waiting", {})
+                reason = waiting.get("reason", "")
+                if reason == "CrashLoopBackOff":
+                    return True
+
+        return False
+    except (json.JSONDecodeError, TypeError):
+        return False
+
+
+def _parse_image_pull_failure_from_pods(pods_json_str: str) -> bool:
+    """Parse pod JSON and detect image pull failures.
+
+    Returns True if we find containerStatuses with waiting.reason in
+    (ImagePullBackOff, ErrImagePull).
+    """
+    try:
+        pods_data = json.loads(pods_json_str)
+        if not isinstance(pods_data, dict):
+            return False
+
+        items = pods_data.get("items", [])
+        for pod in items:
+            container_statuses = pod.get("status", {}).get("containerStatuses", [])
+            for cs in container_statuses:
+                state = cs.get("state", {})
+                waiting = state.get("waiting", {})
+                reason = waiting.get("reason", "")
+                if reason in ("ImagePullBackOff", "ErrImagePull"):
+                    return True
+
+            init_container_statuses = pod.get("status", {}).get("initContainerStatuses", [])
+            for cs in init_container_statuses:
+                state = cs.get("state", {})
+                waiting = state.get("waiting", {})
+                reason = waiting.get("reason", "")
+                if reason in ("ImagePullBackOff", "ErrImagePull"):
+                    return True
+
+        return False
+    except (json.JSONDecodeError, TypeError):
+        return False
+
+
+def _parse_probe_failure_from_pods(pods_json_str: str) -> bool:
+    """Parse pod JSON and detect readiness/liveness probe failures.
+
+    Returns True if containers have lastState.terminated with exit code != 0
+    due to health check failures.
+    """
+    try:
+        pods_data = json.loads(pods_json_str)
+        if not isinstance(pods_data, dict):
+            return False
+
+        items = pods_data.get("items", [])
+        for pod in items:
+            container_statuses = pod.get("status", {}).get("containerStatuses", [])
+            for cs in container_statuses:
+                last_state = cs.get("lastState", {})
+                terminated = last_state.get("terminated", {})
+                exit_code = terminated.get("exitCode", 0)
+                reason = terminated.get("reason", "")
+                # Health check failures often show as exit code 1 or specific reasons
+                if exit_code != 0 and reason in ("Error", "Completed", ""):
+                    return True
+
+        return False
+    except (json.JSONDecodeError, TypeError):
+        return False
+
+
+def _parse_deployment_not_ready_from_deployments(deployments_json_str: str) -> bool:
+    """Parse deployment JSON and detect unavailable replicas.
+
+    Returns True if any deployment has availableReplicas < replicas.
+    """
+    try:
+        data = json.loads(deployments_json_str)
+        if not isinstance(data, dict):
+            return False
+
+        items = data.get("items", [])
+        for deploy in items:
+            status = deploy.get("status", {})
+            replicas = status.get("replicas", 0)
+            available = status.get("availableReplicas", 0)
+            if replicas > 0 and available == 0:
+                return True
+
+        return False
+    except (json.JSONDecodeError, TypeError):
+        return False
+
+
+def _parse_pvc_pending_from_pods(pods_json_str: str, events_str: str) -> bool:
+    """Parse pod and event JSON to detect PVC pending state.
+
+    Returns True if pods have PVC volumes stuck in pending state.
+    """
+    try:
+        pods_data = json.loads(pods_json_str)
+        if not isinstance(pods_data, dict):
+            return False
+
+        items = pods_data.get("items", [])
+        for pod in items:
+            # Check if pod is in Pending state
+            phase = pod.get("status", {}).get("phase", "")
+            if phase == "Pending":
+                # Check conditions for pending reason
+                conditions = pod.get("status", {}).get("conditions", [])
+                for cond in conditions:
+                    reason = cond.get("reason", "")
+                    if "pvc" in reason.lower() or "volume" in reason.lower():
+                        return True
+
+        # Also check events for PVC-related pending messages
+        events_lower = events_str.lower()
+        if ("pending" in events_lower and "pvc" in events_lower) or \
+           ("waiting" in events_lower and "volume" in events_lower):
+            return True
+
+        return False
+    except (json.JSONDecodeError, TypeError):
+        return False
+
+
+def main_classify_wait_timeout() -> int:
+    """Classify Helm wait timeout using watchdog artifacts.
+
+    Usage: classify-wait-timeout --helm-log <path> --namespace <name> [--kubeconfig <path>]
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Classify Helm wait timeout")
+    parser.add_argument("--helm-log", required=True, help="Path to Helm install log")
+    parser.add_argument("--namespace", required=True, help="Namespace name")
+    parser.add_argument(
+        "--kubeconfig",
+        default=os.environ.get("KUBECONFIG", ""),
+        help="Path to kubeconfig",
+    )
+    parser.add_argument(
+        "--artifact-dir",
+        default=os.environ.get("ARTIFACT_DIR", "./lab-artifacts/live"),
+        help="Artifact directory",
+    )
+    args = parser.parse_args(sys.argv[2:])
+
+    artifact_dir = Path(args.artifact_dir)
+    helm_log_path = Path(args.helm_log)
+    namespace = args.namespace
+    kubeconfig = args.kubeconfig or None
+
+    # Read Helm log
+    if helm_log_path.exists():
+        helm_output = helm_log_path.read_text()
+    else:
+        helm_output = ""
+
+    preflight = PreflightData(artifact_dir, namespace)
+    diagnosis = DiagnosisGenerator(artifact_dir, namespace)
+
+    # Read existing preflight to preserve context
+    existing = read_json(artifact_dir / "lab-preflight.json")
+    if existing:
+        preflight.active_identity = existing.get("active_identity")
+        preflight.namespace = existing.get("namespace", namespace)
+        preflight.timestamp = existing.get("bootstrap_timestamp", preflight.timestamp)
+
+    # If we have kubeconfig, collect and analyze watchdog artifacts
+    if kubeconfig and Path(kubeconfig).exists():
+        # Collect current state
+        kubectl_artifacts = [
+            ("watchdog/pods-final.json", ["get", "pods", "-n", namespace, "-o", "json"]),
+            ("watchdog/deployments-final.json", ["get", "deployments", "-n", namespace, "-o", "json"]),
+            ("watchdog/events-final.txt", ["get", "events", "-n", namespace, "--sort-by=.lastTimestamp"]),
+        ]
+
+        for filename, cmd in kubectl_artifacts:
+            result = subprocess.run(
+                ["kubectl", "--kubeconfig", kubeconfig] + cmd,
+                capture_output=True,
+                text=True,
+            )
+            (artifact_dir / filename).write_text(result.stdout or "(empty)")
+
+        # Parse and classify based on actual state
+        pods_json = ""
+        deployments_json = ""
+        events_text = ""
+
+        pods_path = artifact_dir / "watchdog/pods-final.json"
+        if pods_path.exists():
+            pods_json = pods_path.read_text()
+
+        deployments_path = artifact_dir / "watchdog/deployments-final.json"
+        if deployments_path.exists():
+            deployments_json = deployments_path.read_text()
+
+        events_path = artifact_dir / "watchdog/events-final.txt"
+        if events_path.exists():
+            events_text = events_path.read_text()
+
+        helm_lower = helm_output.lower()
+
+        # Priority order: most specific first
+        if _parse_crash_loop_from_pods(pods_json):
+            failure_class = FAILURE_POD_CRASH_LOOP
+            diagnosis.text(f"**Classification**: `{failure_class}`")
+            diagnosis.text("**Cause**: Pod containers are in CrashLoopBackOff state.")
+            diagnosis.text("**Evidence**: watchdog/pods-final.json")
+
+        elif _parse_image_pull_failure_from_pods(pods_json):
+            failure_class = FAILURE_IMAGE_PULL_FAILED
+            diagnosis.text(f"**Classification**: `{failure_class}`")
+            diagnosis.text("**Cause**: Container image could not be pulled.")
+            diagnosis.text("**Evidence**: watchdog/pods-final.json")
+
+        elif _parse_probe_failure_from_pods(pods_json):
+            failure_class = FAILURE_PROBE_FAILED
+            diagnosis.text(f"**Classification**: `{failure_class}`")
+            diagnosis.text("**Cause**: Container probe failed (exit code != 0).")
+            diagnosis.text("**Evidence**: watchdog/pods-final.json")
+
+        elif _parse_deployment_not_ready_from_deployments(deployments_json):
+            failure_class = FAILURE_DEPLOYMENT_NOT_AVAILABLE
+            diagnosis.text(f"**Classification**: `{failure_class}`")
+            diagnosis.text("**Cause**: Deployment has no available replicas.")
+            diagnosis.text("**Evidence**: watchdog/deployments-final.json")
+
+        elif _parse_pvc_pending_from_pods(pods_json, events_text):
+            failure_class = FAILURE_PVC_PENDING
+            diagnosis.text(f"**Classification**: `{failure_class}`")
+            diagnosis.text("**Cause**: PVC is stuck in Pending state.")
+            diagnosis.text("**Evidence**: watchdog/pods-final.json, watchdog/events-final.txt")
+
+        elif "unknown field" in helm_lower:
+            failure_class = FAILURE_HELM_MANIFEST_SCHEMA_WARNING
+            diagnosis.text(f"**Classification**: `{failure_class}`")
+            diagnosis.text("**Cause**: Helm chart has schema drift (unknown field warnings).")
+            diagnosis.text("**Evidence**: helm install log")
+
+        else:
+            failure_class = FAILURE_HELM_WAIT_TIMEOUT_UNKNOWN
+            diagnosis.text(f"**Classification**: `{failure_class}`")
+            diagnosis.text("**Cause**: Helm wait timed out but specific cause not determined.")
+            diagnosis.text("**Evidence**: Review watchdog/ artifacts for details.")
+
+    else:
+        failure_class = FAILURE_HELM_WAIT_TIMEOUT_UNKNOWN
+        diagnosis.text(f"**Classification**: `{failure_class}`")
+        diagnosis.text("**Cause**: Helm wait timed out without cluster state data.")
+        diagnosis.text("**Evidence**: helm install log")
+
+    diagnosis.text("")
+    diagnosis.text(f"**Suggested action**: Review watchdog/ artifacts and {helm_log_path.name}")
+    diagnosis.text("to determine the root cause of the timeout.")
+
+    if preflight.failure_class is None:
+        preflight.failure_class = failure_class
+        preflight.failure_stage = "helm_deploy"
+
+    preflight.save()
+    diagnosis.save()
+    print(failure_class)
+    return 0
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        subcommand = sys.argv[1]
+        if subcommand == "classify-error":
+            sys.exit(main_classify_error())
+        elif subcommand == "classify-schema":
+            sys.exit(main_classify_schema())
+        elif subcommand == "classify-wait-timeout":
+            sys.exit(main_classify_wait_timeout())
+
+    env_secret = sys.argv[1] if len(sys.argv) > 1 else "K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64"
+    out_var = sys.argv[2] if len(sys.argv) > 2 else "KUBECONFIG"
+    namespace = sys.argv[3] if len(sys.argv) > 3 else os.environ.get("LAB_NAMESPACE", "")
+    sys.exit(main_bootstrap(env_secret, out_var, namespace))
