@@ -51,6 +51,17 @@ FAILURE_PVC_PENDING = "pvc_pending"
 FAILURE_HELM_WAIT_TIMEOUT_UNKNOWN = "helm_wait_timeout_unknown"
 FAILURE_HELM_UNKNOWN = "helm_unknown_error"
 
+# Rollout failure classes (proactive monitor)
+FAILURE_IMAGE_PULL_BACKOFF = "image_pull_backoff"
+FAILURE_CRASH_LOOP = "crash_loop"
+FAILURE_FAILED_SCHEDULING = "failed_scheduling"
+FAILURE_PVC_PENDING = "pvc_pending"
+FAILURE_READINESS_PROBE_FAILED = "readiness_probe_failed"
+FAILURE_DEPLOYMENT_REPLICA_FAILURE = "deployment_replica_failure"
+FAILURE_DEPLOYMENT_PROGRESS_DEADLINE = "deployment_progress_deadline"
+FAILURE_ROLLOUT_TIMEOUT = "rollout_timeout"
+FAILURE_SNAPSHOT_COLLECTION_FAILED = "rollout_snapshot_collection_failed"
+
 
 # =============================================================================
 # Helpers
@@ -1547,6 +1558,1151 @@ def main_classify_wait_timeout() -> int:
     return 0
 
 
+# =============================================================================
+# Proactive Rollout Monitor
+# =============================================================================
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class RolloutDiagnosis:
+    """Structured diagnosis result from rollout monitor."""
+    
+    # Classification
+    failure_class: str = ""
+    fatal: bool = False
+    
+    # Affected resources
+    affected_pods: list[str] = field(default_factory=list)
+    affected_deployments: list[str] = field(default_factory=list)
+    affected_pvcs: list[str] = field(default_factory=list)
+    
+    # Pod details
+    pod_phase: str = ""
+    container_waiting_reason: str = ""
+    container_name: str = ""
+    
+    # Event details
+    latest_event_reason: str = ""
+    latest_event_message: str = ""
+    
+    # Snapshot path
+    snapshot_path: str = ""
+    
+    # All diagnostics for JSON artifact
+    diagnostics: dict = field(default_factory=dict)
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "failure_class": self.failure_class,
+            "fatal": self.fatal,
+            "affected_pods": self.affected_pods,
+            "affected_deployments": self.affected_deployments,
+            "affected_pvcs": self.affected_pvcs,
+            "pod_phase": self.pod_phase,
+            "container_waiting_reason": self.container_waiting_reason,
+            "container_name": self.container_name,
+            "latest_event_reason": self.latest_event_reason,
+            "latest_event_message": self.latest_event_message,
+            "snapshot_path": self.snapshot_path,
+            "diagnostics": self.diagnostics,
+        }
+
+
+@dataclass
+class KubectlResult:
+    """Result from kubectl collection with success tracking."""
+    
+    json_data: str
+    text_data: str = ""
+    success: bool = False
+    error_message: str = ""
+
+
+def _get_kubectl_json(kubeconfig: str, namespace: str, resource: str) -> KubectlResult:
+    """Execute kubectl get command and return structured result with success tracking."""
+    result = subprocess.run(
+        ["kubectl", "--kubeconfig", kubeconfig, "get", resource, "-n", namespace, "-o", "json"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return KubectlResult(json_data=result.stdout, text_data=result.stdout, success=True)
+    else:
+        return KubectlResult(
+            json_data="{}",
+            text_data=result.stderr or f"kubectl failed with exit code {result.returncode}",
+            success=False,
+            error_message=result.stderr.strip() or f"Exit code: {result.returncode}"
+        )
+
+
+def _get_kubectl_events(kubeconfig: str, namespace: str) -> KubectlResult:
+    """Execute kubectl get events command and return structured result."""
+    result = subprocess.run(
+        ["kubectl", "--kubeconfig", kubeconfig, "get", "events", "-n", namespace, "-o", "json", "--sort-by=.lastTimestamp"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return KubectlResult(json_data=result.stdout, text_data=result.stdout, success=True)
+    else:
+        return KubectlResult(
+            json_data='{"items": []}',
+            text_data=result.stderr or f"kubectl failed with exit code {result.returncode}",
+            success=False,
+            error_message=result.stderr.strip() or f"Exit code: {result.returncode}"
+        )
+
+
+def _get_kubectl_text(kubeconfig: str, namespace: str, resource: str) -> KubectlResult:
+    """Execute kubectl get command and return text output with success tracking."""
+    result = subprocess.run(
+        ["kubectl", "--kubeconfig", kubeconfig, "get", resource, "-n", namespace, "--sort-by=.lastTimestamp"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return KubectlResult(json_data="{}", text_data=result.stdout, success=True)
+    else:
+        return KubectlResult(
+            json_data="{}",
+            text_data=result.stderr or f"kubectl failed with exit code {result.returncode}",
+            success=False,
+            error_message=result.stderr.strip() or f"Exit code: {result.returncode}"
+        )
+
+
+def _get_deployment_conditions(deployments_json: str) -> list[dict]:
+    """Parse deployment conditions from JSON."""
+    try:
+        data = json.loads(deployments_json)
+        conditions = []
+        for deploy in data.get("items", []):
+            for cond in deploy.get("status", {}).get("conditions", []):
+                cond["deployment"] = deploy.get("metadata", {}).get("name", "unknown")
+                conditions.append(cond)
+        return conditions
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+def _get_pvc_status(pvc_json: str) -> list[dict]:
+    """Parse PVC status from JSON."""
+    try:
+        data = json.loads(pvc_json)
+        pvcs = []
+        for pvc in data.get("items", []):
+            status = pvc.get("status", {}).get("phase", "Unknown")
+            if status != "Bound":
+                pvcs.append({
+                    "name": pvc.get("metadata", {}).get("name", "unknown"),
+                    "namespace": pvc.get("metadata", {}).get("namespace", "unknown"),
+                    "status": status,
+                    "reason": pvc.get("status", {}).get("reason", ""),
+                })
+        return pvcs
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+def _get_pod_waiting_info(pods_json: str) -> list[dict]:
+    """Parse pod container waiting info from JSON."""
+    try:
+        data = json.loads(pods_json)
+        waiting_info = []
+        for pod in data.get("items", []):
+            pod_name = pod.get("metadata", {}).get("name", "unknown")
+            phase = pod.get("status", {}).get("phase", "Unknown")
+            
+            for cs in pod.get("status", {}).get("containerStatuses", []):
+                container_name = cs.get("name", "unknown")
+                state = cs.get("state", {})
+                waiting = state.get("waiting", {})
+                if waiting:
+                    waiting_info.append({
+                        "pod": pod_name,
+                        "container": container_name,
+                        "phase": phase,
+                        "reason": waiting.get("reason", ""),
+                        "message": waiting.get("message", ""),
+                    })
+            
+            for cs in pod.get("status", {}).get("initContainerStatuses", []):
+                container_name = cs.get("name", "unknown")
+                state = cs.get("state", {})
+                waiting = state.get("waiting", {})
+                if waiting:
+                    waiting_info.append({
+                        "pod": pod_name,
+                        "container": container_name,
+                        "phase": phase,
+                        "reason": waiting.get("reason", ""),
+                        "message": waiting.get("message", ""),
+                        "init": True,
+                    })
+        return waiting_info
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+def _check_image_pull_backoff(waiting_info: list[dict]) -> tuple[bool, str, str]:
+    """Check for image pull backoff conditions.
+    
+    Returns: (is_fatal, reason, message)
+    """
+    for w in waiting_info:
+        reason = w.get("reason", "")
+        if reason in ("ImagePullBackOff", "ErrImagePull"):
+            return True, reason, w.get("message", "")
+    return False, "", ""
+
+
+def _check_crash_loop(waiting_info: list[dict]) -> tuple[bool, str, str]:
+    """Check for crash loop conditions.
+    
+    Returns: (is_fatal, reason, message)
+    """
+    for w in waiting_info:
+        reason = w.get("reason", "")
+        if reason == "CrashLoopBackOff":
+            return True, reason, w.get("message", "")
+    return False, "", ""
+
+
+def _check_failed_scheduling_from_events(events_json: str) -> tuple[bool, str, str]:
+    """Check for failed scheduling conditions using structural event JSON.
+    
+    Returns: (is_fatal, reason, message)
+    """
+    try:
+        data = json.loads(events_json)
+        for event in data.get("items", []):
+            reason = event.get("reason", "")
+            
+            # Primary: event.reason == "FailedScheduling"
+            if reason == "FailedScheduling":
+                message = event.get("message", "")
+                involved = event.get("involvedObject", {})
+                obj_name = involved.get("name", "unknown")
+                obj_kind = involved.get("kind", "Pod")
+                return True, reason, f"{obj_kind}/{obj_name}: {message}"
+            
+            # Secondary: Warning type events for scheduling
+            event_type = event.get("type", "")
+            if event_type == "Warning":
+                # Check for scheduling-related reasons
+                scheduling_reasons = [
+                    "Unschedulable",
+                    "SchedulingDisabled", 
+                    "InsufficientCPU",
+                    "InsufficientMemory",
+                    "NoNodeSelector",
+                    "NoVolumeZoneConflict",
+                    "NodeSelectorMismatching",
+                    "TaintTolerationMismatch",
+                    "AffinityConflict",
+                    "PVCBindingFailed",
+                ]
+                if reason in scheduling_reasons:
+                    message = event.get("message", "")
+                    involved = event.get("involvedObject", {})
+                    obj_name = involved.get("name", "unknown")
+                    return True, reason, f"{reason}: {message}"
+    except (json.JSONDecodeError, TypeError):
+        pass
+    
+    return False, "", ""
+
+
+def _check_readiness_probe_failed_from_events(events_json: str) -> tuple[bool, str, str]:
+    """Check for readiness probe failure events using structural event JSON.
+    
+    Returns: (is_fatal, reason, message)
+    """
+    try:
+        data = json.loads(events_json)
+        for event in data.get("items", []):
+            reason = event.get("reason", "")
+            event_type = event.get("type", "")
+            message = event.get("message", "")
+            involved = event.get("involvedObject", {})
+            obj_name = involved.get("name", "unknown")
+            obj_kind = involved.get("kind", "")
+            
+            # Primary: event.reason == "Unhealthy" with readiness message
+            if reason == "Unhealthy" and event_type == "Warning":
+                if "readiness" in message.lower():
+                    return True, reason, f"{obj_kind}/{obj_name}: {message}"
+            
+            # Secondary: probe-related reasons
+            probe_reasons = [
+                "ProbeFailed",
+                "ReadinessProbeFailed",
+                "LivenessProbeFailed",
+                "StartupProbeFailed",
+                "ContainerProbeFailed",
+            ]
+            if reason in probe_reasons:
+                return True, reason, f"{obj_kind}/{obj_name}: {message}"
+            
+            # Tertiary: BackOff events for probes
+            if "BackOff" in reason and "probe" in message.lower():
+                return True, reason, f"{obj_kind}/{obj_name}: {message}"
+    except (json.JSONDecodeError, TypeError):
+        pass
+    
+    return False, "", ""
+
+
+def _check_failed_scheduling(pods_json: str, events_text: str, events_json: str = "") -> tuple[bool, str, str]:
+    """Check for failed scheduling conditions using structural JSON with text fallback.
+    
+    Returns: (is_fatal, reason, message)
+    """
+    # Primary: Use structural JSON events when available
+    if events_json:
+        is_fatal, reason, message = _check_failed_scheduling_from_events(events_json)
+        if is_fatal:
+            return True, reason, message
+    
+    # Fallback: Check pods for scheduling failure conditions
+    try:
+        data = json.loads(pods_json)
+        for pod in data.get("items", []):
+            for cond in pod.get("status", {}).get("conditions", []):
+                cond_type = cond.get("type", "")
+                reason = cond.get("reason", "")
+                message = cond.get("message", "")
+                
+                # PodScheduled False with scheduling failure reasons
+                if cond_type == "PodScheduled" and cond.get("status") == "False":
+                    failure_reasons = [
+                        "Unschedulable",
+                        "SchedulingDisabled",
+                        "InsufficientCPU",
+                        "InsufficientMemory",
+                        "NoNodeSelector",
+                        "NoVolumeZoneConflict",
+                        "NodeSelectorMismatching",
+                        "TaintTolerationMismatch",
+                        "AffinityConflict",
+                    ]
+                    if reason in failure_reasons or "unschedulable" in reason.lower():
+                        return True, reason, message
+                    
+                    # Generic unschedulable
+                    if "cannot schedule pod" in message.lower() or "no nodes available" in message.lower():
+                        return True, reason, message
+    except (json.JSONDecodeError, TypeError):
+        pass
+    
+    # Last resort: Check events text for scheduling failure (substring fallback)
+    if events_text:
+        events_lower = events_text.lower()
+        scheduling_keywords = [
+            "failed to schedule",
+            "no nodes available",
+            "insufficient cpu",
+            "insufficient memory",
+            "node(s) had taints",
+            "node affinity",
+            "pod affinity",
+            "cannot schedule",
+        ]
+        for keyword in scheduling_keywords:
+            if keyword in events_lower:
+                return True, "FailedScheduling", keyword
+    
+    return False, "", ""
+
+
+def _check_pvc_pending(pvcs: list[dict]) -> tuple[bool, str, str]:
+    """Check for PVC pending conditions.
+    
+    Returns: (is_fatal, status, reason)
+    """
+    for pvc in pvcs:
+        if pvc.get("status") != "Bound":
+            return True, pvc.get("status", "Pending"), pvc.get("reason", "PVC not Bound")
+    return False, "", ""
+
+
+def _check_readiness_probe_failed(
+    waiting_info: list[dict],
+    events_text: str = "",
+    events_json: str = "",
+) -> tuple[bool, str, str]:
+    """Check for readiness probe failure events.
+    
+    Uses events_json for structural classification, events_text as fallback.
+    
+    Returns: (is_fatal, reason, message)
+    """
+    for w in waiting_info:
+        reason = w.get("reason", "")
+        # Readiness probe failures often show as container not ready
+        if reason == "ContainersNotReady":
+            return True, reason, w.get("message", "")
+    
+    # Primary: Use structural JSON events for probe failure detection
+    if events_json:
+        is_fatal, reason, message = _check_readiness_probe_failed_from_events(events_json)
+        if is_fatal:
+            return True, reason, message
+    
+    # Fallback: Check events text for readiness probe failure patterns
+    if events_text:
+        events_lower = events_text.lower()
+        readiness_patterns = [
+            "readiness probe failed",
+            "readiness check failed",
+            "unhealthy",
+            "liveness probe failed",
+        ]
+        for pattern in readiness_patterns:
+            if pattern in events_lower:
+                # Extract message near the pattern
+                lines = events_text.split("\n")
+                for line in lines:
+                    if pattern in line.lower():
+                        return True, "ProbeFailed", line.strip()
+    
+    return False, "", ""
+
+
+def _check_deployment_replica_failure(conditions: list[dict]) -> tuple[bool, str, str]:
+    """Check for deployment ReplicaFailure condition.
+    
+    Returns: (is_fatal, reason, message)
+    """
+    for cond in conditions:
+        cond_type = cond.get("type", "")
+        if cond_type == "ReplicaFailure" and cond.get("status") == "True":
+            return True, "ReplicaFailure", cond.get("message", "")
+    return False, "", ""
+
+
+def _check_deployment_progress_deadline(conditions: list[dict]) -> tuple[bool, str, str]:
+    """Check for deployment ProgressDeadlineExceeded condition.
+    
+    Returns: (is_fatal, reason, message)
+    """
+    for cond in conditions:
+        cond_type = cond.get("type", "")
+        if cond_type == "Progressing" and cond.get("status") == "False":
+            reason = cond.get("reason", "")
+            if reason == "ProgressDeadlineExceeded":
+                return True, reason, cond.get("message", "")
+    return False, "", ""
+
+
+# Expected workloads for k9b CNPG lab
+EXPECTED_WORKLOADS = frozenset([
+    "k9b-backend",
+    "k9b-frontend", 
+    "k9b-scheduler",
+])
+
+
+def _check_rollout_success(
+    pods_json: str,
+    deployments_json: str,
+    pvc_json: str,
+) -> bool:
+    """Check if rollout is complete and successful.
+    
+    Returns True only if ALL conditions for successful rollout are met:
+    - Expected deployments exist and have availableReplicas == desired replicas
+    - All pods are Running with Ready condition True
+    - All PVCs are Bound
+    - observedGeneration matches generation (rollout complete)
+    
+    IMPORTANT: Empty or failed kubectl collection does NOT count as success.
+    This prevents false-green when kubectl commands fail silently.
+    
+    Args:
+        pods_json: JSON output from kubectl get pods -o json
+        deployments_json: JSON output from kubectl get deployments -o json
+        pvc_json: JSON output from kubectl get pvc -o json
+    
+    Returns:
+        True if rollout is successful, False otherwise
+    """
+    try:
+        # Check deployments: must have expected workloads with available replicas
+        deploy_data = json.loads(deployments_json)
+        
+        # Track which expected workloads we found
+        found_workloads: set[str] = set()
+        deploy_items = deploy_data.get("items", [])
+        
+        # If no deployments found at all, rollout is NOT successful
+        if not deploy_items:
+            return False
+        
+        for deploy in deploy_items:
+            name = deploy.get("metadata", {}).get("name", "")
+            found_workloads.add(name)
+            
+            spec_replicas = deploy.get("spec", {}).get("replicas", 0)
+            status = deploy.get("status", {})
+            available = status.get("availableReplicas", 0)
+            updated = status.get("updatedReplicas", 0)
+            
+            # Check if deployment is fully rolled out
+            if available < spec_replicas or updated < spec_replicas:
+                return False
+            
+            # Check observedGeneration matches generation (rollout complete)
+            generation = deploy.get("metadata", {}).get("generation", 0)
+            observed = status.get("observedGeneration", 0)
+            if observed < generation:
+                return False
+            
+            # Check Available condition is True
+            has_available_true = False
+            for cond in status.get("conditions", []):
+                if cond.get("type") == "Available" and cond.get("status") == "True":
+                    has_available_true = True
+                    break
+            if not has_available_true:
+                return False
+        
+        # Verify expected workloads were found
+        # This prevents false-green when kubectl fails and returns empty list
+        missing_workloads = EXPECTED_WORKLOADS - found_workloads
+        if missing_workloads:
+            # Some expected workloads are missing - rollout not complete
+            return False
+        
+        # Check pods: all should be Running with Ready condition True
+        pods_data = json.loads(pods_json)
+        pod_items = pods_data.get("items", [])
+        
+        # If no pods found at all, rollout is NOT successful
+        if not pod_items:
+            return False
+        
+        # Track pods per expected workload
+        pods_per_workload: dict[str, int] = {w: 0 for w in EXPECTED_WORKLOADS}
+        
+        for pod in pod_items:
+            # Skip pods that are being deleted
+            if pod.get("metadata", {}).get("deletionTimestamp"):
+                continue
+            
+            # Check owner reference to associate with workload
+            owner_refs = pod.get("metadata", {}).get("ownerReferences", [])
+            for ref in owner_refs:
+                if ref.get("kind") == "ReplicaSet":
+                    # Get the parent Deployment name from the ReplicaSet
+                    # ReplicaSet names are typically: <deployment-name>-<hash>
+                    rs_name = ref.get("name", "")
+                    for workload in EXPECTED_WORKLOADS:
+                        if rs_name.startswith(workload + "-"):
+                            pods_per_workload[workload] += 1
+                            break
+            
+            phase = pod.get("status", {}).get("phase", "")
+            if phase != "Running":
+                return False
+            
+            # Check Ready condition - must be present AND True
+            has_ready_true = False
+            for cond in pod.get("status", {}).get("conditions", []):
+                if cond.get("type") == "Ready":
+                    if cond.get("status") == "True":
+                        has_ready_true = True
+                        break
+                    # Ready condition exists but is not True
+                    return False
+            # If Ready condition doesn't exist at all, pod is not ready
+            if not has_ready_true:
+                return False
+        
+        # Verify at least one pod per expected workload
+        # This prevents false-green when pods fail to schedule
+        for workload, count in pods_per_workload.items():
+            if count == 0:
+                return False
+        
+        # Check PVCs: all should be Bound
+        pvc_data = json.loads(pvc_json)
+        for pvc in pvc_data.get("items", []):
+            phase = pvc.get("status", {}).get("phase", "")
+            if phase != "Bound":
+                return False
+        
+        return True
+        
+    except (json.JSONDecodeError, TypeError, KeyError):
+        # If we can't parse, assume not successful
+        return False
+
+
+def classify_rollout_state(
+    pods_json: str,
+    deployments_json: str,
+    pvc_json: str,
+    events_text: str,
+    events_json: str = "",
+) -> RolloutDiagnosis:
+    """Classify rollout state from Kubernetes JSON data.
+    
+    Performs structural JSON parsing to detect failure conditions.
+    Uses events_json for primary event classification, events_text as fallback.
+    
+    Args:
+        pods_json: JSON output from kubectl get pods -o json
+        deployments_json: JSON output from kubectl get deployments -o json
+        pvc_json: JSON output from kubectl get pvc -o json
+        events_text: Text output from kubectl get events (fallback)
+        events_json: JSON output from kubectl get events -o json (primary)
+    
+    Returns:
+        RolloutDiagnosis with classification and details
+    """
+    diagnosis = RolloutDiagnosis()
+    
+    # Parse diagnostic data
+    waiting_info = _get_pod_waiting_info(pods_json)
+    conditions = _get_deployment_conditions(deployments_json)
+    pvcs = _get_pvc_status(pvc_json)
+    
+    # Store diagnostics for artifact
+    diagnosis.diagnostics = {
+        "waiting_containers": waiting_info,
+        "deployment_conditions": conditions,
+        "pending_pvcs": pvcs,
+        "events_sample": events_text[:2000] if events_text else "",  # Limit events
+    }
+    
+    # Priority order: most specific failure classes first
+    
+    # 1. Image pull backoff
+    is_fatal, reason, message = _check_image_pull_backoff(waiting_info)
+    if is_fatal:
+        affected = [w["pod"] for w in waiting_info if w.get("reason") in ("ImagePullBackOff", "ErrImagePull")]
+        diagnosis.failure_class = FAILURE_IMAGE_PULL_BACKOFF
+        diagnosis.fatal = True
+        diagnosis.affected_pods = affected
+        diagnosis.container_waiting_reason = reason
+        diagnosis.container_name = next((w["container"] for w in waiting_info if w.get("reason") == reason), "")
+        diagnosis.latest_event_reason = reason
+        diagnosis.latest_event_message = message
+        return diagnosis
+    
+    # 2. Crash loop
+    is_fatal, reason, message = _check_crash_loop(waiting_info)
+    if is_fatal:
+        affected = [w["pod"] for w in waiting_info if w.get("reason") == "CrashLoopBackOff"]
+        diagnosis.failure_class = FAILURE_CRASH_LOOP
+        diagnosis.fatal = True
+        diagnosis.affected_pods = affected
+        diagnosis.pod_phase = next((w["phase"] for w in waiting_info if w.get("reason") == "CrashLoopBackOff"), "")
+        diagnosis.container_waiting_reason = reason
+        diagnosis.container_name = next((w["container"] for w in waiting_info if w.get("reason") == "CrashLoopBackOff"), "")
+        diagnosis.latest_event_reason = reason
+        diagnosis.latest_event_message = message
+        return diagnosis
+    
+    # 3. Failed scheduling (use events_json for structural classification)
+    is_fatal, reason, message = _check_failed_scheduling(pods_json, events_text, events_json)
+    if is_fatal:
+        affected = []
+        # Add pods from waiting_info
+        for w in waiting_info:
+            if "unschedulable" in w.get("message", "").lower():
+                affected.append(w["pod"])
+        # Also add pods from the pods_json that have scheduling conditions
+        try:
+            pods_data = json.loads(pods_json)
+            for pod in pods_data.get("items", []):
+                pod_name = pod.get("metadata", {}).get("name", "unknown")
+                for cond in pod.get("status", {}).get("conditions", []):
+                    if cond.get("type") == "PodScheduled" and cond.get("status") == "False":
+                        if pod_name not in affected:
+                            affected.append(pod_name)
+        except (json.JSONDecodeError, TypeError):
+            pass
+        diagnosis.failure_class = FAILURE_FAILED_SCHEDULING
+        diagnosis.fatal = True
+        diagnosis.affected_pods = affected
+        diagnosis.pod_phase = "Pending"
+        diagnosis.latest_event_reason = reason
+        diagnosis.latest_event_message = message
+        return diagnosis
+    
+    # 4. PVC pending
+    is_fatal, status, reason = _check_pvc_pending(pvcs)
+    if is_fatal:
+        affected = [p["name"] for p in pvcs]
+        diagnosis.failure_class = FAILURE_PVC_PENDING
+        diagnosis.fatal = True
+        diagnosis.affected_pvcs = affected
+        diagnosis.latest_event_reason = "PVCNotBound"
+        diagnosis.latest_event_message = f"PVC status: {status}, reason: {reason}"
+        return diagnosis
+    
+    # 5. Readiness probe failed (use events_json for structural classification)
+    is_fatal, reason, message = _check_readiness_probe_failed(waiting_info, events_text, events_json)
+    if is_fatal:
+        affected = [w["pod"] for w in waiting_info if w.get("reason") == "ContainersNotReady"]
+        diagnosis.failure_class = FAILURE_READINESS_PROBE_FAILED
+        diagnosis.fatal = True
+        diagnosis.affected_pods = affected
+        diagnosis.container_waiting_reason = reason
+        diagnosis.latest_event_reason = reason
+        diagnosis.latest_event_message = message
+        return diagnosis
+    
+    # 6. Deployment replica failure
+    is_fatal, reason, message = _check_deployment_replica_failure(conditions)
+    if is_fatal:
+        affected = [c["deployment"] for c in conditions if c.get("type") == "ReplicaFailure"]
+        diagnosis.failure_class = FAILURE_DEPLOYMENT_REPLICA_FAILURE
+        diagnosis.fatal = True
+        diagnosis.affected_deployments = affected
+        diagnosis.latest_event_reason = reason
+        diagnosis.latest_event_message = message
+        return diagnosis
+    
+    # 7. Deployment progress deadline
+    is_fatal, reason, message = _check_deployment_progress_deadline(conditions)
+    if is_fatal:
+        affected = [c["deployment"] for c in conditions if c.get("type") == "Progressing"]
+        diagnosis.failure_class = FAILURE_DEPLOYMENT_PROGRESS_DEADLINE
+        diagnosis.fatal = True
+        diagnosis.affected_deployments = affected
+        diagnosis.latest_event_reason = reason
+        diagnosis.latest_event_message = message
+        return diagnosis
+    
+    # No fatal condition found - workload may be progressing
+    diagnosis.failure_class = ""
+    diagnosis.fatal = False
+    return diagnosis
+
+
+def _collect_rollout_snapshot(
+    kubeconfig: str,
+    namespace: str,
+    artifact_dir: Path,
+    snapshot_id: int,
+) -> tuple[KubectlResult, KubectlResult, KubectlResult, KubectlResult, KubectlResult]:
+    """Collect rollout snapshot and return structured results.
+    
+    Args:
+        kubeconfig: Path to kubeconfig
+        namespace: Namespace name
+        artifact_dir: Base artifact directory
+        snapshot_id: Snapshot sequence number
+    
+    Returns:
+        Tuple of KubectlResult objects for (pods, deployments, pvc, events_text, events_json)
+    """
+    rollout_dir = artifact_dir / "rollout-watch"
+    rollout_dir.mkdir(parents=True, exist_ok=True)
+    
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    
+    # Collect pods JSON
+    pods_result = _get_kubectl_json(kubeconfig, namespace, "pods")
+    pods_path = rollout_dir / f"pods-{snapshot_id:03d}-{timestamp}.json"
+    pods_path.write_text(pods_result.json_data)
+    
+    # Collect deployments JSON
+    deployments_result = _get_kubectl_json(kubeconfig, namespace, "deployments")
+    deployments_path = rollout_dir / f"deployments-{snapshot_id:03d}-{timestamp}.json"
+    deployments_path.write_text(deployments_result.json_data)
+    
+    # Collect PVCs JSON
+    pvc_result = _get_kubectl_json(kubeconfig, namespace, "pvc")
+    pvc_path = rollout_dir / f"pvc-{snapshot_id:03d}-{timestamp}.json"
+    pvc_path.write_text(pvc_result.json_data)
+    
+    # Collect events text
+    events_text_result = _get_kubectl_text(kubeconfig, namespace, "events")
+    events_path = rollout_dir / f"events-{snapshot_id:03d}-{timestamp}.txt"
+    events_path.write_text(events_text_result.text_data)
+    
+    # Collect events JSON for structural parsing
+    events_json_result = _get_kubectl_events(kubeconfig, namespace)
+    events_json_path = rollout_dir / f"events-{snapshot_id:03d}-{timestamp}.json"
+    events_json_path.write_text(events_json_result.json_data)
+    
+    return pods_result, deployments_result, pvc_result, events_text_result, events_json_result
+
+
+def _format_bounded_summary(diagnosis: RolloutDiagnosis, snapshot_path: str) -> str:
+    """Format bounded diagnosis summary for GitHub Actions output.
+    
+    Args:
+        diagnosis: RolloutDiagnosis result
+        snapshot_path: Path to snapshot artifact
+    
+    Returns:
+        Bounded summary string suitable for CI logs
+    """
+    lines = []
+    
+    if diagnosis.fatal and diagnosis.failure_class:
+        lines.append(f"FAILURE_CLASS={diagnosis.failure_class}")
+        lines.append("")
+        
+        if diagnosis.affected_pods:
+            lines.append(f"Affected pods: {', '.join(diagnosis.affected_pods[:5])}")
+            if len(diagnosis.affected_pods) > 5:
+                lines.append(f"  ... and {len(diagnosis.affected_pods) - 5} more")
+        
+        if diagnosis.affected_deployments:
+            lines.append(f"Affected deployments: {', '.join(diagnosis.affected_deployments[:5])}")
+        
+        if diagnosis.affected_pvcs:
+            lines.append(f"Affected PVCs: {', '.join(diagnosis.affected_pvcs[:5])}")
+        
+        if diagnosis.pod_phase:
+            lines.append(f"Pod phase: {diagnosis.pod_phase}")
+        
+        if diagnosis.container_waiting_reason:
+            lines.append(f"Container waiting reason: {diagnosis.container_waiting_reason}")
+        
+        if diagnosis.container_name:
+            lines.append(f"Container name: {diagnosis.container_name}")
+        
+        if diagnosis.latest_event_reason:
+            lines.append(f"Latest event reason: {diagnosis.latest_event_reason}")
+        
+        if diagnosis.latest_event_message:
+            # Truncate long messages
+            msg = diagnosis.latest_event_message
+            if len(msg) > 200:
+                msg = msg[:197] + "..."
+            lines.append(f"Latest event message: {msg}")
+        
+        lines.append("")
+        lines.append(f"Artifact: {snapshot_path}")
+    else:
+        lines.append("Rollout progressing - no fatal condition detected")
+        lines.append(f"Artifact: {snapshot_path}")
+    
+    return "\n".join(lines)
+
+
+def monitor_rollout(
+    kubeconfig: str,
+    namespace: str,
+    artifact_dir: Path,
+    deadline_seconds: int = 90,
+    poll_interval: int = 8,
+) -> RolloutDiagnosis:
+    """Monitor rollout with proactive short-interval polling.
+    
+    Polls Kubernetes every poll_interval seconds until either:
+    - A fatal failure condition is detected
+    - The deadline is reached
+    
+    Args:
+        kubeconfig: Path to kubeconfig
+        namespace: Namespace name
+        artifact_dir: Base artifact directory
+        deadline_seconds: Maximum time to monitor (default 90s)
+        poll_interval: Seconds between polls (default 8s)
+    
+    Returns:
+        RolloutDiagnosis with classification
+    """
+    import time
+    
+    rollout_dir = artifact_dir / "rollout-watch"
+    rollout_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Index file for snapshots
+    index_file = rollout_dir / "index.json"
+    snapshots: list[dict] = []
+    
+    snapshot_id = 0
+    start_time = time.time()
+    last_diagnosis: RolloutDiagnosis | None = None
+    
+    while True:
+        elapsed = time.time() - start_time
+        remaining = deadline_seconds - elapsed
+        
+        if remaining <= 0:
+            log(f"Rollout monitor: deadline reached ({deadline_seconds}s)")
+            if last_diagnosis and not last_diagnosis.fatal:
+                # Timeout without fatal condition
+                last_diagnosis.failure_class = FAILURE_ROLLOUT_TIMEOUT
+                last_diagnosis.fatal = True
+                last_diagnosis.diagnostics["timeout_seconds"] = deadline_seconds
+            break
+        
+        # Collect snapshot (including events JSON for structural classification)
+        timestamp = datetime.now(UTC).isoformat()
+        pods_result, deployments_result, pvc_result, events_text_result, events_json_result = _collect_rollout_snapshot(
+            kubeconfig, namespace, artifact_dir, snapshot_id
+        )
+        
+        # Check for collection failures - fail immediately with explicit failure class
+        # All collections must succeed to have meaningful diagnostics
+        if not pods_result.success or not deployments_result.success or not pvc_result.success:
+            elapsed = time.time() - start_time
+            log(f"Rollout monitor: kubectl collection failed at {elapsed:.1f}s")
+            
+            diagnosis = RolloutDiagnosis()
+            diagnosis.failure_class = FAILURE_SNAPSHOT_COLLECTION_FAILED
+            diagnosis.fatal = True
+            diagnosis.diagnostics = {
+                "elapsed_seconds": round(elapsed, 1),
+                "total_snapshots": snapshot_id + 1,
+                "pods_success": pods_result.success,
+                "pods_error": pods_result.error_message,
+                "deployments_success": deployments_result.success,
+                "deployments_error": deployments_result.error_message,
+                "pvc_success": pvc_result.success,
+                "pvc_error": pvc_result.error_message,
+                "events_success": events_json_result.success,
+            }
+            diagnosis.snapshot_path = str(rollout_dir)
+            diagnosis.latest_event_reason = "SnapshotCollectionFailed"
+            diagnosis.latest_event_message = (
+                f"pods={pods_result.error_message}, "
+                f"deployments={deployments_result.error_message}, "
+                f"pvc={pvc_result.error_message}"
+            )
+            
+            # Save final diagnosis
+            final_diag = diagnosis.to_dict()
+            final_diag["final"] = True
+            write_json_atomically(rollout_dir / "final-diagnosis.json", final_diag)
+            
+            # Save bounded summary
+            summary = _format_bounded_summary(diagnosis, str(rollout_dir))
+            (rollout_dir / "bounded-summary.txt").write_text(summary)
+            
+            # Update index
+            snapshots.append({
+                "id": snapshot_id,
+                "timestamp": timestamp,
+                "elapsed_seconds": round(elapsed, 1),
+                "failure_class": diagnosis.failure_class,
+                "fatal": True,
+            })
+            snapshots[-1]["final"] = True
+            write_json_atomically(index_file, {"snapshots": snapshots})
+            
+            return diagnosis
+        
+        # Extract raw JSON/text from results
+        pods_json = pods_result.json_data
+        deployments_json = deployments_result.json_data
+        pvc_json = pvc_result.json_data
+        events_text = events_text_result.text_data
+        events_json = events_json_result.json_data
+        
+        # Classify state using structural JSON events
+        diagnosis = classify_rollout_state(pods_json, deployments_json, pvc_json, events_text, events_json)
+        
+        # Check for successful rollout - if all deployments are healthy and pods are ready
+        if _check_rollout_success(pods_json, deployments_json, pvc_json):
+            elapsed = time.time() - start_time
+            log(f"Rollout monitor: success detected at {elapsed:.1f}s")
+            
+            # Create success diagnosis
+            diagnosis = RolloutDiagnosis()
+            diagnosis.fatal = False
+            diagnosis.failure_class = ""
+            diagnosis.diagnostics = {
+                "elapsed_seconds": round(elapsed, 1),
+                "total_snapshots": snapshot_id + 1,
+            }
+            diagnosis.snapshot_path = str(rollout_dir)
+            
+            # Save final diagnosis
+            final_diag = diagnosis.to_dict()
+            final_diag["final"] = True
+            final_diag["success"] = True
+            write_json_atomically(rollout_dir / "final-diagnosis.json", final_diag)
+            
+            # Save bounded summary
+            (rollout_dir / "bounded-summary.txt").write_text(
+                f"SUCCESS: Rollout complete at {elapsed:.1f}s\n"
+                f"Snapshots: {snapshot_id + 1}\n"
+                f"Artifact: {rollout_dir}"
+            )
+            
+            # Update index
+            snapshot_info = {
+                "id": snapshot_id,
+                "timestamp": timestamp,
+                "elapsed_seconds": round(elapsed, 1),
+                "failure_class": "",
+                "fatal": False,
+                "success": True,
+            }
+            snapshots.append(snapshot_info)
+            snapshots[-1]["final"] = True
+            write_json_atomically(index_file, {"snapshots": snapshots})
+            
+            return diagnosis
+        
+        # Record snapshot info
+        snapshot_info = {
+            "id": snapshot_id,
+            "timestamp": timestamp,
+            "elapsed_seconds": round(elapsed, 1),
+            "failure_class": diagnosis.failure_class,
+            "fatal": diagnosis.fatal,
+            "affected_pods": diagnosis.affected_pods,
+        }
+        snapshots.append(snapshot_info)
+        
+        # Update diagnosis snapshot path
+        diagnosis.snapshot_path = str(rollout_dir / f"*-{snapshot_id:03d}-*.json")
+        
+        # Save diagnosis for this snapshot
+        diag_path = rollout_dir / f"diagnosis-{snapshot_id:03d}.json"
+        write_json_atomically(diag_path, diagnosis.to_dict())
+        
+        log(f"Rollout snapshot #{snapshot_id}: elapsed={elapsed:.1f}s, fatal={diagnosis.fatal}, class={diagnosis.failure_class}")
+        
+        if diagnosis.fatal:
+            # Save final diagnosis
+            final_diag = diagnosis.to_dict()
+            final_diag["final"] = True
+            final_diag["total_snapshots"] = snapshot_id + 1
+            final_diag["total_elapsed_seconds"] = round(elapsed, 1)
+            write_json_atomically(rollout_dir / "final-diagnosis.json", final_diag)
+            
+            # Save bounded summary
+            summary = _format_bounded_summary(diagnosis, str(diag_path))
+            (rollout_dir / "bounded-summary.txt").write_text(summary)
+            
+            # Update index
+            snapshots[-1]["final"] = True
+            write_json_atomically(index_file, {"snapshots": snapshots})
+            
+            return diagnosis
+        
+        last_diagnosis = diagnosis
+        snapshot_id += 1
+        
+        # Wait before next poll
+        time.sleep(poll_interval)
+    
+    # Timeout reached - handle zero-snapshot edge case
+    if not last_diagnosis:
+        # Initialize a diagnosis even if no snapshots were collected
+        # (e.g., if deadline is 0 or negative)
+        last_diagnosis = RolloutDiagnosis()
+        last_diagnosis.failure_class = FAILURE_ROLLOUT_TIMEOUT
+        last_diagnosis.fatal = True
+        last_diagnosis.diagnostics = {
+            "timeout_seconds": deadline_seconds,
+            "total_snapshots": 0,
+            "total_elapsed_seconds": round(time.time() - start_time, 1),
+        }
+    
+    last_diagnosis.failure_class = FAILURE_ROLLOUT_TIMEOUT
+    last_diagnosis.fatal = True
+    last_diagnosis.diagnostics["timeout_seconds"] = deadline_seconds
+    last_diagnosis.diagnostics["total_snapshots"] = len(snapshots)
+    last_diagnosis.diagnostics["total_elapsed_seconds"] = round(time.time() - start_time, 1)
+    
+    # Save final diagnosis
+    final_diag = last_diagnosis.to_dict()
+    final_diag["final"] = True
+    write_json_atomically(rollout_dir / "final-diagnosis.json", final_diag)
+    
+    # Save bounded summary
+    summary = _format_bounded_summary(last_diagnosis, str(rollout_dir))
+    (rollout_dir / "bounded-summary.txt").write_text(summary)
+    
+    # Update index - mark last snapshot as final
+    if snapshots:
+        snapshots[-1]["final"] = True
+    write_json_atomically(index_file, {"snapshots": snapshots})
+    
+    return last_diagnosis
+
+
+def main_monitor_rollout() -> int:
+    """CLI entry point for rollout monitor.
+    
+    Usage:
+        monitor-rollout --kubeconfig <path> --namespace <name>
+                       [--artifact-dir <path>] [--deadline <seconds>] [--poll-interval <seconds>]
+    """
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Monitor rollout with proactive polling")
+    parser.add_argument("--kubeconfig", required=True, help="Path to kubeconfig")
+    parser.add_argument("--namespace", required=True, help="Namespace name")
+    parser.add_argument(
+        "--artifact-dir",
+        default=os.environ.get("ARTIFACT_DIR", "./lab-artifacts/live"),
+        help="Artifact directory",
+    )
+    parser.add_argument(
+        "--deadline",
+        type=int,
+        default=90,
+        help="Maximum monitoring time in seconds (default: 90)",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=int,
+        default=8,
+        help="Poll interval in seconds (default: 8)",
+    )
+    args = parser.parse_args(sys.argv[2:])
+    
+    kubeconfig = args.kubeconfig
+    namespace = args.namespace
+    artifact_dir = Path(args.artifact_dir)
+    deadline = args.deadline
+    poll_interval = args.poll_interval
+    
+    if not Path(kubeconfig).exists():
+        error(f"Kubeconfig not found: {kubeconfig}")
+        return 1
+    
+    log(f"Starting rollout monitor for namespace: {namespace}")
+    log(f"Deadline: {deadline}s, poll interval: {poll_interval}s")
+    
+    diagnosis = monitor_rollout(
+        kubeconfig=kubeconfig,
+        namespace=namespace,
+        artifact_dir=artifact_dir,
+        deadline_seconds=deadline,
+        poll_interval=poll_interval,
+    )
+    
+    # Output for CI
+    print(f"FAILURE_CLASS={diagnosis.failure_class}")
+    print(f"FATAL={str(diagnosis.fatal).lower()}")
+    
+    if diagnosis.affected_pods:
+        print(f"AFFECTED_PODS={','.join(diagnosis.affected_pods[:10])}")
+    if diagnosis.affected_deployments:
+        print(f"AFFECTED_DEPLOYMENTS={','.join(diagnosis.affected_deployments[:10])}")
+    if diagnosis.affected_pvcs:
+        print(f"AFFECTED_PVCS={','.join(diagnosis.affected_pvcs[:10])}")
+    
+    if diagnosis.container_waiting_reason:
+        print(f"CONTAINER_WAITING_REASON={diagnosis.container_waiting_reason}")
+    
+    if diagnosis.latest_event_reason:
+        print(f"LATEST_EVENT_REASON={diagnosis.latest_event_reason}")
+    
+    # Return 0 if not fatal (workload progressing), 1 if fatal
+    return 0 if not diagnosis.fatal else 1
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         subcommand = sys.argv[1]
@@ -1558,6 +2714,8 @@ if __name__ == "__main__":
             sys.exit(main_classify_wait_timeout())
         elif subcommand == "extract-schema-evidence":
             sys.exit(main_extract_schema_evidence())
+        elif subcommand == "monitor-rollout":
+            sys.exit(main_monitor_rollout())
 
     env_secret = sys.argv[1] if len(sys.argv) > 1 else "K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64"
     out_var = sys.argv[2] if len(sys.argv) > 2 else "KUBECONFIG"
