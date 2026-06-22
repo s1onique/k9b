@@ -188,12 +188,15 @@ jobs:
           fi
           echo "✓ No wildcard verbs"
           
-          # Verify no cluster-admin binding
-          if grep -qi "cluster-admin" "$MANIFEST"; then
-            echo "ERROR: Manifest contains cluster-admin binding"
+          # Verify no cluster-admin role/object name (ignore comments)
+          # Catches roleRef.name: cluster-admin and ClusterRoleBinding to cluster-admin
+          # but allows comments like "No cluster-admin binding" for documentation
+          if grep -Ev '^[[:space:]]*#' "$MANIFEST" \
+            | grep -Eiq '^[[:space:]]*name:[[:space:]]*["'\''"]?cluster-admin["'\''"]?[[:space:]]*$'; then
+            echo "ERROR: Manifest contains cluster-admin role/object name"
             exit 1
           fi
-          echo "✓ No cluster-admin binding"
+          echo "✓ No cluster-admin role/object name"
           
           echo "=== Manifest validation PASSED ==="
 

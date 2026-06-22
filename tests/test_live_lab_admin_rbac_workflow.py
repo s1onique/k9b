@@ -226,10 +226,29 @@ class TestAdminWorkflowManifestValidation:
             "Should validate no wildcard verbs"
 
     def test_workflow_validates_no_cluster_admin(self) -> None:
-        """Workflow should validate manifest contains no cluster-admin."""
+        """Workflow should validate manifest contains no cluster-admin role/object name."""
         content = ADMIN_WORKFLOW_FILE.read_text()
-        assert 'cluster-admin' not in content.lower() or 'ERROR' in content, \
-            "Should validate no cluster-admin binding"
+        assert 'cluster-admin role/object name' in content, \
+            "Should validate no cluster-admin role/object name"
+
+    def test_admin_workflow_cluster_admin_check_ignores_comments(self) -> None:
+        """Cluster-admin check should ignore comments to allow documentation."""
+        content = ADMIN_WORKFLOW_FILE.read_text()
+        # Should NOT use the old broad grep that matches comments
+        assert 'grep -qi "cluster-admin" "$MANIFEST"' not in content, \
+            "Should NOT use broad grep that matches comments"
+        # Should use grep that filters out comment lines
+        assert "grep -Ev '^[[:space:]]*#'" in content, \
+            "Should filter out comment lines before checking"
+
+    def test_admin_workflow_still_rejects_cluster_admin_role_names(self) -> None:
+        """Cluster-admin check should still catch actual role/object names."""
+        content = ADMIN_WORKFLOW_FILE.read_text()
+        # Should still catch name: cluster-admin patterns
+        assert "cluster-admin role/object name" in content, \
+            "Should check for cluster-admin role/object name"
+        assert "^[[:space:]]*name:" in content, \
+            "Should check name: field specifically"
 
 
 class TestAdminWorkflowPermissionVerification:
