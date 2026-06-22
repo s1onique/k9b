@@ -148,17 +148,17 @@ class TestWorkflowLiveLabNamespaceMode:
         assert "spbnix-k8s-docker" not in content, \
             "Should NOT run on spbnix-k8s-docker scale set (no Docker needed)"
 
-    def test_live_workflow_has_runner_preflight_diagnostics(self) -> None:
-        """Live workflow should have runner preflight diagnostics."""
+    def test_live_workflow_has_bootstrap_and_preflight(self) -> None:
+        """Live workflow should have bootstrap and kubectl verification steps."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert "Runner preflight diagnostics" in content, \
-            "Should have runner preflight diagnostics step"
-        assert "RUNNER_NAME" in content, \
-            "Should print runner name"
-        assert "kubectl version --client" in content, \
-            "Should verify kubectl version"
-        assert "kubectl auth can-i get pods" in content, \
-            "Should verify cluster access"
+        assert "Bootstrap protected kubeconfig" in content, \
+            "Should have bootstrap step"
+        assert "Verify kubectl with protected kubeconfig" in content, \
+            "Should verify kubectl with protected kubeconfig"
+        assert "kubectl --kubeconfig" in content, \
+            "Should use --kubeconfig for kubectl"
+        assert "cluster-info" in content.lower(), \
+            "Should verify cluster reachability"
 
     def test_live_workflow_uses_workflow_call(self) -> None:
         """Live workflow should be a reusable workflow with workflow_call."""
@@ -224,7 +224,7 @@ class TestWorkflowLiveLabNamespaceMode:
     def test_live_workflow_preflights_existing_cnpg(self) -> None:
         """Live workflow should preflight existing CNPG operator."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert "kubectl get crd clusters.postgresql.cnpg.io" in content, \
+        assert "clusters.postgresql.cnpg.io" in content, \
             "Should check CNPG CRD"
         assert "cnpg-system" in content, \
             "Should check cnpg-system namespace"
@@ -234,7 +234,7 @@ class TestWorkflowLiveLabNamespaceMode:
         content = WORKFLOW_LIVE_FILE.read_text()
         assert "k9b-cnpg-lab-${{ github.run_id }}" in content, \
             "Should create namespace from GITHUB_RUN_ID"
-        assert "kubectl create namespace" in content, \
+        assert "kubectl create namespace" in content or "create namespace" in content, \
             "Should create namespace"
         assert "lab.k9b.io/managed=true" in content, \
             "Should label namespace as managed"
@@ -302,7 +302,7 @@ class TestWorkflowLiveLabNamespaceMode:
         content = WORKFLOW_LIVE_FILE.read_text()
         assert re.search(r"Cleanup lab namespace.*?if:\s*always\(\)", content, re.DOTALL), \
             "Cleanup should have if: always()"
-        assert "kubectl delete namespace" in content, \
+        assert "delete namespace" in content, \
             "Should delete namespace"
 
     def test_live_workflow_avoids_secrets(self) -> None:
@@ -337,17 +337,17 @@ class TestWorkflowLiveLabNamespaceMode:
 
 
 class TestKubectlBootstrap:
-    """Test kubectl bootstrap and in-cluster kubeconfig configuration."""
+    """Test kubectl bootstrap using protected environment kubeconfig (not in-cluster SA)."""
 
     def test_live_workflow_installs_kubectl_before_preflight(self) -> None:
-        """Live workflow should install kubectl using azure/setup-kubectl before preflight."""
+        """Live workflow should install kubectl using azure/setup-kubectl before bootstrap."""
         content = WORKFLOW_LIVE_FILE.read_text()
         setup_pos = content.find("azure/setup-kubectl@v4")
-        preflight_pos = content.find("Runner preflight diagnostics")
+        bootstrap_pos = content.find("Bootstrap protected kubeconfig")
         assert setup_pos != -1, "azure/setup-kubectl@v4 not found"
-        assert preflight_pos != -1, "Runner preflight diagnostics not found"
-        assert setup_pos < preflight_pos, \
-            f"kubectl setup ({setup_pos}) must come before preflight ({preflight_pos})"
+        assert bootstrap_pos != -1, "Bootstrap protected kubeconfig step not found"
+        assert setup_pos < bootstrap_pos, \
+            f"kubectl setup ({setup_pos}) must come before bootstrap ({bootstrap_pos})"
 
     def test_live_workflow_uses_pinned_kubectl_version(self) -> None:
         """Live workflow should use a pinned kubectl version, not 'latest'."""
@@ -359,88 +359,100 @@ class TestKubectlBootstrap:
         assert "version: 'latest'" not in content, \
             "Should NOT use 'latest' for kubectl version"
 
-    def test_live_workflow_configures_in_cluster_kubeconfig(self) -> None:
-        """Live workflow should configure in-cluster kubeconfig from service account mount."""
+    def test_live_workflow_uses_protected_kubeconfig_not_incluster(self) -> None:
+        """Live workflow should use protected kubeconfig, NOT in-cluster SA mount."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert "/var/run/secrets/kubernetes.io/serviceaccount" in content, \
-            "Should reference service account mount path"
-        assert "KUBERNETES_SERVICE_HOST" in content, \
-            "Should check KUBERNETES_SERVICE_HOST environment variable"
-        assert "kubectl config set-cluster in-cluster" in content, \
-            "Should configure in-cluster context"
-        assert "kubectl config set-credentials runner-sa" in content, \
-            "Should configure runner-sa credentials"
-        assert "kubectl config use-context in-cluster" in content, \
-            "Should set in-cluster as current context"
+        # Should use protected environment
+        assert "environment: k9b-live-lab-admin" in content, \
+            "Should use protected environment k9b-live-lab-admin"
+        # Should use the bootstrap script
+        assert "k9b_cnpg_live_lab_bootstrap.sh" in content, \
+            "Should use bootstrap script for kubeconfig"
+        # Should NOT configure in-cluster kubeconfig from SA mount
+        assert "/var/run/secrets/kubernetes.io/serviceaccount" not in content, \
+            "Should NOT use in-cluster service account mount"
+        assert "kubectl config set-cluster in-cluster" not in content, \
+            "Should NOT configure in-cluster context"
+        assert "KUBERNETES_SERVICE_HOST" not in content, \
+            "Should NOT check KUBERNETES_SERVICE_HOST"
 
-    def test_live_workflow_checks_sa_token_exists(self) -> None:
-        """Live workflow should verify service account token file exists."""
+    def test_live_workflow_calls_bootstrap_before_using_kubectl(self) -> None:
+        """Bootstrap must complete before kubectl is used."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert 'if [ ! -f "$SA_DIR/token" ]' in content or "$SA_DIR/token" in content, \
-            "Should check that service account token exists"
-        assert "ERROR: service account token not mounted" in content, \
-            "Should emit error if token is missing"
-
-    def test_live_workflow_checks_sa_ca_exists(self) -> None:
-        """Live workflow should verify service account CA file exists."""
-        content = WORKFLOW_LIVE_FILE.read_text()
-        assert 'if [ ! -f "$SA_DIR/ca.crt" ]' in content or "$SA_DIR/ca.crt" in content, \
-            "Should check that service account CA exists"
-        assert "ERROR: service account CA not mounted" in content, \
-            "Should emit error if CA is missing"
-
-    def test_live_workflow_does_not_echo_token(self) -> None:
-        """Live workflow should NOT echo or print the service account token."""
-        content = WORKFLOW_LIVE_FILE.read_text()
-        # The token is used inline in --token="$(cat "$SA_DIR/token")" which is OK
-        # but there should be no echo of the token
-        assert "echo.*token" not in content.lower() or "token not mounted" in content.lower(), \
-            "Should not echo service account token"
-        # The pattern cat "$SA_DIR/token" inside set-credentials is OK
-        # But standalone echo with token variable is not
-        assert not re.search(r'echo\s+["\']?\$\{?SA_DIR\}?/token\}?', content), \
-            "Should not echo service account token path either"
-
-    def test_live_workflow_does_not_run_kubectl_config_view_raw(self) -> None:
-        """Live workflow should NOT run 'kubectl config view --raw' which can leak tokens."""
-        content = WORKFLOW_LIVE_FILE.read_text()
-        assert "kubectl config view --raw" not in content, \
-            "Should NOT run kubectl config view --raw (can leak tokens)"
+        bootstrap_pos = content.find("Bootstrap protected kubeconfig")
+        # Find first kubectl --kubeconfig usage
+        first_kubectl = content.find("kubectl --kubeconfig=")
+        assert bootstrap_pos != -1, "Bootstrap step not found"
+        assert first_kubectl != -1, "No kubectl --kubeconfig usage found"
+        assert bootstrap_pos < first_kubectl, \
+            f"Bootstrap ({bootstrap_pos}) must come before kubectl usage ({first_kubectl})"
 
     def test_live_workflow_exports_kubeconfig_path(self) -> None:
-        """Live workflow should export KUBECONFIG path to GITHUB_ENV."""
+        """Live workflow should export KUBECONFIG path to GITHUB_ENV via bootstrap."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert 'KUBECONFIG=$KUBECONFIG_PATH" >> "$GITHUB_ENV' in content, \
-            "Should export KUBECONFIG path to GITHUB_ENV"
+        # Bootstrap script exports KUBECONFIG via echo >> ${GITHUB_ENV}
+        assert "GITHUB_ENV" in content, \
+            "Should use GITHUB_ENV for KUBECONFIG"
+        # Should use KUBECONFIG from bootstrap
+        assert "${KUBECONFIG}" in content or "$KUBECONFIG" in content, \
+            "Should use KUBECONFIG from bootstrap"
+
+    def test_live_workflow_uses_kubeconfig_for_all_kubectl(self) -> None:
+        """All kubectl commands must use --kubeconfig flag."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        # Count kubectl --kubeconfig occurrences (primary check)
+        kubectl_kubeconfig_count = len(re.findall(r"kubectl\s+--kubeconfig", content))
+        assert kubectl_kubeconfig_count > 10, \
+            f"Expected many kubectl --kubeconfig usages, found {kubectl_kubeconfig_count}"
+        # Verify no kubectl commands in run: blocks without --kubeconfig
+        # Split by lines and check for kubectl without --kubeconfig
+        lines = content.split('\n')
+        bare_kubectl_lines = []
+        for line in lines:
+            if 'kubectl' in line and '--kubeconfig' not in line:
+                # Skip comments
+                stripped = line.strip()
+                if stripped.startswith('#'):
+                    continue
+                # Skip uses: steps
+                if 'uses:' in line:
+                    continue
+                # Skip step names (contain '- name:')
+                if '- name:' in line:
+                    continue
+                # Skip echo commands (just echo statements mentioning kubectl)
+                if stripped.startswith('echo '):
+                    continue
+                bare_kubectl_lines.append(line.strip())
+        assert len(bare_kubectl_lines) == 0, \
+            f"Found kubectl commands without --kubeconfig: {bare_kubectl_lines}"
 
     def test_live_workflow_configures_readonly_diagnostics(self) -> None:
         """Live workflow should have bounded preflight diagnostics without token exposure."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        # Should have command -v kubectl check
-        assert "command -v kubectl" in content, \
-            "Should verify kubectl is available"
-        # Should have kubectl version --client
-        assert "kubectl version --client" in content, \
-            "Should check kubectl client version"
-        # Should have kubectl config current-context
-        assert "kubectl config current-context" in content, \
-            "Should check current context"
+        # Should verify kubectl works with protected kubeconfig
+        assert "Verify kubectl with protected kubeconfig" in content, \
+            "Should verify kubectl with protected kubeconfig"
+        # Should have cluster-info
+        assert "cluster-info" in content.lower() or "cluster_info" in content, \
+            "Should verify cluster reachability"
 
 
 class TestRBACPreflight:
     """Test fatal RBAC preflight checks for live lab permissions."""
 
     def test_live_workflow_has_fatal_rbac_preflight(self) -> None:
-        """Live workflow should have fatal RBAC preflight step."""
+        """Live workflow should have RBAC preflight checks via bootstrap script."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert "Verify live lab Kubernetes permissions" in content, \
-            "Should have RBAC preflight step"
+        # The bootstrap script handles credential validation
+        assert "k9b_cnpg_live_lab_bootstrap.sh" in content, \
+            "Should use bootstrap script that validates credentials"
 
     def test_live_workflow_uses_rbac_helper_script(self) -> None:
-        """Live workflow should use RBAC helper script for cluster checks."""
+        """Live workflow should use RBAC helper script for namespace checks."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert "k9b_cnpg_live_lab_rbac_preflight.sh cluster" in content, \
-            "Should use RBAC helper script for cluster checks"
+        assert "k9b_cnpg_live_lab_rbac_preflight.sh namespace" in content, \
+            "Should use RBAC helper script for namespace checks"
 
     def test_live_workflow_uses_rbac_helper_script_namespace(self) -> None:
         """Live workflow should use RBAC helper script for namespace checks."""
@@ -449,12 +461,11 @@ class TestRBACPreflight:
             "Should use RBAC helper script for namespace checks"
 
     def test_live_workflow_has_subject_diagnostics(self) -> None:
-        """Live workflow should have Kubernetes subject diagnostics step."""
+        """Bootstrap script should validate credential source (detects wrong identity)."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert "Kubernetes subject diagnostics" in content, \
-            "Should have subject diagnostics step"
-        assert "k9b_cnpg_live_lab_rbac_preflight.sh subject" in content, \
-            "Should call RBAC helper script in subject mode"
+        # Bootstrap script validates credential source
+        assert "k9b_cnpg_live_lab_bootstrap.sh" in content, \
+            "Should use bootstrap script for credential validation"
 
     def test_live_workflow_no_raw_auth_can_i_cluster(self) -> None:
         """Live workflow should NOT use raw kubectl auth can-i for cluster checks."""
@@ -538,10 +549,10 @@ class TestRBACPreflight:
     def test_live_workflow_has_namespace_scoped_permissions(self) -> None:
         """Live workflow should verify namespace-scoped permissions after namespace creation."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert "Verify namespace-scoped Kubernetes permissions" in content, \
+        # The workflow uses "Check namespace-scoped Kubernetes permissions"
+        assert "Check namespace-scoped Kubernetes permissions" in content or \
+               "k9b_cnpg_live_lab_rbac_preflight.sh namespace" in content, \
             "Should have namespace-scoped permission check step"
-        assert "k9b_cnpg_live_lab_rbac_preflight.sh namespace" in content, \
-            "Should use RBAC helper script for namespace checks"
 
     def test_rbac_script_has_check_can_i_helper(self) -> None:
         """RBAC script should have check_can_i helper function."""

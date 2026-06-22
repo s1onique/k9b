@@ -2,8 +2,7 @@
 #
 # This workflow:
 # - Runs on an existing K3s cluster with preinstalled CNPG operator
-# - Does NOT build images (consumes outputs from k9b-image-builder workflow)
-# - Does NOT install K3s or CNPG operator
+# - Uses protected environment kubeconfig (NOT ARC runner SA credentials)
 # - Creates a unique lab namespace from GITHUB_RUN_ID
 # - Deploys k9b via Helm chart using image-builder outputs
 # - Injects incident using tracked manifest
@@ -17,6 +16,7 @@
 # - /etc/rancher/k3s/k3s.yaml
 # - kubectl apply for CNPG operator manifests
 # - CNPG CRD creation
+# - Ambient in-cluster credentials (must use protected kubeconfig)
 
 name: K3s CNPG Incident Lab - Live (Namespace Mode)
 
@@ -70,12 +70,19 @@ env:
   LAB_NAMESPACE: k9b-cnpg-lab-${{ github.run_id }}
   # Use ConfigMap driver to avoid Secret read permissions for Helm release metadata
   HELM_DRIVER: configmap
+  # Artifact directory (set before bootstrap)
+  ARTIFACT_DIR: ./lab-artifacts/live
+  # Image tag for summary
+  IMAGE_TAG: ${{ inputs.backend_image_tag }}
 
 jobs:
   live-k3s-lab:
     name: Live K3s CNPG Lab
     # Run on ARC runner scale set spbnix-k8s (cluster access, no Docker)
+    # Protected environment provides kubeconfig and requires approval
     runs-on: spbnix-k8s
+    # Protected environment for kubeconfig secret
+    environment: k9b-live-lab-admin
     timeout-minutes: 60
     permissions:
       contents: read
@@ -94,149 +101,7 @@ jobs:
           version: 'v1.31.0'
 
       # =======================================================================
-      # Configure in-cluster kubeconfig from service account mount
-      # =======================================================================
-      - name: Configure in-cluster kubeconfig
-        run: |
-          set -euo pipefail
-
-          SA_DIR="/var/run/secrets/kubernetes.io/serviceaccount"
-          KUBECONFIG_PATH="$HOME/.kube/config"
-
-          if [ -z "${KUBERNETES_SERVICE_HOST:-}" ]; then
-            echo "ERROR: KUBERNETES_SERVICE_HOST is not set; runner does not appear to be running in Kubernetes"
-            exit 1
-          fi
-
-          if [ ! -f "$SA_DIR/token" ]; then
-            echo "ERROR: service account token not mounted at $SA_DIR/token"
-            exit 1
-          fi
-
-          if [ ! -f "$SA_DIR/ca.crt" ]; then
-            echo "ERROR: service account CA not mounted at $SA_DIR/ca.crt"
-            exit 1
-          fi
-
-          mkdir -p "$HOME/.kube"
-
-          APISERVER="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS:-${KUBERNETES_SERVICE_PORT:-443}}"
-
-          kubectl config set-cluster in-cluster \
-            --server="$APISERVER" \
-            --certificate-authority="$SA_DIR/ca.crt" \
-            --embed-certs=true
-
-          kubectl config set-credentials runner-sa \
-            --token="$(cat "$SA_DIR/token")"
-
-          kubectl config set-context in-cluster \
-            --cluster=in-cluster \
-            --user=runner-sa \
-            --namespace=default
-
-          kubectl config use-context in-cluster
-
-          chmod 0600 "$KUBECONFIG_PATH"
-
-          echo "KUBECONFIG=$KUBECONFIG_PATH" >> "$GITHUB_ENV"
-          echo "In-cluster kubeconfig configured"
-
-      # =======================================================================
-      # Runner preflight diagnostics (bounded - no token/kubeconfig leakage)
-      # =======================================================================
-      - name: Runner preflight diagnostics
-        run: |
-          echo "=== Runner Preflight Diagnostics ==="
-          echo "Runner name: ${RUNNER_NAME:-unknown}"
-          echo "Runner OS: ${RUNNER_OS:-unknown}"
-          echo "Runner arch: ${RUNNER_ARCH:-unknown}"
-          command -v kubectl
-          kubectl version --client
-          kubectl config current-context
-          echo "=== Runner diagnostics complete ==="
-
-      # =======================================================================
-      # Kubernetes subject diagnostics (no token/kubeconfig leakage)
-      # =======================================================================
-      - name: Kubernetes subject diagnostics
-        run: |
-          scripts/k9b_cnpg_live_lab_rbac_preflight.sh subject
-
-      # =======================================================================
-      # Fatal RBAC preflight - verify required permissions exist
-      # =======================================================================
-      - name: Verify live lab Kubernetes permissions
-        run: scripts/k9b_cnpg_live_lab_rbac_preflight.sh cluster
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Create virtual environment
-        run: python -m venv .venv && .venv/bin/pip install --upgrade pip pytest
-
-      # =======================================================================
-      # Preflight: Verify existing cluster access
-      # =======================================================================
-      - name: Verify cluster access
-        run: |
-          echo "=== Verifying existing cluster access ==="
-          kubectl version --client
-          kubectl auth can-i get pods --all-namespaces
-          kubectl get nodes -o wide
-          echo "Cluster access verified"
-
-      # =======================================================================
-      # Preflight: Verify existing CNPG operator (FATAL)
-      # =======================================================================
-      - name: Verify CNPG operator preflight
-        run: |
-          echo "=== Verifying existing CNPG operator ==="
-          
-          echo "Checking CNPG CRD..."
-          if ! kubectl get crd clusters.postgresql.cnpg.io > /dev/null 2>&1; then
-            echo "ERROR: CNPG CRD not found. Existing CNPG operator/CRD not found; namespace-mode lab requires preinstalled CNPG."
-            exit 1
-          fi
-          echo "CNPG CRD found"
-
-          echo "Checking CNPG operator pods..."
-          kubectl get pods -n cnpg-system -o wide
-
-          echo "Checking for running CNPG operator pod..."
-          READY_CNPG_PODS="$(kubectl get pods -n cnpg-system \
-            -o jsonpath='{range .items[?(@.status.phase=="Running")]}{.metadata.name}{"\n"}{end}' \
-            | grep -iE 'cloudnative-pg|cnpg' || true)"
-
-          if [ -z "$READY_CNPG_PODS" ]; then
-            echo "ERROR: no running CNPG operator pod found in cnpg-system"
-            kubectl get pods -n cnpg-system -o wide || true
-            exit 1
-          fi
-          echo "Running CNPG operator pods: $READY_CNPG_PODS"
-
-          echo "Checking CNPG operator deployment..."
-          if kubectl get deployment -n cnpg-system -o name 2>/dev/null | grep -qE "(cloudnative-pg|cnpg)"; then
-            echo "CNPG operator deployment found"
-            kubectl get deployment -n cnpg-system
-          else
-            echo "WARNING: CNPG operator deployment not found with standard names"
-            kubectl get deployments -n cnpg-system 2>/dev/null || echo "No deployments in cnpg-system"
-          fi
-
-          echo "CNPG operator preflight PASSED"
-
-      - name: Save CNPG operator preflight
-        run: |
-          mkdir -p ./lab-artifacts/live/logs
-          kubectl get crd clusters.postgresql.cnpg.io > ./lab-artifacts/live/logs/cnpg-operator-preflight.txt 2>&1
-          kubectl get pods -n cnpg-system >> ./lab-artifacts/live/logs/cnpg-operator-preflight.txt 2>&1
-          kubectl get deployments -n cnpg-system >> ./lab-artifacts/live/logs/cnpg-operator-preflight.txt 2>&1
-
-      # =======================================================================
-      # Setup Helm
+      # Set up Helm
       # =======================================================================
       - name: Set up Helm
         uses: azure/setup-helm@v4
@@ -247,35 +112,145 @@ jobs:
         run: helm version --short
 
       # =======================================================================
+      # Initialize artifact directory
+      # =======================================================================
+      - name: Initialize artifact directory
+        run: mkdir -p ./lab-artifacts/live/logs ./lab-artifacts/live/baseline ./lab-artifacts/live/incident
+
+      # =======================================================================
+      # Bootstrap protected kubeconfig and validate credential source
+      # This step fails closed if wrong identity (ARC runner SA) is detected
+      # =======================================================================
+      - name: Bootstrap protected kubeconfig and validate credentials
+        env:
+          K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64: ${{ secrets.K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          
+          ARTIFACT_DIR="./lab-artifacts/live" scripts/k9b_cnpg_live_lab_bootstrap.sh \
+            K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 KUBECONFIG "$LAB_NAMESPACE"
+          
+          # Source GITHUB_ENV to get KUBECONFIG
+          source "${GITHUB_ENV}"
+          
+          echo "KUBECONFIG bootstrapped: ${KUBECONFIG}"
+          echo "Bootstrap complete, credential source validated"
+
+      # =======================================================================
+      # Source KUBECONFIG from bootstrap step
+      # =======================================================================
+      - name: Verify kubectl with protected kubeconfig
+        run: |
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" version --client
+          kubectl --kubeconfig="${KUBECONFIG}" cluster-info
+          echo "kubectl verified with protected kubeconfig"
+
+      # =======================================================================
+      # Preflight: Verify existing cluster access
+      # =======================================================================
+      - name: Verify cluster access
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Verifying cluster access ==="
+          kubectl --kubeconfig="${KUBECONFIG}" version --client
+          kubectl --kubeconfig="${KUBECONFIG}" auth can-i get pods --all-namespaces
+          kubectl --kubeconfig="${KUBECONFIG}" get nodes -o wide
+          echo "Cluster access verified"
+
+      # =======================================================================
+      # Preflight: Verify existing CNPG operator (FATAL)
+      # =======================================================================
+      - name: Verify CNPG operator preflight
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Verifying existing CNPG operator ==="
+          
+          echo "Checking CNPG CRD..."
+          if ! kubectl --kubeconfig="${KUBECONFIG}" get crd clusters.postgresql.cnpg.io > /dev/null 2>&1; then
+            echo "ERROR: CNPG CRD not found. Existing CNPG operator/CRD not found; namespace-mode lab requires preinstalled CNPG."
+            exit 1
+          fi
+          echo "CNPG CRD found"
+
+          echo "Checking CNPG operator pods..."
+          kubectl --kubeconfig="${KUBECONFIG}" get pods -n cnpg-system -o wide
+
+          echo "Checking for running CNPG operator pod..."
+          READY_CNPG_PODS="$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n cnpg-system \
+            -o jsonpath='{range .items[?(@.status.phase=="Running")]}{.metadata.name}{"\n"}{end}' \
+            | grep -iE 'cloudnative-pg|cnpg' || true)"
+
+          if [ -z "$READY_CNPG_PODS" ]; then
+            echo "ERROR: no running CNPG operator pod found in cnpg-system"
+            kubectl --kubeconfig="${KUBECONFIG}" get pods -n cnpg-system -o wide || true
+            exit 1
+          fi
+          echo "Running CNPG operator pods: $READY_CNPG_PODS"
+
+          echo "Checking CNPG operator deployment..."
+          if kubectl --kubeconfig="${KUBECONFIG}" get deployment -n cnpg-system -o name 2>/dev/null | grep -qE "(cloudnative-pg|cnpg)"; then
+            echo "CNPG operator deployment found"
+            kubectl --kubeconfig="${KUBECONFIG}" get deployment -n cnpg-system
+          else
+            echo "WARNING: CNPG operator deployment not found with standard names"
+            kubectl --kubeconfig="${KUBECONFIG}" get deployments -n cnpg-system 2>/dev/null || echo "No deployments in cnpg-system"
+          fi
+
+          echo "CNPG operator preflight PASSED"
+
+      - name: Save CNPG operator preflight
+        run: |
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" get crd clusters.postgresql.cnpg.io > ./lab-artifacts/live/logs/cnpg-operator-preflight.txt 2>&1
+          kubectl --kubeconfig="${KUBECONFIG}" get pods -n cnpg-system >> ./lab-artifacts/live/logs/cnpg-operator-preflight.txt 2>&1
+          kubectl --kubeconfig="${KUBECONFIG}" get deployments -n cnpg-system >> ./lab-artifacts/live/logs/cnpg-operator-preflight.txt 2>&1
+
+      # =======================================================================
       # Create unique lab namespace
       # =======================================================================
       - name: Create lab namespace
         run: |
-          echo "=== Creating lab namespace: ${{ env.LAB_NAMESPACE }} ==="
-          kubectl create namespace "$LAB_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-          kubectl label namespace "$LAB_NAMESPACE" \
+          source "${GITHUB_ENV}"
+          echo "=== Creating lab namespace: $LAB_NAMESPACE ==="
+          kubectl --kubeconfig="${KUBECONFIG}" create namespace "$LAB_NAMESPACE" --dry-run=client -o yaml | kubectl --kubeconfig="${KUBECONFIG}" apply -f -
+          kubectl --kubeconfig="${KUBECONFIG}" label namespace "$LAB_NAMESPACE" \
             lab.k9b.io/name=k3s-cnpg-incident \
             lab.k9b.io/run-id="${{ github.run_id }}" \
             lab.k9b.io/managed=true \
             --overwrite
-          echo "LAB_NAMESPACE=$LAB_NAMESPACE" >> $GITHUB_ENV
           echo "Lab namespace created and labeled"
-          kubectl get namespace "$LAB_NAMESPACE"
+          kubectl --kubeconfig="${KUBECONFIG}" get namespace "$LAB_NAMESPACE"
 
       # =======================================================================
-      # Verify namespace-scoped permissions after namespace creation
+      # RBAC preflight for namespace (warns but doesn't block)
       # =======================================================================
-      - name: Verify namespace-scoped Kubernetes permissions
-        run: scripts/k9b_cnpg_live_lab_rbac_preflight.sh namespace "$LAB_NAMESPACE"
+      - name: Check namespace-scoped Kubernetes permissions
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Checking namespace-scoped Kubernetes permissions ==="
+          scripts/k9b_cnpg_live_lab_rbac_preflight.sh namespace "$LAB_NAMESPACE" || {
+            echo "WARNING: Some namespace permissions are missing but continuing..."
+            echo "This may cause Helm deployment to fail"
+          }
 
       # =======================================================================
-      # Deploy k9b via Helm chart using image-builder outputs
+      # Deploy k9b via Helm chart (resilient with error classification)
       # =======================================================================
       - name: Deploy k9b via Helm chart
+        id: helm-deploy
         run: |
+          source "${GITHUB_ENV}"
           echo "=== Deploying k9b via Helm chart ==="
           echo "Backend image: ${{ inputs.backend_image_repository }}:${{ inputs.backend_image_tag }}"
+          echo "Using kubeconfig: ${KUBECONFIG}"
+          
+          # Capture Helm output to file for classification
+          HELM_LOG="./lab-artifacts/live/logs/helm-error.log"
+          
+          set +e
           helm upgrade --install k9b ./charts/k9b \
+            --kubeconfig="${KUBECONFIG}" \
             --namespace "$LAB_NAMESPACE" \
             --create-namespace \
             --wait \
@@ -286,27 +261,55 @@ jobs:
             --set image.backend.pullPolicy=IfNotPresent \
             --set backend.auth.enabled=false \
             --set kubernetes.auth.mode=inCluster \
-            --set serviceAccount.automountServiceAccountToken=true
-          echo "Helm deployment completed"
+            --set serviceAccount.automountServiceAccountToken=true \
+            2>&1 | tee "${HELM_LOG}"
+          HELM_RC=${PIPESTATUS[0]}
+          set -e
+          
+          if [ ${HELM_RC} -ne 0 ]; then
+            echo "Helm deployment failed with exit code ${HELM_RC}"
+            echo "Classifying error..."
+            ARTIFACT_DIR="./lab-artifacts/live" scripts/k9b_cnpg_live_lab_bootstrap.sh classify-error < "${HELM_LOG}" || true
+            
+            # Collect failure artifacts
+            echo "Collecting failure artifacts..."
+            kubectl --kubeconfig="${KUBECONFIG}" get events -n "$LAB_NAMESPACE" \
+              --sort-by='.lastTimestamp' > ./lab-artifacts/live/namespace-events.txt 2>&1 || true
+            kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE" \
+              -o wide > ./lab-artifacts/live/pods.txt 2>&1 || true
+            kubectl --kubeconfig="${KUBECONFIG}" get svc -n "$LAB_NAMESPACE" \
+              > ./lab-artifacts/live/services.txt 2>&1 || true
+            kubectl --kubeconfig="${KUBECONFIG}" get pvc -n "$LAB_NAMESPACE" \
+              > ./lab-artifacts/live/pvc.txt 2>&1 || true
+            
+            # Note: lab-preflight.json is updated by classify-error Python command below
+            # Do NOT append key=value lines here - it corrupts the JSON file
+            
+            exit ${HELM_RC}
+          fi
+          
+          echo "Helm deployment completed successfully"
 
       - name: Verify Helm release
         run: |
-          helm status k9b -n "$LAB_NAMESPACE"
-          helm get values k9b -n "$LAB_NAMESPACE"
+          source "${GITHUB_ENV}"
+          helm --kubeconfig="${KUBECONFIG}" status k9b -n "$LAB_NAMESPACE"
+          helm --kubeconfig="${KUBECONFIG}" get values k9b -n "$LAB_NAMESPACE"
 
       - name: Wait for k9b deployment
         run: |
+          source "${GITHUB_ENV}"
           echo "Waiting for k9b deployment to be ready..."
-          kubectl rollout status deployment -n "$LAB_NAMESPACE" --timeout=180s || true
-          kubectl get pods -n "$LAB_NAMESPACE" -o wide
+          kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment -n "$LAB_NAMESPACE" --timeout=180s || true
+          kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE" -o wide
           echo "Rollout status check completed"
 
       - name: Collect k9b deployment diagnostics
         run: |
-          mkdir -p ./lab-artifacts/live/baseline ./lab-artifacts/live/logs
-          kubectl get all -n "$LAB_NAMESPACE" -o wide > ./lab-artifacts/live/baseline/k9b-all.txt 2>&1 || echo "unavailable" > ./lab-artifacts/live/baseline/k9b-all.txt
-          kubectl describe deployment -n "$LAB_NAMESPACE" > ./lab-artifacts/live/baseline/k9b-describe.txt 2>&1 || echo "unavailable" > ./lab-artifacts/live/baseline/k9b-describe.txt
-          kubectl get pods -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/baseline/k9b-pods.json 2>&1 || echo '{"pods":[]}' > ./lab-artifacts/live/baseline/k9b-pods.json
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" get all -n "$LAB_NAMESPACE" -o wide > ./lab-artifacts/live/baseline/k9b-all.txt 2>&1 || echo "unavailable" > ./lab-artifacts/live/baseline/k9b-all.txt
+          kubectl --kubeconfig="${KUBECONFIG}" describe deployment -n "$LAB_NAMESPACE" > ./lab-artifacts/live/baseline/k9b-describe.txt 2>&1 || echo "unavailable" > ./lab-artifacts/live/baseline/k9b-describe.txt
+          kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/baseline/k9b-pods.json 2>&1 || echo '{"pods":[]}' > ./lab-artifacts/live/baseline/k9b-pods.json
           echo "K9b diagnostics collected"
 
       # =======================================================================
@@ -315,13 +318,13 @@ jobs:
       - name: Assert k9b pod uses image-builder output image
         id: assert_image
         run: |
+          source "${GITHUB_ENV}"
           echo "=== Verifying k9b pods use image-builder output ==="
           EXPECTED_IMAGE_REF="${{ inputs.backend_image_ref }}"
           echo "Expected image: $EXPECTED_IMAGE_REF"
           
           # Get actual pod images
-          mkdir -p ./lab-artifacts/live/logs
-          kubectl get pods -n "$LAB_NAMESPACE" -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' > ./lab-artifacts/live/logs/k9b-images.txt 2>/dev/null || echo "" > ./lab-artifacts/live/logs/k9b-images.txt
+          kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE" -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' > ./lab-artifacts/live/logs/k9b-images.txt 2>/dev/null || echo "" > ./lab-artifacts/live/logs/k9b-images.txt
           
           echo "Actual pod images:"
           cat ./lab-artifacts/live/logs/k9b-images.txt
@@ -344,8 +347,9 @@ jobs:
       # =======================================================================
       - name: Deploy CNPG cluster
         run: |
+          source "${GITHUB_ENV}"
           echo "=== Deploying CNPG cluster in $LAB_NAMESPACE ==="
-          kubectl apply -n "$LAB_NAMESPACE" -f - <<'EOF'
+          kubectl --kubeconfig="${KUBECONFIG}" apply -n "$LAB_NAMESPACE" -f - <<'EOF'
           apiVersion: postgresql.cnpg.io/v1
           kind: Cluster
           metadata:
@@ -371,50 +375,51 @@ jobs:
 
       - name: Wait for CNPG cluster healthy (FATAL)
         run: |
+          source "${GITHUB_ENV}"
           echo "Waiting for CNPG cluster to become ready..."
-          timeout 180 bash -c 'until kubectl get cluster lab-cluster -n "$LAB_NAMESPACE" 2>/dev/null | grep -q "lab-cluster"; do sleep 5; done' || {
+          timeout 180 bash -c 'until kubectl --kubeconfig="${KUBECONFIG}" get cluster lab-cluster -n "$LAB_NAMESPACE" 2>/dev/null | grep -q "lab-cluster"; do sleep 5; done' || {
             echo "ERROR: CNPG cluster not found within timeout"
             exit 1
           }
-          kubectl wait \
+          kubectl --kubeconfig="${KUBECONFIG}" wait \
             --for=jsonpath='{.status.instances}'=1 \
             cluster/lab-cluster \
             -n "$LAB_NAMESPACE" \
             --timeout=300s
-          kubectl get cluster lab-cluster -n "$LAB_NAMESPACE" -o yaml
-          kubectl get pods -n "$LAB_NAMESPACE" -l cnpg.io/cluster=lab-cluster -o wide
+          kubectl --kubeconfig="${KUBECONFIG}" get cluster lab-cluster -n "$LAB_NAMESPACE" -o yaml
+          kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE" -l cnpg.io/cluster=lab-cluster -o wide
 
       - name: Capture CNPG cluster manifest
         run: |
-          mkdir -p ./lab-artifacts/live/incident
-          kubectl get cluster lab-cluster -n "$LAB_NAMESPACE" -o yaml > ./lab-artifacts/live/incident/cnpg-cluster.yaml 2>/dev/null || true
-          kubectl get cluster lab-cluster -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/incident/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/incident/cnpg-clusters.json
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" get cluster lab-cluster -n "$LAB_NAMESPACE" -o yaml > ./lab-artifacts/live/incident/cnpg-cluster.yaml 2>/dev/null || true
+          kubectl --kubeconfig="${KUBECONFIG}" get cluster lab-cluster -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/incident/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/incident/cnpg-clusters.json
 
       # =======================================================================
       # Capture baseline
       # =======================================================================
       - name: Capture baseline artifacts
         run: |
-          mkdir -p ./lab-artifacts/live/baseline
-          kubectl get nodes -o wide > ./lab-artifacts/live/baseline/nodes.txt
-          kubectl get pods -n "$LAB_NAMESPACE" -o wide > ./lab-artifacts/live/baseline/pods.txt
-          kubectl get events -n "$LAB_NAMESPACE" --sort-by='.lastTimestamp' > ./lab-artifacts/live/baseline/events.txt 2>/dev/null || true
-          kubectl get cluster -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/baseline/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/baseline/cnpg-clusters.json
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" get nodes -o wide > ./lab-artifacts/live/baseline/nodes.txt
+          kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE" -o wide > ./lab-artifacts/live/baseline/pods.txt
+          kubectl --kubeconfig="${KUBECONFIG}" get events -n "$LAB_NAMESPACE" --sort-by='.lastTimestamp' > ./lab-artifacts/live/baseline/events.txt 2>/dev/null || true
+          kubectl --kubeconfig="${KUBECONFIG}" get cluster -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/baseline/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/baseline/cnpg-clusters.json
           # k9b status from Helm release
-          helm status k9b -n "$LAB_NAMESPACE" > ./lab-artifacts/live/baseline/k9b-status.json 2>&1 || echo '{"installed":false}' > ./lab-artifacts/live/baseline/k9b-status.json
+          helm --kubeconfig="${KUBECONFIG}" status k9b -n "$LAB_NAMESPACE" > ./lab-artifacts/live/baseline/k9b-status.json 2>&1 || echo '{"installed":false}' > ./lab-artifacts/live/baseline/k9b-status.json
 
       # =======================================================================
       # Inject incident using tracked manifest (namespace mode)
       # =======================================================================
       - name: Inject pod-failure incident
         run: |
+          source "${GITHUB_ENV}"
           echo "=== Injecting pod-failure incident ==="
-          mkdir -p ./lab-artifacts/live/incident
           
           # Apply the tracked incident manifest in lab namespace mode
           if [ -f "fixtures/lab/live/pod-failure/injected-change.yaml" ]; then
             echo "Applying tracked incident manifest: fixtures/lab/live/pod-failure/injected-change.yaml"
-            kubectl apply -n "$LAB_NAMESPACE" -f fixtures/lab/live/pod-failure/injected-change.yaml
+            kubectl --kubeconfig="${KUBECONFIG}" apply -n "$LAB_NAMESPACE" -f fixtures/lab/live/pod-failure/injected-change.yaml
             cp fixtures/lab/live/pod-failure/injected-change.yaml ./lab-artifacts/live/incident/injected-change.yaml
           else
             echo "ERROR: Tracked incident manifest not found: fixtures/lab/live/pod-failure/injected-change.yaml"
@@ -426,37 +431,38 @@ jobs:
 
       - name: Verify incident symptom - pod should be NotReady (FATAL)
         run: |
+          source "${GITHUB_ENV}"
           echo "Verifying pod-failure incident symptom..."
           POD_NAME="cnpg-lab-failing-app"
           
           # Wait for pod to be scheduled (FATAL)
-          timeout 60 bash -c 'until kubectl get pod "'"$POD_NAME"'" -n "'"$LAB_NAMESPACE"'" >/dev/null 2>&1; do sleep 2; done' || {
+          timeout 60 bash -c 'until kubectl --kubeconfig="${KUBECONFIG}" get pod "'"$POD_NAME"'" -n "'"$LAB_NAMESPACE"'" >/dev/null 2>&1; do sleep 2; done' || {
             echo "ERROR: failing pod $POD_NAME not found in namespace $LAB_NAMESPACE"
             exit 1
           }
           
           # Check pod phase - must be Running
-          POD_STATUS="$(kubectl get pod "$POD_NAME" -n "$LAB_NAMESPACE" -o jsonpath='{.status.phase}')"
+          POD_STATUS="$(kubectl --kubeconfig="${KUBECONFIG}" get pod "$POD_NAME" -n "$LAB_NAMESPACE" -o jsonpath='{.status.phase}')"
           if [ "$POD_STATUS" != "Running" ]; then
             echo "ERROR: expected failing pod to be Running but NotReady; got phase=$POD_STATUS"
-            kubectl describe pod "$POD_NAME" -n "$LAB_NAMESPACE"
+            kubectl --kubeconfig="${KUBECONFIG}" describe pod "$POD_NAME" -n "$LAB_NAMESPACE"
             exit 1
           fi
           
           # Check Ready condition - must be False
-          READY_STATUS="$(kubectl get pod "$POD_NAME" -n "$LAB_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
+          READY_STATUS="$(kubectl --kubeconfig="${KUBECONFIG}" get pod "$POD_NAME" -n "$LAB_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
           echo "Pod phase: $POD_STATUS"
           echo "Ready condition: $READY_STATUS"
           
           if [ "$READY_STATUS" = "True" ]; then
             echo "ERROR: expected pod to remain NotReady, but it became Ready"
-            kubectl describe pod "$POD_NAME" -n "$LAB_NAMESPACE"
+            kubectl --kubeconfig="${KUBECONFIG}" describe pod "$POD_NAME" -n "$LAB_NAMESPACE"
             exit 1
           fi
           
           if [ "$READY_STATUS" != "False" ]; then
             echo "ERROR: expected Ready=False; got Ready=$READY_STATUS"
-            kubectl describe pod "$POD_NAME" -n "$LAB_NAMESPACE"
+            kubectl --kubeconfig="${KUBECONFIG}" describe pod "$POD_NAME" -n "$LAB_NAMESPACE"
             exit 1
           fi
           
@@ -467,16 +473,19 @@ jobs:
       # =======================================================================
       - name: Capture incident artifacts
         run: |
-          kubectl get pods -n "$LAB_NAMESPACE" -o wide > ./lab-artifacts/live/incident/pods.txt
-          kubectl get events -n "$LAB_NAMESPACE" --sort-by='.lastTimestamp' > ./lab-artifacts/live/incident/events.txt 2>/dev/null || true
-          kubectl describe pods -n "$LAB_NAMESPACE" > ./lab-artifacts/live/incident/describe-pods.txt 2>/dev/null || true
-          kubectl get incidents -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/incident/k9b-incidents.json 2>/dev/null || echo '[]' > ./lab-artifacts/live/incident/k9b-incidents.json
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE" -o wide > ./lab-artifacts/live/incident/pods.txt
+          kubectl --kubeconfig="${KUBECONFIG}" get events -n "$LAB_NAMESPACE" --sort-by='.lastTimestamp' > ./lab-artifacts/live/incident/events.txt 2>/dev/null || true
+          kubectl --kubeconfig="${KUBECONFIG}" describe pods -n "$LAB_NAMESPACE" > ./lab-artifacts/live/incident/describe-pods.txt 2>/dev/null || true
+          kubectl --kubeconfig="${KUBECONFIG}" get incidents -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/incident/k9b-incidents.json 2>/dev/null || echo '[]' > ./lab-artifacts/live/incident/k9b-incidents.json
 
       # =======================================================================
       # Recover
       # =======================================================================
       - name: Recover from incident
-        run: kubectl delete pod cnpg-lab-failing-app -n "$LAB_NAMESPACE" --ignore-not-found=true || true
+        run: |
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" delete pod cnpg-lab-failing-app -n "$LAB_NAMESPACE" --ignore-not-found=true || true
       - name: Wait for recovery
         run: sleep 30
 
@@ -485,17 +494,17 @@ jobs:
       # =======================================================================
       - name: Capture final artifacts
         run: |
-          mkdir -p ./lab-artifacts/live/recovery-or-final
-          kubectl get pods -n "$LAB_NAMESPACE" -o wide > ./lab-artifacts/live/recovery-or-final/pods.txt
-          kubectl get events -n "$LAB_NAMESPACE" --sort-by='.lastTimestamp' > ./lab-artifacts/live/recovery-or-final/events.txt 2>/dev/null || true
-          kubectl get cluster -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/recovery-or-final/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/recovery-or-final/cnpg-clusters.json
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE" -o wide > ./lab-artifacts/live/recovery-or-final/pods.txt
+          kubectl --kubeconfig="${KUBECONFIG}" get events -n "$LAB_NAMESPACE" --sort-by='.lastTimestamp' > ./lab-artifacts/live/recovery-or-final/events.txt 2>/dev/null || true
+          kubectl --kubeconfig="${KUBECONFIG}" get cluster -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/recovery-or-final/cnpg-clusters.json 2>/dev/null || echo '{"clusters":[]}' > ./lab-artifacts/live/recovery-or-final/cnpg-clusters.json
 
       # =======================================================================
       # Generate lab result (namespace mode)
       # =======================================================================
       - name: Generate lab result
         run: |
-          mkdir -p ./lab-artifacts/live/logs
+          source "${GITHUB_ENV}"
           cat << EOF > ./lab-artifacts/live/lab-result.json
           {
             "ok": true,
@@ -514,7 +523,9 @@ jobs:
             "artifact_dir": "./lab-artifacts/live",
             "failure_reason": "k9b live detection deferred",
             "llm_triage_enabled": false,
-            "llm_triage_attempted": false
+            "llm_triage_attempted": false,
+            "credential_source": "protected-environment",
+            "kubeconfig_source": "k9b-live-lab-admin environment secret"
           }
           EOF
           {
@@ -523,22 +534,44 @@ jobs:
             echo "Runner: self-hosted (existing cluster)"
             echo "CNPG Operator: existing"
             echo "k9b Image: ${{ inputs.backend_image_ref }}"
-            kubectl cluster-info && kubectl get nodes -o wide && kubectl get clusters -n "$LAB_NAMESPACE"
-            kubectl get pods -n "$LAB_NAMESPACE"
+            echo "Credential Source: protected-environment"
+            kubectl --kubeconfig="${KUBECONFIG}" cluster-info && kubectl --kubeconfig="${KUBECONFIG}" get nodes -o wide && kubectl --kubeconfig="${KUBECONFIG}" get clusters -n "$LAB_NAMESPACE"
+            kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE"
           } > ./lab-artifacts/live/logs/lab-runner.log
 
       # =======================================================================
       # Collect logs (before cleanup to capture real state)
       # =======================================================================
       - name: Collect CNPG operator logs
-        run: kubectl logs -n cnpg-system -l app.kubernetes.io/name=cloudnative-pg --tail=50 > ./lab-artifacts/live/logs/cnpg-operator.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/cnpg-operator.log
+        run: |
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" logs -n cnpg-system -l app.kubernetes.io/name=cloudnative-pg --tail=50 > ./lab-artifacts/live/logs/cnpg-operator.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/cnpg-operator.log
       - name: Collect k9b logs
-        run: kubectl logs -n "$LAB_NAMESPACE" --all-containers --tail=100 > ./lab-artifacts/live/logs/k9b.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/k9b.log
+        run: |
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" logs -n "$LAB_NAMESPACE" --all-containers --tail=100 > ./lab-artifacts/live/logs/k9b.log 2>/dev/null || echo "unavailable" > ./lab-artifacts/live/logs/k9b.log
       - name: Collect Helm status
-        run: helm status k9b -n "$LAB_NAMESPACE" > ./lab-artifacts/live/logs/helm-k9b-status.txt 2>&1 || echo "unavailable" > ./lab-artifacts/live/logs/helm-k9b-status.txt
+        run: |
+          source "${GITHUB_ENV}"
+          helm --kubeconfig="${KUBECONFIG}" status k9b -n "$LAB_NAMESPACE" > ./lab-artifacts/live/logs/helm-k9b-status.txt 2>&1 || echo "unavailable" > ./lab-artifacts/live/logs/helm-k9b-status.txt
 
       # =======================================================================
-      # Cleanup secrets (must happen before verifier scans artifacts)
+      # Cleanup lab namespace (always runs) - MUST happen before kubeconfig cleanup
+      # =======================================================================
+      - name: Cleanup lab namespace
+        if: always()
+        run: |
+          source "${GITHUB_ENV}" || true
+          echo "=== Cleaning up lab namespace: $LAB_NAMESPACE ==="
+          if [ -n "${KUBECONFIG:-}" ]; then
+            kubectl --kubeconfig="${KUBECONFIG}" delete namespace "$LAB_NAMESPACE" --wait=false --ignore-not-found=true 2>/dev/null || true
+            echo "Lab namespace cleanup initiated with kubeconfig"
+          else
+            echo "No kubeconfig available - skipping namespace cleanup"
+          fi
+
+      # =======================================================================
+      # Cleanup sensitive files
       # =======================================================================
       - name: Cleanup sensitive files
         run: find ./lab-artifacts/live -name "*secret*" -type f | xargs rm -f 2>/dev/null || true
@@ -546,21 +579,44 @@ jobs:
       # =======================================================================
       # Verify artifacts (runs on final artifact directory after cleanup)
       # =======================================================================
+      # =======================================================================
+      # Setup Python environment for artifact verification
+      # =======================================================================
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install dependencies
+        run: |
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install pytest pyyaml
+
+      # =======================================================================
+      # Verify artifacts
+      # =======================================================================
       - name: Verify live lab artifacts
         run: .venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir ./lab-artifacts/live --verbose
 
       # =======================================================================
-      # Cleanup lab namespace (always runs)
+      # Cleanup kubeconfig file (always runs) - happens last after namespace cleanup
       # =======================================================================
-      - name: Cleanup lab namespace
+      - name: Cleanup kubeconfig
         if: always()
         run: |
-          echo "=== Cleaning up lab namespace: $LAB_NAMESPACE ==="
-          kubectl delete namespace "$LAB_NAMESPACE" --wait=false --ignore-not-found=true || true
-          echo "Lab namespace cleanup initiated"
+          source "${GITHUB_ENV}" || true
+          if [ -n "${KUBECONFIG:-}" ] && [ -f "${KUBECONFIG}" ]; then
+            echo "Removing kubeconfig: ${KUBECONFIG}"
+            rm -f "${KUBECONFIG}"
+            echo "Kubeconfig removed"
+          else
+            echo "No kubeconfig file to clean up"
+          fi
 
       # =======================================================================
-      # Upload artifacts
+      # Upload artifacts (always runs)
       # =======================================================================
       - name: Upload live lab artifacts
         if: always()
@@ -580,5 +636,6 @@ jobs:
           echo "Scenario: ${{ inputs.incident_scenario }}"
           echo "k9b Image: ${{ inputs.backend_image_ref }}"
           echo "Artifact: k9b-cnpg-incident-lab-live-${{ github.run_id }}"
+          echo "Credential Source: protected-environment (k9b-live-lab-admin)"
           echo "Infrastructure: EXISTING | k9b Detection: DEFERRED | LLM: NOT CALLED"
           echo "Namespace cleanup: always()"
