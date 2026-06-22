@@ -83,6 +83,24 @@ doctrines:
     manual_only: false
     notes: Enforced via scripts/check_llm_friendly_files.py.
 
+  - id: no-new-llm-allowlist-entries
+    title: No New LLM Large-File Allowlist Entries
+    file: docs/doctrine/no-new-llm-large-file-allowlist.md
+    applies_to:
+      - llm-allowlist-change
+      - large-files
+    agent_rules:
+      - .kilocode/rules/40-tool-use.md
+    required_checks:
+      - no new active allowlist entries
+      - no baseline additions in normal transactions
+      - modified active allowlist targets must be removed from active allowlist
+      - no new allowlist entries without baseline
+      - baseline CSV has valid schema
+      - paths are repo-relative and non-escaping
+    manual_only: false
+    notes: Enforced via scripts/verify_no_new_llm_allowlist.py. Baseline: docs/tooling/llm_large_file_allowlist_baseline.csv.
+
   - id: path-security
     title: Path and Artifact Security
     file: docs/doctrine/path-security-doctrine.md

@@ -113,7 +113,7 @@ def get_profiles() -> dict[str, VerificationProfile]:
         "production-readiness-disclaimer", "discovery-logging-hygiene",
         "next-check-sanitization", "operator-projection-hygiene",
         "pvc-rollout-policy", "shared-pvc-colocation",
-        "llm-friendly", "shell-containment",
+        "llm-friendly", "no-new-llm-allowlist", "shell-containment",
         "helm-chart", "helm-oci-login",
         "docs-inventory", "docs-claims-registry",
     ]
@@ -211,7 +211,7 @@ def get_profile_summary(profile_name: str) -> dict:
 # =============================================================================
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description="Verification profile definitions")
     parser.add_argument("--list", action="store_true", help="List all available profiles")
     parser.add_argument("--profile", choices=["fast", "full"], help="Show steps for a profile")

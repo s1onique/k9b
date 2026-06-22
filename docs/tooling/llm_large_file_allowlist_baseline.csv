@@ -1,0 +1,159 @@
+path,source,reason,owner,status,migration_note
+docs/agent-run-review-template.md,llm_friendly_allowlist_py,[DOC] Single-purpose template,platform-team,grandfathered,Consider extracting to smaller focused docs
+docs/data-model.md,llm_friendly_allowlist_py,[DOC] Data model reference,platform-team,grandfathered,Consider splitting by domain area
+docs/security/threat-model.md,llm_friendly_allowlist_py,[DOC] Security reference,security-team,grandfathered,Consider splitting by threat category
+docs/security-exception-audit.md,llm_friendly_allowlist_py,[DOC] Audit document - historical record,security-team,grandfathered,Historical - review for cleanup
+docs/artifact-immutability-audit.md,llm_friendly_allowlist_py,[DOC] Audit document - historical record,platform-team,grandfathered,Historical - review for cleanup
+src/k8s_diag_agent/health/loop.py,llm_friendly_allowlist_py,[EXTRACTION] Health loop - extract by concern,platform-team,planned_removal,"Extract by concern: discovery, assessment, notification, scheduler"
+src/k8s_diag_agent/health/loop_scheduler.py,llm_friendly_allowlist_py,[EXTRACTION] Loop scheduler - run loop extracted; compatibility surface remains,platform-team,planned_removal,Consolidate with loop.py extraction
+src/k8s_diag_agent/collect/incident_diagnosis_review_packet.py,llm_friendly_allowlist_py,[CONTRACT] Review packet - artifact writer with bounded output; all functions related,platform-team,grandfathered,Consider extracting serializers
+tests/fixtures/incident_report_fixtures.py,llm_friendly_allowlist_py,[TEST] Fixture data - extract by test family,platform-team,planned_removal,Split by test family
+tests/unit/test_ui_server_api_alertmanager_sources.py,llm_friendly_allowlist_py,[TEST] Alertmanager sources - large fixtures,platform-team,planned_removal,Split fixtures from tests
+tests/unit/test_health_loop_alertmanager_snapshot_collection.py,llm_friendly_allowlist_py,[TEST] Snapshot tests - split by scenario,platform-team,planned_removal,Split by scenario
+tests/unit/test_api_incident_report.py,llm_friendly_allowlist_py,[TEST] Incident report tests - large fixtures,platform-team,planned_removal,Split fixtures from tests
+tests/unit/test_health_ui.py,llm_friendly_allowlist_py,[TEST] Health UI tests - complex fixtures,platform-team,planned_removal,Split fixtures from tests
+tests/unit/test_ui_server_api.py,llm_friendly_allowlist_py,[TEST] UI server API tests - complex fixtures,platform-team,planned_removal,Split fixtures from tests
+tests/unit/test_alertmanager_discovery.py,llm_friendly_allowlist_py,[TEST] Alertmanager discovery tests,platform-team,planned_removal,Split by discovery scenario
+tests/test_health_loop.py,llm_friendly_allowlist_py,[TEST] Health loop tests - complex fixtures,platform-team,planned_removal,Split by behavior
+tests/test_alertmanager.py,llm_friendly_allowlist_py,[TEST] Alertmanager tests - complex scenarios,platform-team,planned_removal,Split by scenario
+tests/test_scripts.py,llm_friendly_allowlist_py,[TEST] Script tests - complex test scenarios,platform-team,planned_removal,Split by script
+tests/test_security_path_validation.py,llm_friendly_allowlist_py,[TEST] Security tests - complex scenarios,security-team,planned_removal,Split by scenario
+tests/test_index_batch_eligibility.py,llm_friendly_allowlist_py,[TEST] Batch eligibility tests,platform-team,planned_removal,Extract fixtures
+tests/test_prompt_anonymization.py,llm_friendly_allowlist_py,[TEST] Prompt tests - complex scenarios,platform-team,planned_removal,Split by scenario
+tests/test_next_check_planner.py,llm_friendly_allowlist_py,[TEST] Planner tests - complex scenarios,platform-team,planned_removal,Split by scenario
+tests/test_alertmanager_feedback.py,llm_friendly_allowlist_py,[TEST] Alertmanager feedback tests,platform-team,planned_removal,Split by feedback type
+tests/test_external_analysis.py,llm_friendly_allowlist_py,[TEST] External analysis tests,platform-team,planned_removal,Split by analysis type
+tests/test_server_read_support_deanonymization.py,llm_friendly_allowlist_py,[TEST] Deanonymization tests,security-team,planned_removal,Split by operation
+tests/test_server_read_support_security.py,llm_friendly_allowlist_py,[TEST] Security tests - complex scenarios,security-team,planned_removal,Split by scenario
+tests/unit/test_external_analysis_artifact.py,llm_friendly_allowlist_py,[TEST] External analysis artifact tests,platform-team,planned_removal,Split by artifact type
+tests/unit/test_usefulness_feedback.py,llm_friendly_allowlist_py,[TEST] Usefulness feedback tests - complex scenarios,platform-team,planned_removal,Split by feedback type
+tests/unit/test_next_check_planner_alertmanager.py,llm_friendly_allowlist_py,[TEST] Planner tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_external_analysis_adapter.py,llm_friendly_allowlist_py,[TEST] Adapter tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_external_analysis_manual_next_check.py,llm_friendly_allowlist_py,[TEST] Manual next check tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_external_analysis_result_digest.py,llm_friendly_allowlist_py,[TEST] Result digest tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_vmalert_discovery.py,llm_friendly_allowlist_py,[TEST] vmalert discovery tests,platform-team,planned_removal,Split by scenario
+tests/unit/test_alertmanager_source_registry.py,llm_friendly_allowlist_py,[TEST] Alertmanager registry tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_alertmanager_relevance_review.py,llm_friendly_allowlist_py,[TEST] Relevance tests - complex scenarios,platform-team,planned_removal,Split by scenario
+tests/unit/test_alertmanager_cross_namespace_discovery.py,llm_friendly_allowlist_py,[TEST] Cross-namespace discovery tests,platform-team,planned_removal,Split by namespace scenario
+tests/unit/test_api_incident_report_ownership.py,llm_friendly_allowlist_py,[TEST] Ownership tests - complex scenarios,platform-team,planned_removal,Split by scenario
+tests/unit/test_api_run_performance.py,llm_friendly_allowlist_py,[TEST] Performance tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_artifact_exception_handling.py,llm_friendly_allowlist_py,[TEST] Exception handling tests,platform-team,planned_removal,Split by exception type
+tests/unit/test_batch_next_checks.py,llm_friendly_allowlist_py,[TEST] Batch tests - complex scenarios,platform-team,planned_removal,Split by scenario
+tests/unit/test_diagnostic_pack.py,llm_friendly_allowlist_py,[TEST] Diagnostic pack tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_external_analysis_deterministic_next_check_promotion.py,llm_friendly_allowlist_py,[TEST] Promotion tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_feedback_validators.py,llm_friendly_allowlist_py,[TEST] Validator tests - complex scenarios,platform-team,planned_removal,Split by validator type
+tests/unit/test_health_loop_alertmanager_discovery.py,llm_friendly_allowlist_py,[TEST] Discovery tests - complex,platform-team,planned_removal,Split by scenario
+tests/unit/test_health_notifications.py,llm_friendly_allowlist_py,[TEST] Notification tests - complex scenarios,platform-team,planned_removal,Split by notification type
+tests/unit/test_health_scheduler.py,llm_friendly_allowlist_py,[TEST] Scheduler tests - complex scenarios,platform-team,planned_removal,Split by scheduler type
+tests/unit/test_llm_assessor.py,llm_friendly_allowlist_py,[TEST] LLM assessor tests - complex scenarios,platform-team,planned_removal,Split by assessor type
+tests/unit/test_mutation_request_validation.py,llm_friendly_allowlist_py,[TEST] Mutation tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_report_usefulness_learning.py,llm_friendly_allowlist_py,[TEST] Learning tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_review_enrichment_alertmanager_references.py,llm_friendly_allowlist_py,[TEST] Reference tests - complex scenarios,platform-team,planned_removal,Split by scenario
+tests/unit/test_run_artifact_index.py,llm_friendly_allowlist_py,[TEST] Index tests - complex scenarios,platform-team,planned_removal,Split by index type
+tests/unit/test_runs_list_window_optimization.py,llm_friendly_allowlist_py,[TEST] Window optimization tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_scheduler_config_logging.py,llm_friendly_allowlist_py,[TEST] Logging tests - complex scenarios,platform-team,planned_removal,Split by log type
+tests/unit/test_server_alertmanager_exception_handling.py,llm_friendly_allowlist_py,[TEST] Exception tests - complex,platform-team,planned_removal,Split by exception type
+tests/unit/test_ui_model.py,llm_friendly_allowlist_py,[TEST] UI model tests - complex scenarios,frontend-team,planned_removal,Split by model type
+tests/unit/test_ui_model_builders.py,llm_friendly_allowlist_py,[TEST] Builder tests - complex scenarios,frontend-team,planned_removal,Split by builder type
+tests/unit/test_ui_model_next_check_queue_import_compat.py,llm_friendly_allowlist_py,[TEST] Import compatibility tests,frontend-team,planned_removal,Extract fixtures
+tests/unit/test_ui_server_api_vmalert_sources.py,llm_friendly_allowlist_py,[TEST] vmalert sources tests - complex scenarios,frontend-team,planned_removal,Split by source type
+tests/unit/test_ui_server_past_run_status.py,llm_friendly_allowlist_py,[TEST] Past status tests - complex scenarios,frontend-team,planned_removal,Split by status type
+tests/unit/test_vmalert_discovery_smoke.py,llm_friendly_allowlist_py,[TEST] vmalert smoke tests - complex scenarios,platform-team,planned_removal,Split by scenario
+tests/unit/test_vmalert_rule_state_artifact.py,llm_friendly_allowlist_py,[TEST] vmalert rule state tests,platform-team,planned_removal,Extract fixtures
+tests/security/test_deanonymization.py,llm_friendly_allowlist_py,[TEST] Security tests - complex scenarios,security-team,planned_removal,Split by scenario
+tests/test_index_batch_eligibility_cache_freshness.py,llm_friendly_allowlist_py,[TEST] Cache tests - complex scenarios,platform-team,planned_removal,Extract fixtures
+tests/test_semantic_injection_detector.py,llm_friendly_allowlist_py,[TEST] Semantic injection detector - extensive test cases,security-team,planned_removal,Split by detector type
+scripts/build_diagnostic_pack.py,llm_friendly_allowlist_py,[SCRIPT] Build tool - single-purpose,platform-team,grandfathered,Consider if still needed
+scripts/import_next_check_usefulness_feedback.py,llm_friendly_allowlist_py,[SCRIPT] Import tool - single-purpose,platform-team,grandfathered,Consider consolidating
+scripts/report_usefulness_learning.py,llm_friendly_allowlist_py,[SCRIPT] Report tool - single-purpose,platform-team,grandfathered,Consider consolidating
+scripts/debug_recent_runs_execution_state.sh,llm_friendly_allowlist_py,[SCRIPT] Debug script - single-purpose,platform-team,grandfathered,Consider if still needed
+frontend/src/App.tsx,llm_friendly_allowlist_py,[FRONTEND] Main React app - requires UI architect review,frontend-team,grandfathered,UI architect review needed
+frontend/src/components/ExecutionHistoryPanel.tsx,llm_friendly_allowlist_py,[FRONTEND] Execution history - complex panel,frontend-team,planned_removal,Split by panel section
+frontend/src/components/AlertmanagerPanel.tsx,llm_friendly_allowlist_py,[FRONTEND] Alertmanager panel - complex UI,frontend-team,planned_removal,Split by panel section
+frontend/src/components/ClusterNextCheckPlanSection.tsx,llm_friendly_allowlist_py,[FRONTEND] Cluster section - complex UI,frontend-team,planned_removal,Split by section
+frontend/src/components/QueuePanel.tsx,llm_friendly_allowlist_py,[FRONTEND] Queue panel - complex UI,frontend-team,planned_removal,Split by panel section
+frontend/src/components/RunsPanel.tsx,llm_friendly_allowlist_py,[FRONTEND] Runs panel - complex UI,frontend-team,planned_removal,Split by panel section
+frontend/src/hooks/useRunSelection.ts,llm_friendly_allowlist_py,[FRONTEND] Selection hook - state complexity,frontend-team,planned_removal,Extract state logic
+frontend/src/types.ts,llm_friendly_allowlist_py,[FRONTEND] Shared types - large but coherent,frontend-team,grandfathered,Consider splitting by domain
+frontend/src/utils/selectors.ts,llm_friendly_allowlist_py,[FRONTEND] Selector utilities - complex state,frontend-team,planned_removal,Split by selector domain
+frontend/src/run-control/runControlReducer.ts,llm_friendly_allowlist_py,[FRONTEND] Reducer - state machine complexity,frontend-team,planned_removal,Split actions
+frontend/src/run-control/useRunControl.ts,llm_friendly_allowlist_py,[FRONTEND] State hook - complex dependencies,frontend-team,planned_removal,Extract sub-hooks
+frontend/src/__tests__/app.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Frontend app test - requires shared context,frontend-team,planned_removal,Split by test scenario
+frontend/src/__tests__/fixtures.ts,llm_friendly_allowlist_py,[FRONTEND TEST] Test fixtures - shared test data,frontend-team,grandfathered,Consider splitting by fixture domain
+frontend/src/__tests__/incident-report-operator-worklist.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Snapshot UI test,frontend-team,planned_removal,Extract snapshots
+frontend/src/__tests__/api.test.ts,llm_friendly_allowlist_py,[FRONTEND TEST] API tests - complex scenarios,frontend-team,planned_removal,Split by API endpoint
+frontend/src/__tests__/advisory-lower-sections.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Snapshot UI test,frontend-team,planned_removal,Extract snapshots
+frontend/src/__tests__/advisory-panel.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Snapshot UI test,frontend-team,planned_removal,Extract snapshots
+frontend/src/__tests__/alertmanager-cluster-switching-regression.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Regression test,frontend-team,planned_removal,Split by scenario
+frontend/src/__tests__/execution-history-filter.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] UI test - complex scenarios,frontend-team,planned_removal,Split by filter type
+frontend/src/__tests__/execution-history-usefulness.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] UI test - complex scenarios,frontend-team,planned_removal,Split by scenario
+frontend/src/__tests__/run-summary-components.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Snapshot UI test,frontend-team,planned_removal,Extract snapshots
+frontend/src/__tests__/status-cue-regression.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Regression test,frontend-team,planned_removal,Split by scenario
+frontend/src/__tests__/vmalert-alert-state-panel.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Snapshot UI test,frontend-team,planned_removal,Extract snapshots
+frontend/src/utils/__tests__/selectors.test.ts,llm_friendly_allowlist_py,[FRONTEND TEST] Selector tests - complex scenarios,frontend-team,planned_removal,Split by selector domain
+frontend/src/run-control/__tests__/runControlReducer.test.ts,llm_friendly_allowlist_py,[FRONTEND TEST] Reducer tests - complex state,frontend-team,planned_removal,Split actions
+frontend/src/run-control/__tests__/useRunControl.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Hook tests - complex scenarios,frontend-team,planned_removal,Extract sub-hook tests
+frontend/src/run-control/__tests__/boot-fetch-scheduling.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Boot fetch tests,frontend-team,planned_removal,Extract scenarios
+frontend/src/index.css,llm_friendly_allowlist_py,[STYLES] Main CSS - style collection,frontend-team,grandfathered,Consider extracting by component
+frontend/src/themes.css,llm_friendly_allowlist_py,[STYLES] Theme variables - coherent collection,frontend-team,grandfathered,Consider extracting theme tokens
+frontend/src/styles/components/next-check-plan.css,llm_friendly_allowlist_py,[STYLES] Plan styles - complex selectors,frontend-team,planned_removal,Extract shared styles
+frontend/src/styles/components/next-check-queue.css,llm_friendly_allowlist_py,[STYLES] Queue styles - complex selectors,frontend-team,planned_removal,Extract shared styles
+frontend/src/styles/components/run-overview-dashboard.css,llm_friendly_allowlist_py,[STYLES] Dashboard styles - complex selectors,frontend-team,planned_removal,Extract shared styles
+scripts/export_next_check_usefulness_review.py,llm_friendly_allowlist_py,[SCRIPT] Export tool - single-purpose,platform-team,grandfathered,Consider consolidating
+scripts/select_review_candidate_runs.py,llm_friendly_allowlist_py,[SCRIPT] Selection tool - single-purpose,platform-team,grandfathered,Consider consolidating
+frontend/src/api.ts,llm_friendly_allowlist_py,[FRONTEND] API client - large but coherent,frontend-team,planned_removal,Split by API domain
+frontend/src/hooks/useQueueState.ts,llm_friendly_allowlist_py,[FRONTEND] Queue state hook - complex logic,frontend-team,planned_removal,Extract state logic
+frontend/src/__tests__/alertmanager-snapshot-panel.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Snapshot panel tests,frontend-team,planned_removal,Extract snapshots
+frontend/src/__tests__/alertmanager-sources-panel.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Sources panel tests,frontend-team,planned_removal,Extract snapshots
+frontend/src/__tests__/pagination.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Pagination tests,frontend-team,planned_removal,Extract scenarios
+frontend/src/__tests__/run-overview-dashboard.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Dashboard tests,frontend-team,planned_removal,Split by dashboard section
+frontend/src/__tests__/selected-run-refresh-regression.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Refresh regression tests,frontend-team,planned_removal,Split by scenario
+frontend/src/__tests__/incident-list-panel.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Incident list panel tests - comprehensive coverage,frontend-team,planned_removal,Split by panel section
+tests/fixtures/incident_report_cross_cluster_fixtures.py,llm_friendly_allowlist_py,[TEST] Cross-cluster fixtures - large data,platform-team,planned_removal,Split by cluster scenario
+tests/fixtures/ui_index_sample.py,llm_friendly_allowlist_py,[TEST] UI index fixtures - large data,platform-team,planned_removal,Split by index type
+tests/test_alertmanager_durable_learning.py,llm_friendly_allowlist_py,[TEST] Durable learning tests,platform-team,planned_removal,Split by learning type
+tests/test_debug_recent_runs_execution_state.py,llm_friendly_allowlist_py,[TEST] Debug execution state tests,platform-team,planned_removal,Split by state type
+tests/test_metadata_anonymizer.py,llm_friendly_allowlist_py,[TEST] Metadata anonymizer tests,security-team,planned_removal,Split by operation
+tests/test_phase1b_anonymization.py,llm_friendly_allowlist_py,[TEST] Anonymization tests,security-team,planned_removal,Split by operation
+tests/unit/test_alertmanager_identity_e2e.py,llm_friendly_allowlist_py,[TEST] Alertmanager identity e2e tests,platform-team,planned_removal,Split by identity scenario
+tests/unit/test_batch_execution_state_consolidation.py,llm_friendly_allowlist_py,[TEST] Batch execution tests,platform-team,planned_removal,Split by execution type
+tests/unit/test_execution_summary_derivation.py,llm_friendly_allowlist_py,[TEST] Execution summary tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_health_validators.py,llm_friendly_allowlist_py,[TEST] Health validators tests,platform-team,planned_removal,Split by validator type
+tests/unit/test_llamacpp_generation_settings.py,llm_friendly_allowlist_py,[TEST] LlamaCPP settings tests,platform-team,planned_removal,Extract fixtures
+tests/unit/test_loop_vmalert_discovery.py,llm_friendly_allowlist_py,[TEST] Loop vmalert discovery tests,platform-team,planned_removal,Split by scenario
+tests/unit/test_notification_artifact_readers.py,llm_friendly_allowlist_py,[TEST] Notification readers tests,platform-team,planned_removal,Split by notification type
+tests/unit/test_proposal_lifecycle_events.py,llm_friendly_allowlist_py,[TEST] Proposal lifecycle tests,platform-team,planned_removal,Split by lifecycle stage
+tests/unit/test_server_feedback_exception_handling.py,llm_friendly_allowlist_py,[TEST] Feedback exception tests,platform-team,planned_removal,Split by exception type
+tests/unit/test_ui_api.py,llm_friendly_allowlist_py,[TEST] UI API tests - large fixtures,frontend-team,planned_removal,Extract fixtures
+tests/unit/test_ui_api_debug.py,llm_friendly_allowlist_py,[TEST] UI API debug tests,frontend-team,planned_removal,Extract fixtures
+tests/unit/test_ui_api_execution_summary.py,llm_friendly_allowlist_py,[TEST] Execution summary tests,frontend-team,planned_removal,Extract fixtures
+tests/unit/test_ui_model_assessment.py,llm_friendly_allowlist_py,[TEST] Model assessment tests,frontend-team,planned_removal,Split by assessment type
+tests/unit/test_ui_model_llm_policy_import_compat.py,llm_friendly_allowlist_py,[TEST] LLM policy import tests,frontend-team,planned_removal,Extract fixtures
+tests/unit/test_vmalert_rule_state.py,llm_friendly_allowlist_py,[TEST] vmalert rule state tests,platform-team,planned_removal,Extract fixtures
+charts/k9b/README.md,llm_friendly_allowlist_py,[DOC] Helm chart reference - all content is related,platform-team,grandfathered,Consider splitting by section
+docs/beta-stakeholder-demo-script.md,llm_friendly_allowlist_py,[DOC] Demo script - single-purpose,platform-team,grandfathered,Consider splitting by demo section
+docs/doctrine/documentation-truthfulness.md,llm_friendly_allowlist_py,[DOC] Policy document - grows with features and verification tools,platform-team,planned_removal,Split by policy area
+docs/doctrine/evals/seed_evals.yaml,llm_friendly_allowlist_py,[DOC] Seed evals - data file,platform-team,grandfathered,Consider splitting by eval category
+docs/post-beta-operator-feedback-and-live-integrations.md,llm_friendly_allowlist_py,[DOC] Feedback document,platform-team,grandfathered,Consider extracting by feedback type
+docs/schemas/incident-report-schema.md,llm_friendly_allowlist_py,[DOC] Schema reference - all content related,platform-team,grandfathered,Consider splitting by schema section
+docs/security/llm-anonymization-design.md,llm_friendly_allowlist_py,[DOC] Design document,security-team,grandfathered,Consider splitting by design area
+docs/security/llm-prompt-security-audit.md,llm_friendly_allowlist_py,[DOC] Security audit - historical,security-team,grandfathered,Historical - review for cleanup
+docs/security/operator-auth-design.md,llm_friendly_allowlist_py,[DOC] Auth design - all content related,security-team,grandfathered,Consider splitting by design area
+docs/security/rbac-deployment-guide.md,llm_friendly_allowlist_py,[DOC] RBAC guide - all content related,security-team,grandfathered,Consider splitting by guide section
+docs/security/security-audit-closeout.md,llm_friendly_allowlist_py,[DOC] Audit closeout - historical,security-team,grandfathered,Historical - review for cleanup
+docs/security/subprocess-security-audit.md,llm_friendly_allowlist_py,[DOC] Subprocess audit - historical,security-team,grandfathered,Historical - review for cleanup
+scripts/step_runner.sh,llm_friendly_allowlist_py,[SCRIPT] Step runner - shared verification logic,platform-team,planned_removal,Migrate to Python
+scripts/verify_all.sh,llm_friendly_allowlist_py,[SCRIPT] Verification gate - comprehensive gate,platform-team,grandfathered,Consider simplifying
+scripts/check_llm_friendly_files.py,llm_friendly_allowlist_py,[CONFIG] LLM-friendly checker implementation,platform-team,grandfathered,Keep as-is - essential tool
+scripts/llm_friendly_allowlist.py,llm_friendly_allowlist_py,[CONFIG] Baseline burn-down allowlist ledger,platform-team,grandfathered,Keep as-is - essential ledger
+scripts/verify_helm_oci_login.sh,llm_friendly_allowlist_py,[VERIFIER] Helm OCI login verification - comprehensive rules and self-tests,platform-team,planned_removal,Migrate to Python
+scripts/verify_docker_workflow_hygiene.sh,llm_friendly_allowlist_py,[VERIFIER] Docker workflow hygiene verification - comprehensive rules and self-tests,platform-team,planned_removal,Migrate to Python
+scripts/verify_dockerhub_base_images.sh,llm_friendly_allowlist_py,[VERIFIER] DockerHub base image verification - comprehensive rules and self-tests,platform-team,planned_removal,Migrate to Python
+scripts/verify_docker_build_locality.sh,llm_friendly_allowlist_py,[VERIFIER] Docker build locality verification - comprehensive rules and self-tests,platform-team,planned_removal,Migrate to Python
+scripts/verify_verification_discipline.py,llm_friendly_allowlist_py,[VERIFIER] Verification discipline guard - comprehensive tests,platform-team,grandfathered,Keep as-is - essential tool
+tests/test_act_local_verification.py,llm_friendly_allowlist_py,[TEST] ACT-local verification tests - comprehensive coverage,platform-team,planned_removal,Split by verification type
+.github/workflows/k9b-cnpg-incident-lab-live.yml,llm_friendly_allowlist_py,"[CI WORKFLOW] Live lab workflow - comprehensive deployment steps",platform-team,grandfathered,Consider splitting by deployment stage
+scripts/k9b_cnpg_live_lab_bootstrap.sh,llm_friendly_allowlist_py,[SCRIPT] Live lab bootstrap - comprehensive credential handling,platform-team,planned_removal,Migrate to Python
+scripts/k9b_cnpg_live_lab_bootstrap.py,llm_friendly_allowlist_py,"[SCRIPT] Live lab bootstrap - comprehensive credential handling, ported from shell",platform-team,planned_removal,Extract credential handling
+tests/test_live_lab_config.py,llm_friendly_allowlist_py,[TEST] Live lab config tests - comprehensive coverage,platform-team,planned_removal,Split by config type
+tests/test_live_lab_bootstrap_and_protected_kubeconfig.py,llm_friendly_allowlist_py,[TEST] Bootstrap tests - comprehensive coverage,platform-team,planned_removal,Split by bootstrap scenario

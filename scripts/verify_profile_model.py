@@ -54,6 +54,13 @@ STEPS: dict[str, dict] = {
         "description": "File size check for LLM-friendliness",
         "is_expensive": False,
     },
+    "no-new-llm-allowlist": {
+        "command": "python scripts/verify_no_new_llm_allowlist.py",
+        "lane": "python",
+        "category": StepCategory.POLICY,
+        "description": "No new LLM allowlist entries policy",
+        "is_expensive": False,
+    },
     "shell-containment": {
         "command": "python scripts/verify_shell_containment.py",
         "lane": "python",
