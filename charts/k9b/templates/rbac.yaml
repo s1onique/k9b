@@ -1,9 +1,14 @@
 {{/*
 ServiceAccount, ClusterRole and ClusterRoleBinding for k9b diagnostics.
-Creates read-only cluster-wide RBAC for accessing Kubernetes resources.
+Creates read-only cluster-wide RBAC for accessing Kubernetes resources when clusterScoped=true.
+Creates namespace-scoped Role/RoleBinding when clusterScoped=false.
+
+Backward compatibility: If clusterScoped is not set, falls back to clusterWide.
+clusterScoped takes precedence over the deprecated clusterWide.
 */}}
 {{- if .Values.rbac.create }}
-{{- if .Values.rbac.clusterWide }}
+{{- $clusterScoped := include "k9b.rbac.clusterScoped" . }}
+{{- if eq $clusterScoped "true" }}
 ---
 apiVersion: v1
 kind: ServiceAccount

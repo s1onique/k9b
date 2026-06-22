@@ -1,0 +1,15 @@
+# Live lab values for K3s/CNPG cluster deployments.
+# This file disables cluster-scoped RBAC for environments where the runner lacks
+# cluster-RBAC permissions (ClusterRole/ClusterRoleBinding).
+#
+# Usage:
+#   helm install k9b ./charts/k9b -f charts/k9b/values-live-lab.yaml [other options]
+#
+# Or override individual values:
+#   helm install k9b ./charts/k9b --set rbac.clusterScoped=false [other options]
+
+# RBAC: Use namespace-scoped Role/RoleBinding instead of ClusterRole/ClusterRoleBinding.
+# This allows Helm to deploy without requiring cluster-scoped RBAC permissions.
+rbac:
+  create: true
+  clusterScoped: false

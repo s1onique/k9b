@@ -209,11 +209,17 @@ serviceAccount:
   automountServiceAccountToken: true
 
 # RBAC configuration for diagnostics.
-# When rbac.create=true, ClusterRole and ClusterRoleBinding are created for read-only diagnostics.
+# When rbac.create=true, ServiceAccount is always created.
+# When rbac.clusterScoped=true, ClusterRole and ClusterRoleBinding are created (cluster-wide).
+# When rbac.clusterScoped=false, Role and RoleBinding are created (namespace-scoped).
+# Use clusterScoped=false for clusters where the runner lacks cluster-scoped RBAC permissions.
 rbac:
   create: true
-  # clusterWide: When true, creates ClusterRole with cluster-wide read access.
-  # When false, creates Role with namespaced read access (use with backend.unsafeBind=false).
+  # clusterScoped: When true, creates ClusterRole and ClusterRoleBinding (cluster-wide read access).
+  # When false, creates Role and RoleBinding (namespace-scoped, requires no cluster permissions).
+  clusterScoped: true
+  # DEPRECATED: Use clusterScoped instead. This alias is retained for backward compatibility.
+  # If both are set, clusterScoped takes precedence.
   clusterWide: true
 
 # Runs storage persistence.

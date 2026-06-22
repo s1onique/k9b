@@ -280,6 +280,7 @@ jobs:
             --create-namespace \
             --wait \
             --timeout 5m \
+            --values ./charts/k9b/values-live-lab.yaml \
             --set image.backend.repository="${{ inputs.backend_image_repository }}" \
             --set image.backend.tag="${{ inputs.backend_image_tag }}" \
             --set image.backend.pullPolicy=IfNotPresent \

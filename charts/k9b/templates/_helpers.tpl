@@ -182,3 +182,23 @@ true
 false
 {{- end -}}
 {{- end -}}
+
+{{/*
+Determine RBAC cluster scope mode.
+
+Priority:
+1. rbac.clusterScoped if explicitly set (true/false)
+2. rbac.clusterWide if explicitly set (true/false) - DEPRECATED alias
+3. Default to true (cluster-wide)
+
+Returns "true" for cluster-scoped or "false" for namespace-scoped.
+*/}}
+{{- define "k9b.rbac.clusterScoped" -}}
+{{- if hasKey .Values.rbac "clusterScoped" -}}
+{{- .Values.rbac.clusterScoped | toString -}}
+{{- else if hasKey .Values.rbac "clusterWide" -}}
+{{- .Values.rbac.clusterWide | toString -}}
+{{- else -}}
+{{- "true" -}}
+{{- end -}}
+{{- end -}}
