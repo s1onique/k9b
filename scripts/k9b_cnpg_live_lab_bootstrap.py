@@ -97,6 +97,185 @@ def get_env_secret(secret_name: str) -> str | None:
 
 
 # =============================================================================
+# Schema Evidence Extraction
+# =============================================================================
+
+# Schema validation patterns for precise detection (not generic "error")
+SCHEMA_VALIDATION_PATTERNS = [
+    r"unknown field",
+    r"strict decoding error",
+    r"ValidationError\b",
+    r"error validating data",
+    r"field not declared in schema",
+]
+
+
+def extract_schema_warnings(
+    log_content: str,
+    rendered_content: str = "",
+) -> list[dict]:
+    """Extract bounded schema warnings from log content.
+
+    Parses log output for schema validation errors and extracts:
+    - line number
+    - message text
+    - unknown field path if present
+    - resource kind/name if inferable
+    - source file/log name
+
+    Args:
+        log_content: Content of the helm dry-run or template log
+        rendered_content: Optional rendered YAML content for context
+
+    Returns:
+        List of warning dictionaries with bounded evidence
+    """
+    warnings: list[dict] = []
+    lines = log_content.split("\n")
+
+    for i, line in enumerate(lines, start=1):
+        line_lower = line.lower()
+
+        # Check if line matches any schema validation pattern
+        matched_pattern = None
+        for pattern in SCHEMA_VALIDATION_PATTERNS:
+            # Use IGNORECASE to handle case-insensitive matching
+            if re.search(pattern, line_lower, re.IGNORECASE):
+                matched_pattern = pattern
+                break
+
+        if matched_pattern is None:
+            continue
+
+        # Extract field path from "unknown field" messages
+        field_path = ""
+        field_match = re.search(r'unknown field "([^"]+)"', line)
+        if field_match:
+            field_path = field_match.group(1)
+
+        # Extract resource kind and name from line context
+        kind = ""
+        name = ""
+
+        # Try to extract from error message format: "error from <kind>/<name>"
+        resource_match = re.search(r'(Deployment|StatefulSet|DaemonSet|Job|CronJob|Service|ConfigMap|Secret)[/\s]+([a-zA-Z0-9][-a-zA-Z0-9_]*)', line)
+        if resource_match:
+            kind = resource_match.group(1)
+            name = resource_match.group(2)
+
+        # Try YAML document context from surrounding lines
+        if rendered_content:
+            # Look for YAML document separator and kind/name nearby
+            doc_start = max(0, i - 5)
+            doc_lines = lines[doc_start:i]
+            for doc_line in reversed(doc_lines):
+                if doc_line.strip().startswith("---"):
+                    break
+                kind_match = re.search(r'^\s*kind:\s*(\w+)', doc_line)
+                if kind_match:
+                    kind = kind_match.group(1)
+                    break
+                name_match = re.search(r'^\s*name:\s*([a-zA-Z0-9][-a-zA-Z0-9_]*)', doc_line)
+                if name_match:
+                    name = name_match.group(1)
+
+        warning: dict[str, str | int] = {
+            "line": i,
+            "message": line.strip(),
+            "pattern_matched": matched_pattern,
+        }
+
+        if field_path:
+            warning["field"] = field_path
+        if kind:
+            warning["kind"] = kind
+        if name:
+            warning["name"] = name
+
+        warnings.append(warning)
+
+    return warnings
+
+
+def write_schema_warnings_json(
+    artifact_dir: Path,
+    warnings: list[dict],
+    source_log: str,
+    failure_class: str,
+) -> Path:
+    """Write schema warnings to JSON file atomically.
+
+    Args:
+        artifact_dir: Directory to write the JSON file
+        warnings: List of warning dictionaries
+        source_log: Name of the source log file
+        failure_class: The failure class being reported
+
+    Returns:
+        Path to the written JSON file
+    """
+    data = {
+        "failure_class": failure_class,
+        "source_log": source_log,
+        "match_count": len(warnings),
+        "matches": warnings,
+    }
+
+    output_path = artifact_dir / "logs" / "schema-warnings.json"
+    write_json_atomically(output_path, data)
+    return output_path
+
+
+def generate_bounded_summary(warnings: list[dict], max_lines: int = 20) -> str:
+    """Generate bounded sanitized summary of schema warnings.
+
+    Args:
+        warnings: List of warning dictionaries
+        max_lines: Maximum number of warnings to include
+
+    Returns:
+        Sanitized summary string suitable for GitHub Actions output
+    """
+    if not warnings:
+        return "No schema warnings detected."
+
+    lines = ["Schema validation failed before Helm install.", ""]
+    lines.append(f"Failure class: {FAILURE_HELM_MANIFEST_SCHEMA_WARNING}")
+    lines.append("")
+    lines.append("Matched warnings:")
+
+    # Bounded output - limit to max_lines
+    for warning in warnings[:max_lines]:
+        parts = []
+        if "field" in warning:
+            parts.append(f'unknown field "{warning["field"]}"')
+        elif "message" in warning:
+            # Truncate long messages
+            msg = warning["message"]
+            if len(msg) > 120:
+                msg = msg[:117] + "..."
+            parts.append(msg)
+
+        if "kind" in warning and "name" in warning:
+            parts.append(f"({warning['kind']}/{warning['name']})")
+
+        if parts:
+            lines.append(f"- {' '.join(parts)}")
+
+    # Indicate truncation if needed
+    if len(warnings) > max_lines:
+        lines.append(f"... and {len(warnings) - max_lines} more warnings")
+
+    lines.append("")
+    lines.append("Evidence:")
+    lines.append("- logs/helm-server-dry-run.log")
+    lines.append("- logs/helm-rendered.yaml")
+    lines.append("- logs/schema-warnings.json")
+
+    return "\n".join(lines)
+
+
+# =============================================================================
 # Preflight data structure
 # =============================================================================
 
@@ -903,12 +1082,17 @@ def main_classify_error() -> int:
 def main_classify_schema() -> int:
     """Classify manifest schema error from file.
 
-    Usage: classify-schema --input <path>
+    Usage: classify-schema --input <path> [--rendered <path>]
     """
     import argparse
 
     parser = argparse.ArgumentParser(description="Classify manifest schema error")
-    parser.add_argument("--input", required=True, help="Path to manifest file")
+    parser.add_argument("--input", required=True, help="Path to schema validation log file")
+    parser.add_argument(
+        "--rendered",
+        default="",
+        help="Path to rendered Helm YAML (optional, for context)",
+    )
     parser.add_argument(
         "--artifact-dir",
         default=os.environ.get("ARTIFACT_DIR", "./lab-artifacts/live"),
@@ -918,12 +1102,21 @@ def main_classify_schema() -> int:
 
     artifact_dir = Path(args.artifact_dir)
     input_path = Path(args.input)
+    rendered_path = Path(args.rendered) if args.rendered else None
 
-    # Read manifest file
+    # Read log file
     if input_path.exists():
-        output = input_path.read_text()
+        log_content = input_path.read_text()
     else:
-        output = ""
+        log_content = ""
+
+    # Read rendered YAML for context if provided
+    rendered_content = ""
+    if rendered_path and rendered_path.exists():
+        rendered_content = rendered_path.read_text()
+
+    # Extract schema warnings for bounded evidence
+    warnings = extract_schema_warnings(log_content, rendered_content)
 
     preflight = PreflightData(artifact_dir)
     diagnosis = DiagnosisGenerator(artifact_dir)
@@ -936,8 +1129,74 @@ def main_classify_schema() -> int:
         preflight.namespace = existing.get("namespace", "")
         preflight.timestamp = existing.get("bootstrap_timestamp", preflight.timestamp)
 
-    failure_class = classify_schema_error(output, artifact_dir, preflight, diagnosis)
+    # Classify the error
+    failure_class = classify_schema_error(log_content, artifact_dir, preflight, diagnosis)
+
+    # Write schema-warnings.json with bounded evidence
+    if warnings:
+        schema_warnings_path = write_schema_warnings_json(
+            artifact_dir, warnings, input_path.name, failure_class
+        )
+        # Add bounded summary to diagnosis
+        diagnosis.text("")
+        diagnosis.text(f"{diagnosis.bold('Extracted Evidence')}: {diagnosis.inline_code(schema_warnings_path.name)}")
+        bounded_summary = generate_bounded_summary(warnings)
+        diagnosis.text("")
+        diagnosis.text(bounded_summary)
+        diagnosis.save()
+
     print(failure_class)
+    return 0
+
+
+def main_extract_schema_evidence() -> int:
+    """Extract schema warnings evidence from log file.
+
+    Usage: extract-schema-evidence --input <path> [--rendered <path>] --output <path>
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Extract schema warnings from log")
+    parser.add_argument("--input", required=True, help="Path to schema validation log file")
+    parser.add_argument(
+        "--rendered",
+        default="",
+        help="Path to rendered Helm YAML (optional, for context)",
+    )
+    parser.add_argument("--output", required=True, help="Output path for schema-warnings.json")
+    args = parser.parse_args(sys.argv[2:])
+
+    input_path = Path(args.input)
+    rendered_path = Path(args.rendered) if args.rendered else None
+    output_path = Path(args.output)
+
+    # Read log file
+    if input_path.exists():
+        log_content = input_path.read_text()
+    else:
+        error(f"Input file not found: {input_path}")
+        return 1
+
+    # Read rendered YAML for context if provided
+    rendered_content = ""
+    if rendered_path and rendered_path.exists():
+        rendered_content = rendered_path.read_text()
+
+    # Extract schema warnings
+    warnings = extract_schema_warnings(log_content, rendered_content)
+
+    # Write output JSON
+    data = {
+        "failure_class": FAILURE_HELM_MANIFEST_SCHEMA_WARNING,
+        "source_log": input_path.name,
+        "match_count": len(warnings),
+        "matches": warnings,
+    }
+    write_json_atomically(output_path, data)
+
+    # Print bounded summary to stdout
+    summary = generate_bounded_summary(warnings)
+    print(summary)
     return 0
 
 
@@ -1245,6 +1504,8 @@ if __name__ == "__main__":
             sys.exit(main_classify_schema())
         elif subcommand == "classify-wait-timeout":
             sys.exit(main_classify_wait_timeout())
+        elif subcommand == "extract-schema-evidence":
+            sys.exit(main_extract_schema_evidence())
 
     env_secret = sys.argv[1] if len(sys.argv) > 1 else "K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64"
     out_var = sys.argv[2] if len(sys.argv) > 2 else "KUBECONFIG"

@@ -326,11 +326,30 @@ jobs:
           set -e
           
           # kubectl apply --dry-run=server may exit 0 with warnings in output
-          # Always scan the log for schema issues
-          if grep -qi "unknown field\|error" ./lab-artifacts/live/logs/helm-server-dry-run.log 2>/dev/null; then
-            echo "Server-side dry-run has schema warnings or errors"
+          # Use precise schema patterns instead of generic "error" grep
+          # Schema patterns: unknown field, strict decoding error, ValidationError,
+          # error validating data, field not declared in schema
+          if grep -qiE "unknown field|strict decoding error|validationerror|error validating data|field not declared in schema" \
+            ./lab-artifacts/live/logs/helm-server-dry-run.log 2>/dev/null; then
+            echo "Server-side dry-run has schema warnings"
+            echo ""
+            echo "Extracting schema evidence..."
+            # Extract bounded evidence with field paths and line numbers
             .venv/bin/python scripts/k9b_cnpg_live_lab_bootstrap.py \
-              classify-schema --input ./lab-artifacts/live/logs/helm-server-dry-run.log
+              extract-schema-evidence \
+              --input ./lab-artifacts/live/logs/helm-server-dry-run.log \
+              --rendered ./lab-artifacts/live/logs/helm-rendered.yaml \
+              --output ./lab-artifacts/live/logs/schema-warnings.json
+            echo ""
+            echo "Schema evidence extracted to logs/schema-warnings.json"
+            echo ""
+            echo "Classifying schema error and updating diagnosis..."
+            # Also classify to update lab-preflight.json and lab-diagnosis.md
+            .venv/bin/python scripts/k9b_cnpg_live_lab_bootstrap.py \
+              classify-schema \
+              --input ./lab-artifacts/live/logs/helm-server-dry-run.log \
+              --rendered ./lab-artifacts/live/logs/helm-rendered.yaml
+            echo ""
             echo "Dry-run validation FAILED - not proceeding with Helm install"
             exit 1
           fi
@@ -339,7 +358,9 @@ jobs:
           if [ ${DRY_RUN_RC} -ne 0 ]; then
             echo "Server-side dry-run validation failed with exit code ${DRY_RUN_RC}"
             .venv/bin/python scripts/k9b_cnpg_live_lab_bootstrap.py \
-              classify-schema --input ./lab-artifacts/live/logs/helm-server-dry-run.log
+              classify-schema \
+              --input ./lab-artifacts/live/logs/helm-server-dry-run.log \
+              --rendered ./lab-artifacts/live/logs/helm-rendered.yaml
             echo "Dry-run validation FAILED - not proceeding with Helm install"
             exit 1
           fi
