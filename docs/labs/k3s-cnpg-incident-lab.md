@@ -159,8 +159,25 @@ on:
 2. Add required reviewers (trusted maintainers/admins)
 3. Add environment secret: `K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64`
    ```bash
-   # Encode kubeconfig:
-   cat ~/.kube/config | base64 -w 0
+   # Extract only pve1-k3s-main context and encode as base64:
+   scripts/extract_kubeconfig_context_secret.py \
+     --context pve1-k3s-main \
+     --kubeconfig ~/.kube/config
+   ```
+   
+   The script will:
+   - Extract only the `pve1-k3s-main` context from your kubeconfig
+   - Validate the extracted kubeconfig has exactly one context
+   - Write a single-line base64 string to `/tmp/k9b-admin-kubeconfig-pve1-k3s-main.b64`
+   - Print instructions for pasting into GitHub
+   
+   Open the generated file and paste its contents into the environment secret.
+   
+   **Do not commit the generated file.**
+
+   Alternatively, for `--stdout` mode (copy/paste directly):
+   ```bash
+   scripts/extract_kubeconfig_context_secret.py --stdout --force
    ```
 
 **Permission smoke checks:**
