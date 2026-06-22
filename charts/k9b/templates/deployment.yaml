@@ -112,11 +112,13 @@ spec:
                   name: {{ include "k9b.adminAuthSecretName" . }}
                   key: {{ .Values.backend.auth.passwordHashKey }}
             {{- end }}
+          {{- with .Values.backend.resources }}
           resources:
-            {{- toYaml .Values.backend.resources | nindent 10 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.containerSecurityContext }}
           securityContext:
-            {{- toYaml . | nindent 10 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
             {{- if .Values.healthConfig.enabled }}

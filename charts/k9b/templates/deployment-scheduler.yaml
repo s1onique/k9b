@@ -114,11 +114,13 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             {{- end }}
+          {{- with .Values.scheduler.resources }}
           resources:
-            {{- toYaml .Values.scheduler.resources | nindent 10 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.containerSecurityContext }}
           securityContext:
-            {{- toYaml . | nindent 10 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
             {{- if .Values.healthConfig.enabled }}

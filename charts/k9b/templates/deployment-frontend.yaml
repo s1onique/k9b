@@ -43,11 +43,57 @@ spec:
               value: {{ .Values.frontend.env.VITE_BACKEND_PORT | quote }}
             - name: FRONTEND_HOST
               value: {{ .Values.frontend.env.FRONTEND_HOST | quote }}
+          {{- $hasResources := false }}
+          {{- if .Values.frontend.resources.limits }}
+          {{- $hasResources = true }}
+          {{- end }}
+          {{- if .Values.frontend.resources.requests }}
+          {{- $hasResources = true }}
+          {{- end }}
+          {{- if $hasResources }}
           resources:
-            {{- toYaml .Values.frontend.resources | nindent 10 }}
+            {{- if .Values.frontend.resources.limits }}
+            {{- with .Values.frontend.resources.limits }}
+            limits:
+              {{- if .cpu }}
+              cpu: {{ .cpu }}
+              {{- end }}
+              {{- if .memory }}
+              memory: {{ .memory }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.frontend.resources.requests }}
+            {{- with .Values.frontend.resources.requests }}
+            requests:
+              {{- if .cpu }}
+              cpu: {{ .cpu }}
+              {{- end }}
+              {{- if .memory }}
+              memory: {{ .memory }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+          {{- end }}
           {{- if .Values.frontend.securityContext }}
+          {{- with .Values.frontend.securityContext }}
           securityContext:
-            {{- toYaml .Values.frontend.securityContext | nindent 10 }}
+            {{- if hasKey . "allowPrivilegeEscalation" }}
+            allowPrivilegeEscalation: {{ .allowPrivilegeEscalation }}
+            {{- end }}
+            {{- if hasKey . "readOnlyRootFilesystem" }}
+            readOnlyRootFilesystem: {{ .readOnlyRootFilesystem }}
+            {{- end }}
+            {{- if hasKey . "capabilities" }}
+            capabilities:
+              {{- if .capabilities.drop }}
+              drop:
+                {{- range .capabilities.drop }}
+                - {{ . }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
           {{- end }}
           volumeMounts:
             - name: nginx-tmp

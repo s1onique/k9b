@@ -109,6 +109,62 @@ SCHEMA_VALIDATION_PATTERNS = [
     r"field not declared in schema",
 ]
 
+# Valid resource name pattern (must start with alphanumeric, can contain dash/underscore)
+VALID_RESOURCE_NAME_PATTERN = r'[a-zA-Z0-9][-a-zA-Z0-9_]*'
+
+
+def _parse_rendered_yaml_for_resource(
+    rendered_content: str,
+    field_path: str,
+) -> tuple[str, str, str]:
+    """Parse rendered YAML to find the resource containing a field path.
+
+    Args:
+        rendered_content: The rendered YAML content
+        field_path: The field path to search for (e.g., "spec.template.spec.containers[0].allowPrivilegeEscalation")
+
+    Returns:
+        Tuple of (kind, name, namespace) for the resource containing the field
+    """
+    # Split into YAML documents
+    documents = rendered_content.split("---")
+
+    for doc in documents:
+        lines = doc.strip().split("\n")
+        if not lines:
+            continue
+
+        # Find kind and name in this document
+        kind = ""
+        name = ""
+        namespace = ""
+
+        for line in lines:
+            kind_match = re.match(r'\s*kind:\s*(\w+)', line)
+            if kind_match:
+                kind = kind_match.group(1)
+            name_match = re.match(r'\s*name:\s*([a-zA-Z0-9][-a-zA-Z0-9_]*)', line)
+            if name_match:
+                name = name_match.group(1)
+            namespace_match = re.match(r'\s*namespace:\s*([a-zA-Z0-9][-a-zA-Z0-9_]*)', line)
+            if namespace_match:
+                namespace = namespace_match.group(1)
+
+        # Check if this document contains the field path
+        # For container fields, check if the container name matches
+        if kind and name:
+            doc_content = doc.lower()
+            # Check for indicators that this document has the problematic field
+            if "containers" in field_path.lower():
+                # For container-level fields, check if document has containers section
+                if "containers" in doc_content:
+                    return kind, name, namespace
+            else:
+                # For non-container fields, any matching document works
+                return kind, name, namespace
+
+    return "", "", ""
+
 
 def extract_schema_warnings(
     log_content: str,
@@ -120,12 +176,12 @@ def extract_schema_warnings(
     - line number
     - message text
     - unknown field path if present
-    - resource kind/name if inferable
+    - resource kind/name if inferable from rendered YAML
     - source file/log name
 
     Args:
         log_content: Content of the helm dry-run or template log
-        rendered_content: Optional rendered YAML content for context
+        rendered_content: Optional rendered YAML content for accurate resource mapping
 
     Returns:
         List of warning dictionaries with bounded evidence
@@ -153,31 +209,27 @@ def extract_schema_warnings(
         if field_match:
             field_path = field_match.group(1)
 
-        # Extract resource kind and name from line context
+        # Extract resource kind and name
         kind = ""
         name = ""
 
-        # Try to extract from error message format: "error from <kind>/<name>"
-        resource_match = re.search(r'(Deployment|StatefulSet|DaemonSet|Job|CronJob|Service|ConfigMap|Secret)[/\s]+([a-zA-Z0-9][-a-zA-Z0-9_]*)', line)
-        if resource_match:
-            kind = resource_match.group(1)
-            name = resource_match.group(2)
+        # Priority 1: Use rendered YAML to find the actual resource
+        if rendered_content and field_path:
+            kind, name, _ = _parse_rendered_yaml_for_resource(rendered_content, field_path)
 
-        # Try YAML document context from surrounding lines
-        if rendered_content:
-            # Look for YAML document separator and kind/name nearby
-            doc_start = max(0, i - 5)
-            doc_lines = lines[doc_start:i]
-            for doc_line in reversed(doc_lines):
-                if doc_line.strip().startswith("---"):
-                    break
-                kind_match = re.search(r'^\s*kind:\s*(\w+)', doc_line)
-                if kind_match:
-                    kind = kind_match.group(1)
-                    break
-                name_match = re.search(r'^\s*name:\s*([a-zA-Z0-9][-a-zA-Z0-9_]*)', doc_line)
-                if name_match:
-                    name = name_match.group(1)
+        # Priority 2: Try to extract from error message format: "error from <kind>/<name>"
+        # Only accept if the name matches valid resource name pattern (not "in", "version", etc.)
+        if not kind or not name:
+            resource_match = re.search(
+                rf'(Deployment|StatefulSet|DaemonSet|Job|CronJob|Service|ConfigMap|Secret)/({VALID_RESOURCE_NAME_PATTERN})',
+                line
+            )
+            if resource_match:
+                kind = resource_match.group(1)
+                name = resource_match.group(2)
+                # Additional validation: name must not be a common word
+                if name.lower() in ("in", "version", "the", "a", "an", "for", "with"):
+                    name = ""  # Reject bogus names
 
         warning: dict[str, str | int] = {
             "line": i,
