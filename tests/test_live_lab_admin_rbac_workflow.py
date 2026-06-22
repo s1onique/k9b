@@ -448,3 +448,27 @@ class TestAdminWorkflowPreApplyDiagnostics:
         content = ADMIN_WORKFLOW_FILE.read_text()
         assert 'kubectl auth whoami' in content, \
             "Should run kubectl auth whoami"
+
+    def test_workflow_runs_kubectl_cluster_info(self) -> None:
+        """Workflow should run kubectl cluster-info for API reachability check."""
+        content = ADMIN_WORKFLOW_FILE.read_text()
+        assert 'kubectl cluster-info' in content, \
+            "Should run kubectl cluster-info to verify API reachability"
+
+
+class TestAdminWorkflowRunner:
+    """Test that the admin workflow uses the correct runner."""
+
+    def test_admin_workflow_runs_on_private_network_runner(self) -> None:
+        """Admin workflow should run on spbnix-k8s runner with private-network reachability."""
+        content = ADMIN_WORKFLOW_FILE.read_text()
+        assert 'runs-on: spbnix-k8s' in content, \
+            "Should use spbnix-k8s runner with private-network access"
+        assert 'runs-on: ubuntu-latest' not in content, \
+            "Should NOT use ubuntu-latest runner (cannot reach private API)"
+
+    def test_admin_workflow_does_not_use_docker_runner(self) -> None:
+        """Admin workflow should NOT run on spbnix-k8s-docker runner."""
+        content = ADMIN_WORKFLOW_FILE.read_text()
+        assert 'spbnix-k8s-docker' not in content, \
+            "Should NOT use spbnix-k8s-docker runner"

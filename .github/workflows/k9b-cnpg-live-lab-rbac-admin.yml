@@ -21,9 +21,10 @@
 # - Server-side dry-run before apply
 #
 # Runner/reachability model:
-# - Uses ubuntu-latest runner with admin kubeconfig from protected environment
-# - The kubeconfig must point to an API server reachable from GitHub-hosted runners
-# - If the cluster API is private/in-cluster only, use a self-hosted runner instead
+# - Uses ARC runner scale set (spbnix-k8s) with private-network reachability
+# - GitHub-hosted runners cannot reach the private API (192.168.50.11:6443)
+# - The ARC runner scale set has access to the private cluster network
+# - Admin kubeconfig from protected environment secret (k9b-live-lab-admin)
 #
 # Usage:
 # 1. Navigate to Actions → K9B CNPG Live Lab RBAC Admin
@@ -69,7 +70,7 @@ jobs:
     name: Apply Live Lab RBAC
     # Protected environment requires manual approval from trusted maintainers
     environment: k9b-live-lab-admin
-    runs-on: ubuntu-latest
+    runs-on: spbnix-k8s
     timeout-minutes: 30
     permissions:
       contents: read
@@ -235,7 +236,7 @@ jobs:
           version: '${{ env.KUBECTL_VERSION }}'
 
       # =========================================================================
-      # Pre-apply diagnostics
+      # Pre-apply diagnostics / API reachability check
       # =========================================================================
       - name: Pre-apply diagnostics
         run: |
@@ -243,6 +244,7 @@ jobs:
           
           echo "=== Pre-Apply Diagnostics ==="
           kubectl version --client
+          kubectl cluster-info
           kubectl config current-context
           kubectl auth whoami || true
           echo "=== Diagnostics complete ==="
