@@ -112,6 +112,21 @@ jobs:
         run: helm version --short
 
       # =======================================================================
+      # Setup Python environment (needed for preflight scripts)
+      # =======================================================================
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install dependencies
+        run: |
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install pytest pyyaml
+
+      # =======================================================================
       # Initialize artifact directory
       # =======================================================================
       - name: Initialize artifact directory
@@ -235,19 +250,203 @@ jobs:
           }
 
       # =======================================================================
-      # Setup Python environment (needed for classification subcommands)
+      # Image preflight: Resolved image refs (write artifact before checks)
       # =======================================================================
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create virtual environment
-        run: python -m venv .venv
-
-      - name: Install dependencies
+      - name: Write resolved image refs artifact
         run: |
-          .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install pytest pyyaml
+          source "${GITHUB_ENV}"
+          echo "=== Writing resolved image refs ==="
+          
+          # Compute exact image refs as Helm will render them
+          BACKEND_IMAGE_REF="${{ inputs.backend_image_repository }}:${{ inputs.backend_image_tag }}"
+          # Derive frontend image from workflow inputs (repository:tag) or full ref
+          if [ -n "${{ inputs.frontend_image_ref }}" ]; then
+            FRONTEND_IMAGE_REF="${{ inputs.frontend_image_ref }}"
+          elif [ -n "${{ inputs.frontend_image_repository }}" ] && [ -n "${{ inputs.frontend_image_tag }}" ]; then
+            FRONTEND_IMAGE_REF="${{ inputs.frontend_image_repository }}:${{ inputs.frontend_image_tag }}"
+          else
+            FRONTEND_IMAGE_REF=""
+          fi
+          
+          echo "Backend image ref: ${BACKEND_IMAGE_REF}"
+          echo "Frontend image ref: ${FRONTEND_IMAGE_REF}"
+          
+          # Write resolved images artifact
+          mkdir -p ./lab-artifacts/live/image-preflight
+          .venv/bin/python scripts/k9b_cnpg_image_preflight.py \
+            resolved-images \
+            --backend-image "${BACKEND_IMAGE_REF}" \
+            --frontend-image "${FRONTEND_IMAGE_REF}" \
+            --artifact-dir ./lab-artifacts/live
+          
+          echo "IMAGE_PREFLIGHT_BACKEND=${BACKEND_IMAGE_REF}" >> $GITHUB_ENV
+          echo "IMAGE_PREFLIGHT_FRONTEND=${FRONTEND_IMAGE_REF}" >> $GITHUB_ENV
+          echo "Resolved image refs written to lab-artifacts/live/image-preflight/resolved-images.json"
+
+      # =======================================================================
+      # Image preflight: Registry manifest availability check (FAILS before Helm)
+      # =======================================================================
+      - name: Check registry manifest availability
+        id: registry-preflight
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Checking registry manifest availability ==="
+          
+          # Use image refs from environment (set by resolved-images step)
+          BACKEND_IMAGE_REF="${IMAGE_PREFLIGHT_BACKEND}"
+          FRONTEND_IMAGE_REF="${IMAGE_PREFLIGHT_FRONTEND}"
+          
+          echo "Checking backend: ${BACKEND_IMAGE_REF}"
+          echo "Checking frontend: ${FRONTEND_IMAGE_REF}"
+          
+          # Run registry manifest preflight
+          # Registry credentials are optional - the check will classify unauthorized if needed
+          # AUTH_UNVERIFIED is non-blocking - node-side pullability is authoritative
+          # Use set +e to capture exit code without exiting step immediately
+          set +e
+          .venv/bin/python scripts/k9b_cnpg_image_preflight.py \
+            registry-preflight \
+            --backend-image "${BACKEND_IMAGE_REF}" \
+            --frontend-image "${FRONTEND_IMAGE_REF}" \
+            --artifact-dir ./lab-artifacts/live
+          REGISTRY_RC=$?
+          set -e
+          
+          # Check if ALL failures are runner_registry_auth_unverified (only safe to skip)
+          # If ANY fatal failure exists (manifest_missing, tls_error, network_error), fail
+          if [ "${REGISTRY_RC}" -ne 0 ]; then
+            if [ -f ./lab-artifacts/live/image-preflight/registry-preflight.json ]; then
+              ALL_UNVERIFIED=$(.venv/bin/python -c "
+import json
+with open('./lab-artifacts/live/image-preflight/registry-preflight.json') as f:
+    data = json.load(f)
+    fcs = data.get('failure_classes', [])
+    all_unverified = all(fc == 'runner_registry_auth_unverified' for fc in fcs)
+    print('true' if all_unverified and fcs else 'false')
+" 2>/dev/null)
+            else
+              ALL_UNVERIFIED="false"
+            fi
+            
+            if [ "${ALL_UNVERIFIED}" != "true" ]; then
+              echo ""
+              echo "FAILURE: Registry manifest check failed (non-auth error)"
+              echo ""
+              
+              # Extract failure class from result
+              if [ -f ./lab-artifacts/live/image-preflight/registry-preflight.json ]; then
+                echo "Registry preflight results:"
+                cat ./lab-artifacts/live/image-preflight/registry-preflight.json | .venv/bin/python -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d, indent=2))"
+              fi
+              
+              echo ""
+              echo "Not proceeding with Helm deploy due to image availability failure."
+              echo "Fix the image issue and re-run, or verify the image exists in the registry."
+              exit 1
+            fi
+            
+            echo "NOTE: Registry auth unverifiable (no credentials); continuing to node-side pullability"
+          fi
+          
+          echo "Registry manifest check PASSED"
+
+      # =======================================================================
+      # Image preflight: ImagePullSecret verification (informational)
+      # =======================================================================
+      - name: Check imagePullSecrets status
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Checking imagePullSecrets status ==="
+          
+          .venv/bin/python scripts/k9b_cnpg_image_preflight.py \
+            check-image-pull-secrets \
+            --kubeconfig "${KUBECONFIG}" \
+            --namespace "$LAB_NAMESPACE" \
+            --artifact-dir ./lab-artifacts/live
+          
+          echo "ImagePullSecret status written to lab-artifacts/live/image-preflight/image-pull-secret.json"
+
+      # =======================================================================
+      # Image preflight: Node-side pullability preflight (FAILS before Helm)
+      # =======================================================================
+      - name: Check node-side image pullability
+        id: node-pull-preflight
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Checking node-side image pullability ==="
+          
+          # Use image refs from environment (set by resolved-images step)
+          BACKEND_IMAGE_REF="${IMAGE_PREFLIGHT_BACKEND}"
+          FRONTEND_IMAGE_REF="${IMAGE_PREFLIGHT_FRONTEND}"
+          
+          echo "Testing backend image: ${BACKEND_IMAGE_REF}"
+          echo "Testing frontend image: ${FRONTEND_IMAGE_REF}"
+          
+          # Run node pull preflight using diagnostic pods
+          # Use set +e to capture exit code without exiting step immediately
+          set +e
+          .venv/bin/python scripts/k9b_cnpg_image_preflight.py \
+            node-pull-preflight \
+            --kubeconfig "${KUBECONFIG}" \
+            --namespace "$LAB_NAMESPACE" \
+            --backend-image "${BACKEND_IMAGE_REF}" \
+            --frontend-image "${FRONTEND_IMAGE_REF}" \
+            --artifact-dir ./lab-artifacts/live
+          NODE_PULL_RC=$?
+          set -e
+          
+          # Read the result to determine failure class
+          if [ ${NODE_PULL_RC} -ne 0 ]; then
+            echo ""
+            echo "FAILURE: Node-side image pullability check failed"
+            echo ""
+            
+            # Extract and display exact failure class (inside failure branch)
+            EXACT_FAILURE=$(.venv/bin/python -c "
+import json
+with open('./lab-artifacts/live/image-preflight/node-pull-preflight.json') as f:
+    data = json.load(f)
+    for fc in data.get('failure_classes', []):
+        if fc:
+            print(fc)
+            break
+    else:
+        print('node_image_pull_unknown')
+" 2>/dev/null || echo "node_image_pull_unknown")
+            
+            echo "Node pull preflight results:"
+            cat ./lab-artifacts/live/image-preflight/node-pull-preflight.json | .venv/bin/python -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d, indent=2))"
+            
+            echo ""
+            echo "FAILURE_CLASS: ${EXACT_FAILURE}"
+            echo "Not proceeding with Helm deploy due to node-side image pull failure."
+            echo "This typically indicates:"
+            echo "  - Image exists in registry but nodes cannot pull it (network/auth)"
+            echo "  - imagePullSecrets are missing or incorrect"
+            echo "  - Node cannot reach registry (DNS/TLS/network)"
+            echo ""
+            echo "Artifacts:"
+            echo "  - lab-artifacts/live/image-preflight/node-pull-backend.json"
+            echo "  - lab-artifacts/live/image-preflight/node-pull-frontend.json"
+            echo "  - lab-artifacts/live/image-preflight/node-pull-preflight.json"
+            exit 1
+          fi
+          
+          echo "Node-side image pullability check PASSED"
+
+          # Extract and display exact failure class for diagnostics (on success path)
+          if [ -f ./lab-artifacts/live/image-preflight/node-pull-preflight.json ]; then
+            FIRST_FAILURE=$(.venv/bin/python -c "
+import json
+with open('./lab-artifacts/live/image-preflight/node-pull-preflight.json') as f:
+    data = json.load(f)
+    for fc in data.get('failure_classes', []):
+        if fc:
+            print(fc)
+            break
+" 2>/dev/null || echo "unknown")
+            echo "NODE_PREF_FAILURE_CLASS=${FIRST_FAILURE}" >> $GITHUB_OUTPUT
+          fi
 
       # =======================================================================
       # Step 1: Pre-Helm render (capture manifests for schema validation)
