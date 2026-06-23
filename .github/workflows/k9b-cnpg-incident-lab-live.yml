@@ -965,20 +965,80 @@ jobs:
           helm --kubeconfig="${KUBECONFIG}" status k9b -n "$LAB_NAMESPACE" > ./lab-artifacts/live/baseline/k9b-status.json 2>&1 || echo '{"installed":false}' > ./lab-artifacts/live/baseline/k9b-status.json
 
       # =======================================================================
-      # Inject incident using tracked manifest (namespace mode)
+      # Render incident fixture with namespace normalization
+      # Namespaced source namespace mismatches are normalized (not fatal).
+      # Namespace object mismatches and cluster-scoped resources are fatal.
+      # =======================================================================
+      - name: Render incident fixture with namespace normalization
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Rendering incident fixture with namespace normalization ==="
+          
+          if [ ! -f "fixtures/lab/live/pod-failure/injected-change.yaml" ]; then
+            echo "ERROR: Tracked incident manifest not found: fixtures/lab/live/pod-failure/injected-change.yaml"
+            exit 1
+          fi
+          
+          # Render the fixture to lab-artifacts/live/incidents/<scenario>/
+          mkdir -p "./lab-artifacts/live/incidents/pod-failure"
+          
+          # Render step: normalizes namespaced resources, fails on fatal issues
+          .venv/bin/python scripts/k9b_cnpg_live_lab_fixture_render.py \
+            render \
+            --fixture fixtures/lab/live/pod-failure/injected-change.yaml \
+            --output ./lab-artifacts/live/incidents/pod-failure/injected-change.yaml \
+            --namespace "$LAB_NAMESPACE" \
+            --artifact-dir ./lab-artifacts/live || {
+            echo ""
+            echo "FAILURE: Fixture rendering failed"
+            echo "Check fixture-render-result.json for details"
+            cat ./lab-artifacts/live/fixture-render-result.json 2>/dev/null || true
+            exit 1
+          }
+          
+          echo "Fixture rendered successfully to ./lab-artifacts/live/incidents/pod-failure/injected-change.yaml"
+          echo "RENDERED_FIXTURE_PATH=./lab-artifacts/live/incidents/pod-failure/injected-change.yaml" >> $GITHUB_ENV
+
+      # =======================================================================
+      # Verify rendered artifact has correct namespace
+      # =======================================================================
+      - name: Verify rendered fixture namespace compliance
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Verifying rendered fixture namespace compliance ==="
+          
+          RENDERED_FIXTURE="${RENDERED_FIXTURE_PATH:-./lab-artifacts/live/incidents/pod-failure/injected-change.yaml}"
+          
+          # Verify the rendered artifact
+          .venv/bin/python scripts/k9b_cnpg_live_lab_fixture_render.py \
+            verify \
+            --fixture "$RENDERED_FIXTURE" \
+            --namespace "$LAB_NAMESPACE" || {
+            echo ""
+            echo "FAILURE: Rendered fixture has namespace violations"
+            echo "This should not happen - renderer should have normalized all namespaced resources"
+            exit 1
+          }
+          
+          echo "Rendered fixture namespace compliance verified"
+
+      # =======================================================================
+      # Inject incident using rendered manifest (namespace mode)
       # =======================================================================
       - name: Inject pod-failure incident
         run: |
           source "${GITHUB_ENV}"
           echo "=== Injecting pod-failure incident ==="
           
-          # Apply the tracked incident manifest in lab namespace mode
-          if [ -f "fixtures/lab/live/pod-failure/injected-change.yaml" ]; then
-            echo "Applying tracked incident manifest: fixtures/lab/live/pod-failure/injected-change.yaml"
-            kubectl --kubeconfig="${KUBECONFIG}" apply -n "$LAB_NAMESPACE" -f fixtures/lab/live/pod-failure/injected-change.yaml
-            cp fixtures/lab/live/pod-failure/injected-change.yaml ./lab-artifacts/live/incident/injected-change.yaml
+          RENDERED_FIXTURE="${RENDERED_FIXTURE_PATH:-./lab-artifacts/live/incidents/pod-failure/injected-change.yaml}"
+          
+          if [ -f "$RENDERED_FIXTURE" ]; then
+            echo "Applying rendered incident manifest: $RENDERED_FIXTURE"
+            kubectl --kubeconfig="${KUBECONFIG}" apply -n "$LAB_NAMESPACE" -f "$RENDERED_FIXTURE"
+            # Also copy to incident/ for artifact collection
+            cp "$RENDERED_FIXTURE" ./lab-artifacts/live/incident/injected-change.yaml
           else
-            echo "ERROR: Tracked incident manifest not found: fixtures/lab/live/pod-failure/injected-change.yaml"
+            echo "ERROR: Rendered incident manifest not found: $RENDERED_FIXTURE"
             exit 1
           fi
 
