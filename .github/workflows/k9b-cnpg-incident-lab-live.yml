@@ -130,7 +130,15 @@ jobs:
       # Initialize artifact directory
       # =======================================================================
       - name: Initialize artifact directory
-        run: mkdir -p ./lab-artifacts/live/logs ./lab-artifacts/live/baseline ./lab-artifacts/live/incident
+        run: |
+          mkdir -p \
+            ./lab-artifacts/live/logs \
+            ./lab-artifacts/live/baseline \
+            ./lab-artifacts/live/incident \
+            ./lab-artifacts/live/recovery-or-final \
+            ./lab-artifacts/live/image-preflight \
+            ./lab-artifacts/live/rollout-watch \
+            ./lab-artifacts/live/symptom-watch
 
       # =======================================================================
       # Bootstrap protected kubeconfig and validate credential source
