@@ -67,6 +67,50 @@ FAILURE_SNAPSHOT_COLLECTION_FAILED = "rollout_snapshot_collection_failed"
 # Helpers
 # =============================================================================
 
+def _is_transient_volume_binding_conflict(reason: str, message: str) -> bool:
+    """Detect transient VolumeBinding PreBind conflict that should be retried.
+
+    This catches the scheduler PreBind race condition where the PVC object changes
+    while the scheduler tries to bind or reserve volume state. Kubernetes should
+    retry this automatically, so we treat it as nonfatal.
+
+    Args:
+        reason: Event reason (e.g., "FailedScheduling")
+        message: Event message containing the error details
+
+    Returns:
+        True if this is a transient VolumeBinding PreBind conflict, False otherwise
+    """
+    msg = message.lower()
+    return (
+        reason == "FailedScheduling"
+        and "prebind plugin" in msg
+        and "volumebinding" in msg
+        and "object has been modified" in msg
+        and "please apply your changes" in msg
+    )
+
+
+def _detect_transient_volume_binding_conflict_from_events(events_json: str) -> tuple[bool, str, str]:
+    """Scan events JSON for transient VolumeBinding PreBind conflict.
+
+    Returns: (has_transient, message, pod_name)
+    """
+    if not events_json:
+        return False, "", ""
+    try:
+        data = json.loads(events_json)
+        for event in data.get("items", []):
+            if event.get("reason") == "FailedScheduling":
+                msg = event.get("message", "") or ""
+                if _is_transient_volume_binding_conflict("FailedScheduling", msg):
+                    involved = event.get("involvedObject", {})
+                    obj_name = involved.get("name", "unknown")
+                    return True, msg, obj_name
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return False, "", ""
+
 def log(msg: str) -> None:
     """Log info message."""
     print(f"[bootstrap] {msg}", flush=True)
@@ -1776,6 +1820,7 @@ def _check_failed_scheduling_from_events(events_json: str) -> tuple[bool, str, s
     """Check for failed scheduling conditions using structural event JSON.
     
     Returns: (is_fatal, reason, message)
+    Nonfatal transient conflicts (e.g., VolumeBinding PreBind race) return False.
     """
     try:
         data = json.loads(events_json)
@@ -1785,6 +1830,16 @@ def _check_failed_scheduling_from_events(events_json: str) -> tuple[bool, str, s
             # Primary: event.reason == "FailedScheduling"
             if reason == "FailedScheduling":
                 message = event.get("message", "")
+                
+                # Check for transient VolumeBinding PreBind conflict
+                # This is a race condition that Kubernetes should retry automatically
+                if _is_transient_volume_binding_conflict(reason, message):
+                    # Return nonfatal - the scheduler will retry
+                    involved = event.get("involvedObject", {})
+                    obj_name = involved.get("name", "unknown")
+                    obj_kind = involved.get("kind", "Pod")
+                    return False, "", f"{obj_kind}/{obj_name}: {message}"  # is_fatal=False
+                
                 involved = event.get("involvedObject", {})
                 obj_name = involved.get("name", "unknown")
                 obj_kind = involved.get("kind", "Pod")
@@ -2209,7 +2264,22 @@ def classify_rollout_state(
         diagnosis.latest_event_message = message
         return diagnosis
     
-    # 3. Failed scheduling (use events_json for structural classification)
+    # 3. Transient VolumeBinding PreBind conflict - check BEFORE failed_scheduling
+    # This is nonfatal - the scheduler will retry automatically
+    # If present, we skip failed_scheduling and PVC classification to avoid false positives
+    has_transient, transient_msg, transient_pod = _detect_transient_volume_binding_conflict_from_events(events_json)
+    if has_transient:
+        diagnosis.diagnostics["transient_volume_binding_conflict"] = True
+        diagnosis.diagnostics["transient_volume_binding_message"] = transient_msg
+        diagnosis.diagnostics["transient_volume_binding_pod"] = transient_pod
+        # Return nonfatal - the scheduler will retry and PVC may become Bound
+        diagnosis.failure_class = ""
+        diagnosis.fatal = False
+        return diagnosis
+    
+    # 4. Failed scheduling (use events_json for structural classification)
+    # Note: Transient VolumeBinding conflicts are handled above, so this only catches
+    # genuine scheduling failures (insufficient CPU, memory, taints, etc.)
     is_fatal, reason, message = _check_failed_scheduling(pods_json, events_text, events_json)
     if is_fatal:
         affected = []
@@ -2236,7 +2306,7 @@ def classify_rollout_state(
         diagnosis.latest_event_message = message
         return diagnosis
     
-    # 4. PVC pending
+    # 5. PVC pending (only if no transient VolumeBinding conflict)
     is_fatal, status, reason = _check_pvc_pending(pvcs)
     if is_fatal:
         affected = [p["name"] for p in pvcs]
