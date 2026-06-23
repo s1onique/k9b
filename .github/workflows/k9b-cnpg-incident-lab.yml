@@ -117,10 +117,7 @@ jobs:
       - name: Run Python verifier tests
         run: |
           echo "=== Running Python verifier tests ==="
-          .venv/bin/python - <<'PY'
-import yaml
-print("PyYAML import OK")
-PY
+          .venv/bin/python -c "import yaml; print('PyYAML import OK')"
           .venv/bin/python -m pytest tests/test_verify_k3s_cnpg_incident_lab.py tests/test_live_lab_config.py -v
 
       # Verify passing fixture

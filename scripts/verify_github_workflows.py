@@ -268,6 +268,17 @@ def run_self_test(verbose: bool = False) -> bool:
         }
         VALID = {"valid_workflow.yml", "valid_nested_if.yml", "pwsh_shell.yml", "python_shell.yml"}
 
+        # Workflow name assertions for specific files in the repo
+        # Maps filename -> expected top-level name
+        NAME_ASSERTIONS: dict[str, str] = {}
+
+        # Populate name assertions from repo workflows if available
+        repo_workflows_dir = REPO_ROOT / ".github" / "workflows"
+        if repo_workflows_dir.exists():
+            repo_cnpg_lab = repo_workflows_dir / "k9b-cnpg-incident-lab.yml"
+            if repo_cnpg_lab.exists():
+                NAME_ASSERTIONS["k9b-cnpg-incident-lab.yml"] = "K3s CNPG Incident Lab"
+
         for fname, expected in EXPECTED_ERRORS.items():
             wf_errors = {e.error_type for e in verifier.errors if e.workflow_path.name == fname}
             # Allow MISSING_ON as extra error type
@@ -296,6 +307,28 @@ def run_self_test(verbose: bool = False) -> bool:
         else:
             failed += 1
             print(f"  FAIL: Expected 2 skipped shell checks, got {skipped_count}")
+
+        # Verify specific workflow name assertions
+        # Build reverse map: filename -> actual name (from repo scan)
+        repo_name_map: dict[str, Path] = {}
+        for wf_path in (REPO_ROOT / ".github" / "workflows").glob("*.yml"):
+            try:
+                with open(wf_path, encoding="utf-8") as f:
+                    wf_data = yaml.safe_load(f)
+                if wf_data and isinstance(wf_data, dict) and "name" in wf_data:
+                    repo_name_map[wf_path.name] = wf_data["name"]
+            except Exception:
+                pass
+
+        for fname, expected_name in NAME_ASSERTIONS.items():
+            actual_name = repo_name_map.get(fname)
+            if actual_name == expected_name:
+                passed += 1
+                if verbose:
+                    print(f"  PASS: {fname} has top-level name == {expected_name!r}")
+            else:
+                failed += 1
+                print(f"  FAIL: {fname} has name == {actual_name!r}, expected {expected_name!r}")
 
         print(f"\nSelf-test results: {passed} passed, {failed} failed")
         return failed == 0
