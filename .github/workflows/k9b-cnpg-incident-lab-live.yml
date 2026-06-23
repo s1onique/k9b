@@ -284,6 +284,91 @@ jobs:
           echo "Resolved image refs written to lab-artifacts/live/image-preflight/resolved-images.json"
 
       # =======================================================================
+      # Image preflight: Render Helm manifests and validate images (HARD GATE)
+      # This step catches the mismatch where preflight checks one image but Helm deploys another.
+      # Must run BEFORE registry preflight to fail fast.
+      # =======================================================================
+      - name: Render Helm and validate images against preflight refs
+        id: render-preflight
+        run: |
+          set -euo pipefail
+          source "${GITHUB_ENV}"
+          echo "=== Render Helm manifests and validate images ==="
+          
+          # Use image refs from environment (set by resolved-images step)
+          BACKEND_IMAGE_REF="${IMAGE_PREFLIGHT_BACKEND}"
+          FRONTEND_IMAGE_REF="${IMAGE_PREFLIGHT_FRONTEND}"
+          
+          echo "Expected backend: ${BACKEND_IMAGE_REF}"
+          echo "Expected frontend: ${FRONTEND_IMAGE_REF}"
+          
+          # Build frontend image set args if frontend image is provided
+          FRONTEND_SET_ARGS=()
+          if [ -n "${FRONTEND_IMAGE_REF}" ]; then
+            # Parse frontend image into repository and tag
+            FRONTEND_REPO="${FRONTEND_IMAGE_REF%:*}"
+            FRONTEND_TAG="${FRONTEND_IMAGE_REF##*:}"
+            FRONTEND_SET_ARGS+=("--set" "image.frontend.repository=${FRONTEND_REPO}")
+            FRONTEND_SET_ARGS+=("--set" "image.frontend.tag=${FRONTEND_TAG}")
+            echo "Frontend Helm overrides: repository=${FRONTEND_REPO}, tag=${FRONTEND_TAG}"
+          fi
+          
+          # Build backend image set args
+          BACKEND_REPO="${BACKEND_IMAGE_REF%:*}"
+          BACKEND_TAG="${BACKEND_IMAGE_REF##*:}"
+          BACKEND_SET_ARGS=(
+            "--set" "image.backend.repository=${BACKEND_REPO}"
+            "--set" "image.backend.tag=${BACKEND_TAG}"
+            "--set" "image.backend.pullPolicy=IfNotPresent"
+          )
+          echo "Backend Helm overrides: repository=${BACKEND_REPO}, tag=${BACKEND_TAG}"
+          
+          # Run render preflight with all --set overrides
+          # This renders the exact same manifests that will be deployed
+          set +e
+          .venv/bin/python scripts/k9b_cnpg_image_preflight.py \
+            render-preflight \
+            --chart ./charts/k9b \
+            --release k9b \
+            --namespace "$LAB_NAMESPACE" \
+            --values ./charts/k9b/values-live-lab.yaml \
+            "${BACKEND_SET_ARGS[@]}" \
+            "${FRONTEND_SET_ARGS[@]}" \
+            --set backend.auth.enabled=false \
+            --set kubernetes.auth.mode=inCluster \
+            --set serviceAccount.automountServiceAccountToken=true \
+            --expected-backend "${BACKEND_IMAGE_REF}" \
+            --expected-frontend "${FRONTEND_IMAGE_REF}" \
+            --artifact-dir ./lab-artifacts/live
+          RENDER_RC=$?
+          set -e
+          
+          if [ ${RENDER_RC} -ne 0 ]; then
+            echo ""
+            echo "FAILURE: Render preflight failed (image ref mismatch detected)"
+            echo ""
+            echo "This means the Helm chart will deploy a different image than what was preflighted."
+            echo "NOT_PROCEEDING_WITH_HELM=true"
+            echo ""
+            
+            # Show detailed comparison if available
+            if [ -f ./lab-artifacts/live/image-preflight/image-preflight-compare.json ]; then
+              echo "Render preflight results:"
+              cat ./lab-artifacts/live/image-preflight/image-preflight-compare.json | .venv/bin/python -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d, indent=2))"
+            fi
+            
+            echo ""
+            echo "Rendered images (from manifests):"
+            if [ -f ./lab-artifacts/live/image-preflight/rendered-images.json ]; then
+              cat ./lab-artifacts/live/image-preflight/rendered-images.json | .venv/bin/python -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('summary', {}), indent=2))"
+            fi
+            
+            exit 1
+          fi
+          
+          echo "Render preflight PASSED: rendered images match expected"
+
+      # =======================================================================
       # Preflight: Install Harbor CA certificate into runner trust store
       # This enables curl-based registry manifest checks to verify Harbor TLS
       # =======================================================================
@@ -499,22 +584,39 @@ jobs:
         run: |
           source "${GITHUB_ENV}"
           echo "=== Rendering Helm manifests ==="
-          echo "Backend image: ${{ inputs.backend_image_repository }}:${{ inputs.backend_image_tag }}"
           
-          # Render manifests to file for schema validation
-          # Separate stdout (clean YAML) and stderr (warnings) for proper classification
-          # Wrap with set +e to capture exit code before classification runs
+          # Use already-resolved env vars for image refs
+          BACKEND_REPO="${IMAGE_PREFLIGHT_BACKEND%:*}"
+          BACKEND_TAG="${IMAGE_PREFLIGHT_BACKEND##*:}"
+          echo "Backend: ${BACKEND_REPO}:${BACKEND_TAG}"
+          
+          # Build frontend image set args if frontend image is provided
+          FRONTEND_SET_ARGS=()
+          if [[ -n "${IMAGE_PREFLIGHT_FRONTEND:-}" ]]; then
+            FRONTEND_REPO="${IMAGE_PREFLIGHT_FRONTEND%:*}"
+            FRONTEND_TAG="${IMAGE_PREFLIGHT_FRONTEND##*:}"
+            FRONTEND_SET_ARGS+=(--set "image.frontend.repository=${FRONTEND_REPO}")
+            FRONTEND_SET_ARGS+=(--set "image.frontend.tag=${FRONTEND_TAG}")
+            echo "Frontend: ${FRONTEND_REPO}:${FRONTEND_TAG}"
+          else
+            echo "Frontend: (using chart defaults)"
+          fi
+          
+          # Render manifests to file for schema validation using array
           set +e
-          helm template k9b ./charts/k9b \
-            --namespace "$LAB_NAMESPACE" \
-            --values ./charts/k9b/values-live-lab.yaml \
-            --set image.backend.repository="${{ inputs.backend_image_repository }}" \
-            --set image.backend.tag="${{ inputs.backend_image_tag }}" \
-            --set image.backend.pullPolicy=IfNotPresent \
-            --set backend.auth.enabled=false \
-            --set kubernetes.auth.mode=inCluster \
-            --set serviceAccount.automountServiceAccountToken=true \
-            > ./lab-artifacts/live/logs/helm-rendered.yaml \
+          HELM_TEMPLATE_CMD=(
+            helm template k9b ./charts/k9b
+            --namespace "${LAB_NAMESPACE}"
+            --values ./charts/k9b/values-live-lab.yaml
+            --set "image.backend.repository=${BACKEND_REPO}"
+            --set "image.backend.tag=${BACKEND_TAG}"
+            --set image.backend.pullPolicy=IfNotPresent
+            --set backend.auth.enabled=false
+            --set kubernetes.auth.mode=inCluster
+            --set serviceAccount.automountServiceAccountToken=true
+            "${FRONTEND_SET_ARGS[@]}"
+          )
+          "${HELM_TEMPLATE_CMD[@]}" > ./lab-artifacts/live/logs/helm-rendered.yaml \
             2> ./lab-artifacts/live/logs/helm-template.log
           TEMPLATE_RC=$?
           set -e
@@ -617,8 +719,23 @@ jobs:
         run: |
           source "${GITHUB_ENV}"
           echo "=== Deploying k9b via Helm chart ==="
-          echo "Backend image: ${{ inputs.backend_image_repository }}:${{ inputs.backend_image_tag }}"
-          echo "Using kubeconfig: ${KUBECONFIG}"
+          
+          # Use already-resolved env vars for image refs
+          BACKEND_REPO="${IMAGE_PREFLIGHT_BACKEND%:*}"
+          BACKEND_TAG="${IMAGE_PREFLIGHT_BACKEND##*:}"
+          echo "Backend: ${BACKEND_REPO}:${BACKEND_TAG}"
+          
+          # Build frontend image set args if frontend image is provided
+          FRONTEND_SET_ARGS=()
+          if [[ -n "${IMAGE_PREFLIGHT_FRONTEND:-}" ]]; then
+            FRONTEND_REPO="${IMAGE_PREFLIGHT_FRONTEND%:*}"
+            FRONTEND_TAG="${IMAGE_PREFLIGHT_FRONTEND##*:}"
+            FRONTEND_SET_ARGS+=(--set "image.frontend.repository=${FRONTEND_REPO}")
+            FRONTEND_SET_ARGS+=(--set "image.frontend.tag=${FRONTEND_TAG}")
+            echo "Frontend: ${FRONTEND_REPO}:${FRONTEND_TAG}"
+          else
+            echo "Frontend: (using chart defaults)"
+          fi
           
           # Create rollout-watch directory for proactive monitor
           mkdir -p ./lab-artifacts/live/rollout-watch
@@ -626,22 +743,24 @@ jobs:
           # Capture Helm output to file
           HELM_LOG="./lab-artifacts/live/logs/helm-install.log"
           
-          # Deploy with --wait=false to avoid blocking
-          # The proactive rollout monitor will detect failures fast
+          # Deploy with --wait=false to avoid blocking using array
           set +e
-          helm upgrade --install k9b ./charts/k9b \
-            --kubeconfig="${KUBECONFIG}" \
-            --namespace "$LAB_NAMESPACE" \
-            --create-namespace \
-            --wait=false \
-            --values ./charts/k9b/values-live-lab.yaml \
-            --set image.backend.repository="${{ inputs.backend_image_repository }}" \
-            --set image.backend.tag="${{ inputs.backend_image_tag }}" \
-            --set image.backend.pullPolicy=IfNotPresent \
-            --set backend.auth.enabled=false \
-            --set kubernetes.auth.mode=inCluster \
-            --set serviceAccount.automountServiceAccountToken=true \
-            > "${HELM_LOG}" 2>&1
+          HELM_UPGRADE_CMD=(
+            helm upgrade --install k9b ./charts/k9b
+            --kubeconfig="${KUBECONFIG}"
+            --namespace "${LAB_NAMESPACE}"
+            --create-namespace
+            --wait=false
+            --values ./charts/k9b/values-live-lab.yaml
+            --set "image.backend.repository=${BACKEND_REPO}"
+            --set "image.backend.tag=${BACKEND_TAG}"
+            --set image.backend.pullPolicy=IfNotPresent
+            --set backend.auth.enabled=false
+            --set kubernetes.auth.mode=inCluster
+            --set serviceAccount.automountServiceAccountToken=true
+            "${FRONTEND_SET_ARGS[@]}"
+          )
+          "${HELM_UPGRADE_CMD[@]}" > "${HELM_LOG}" 2>&1
           HELM_RC=$?
           set -e
           

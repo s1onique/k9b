@@ -4,11 +4,18 @@
 This is a thin CLI wrapper that delegates to modular preflight components:
 - k9b_cnpg_image_preflight_registry: Registry manifest availability
 - k9b_cnpg_image_preflight_node: Node-side pullability via diagnostic pods
+- k9b_cnpg_image_preflight_render: Render Helm and extract images
 - k9b_cnpg_image_preflight_types: Shared types and failure constants
 
 Usage:
     python k9b_cnpg_image_preflight.py resolved-images \
         --backend-image <ref> --frontend-image <ref> --artifact-dir <path>
+
+    python k9b_cnpg_image_preflight.py render-preflight \
+        --chart <path> --release <name> --namespace <ns> \
+        --values <values.yaml> [--set key=value ...] \
+        --expected-backend <ref> --expected-frontend <ref> \
+        --artifact-dir <path>
 
     python k9b_cnpg_image_preflight.py registry-preflight \
         --backend-image <ref> --frontend-image <ref> \
@@ -284,6 +291,49 @@ def cmd_check_image_pull_secrets(kubeconfig: str, namespace: str, artifact_dir: 
     return 0
 
 
+def cmd_render_preflight(
+    chart: str,
+    release: str,
+    namespace: str,
+    values: list[str],
+    set_values: list[str],
+    expected_backend: str | None,
+    expected_frontend: str | None,
+    artifact_dir: Path,
+) -> int:
+    """Render Helm manifests and compare extracted images against expected.
+
+    This is the hard pre-Helm gate that catches image ref mismatches.
+    """
+    from k9b_cnpg_image_preflight_render import (
+        cmd_render_and_compare as render_and_compare,
+    )
+
+    log("Running render preflight (Helm manifest image extraction)...")
+
+    result = render_and_compare(
+        chart_path=chart,
+        release_name=release,
+        namespace=namespace,
+        values_files=values,
+        set_values=set_values,
+        expected_backend=expected_backend,
+        expected_frontend=expected_frontend,
+        artifact_dir=artifact_dir,
+    )
+
+    if result == 0:
+        log("Render preflight PASSED: rendered images match expected")
+        return 0
+    elif result == 1:
+        error("Render preflight FAILED: Helm render error")
+        return 1
+    else:
+        error("Render preflight FAILED: image mismatch detected")
+        error("NOT_PROCEEDING_WITH_HELM=true")
+        return 2
+
+
 def main() -> int:
     """Main entry point."""
     import argparse
@@ -300,6 +350,17 @@ def main() -> int:
     p_resolved.add_argument("--backend-image", required=True)
     p_resolved.add_argument("--frontend-image", required=True)
     p_resolved.add_argument("--artifact-dir", required=True, type=Path)
+
+    # render-preflight
+    p_render = subparsers.add_parser("render-preflight", help="Render Helm and validate images against expected")
+    p_render.add_argument("--chart", required=True, help="Path to Helm chart")
+    p_render.add_argument("--release", required=True, help="Helm release name")
+    p_render.add_argument("--namespace", required=True, help="Kubernetes namespace")
+    p_render.add_argument("--values", action="append", default=[], help="Values file (can be repeated)")
+    p_render.add_argument("--set", action="append", default=[], dest="set_values", help="Set value (can be repeated)")
+    p_render.add_argument("--expected-backend", default=None, help="Expected backend image ref")
+    p_render.add_argument("--expected-frontend", default=None, help="Expected frontend image ref")
+    p_render.add_argument("--artifact-dir", required=True, type=Path)
 
     # registry-preflight
     p_reg = subparsers.add_parser("registry-preflight", help="Check registry manifest availability")
@@ -329,6 +390,17 @@ def main() -> int:
     match args.command:
         case "resolved-images":
             return cmd_resolved_images(args.backend_image, args.frontend_image, args.artifact_dir)
+        case "render-preflight":
+            return cmd_render_preflight(
+                chart=args.chart,
+                release=args.release,
+                namespace=args.namespace,
+                values=args.values,
+                set_values=args.set_values,
+                expected_backend=args.expected_backend,
+                expected_frontend=args.expected_frontend,
+                artifact_dir=args.artifact_dir,
+            )
         case "registry-preflight":
             return cmd_registry_preflight(
                 args.backend_image, args.frontend_image,

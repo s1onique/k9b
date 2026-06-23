@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-06-23T08:00:00+00:00",
+  "helm_command": "helm template k9b ./charts/k9b --namespace k9b-cnpg-lab-123456 --values ./charts/k9b/values-live-lab.yaml --set image.backend.repository=harbor-pve1.spbnix.local/k9b/k9b-backend --set image.backend.tag=d9b4d2376d9497bba8be2a007da087ec6c1d2c1a --set backend.auth.enabled=false --set kubernetes.auth.mode=inCluster",
+  "success": true,
+  "images": [
+    {
+      "image_ref": "registry.spbnix.com/gitinsky/k9b-backend:ecacd81",
+      "component": "backend",
+      "container_name": "backend",
+      "resource_kind": "Deployment",
+      "resource_name": "k9b-backend",
+      "is_init_container": false
+    },
+    {
+      "image_ref": "registry.spbnix.com/gitinsky/k9b-frontend:ecacd81",
+      "component": "frontend",
+      "container_name": "frontend",
+      "resource_kind": "Deployment",
+      "resource_name": "k9b-frontend",
+      "is_init_container": false
+    }
+  ],
+  "summary": {
+    "total_images": 2,
+    "backend_image": "registry.spbnix.com/gitinsky/k9b-backend:ecacd81",
+    "frontend_image": "registry.spbnix.com/gitinsky/k9b-frontend:ecacd81"
+  }
+}
