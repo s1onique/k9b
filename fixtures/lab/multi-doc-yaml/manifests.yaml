@@ -1,0 +1,29 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: test-namespace
+data:
+  database: postgres
+  port: "5432"
+  secretName: pg-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pg-secret
+  namespace: test-namespace
+type: Opaque
+data:
+  password: c3VwZXJzZWNyZXQ=
+  username: dXNlcm5hbWU=
+stringData:
+  connection: "host=localhost port=5432"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-sa
+  namespace: test-namespace
+automountServiceAccountToken: true

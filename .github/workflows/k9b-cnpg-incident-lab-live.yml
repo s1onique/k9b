@@ -1210,16 +1210,16 @@ jobs:
           fi
 
       # =======================================================================
-      # Cleanup sensitive files
+      # Cleanup sensitive files (raw artifacts - kept local during job)
       # =======================================================================
-      - name: Cleanup sensitive files
-        run: find ./lab-artifacts/live -name "*secret*" -type f | xargs rm -f 2>/dev/null || true
+      - name: Cleanup sensitive files (raw artifacts)
+        run: |
+          echo "Removing any accidental secret files from raw artifact directory..."
+          find ./lab-artifacts/live -name "*secret*" -type f | xargs rm -f 2>/dev/null || true
+          echo "Raw artifact cleanup complete."
 
       # =======================================================================
-      # Verify artifacts (runs on final artifact directory after cleanup)
-      # =======================================================================
-      # =======================================================================
-      # Setup Python environment for artifact verification
+      # Sanitize artifacts for verification and upload
       # =======================================================================
       - uses: actions/setup-python@v5
         with:
@@ -1233,11 +1233,69 @@ jobs:
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install pytest pyyaml
 
+      - name: Sanitize artifacts for verification
+        run: |
+          echo "=== Sanitizing live lab artifacts ==="
+          echo "Input: ./lab-artifacts/live (raw)"
+          echo "Output: ./lab-artifacts/live-sanitized"
+          echo ""
+          
+          # Create sanitized directory
+          mkdir -p ./lab-artifacts/live-sanitized
+          
+          # Run sanitizer with verification integrated
+          # Use set +e to capture exit code without exiting step immediately
+          # This allows printing findings summary and diagnostics before exit
+          set +e
+          .venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py \
+            --sanitize-only \
+            --raw-artifact-dir ./lab-artifacts/live \
+            --artifact-dir ./lab-artifacts/live-sanitized \
+            --verbose
+          SANITIZE_RC=$?
+          set -e
+          
+          echo ""
+          echo "=== Sanitization exit code: ${SANITIZE_RC} ==="
+          
+          # Show findings summary
+          if [ -f ./lab-artifacts/live-sanitized/_findings.json ]; then
+            echo ""
+            echo "=== Findings Summary ==="
+            .venv/bin/python scripts/k9b_cnpg_live_lab_bootstrap.py \
+              show-findings --file ./lab-artifacts/live-sanitized/_findings.json || true
+          fi
+          
+          # Exit with sanitizer result (will fail if actual secrets detected)
+          if [ ${SANITIZE_RC} -ne 0 ]; then
+            echo ""
+            echo "FATAL: Artifact sanitization detected actual secrets or failed."
+            echo "Raw artifacts remain local; sanitized artifacts not uploaded."
+            exit 1
+          fi
+
       # =======================================================================
-      # Verify artifacts
+      # Verify sanitized artifacts
       # =======================================================================
-      - name: Verify live lab artifacts
-        run: .venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir ./lab-artifacts/live --verbose
+      - name: Verify sanitized artifacts
+        run: |
+          echo "=== Verifying sanitized artifacts ==="
+          set +e
+          .venv/bin/python scripts/verify_k3s_cnpg_incident_lab_artifact.py \
+            --artifact-dir ./lab-artifacts/live-sanitized \
+            --verbose
+          VERIFY_RC=$?
+          set -e
+          
+          if [ ${VERIFY_RC} -ne 0 ]; then
+            echo "Artifact verification failed."
+            exit 1
+          fi
+          
+          # Create safety marker only after both sanitizer and verifier pass
+          touch ./lab-artifacts/live-sanitized/.safe-for-upload
+          echo "SANITIZED_ARTIFACTS_SAFE=true" >> "${GITHUB_ENV}"
+          echo "Artifact verification passed."
 
       # =======================================================================
       # Cleanup kubeconfig file (always runs) - happens last after namespace cleanup
@@ -1255,15 +1313,18 @@ jobs:
           fi
 
       # =======================================================================
-      # Upload artifacts (always runs)
+      # Upload sanitized artifacts (fail-closed boundary)
+      # Only uploads if BOTH sanitizer and sanitized verifier passed.
+      # The SANITIZED_ARTIFACTS_SAFE env var is only set after both pass.
       # =======================================================================
-      - name: Upload live lab artifacts
-        if: always()
+      - name: Upload sanitized artifacts
+        if: ${{ always() && env.SANITIZED_ARTIFACTS_SAFE == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: k9b-cnpg-incident-lab-live-${{ github.run_id }}
-          path: ./lab-artifacts/live/**
-          if-no-files-found: warn
+          # Upload sanitized artifacts only - safe-by-construction
+          path: ./lab-artifacts/live-sanitized/**
+          if-no-files-found: error
           retention-days: ${{ inputs.artifact_retention_days }}
 
       - name: Summary
