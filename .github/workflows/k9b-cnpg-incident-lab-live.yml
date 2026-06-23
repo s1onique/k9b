@@ -1258,12 +1258,13 @@ jobs:
           echo ""
           echo "=== Sanitization exit code: ${SANITIZE_RC} ==="
           
-          # Show findings summary
-          if [ -f ./lab-artifacts/live-sanitized/_findings.json ]; then
+          # Show findings summary (using json.tool instead of bootstrap.py which doesn't have show-findings)
+          if [ -s ./lab-artifacts/live-sanitized/_findings.json ]; then
             echo ""
             echo "=== Findings Summary ==="
-            .venv/bin/python scripts/k9b_cnpg_live_lab_bootstrap.py \
-              show-findings --file ./lab-artifacts/live-sanitized/_findings.json || true
+            .venv/bin/python -m json.tool ./lab-artifacts/live-sanitized/_findings.json || cat ./lab-artifacts/live-sanitized/_findings.json
+          else
+            echo "No findings file found."
           fi
           
           # Exit with sanitizer result (will fail if actual secrets detected)

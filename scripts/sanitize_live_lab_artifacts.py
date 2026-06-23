@@ -39,9 +39,13 @@ REDACTION_PLACEHOLDER = "<REDACTED>"
 # ============================================================================
 
 # Actual secret values that should be redacted (fatal if found)
+# IMPORTANT: These patterns must match actual credential VALUES, not safe field names.
+# Safe Kubernetes/CNPG Secret references (superuserSecret.name, clientCASecret, etc.)
+# are handled structurally, not via raw text regex.
 _FATAL_PATTERNS: list[Pattern[str]] = [
-    # JWT/Bearer tokens
+    # JWT tokens (actual values, not field names)
     re.compile(r"eyJ[A-Za-z0-9+/=_-]+\.eyJ[A-Za-z0-9+/=_-]+"),
+    # Bearer token values (actual values)
     re.compile(r"(?i)bearer\s+[A-Za-z0-9+/=_\-\.]{20,}"),
     # AWS keys
     re.compile(r"AKIA[0-9A-Z]{16}"),
@@ -49,16 +53,18 @@ _FATAL_PATTERNS: list[Pattern[str]] = [
     re.compile(r"sk-[0-9A-Za-z]{32,}"),
     # GitHub PATs
     re.compile(r"github_pat_[A-Za-z0-9_]{22,82}"),
-    # Private key blocks
+    # Private key blocks (actual values)
     re.compile(r"-----BEGIN\s+(RSA |EC |DSA |OPENSSH |PRIVATE |ENCRYPTED )?PRIVATE KEY-----"),
-    # Certificates
+    # Certificates (actual values)
     re.compile(r"-----BEGIN\s+CERTIFICATE-----"),
-    # Raw passwords in text (common in kubectl describe output)
-    re.compile(r"(?i)password:\s*[^\s]{8,}"),
-    # API keys (generic pattern)
-    re.compile(r"(?i)api_key:\s*[^\s]{8,}"),
-    # Secret values (not just field names)
-    re.compile(r"(?i)secret:\s*[^\s]{8,}"),
+    # Raw password values (actual values, not field names)
+    re.compile(r"(?i)(^|\s)password:\s*[^\s]{8,}"),
+    # API key values (actual values, not field names)
+    re.compile(r"(?i)(^|\s)api_key:\s*[^\s]{8,}"),
+    # Authorization header values
+    re.compile(r"(?i)authorization:\s*[A-Za-z0-9+/=_\-\.]{20,}"),
+    # Client/private key data field values (when the value itself looks like a credential)
+    re.compile(r"(?i)(^|\s)(client-key-data|private-key-data):\s*[A-Za-z0-9+/=_\-\.]{20,}"),
     # Token values (sha256~ or similar)
     re.compile(r"(?i)token:\s*sha256~[A-Za-z0-9+/]+"),
 ]
@@ -93,14 +99,31 @@ _SENSITIVE_VALUE_FIELDS: frozenset[str] = frozenset({
 })
 
 # Field names that are safe (Kubernetes vocabulary) - should NOT trigger redaction
-# These are metadata/field names, not actual secret values
+# These are metadata/field names, not actual secret values.
+# IMPORTANT: These handle CNPG/Kubernetes Secret reference field names, NOT actual secret data.
+# The actual secret data (base64-encoded values in Secret.data/stringData) is handled
+# separately by _sanitize_secret_object().
 _SAFE_K8S_FIELDS: frozenset[str] = frozenset({
-    # Secret resource references
+    # Secret resource references (pointing TO a Secret by name)
     "secretname",
-    "secretref",
     "secretref",
     "secretnames",
     "secrets",
+    # CNPG Secret reference fields (pointing to Secret objects by name, NOT actual secret values)
+    "superusersecret",     # superuserSecret.name in CNPG Cluster bootstrap
+    "clientcasecret",      # clientCASecret in CNPG Cluster
+    "casecret",            # caSecret in CNPG Cluster
+    "servercasecret",      # serverCASecret in CNPG Cluster
+    "replicationslotsecret",  # replicationSlotSecret in CNPG
+    "slotprefix",          # slotPrefix in CNPG replicationSlots highAvailability
+    # imagePullSecrets references (list of Secret references by name)
+    "imagepullsecret",     # singular form
+    "imagepullsecrets",    # plural form (CNPG standard field name)
+    # Bootstrap initdb secret fields (metadata, not values)
+    "bootstrapsecret",
+    "initdbsecret",
+    "databasesecret",
+    "ownername",
     # Service account references
     "serviceaccountname",
     "serviceaccount",
@@ -111,9 +134,6 @@ _SAFE_K8S_FIELDS: frozenset[str] = frozenset({
     # Auto-mount flag
     "automountserviceaccounttoken",
     "automountserviceaccount",
-    # CNPG specific
-    "clientcasecret",
-    "cascret",
     # RBAC
     "roleref",
     "subjects",

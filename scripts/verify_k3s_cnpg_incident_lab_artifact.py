@@ -29,31 +29,21 @@ import json
 import re
 import sys
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
 # Import the sanitizer for shared constants and utilities
 from sanitize_live_lab_artifacts import (
+    _FATAL_PATTERNS,
+    REDACTION_PLACEHOLDER,
     Finding,
     FindingKind,
-    REDACTION_PLACEHOLDER,
-    _FATAL_PATTERNS,
-    sanitize_directory,
-    _SENSITIVE_VALUE_FIELDS,
-    _SAFE_K8S_FIELDS,
 )
-
 
 # ============================================================================
 # FINDING CLASSIFICATION
 # ============================================================================
-
-class FindingKind:
-    """Finding severity levels for structured verification."""
-    FATAL = "fatal"
-    WARNING = "warning"
-    INFO = "info"
+# FindingKind is imported from sanitize_live_lab_artifacts
 
 
 # ============================================================================
@@ -229,9 +219,6 @@ def _check_structured_secrets_in_file(ctx: VerificationContext, filepath: Path) 
     rel_path = str(filepath.relative_to(ctx.artifact_dir))
     found_actual_secret = False
 
-    # Track whether we've logged "benign structure" info (but still scan)
-    logged_benign_info = False
-
     # For JSON files, do structured analysis but ALWAYS continue scanning
     suffix = filepath.suffix.lower()
     if suffix == ".json":
@@ -240,7 +227,6 @@ def _check_structured_secrets_in_file(ctx: VerificationContext, filepath: Path) 
             if _is_benign_json_structure(data):
                 # Log info but DO NOT return - must continue scanning
                 ctx.add_info("Benign Kubernetes structure detected", rel_path)
-                logged_benign_info = True
         except json.JSONDecodeError:
             pass
 
@@ -258,7 +244,7 @@ def _check_structured_secrets_in_file(ctx: VerificationContext, filepath: Path) 
             if pattern.search(stripped):
                 # Found actual secret - but check if it's in a benign context
                 if _is_benign_k8s_pattern(stripped):
-                    ctx.add_info(f"Benign pattern matched (not a credential)", f"{rel_path}:{i+1}")
+                    ctx.add_info("Benign pattern matched (not a credential)", f"{rel_path}:{i+1}")
                     continue
                 
                 ctx.add_fatal(
@@ -461,7 +447,6 @@ def verify_artifact_dir(ctx: VerificationContext) -> bool:
             if "lab-result.json" in str(filepath):
                 continue  # Skip lab-result.json secrets check as it's handled separately
             
-            rel_path = filepath.relative_to(ctx.artifact_dir)
             found_secret = _check_structured_secrets_in_file(ctx, filepath)
             if found_secret:
                 found_any_secret = True
@@ -583,9 +568,22 @@ def main() -> int:
             return 1
         
         # Check for sanitization errors (non-success but no fatal findings)
+        # FAIL CLOSED: file errors must fail the gate, not silently continue
         if not success:
             print()
-            print("Sanitization had file errors, but continuing with verification...")
+            print("FATAL: Sanitization had file errors!")
+            file_errors = [r for r in results if not r.success and r.error]
+            for r in file_errors[:10]:
+                print(f"  {r.input_path}: {r.error}")
+            if len(file_errors) > 10:
+                print(f"  ... and {len(file_errors) - 10} more file errors")
+            print("Raw artifacts remain local; sanitized artifacts not uploaded.")
+            findings_data["findings"] = [
+                {"kind": "fatal", "message": f"File error: {r.error}", "file": str(r.input_path), "context": None}
+                for r in file_errors
+            ]
+            findings_path.write_text(json.dumps(findings_data, indent=2))
+            return 1
         
         print()
         print(sanitize_live_lab_artifacts.format_findings_summary(findings))
