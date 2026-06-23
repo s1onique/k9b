@@ -1048,41 +1048,56 @@ jobs:
       - name: Verify incident symptom - pod should be NotReady (FATAL)
         run: |
           source "${GITHUB_ENV}"
-          echo "Verifying pod-failure incident symptom..."
-          POD_NAME="cnpg-lab-failing-app"
+          echo "Verifying pod-failure incident symptom with state-aware polling..."
           
-          # Wait for pod to be scheduled (FATAL)
-          timeout 60 bash -c 'until kubectl --kubeconfig="${KUBECONFIG}" get pod "'"$POD_NAME"'" -n "'"$LAB_NAMESPACE"'" >/dev/null 2>&1; do sleep 2; done' || {
-            echo "ERROR: failing pod $POD_NAME not found in namespace $LAB_NAMESPACE"
-            exit 1
-          }
+          # Create artifact directory for symptom verification
+          mkdir -p ./lab-artifacts/live/symptom-watch
           
-          # Check pod phase - must be Running
-          POD_STATUS="$(kubectl --kubeconfig="${KUBECONFIG}" get pod "$POD_NAME" -n "$LAB_NAMESPACE" -o jsonpath='{.status.phase}')"
-          if [ "$POD_STATUS" != "Running" ]; then
-            echo "ERROR: expected failing pod to be Running but NotReady; got phase=$POD_STATUS"
-            kubectl --kubeconfig="${KUBECONFIG}" describe pod "$POD_NAME" -n "$LAB_NAMESPACE"
+          # Run state-aware verifier with bounded polling
+          # Deadline: 90s (allows for image pull + readiness probe check)
+          # Poll interval: 5s
+          set +e
+          .venv/bin/python scripts/verify_pod_failure_symptom.py \
+            --kubeconfig "${KUBECONFIG}" \
+            --namespace "$LAB_NAMESPACE" \
+            --pod-name "cnpg-lab-failing-app" \
+            --deadline 90 \
+            --poll-interval 5 \
+            --artifact-dir ./lab-artifacts/live/symptom-watch
+          VERIFY_RC=$?
+          set -e
+          
+          # Read result for diagnostics
+          if [ -f ./lab-artifacts/live/symptom-watch/pod-failure-symptom-result.json ]; then
+            echo ""
+            echo "=== Symptom Verification Result ==="
+            cat ./lab-artifacts/live/symptom-watch/pod-failure-symptom-result.json | .venv/bin/python -c "import json,sys; d=json.load(sys.stdin); print(f\"Class: {d.get('symptom_class')}\"); print(f\"Fatal: {d.get('fatal')}\"); print(f\"Pod phase: {d.get('pod_phase')}\"); print(f\"Pod ready: {d.get('pod_ready')}\"); print(f\"Container state: {d.get('container_state')}\"); print(f\"Failure reason: {d.get('failure_reason')}\"); print(f\"Elapsed: {d.get('elapsed_seconds')}s ({d.get('poll_count')} polls)\")"
+            
+            # Extract symptom class for CI output
+            SYMPTOM_CLASS=$(.venv/bin/python -c "import json; print(json.load(open('./lab-artifacts/live/symptom-watch/pod-failure-symptom-result.json')).get('symptom_class', ''))")
+            echo "SYMPTOM_CLASS=${SYMPTOM_CLASS}" >> $GITHUB_OUTPUT
+          fi
+          
+          # Show polling snapshots if available
+          if [ -f ./lab-artifacts/live/symptom-watch/pod-failure-symptom-snapshots.json ]; then
+            echo ""
+            echo "=== Polling History ==="
+            cat ./lab-artifacts/live/symptom-watch/pod-failure-symptom-snapshots.json | .venv/bin/python -c "import json,sys; [print(f\"poll {s['poll_count']}: {s['elapsed_seconds']}s - phase={s['pod_phase']} ready={s['pod_ready']} reason={s['container_waiting_reason'] or 'none'}\") for s in json.load(sys.stdin)]"
+          fi
+          
+          # Exit with verifier result
+          if [ ${VERIFY_RC} -ne 0 ]; then
+            echo ""
+            echo "ERROR: Pod-failure symptom verification failed"
+            echo "The pod did not reach the expected Running+NotReady state within the deadline,"
+            echo "or a fatal error was detected (image pull failure, scheduling failure)."
+            echo ""
+            echo "Check ./lab-artifacts/live/symptom-watch/ for detailed diagnostics."
             exit 1
           fi
           
-          # Check Ready condition - must be False
-          READY_STATUS="$(kubectl --kubeconfig="${KUBECONFIG}" get pod "$POD_NAME" -n "$LAB_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
-          echo "Pod phase: $POD_STATUS"
-          echo "Ready condition: $READY_STATUS"
-          
-          if [ "$READY_STATUS" = "True" ]; then
-            echo "ERROR: expected pod to remain NotReady, but it became Ready"
-            kubectl --kubeconfig="${KUBECONFIG}" describe pod "$POD_NAME" -n "$LAB_NAMESPACE"
-            exit 1
-          fi
-          
-          if [ "$READY_STATUS" != "False" ]; then
-            echo "ERROR: expected Ready=False; got Ready=$READY_STATUS"
-            kubectl --kubeconfig="${KUBECONFIG}" describe pod "$POD_NAME" -n "$LAB_NAMESPACE"
-            exit 1
-          fi
-          
-          echo "SUCCESS: Pod is Running/NotReady as expected (incident symptom confirmed)"
+          echo ""
+          echo "SUCCESS: Pod-failure symptom verified (Running + NotReady + readiness probe failure)"
 
       # =======================================================================
       # Capture incident
