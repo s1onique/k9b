@@ -1746,6 +1746,9 @@ def _get_pvc_status(pvc_json: str) -> list[dict]:
                     "namespace": pvc.get("metadata", {}).get("namespace", "unknown"),
                     "status": status,
                     "reason": pvc.get("status", {}).get("reason", ""),
+                    "storage_class_name": pvc.get("spec", {}).get("storageClassName", ""),
+                    "access_modes": pvc.get("spec", {}).get("accessModes", []),
+                    "resources": pvc.get("spec", {}).get("resources", {}),
                 })
         return pvcs
     except (json.JSONDecodeError, TypeError):
@@ -1974,15 +1977,302 @@ def _check_failed_scheduling(pods_json: str, events_text: str, events_json: str 
     return False, "", ""
 
 
-def _check_pvc_pending(pvcs: list[dict]) -> tuple[bool, str, str]:
-    """Check for PVC pending conditions.
-    
-    Returns: (is_fatal, status, reason)
+def _check_pvc_pending(
+    pvcs: list[dict],
+) -> tuple[bool, str, str, str]:
+    """Check for ordinary non-bound PVCs with no hard evidence.
+
+    This helper is called AFTER classify_rollout_state() has already ruled out:
+    - Explicit provisioning failure (5a)
+    - Missing StorageClass (5b)
+    - WaitForFirstConsumer (5c)
+
+    So this only answers: "is there still a pending PVC with no hard evidence?"
+
+    Args:
+        pvcs: List of PVC info dicts
+
+    Returns:
+        Tuple of (is_pending, status, reason, failure_class)
+        - is_pending: True if a non-bound PVC exists
+        - status: PVC status string
+        - reason: Failure reason
+        - failure_class: "pvc_pending" for ordinary pending
     """
+    # Ordinary pending - non-fatal until deadline
     for pvc in pvcs:
         if pvc.get("status") != "Bound":
-            return True, pvc.get("status", "Pending"), pvc.get("reason", "PVC not Bound")
+            return True, pvc.get("status", "Pending"), pvc.get("reason", "PVC not Bound"), "pvc_pending"
+
+    return False, "", "", ""
+
+
+def _get_pvc_binding_mode(storage_class_json: str, storage_class_name: str) -> str:
+    """Get volumeBindingMode for a StorageClass.
+    
+    Note: volumeBindingMode is a top-level StorageClass field, not a parameter.
+    See https://kubernetes.io/docs/concepts/storage/storage-classes/
+    
+    Args:
+        storage_class_json: JSON output from kubectl get storageclass -o json
+        storage_class_name: Name of the StorageClass to look up
+    
+    Returns:
+        "WaitForFirstConsumer", "Immediate", or "" if not found/unknown
+    """
+    try:
+        data = json.loads(storage_class_json)
+        for sc in data.get("items", []):
+            if sc.get("metadata", {}).get("name") == storage_class_name:
+                # volumeBindingMode is a top-level field on StorageClass, not in parameters
+                mode: str = sc.get("volumeBindingMode", "Immediate")
+                return mode
+        return ""
+    except (json.JSONDecodeError, TypeError):
+        return ""
+
+
+def _get_default_storage_class(storage_class_json: str) -> str:
+    """Get the name of the default StorageClass.
+    
+    Args:
+        storage_class_json: JSON output from kubectl get storageclass -o json
+    
+    Returns:
+        Name of default StorageClass or "" if none
+    """
+    try:
+        data = json.loads(storage_class_json)
+        for sc in data.get("items", []):
+            metadata = sc.get("metadata", {})
+            if not isinstance(metadata, dict):
+                continue
+            annotations = metadata.get("annotations", {})
+            if not isinstance(annotations, dict):
+                continue
+            ann1: str = annotations.get("storageclass.kubernetes.io/is-default-class", "")
+            ann2: str = annotations.get("storageclass.beta.kubernetes.io/is-default-class", "")
+            if ann1.lower() == "true" or ann2.lower() == "true":
+                sc_name: str = metadata.get("name", "")
+                return sc_name
+        return ""
+    except (json.JSONDecodeError, TypeError):
+        return ""
+
+
+def _check_pvc_provisioning_failure(events_json: str) -> tuple[bool, str, str]:
+    """Check for explicit provisioning failures in events.
+    
+    Args:
+        events_json: JSON output from kubectl get events -o json
+    
+    Returns: (is_fatal, reason, message)
+    """
+    try:
+        data = json.loads(events_json)
+        for event in data.get("items", []):
+            reason = event.get("reason", "")
+            # Explicit provisioning failures
+            if reason in ("ProvisioningFailed", "VolumeBindingFailed", "CreateContainerConfigError"):
+                message = event.get("message", "")
+                involved = event.get("involvedObject", {})
+                obj_name = involved.get("name", "unknown")
+                obj_kind = involved.get("kind", "PVC")
+                return True, reason, f"{obj_kind}/{obj_name}: {message}"
+    except (json.JSONDecodeError, TypeError):
+        pass
     return False, "", ""
+
+
+def _check_pvc_missing_storage_class(
+    pvcs: list[dict],
+    storage_class_json: str,
+) -> tuple[bool, str, str]:
+    """Check for PVCs referencing non-existent StorageClasses.
+    
+    Args:
+        pvcs: List of PVC info dicts
+        storage_class_json: JSON output from kubectl get storageclass -o json
+    
+    Returns: (is_fatal, reason, message)
+    """
+    try:
+        data = json.loads(storage_class_json)
+        existing_classes: set[str] = set()
+        for sc in data.get("items", []):
+            existing_classes.add(sc.get("metadata", {}).get("name", ""))
+        
+        default_class = _get_default_storage_class(storage_class_json)
+        
+        for pvc in pvcs:
+            if pvc.get("status") != "Bound":
+                # Note: _get_pvc_status normalizes the key to storage_class_name
+                storage_class_name = str(pvc.get("storage_class_name", ""))
+                if storage_class_name:
+                    # Check if requested storageClass exists
+                    if storage_class_name not in existing_classes:
+                        return True, "StorageClassNotFound", (
+                            f"PVC {pvc.get('name')} requests storageClass '{storage_class_name}' "
+                            f"which does not exist"
+                        )
+                else:
+                    # PVC has no storageClassName and no default exists
+                    if not default_class:
+                        return True, "NoStorageClassAvailable", (
+                            f"PVC {pvc.get('name')} has no storageClassName and no default "
+                            f"StorageClass is configured"
+                        )
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return False, "", ""
+
+
+def _check_pvc_wait_for_first_consumer(
+    pvcs: list[dict],
+    storage_class_json: str,
+    pods_json: str,
+) -> tuple[bool, str, str]:
+    """Check for PVCs pending due to WaitForFirstConsumer binding mode.
+    
+    This is a non-fatal condition - the PVC will bind once a Pod using it
+    is scheduled and its constraints are known.
+    
+    Args:
+        pvcs: List of PVC info dicts
+        storage_class_json: JSON output from kubectl get storageclass -o json
+        pods_json: JSON output from kubectl get pods -o json
+    
+    Returns: (is_wait_for_first_consumer, reason, message)
+    """
+    try:
+        data = json.loads(storage_class_json)
+        binding_modes: dict[str, str] = {}
+        for sc in data.get("items", []):
+            sc_name = sc.get("metadata", {}).get("name", "")
+            # volumeBindingMode is a top-level field on StorageClass, not in parameters
+            mode = sc.get("volumeBindingMode", "Immediate")
+            binding_modes[sc_name] = mode
+        
+        pods_data = json.loads(pods_json)
+        pods_using_pvcs: set[str] = set()
+        for pod in pods_data.get("items", []):
+            for vol in pod.get("spec", {}).get("volumes", []):
+                if "persistentVolumeClaim" in vol:
+                    pvc_name = vol.get("persistentVolumeClaim", {}).get("claimName", "")
+                    if pvc_name:
+                        pods_using_pvcs.add(pvc_name)
+        
+        for pvc in pvcs:
+            if pvc.get("status") != "Bound":
+                # Note: _get_pvc_status normalizes the key to storage_class_name
+                storage_class_name = str(pvc.get("storage_class_name", ""))
+                pvc_name = pvc.get("name", "")
+                
+                if storage_class_name:
+                    binding_mode = binding_modes.get(storage_class_name, "Immediate")
+                    if binding_mode == "WaitForFirstConsumer":
+                        # Check if there's a pod using this PVC
+                        if pvc_name not in pods_using_pvcs:
+                            return True, "WaitForFirstConsumer", (
+                                f"PVC {pvc_name} uses StorageClass '{storage_class_name}' "
+                                f"with volumeBindingMode=WaitForFirstConsumer and no Pod "
+                                f"is currently using it - binding will occur when Pod is scheduled"
+                            )
+                        else:
+                            return True, "WaitForFirstConsumerPodScheduled", (
+                                f"PVC {pvc_name} uses StorageClass '{storage_class_name}' "
+                                f"with volumeBindingMode=WaitForFirstConsumer - waiting for "
+                                f"Pod scheduling constraints to be resolved"
+                            )
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return False, "", ""
+
+
+def _collect_pvc_diagnostic_info(
+    pvc_name: str,
+    pvc_json: str,
+    storage_class_json: str,
+    events_json: str,
+) -> dict:
+    """Collect comprehensive PVC diagnostic information.
+    
+    Args:
+        pvc_name: Name of the PVC to diagnose
+        pvc_json: JSON output from kubectl get pvc -o json
+        storage_class_json: JSON output from kubectl get storageclass -o json
+        events_json: JSON output from kubectl get events -o json
+    
+    Returns:
+        Dict with PVC diagnostic info
+    """
+    diagnostics: dict[str, object] = {
+        "pvc_name": pvc_name,
+        "spec": {},
+        "status": {},
+        "events": [],
+        "storage_class": {},
+        "binding_mode": "",
+    }
+    
+    # Extract PVC spec and status
+    try:
+        data = json.loads(pvc_json)
+        for pvc in data.get("items", []):
+            if pvc.get("metadata", {}).get("name") == pvc_name:
+                diagnostics["spec"] = {
+                    "access_modes": pvc.get("spec", {}).get("accessModes", []),
+                    "resources": pvc.get("spec", {}).get("resources", {}),
+                    "storage_class_name": pvc.get("spec", {}).get("storageClassName", ""),
+                    "volume_name": pvc.get("spec", {}).get("volumeName", ""),
+                    "selector": pvc.get("spec", {}).get("selector", {}),
+                }
+                diagnostics["status"] = {
+                    "phase": pvc.get("status", {}).get("phase", ""),
+                    "reason": pvc.get("status", {}).get("reason", ""),
+                    "message": pvc.get("status", {}).get("message", ""),
+                    "capacity": pvc.get("status", {}).get("capacity", {}),
+                }
+                break
+    except (json.JSONDecodeError, TypeError):
+        pass
+    
+    # Extract relevant events
+    try:
+        data = json.loads(events_json)
+        for event in data.get("items", []):
+            involved = event.get("involvedObject", {})
+            if involved.get("kind") == "PersistentVolumeClaim" and involved.get("name") == pvc_name:
+                diagnostics["events"].append({
+                    "reason": event.get("reason", ""),
+                    "message": event.get("message", ""),
+                    "type": event.get("type", ""),
+                    "last_timestamp": event.get("lastTimestamp", ""),
+                })
+    except (json.JSONDecodeError, TypeError):
+        pass
+    
+    # Extract StorageClass info
+    pvc_sc_name = str(diagnostics.get("spec", {}).get("storage_class_name", ""))
+    if pvc_sc_name:
+        try:
+            data = json.loads(storage_class_json)
+            for sc in data.get("items", []):
+                if sc.get("metadata", {}).get("name") == pvc_sc_name:
+                    # volumeBindingMode is a top-level field on StorageClass, not in parameters
+                    binding_mode = sc.get("volumeBindingMode", "Immediate")
+                    diagnostics["storage_class"] = {
+                        "name": pvc_sc_name,
+                        "provisioner": sc.get("provisioner", ""),
+                        "parameters": sc.get("parameters", {}),
+                        "volume_binding_mode": binding_mode,
+                    }
+                    diagnostics["binding_mode"] = binding_mode
+                    break
+        except (json.JSONDecodeError, TypeError):
+            pass
+    
+    return diagnostics
 
 
 def _check_readiness_probe_failed(
@@ -2204,11 +2494,23 @@ def classify_rollout_state(
     pvc_json: str,
     events_text: str,
     events_json: str = "",
+    storage_class_json: str = "",
+    storage_class_available: bool = True,
 ) -> RolloutDiagnosis:
     """Classify rollout state from Kubernetes JSON data.
     
     Performs structural JSON parsing to detect failure conditions.
     Uses events_json for primary event classification, events_text as fallback.
+    
+    Evidence-backed PVC classification:
+    - WaitForFirstConsumer: non-fatal until consuming Pod scheduling evidence
+    - Missing StorageClass: fatal (hard evidence) - ONLY when StorageClass data was collected
+    - Provisioning failure: fatal (hard evidence)
+    - Ordinary Pending: non-fatal until deadline expires
+    
+    IMPORTANT: If storage_class_available is False (e.g., RBAC denied), we cannot emit
+    StorageClassNotFound or NoStorageClassAvailable because that would be a false
+    positive. StorageClass is cluster-scoped and may need separate permissions.
     
     Args:
         pods_json: JSON output from kubectl get pods -o json
@@ -2216,6 +2518,8 @@ def classify_rollout_state(
         pvc_json: JSON output from kubectl get pvc -o json
         events_text: Text output from kubectl get events (fallback)
         events_json: JSON output from kubectl get events -o json (primary)
+        storage_class_json: JSON output from kubectl get storageclass -o json
+        storage_class_available: True if kubectl get storageclass succeeded
     
     Returns:
         RolloutDiagnosis with classification and details
@@ -2306,18 +2610,73 @@ def classify_rollout_state(
         diagnosis.latest_event_message = message
         return diagnosis
     
-    # 5. PVC pending (only if no transient VolumeBinding conflict)
-    is_fatal, status, reason = _check_pvc_pending(pvcs)
-    if is_fatal:
-        affected = [p["name"] for p in pvcs]
-        diagnosis.failure_class = FAILURE_PVC_PENDING
-        diagnosis.fatal = True
-        diagnosis.affected_pvcs = affected
-        diagnosis.latest_event_reason = "PVCNotBound"
-        diagnosis.latest_event_message = f"PVC status: {status}, reason: {reason}"
-        return diagnosis
+    # 5. Evidence-backed PVC classification
+    # Check for non-Bound PVCs and classify based on evidence
+    # IMPORTANT: Only check StorageClass if collection succeeded (storage_class_available=True)
+    # If RBAC denied, we cannot emit StorageClassNotFound/NoStorageClassAvailable
+    if pvcs and storage_class_available and storage_class_json:
+        # 5a. Explicit provisioning failure (fatal)
+        is_fatal, reason, message = _check_pvc_provisioning_failure(events_json)
+        if is_fatal:
+            affected = [p["name"] for p in pvcs]
+            diagnosis.failure_class = FAILURE_PVC_PENDING
+            diagnosis.fatal = True
+            diagnosis.affected_pvcs = affected
+            diagnosis.latest_event_reason = reason
+            diagnosis.latest_event_message = message
+            # Collect comprehensive PVC diagnostic info
+            for pvc_name in affected[:3]:  # Limit to first 3
+                pvc_diag = _collect_pvc_diagnostic_info(pvc_name, pvc_json, storage_class_json, events_json)
+                diagnosis.diagnostics[f"pvc_diagnostic_{pvc_name}"] = pvc_diag
+            return diagnosis
+        
+        # 5b. Missing StorageClass (fatal)
+        is_fatal, reason, message = _check_pvc_missing_storage_class(pvcs, storage_class_json)
+        if is_fatal:
+            affected = [p["name"] for p in pvcs]
+            diagnosis.failure_class = FAILURE_PVC_PENDING
+            diagnosis.fatal = True
+            diagnosis.affected_pvcs = affected
+            diagnosis.latest_event_reason = reason
+            diagnosis.latest_event_message = message
+            # Collect comprehensive PVC diagnostic info
+            for pvc_name in affected[:3]:
+                pvc_diag = _collect_pvc_diagnostic_info(pvc_name, pvc_json, storage_class_json, events_json)
+                diagnosis.diagnostics[f"pvc_diagnostic_{pvc_name}"] = pvc_diag
+            return diagnosis
+        
+        # 5c. WaitForFirstConsumer (non-fatal - keep polling)
+        is_wfcf, reason, message = _check_pvc_wait_for_first_consumer(pvcs, storage_class_json, pods_json)
+        if is_wfcf:
+            affected = [p["name"] for p in pvcs]
+            diagnosis.failure_class = "waiting_for_first_consumer"
+            diagnosis.fatal = False  # Non-fatal - will bind when Pod is scheduled
+            diagnosis.affected_pvcs = affected
+            diagnosis.latest_event_reason = reason
+            diagnosis.latest_event_message = message
+            # Collect comprehensive PVC diagnostic info
+            for pvc_name in affected[:3]:
+                pvc_diag = _collect_pvc_diagnostic_info(pvc_name, pvc_json, storage_class_json, events_json)
+                diagnosis.diagnostics[f"pvc_diagnostic_{pvc_name}"] = pvc_diag
+            return diagnosis
+        
+        # 5d. PVC pending without hard evidence (non-fatal - keep polling until deadline)
+        # Note: Called AFTER 5a-5c have ruled out hard failures
+        is_pending, status, reason, _failure_class = _check_pvc_pending(pvcs)
+        if is_pending:
+            affected = [p["name"] for p in pvcs]
+            diagnosis.failure_class = "pvc_pending"
+            diagnosis.fatal = False  # Non-fatal - waiting for provisioning
+            diagnosis.affected_pvcs = affected
+            diagnosis.latest_event_reason = "PVCNotBound"
+            diagnosis.latest_event_message = f"PVC pending: {status}, reason: {reason} - waiting for provisioning"
+            # Collect comprehensive PVC diagnostic info
+            for pvc_name in affected[:3]:
+                pvc_diag = _collect_pvc_diagnostic_info(pvc_name, pvc_json, storage_class_json, events_json)
+                diagnosis.diagnostics[f"pvc_diagnostic_{pvc_name}"] = pvc_diag
+            return diagnosis
     
-    # 5. Readiness probe failed (use events_json for structural classification)
+    # 6. Readiness probe failed (use events_json for structural classification)
     is_fatal, reason, message = _check_readiness_probe_failed(waiting_info, events_text, events_json)
     if is_fatal:
         affected = [w["pod"] for w in waiting_info if w.get("reason") == "ContainersNotReady"]
@@ -2329,7 +2688,7 @@ def classify_rollout_state(
         diagnosis.latest_event_message = message
         return diagnosis
     
-    # 6. Deployment replica failure
+    # 7. Deployment replica failure
     is_fatal, reason, message = _check_deployment_replica_failure(conditions)
     if is_fatal:
         affected = [c["deployment"] for c in conditions if c.get("type") == "ReplicaFailure"]
@@ -2340,7 +2699,7 @@ def classify_rollout_state(
         diagnosis.latest_event_message = message
         return diagnosis
     
-    # 7. Deployment progress deadline
+    # 8. Deployment progress deadline
     is_fatal, reason, message = _check_deployment_progress_deadline(conditions)
     if is_fatal:
         affected = [c["deployment"] for c in conditions if c.get("type") == "Progressing"]
@@ -2357,12 +2716,30 @@ def classify_rollout_state(
     return diagnosis
 
 
+def _get_kubectl_storageclass(kubeconfig: str) -> KubectlResult:
+    """Execute kubectl get storageclass command and return structured result."""
+    result = subprocess.run(
+        ["kubectl", "--kubeconfig", kubeconfig, "get", "storageclass", "-o", "json"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return KubectlResult(json_data=result.stdout, text_data=result.stdout, success=True)
+    else:
+        return KubectlResult(
+            json_data="{}",
+            text_data=result.stderr or f"kubectl failed with exit code {result.returncode}",
+            success=False,
+            error_message=result.stderr.strip() or f"Exit code: {result.returncode}"
+        )
+
+
 def _collect_rollout_snapshot(
     kubeconfig: str,
     namespace: str,
     artifact_dir: Path,
     snapshot_id: int,
-) -> tuple[KubectlResult, KubectlResult, KubectlResult, KubectlResult, KubectlResult]:
+) -> tuple[KubectlResult, KubectlResult, KubectlResult, KubectlResult, KubectlResult, KubectlResult]:
     """Collect rollout snapshot and return structured results.
     
     Args:
@@ -2372,7 +2749,7 @@ def _collect_rollout_snapshot(
         snapshot_id: Snapshot sequence number
     
     Returns:
-        Tuple of KubectlResult objects for (pods, deployments, pvc, events_text, events_json)
+        Tuple of KubectlResult objects for (pods, deployments, pvc, events_text, events_json, storageclass)
     """
     rollout_dir = artifact_dir / "rollout-watch"
     rollout_dir.mkdir(parents=True, exist_ok=True)
@@ -2404,7 +2781,12 @@ def _collect_rollout_snapshot(
     events_json_path = rollout_dir / f"events-{snapshot_id:03d}-{timestamp}.json"
     events_json_path.write_text(events_json_result.json_data)
     
-    return pods_result, deployments_result, pvc_result, events_text_result, events_json_result
+    # Collect StorageClass for PVC diagnosis
+    storageclass_result = _get_kubectl_storageclass(kubeconfig)
+    storageclass_path = rollout_dir / f"storageclass-{snapshot_id:03d}-{timestamp}.json"
+    storageclass_path.write_text(storageclass_result.json_data)
+    
+    return pods_result, deployments_result, pvc_result, events_text_result, events_json_result, storageclass_result
 
 
 def _format_bounded_summary(diagnosis: RolloutDiagnosis, snapshot_path: str) -> str:
@@ -2513,7 +2895,7 @@ def monitor_rollout(
         
         # Collect snapshot (including events JSON for structural classification)
         timestamp = datetime.now(UTC).isoformat()
-        pods_result, deployments_result, pvc_result, events_text_result, events_json_result = _collect_rollout_snapshot(
+        pods_result, deployments_result, pvc_result, events_text_result, events_json_result, storageclass_result = _collect_rollout_snapshot(
             kubeconfig, namespace, artifact_dir, snapshot_id
         )
         
@@ -2573,9 +2955,12 @@ def monitor_rollout(
         pvc_json = pvc_result.json_data
         events_text = events_text_result.text_data
         events_json = events_json_result.json_data
+        storage_class_json = storageclass_result.json_data
         
         # Classify state using structural JSON events
-        diagnosis = classify_rollout_state(pods_json, deployments_json, pvc_json, events_text, events_json)
+        # Pass storageclass_result.success to prevent false-positive StorageClassNotFound
+        # when RBAC denies get on cluster-scoped storageclass resource
+        diagnosis = classify_rollout_state(pods_json, deployments_json, pvc_json, events_text, events_json, storage_class_json, storageclass_result.success)
         
         # Check for successful rollout - if all deployments are healthy and pods are ready
         if _check_rollout_success(pods_json, deployments_json, pvc_json):
