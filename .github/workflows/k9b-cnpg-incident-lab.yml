@@ -95,7 +95,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/pip install pytest
+          .venv/bin/pip install pytest pyyaml
 
       # Sync Go workspace
       - name: Sync Go workspace
@@ -117,6 +117,10 @@ jobs:
       - name: Run Python verifier tests
         run: |
           echo "=== Running Python verifier tests ==="
+          .venv/bin/python - <<'PY'
+import yaml
+print("PyYAML import OK")
+PY
           .venv/bin/python -m pytest tests/test_verify_k3s_cnpg_incident_lab.py tests/test_live_lab_config.py -v
 
       # Verify passing fixture
