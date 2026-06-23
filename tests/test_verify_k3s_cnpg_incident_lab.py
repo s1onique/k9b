@@ -674,3 +674,5 @@ class TestSanitizerDependencies:
         )
         assert result.returncode == 0, f"yaml import failed:\n{result.stderr}"
         assert "yaml OK" in result.stdout
+
+

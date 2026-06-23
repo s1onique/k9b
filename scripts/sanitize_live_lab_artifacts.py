@@ -345,6 +345,55 @@ def _sanitize_secret_object(data: Mapping[str, Any], file_path: str) -> tuple[di
     return sanitized, findings
 
 
+def _sanitize_value(
+    value: Any,
+    parent_key: str | None = None,
+    file_path: str = "",
+) -> tuple[Any, list[Finding]]:
+    """
+    Type-dispatched sanitization entry point.
+    
+    Handles any JSON/YAML value type:
+    - dict/Mapping -> _sanitize_mapping
+    - list -> _sanitize_sequence
+    - str -> _sanitize_string_value
+    
+    Returns (sanitized_value, findings).
+    """
+    if isinstance(value, Mapping):
+        return _sanitize_mapping(value, parent_key, file_path)
+    if isinstance(value, list):
+        return _sanitize_sequence(value, parent_key, file_path)
+    if isinstance(value, str):
+        return _sanitize_string_value(value, parent_key)
+    return value, []
+
+
+def _sanitize_sequence(
+    values: list[Any],
+    parent_key: str | None = None,
+    file_path: str = "",
+) -> tuple[list[Any], list[Finding]]:
+    """
+    Sanitize a sequence (list), handling arrays at any level including top-level.
+    
+    This enables handling of JSON/YAML files whose root is an array,
+    such as top-level arrays of incident objects or symptom snapshots.
+    
+    Returns (sanitized_list, findings).
+    """
+    sanitized: list[Any] = []
+    findings: list[Finding] = []
+
+    for index, item in enumerate(values):
+        index_key = f"{parent_key}[{index}]" if parent_key else f"[{index}]"
+        sanitized_item, item_findings = _sanitize_value(item, index_key, file_path)
+        sanitized.append(sanitized_item)
+        findings.extend(item_findings)
+
+    return sanitized, findings
+
+
 def _sanitize_mapping(
     data: Mapping[str, Any],
     parent_key: str | None = None,
@@ -448,19 +497,8 @@ def _sanitize_mapping(
             sanitized[key_str], sub_findings = _sanitize_mapping(value, key_str, file_path)
             findings.extend(sub_findings)
         elif isinstance(value, list):
-            sanitized_list = []
-            for item in value:
-                if isinstance(item, str):
-                    item_sanitized, sub_findings = _sanitize_string_value(item, key_str)
-                    sanitized_list.append(item_sanitized)
-                    findings.extend(sub_findings)
-                elif isinstance(item, Mapping):
-                    item_sanitized, sub_findings = _sanitize_mapping(item, key_str, file_path)
-                    sanitized_list.append(item_sanitized)
-                    findings.extend(sub_findings)
-                else:
-                    sanitized_list.append(item)
-            sanitized[key_str] = sanitized_list
+            sanitized[key_str], sub_findings = _sanitize_sequence(value, key_str, file_path)
+            findings.extend(sub_findings)
         else:
             sanitized[key_str] = value
 
@@ -533,7 +571,8 @@ def sanitize_file(input_path: Path, output_path: Path) -> SanitizationResult:
         if suffix in (".json",):
             try:
                 data = json.loads(content)
-                sanitized_data, findings = _sanitize_mapping(data, None, file_path_str)
+                # Use _sanitize_value for JSON: handles both dict (mapping) and list (array) roots
+                sanitized_data, findings = _sanitize_value(data, None, file_path_str)
                 output_content = json.dumps(sanitized_data, indent=2)
             except json.JSONDecodeError:
                 # Not valid JSON, treat as raw text
