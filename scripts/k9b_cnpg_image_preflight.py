@@ -31,8 +31,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from k9b_cnpg_image_preflight_registry import check_manifest_with_curl
 from k9b_cnpg_image_preflight_node import check_node_pullability
+from k9b_cnpg_image_preflight_registry import check_manifest_with_curl
 from k9b_cnpg_image_preflight_types import (
     FAIL_IMAGE_CREDS_MISSING,
     FAIL_IMAGE_FORBIDDEN,
@@ -41,9 +41,7 @@ from k9b_cnpg_image_preflight_types import (
     FAIL_IMAGE_TLS,
     FAIL_IMAGE_UNAUTHORIZED,
     FAIL_IMAGE_UNKNOWN,
-    FAIL_IMAGE_UNRESOLVED,
     ImagePullSecretStatus,
-    RegistryResult,
 )
 
 
@@ -102,7 +100,7 @@ def cmd_resolved_images(backend_image: str, frontend_image: str, artifact_dir: P
         errors.append(frontend_error)
 
     if errors:
-        error(f"Empty image refs are not allowed:")
+        error("Empty image refs are not allowed:")
         for e in errors:
             error(f"  {e['component']}: {e['error_message']}")
         # Write error artifact
@@ -141,6 +139,7 @@ def cmd_registry_preflight(
     frontend_image: str,
     registry_username: str | None,
     registry_password: str | None,
+    ca_cert_path: str | None,
     artifact_dir: Path,
 ) -> int:
     """Check registry manifest availability for both images."""
@@ -153,7 +152,7 @@ def cmd_registry_preflight(
 
     for image_ref, component in [(backend_image, "backend"), (frontend_image, "frontend")]:
         log(f"Checking registry manifest: {image_ref}")
-        result = check_manifest_with_curl(image_ref, registry_username, registry_password)
+        result = check_manifest_with_curl(image_ref, registry_username, registry_password, ca_cert_path)
         results.append(result)
 
         # Write individual result
@@ -308,6 +307,7 @@ def main() -> int:
     p_reg.add_argument("--frontend-image", required=True)
     p_reg.add_argument("--registry-username", default=None)
     p_reg.add_argument("--registry-password", default=None)
+    p_reg.add_argument("--ca-cert", default=None, help="Path to CA certificate for TLS verification")
     p_reg.add_argument("--artifact-dir", required=True, type=Path)
 
     # node-pull-preflight
@@ -332,7 +332,8 @@ def main() -> int:
         case "registry-preflight":
             return cmd_registry_preflight(
                 args.backend_image, args.frontend_image,
-                args.registry_username, args.registry_password, args.artifact_dir,
+                args.registry_username, args.registry_password,
+                args.ca_cert, args.artifact_dir,
             )
         case "node-pull-preflight":
             return cmd_node_pull_preflight(

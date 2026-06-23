@@ -284,11 +284,62 @@ jobs:
           echo "Resolved image refs written to lab-artifacts/live/image-preflight/resolved-images.json"
 
       # =======================================================================
+      # Preflight: Install Harbor CA certificate into runner trust store
+      # This enables curl-based registry manifest checks to verify Harbor TLS
+      # =======================================================================
+      - name: Install Harbor CA certificate into runner trust
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+        run: |
+          set -euo pipefail
+          
+          echo "=== Installing Harbor CA certificate into runner trust ==="
+          
+          if [[ -z "${SPBNIX_CA_CERT_PEM:-}" ]]; then
+            echo "WARNING: SPBNIX_CA_CERT_PEM secret not set; registry preflight may fail with TLS errors"
+            echo "HARBOR_CA_CERT_PATH=" >> $GITHUB_ENV
+            exit 0
+          fi
+          
+          # Write CA certificate to runner temp (never in repo)
+          HARBOR_CA_CERT_DIR="${RUNNER_TEMP}/spbnix-ca"
+          mkdir -p "$HARBOR_CA_CERT_DIR"
+          echo "${SPBNIX_CA_CERT_PEM}" > "${HARBOR_CA_CERT_DIR}/harbor-ca.crt"
+          chmod 0600 "${HARBOR_CA_CERT_DIR}/harbor-ca.crt"
+          
+          # Validate PEM content
+          if ! openssl x509 -in "${HARBOR_CA_CERT_DIR}/harbor-ca.crt" -noout 2>/dev/null; then
+            echo "ERROR: Invalid CA certificate PEM in SPBNIX_CA_CERT_PEM"
+            exit 1
+          fi
+          
+          # Install into system trust store (Debian/Ubuntu) if update-ca-certificates and sudo are available
+          if command -v update-ca-certificates >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+            echo "Installing CA into system trust store..."
+            sudo install -m 0644 "${HARBOR_CA_CERT_DIR}/harbor-ca.crt" /usr/local/share/ca-certificates/harbor-pve1-spbnix-local.crt
+            sudo update-ca-certificates
+            echo "HARBOR_CA_CERT_PATH=" >> $GITHUB_ENV
+            echo "CA certificate installed into system trust store"
+          else
+            echo "Using CA certificate from runner temp for curl --cacert"
+            echo "HARBOR_CA_CERT_PATH=${HARBOR_CA_CERT_DIR}/harbor-ca.crt" >> $GITHUB_ENV
+          fi
+          
+          # Also export for subshells
+          export CURL_CA_BUNDLE="${HARBOR_CA_CERT_DIR}/harbor-ca.crt"
+          export SSL_CERT_FILE="${HARBOR_CA_CERT_DIR}/harbor-ca.crt"
+          echo "CURL_CA_BUNDLE=${CURL_CA_BUNDLE}" >> $GITHUB_ENV
+          echo "SSL_CERT_FILE=${SSL_CERT_FILE}" >> $GITHUB_ENV
+          
+          echo "Harbor CA certificate installed"
+
+      # =======================================================================
       # Image preflight: Registry manifest availability check (FAILS before Helm)
       # =======================================================================
       - name: Check registry manifest availability
         id: registry-preflight
         run: |
+          set -euo pipefail
           source "${GITHUB_ENV}"
           echo "=== Checking registry manifest availability ==="
           
@@ -299,16 +350,30 @@ jobs:
           echo "Checking backend: ${BACKEND_IMAGE_REF}"
           echo "Checking frontend: ${FRONTEND_IMAGE_REF}"
           
+          # Build registry preflight command with bash array (no eval)
+          # shellcheck disable=SC2124
+          PREFLIGHT_CMD=(
+            .venv/bin/python scripts/k9b_cnpg_image_preflight.py
+            registry-preflight
+            --backend-image "${BACKEND_IMAGE_REF}"
+            --frontend-image "${FRONTEND_IMAGE_REF}"
+            --artifact-dir ./lab-artifacts/live
+          )
+          
+          # Add CA cert path if available (for TLS verification)
+          if [[ -n "${HARBOR_CA_CERT_PATH:-}" ]]; then
+            PREFLIGHT_CMD+=(--ca-cert "${HARBOR_CA_CERT_PATH}")
+            echo "Using CA certificate: ${HARBOR_CA_CERT_PATH}"
+          else
+            echo "NOTE: No CA certificate path set; using system trust store if available"
+          fi
+          
           # Run registry manifest preflight
           # Registry credentials are optional - the check will classify unauthorized if needed
           # AUTH_UNVERIFIED is non-blocking - node-side pullability is authoritative
           # Use set +e to capture exit code without exiting step immediately
           set +e
-          .venv/bin/python scripts/k9b_cnpg_image_preflight.py \
-            registry-preflight \
-            --backend-image "${BACKEND_IMAGE_REF}" \
-            --frontend-image "${FRONTEND_IMAGE_REF}" \
-            --artifact-dir ./lab-artifacts/live
+          "${PREFLIGHT_CMD[@]}"
           REGISTRY_RC=$?
           set -e
           

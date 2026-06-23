@@ -60,8 +60,10 @@ def sanitize_error(error_msg: str) -> str:
 def classify_http_error(status_code: int, error_body: str = "") -> str:
     """Classify HTTP error into failure class."""
     from k9b_cnpg_image_preflight_types import (
-        FAIL_IMAGE_FORBIDDEN, FAIL_IMAGE_MISSING, FAIL_IMAGE_NETWORK,
-        FAIL_IMAGE_TLS, FAIL_IMAGE_UNKNOWN, FAIL_IMAGE_UNAUTHORIZED,
+        FAIL_IMAGE_FORBIDDEN,
+        FAIL_IMAGE_MISSING,
+        FAIL_IMAGE_UNAUTHORIZED,
+        FAIL_IMAGE_UNKNOWN,
     )
 
     error_lower = error_body.lower()
@@ -84,15 +86,27 @@ def check_manifest_with_curl(
     image_ref: str,
     registry_username: str | None = None,
     registry_password: str | None = None,
+    ca_cert_path: str | None = None,
 ) -> dict:
     """Check if image manifest exists using curl with proper Accept headers.
+
+    Args:
+        image_ref: Image reference (e.g., "harbor.example.com/project/image:tag")
+        registry_username: Optional registry username for authenticated requests
+        registry_password: Optional registry password for authenticated requests
+        ca_cert_path: Optional path to CA certificate for TLS verification
 
     Returns dict with keys: component, image_ref, registry_host, repository_path,
     tag, success, failure_class, status_code, error_message, command_used, timestamp
     """
     from k9b_cnpg_image_preflight_types import (
-        FAIL_IMAGE_AUTH_UNVERIFIED, FAIL_IMAGE_CREDS_MISSING, FAIL_IMAGE_MISSING,
-        FAIL_IMAGE_NETWORK, FAIL_IMAGE_TLS, FAIL_IMAGE_UNKNOWN, RegistryResult,
+        FAIL_IMAGE_AUTH_UNVERIFIED,
+        FAIL_IMAGE_CREDS_MISSING,
+        FAIL_IMAGE_MISSING,
+        FAIL_IMAGE_NETWORK,
+        FAIL_IMAGE_TLS,
+        FAIL_IMAGE_UNKNOWN,
+        RegistryResult,
     )
 
     component = _infer_component(image_ref)
@@ -109,6 +123,10 @@ def check_manifest_with_curl(
         "--connect-timeout", "10",
         "-L",
     ]
+
+    # Add CA certificate for TLS verification if provided
+    if ca_cert_path:
+        curl_cmd.extend(["--cacert", ca_cert_path])
 
     cmd_prefix = ""
     if registry_username and registry_password:
@@ -129,12 +147,31 @@ def check_manifest_with_curl(
         ).to_dict()
 
     curl_cmd.append(manifest_url)
-    command_used = f"{cmd_prefix}curl -I -H 'Accept: ...' -w '%{{http_code}}' {manifest_url}"
+    ca_cert_flag = f" --cacert {ca_cert_path}" if ca_cert_path else ""
+    command_used = f"{cmd_prefix}curl{ca_cert_flag} -I -H 'Accept: ...' -w '%{{http_code}}' {manifest_url}"
 
     try:
         proc = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=30)
         status_code_str = proc.stdout.strip()
         stderr = proc.stderr or ""
+
+        # Detect curl-specific TLS errors (exit code 60 = SSL certificate problem)
+        if proc.returncode == 60:
+            stderr_lower = stderr.lower()
+            if "ssl certificate problem" in stderr_lower or "unable to get local issuer certificate" in stderr_lower:
+                return RegistryResult(
+                    component=component,
+                    image_ref=image_ref,
+                    registry_host=registry_host,
+                    repository_path=repository_path,
+                    tag=tag,
+                    success=False,
+                    failure_class=FAIL_IMAGE_TLS,
+                    status_code=0,
+                    error_message="SSL certificate problem: unable to get local issuer certificate. Install Harbor CA certificate to verify registry TLS.",
+                    command_used=command_used,
+                    timestamp=timestamp,
+                ).to_dict()
 
         try:
             status_code = int(status_code_str)
@@ -274,7 +311,6 @@ def _infer_component(image_ref: str) -> str:
 if __name__ == "__main__":
     import argparse
     import json
-    from pathlib import Path
 
     parser = argparse.ArgumentParser(description="Check registry manifest")
     parser.add_argument("--image", required=True, help="Image reference")

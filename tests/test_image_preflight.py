@@ -7,32 +7,31 @@ Tests:
 - Output sanitization (no auth tokens leaked)
 - Registry preflight result structures
 - Node pull event classification
+- TLS error classification
+- CA certificate passthrough
 """
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-from k9b_cnpg_image_preflight_types import (
-    ImagePullSecretStatus,
-    NodePullResult,
-    RegistryResult,
-)
+from k9b_cnpg_image_preflight_node import classify_pull_failure
 from k9b_cnpg_image_preflight_registry import (
     _infer_component,
-    check_manifest_with_curl,
     classify_http_error,
     parse_image_ref,
     sanitize_error,
 )
-from k9b_cnpg_image_preflight_node import (
-    check_container_waiting_reason,
-    classify_pull_failure,
+from k9b_cnpg_image_preflight_types import (
+    FAIL_IMAGE_TLS,
+    ImagePullSecretStatus,
+    NodePullResult,
+    RegistryResult,
 )
 
 
@@ -401,6 +400,107 @@ Containers:
         describe = "No events."
         failure_class, message = classify_pull_failure({"items": []}, "test", describe)
         assert failure_class == ""
+
+
+class TestCurlTlsErrorClassification:
+    """Tests for curl exit 60 / SSL certificate problem classification."""
+
+    def test_curl_exit_60_ssl_certificate_problem_classifies_as_tls_error(
+        self, tmp_path: Path
+    ) -> None:
+        """Should classify curl exit 60 with SSL certificate problem as image_registry_tls_error."""
+        from k9b_cnpg_image_preflight_registry import check_manifest_with_curl
+
+        # Create a dummy CA cert file
+        ca_cert = tmp_path / "ca.crt"
+        ca_cert.write_text("-----BEGIN CERTIFICATE-----\nDUMMY\n-----END CERTIFICATE-----\n")
+
+        # Mock subprocess.run to return exit code 60 with SSL error
+        mock_proc = mock.Mock()
+        mock_proc.returncode = 60
+        mock_proc.stdout = ""  # No HTTP status when TLS fails
+        mock_proc.stderr = "curl: (60) SSL certificate problem: unable to get local issuer certificate"
+
+        with mock.patch("subprocess.run", return_value=mock_proc):
+            result = check_manifest_with_curl(
+                "harbor-pve1.spbnix.local/k9b/k9b-backend:test",
+                ca_cert_path=str(ca_cert),
+            )
+
+        assert result["success"] is False
+        assert result["failure_class"] == FAIL_IMAGE_TLS
+        assert result["status_code"] == 0
+        assert "SSL certificate problem" in result["error_message"]
+        assert "local issuer certificate" in result["error_message"]
+        assert "--cacert" in result["command_used"]
+
+    def test_curl_exit_60_unable_to_get_local_issuer_classifies_as_tls_error(
+        self, tmp_path: Path
+    ) -> None:
+        """Should classify 'unable to get local issuer certificate' as image_registry_tls_error."""
+        from k9b_cnpg_image_preflight_registry import check_manifest_with_curl
+
+        # Create a dummy CA cert file
+        ca_cert = tmp_path / "ca.crt"
+        ca_cert.write_text("-----BEGIN CERTIFICATE-----\nDUMMY\n-----END CERTIFICATE-----\n")
+
+        # Mock subprocess.run to return exit code 60 with different SSL error text
+        mock_proc = mock.Mock()
+        mock_proc.returncode = 60
+        mock_proc.stdout = ""
+        mock_proc.stderr = "curl: (60) SSL certificate problem: unable to get local issuer certificate"
+
+        with mock.patch("subprocess.run", return_value=mock_proc):
+            result = check_manifest_with_curl(
+                "harbor-pve1.spbnix.local/k9b/k9b-frontend:v1",
+                ca_cert_path=str(ca_cert),
+            )
+
+        assert result["failure_class"] == FAIL_IMAGE_TLS
+        assert "unable to get local issuer certificate" in result["error_message"].lower()
+
+    def test_ca_cert_path_passthrough_to_curl_command(self, tmp_path: Path) -> None:
+        """Should include --cacert in curl command when ca_cert_path is provided."""
+        from k9b_cnpg_image_preflight_registry import check_manifest_with_curl
+
+        ca_cert = tmp_path / "harbor-ca.crt"
+        ca_cert.write_text("-----BEGIN CERTIFICATE-----\nDUMMY\n-----END CERTIFICATE-----\n")
+
+        # Mock subprocess.run to return success
+        mock_proc = mock.Mock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "200"
+        mock_proc.stderr = ""
+
+        with mock.patch("subprocess.run", return_value=mock_proc):
+            result = check_manifest_with_curl(
+                "harbor-pve1.spbnix.local/k9b/k9b-backend:test",
+                ca_cert_path=str(ca_cert),
+            )
+
+        # Verify --cacert is in the command used
+        assert "--cacert" in result["command_used"]
+        assert str(ca_cert) in result["command_used"]
+        assert result["success"] is True
+
+    def test_no_ca_cert_when_not_provided(self) -> None:
+        """Should not include --cacert when ca_cert_path is None."""
+        from k9b_cnpg_image_preflight_registry import check_manifest_with_curl
+
+        mock_proc = mock.Mock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "200"
+        mock_proc.stderr = ""
+
+        with mock.patch("subprocess.run", return_value=mock_proc):
+            result = check_manifest_with_curl(
+                "harbor-pve1.spbnix.local/k9b/k9b-backend:test",
+                # No ca_cert_path
+            )
+
+        # Verify --cacert is NOT in the command used
+        assert "--cacert" not in result["command_used"]
+        assert result["success"] is True
 
 
 class TestInferComponentFromRef:
