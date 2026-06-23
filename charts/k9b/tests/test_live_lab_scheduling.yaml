@@ -1,0 +1,299 @@
+# Helm test assertions for k9b live-lab scheduling behavior.
+# Tests that live-lab values correctly adjust scheduler affinity and resources
+# for lab environments where the original required pod affinity would cause failures.
+suite: live-lab scheduling
+
+templates:
+  - deployment-scheduler.yaml
+  - deployment.yaml
+  - deployment-frontend.yaml
+
+tests:
+  # =============================================================================
+  # SCHEDULER: Production default has hard affinity (NOT weakened)
+  # =============================================================================
+
+  - it: scheduler by default should have requiredDuringSchedulingIgnoredDuringExecution
+    template: deployment-scheduler.yaml
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution
+
+  - it: scheduler by default should NOT have preferredDuringSchedulingIgnoredDuringExecution
+    template: deployment-scheduler.yaml
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution
+
+  - it: scheduler by default should have standard CPU request (100m)
+    template: deployment-scheduler.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 100m
+
+  - it: scheduler by default should have standard memory request (256Mi)
+    template: deployment-scheduler.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+
+  # =============================================================================
+  # SCHEDULER: Live-lab disables affinity entirely
+  # =============================================================================
+
+  - it: scheduler with live-lab values should not render affinity section
+    template: deployment-scheduler.yaml
+    set:
+      scheduler.affinity.podAffinity: {}
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity
+
+  - it: scheduler with live-lab values should have reduced CPU request (25m)
+    template: deployment-scheduler.yaml
+    set:
+      scheduler.affinity.podAffinity: {}
+      scheduler.resources.requests.cpu: 25m
+      scheduler.resources.requests.memory: 128Mi
+      scheduler.resources.limits.cpu: 500m
+      scheduler.resources.limits.memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 25m
+
+  - it: scheduler with live-lab values should have reduced memory request (128Mi)
+    template: deployment-scheduler.yaml
+    set:
+      scheduler.affinity.podAffinity: {}
+      scheduler.resources.requests.cpu: 25m
+      scheduler.resources.requests.memory: 128Mi
+      scheduler.resources.limits.cpu: 500m
+      scheduler.resources.limits.memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 128Mi
+
+  - it: scheduler with live-lab values should have reduced CPU limit (500m)
+    template: deployment-scheduler.yaml
+    set:
+      scheduler.affinity.podAffinity: {}
+      scheduler.resources.requests.cpu: 25m
+      scheduler.resources.requests.memory: 128Mi
+      scheduler.resources.limits.cpu: 500m
+      scheduler.resources.limits.memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 500m
+
+  - it: scheduler with live-lab values should have reduced memory limit (512Mi)
+    template: deployment-scheduler.yaml
+    set:
+      scheduler.affinity.podAffinity: {}
+      scheduler.resources.requests.cpu: 25m
+      scheduler.resources.requests.memory: 128Mi
+      scheduler.resources.limits.cpu: 500m
+      scheduler.resources.limits.memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 512Mi
+
+  # =============================================================================
+  # BACKEND: Production default resources
+  # =============================================================================
+
+  - it: backend by default should have standard CPU request (100m)
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 100m
+
+  - it: backend by default should have standard memory request (256Mi)
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+
+  # =============================================================================
+  # BACKEND: Live-lab reduced resources
+  # =============================================================================
+
+  - it: backend with live-lab values should have reduced CPU request (25m)
+    template: deployment.yaml
+    set:
+      backend.resources.requests.cpu: 25m
+      backend.resources.requests.memory: 128Mi
+      backend.resources.limits.cpu: 500m
+      backend.resources.limits.memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 25m
+
+  - it: backend with live-lab values should have reduced memory request (128Mi)
+    template: deployment.yaml
+    set:
+      backend.resources.requests.cpu: 25m
+      backend.resources.requests.memory: 128Mi
+      backend.resources.limits.cpu: 500m
+      backend.resources.limits.memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 128Mi
+
+  - it: backend with live-lab values should have reduced CPU limit (500m)
+    template: deployment.yaml
+    set:
+      backend.resources.requests.cpu: 25m
+      backend.resources.requests.memory: 128Mi
+      backend.resources.limits.cpu: 500m
+      backend.resources.limits.memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 500m
+
+  - it: backend with live-lab values should have reduced memory limit (512Mi)
+    template: deployment.yaml
+    set:
+      backend.resources.requests.cpu: 25m
+      backend.resources.requests.memory: 128Mi
+      backend.resources.limits.cpu: 500m
+      backend.resources.limits.memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 512Mi
+
+  # =============================================================================
+  # FRONTEND: Production default resources
+  # =============================================================================
+
+  - it: frontend by default should have standard CPU request (50m)
+    template: deployment-frontend.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 50m
+
+  - it: frontend by default should have standard memory request (64Mi)
+    template: deployment-frontend.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 64Mi
+
+  # =============================================================================
+  # FRONTEND: Live-lab reduced resources
+  # =============================================================================
+
+  - it: frontend with live-lab values should have reduced CPU request (25m)
+    template: deployment-frontend.yaml
+    set:
+      frontend.resources.requests.cpu: 25m
+      frontend.resources.requests.memory: 64Mi
+      frontend.resources.limits.cpu: 250m
+      frontend.resources.limits.memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 25m
+
+  - it: frontend with live-lab values should have reduced memory request (64Mi)
+    template: deployment-frontend.yaml
+    set:
+      frontend.resources.requests.cpu: 25m
+      frontend.resources.requests.memory: 64Mi
+      frontend.resources.limits.cpu: 250m
+      frontend.resources.limits.memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 64Mi
+
+  - it: frontend with live-lab values should have reduced CPU limit (250m)
+    template: deployment-frontend.yaml
+    set:
+      frontend.resources.requests.cpu: 25m
+      frontend.resources.requests.memory: 64Mi
+      frontend.resources.limits.cpu: 250m
+      frontend.resources.limits.memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 250m
+
+  - it: frontend with live-lab values should have reduced memory limit (128Mi)
+    template: deployment-frontend.yaml
+    set:
+      frontend.resources.requests.cpu: 25m
+      frontend.resources.requests.memory: 64Mi
+      frontend.resources.limits.cpu: 250m
+      frontend.resources.limits.memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 128Mi
+
+  # =============================================================================
+  # LIVE-LAB VALUES FILE: Test using actual values-live-lab.yaml
+  # =============================================================================
+
+  - it: scheduler using values-live-lab.yaml should have no affinity section
+    template: deployment-scheduler.yaml
+    values:
+      - ../values-live-lab.yaml
+    set:
+      kubernetes.auth.mode: inCluster
+      serviceAccount.automountServiceAccountToken: true
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity
+
+  - it: scheduler using values-live-lab.yaml should have reduced resources
+    template: deployment-scheduler.yaml
+    values:
+      - ../values-live-lab.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 25m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 128Mi
+
+  - it: backend using values-live-lab.yaml should have reduced resources
+    template: deployment.yaml
+    values:
+      - ../values-live-lab.yaml
+    set:
+      backend.auth.enabled: false
+      kubernetes.auth.mode: inCluster
+      serviceAccount.automountServiceAccountToken: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 25m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 128Mi
+
+  - it: frontend using values-live-lab.yaml should have reduced resources
+    template: deployment-frontend.yaml
+    values:
+      - ../values-live-lab.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 25m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 64Mi

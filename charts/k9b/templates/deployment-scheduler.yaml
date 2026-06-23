@@ -164,18 +164,76 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- /*
+        Affinity logic:
+        1. If scheduler.affinity is explicitly set with content:
+           - Render scheduler affinity only (override global if needed)
+        2. If global affinity has content:
+           - Render global affinity (includes podAffinity if set)
+        3. Otherwise, render default hard affinity (production default)
+      */ -}}
+      {{- $hasSchedulerAffinity := false -}}
+      {{- $schedulerAffinityPodAffinityContent := false -}}
+      {{- if hasKey .Values.scheduler "affinity" }}
+        {{- $hasSchedulerAffinity = true -}}
+        {{- /* Check if podAffinity has actual content, not just empty dict */ -}}
+        {{- if and .Values.scheduler.affinity.podAffinity (not (empty .Values.scheduler.affinity.podAffinity)) }}
+          {{- $schedulerAffinityPodAffinityContent = true -}}
+        {{- end }}
+      {{- end }}
+      {{- $hasGlobalAffinityContent := false -}}
+      {{- if hasKey .Values "affinity" }}
+        {{- if not (empty .Values.affinity) }}
+          {{- $hasGlobalAffinityContent = true -}}
+        {{- end }}
+      {{- end }}
+      {{- $renderAffinity := false -}}
+      {{- $renderDefaultAffinity := false -}}
+      {{- /* Determine what to render */ -}}
+      {{- if $hasSchedulerAffinity }}
+        {{- /* Scheduler affinity explicitly set - skip if empty podAffinity */ -}}
+        {{- if or $schedulerAffinityPodAffinityContent }}
+          {{- $renderAffinity = true -}}
+        {{- end }}
+      {{- else if $hasGlobalAffinityContent }}
+        {{- /* Global affinity has content */ -}}
+        {{- $renderAffinity = true -}}
+      {{- else }}
+        {{- /* Default: hard affinity for production */ -}}
+        {{- $renderAffinity = true -}}
+        {{- $renderDefaultAffinity = true -}}
+      {{- end }}
+      {{- if $renderAffinity }}
       affinity:
-        {{- if .Values.affinity }}
+        {{- /* Render global affinity if it has content (and no scheduler affinity override) */ -}}
+        {{- if and $hasGlobalAffinityContent (not $hasSchedulerAffinity) }}
         {{- toYaml .Values.affinity | nindent 8 }}
         {{- end }}
+        {{- /* Render scheduler podAffinity if it has content */ -}}
+        {{- if and $hasSchedulerAffinity $schedulerAffinityPodAffinityContent }}
+        {{- with .Values.scheduler.affinity }}
+        podAffinity:
+          {{- if .podAffinity.requiredDuringSchedulingIgnoredDuringExecution }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            {{- toYaml .podAffinity.requiredDuringSchedulingIgnoredDuringExecution | nindent 12 }}
+          {{- end }}
+          {{- if .podAffinity.preferredDuringSchedulingIgnoredDuringExecution }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            {{- toYaml .podAffinity.preferredDuringSchedulingIgnoredDuringExecution | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- /* Default hard affinity for production */ -}}
+        {{- if $renderDefaultAffinity }}
+        {{- $backendLabels := dict "app.kubernetes.io/name" (include "k9b.name" .) "app.kubernetes.io/instance" .Release.Name "app.kubernetes.io/component" "backend" | toJson | fromJson }}
         podAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  app.kubernetes.io/name: {{ include "k9b.name" . }}
-                  app.kubernetes.io/instance: {{ .Release.Name }}
-                  app.kubernetes.io/component: backend
+                  {{- toYaml $backendLabels | nindent 16 }}
               topologyKey: kubernetes.io/hostname
+        {{- end }}
+      {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}

@@ -1,15 +1,56 @@
 # Live lab values for K3s/CNPG cluster deployments.
-# This file disables cluster-scoped RBAC for environments where the runner lacks
-# cluster-RBAC permissions (ClusterRole/ClusterRoleBinding).
+#
+# This file provides live-lab-safe scheduling and resource overrides
+# that allow k9b to schedule reliably on self-hosted lab runner clusters
+# without weakening production defaults.
 #
 # Usage:
 #   helm install k9b ./charts/k9b -f charts/k9b/values-live-lab.yaml [other options]
 #
 # Or override individual values:
-#   helm install k9b ./charts/k9b --set rbac.clusterScoped=false [other options]
+#   helm install k9b ./charts/k9b --set scheduler.resources.requests.cpu=25m [other options]
 
-# RBAC: Use namespace-scoped Role/RoleBinding instead of ClusterRole/ClusterRoleBinding.
-# This allows Helm to deploy without requiring cluster-scoped RBAC permissions.
+# =============================================================================
+# RBAC: Namespace-scoped (no cluster-RBAC permissions required)
+# =============================================================================
 rbac:
   create: true
   clusterScoped: false
+
+# =============================================================================
+# Resources: Smaller, honest values for lab environments
+# Lab clusters often have limited resources or shared nodes.
+# Keep requests non-zero so the scheduler respects actual resource needs.
+# =============================================================================
+backend:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+scheduler:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # Disable scheduler pod affinity entirely for lab scheduling.
+  # Lab clusters may not have nodes that satisfy both taint/toleration
+  # and pod affinity requirements with a single replica.
+  # This completely removes the affinity constraint (not a soft/preferred version).
+  affinity:
+    podAffinity: {}
+
+frontend:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
