@@ -326,14 +326,22 @@ class TestWorkflowLiveLabNamespaceMode:
     def test_live_workflow_verifier_runs_after_cleanup(self) -> None:
         """Verifier must run after log collection and cleanup."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        # Extract step order
+        # Extract step order (sanitized pipeline)
         collect_logs_pos = content.find("Collect")
         cleanup_pos = content.find("Cleanup sensitive files")
-        verify_pos = content.find("Verify live lab artifacts")
-        upload_pos = content.find("Upload live lab artifacts")
-        # Correct order: collect -> cleanup -> verify -> upload
-        assert collect_logs_pos < cleanup_pos < verify_pos < upload_pos, \
-            f"Step order wrong: collect={collect_logs_pos}, cleanup={cleanup_pos}, verify={verify_pos}, upload={upload_pos}"
+        sanitize_pos = content.find("Sanitize artifacts for verification")
+        verify_pos = content.find("Verify sanitized artifacts")
+        upload_pos = content.find("Upload sanitized artifacts")
+        # Correct order: collect -> cleanup -> sanitize -> verify -> upload
+        assert collect_logs_pos < cleanup_pos < sanitize_pos < verify_pos < upload_pos, \
+            f"Step order wrong: collect={collect_logs_pos}, cleanup={cleanup_pos}, sanitize={sanitize_pos}, verify={verify_pos}, upload={upload_pos}"
+        # Verify safety boundary
+        assert "SANITIZED_ARTIFACTS_SAFE=true" in content, \
+            "Should set SANITIZED_ARTIFACTS_SAFE after sanitization"
+        assert "path: ./lab-artifacts/live-sanitized/**" in content, \
+            "Should upload sanitized artifacts only"
+        assert "path: ./lab-artifacts/live/**" not in content, \
+            "Should NOT upload raw live artifacts"
 
 
 class TestKubectlBootstrap:

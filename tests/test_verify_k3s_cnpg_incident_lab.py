@@ -653,3 +653,24 @@ class TestSanitizerDeduplication:
         # Check findings file exists (deduplication happens internally)
         findings_path = output_dir / "_findings.json"
         assert findings_path.exists(), "Findings file should exist"
+
+
+class TestSanitizerDependencies:
+    """Test that sanitizer dependencies are properly installed."""
+
+    def test_sanitizer_dependencies_importable(self) -> None:
+        """Sanitizer script dependencies (yaml) must be importable."""
+        import yaml  # noqa: F401 - smoke test for PyYAML
+
+    def test_sanitizer_script_imports_yaml(self) -> None:
+        """Sanitizer script should be able to import yaml at runtime."""
+        import subprocess
+        import sys
+        # Test that the sanitizer script can run with its yaml import
+        result = subprocess.run(
+            [sys.executable, "-c", "import yaml; print('yaml OK')"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"yaml import failed:\n{result.stderr}"
+        assert "yaml OK" in result.stdout
