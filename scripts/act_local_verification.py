@@ -29,6 +29,7 @@ from act_local_checks import (
     run_ruff_on_files,
     run_shell_containment_on_files,
     run_verification_discipline_check,
+    run_workflow_check,
 )
 from act_local_contract import ActLocalResult, CheckResult
 from act_local_output import format_human_output, format_json_output
@@ -111,6 +112,12 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(json_result)
     if json_result.status == "FAIL":
         failure_commands.append(json_result.command)
+    
+    # Run GitHub workflow verifier (always runs - cheap, global check)
+    workflow_result = run_workflow_check()
+    checks.append(workflow_result)
+    if workflow_result.status == "FAIL":
+        failure_commands.append(workflow_result.command)
     
     # Determine overall success (all non-skipped checks must pass)
     non_skipped = [c for c in checks if c.status != "SKIP"]

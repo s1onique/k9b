@@ -204,3 +204,24 @@ def run_json_contract_check() -> CheckResult:
     
     command = [str(REPO_ROOT / ".venv" / "bin" / "python"), str(contract_path)]
     return run_check("json-contract", command)
+
+
+def run_workflow_check() -> CheckResult:
+    """Run GitHub workflow YAML and shell syntax verifier on all workflows.
+
+    This check always runs because workflow validity depends on all workflows
+    (duplicate name detection requires seeing the full set). It's fast (~1s).
+    """
+    verifier_path = SCRIPTS_DIR / "verify_github_workflows.py"
+    if not verifier_path.exists():
+        return CheckResult(
+            name="workflow-verify",
+            command="verify_github_workflows.py",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message="CRITICAL: verify_github_workflows.py not found",
+        )
+    
+    command = [str(REPO_ROOT / ".venv" / "bin" / "python"), str(verifier_path)]
+    return run_check("workflow-verify", command)

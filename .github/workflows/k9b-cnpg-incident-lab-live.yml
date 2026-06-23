@@ -316,14 +316,8 @@ jobs:
           # If ANY fatal failure exists (manifest_missing, tls_error, network_error), fail
           if [ "${REGISTRY_RC}" -ne 0 ]; then
             if [ -f ./lab-artifacts/live/image-preflight/registry-preflight.json ]; then
-              ALL_UNVERIFIED=$(.venv/bin/python -c "
-import json
-with open('./lab-artifacts/live/image-preflight/registry-preflight.json') as f:
-    data = json.load(f)
-    fcs = data.get('failure_classes', [])
-    all_unverified = all(fc == 'runner_registry_auth_unverified' for fc in fcs)
-    print('true' if all_unverified and fcs else 'false')
-" 2>/dev/null)
+              .venv/bin/python -c "import json; data=json.load(open(\"./lab-artifacts/live/image-preflight/registry-preflight.json\")); fcs=data.get(\"failure_classes\",[]); all_unv=all(fc==\"runner_registry_auth_unverified\" for fc in fcs); print(\"true\" if all_unv and fcs else \"false\")" > ./lab-artifacts/live/image-preflight/all_unverified.tmp 2>/dev/null
+              ALL_UNVERIFIED=$(cat ./lab-artifacts/live/image-preflight/all_unverified.tmp)
             else
               ALL_UNVERIFIED="false"
             fi
@@ -402,17 +396,8 @@ with open('./lab-artifacts/live/image-preflight/registry-preflight.json') as f:
             echo ""
             
             # Extract and display exact failure class (inside failure branch)
-            EXACT_FAILURE=$(.venv/bin/python -c "
-import json
-with open('./lab-artifacts/live/image-preflight/node-pull-preflight.json') as f:
-    data = json.load(f)
-    for fc in data.get('failure_classes', []):
-        if fc:
-            print(fc)
-            break
-    else:
-        print('node_image_pull_unknown')
-" 2>/dev/null || echo "node_image_pull_unknown")
+            .venv/bin/python -c "import json; data=json.load(open(\"./lab-artifacts/live/image-preflight/node-pull-preflight.json\")); fcs=data.get(\"failure_classes\",[]); print(next((fc for fc in fcs if fc), \"node_image_pull_unknown\"))" > ./lab-artifacts/live/image-preflight/exact_failure.tmp 2>/dev/null || echo "node_image_pull_unknown" > ./lab-artifacts/live/image-preflight/exact_failure.tmp
+            EXACT_FAILURE=$(cat ./lab-artifacts/live/image-preflight/exact_failure.tmp)
             
             echo "Node pull preflight results:"
             cat ./lab-artifacts/live/image-preflight/node-pull-preflight.json | .venv/bin/python -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d, indent=2))"
@@ -436,15 +421,8 @@ with open('./lab-artifacts/live/image-preflight/node-pull-preflight.json') as f:
 
           # Extract and display exact failure class for diagnostics (on success path)
           if [ -f ./lab-artifacts/live/image-preflight/node-pull-preflight.json ]; then
-            FIRST_FAILURE=$(.venv/bin/python -c "
-import json
-with open('./lab-artifacts/live/image-preflight/node-pull-preflight.json') as f:
-    data = json.load(f)
-    for fc in data.get('failure_classes', []):
-        if fc:
-            print(fc)
-            break
-" 2>/dev/null || echo "unknown")
+            .venv/bin/python -c "import json; data=json.load(open(\"./lab-artifacts/live/image-preflight/node-pull-preflight.json\")); fcs=data.get(\"failure_classes\",[]); print(next((fc for fc in fcs if fc), \"unknown\"))" > ./lab-artifacts/live/image-preflight/first_failure.tmp 2>/dev/null || echo "unknown" > ./lab-artifacts/live/image-preflight/first_failure.tmp
+            FIRST_FAILURE=$(cat ./lab-artifacts/live/image-preflight/first_failure.tmp)
             echo "NODE_PREF_FAILURE_CLASS=${FIRST_FAILURE}" >> $GITHUB_OUTPUT
           fi
 
