@@ -459,3 +459,56 @@ def run_golden_case_privacy_check() -> CheckResult:
     ]
 
     return run_check("golden-case-privacy", verify_cmd)
+
+
+def run_incident_api_one_pass_diagnosis_check() -> CheckResult:
+    """Run incident API/service one-pass diagnosis wiring verification.
+
+    This check:
+    - Exercises the incident diagnosis service seam with the pod-failure golden case
+    - Uses fake stores, fake providers, and fake read-only handlers
+    - Verifies the golden case passes through the service/API path
+    - Proves the same one-pass loop is invoked as the golden-case proof
+    - Verifies read-only fake handlers are invoked
+    - Verifies missing providers/handlers fail closed
+    - Verifies mutation proposals fail closed
+
+    This is a fast, deterministic check that uses checked-in fixtures.
+    It exercises the new service function (incident_diagnosis_service.py)
+    and proves it wires correctly to the production one-pass loop.
+
+    Missing script is a HARD FAILURE because the ACT requires this check.
+    """
+    # Check if the API/service one-pass diagnosis check script exists
+    check_script_path = SCRIPTS_DIR / "run_incident_api_one_pass_diagnosis_check.py"
+
+    if not check_script_path.exists():
+        return CheckResult(
+            name="incident-api-one-pass-diagnosis",
+            command="run_incident_api_one_pass_diagnosis_check.py",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message="CRITICAL: run_incident_api_one_pass_diagnosis_check.py not found - ACT requires this check",
+        )
+
+    # Define golden case path
+    case_dir = REPO_ROOT / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
+
+    if not case_dir.exists():
+        return CheckResult(
+            name="incident-api-one-pass-diagnosis",
+            command="golden case bundle",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message=f"Golden case bundle not found: {case_dir}",
+        )
+
+    # Run the incident API one-pass diagnosis check
+    check_cmd = [
+        str(REPO_ROOT / ".venv" / "bin" / "python"),
+        str(check_script_path),
+    ]
+
+    return run_check("incident-api-one-pass-diagnosis", check_cmd)
