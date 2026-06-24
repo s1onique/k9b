@@ -23,6 +23,7 @@ from act_local_changed_files import filter_python_files, get_changed_files
 from act_local_checks import (
     run_doctrine_check,
     run_golden_case_check,
+    run_golden_case_privacy_check,
     run_json_contract_check,
     run_llm_friendly_on_files,
     run_mypy_on_files,
@@ -132,6 +133,12 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(provenance_result)
     if provenance_result.status == "FAIL":
         failure_commands.append(provenance_result.command)
+    
+    # Run privacy verification for golden case (verifies no private topology leaks)
+    privacy_result = run_golden_case_privacy_check()
+    checks.append(privacy_result)
+    if privacy_result.status == "FAIL":
+        failure_commands.append(privacy_result.command)
     
     # Determine overall success (all non-skipped checks must pass)
     non_skipped = [c for c in checks if c.status != "SKIP"]

@@ -391,3 +391,57 @@ def run_provenance_golden_case_check() -> CheckResult:
     ]
 
     return run_check("provenance-golden-case", verify_cmd)
+
+
+def run_golden_case_privacy_check() -> CheckResult:
+    """Run privacy verification for diagnosis golden-case fixtures.
+
+    This check:
+    - Scans golden-case fixture directories for leaked internal topology
+    - Detects RFC1918 private IPs (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
+    - Detects internal K8s node names (k3s-worker-*, k3s-master-*)
+    - Detects internal namespace names (k9b-cnpg-lab-[0-9]+)
+    - Detects internal domains (*.spbnix.local, registry.spbnix.com)
+    - Detects raw artifact paths (lab-artifacts/live)
+    - Allows intended placeholders: <PRIVATE_IP>, <K8S_NODE>, etc.
+    - Reports file, line number, pattern class, and bounded excerpt on failure
+
+    This is a fail-closed check that prevents accidental commits of private topology.
+    Missing verifier is a HARD FAILURE (not SKIP) because privacy is mandatory.
+
+    This is a fast, offline check that does not contact external services.
+    """
+    # Check if privacy verifier exists - HARD FAIL if missing (privacy is mandatory)
+    verifier_path = SCRIPTS_DIR / "verify_diagnosis_golden_case_privacy.py"
+
+    if not verifier_path.exists():
+        return CheckResult(
+            name="golden-case-privacy",
+            command="verify_diagnosis_golden_case_privacy.py",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message="CRITICAL: verify_diagnosis_golden_case_privacy.py not found - privacy gate is missing",
+        )
+
+    # Define golden case path
+    case_dir = REPO_ROOT / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
+
+    if not case_dir.exists():
+        return CheckResult(
+            name="golden-case-privacy",
+            command="golden case bundle",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message=f"Golden case bundle not found: {case_dir}",
+        )
+
+    # Run privacy verification
+    verify_cmd = [
+        str(REPO_ROOT / ".venv" / "bin" / "python"),
+        str(verifier_path),
+        str(case_dir),
+    ]
+
+    return run_check("golden-case-privacy", verify_cmd)
