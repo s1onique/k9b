@@ -228,25 +228,32 @@ def run_workflow_check() -> CheckResult:
 
 
 def run_golden_case_check() -> CheckResult:
-    """Run golden case diagnosis verification.
+    """Run golden case one-pass production-loop diagnosis verification.
 
     This check:
-    - Runs the production diagnosis-loop adapter on the pod-failure golden case
+    - Runs the production one-pass diagnosis loop adapter on the pod-failure golden case
+    - Uses golden-case fake handlers for read-only check execution
+    - Uses deterministic LLM provider for diagnosis
     - Verifies the diagnosis output against expected.json
     - Ensures correct category, root cause, and no forbidden conclusions
 
     This is a fast, deterministic check that uses checked-in fixtures.
 
-    Note: This runs the PRODUCTION adapter (run_golden_case_diagnosis_via_production_loop.py)
-    to exercise the real production diagnosis path. The standalone fixture harness
-    (run_diagnosis_offline.py) is preserved for focused tests but is not the primary
-    proof path.
+    The one-pass production loop exercises:
+    - incident_case_file (build)
+    - incident_llm_diagnosis (with injected deterministic provider)
+    - incident_diagnosis_loop_orchestrator (one-pass)
+    - incident_read_only_check_runner (with injected fake handlers)
+
+    Note: The standalone fixture harness (run_golden_case_diagnosis_via_production_loop.py)
+    is preserved for focused tests. The new runner exercises the production loop machinery
+    more completely.
     """
     # Check if golden case verifier exists
     verifier_path = SCRIPTS_DIR / "verify_diagnosis_golden_case.py"
 
-    # Check if production adapter exists
-    production_adapter_path = SCRIPTS_DIR / "run_golden_case_diagnosis_via_production_loop.py"
+    # Check if one-pass production loop adapter exists
+    production_adapter_path = SCRIPTS_DIR / "run_golden_case_via_one_pass_diagnosis_loop.py"
 
     if not verifier_path.exists():
         return CheckResult(
@@ -261,11 +268,11 @@ def run_golden_case_check() -> CheckResult:
     if not production_adapter_path.exists():
         return CheckResult(
             name="golden-case-verify",
-            command="run_golden_case_diagnosis_via_production_loop.py",
+            command="run_golden_case_via_one_pass_diagnosis_loop.py",
             status="FAIL",
             duration_ms=0,
             exit_code=1,
-            error_message="CRITICAL: production adapter script not found - golden case must exercise production path",
+            error_message="CRITICAL: one-pass production loop adapter not found - golden case must exercise production path",
         )
 
     # Define golden case paths
@@ -297,7 +304,7 @@ def run_golden_case_check() -> CheckResult:
     with tempfile.TemporaryDirectory() as tmp_dir:
         output_dir = Path(tmp_dir) / "diagnosis-output"
 
-        # Run production diagnosis adapter (exercises real production path)
+        # Run one-pass production loop adapter (exercises real production path)
         production_cmd = [
             str(REPO_ROOT / ".venv" / "bin" / "python"),
             str(production_adapter_path),
@@ -320,7 +327,7 @@ def run_golden_case_check() -> CheckResult:
                 status="FAIL",
                 duration_ms=0,
                 exit_code=production_result.returncode,
-                error_message=f"Production adapter failed: {production_result.stderr[:500]}",
+                error_message=f"One-pass production loop adapter failed: {production_result.stderr[:500]}",
             )
 
         # Verify diagnosis output

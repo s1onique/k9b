@@ -102,92 +102,97 @@ python scripts/verify_diagnosis_golden_case.py \
     --diagnosis /tmp/diagnosis-output/diagnosis.json
 ```
 
-## Deterministic Adapter Scaffold
+## Three-Tier Architecture
 
-**Status**: This is a **deterministic adapter scaffold**, not the production diagnosis loop itself. It verifies the seam by exercising:
-- Evidence loading from golden-case bundles
-- Deterministic diagnosis matching expected output schema
-- Safety enforcement (no forbidden conclusions, no mutation proposals)
-- Privacy and provenance verification via actual verifier scripts
+The golden-case diagnosis system has evolved through three distinct implementations:
 
-The adapter does NOT wire into:
-- Incident case-file builder
-- One-pass diagnosis orchestrator
-- Read-only check runner with fake handlers
-- LLM diagnosis path
+### 1. Offline Fixture Harness (`scripts/run_diagnosis_offline.py`)
+
+The original standalone harness that:
+- Loads golden-case evidence from bundle
+- Produces deterministic diagnosis output
+- Validates against expected.json
+- Preserved for focused unit tests
+
+### 2. Deterministic Adapter Scaffold
+
+The intermediate adapter that:
+- Validates prerequisites (privacy, provenance, sanitizer)
+- Loads golden-case bundle
+- Uses `GoldenCaseEvidenceProvider` for evidence
+- Uses `DeterministicDiagnosisProvider` for diagnosis
+- Validates evidence requirements
+- Enforces safety constraints
+- Outputs diagnosis.json + summary.md
+
+**Note**: This scaffold verifies the seam but does NOT wire into production modules.
+
+### 3. One-Pass Production-Loop Runner (`scripts/run_golden_case_via_one_pass_diagnosis_loop.py`)
+
+The production adapter that exercises **real production modules**:
+
+```
+One-Pass Production-Loop Runner
+├── Validates prerequisites (privacy, provenance, sanitizer)  [fail-closed on missing]
+├── Loads golden-case bundle
+├── GoldenCaseEvidenceProvider         - Serves evidence from bundle
+├── build_golden_case_case_file()     - Converts bundle to production case-file shape
+├── GoldenCaseDeterministicLLMProvider - Injects deterministic LLM seam
+├── incident_diagnosis_loop_orchestrator.run_one_read_only_diagnosis_loop_pass()
+│   └── Uses injected fake_handlers (NOT live commands)
+├── Enforces fake-handler execution    [fail-closed if checks_run=0 or unknown check_id]
+└── Enforces safety constraints        [fail-closed on mutation/forbidden conclusions]
+```
+
+**Key Enforcements**:
+
+| Check | Behavior |
+|-------|----------|
+| Missing privacy/provenance scripts | Exit code 3 (fail-closed) |
+| `checks_run <= 0` | Raises `FakeHandlerExecutionError` |
+| Empty `handler_invocations` | Raises `FakeHandlerExecutionError` |
+| Unknown check ID | Raises `FakeHandlerExecutionError` |
+| Missing `golden_case_handler=true` | Raises `FakeHandlerExecutionError` |
+| Missing `no_kubernetes_call=true` | Raises `FakeHandlerExecutionError` |
 
 ### Adapter Comparison
 
-| Adapter | Status | Description |
-|---------|--------|-------------|
-| `run_diagnosis_offline.py` | ✅ Implemented | Standalone fixture harness (preserved for focused tests) |
-| `run_golden_case_diagnosis_via_production_loop.py` | ✅ Implemented | **Deterministic scaffold** - exercises seam, not production loop |
-
-### Current Architecture
-
-```
-Deterministic Adapter Scaffold (run_golden_case_diagnosis_via_production_loop.py)
-├── Validates prerequisites (privacy, provenance, sanitizer)
-├── Loads golden-case bundle
-├── GoldenCaseEvidenceProvider        - Serves evidence from bundle
-├── build_deterministic_diagnosis()   - Uses DeterministicDiagnosisProvider
-├── Validates evidence requirements
-├── Enforces safety constraints
-└── outputs diagnosis.json + summary.md
-
-Golden Case Provider Layer (src/k8s_diag_agent/collect/golden_case_providers.py)
-├── GoldenCaseEvidenceProvider         - Reads evidence from bundle
-├── create_golden_case_fake_handlers() - Future: wire into read-only check runner
-└── DeterministicDiagnosisProvider     - Produces safe, bounded diagnosis
-```
-
-### Production Adapter Interface
-
-The production adapter implements the same interface as the fixture harness:
-
-```python
-# Production adapter must implement:
-def run_diagnosis(case_dir: Path, output_dir: Path) -> dict:
-    """
-    Run diagnosis on golden case evidence.
-    
-    Returns dict with same schema as diagnosis.json:
-    - category: str
-    - root_cause: str  
-    - confidence: str
-    - description: str
-    - evidence_refs: list[str]
-    - read_only: bool
-    - forbidden_actions_observed: list[str]
-    - mutation_proposals_observed: list[str]
-    - diagnosis_engine: str
-    - next_checks: list[dict]
-    """
-```
+| Adapter | Production Modules | Fake Handlers | Enforcement | Use Case |
+|---------|-------------------|---------------|-------------|----------|
+| `run_diagnosis_offline.py` | ❌ | ❌ | Safety only | Focused unit tests |
+| Deterministic scaffold | ❌ | ❌ | Safety only | Seam verification |
+| `run_golden_case_via_one_pass_diagnosis_loop.py` | ✅ | ✅ | Full | ACT-local proof path |
 
 ### Key Design Points
 
-1. **Offline Only**: Adapter does not call kubectl, helm, docker, registry, or GitHub APIs
-2. **Read-Only**: Adapter cannot propose mutation/remediation actions
+1. **Offline Only**: Runner does not call kubectl, helm, docker, registry, or GitHub APIs
+2. **Read-Only**: Cannot propose mutation/remediation actions
 3. **Evidence-Backed**: Uses sanitized golden-case evidence only
 4. **Safety-First**: Fails if privacy/provenance/sanitizer verifiers fail
-5. **Production Seam**: Exercises real k9b modules, not a parallel regex-only path
+5. **Fake-Handler Enforcement**: Enforces actual fake-handler execution, not just presence
+6. **Production Seam**: Exercises real k9b modules with injected fake handlers
 
 ### ACT-Local Verification
 
-ACT-local verification runs the **production adapter** by default:
+ACT-local verification runs the **one-pass production-loop runner** by default:
 
 ```python
 # scripts/act_local_checks.py - run_golden_case_check()
 production_cmd = [
     str(REPO_ROOT / ".venv" / "bin" / "python"),
-    str(production_adapter_path),  # run_golden_case_diagnosis_via_production_loop.py
+    str(REPO_ROOT / "scripts" / "run_golden_case_via_one_pass_diagnosis_loop.py"),
     "--case-dir", str(case_dir),
     "--output-dir", str(output_dir),
 ]
 ```
 
-The standalone fixture harness (`run_diagnosis_offline.py`) is preserved for focused unit tests but is no longer the primary proof path.
+The runner proves:
+- ✅ Production orchestrator path is exercised
+- ✅ Fake handlers are passed to orchestrator
+- ✅ Handler invocations are recorded with proper flags
+- ✅ Unknown check IDs fail closed
+- ✅ Zero checks fails closed
+- ✅ Missing verifiers fail closed
 
 ## References
 
