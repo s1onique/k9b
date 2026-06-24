@@ -512,3 +512,56 @@ def run_incident_api_one_pass_diagnosis_check() -> CheckResult:
     ]
 
     return run_check("incident-api-one-pass-diagnosis", check_cmd)
+
+
+def run_incident_api_route_one_pass_diagnosis_check() -> CheckResult:
+    """Run incident API route one-pass diagnosis wiring verification.
+
+    This check:
+    - Exercises the HTTP API route for incident diagnosis service
+    - Uses fake stores, fake providers, and fake read-only handlers
+    - Verifies the golden case passes through the route/API path
+    - Proves the route wires to run_incident_one_pass_diagnosis()
+    - Verifies fake handlers are actually invoked
+    - Verifies missing providers/handlers fail closed
+    - Verifies mutation proposals fail closed
+
+    This is a fast, deterministic check that uses checked-in fixtures.
+    It exercises the new API route (server_incident_one_pass_diagnosis_service.py)
+    and proves it wires correctly to the service layer.
+
+    Missing script is a HARD FAILURE because the ACT requires this check.
+    """
+    # Check if the API route one-pass diagnosis check script exists
+    check_script_path = SCRIPTS_DIR / "run_incident_api_route_one_pass_diagnosis_check.py"
+
+    if not check_script_path.exists():
+        return CheckResult(
+            name="incident-api-route-one-pass-diagnosis",
+            command="run_incident_api_route_one_pass_diagnosis_check.py",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message="CRITICAL: run_incident_api_route_one_pass_diagnosis_check.py not found - ACT requires this check",
+        )
+
+    # Define golden case path
+    case_dir = REPO_ROOT / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
+
+    if not case_dir.exists():
+        return CheckResult(
+            name="incident-api-route-one-pass-diagnosis",
+            command="golden case bundle",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message=f"Golden case bundle not found: {case_dir}",
+        )
+
+    # Run the incident API route one-pass diagnosis check
+    check_cmd = [
+        str(REPO_ROOT / ".venv" / "bin" / "python"),
+        str(check_script_path),
+    ]
+
+    return run_check("incident-api-route-one-pass-diagnosis", check_cmd)

@@ -25,6 +25,7 @@ from act_local_checks import (
     run_golden_case_check,
     run_golden_case_privacy_check,
     run_incident_api_one_pass_diagnosis_check,
+    run_incident_api_route_one_pass_diagnosis_check,
     run_json_contract_check,
     run_llm_friendly_on_files,
     run_mypy_on_files,
@@ -148,6 +149,14 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(api_one_pass_result)
     if api_one_pass_result.status == "FAIL":
         failure_commands.append(api_one_pass_result.command)
+    
+    # Run incident API route one-pass diagnosis wiring verification
+    # This exercises the HTTP API route with golden-case fixtures and proves
+    # the route wires to run_incident_one_pass_diagnosis()
+    api_route_result = run_incident_api_route_one_pass_diagnosis_check()
+    checks.append(api_route_result)
+    if api_route_result.status == "FAIL":
+        failure_commands.append(api_route_result.command)
     
     # Determine overall success (all non-skipped checks must pass)
     non_skipped = [c for c in checks if c.status != "SKIP"]

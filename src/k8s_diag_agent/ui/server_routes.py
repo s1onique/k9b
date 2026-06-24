@@ -27,6 +27,9 @@ _RUN_ALERTMANAGER_SOURCE_ACTION = re.compile(
 _INCIDENT_DIAGNOSIS_LOOP_PATTERN = re.compile(
     r"^/api/incidents/([^/]+)/diagnosis-loop/one-pass$"
 )
+_INCIDENT_ONE_PASS_DIAGNOSIS_SERVICE_PATTERN = re.compile(
+    r"^/api/incidents/([^/]+)/one-pass-diagnosis$"
+)
 
 
 def handle_get_request(handler: HealthUIRequestHandler) -> None:
@@ -201,6 +204,18 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
 
         incident_id = incident_dl_match.group(1)
         handle_incident_diagnosis_loop_one_pass_api(handler, incident_id)
+        return
+
+    # Incident one-pass diagnosis service (calls run_incident_one_pass_diagnosis)
+    # POST /api/incidents/{incident_id}/one-pass-diagnosis
+    incident_svc_match = _INCIDENT_ONE_PASS_DIAGNOSIS_SERVICE_PATTERN.match(route)
+    if incident_svc_match:
+        from .server_incident_one_pass_diagnosis_service import (
+            handle_incident_one_pass_diagnosis_service_api,
+        )
+
+        incident_id = incident_svc_match.group(1)
+        handle_incident_one_pass_diagnosis_service_api(handler, incident_id)
         return
 
     # Delegate next-check mutation handlers to server_next_checks module
