@@ -1,0 +1,14 @@
+LAST SEEN   TYPE      REASON                    OBJECT                      MESSAGE
+10m         Normal    Scheduled                  Pod/cnpg-lab-failing-app    Successfully assigned to node-1
+9m          Normal    Pulling                    Pod/cnpg-lab-failing-app    Pulling image "alpine:3.19"
+9m          Normal    Pulled                     Pod/cnpg-lab-failing-app    Successfully pulled image "alpine:3.19"
+9m          Normal    Created                    Pod/cnpg-lab-failing-app    Created container app
+8m          Normal    Started                    Pod/cnpg-lab-failing-app    Started container app
+8m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
+7m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
+6m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
+5m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
+4m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
+3m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
+2m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
+1m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1

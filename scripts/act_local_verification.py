@@ -22,6 +22,7 @@ import sys
 from act_local_changed_files import filter_python_files, get_changed_files
 from act_local_checks import (
     run_doctrine_check,
+    run_golden_case_check,
     run_json_contract_check,
     run_llm_friendly_on_files,
     run_mypy_on_files,
@@ -118,6 +119,12 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(workflow_result)
     if workflow_result.status == "FAIL":
         failure_commands.append(workflow_result.command)
+    
+    # Run golden case diagnosis verification (uses checked-in fixtures)
+    golden_result = run_golden_case_check()
+    checks.append(golden_result)
+    if golden_result.status == "FAIL":
+        failure_commands.append(golden_result.command)
     
     # Determine overall success (all non-skipped checks must pass)
     non_skipped = [c for c in checks if c.status != "SKIP"]

@@ -1,0 +1,39 @@
+# Injected pod-failure fixture manifest
+# This is the lab-owned failing app with intentionally failing readiness probe
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cnpg-lab-failing-app
+  namespace: cnpg-lab
+  labels:
+    app: cnpg-lab-failing-app
+    lab.k9b.io/scenario: pod-failure
+    lab.k9b.io/managed: "true"
+  annotations:
+    lab.k9b.io/description: "Pod with failing readiness probe for lab testing"
+spec:
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: registry.spbnix.com/dockerhub-cache/library/alpine:3.19
+      command: ["sleep", "infinity"]
+      # Readiness probe that ALWAYS fails - intentional for lab testing
+      readinessProbe:
+        exec:
+          command: ["/bin/false"]
+        initialDelaySeconds: 1
+        periodSeconds: 5
+        failureThreshold: 1
+      # Liveness probe that succeeds - pod stays running but NotReady
+      livenessProbe:
+        exec:
+          command: ["/bin/true"]
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      resources:
+        requests:
+          cpu: "10m"
+          memory: "16Mi"
+        limits:
+          cpu: "100m"
+          memory: "64Mi"

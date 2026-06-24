@@ -225,3 +225,115 @@ def run_workflow_check() -> CheckResult:
     
     command = [str(REPO_ROOT / ".venv" / "bin" / "python"), str(verifier_path)]
     return run_check("workflow-verify", command)
+
+
+def run_golden_case_check() -> CheckResult:
+    """Run golden case diagnosis verification.
+
+    This check:
+    - Runs the offline diagnosis runner on the pod-failure golden case
+    - Verifies the diagnosis output against expected.json
+    - Ensures correct category, root cause, and no forbidden conclusions
+
+    This is a fast, deterministic check that uses checked-in fixtures.
+    """
+    # Check if golden case verifier exists
+    verifier_path = SCRIPTS_DIR / "verify_diagnosis_golden_case.py"
+    runner_path = SCRIPTS_DIR / "run_diagnosis_offline.py"
+
+    if not verifier_path.exists():
+        return CheckResult(
+            name="golden-case-verify",
+            command="verify_diagnosis_golden_case.py",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message="CRITICAL: verify_diagnosis_golden_case.py not found",
+        )
+
+    if not runner_path.exists():
+        return CheckResult(
+            name="golden-case-verify",
+            command="run_diagnosis_offline.py",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message="CRITICAL: run_diagnosis_offline.py not found",
+        )
+
+    # Define golden case paths
+    case_dir = REPO_ROOT / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
+    expected_path = case_dir / "expected.json"
+
+    if not case_dir.exists():
+        return CheckResult(
+            name="golden-case-verify",
+            command="golden case bundle",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message=f"Golden case bundle not found: {case_dir}",
+        )
+
+    if not expected_path.exists():
+        return CheckResult(
+            name="golden-case-verify",
+            command="expected.json",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message=f"Expected.json not found: {expected_path}",
+        )
+
+    # Create temp output directory
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        output_dir = Path(tmp_dir) / "diagnosis-output"
+
+        # Run diagnosis offline
+        runner_cmd = [
+            str(REPO_ROOT / ".venv" / "bin" / "python"),
+            str(runner_path),
+            "--case-dir", str(case_dir),
+            "--output-dir", str(output_dir),
+        ]
+
+        runner_result = subprocess.run(
+            runner_cmd,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        if runner_result.returncode != 0:
+            return CheckResult(
+                name="golden-case-verify",
+                command=shlex.join(runner_cmd),
+                status="FAIL",
+                duration_ms=0,
+                exit_code=runner_result.returncode,
+                error_message=f"Diagnosis runner failed: {runner_result.stderr[:500]}",
+            )
+
+        # Verify diagnosis output
+        diagnosis_path = output_dir / "diagnosis.json"
+        if not diagnosis_path.exists():
+            return CheckResult(
+                name="golden-case-verify",
+                command="diagnosis.json",
+                status="FAIL",
+                duration_ms=0,
+                exit_code=1,
+                error_message="Diagnosis output not found",
+            )
+
+        verify_cmd = [
+            str(REPO_ROOT / ".venv" / "bin" / "python"),
+            str(verifier_path),
+            "--expected", str(expected_path),
+            "--diagnosis", str(diagnosis_path),
+            "--case-dir", str(case_dir),
+        ]
+
+        return run_check("golden-case-verify", verify_cmd)

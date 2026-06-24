@@ -1,0 +1,57 @@
+{
+  "case_id": "pod-failure-readiness-001",
+  "case_version": "1.0.0",
+  "scenario": "pod-failure",
+  "category": "readiness_probe_failure",
+  "source_workflow": ".github/workflows/k9b-cnpg-incident-lab-live.yml",
+  "source_kind": "representative_fixture",
+  "source_note": "Representative offline fixture modeled after the green pod-failure live-lab schema. Not generated from a real workflow artifact yet.",
+  "artifact_schema_version": "1.0.0",
+  "generated_at": "2026-06-24T00:00:00Z",
+  "description": "Pod with intentionally failing readiness probe. Pod is Running but NotReady due to readiness probe failure.",
+  "expected_root_cause": "readiness probe failure",
+  "expected_category": "readiness_probe_failure",
+  "fixture_name": "cnpg-lab-failing-app",
+  "fixture_namespace": "cnpg-lab",
+  "symptom": "Pod Running but NotReady - readiness probe consistently failing",
+  "expected_evidence_files": [
+    "incident/pods.txt",
+    "incident/events.txt",
+    "incident/injected-change.yaml",
+    "incident/symptom-watch.json",
+    "incident/k9b-incident-detail.json",
+    "incident/cnpg-clusters.json",
+    "baseline/pods.txt",
+    "recovery-or-final/pods.txt",
+    "recovery-or-final/events.txt"
+  ],
+  "required_evidence": {
+    "cnpg_state": "incident/cnpg-clusters.json",
+    "k9b_incident": "incident/k9b-incident-detail.json",
+    "sanitizer_verification": "sanitizer-findings.json",
+    "symptom_watch": "incident/symptom-watch.json"
+  },
+  "forbidden_actions": [
+    "image_pull_failure",
+    "pvc_storage_failure",
+    "cnpg_operator_failure",
+    "node_scheduling_failure",
+    "registry_auth_failure",
+    "mutation",
+    "remediation",
+    "apply",
+    "delete"
+  ],
+  "allowed_read_only_checks": [
+    "kubectl describe pod",
+    "kubectl get events",
+    "kubectl get pod -o yaml",
+    "kubectl logs",
+    "kubectl top pod"
+  ],
+  "provenance": {
+    "artifacts_hash": null,
+    "real_live_artifact_required_for_promotion": true,
+    "builder": "scripts/build_diagnosis_golden_case.py"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "sanitized_at": "2026-06-24T00:00:00Z",
+  "source_note": "Representative fixture validation - models expected sanitizer output for readiness probe failure scenario",
+  "input_dir": "fixtures/diagnosis-golden-cases/pod-failure-readiness",
+  "output_dir": "fixtures/diagnosis-golden-cases/pod-failure-readiness",
+  "total_files": 10,
+  "succeeded": 10,
+  "fatal_count": 0,
+  "warning_count": 0,
+  "findings": [],
+  "sanitized_files": [
+    "incident/pods.txt",
+    "incident/events.txt",
+    "incident/injected-change.yaml",
+    "incident/symptom-watch.json",
+    "incident/k9b-incident-detail.json",
+    "incident/cnpg-clusters.json",
+    "baseline/pods.txt",
+    "recovery-or-final/pods.txt",
+    "recovery-or-final/events.txt",
+    "_findings.json"
+  ],
+  "redacted_patterns": [],
+  "verification_passed": true,
+  "success": true,
+  "note": "Validated by build_diagnosis_golden_case.py - ready for golden case use"
+}

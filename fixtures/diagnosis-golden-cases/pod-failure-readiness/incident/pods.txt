@@ -1,0 +1,4 @@
+NAME                      READY   STATUS    RESTARTS   AGE
+cnpg-operator-abc123     1/1     Running   0          10m
+cnpg-lab-failing-app      0/1     Running   0          5m
+k9b-agent-xyz789          1/1     Running   0          8m

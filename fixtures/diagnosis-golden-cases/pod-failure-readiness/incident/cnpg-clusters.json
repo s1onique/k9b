@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "captured_at": "2026-06-24T00:00:00Z",
+  "source_note": "Representative CNPG cluster state for manual fixture.",
+  "clusters": [
+    {
+      "name": "lab-cluster",
+      "namespace": "cnpg-lab",
+      "status": "Running",
+      "primaryPod": "lab-cluster-1",
+      "replicas": 0,
+      "healthyInstances": 0
+    }
+  ]
+}
