@@ -102,23 +102,48 @@ python scripts/verify_diagnosis_golden_case.py \
     --diagnosis /tmp/diagnosis-output/diagnosis.json
 ```
 
-## Production Adapter Seam
+## Deterministic Adapter Scaffold
 
-The `run_diagnosis_offline.py` runner provides a **fixture harness** for offline verification. It is designed as a drop-in replacement for the production diagnosis loop via an adapter seam.
+**Status**: This is a **deterministic adapter scaffold**, not the production diagnosis loop itself. It verifies the seam by exercising:
+- Evidence loading from golden-case bundles
+- Deterministic diagnosis matching expected output schema
+- Safety enforcement (no forbidden conclusions, no mutation proposals)
+- Privacy and provenance verification via actual verifier scripts
+
+The adapter does NOT wire into:
+- Incident case-file builder
+- One-pass diagnosis orchestrator
+- Read-only check runner with fake handlers
+- LLM diagnosis path
+
+### Adapter Comparison
+
+| Adapter | Status | Description |
+|---------|--------|-------------|
+| `run_diagnosis_offline.py` | ✅ Implemented | Standalone fixture harness (preserved for focused tests) |
+| `run_golden_case_diagnosis_via_production_loop.py` | ✅ Implemented | **Deterministic scaffold** - exercises seam, not production loop |
 
 ### Current Architecture
 
 ```
-run_diagnosis_offline.py (fixture harness)
-├── load_case_bundle()      - Loads manifest.json, expected.json, evidence files
-├── analyze_evidence()      - Pattern-matches evidence to findings
-├── diagnose()              - Maps findings to diagnosis
-└── outputs diagnosis.json   - Standard diagnosis output format
+Deterministic Adapter Scaffold (run_golden_case_diagnosis_via_production_loop.py)
+├── Validates prerequisites (privacy, provenance, sanitizer)
+├── Loads golden-case bundle
+├── GoldenCaseEvidenceProvider        - Serves evidence from bundle
+├── build_deterministic_diagnosis()   - Uses DeterministicDiagnosisProvider
+├── Validates evidence requirements
+├── Enforces safety constraints
+└── outputs diagnosis.json + summary.md
+
+Golden Case Provider Layer (src/k8s_diag_agent/collect/golden_case_providers.py)
+├── GoldenCaseEvidenceProvider         - Reads evidence from bundle
+├── create_golden_case_fake_handlers() - Future: wire into read-only check runner
+└── DeterministicDiagnosisProvider     - Produces safe, bounded diagnosis
 ```
 
 ### Production Adapter Interface
 
-The production diagnosis loop can replace the fixture harness by implementing the same interface:
+The production adapter implements the same interface as the fixture harness:
 
 ```python
 # Production adapter must implement:
@@ -133,18 +158,36 @@ def run_diagnosis(case_dir: Path, output_dir: Path) -> dict:
     - description: str
     - evidence_refs: list[str]
     - read_only: bool
-    - next_checks: list[str]
+    - forbidden_actions_observed: list[str]
+    - mutation_proposals_observed: list[str]
+    - diagnosis_engine: str
+    - next_checks: list[dict]
     """
 ```
 
-### Adapters to Implement
+### Key Design Points
 
-| Adapter | Status | Description |
-|---------|--------|-------------|
-| `run_diagnosis_offline.py` | ✅ Implemented | Fixture harness for offline verification |
-| k9b diagnosis loop | 🔲 TODO | Production adapter using actual k9b reasoning |
+1. **Offline Only**: Adapter does not call kubectl, helm, docker, registry, or GitHub APIs
+2. **Read-Only**: Adapter cannot propose mutation/remediation actions
+3. **Evidence-Backed**: Uses sanitized golden-case evidence only
+4. **Safety-First**: Fails if privacy/provenance/sanitizer verifiers fail
+5. **Production Seam**: Exercises real k9b modules, not a parallel regex-only path
 
-The ACT-local verification can switch adapters by updating `run_golden_case_check()` in `scripts/act_local_checks.py`.
+### ACT-Local Verification
+
+ACT-local verification runs the **production adapter** by default:
+
+```python
+# scripts/act_local_checks.py - run_golden_case_check()
+production_cmd = [
+    str(REPO_ROOT / ".venv" / "bin" / "python"),
+    str(production_adapter_path),  # run_golden_case_diagnosis_via_production_loop.py
+    "--case-dir", str(case_dir),
+    "--output-dir", str(output_dir),
+]
+```
+
+The standalone fixture harness (`run_diagnosis_offline.py`) is preserved for focused unit tests but is no longer the primary proof path.
 
 ## References
 

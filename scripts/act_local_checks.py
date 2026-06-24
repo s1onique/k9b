@@ -231,15 +231,22 @@ def run_golden_case_check() -> CheckResult:
     """Run golden case diagnosis verification.
 
     This check:
-    - Runs the offline diagnosis runner on the pod-failure golden case
+    - Runs the production diagnosis-loop adapter on the pod-failure golden case
     - Verifies the diagnosis output against expected.json
     - Ensures correct category, root cause, and no forbidden conclusions
 
     This is a fast, deterministic check that uses checked-in fixtures.
+
+    Note: This runs the PRODUCTION adapter (run_golden_case_diagnosis_via_production_loop.py)
+    to exercise the real production diagnosis path. The standalone fixture harness
+    (run_diagnosis_offline.py) is preserved for focused tests but is not the primary
+    proof path.
     """
     # Check if golden case verifier exists
     verifier_path = SCRIPTS_DIR / "verify_diagnosis_golden_case.py"
-    runner_path = SCRIPTS_DIR / "run_diagnosis_offline.py"
+
+    # Check if production adapter exists
+    production_adapter_path = SCRIPTS_DIR / "run_golden_case_diagnosis_via_production_loop.py"
 
     if not verifier_path.exists():
         return CheckResult(
@@ -251,14 +258,14 @@ def run_golden_case_check() -> CheckResult:
             error_message="CRITICAL: verify_diagnosis_golden_case.py not found",
         )
 
-    if not runner_path.exists():
+    if not production_adapter_path.exists():
         return CheckResult(
             name="golden-case-verify",
-            command="run_diagnosis_offline.py",
+            command="run_golden_case_diagnosis_via_production_loop.py",
             status="FAIL",
             duration_ms=0,
             exit_code=1,
-            error_message="CRITICAL: run_diagnosis_offline.py not found",
+            error_message="CRITICAL: production adapter script not found - golden case must exercise production path",
         )
 
     # Define golden case paths
@@ -290,30 +297,30 @@ def run_golden_case_check() -> CheckResult:
     with tempfile.TemporaryDirectory() as tmp_dir:
         output_dir = Path(tmp_dir) / "diagnosis-output"
 
-        # Run diagnosis offline
-        runner_cmd = [
+        # Run production diagnosis adapter (exercises real production path)
+        production_cmd = [
             str(REPO_ROOT / ".venv" / "bin" / "python"),
-            str(runner_path),
+            str(production_adapter_path),
             "--case-dir", str(case_dir),
             "--output-dir", str(output_dir),
         ]
 
-        runner_result = subprocess.run(
-            runner_cmd,
+        production_result = subprocess.run(
+            production_cmd,
             cwd=str(REPO_ROOT),
             capture_output=True,
             text=True,
             timeout=60,
         )
 
-        if runner_result.returncode != 0:
+        if production_result.returncode != 0:
             return CheckResult(
                 name="golden-case-verify",
-                command=shlex.join(runner_cmd),
+                command=shlex.join(production_cmd),
                 status="FAIL",
                 duration_ms=0,
-                exit_code=runner_result.returncode,
-                error_message=f"Diagnosis runner failed: {runner_result.stderr[:500]}",
+                exit_code=production_result.returncode,
+                error_message=f"Production adapter failed: {production_result.stderr[:500]}",
             )
 
         # Verify diagnosis output
