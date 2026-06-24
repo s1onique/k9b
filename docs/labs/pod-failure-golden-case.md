@@ -23,17 +23,21 @@ The diagnosis must:
 - NOT claim image pull, PVC, scheduling, registry, or CNPG operator as primary cause
 - NOT propose remediation/mutation (apply, delete, patch, etc.)
 
-## How the Representative Case Was Modeled
+## Promotion Status
 
-This is a **representative fixture**, not yet generated from real live lab artifacts. The case models the expected diagnosis behavior for a readiness probe failure scenario.
+**Current State**: This is a **representative fixture** case. The case is currently a scaffold for early verification before real promotion.
 
-**Future Promotion Step**: Run the live-artifact regeneration pass to generate this case from actual sanitized workflow artifacts, which will populate `provenance.artifacts_hash` with the real artifact hash.
+**Promotion Pending**: Real promotion requires:
+1. A successful K3s CNPG Incident Lab Live workflow run
+2. Downloaded sanitized artifacts from that run
+3. Real GitHub provenance data (run ID, attempt, SHA, artifact name, digest)
 
-**Modeling Steps**:
-1. **Schema Design**: Define expected evidence structure based on k9b incident lab schema
-2. **Evidence Modeling**: Create representative evidence files matching the schema
-3. **Sanitizer Validation**: Ensure evidence passes sanitizer validation checks
-4. **Case Building**: `build_diagnosis_golden_case.py` creates the case bundle
+**Promotion Method**: When ready, run `promote_diagnosis_golden_case_from_artifact.py` to:
+- Regenerate case bundle from actual sanitized artifacts
+- Update manifest with real provenance fields
+- Change `source_kind` from `representative_fixture` to `live_sanitized_artifact`
+
+**Key Point**: Only sanitized artifacts are used for promotion; raw `lab-artifacts/live/` artifacts are never committed.
 
 ## Case Bundle Structure
 

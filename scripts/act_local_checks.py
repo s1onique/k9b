@@ -337,3 +337,57 @@ def run_golden_case_check() -> CheckResult:
         ]
 
         return run_check("golden-case-verify", verify_cmd)
+
+
+def run_provenance_golden_case_check() -> CheckResult:
+    """Run provenance verification for the golden case.
+
+    This check:
+    - Verifies source_kind is live_sanitized_artifact (not representative_fixture)
+    - Verifies provenance.artifacts_hash is non-null
+    - Verifies provenance.github_artifact_digest is present
+    - Verifies real_live_artifact_required_for_promotion is false
+    - Verifies required evidence files exist
+    - Verifies sanitizer findings show success
+    - Verifies provenance data is not placeholder/mock data
+
+    PASS-as-not-yet-promoted behavior: When source_kind is representative_fixture, this check
+    passes (exit 0) because the case is intentionally not yet promoted.
+    This allows ACT-local to pass before real promotion occurs.
+
+    This is a fast, offline check that does not contact GitHub.
+    """
+    # Check if provenance verifier exists
+    verifier_path = SCRIPTS_DIR / "verify_provenance_golden_case.py"
+
+    if not verifier_path.exists():
+        return CheckResult(
+            name="provenance-golden-case",
+            command="verify_provenance_golden_case.py",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message="CRITICAL: verify_provenance_golden_case.py not found",
+        )
+
+    # Define golden case path
+    case_dir = REPO_ROOT / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
+
+    if not case_dir.exists():
+        return CheckResult(
+            name="provenance-golden-case",
+            command="golden case bundle",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message=f"Golden case bundle not found: {case_dir}",
+        )
+
+    # Run provenance verification
+    verify_cmd = [
+        str(REPO_ROOT / ".venv" / "bin" / "python"),
+        str(verifier_path),
+        "--case-dir", str(case_dir),
+    ]
+
+    return run_check("provenance-golden-case", verify_cmd)

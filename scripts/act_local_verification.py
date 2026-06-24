@@ -27,6 +27,7 @@ from act_local_checks import (
     run_llm_friendly_on_files,
     run_mypy_on_files,
     run_no_new_llm_allowlist_check,
+    run_provenance_golden_case_check,
     run_ruff_on_files,
     run_shell_containment_on_files,
     run_verification_discipline_check,
@@ -125,6 +126,12 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(golden_result)
     if golden_result.status == "FAIL":
         failure_commands.append(golden_result.command)
+    
+    # Run provenance verification for golden case (verifies live-derived provenance fields)
+    provenance_result = run_provenance_golden_case_check()
+    checks.append(provenance_result)
+    if provenance_result.status == "FAIL":
+        failure_commands.append(provenance_result.command)
     
     # Determine overall success (all non-skipped checks must pass)
     non_skipped = [c for c in checks if c.status != "SKIP"]
