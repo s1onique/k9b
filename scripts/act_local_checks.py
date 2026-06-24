@@ -21,15 +21,11 @@ SCRIPTS_DIR = Path(__file__).parent
 def run_no_new_llm_allowlist_check() -> CheckResult:
     """Run the no-new-allowlist gate before LLM-friendly check.
     
-    This gate runs BEFORE the normal LLM-friendly check to reject
-    allowlist growth before the normal gate can accept it.
-    
     CRITICAL: If the verifier is missing, this is a FAIL (not SKIP).
     The no-new-allowlist policy is mandatory debt containment.
     """
     verifier_path = SCRIPTS_DIR / "verify_no_new_llm_allowlist.py"
     if not verifier_path.exists():
-        # FAIL closed: missing verifier is a policy violation
         return CheckResult(
             name="no-new-llm-allowlist",
             command="verify_no_new_llm_allowlist.py",
@@ -77,7 +73,6 @@ def run_check(
     duration_ms = int((time.time() - start) * 1000)
     status = "PASS" if exit_code == 0 else "FAIL"
     
-    # Display string for the command
     display_command = shlex.join(command)
     
     return CheckResult(
@@ -138,7 +133,6 @@ def run_verification_discipline_check() -> CheckResult:
 
 def run_llm_friendly_on_files(files: list[str]) -> CheckResult:
     """Run LLM-friendly check on changed files."""
-    # Check if checker supports --changed-only
     checker_path = SCRIPTS_DIR / "check_llm_friendly_files.py"
     if not checker_path.exists():
         return CheckResult(
@@ -167,7 +161,6 @@ def run_shell_containment_on_files(files: list[str]) -> CheckResult:
             exit_code=0,
         )
     
-    # For changed shell files, we verify they're in the inventory
     verifier_path = SCRIPTS_DIR / "verify_shell_containment.py"
     if not verifier_path.exists():
         return CheckResult(
@@ -209,8 +202,7 @@ def run_json_contract_check() -> CheckResult:
 def run_workflow_check() -> CheckResult:
     """Run GitHub workflow YAML and shell syntax verifier on all workflows.
 
-    This check always runs because workflow validity depends on all workflows
-    (duplicate name detection requires seeing the full set). It's fast (~1s).
+    Always runs because workflow validity depends on all workflows (duplicate name detection).
     """
     verifier_path = SCRIPTS_DIR / "verify_github_workflows.py"
     if not verifier_path.exists():
@@ -227,34 +219,43 @@ def run_workflow_check() -> CheckResult:
     return run_check("workflow-verify", command)
 
 
+def _run_golden_case_production_adapter(case_dir: Path, output_dir: Path) -> tuple[Path | None, str | None]:
+    """Run one-pass production loop adapter. Returns (diagnosis_path, error_message)."""
+    production_adapter_path = SCRIPTS_DIR / "run_golden_case_via_one_pass_diagnosis_loop.py"
+    if not production_adapter_path.exists():
+        return None, "one-pass production loop adapter not found"
+    
+    production_cmd = [
+        str(REPO_ROOT / ".venv" / "bin" / "python"),
+        str(production_adapter_path),
+        "--case-dir", str(case_dir),
+        "--output-dir", str(output_dir),
+    ]
+    
+    result = subprocess.run(
+        production_cmd,
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    
+    if result.returncode != 0:
+        return None, f"adapter failed: {result.stderr[:500]}"
+    
+    diagnosis_path = output_dir / "diagnosis.json"
+    if not diagnosis_path.exists():
+        return None, "diagnosis output not found"
+    
+    return diagnosis_path, None
+
+
 def run_golden_case_check() -> CheckResult:
     """Run golden case one-pass production-loop diagnosis verification.
 
-    This check:
-    - Runs the production one-pass diagnosis loop adapter on the pod-failure golden case
-    - Uses golden-case fake handlers for read-only check execution
-    - Uses deterministic LLM provider for diagnosis
-    - Verifies the diagnosis output against expected.json
-    - Ensures correct category, root cause, and no forbidden conclusions
-
-    This is a fast, deterministic check that uses checked-in fixtures.
-
-    The one-pass production loop exercises:
-    - incident_case_file (build)
-    - incident_llm_diagnosis (with injected deterministic provider)
-    - incident_diagnosis_loop_orchestrator (one-pass)
-    - incident_read_only_check_runner (with injected fake handlers)
-
-    Note: The standalone fixture harness (run_golden_case_diagnosis_via_production_loop.py)
-    is preserved for focused tests. The new runner exercises the production loop machinery
-    more completely.
+    Uses golden-case fake handlers, deterministic LLM provider, verifies output against expected.json.
     """
-    # Check if golden case verifier exists
     verifier_path = SCRIPTS_DIR / "verify_diagnosis_golden_case.py"
-
-    # Check if one-pass production loop adapter exists
-    production_adapter_path = SCRIPTS_DIR / "run_golden_case_via_one_pass_diagnosis_loop.py"
-
     if not verifier_path.exists():
         return CheckResult(
             name="golden-case-verify",
@@ -264,21 +265,10 @@ def run_golden_case_check() -> CheckResult:
             exit_code=1,
             error_message="CRITICAL: verify_diagnosis_golden_case.py not found",
         )
-
-    if not production_adapter_path.exists():
-        return CheckResult(
-            name="golden-case-verify",
-            command="run_golden_case_via_one_pass_diagnosis_loop.py",
-            status="FAIL",
-            duration_ms=0,
-            exit_code=1,
-            error_message="CRITICAL: one-pass production loop adapter not found - golden case must exercise production path",
-        )
-
-    # Define golden case paths
+    
     case_dir = REPO_ROOT / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
     expected_path = case_dir / "expected.json"
-
+    
     if not case_dir.exists():
         return CheckResult(
             name="golden-case-verify",
@@ -288,7 +278,7 @@ def run_golden_case_check() -> CheckResult:
             exit_code=1,
             error_message=f"Golden case bundle not found: {case_dir}",
         )
-
+    
     if not expected_path.exists():
         return CheckResult(
             name="golden-case-verify",
@@ -298,50 +288,22 @@ def run_golden_case_check() -> CheckResult:
             exit_code=1,
             error_message=f"Expected.json not found: {expected_path}",
         )
-
-    # Create temp output directory
+    
     import tempfile
     with tempfile.TemporaryDirectory() as tmp_dir:
         output_dir = Path(tmp_dir) / "diagnosis-output"
-
-        # Run one-pass production loop adapter (exercises real production path)
-        production_cmd = [
-            str(REPO_ROOT / ".venv" / "bin" / "python"),
-            str(production_adapter_path),
-            "--case-dir", str(case_dir),
-            "--output-dir", str(output_dir),
-        ]
-
-        production_result = subprocess.run(
-            production_cmd,
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-
-        if production_result.returncode != 0:
+        diagnosis_path, error = _run_golden_case_production_adapter(case_dir, output_dir)
+        
+        if error:
             return CheckResult(
                 name="golden-case-verify",
-                command=shlex.join(production_cmd),
-                status="FAIL",
-                duration_ms=0,
-                exit_code=production_result.returncode,
-                error_message=f"One-pass production loop adapter failed: {production_result.stderr[:500]}",
-            )
-
-        # Verify diagnosis output
-        diagnosis_path = output_dir / "diagnosis.json"
-        if not diagnosis_path.exists():
-            return CheckResult(
-                name="golden-case-verify",
-                command="diagnosis.json",
+                command="run_golden_case_via_one_pass_diagnosis_loop.py",
                 status="FAIL",
                 duration_ms=0,
                 exit_code=1,
-                error_message="Diagnosis output not found",
+                error_message=error,
             )
-
+        
         verify_cmd = [
             str(REPO_ROOT / ".venv" / "bin" / "python"),
             str(verifier_path),
@@ -349,31 +311,17 @@ def run_golden_case_check() -> CheckResult:
             "--diagnosis", str(diagnosis_path),
             "--case-dir", str(case_dir),
         ]
-
+        
         return run_check("golden-case-verify", verify_cmd)
 
 
 def run_provenance_golden_case_check() -> CheckResult:
     """Run provenance verification for the golden case.
 
-    This check:
-    - Verifies source_kind is live_sanitized_artifact (not representative_fixture)
-    - Verifies provenance.artifacts_hash is non-null
-    - Verifies provenance.github_artifact_digest is present
-    - Verifies real_live_artifact_required_for_promotion is false
-    - Verifies required evidence files exist
-    - Verifies sanitizer findings show success
-    - Verifies provenance data is not placeholder/mock data
-
-    PASS-as-not-yet-promoted behavior: When source_kind is representative_fixture, this check
-    passes (exit 0) because the case is intentionally not yet promoted.
-    This allows ACT-local to pass before real promotion occurs.
-
-    This is a fast, offline check that does not contact GitHub.
+    Verifies source_kind, artifacts_hash, github_artifact_digest, and provenance data.
+    PASS-as-not-yet-promoted: passes when source_kind is representative_fixture.
     """
-    # Check if provenance verifier exists
     verifier_path = SCRIPTS_DIR / "verify_provenance_golden_case.py"
-
     if not verifier_path.exists():
         return CheckResult(
             name="provenance-golden-case",
@@ -383,10 +331,8 @@ def run_provenance_golden_case_check() -> CheckResult:
             exit_code=1,
             error_message="CRITICAL: verify_provenance_golden_case.py not found",
         )
-
-    # Define golden case path
+    
     case_dir = REPO_ROOT / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
-
     if not case_dir.exists():
         return CheckResult(
             name="provenance-golden-case",
@@ -396,38 +342,23 @@ def run_provenance_golden_case_check() -> CheckResult:
             exit_code=1,
             error_message=f"Golden case bundle not found: {case_dir}",
         )
-
-    # Run provenance verification
+    
     verify_cmd = [
         str(REPO_ROOT / ".venv" / "bin" / "python"),
         str(verifier_path),
         "--case-dir", str(case_dir),
     ]
-
+    
     return run_check("provenance-golden-case", verify_cmd)
 
 
 def run_golden_case_privacy_check() -> CheckResult:
     """Run privacy verification for diagnosis golden-case fixtures.
 
-    This check:
-    - Scans golden-case fixture directories for leaked internal topology
-    - Detects RFC1918 private IPs (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
-    - Detects internal K8s node names (k3s-worker-*, k3s-master-*)
-    - Detects internal namespace names (k9b-cnpg-lab-[0-9]+)
-    - Detects internal domains (*.spbnix.local, registry.spbnix.com)
-    - Detects raw artifact paths (lab-artifacts/live)
-    - Allows intended placeholders: <PRIVATE_IP>, <K8S_NODE>, etc.
-    - Reports file, line number, pattern class, and bounded excerpt on failure
-
-    This is a fail-closed check that prevents accidental commits of private topology.
-    Missing verifier is a HARD FAILURE (not SKIP) because privacy is mandatory.
-
-    This is a fast, offline check that does not contact external services.
+    Detects RFC1918 private IPs, internal K8s node names, internal namespaces/domains.
+    FAIL-closed: missing verifier is HARD FAILURE (privacy is mandatory).
     """
-    # Check if privacy verifier exists - HARD FAIL if missing (privacy is mandatory)
     verifier_path = SCRIPTS_DIR / "verify_diagnosis_golden_case_privacy.py"
-
     if not verifier_path.exists():
         return CheckResult(
             name="golden-case-privacy",
@@ -437,10 +368,8 @@ def run_golden_case_privacy_check() -> CheckResult:
             exit_code=1,
             error_message="CRITICAL: verify_diagnosis_golden_case_privacy.py not found - privacy gate is missing",
         )
-
-    # Define golden case path
+    
     case_dir = REPO_ROOT / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
-
     if not case_dir.exists():
         return CheckResult(
             name="golden-case-privacy",
@@ -450,38 +379,23 @@ def run_golden_case_privacy_check() -> CheckResult:
             exit_code=1,
             error_message=f"Golden case bundle not found: {case_dir}",
         )
-
-    # Run privacy verification
+    
     verify_cmd = [
         str(REPO_ROOT / ".venv" / "bin" / "python"),
         str(verifier_path),
         str(case_dir),
     ]
-
+    
     return run_check("golden-case-privacy", verify_cmd)
 
 
 def run_incident_api_one_pass_diagnosis_check() -> CheckResult:
     """Run incident API/service one-pass diagnosis wiring verification.
 
-    This check:
-    - Exercises the incident diagnosis service seam with the pod-failure golden case
-    - Uses fake stores, fake providers, and fake read-only handlers
-    - Verifies the golden case passes through the service/API path
-    - Proves the same one-pass loop is invoked as the golden-case proof
-    - Verifies read-only fake handlers are invoked
-    - Verifies missing providers/handlers fail closed
-    - Verifies mutation proposals fail closed
-
-    This is a fast, deterministic check that uses checked-in fixtures.
-    It exercises the new service function (incident_diagnosis_service.py)
-    and proves it wires correctly to the production one-pass loop.
-
-    Missing script is a HARD FAILURE because the ACT requires this check.
+    Exercises incident diagnosis service seam with golden case, verifies wiring to production one-pass loop.
+    HARD FAILURE if script missing (ACT requires this check).
     """
-    # Check if the API/service one-pass diagnosis check script exists
     check_script_path = SCRIPTS_DIR / "run_incident_api_one_pass_diagnosis_check.py"
-
     if not check_script_path.exists():
         return CheckResult(
             name="incident-api-one-pass-diagnosis",
@@ -491,10 +405,8 @@ def run_incident_api_one_pass_diagnosis_check() -> CheckResult:
             exit_code=1,
             error_message="CRITICAL: run_incident_api_one_pass_diagnosis_check.py not found - ACT requires this check",
         )
-
-    # Define golden case path
+    
     case_dir = REPO_ROOT / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
-
     if not case_dir.exists():
         return CheckResult(
             name="incident-api-one-pass-diagnosis",
@@ -504,37 +416,22 @@ def run_incident_api_one_pass_diagnosis_check() -> CheckResult:
             exit_code=1,
             error_message=f"Golden case bundle not found: {case_dir}",
         )
-
-    # Run the incident API one-pass diagnosis check
+    
     check_cmd = [
         str(REPO_ROOT / ".venv" / "bin" / "python"),
         str(check_script_path),
     ]
-
+    
     return run_check("incident-api-one-pass-diagnosis", check_cmd)
 
 
 def run_incident_api_route_one_pass_diagnosis_check() -> CheckResult:
     """Run incident API route one-pass diagnosis wiring verification.
 
-    This check:
-    - Exercises the HTTP API route for incident diagnosis service
-    - Uses fake stores, fake providers, and fake read-only handlers
-    - Verifies the golden case passes through the route/API path
-    - Proves the route wires to run_incident_one_pass_diagnosis()
-    - Verifies fake handlers are actually invoked
-    - Verifies missing providers/handlers fail closed
-    - Verifies mutation proposals fail closed
-
-    This is a fast, deterministic check that uses checked-in fixtures.
-    It exercises the new API route (server_incident_one_pass_diagnosis_service.py)
-    and proves it wires correctly to the service layer.
-
-    Missing script is a HARD FAILURE because the ACT requires this check.
+    Exercises HTTP API route, verifies route wires to run_incident_one_pass_diagnosis().
+    HARD FAILURE if script missing (ACT requires this check).
     """
-    # Check if the API route one-pass diagnosis check script exists
     check_script_path = SCRIPTS_DIR / "run_incident_api_route_one_pass_diagnosis_check.py"
-
     if not check_script_path.exists():
         return CheckResult(
             name="incident-api-route-one-pass-diagnosis",
@@ -544,10 +441,8 @@ def run_incident_api_route_one_pass_diagnosis_check() -> CheckResult:
             exit_code=1,
             error_message="CRITICAL: run_incident_api_route_one_pass_diagnosis_check.py not found - ACT requires this check",
         )
-
-    # Define golden case path
+    
     case_dir = REPO_ROOT / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
-
     if not case_dir.exists():
         return CheckResult(
             name="incident-api-route-one-pass-diagnosis",
@@ -557,11 +452,49 @@ def run_incident_api_route_one_pass_diagnosis_check() -> CheckResult:
             exit_code=1,
             error_message=f"Golden case bundle not found: {case_dir}",
         )
-
-    # Run the incident API route one-pass diagnosis check
+    
     check_cmd = [
         str(REPO_ROOT / ".venv" / "bin" / "python"),
         str(check_script_path),
     ]
-
+    
     return run_check("incident-api-route-one-pass-diagnosis", check_cmd)
+
+
+def run_frontend_one_pass_diagnosis_check() -> CheckResult:
+    """Run frontend one-pass diagnosis UI check.
+
+    Runs targeted frontend API client and component tests with mocked fetch.
+    HARD FAILURE if tests missing (ACT requires these tests).
+    """
+    api_test_path = REPO_ROOT / "frontend" / "src" / "api" / "incidentOnePassDiagnosis.test.ts"
+    component_test_path = REPO_ROOT / "frontend" / "src" / "components" / "IncidentOnePassDiagnosisPanel.test.tsx"
+    
+    if not api_test_path.exists():
+        return CheckResult(
+            name="frontend-one-pass-diagnosis",
+            command="vitest --run frontend/src/api/incidentOnePassDiagnosis.test.ts",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message="CRITICAL: frontend/src/api/incidentOnePassDiagnosis.test.ts not found - ACT requires API client tests",
+        )
+    
+    if not component_test_path.exists():
+        return CheckResult(
+            name="frontend-one-pass-diagnosis",
+            command="vitest --run frontend/src/components/IncidentOnePassDiagnosisPanel.test.tsx",
+            status="FAIL",
+            duration_ms=0,
+            exit_code=1,
+            error_message="CRITICAL: frontend/src/components/IncidentOnePassDiagnosisPanel.test.tsx not found - ACT requires component tests",
+        )
+    
+    check_cmd = [
+        "npx", "vitest", "run",
+        "src/api/incidentOnePassDiagnosis.test.ts",
+        "src/api/incidentOnePassDiagnosisValidation.test.ts",
+        "src/components/IncidentOnePassDiagnosisPanel.test.tsx",
+    ]
+    
+    return run_check("frontend-one-pass-diagnosis", check_cmd, cwd=str(REPO_ROOT / "frontend"))

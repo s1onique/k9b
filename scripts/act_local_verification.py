@@ -22,6 +22,7 @@ import sys
 from act_local_changed_files import filter_python_files, get_changed_files
 from act_local_checks import (
     run_doctrine_check,
+    run_frontend_one_pass_diagnosis_check,
     run_golden_case_check,
     run_golden_case_privacy_check,
     run_incident_api_one_pass_diagnosis_check,
@@ -157,6 +158,13 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(api_route_result)
     if api_route_result.status == "FAIL":
         failure_commands.append(api_route_result.command)
+    
+    # Run frontend one-pass diagnosis UI check
+    # This runs targeted vitest tests for the API client and component
+    frontend_result = run_frontend_one_pass_diagnosis_check()
+    checks.append(frontend_result)
+    if frontend_result.status == "FAIL":
+        failure_commands.append(frontend_result.command)
     
     # Determine overall success (all non-skipped checks must pass)
     non_skipped = [c for c in checks if c.status != "SKIP"]

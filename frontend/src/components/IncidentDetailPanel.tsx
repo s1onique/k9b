@@ -1,26 +1,14 @@
 /**
- * IncidentDetailPanel Component
- *
- * Read-only UI for displaying full incident detail from IncidentDetailPayload.
- * Renders signals, evidence links, timeline events, and review packet state.
- *
- * Hard constraints enforced:
- * - NO remediation actions
- * - NO Kubernetes mutation
- * - NO LLM calls
- * - NO external tool invocation
- * - NO persistence
- * - NO write actions
- *
- * Uses:
- * - latest_snapshot_bundle_id (not snapshot_bundle_id)
- * - review_packet object (not review_packet_available + review_packet_id)
+ * IncidentDetailPanel Component - Read-only incident detail view.
+ * Hard constraints: NO remediation, mutation, LLM calls, tool invocation, persistence, or write actions.
+ * Uses: latest_snapshot_bundle_id, review_packet object.
  */
 
 import type { IncidentDetailPayload } from "../api";
 import { IncidentAutomaticDiagnosisLoopCard } from "./IncidentAutomaticDiagnosisLoopCard";
 import { IncidentAutomaticDiagnosisReviewPanel } from "./IncidentAutomaticDiagnosisReviewPanel";
 import { IncidentDiagnosisLoopPanel } from "./IncidentDiagnosisLoopPanel";
+import { IncidentOnePassDiagnosisPanel } from "./IncidentOnePassDiagnosisPanel";
 import { EvidenceArtifactsSection } from "./EvidenceArtifactsSection";
 
 export interface IncidentDetailPanelProps {
@@ -372,10 +360,6 @@ const SuggestedChecksSection: React.FC<{ suggestedChecks?: IncidentDetailPayload
   );
 };
 
-/**
- * Read-only incident detail panel.
- * Displays full incident information including signals, evidence links, and timeline.
- */
 export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({ incident }) => {
   const displayKind = incident.raw_object_kind || incident.object_kind;
 
@@ -474,6 +458,11 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({ incide
         suggestedChecks={incident.suggested_checks}
       />
 
+      {/* One-pass read-only diagnosis service - bounded manual trigger */}
+      <IncidentOnePassDiagnosisPanel
+        incidentId={incident.incident_id}
+      />
+
       {/* Automatic diagnosis review - bounded summary only */}
       <IncidentAutomaticDiagnosisReviewPanel
         automaticDiagnosisReview={incident.automatic_diagnosis_review}
@@ -493,5 +482,3 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({ incide
     </section>
   );
 };
-
-export default IncidentDetailPanel;
