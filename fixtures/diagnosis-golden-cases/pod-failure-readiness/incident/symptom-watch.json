@@ -1,48 +1,13 @@
 {
-  "schema_version": "1.0.0",
-  "captured_at": "2026-06-16T10:05:00Z",
-  "symptom_class": "readiness_probe_failure",
-  "target_pod": "cnpg-lab-failing-app",
-  "target_namespace": "cnpg-lab",
-  "snapshots": [
-    {
-      "poll_count": 1,
-      "elapsed_seconds": 0.0,
-      "pod_phase": "Pending",
-      "pod_ready": "False",
-      "container_state": "Waiting",
-      "container_waiting_reason": "ContainerCreating",
-      "latest_event": "Scheduled: Successfully assigned to node-1"
-    },
-    {
-      "poll_count": 2,
-      "elapsed_seconds": 5.0,
-      "pod_phase": "Running",
-      "pod_ready": "False",
-      "container_state": "Running",
-      "container_waiting_reason": "",
-      "latest_event": "Started: Started container app"
-    },
-    {
-      "poll_count": 3,
-      "elapsed_seconds": 10.0,
-      "pod_phase": "Running",
-      "pod_ready": "False",
-      "container_state": "Running",
-      "container_waiting_reason": "",
-      "latest_event": "Unhealthy: Readiness probe failed with exit code 1"
-    },
-    {
-      "poll_count": 4,
-      "elapsed_seconds": 15.0,
-      "pod_phase": "Running",
-      "pod_ready": "False",
-      "container_state": "Running",
-      "container_waiting_reason": "",
-      "latest_event": "Unhealthy: Readiness probe failed with exit code 1",
-      "readiness_probe_failure_evidence": true
-    }
-  ],
-  "symptom_achieved": true,
-  "failure_reason": ""
+  "symptom_class": "pod_failure_symptom_observed",
+  "fatal": false,
+  "pod_phase": "Running",
+  "pod_ready": "False",
+  "container_state": "Running",
+  "container_waiting_reason": "",
+  "latest_event": "Unhealthy: Readiness probe failed: ",
+  "readiness_probe_failure_evidence": true,
+  "failure_reason": "",
+  "elapsed_seconds": 0.12466979026794434,
+  "poll_count": 1
 }

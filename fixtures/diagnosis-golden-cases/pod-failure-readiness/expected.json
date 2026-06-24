@@ -37,6 +37,13 @@
       "description": "Sanitizer findings showing success and zero fatal findings"
     }
   },
+  "verifier_contract": {
+    "must_verify_evidence_refs_exist": true,
+    "must_verify_recursive_safety": true,
+    "must_verify_next_checks_read_only": true,
+    "must_fail_on_forbidden_observed": true,
+    "must_fail_on_mutation_observed": true
+  },
   "allowed_uncertainty_phrases": [
     "may be caused by",
     "possibly",
@@ -81,12 +88,5 @@
       "registry",
       "operator failure"
     ]
-  },
-  "verifier_contract": {
-    "must_verify_evidence_refs_exist": true,
-    "must_verify_recursive_safety": true,
-    "must_verify_next_checks_read_only": true,
-    "must_fail_on_forbidden_observed": true,
-    "must_fail_on_mutation_observed": true
   }
 }

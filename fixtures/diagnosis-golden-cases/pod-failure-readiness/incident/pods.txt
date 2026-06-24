@@ -1,4 +1,6 @@
-NAME                      READY   STATUS    RESTARTS   AGE
-cnpg-operator-abc123     1/1     Running   0          10m
-cnpg-lab-failing-app      0/1     Running   0          5m
-k9b-agent-xyz789          1/1     Running   0          8m
+NAME                             READY   STATUS             RESTARTS      AGE   IP             NODE            NOMINATED NODE   READINESS GATES
+cnpg-lab-failing-app             0/1     Running            0             31s   <PRIVATE_IP>   <K8S_NODE>   <none>           <none>
+k9b-backend-84c75c87c4-8qwbs     1/1     Running            0             53s   <PRIVATE_IP>   <K8S_NODE>   <none>           <none>
+k9b-frontend-767787667f-r2l22    1/1     Running            0             53s   <PRIVATE_IP>   <K8S_NODE>   <none>           <none>
+k9b-scheduler-5dcdbf5bf8-jdvpj   0/1     CrashLoopBackOff   2 (13s ago)   53s   <PRIVATE_IP>   <K8S_NODE>   <none>           <none>
+lab-cluster-1                    1/1     Running            0             18s   <PRIVATE_IP>   <K8S_NODE>   <none>           <none>

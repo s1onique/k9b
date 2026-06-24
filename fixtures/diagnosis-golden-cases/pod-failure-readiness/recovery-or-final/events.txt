@@ -1,14 +1,67 @@
-LAST SEEN   TYPE      REASON                    OBJECT                      MESSAGE
-10m         Normal    Scheduled                  Pod/cnpg-lab-failing-app    Successfully assigned to node-1
-9m          Normal    Pulling                    Pod/cnpg-lab-failing-app    Pulling image "alpine:3.19"
-9m          Normal    Pulled                     Pod/cnpg-lab-failing-app    Successfully pulled image "alpine:3.19"
-9m          Normal    Created                    Pod/cnpg-lab-failing-app    Created container app
-8m          Normal    Started                    Pod/cnpg-lab-failing-app    Started container app
-8m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
-7m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
-6m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
-5m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
-4m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
-3m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
-2m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
-1m          Warning   Unhealthy                  Pod/cnpg-lab-failing-app    Readiness probe failed with exit code 1
+LAST SEEN   TYPE      REASON                        OBJECT                                    MESSAGE
+2m3s        Normal    Scheduled                     pod/img-preflight-frontend-1782230429     Successfully assigned <LAB_NAMESPACE>/img-preflight-frontend-1782230429 to <K8S_NODE>
+114s        Warning   FailedScheduling              pod/k9b-scheduler-5dcdbf5bf8-jdvpj        running PreBind plugin "VolumeBinding": Operation cannot be fulfilled on persistentvolumeclaims "k9b-runs": the object has been modified; please apply your changes to the latest version and try again
+109s        Normal    Scheduled                     pod/k9b-backend-84c75c87c4-8qwbs          Successfully assigned <LAB_NAMESPACE>/k9b-backend-84c75c87c4-8qwbs to <K8S_NODE>
+109s        Normal    Scheduled                     pod/k9b-scheduler-5dcdbf5bf8-jdvpj        Successfully assigned <LAB_NAMESPACE>/k9b-scheduler-5dcdbf5bf8-jdvpj to <K8S_NODE>
+2m10s       Normal    Scheduled                     pod/img-preflight-backend-1782230422      Successfully assigned <LAB_NAMESPACE>/img-preflight-backend-1782230422 to <K8S_NODE>
+92s         Normal    Scheduled                     pod/cnpg-lab-failing-app                  Successfully assigned <LAB_NAMESPACE>/cnpg-lab-failing-app to <K8S_NODE>
+114s        Normal    Scheduled                     pod/k9b-frontend-767787667f-r2l22         Successfully assigned <LAB_NAMESPACE>/k9b-frontend-767787667f-r2l22 to <K8S_NODE>
+79s         Normal    Scheduled                     pod/lab-cluster-1                         Successfully assigned <LAB_NAMESPACE>/lab-cluster-1 to <K8S_NODE>
+89s         Normal    Scheduled                     pod/lab-cluster-1-initdb-wrh9r            Successfully assigned <LAB_NAMESPACE>/lab-cluster-1-initdb-wrh9r to <K8S_NODE>
+2m9s        Normal    Pulling                       pod/img-preflight-backend-1782230422      Pulling image "<REGISTRY_HOST>/k9b/k9b-backend:b069a6da50b1fb46f793cc9c293bff4805c6c514"
+2m7s        Normal    Created                       pod/img-preflight-backend-1782230422      Created container: test
+2m7s        Normal    Pulled                        pod/img-preflight-backend-1782230422      Successfully pulled image "<REGISTRY_HOST>/k9b/k9b-backend:b069a6da50b1fb46f793cc9c293bff4805c6c514" in 1.83s (1.83s including waiting). Image size: 93249486 bytes.
+2m7s        Normal    Started                       pod/img-preflight-backend-1782230422      Started container test
+2m2s        Normal    Pulling                       pod/img-preflight-frontend-1782230429     Pulling image "<REGISTRY_HOST>/k9b/k9b-frontend:b069a6da50b1fb46f793cc9c293bff4805c6c514"
+2m2s        Normal    Pulled                        pod/img-preflight-frontend-1782230429     Successfully pulled image "<REGISTRY_HOST>/k9b/k9b-frontend:b069a6da50b1fb46f793cc9c293bff4805c6c514" in 688ms (688ms including waiting). Image size: 26670585 bytes.
+2m2s        Normal    Created                       pod/img-preflight-frontend-1782230429     Created container: test
+2m1s        Normal    Started                       pod/img-preflight-frontend-1782230429     Started container test
+115s        Normal    Provisioning                  persistentvolumeclaim/k9b-runs            External provisioner is provisioning volume for claim "<LAB_NAMESPACE>/k9b-runs"
+115s        Normal    SuccessfulCreate              replicaset/k9b-frontend-767787667f        Created pod: k9b-frontend-767787667f-r2l22
+115s        Normal    ScalingReplicaSet             deployment/k9b-scheduler                  Scaled up replica set k9b-scheduler-5dcdbf5bf8 from 0 to 1
+115s        Normal    SuccessfulCreate              replicaset/k9b-scheduler-5dcdbf5bf8       Created pod: k9b-scheduler-5dcdbf5bf8-jdvpj
+115s        Normal    SuccessfulCreate              replicaset/k9b-backend-84c75c87c4         Created pod: k9b-backend-84c75c87c4-8qwbs
+115s        Normal    ScalingReplicaSet             deployment/k9b-backend                    Scaled up replica set k9b-backend-84c75c87c4 from 0 to 1
+115s        Normal    ExternalProvisioning          persistentvolumeclaim/k9b-runs            Waiting for a volume to be created either by the external provisioner 'rancher.io/local-path' or manually by the system administrator. If volume creation is delayed, please verify that the provisioner is running and correctly registered.
+115s        Normal    WaitForFirstConsumer          persistentvolumeclaim/k9b-runs            waiting for first consumer to be created before binding
+115s        Normal    ScalingReplicaSet             deployment/k9b-frontend                   Scaled up replica set k9b-frontend-767787667f from 0 to 1
+114s        Normal    Pulled                        pod/k9b-frontend-767787667f-r2l22         Container image "<REGISTRY_HOST>/k9b/k9b-frontend:b069a6da50b1fb46f793cc9c293bff4805c6c514" already present on machine
+114s        Normal    Created                       pod/k9b-frontend-767787667f-r2l22         Created container: frontend
+114s        Normal    Started                       pod/k9b-frontend-767787667f-r2l22         Started container frontend
+111s        Normal    ProvisioningSucceeded         persistentvolumeclaim/k9b-runs            Successfully provisioned volume pvc-9b8e4b8e-1be7-4dcc-95d0-681de49721db
+109s        Normal    Pulled                        pod/k9b-backend-84c75c87c4-8qwbs          Container image "<REGISTRY_HOST>/k9b/k9b-backend:b069a6da50b1fb46f793cc9c293bff4805c6c514" already present on machine
+109s        Normal    Created                       pod/k9b-backend-84c75c87c4-8qwbs          Created container: backend
+109s        Normal    Started                       pod/k9b-backend-84c75c87c4-8qwbs          Started container backend
+95s         Normal    CreatingInstance              cluster/lab-cluster                       Primary instance (initdb)
+95s         Normal    CreatingPodDisruptionBudget   cluster/lab-cluster                       Creating PodDisruptionBudget lab-cluster-primary
+95s         Normal    NoPods                        poddisruptionbudget/lab-cluster-primary   No matching pods found
+95s         Normal    CreatingServiceAccount        cluster/lab-cluster                       Creating ServiceAccount
+95s         Normal    Provisioning                  persistentvolumeclaim/lab-cluster-1       External provisioner is provisioning volume for claim "<LAB_NAMESPACE>/lab-cluster-1"
+95s         Normal    ExternalProvisioning          persistentvolumeclaim/lab-cluster-1       Waiting for a volume to be created either by the external provisioner 'rancher.io/local-path' or manually by the system administrator. If volume creation is delayed, please verify that the provisioner is running and correctly registered.
+95s         Normal    CreatingRole                  cluster/lab-cluster                       Creating Cluster Role
+95s         Normal    SuccessfulCreate              job/lab-cluster-1-initdb                  Created pod: lab-cluster-1-initdb-wrh9r
+95s         Normal    WaitForFirstConsumer          persistentvolumeclaim/lab-cluster-1       waiting for first consumer to be created before binding
+92s         Normal    Pulled                        pod/cnpg-lab-failing-app                  Container image "<REGISTRY_HOST>/dockerhub-cache/library/alpine:3.19" already present on machine
+92s         Normal    Created                       pod/cnpg-lab-failing-app                  Created container: app
+91s         Normal    Started                       pod/cnpg-lab-failing-app                  Started container app
+91s         Normal    ProvisioningSucceeded         persistentvolumeclaim/lab-cluster-1       Successfully provisioned volume pvc-1a47f88f-d1d7-44fc-9f1b-a38a0e172273
+89s         Normal    Pulled                        pod/lab-cluster-1-initdb-wrh9r            Container image "ghcr.io/cloudnative-pg/cloudnative-pg:1.26.0" already present on machine
+89s         Normal    Created                       pod/lab-cluster-1-initdb-wrh9r            Created container: bootstrap-controller
+89s         Normal    Started                       pod/lab-cluster-1-initdb-wrh9r            Started container bootstrap-controller
+87s         Normal    Created                       pod/lab-cluster-1-initdb-wrh9r            Created container: initdb
+87s         Normal    Started                       pod/lab-cluster-1-initdb-wrh9r            Started container initdb
+87s         Normal    Pulled                        pod/lab-cluster-1-initdb-wrh9r            Container image "ghcr.io/cloudnative-pg/postgresql:17.5" already present on machine
+80s         Normal    Completed                     job/lab-cluster-1-initdb                  Job completed
+79s         Normal    Created                       pod/lab-cluster-1                         Created container: bootstrap-controller
+79s         Normal    Started                       pod/lab-cluster-1                         Started container bootstrap-controller
+79s         Normal    Pulled                        pod/lab-cluster-1                         Container image "ghcr.io/cloudnative-pg/cloudnative-pg:1.26.0" already present on machine
+77s         Normal    Created                       pod/lab-cluster-1                         Created container: postgres
+77s         Normal    Pulled                        pod/lab-cluster-1                         Container image "ghcr.io/cloudnative-pg/postgresql:17.5" already present on machine
+76s         Normal    Started                       pod/lab-cluster-1                         Started container postgres
+62s         Normal    Killing                       pod/cnpg-lab-failing-app                  Stopping container app
+36s         Warning   Unhealthy                     pod/cnpg-lab-failing-app                  Readiness probe failed:
+31s         Warning   Unhealthy                     pod/cnpg-lab-failing-app                  Readiness probe errored: rpc error: code = NotFound desc = failed to exec in container: failed to create exec "67623b871a3c5d75bb2f93b43a1c2f2814d82428afa8534ea2a83d768de8c0bd": task f26a6a33b93598a63096b9af07f8254c049ae9d5ea19dbf6222725f44864d543 not found
+12s         Warning   BackOff                       pod/k9b-scheduler-5dcdbf5bf8-jdvpj        Back-off restarting failed container scheduler in pod k9b-scheduler-5dcdbf5bf8-jdvpj_<LAB_NAMESPACE>(532b46ee-64a6-4812-8abe-bc8cf7bd9042)
+1s          Normal    Created                       pod/k9b-scheduler-5dcdbf5bf8-jdvpj        Created container: scheduler
+1s          Normal    Pulled                        pod/k9b-scheduler-5dcdbf5bf8-jdvpj        Container image "<REGISTRY_HOST>/k9b/k9b-backend:b069a6da50b1fb46f793cc9c293bff4805c6c514" already present on machine
+0s          Normal    Started                       pod/k9b-scheduler-5dcdbf5bf8-jdvpj        Started container scheduler

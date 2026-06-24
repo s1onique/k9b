@@ -1,3 +1,5 @@
-NAME                      READY   STATUS    RESTARTS   AGE
-cnpg-operator-abc123     1/1     Running   0          5m
-k9b-agent-xyz789          1/1     Running   0          3m
+NAME                             READY   STATUS    RESTARTS     AGE   IP             NODE            NOMINATED NODE   READINESS GATES
+k9b-backend-84c75c87c4-8qwbs     1/1     Running   0            21s   <PRIVATE_IP>   <K8S_NODE>   <none>           <none>
+k9b-frontend-767787667f-r2l22    1/1     Running   0            21s   <PRIVATE_IP>   <K8S_NODE>   <none>           <none>
+k9b-scheduler-5dcdbf5bf8-jdvpj   0/1     Error     1 (8s ago)   21s   <PRIVATE_IP>   <K8S_NODE>   <none>           <none>
+lab-cluster-1-initdb-wrh9r       0/1     Pending   0            1s    <none>         <none>          <none>           <none>

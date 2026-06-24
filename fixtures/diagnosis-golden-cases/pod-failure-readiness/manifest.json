@@ -4,10 +4,10 @@
   "scenario": "pod-failure",
   "category": "readiness_probe_failure",
   "source_workflow": ".github/workflows/k9b-cnpg-incident-lab-live.yml",
-  "source_kind": "representative_fixture",
-  "source_note": "Representative offline fixture modeled after the green pod-failure live-lab schema. Not generated from a real workflow artifact yet.",
+  "source_kind": "live_sanitized_artifact",
+  "source_note": "Live-derived sanitized artifact case. Generated from sanitized workflow artifacts produced by a successful K3s CNPG Incident Lab Live run. Only sanitized artifacts were used; no raw live artifacts were committed.",
   "artifact_schema_version": "1.0.0",
-  "generated_at": "2026-06-24T00:00:00Z",
+  "generated_at": "2026-06-24T09:10:23.951396+00:00",
   "description": "Pod with intentionally failing readiness probe. Pod is Running but NotReady due to readiness probe failure.",
   "expected_root_cause": "readiness probe failure",
   "expected_category": "readiness_probe_failure",
@@ -50,8 +50,14 @@
     "kubectl top pod"
   ],
   "provenance": {
-    "artifacts_hash": null,
-    "real_live_artifact_required_for_promotion": true,
-    "builder": "scripts/build_diagnosis_golden_case.py"
+    "artifacts_hash": "0e52270c0dc79ba50d132c4fe5bbae70031429f0ebccfb4110322adf380a4967",
+    "real_live_artifact_required_for_promotion": false,
+    "builder": "scripts/build_diagnosis_golden_case.py",
+    "github_artifact_digest": "sha256:99db9ea8285a9dec65edf4d4cd1c4e4440799831c92216d5d0c5f312e4f3581b",
+    "workflow_run_id": "28038172713",
+    "workflow_run_attempt": 1,
+    "workflow_sha": "b069a6da50b1fb46f793cc9c293bff4805c6c514",
+    "artifact_name": "k9b-cnpg-incident-lab-live-28038172713",
+    "artifact_downloaded_at": "2026-06-24T09:10:23.952777+00:00"
   }
 }

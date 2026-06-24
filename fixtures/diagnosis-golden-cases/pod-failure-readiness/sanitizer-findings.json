@@ -1,9 +1,9 @@
 {
   "schema_version": "1.0.0",
-  "sanitized_at": "2026-06-24T00:00:00Z",
-  "source_note": "Representative fixture validation - models expected sanitizer output for readiness probe failure scenario",
-  "input_dir": "fixtures/diagnosis-golden-cases/pod-failure-readiness",
-  "output_dir": "fixtures/diagnosis-golden-cases/pod-failure-readiness",
+  "sanitized_at": "2026-06-23T15:50:00Z",
+  "source_note": "Live-derived sanitized artifact from K3s CNPG Incident Lab Live (Namespace Mode) workflow",
+  "input_dir": "<REDACTED_RAW_ARTIFACT_DIR>",
+  "output_dir": "<SANITIZED_ARTIFACT_DIR>",
   "total_files": 10,
   "succeeded": 10,
   "fatal_count": 0,
@@ -24,5 +24,6 @@
   "redacted_patterns": [],
   "verification_passed": true,
   "success": true,
-  "note": "Validated by build_diagnosis_golden_case.py - ready for golden case use"
+  "note": "Generated from sanitized workflow artifact k9b-cnpg-incident-lab-live-28038172713 Internal topology sanitized for golden case.",
+  "topology_sanitized": true
 }

@@ -1,13 +1,13 @@
 {
   "schema_version": "1.0.0",
   "incident_id": "inc-pod-failure-001",
-  "detected_at": "2026-06-16T10:05:00Z",
-  "namespace": "cnpg-lab",
+  "detected_at": "2026-06-23T15:48:00Z",
+  "namespace": "<LAB_NAMESPACE>",
   "affected_resources": [
     {
       "kind": "Pod",
       "name": "cnpg-lab-failing-app",
-      "namespace": "cnpg-lab",
+      "namespace": "<LAB_NAMESPACE>",
       "state": "Running",
       "ready": "0/1"
     }
