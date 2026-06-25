@@ -520,5 +520,92 @@ class TestNormalizeBackendHealthDetails:
         assert "<REDACTED_API_KEY>" in normalized_json, "Should have API key redaction marker"
 
 
+class TestProviderStatusFallback:
+    """Test provider status fallback when status subsystem fails."""
+
+    def test_provider_status_unavailable_preserved_in_health_details(self):
+        """Provider status subsystem failure yields provider_status_unavailable reason_code.
+        
+        Regression test: When get_provider_status import/call fails, the endpoint
+        should preserve provider_status_unavailable as the reason_code, not collapse
+        it to provider_unavailable.
+        """
+        from unittest.mock import patch
+
+        from src.k8s_diag_agent.ui.api_health_details import _build_health_dependencies, _get_provider_health_status
+
+        # Simulate provider status import/call failure
+        # Note: get_provider_status is imported inside the function, so we patch the external_analysis.provider module
+        with patch(
+            "src.k8s_diag_agent.external_analysis.provider.get_provider_status",
+            side_effect=RuntimeError("Module not found"),
+        ):
+            provider_status = _get_provider_health_status()
+            
+            # Verify error_class is preserved in the fallback response
+            assert provider_status["available"] is False
+            assert provider_status["error"] == "provider_status_unavailable"
+            assert provider_status["phase"] == "status_probe_failed"
+            assert provider_status["error_class"] == "provider_status_unavailable"
+            
+            # Build dependencies and verify reason_code is preserved
+            dependencies = _build_health_dependencies()
+            
+            provider_dep = None
+            for dep in dependencies:
+                if dep["dependency_name"] == "diagnosis_provider":
+                    provider_dep = dep
+                    break
+            
+            assert provider_dep is not None, "diagnosis_provider dependency not found"
+            assert provider_dep["reason_code"] == "provider_status_unavailable", \
+                f"Expected provider_status_unavailable, got {provider_dep['reason_code']}"
+            assert provider_dep["message_snippet"] == "", "message_snippet should be empty"
+            assert provider_dep["status"] == "unavailable"
+
+    def test_provider_available_preserved_in_health_details(self):
+        """Provider probe success yields diagnosis_provider.status=available, reason_code=provider_available.
+        
+        Regression test: When provider connectivity probe succeeds, the success path should
+        return provider_available (not 'success' which is not in the allowlist).
+        """
+        from unittest.mock import patch
+
+        from src.k8s_diag_agent.ui.api_health_details import _build_health_dependencies, _get_provider_health_status
+
+        # Simulate successful provider status
+        mock_provider_status = {
+            "available": True,
+            "error": None,
+            "phase": "success",
+            "error_class": "provider_available",
+        }
+        
+        with patch(
+            "src.k8s_diag_agent.external_analysis.provider.get_provider_status",
+            return_value=mock_provider_status,
+        ):
+            provider_status = _get_provider_health_status()
+            
+            # Verify success response is preserved
+            assert provider_status["available"] is True
+            assert provider_status["error_class"] == "provider_available"
+            
+            # Build dependencies and verify reason_code is provider_available
+            dependencies = _build_health_dependencies()
+            
+            provider_dep = None
+            for dep in dependencies:
+                if dep["dependency_name"] == "diagnosis_provider":
+                    provider_dep = dep
+                    break
+            
+            assert provider_dep is not None, "diagnosis_provider dependency not found"
+            assert provider_dep["reason_code"] == "provider_available", \
+                f"Expected provider_available, got {provider_dep['reason_code']}"
+            assert provider_dep["status"] == "available"
+            assert provider_dep["failure_class"] == ""
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

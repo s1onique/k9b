@@ -93,7 +93,8 @@ def _get_provider_health_status() -> dict:
     """Get the diagnosis provider health status.
     
     Returns:
-        dict with 'available' bool and optional 'error' string
+        dict with 'available' bool, optional 'error' string, optional 'phase' string,
+        and optional 'error_class' string with full reason code.
     """
     try:
         from ..external_analysis.provider import get_provider_status
@@ -101,9 +102,16 @@ def _get_provider_health_status() -> dict:
         return {
             "available": status.get("available", False),
             "error": status.get("error"),
+            "phase": status.get("phase"),
+            "error_class": status.get("error_class"),
         }
     except Exception:
-        return {"available": False, "error": "provider_status_unavailable"}
+        return {
+            "available": False,
+            "error": "provider_status_unavailable",
+            "phase": "status_probe_failed",
+            "error_class": HealthReasonCode.PROVIDER_STATUS_UNAVAILABLE,
+        }
 
 
 def _build_health_dependencies() -> list[dict]:
@@ -136,11 +144,37 @@ def _build_health_dependencies() -> list[dict]:
     
     # Check provider health
     provider_status = _get_provider_health_status()
-    provider_reason_code = _classify_provider_reason_code(provider_status["error"])
+    
+    # Prefer error_class from provider probe, fall back to classification
+    # error_class is the sanitized enum from the provider connectivity probe
+    raw_error = provider_status.get("error")
+    error_class = provider_status.get("error_class")
+    
+    # Use error_class if it's a valid enum value, otherwise classify the raw error
+    # Validate against known provider reason codes
+    valid_provider_codes = {
+        HealthReasonCode.PROVIDER_AVAILABLE,
+        HealthReasonCode.PROVIDER_UNAVAILABLE,
+        HealthReasonCode.PROVIDER_STATUS_UNAVAILABLE,
+        HealthReasonCode.PROVIDER_CONNECTION_FAILED,
+        HealthReasonCode.PROVIDER_AUTH_FAILED,
+        HealthReasonCode.PROVIDER_TIMEOUT,
+        HealthReasonCode.PROVIDER_UNKNOWN_ERROR,
+    }
+    
+    if error_class and error_class in valid_provider_codes:
+        provider_reason_code = error_class
+    elif error_class:
+        # error_class exists but not in our enum - use unknown
+        provider_reason_code = HealthReasonCode.PROVIDER_UNKNOWN_ERROR
+    else:
+        # No error_class - classify the raw error
+        provider_reason_code = _classify_provider_reason_code(raw_error)
+    
     provider_dep = {
         "dependency_name": "diagnosis_provider",
         "status": "available" if provider_status["available"] else "unavailable",
-        "failure_class": HealthDependencyFailure.PROVIDER_CONNECTION_FAILED if provider_status["error"] else "",
+        "failure_class": HealthDependencyFailure.PROVIDER_CONNECTION_FAILED if raw_error else "",
         "reason_code": provider_reason_code,
         "message_snippet": "",  # Never include raw messages
     }
