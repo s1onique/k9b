@@ -6,23 +6,34 @@ Verifies:
 - Failure class constants
 - Sanitized diagnostics collection
 - Artifact structure
+- CLI wrapper import mode (regression test)
 """
 
 import json
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scripts.check_backend_health_gate import (
+from scripts.backend_health_gate import (
     FAILURE_BACKEND_HEALTH_500,
     FAILURE_BACKEND_HEALTH_INVALID_RESPONSE,
     FAILURE_BACKEND_HEALTH_TIMEOUT,
     FAILURE_BACKEND_HEALTH_TRANSPORT_ERROR,
     HealthCheckResult,
-    _collect_backend_diagnostics,
-    _collect_scheduler_diagnostics,
+)
+from scripts.backend_health_gate.classification import (
     _get_provider_config_status,
 )
+from scripts.backend_health_gate.k8s_diagnostics import (
+    _collect_backend_diagnostics,
+    _collect_scheduler_diagnostics,
+)
+
+# Repo root for subprocess test (used in TestWrapperImportMode)
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class TestHealthCheckResult:
@@ -410,6 +421,39 @@ class TestWorkflowIntegration:
         assert "backend_health_gate" in phases
         assert phases.index("backend_health_gate") < phases.index("incident_discovery")
         assert phases.index("incident_discovery") < phases.index("one_pass_diagnosis")
+
+
+class TestWrapperImportMode:
+    """Regression tests for CLI wrapper import mode.
+
+    Ensures the wrapper script can be executed as a file from any working directory
+    without ModuleNotFoundError. This catches the sys.path[0] issue where Python
+    sets the first path entry to the script's directory, not the repo root.
+    """
+
+    def test_wrapper_imports_when_run_as_file(self):
+        """Wrapper script imports correctly when executed as `python scripts/check_backend_health_gate.py`.
+
+        This is the exact failure mode that caused the live gate to fail before polling.
+        When Python runs a script file, sys.path[0] is the script's directory (scripts/),
+        not the repo root. The wrapper now inserts the repo root before importing.
+        """
+        result = subprocess.run(
+            [sys.executable, "scripts/check_backend_health_gate.py", "--help"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        # Should succeed, not fail with ModuleNotFoundError
+        assert result.returncode == 0, (
+            f"Wrapper failed to import when run as file.\n"
+            f"stdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
+        )
+        # Should show usage (not import error)
+        assert "usage" in result.stdout.lower() or "Backend Health Gate" in result.stdout
 
 
 if __name__ == "__main__":

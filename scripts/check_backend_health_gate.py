@@ -29,7 +29,15 @@ import json
 import sys
 from pathlib import Path
 
-from scripts.backend_health_gate import run_health_gate
+# Establish repo root as import root before importing the local package.
+# When Python runs a script file, sys.path[0] is the script's directory,
+# not the repo root. This ensures `from scripts.backend_health_gate` resolves
+# correctly regardless of the execution context.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.backend_health_gate import run_health_gate  # noqa: E402
 
 
 def main() -> int:
