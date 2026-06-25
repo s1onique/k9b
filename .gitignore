@@ -100,3 +100,4 @@ runs/debug/
 
 # ACT-local smoke test artifacts (generated, not committed)
 provider-smoke/
+scripts/backend_health_gate/__pycache__/

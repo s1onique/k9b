@@ -60,6 +60,19 @@ def handle_runtime_status_route(handler: HealthUIRequestHandler) -> None:
     _handle(handler)
 
 
+def handle_health_details_route(handler: HealthUIRequestHandler) -> None:
+    """Handle GET /api/health/details route.
+
+    This endpoint provides self-diagnosis when /api/health returns 500.
+
+    Args:
+        handler: The HTTP request handler instance
+    """
+    from .api_health_details import handle_health_details as _handle
+
+    _handle(handler)
+
+
 def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     """Handle API GET requests (read-only endpoints).
 
@@ -108,6 +121,12 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     if route == "/api/runtime-status":
         # Runtime status does not need run context - handles its own route
         handle_runtime_status_route(handler)
+        return
+
+    if route == "/api/health/details":
+        # Health details for self-diagnosis - available even when /api/health returns 500
+        # This is a public endpoint (no auth required) for health gate diagnostics
+        handle_health_details_route(handler)
         return
 
     if route == "/api/notifications":
