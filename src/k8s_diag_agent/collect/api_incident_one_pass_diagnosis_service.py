@@ -199,6 +199,9 @@ class OnePassServiceResponse:
     artifact_written: bool = False
     artifact_name: str | None = None
     error: str | None = None
+    # Provider proof fields for live-lab smoke testing
+    provider_configured: bool = False
+    provider_invocation_attempted: bool = False
 
     @classmethod
     def from_service_result(
@@ -234,6 +237,9 @@ class OnePassServiceResponse:
             artifact_written=result.artifact_written,
             artifact_name=result.artifact_name,
             error=result.error,
+            # Provider proof fields for live-lab smoke testing
+            provider_configured=result.provider_configured,
+            provider_invocation_attempted=result.provider_invocation_attempted,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -259,6 +265,9 @@ class OnePassServiceResponse:
             "checks_run": self.checks_run,
             "next_checks": self.next_checks,
             "artifact_written": self.artifact_written,
+            # Provider proof fields for live-lab smoke testing
+            "provider_configured": self.provider_configured,
+            "provider_invocation_attempted": self.provider_invocation_attempted,
         }
         if self.artifact_name is not None:
             result["artifact_name"] = self.artifact_name

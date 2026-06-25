@@ -23,22 +23,27 @@ from act_local_changed_files import filter_python_files, get_changed_files
 from act_local_checks import (
     run_doctrine_check,
     run_frontend_one_pass_diagnosis_check,
-    run_golden_case_check,
-    run_golden_case_privacy_check,
     run_incident_api_one_pass_diagnosis_check,
     run_incident_api_route_one_pass_diagnosis_check,
     run_json_contract_check,
     run_llm_friendly_on_files,
     run_mypy_on_files,
     run_no_new_llm_allowlist_check,
-    run_provenance_golden_case_check,
     run_ruff_on_files,
     run_shell_containment_on_files,
     run_verification_discipline_check,
     run_workflow_check,
 )
 from act_local_contract import ActLocalResult, CheckResult
+
+# Import directly from submodules to avoid unused-import warnings
+from act_local_golden_case_checks import (
+    run_golden_case_check,
+    run_golden_case_privacy_check,
+    run_provenance_golden_case_check,
+)
 from act_local_output import format_human_output, format_json_output
+from act_local_provider_checks import run_provider_artifact_verifier_check
 
 # =============================================================================
 # ACT-Local Verification
@@ -165,6 +170,13 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(frontend_result)
     if frontend_result.status == "FAIL":
         failure_commands.append(frontend_result.command)
+    
+    # Run provider artifact verifier check
+    # This verifies fail-closed behavior for LLM diagnosis artifacts
+    provider_artifact_result = run_provider_artifact_verifier_check()
+    checks.append(provider_artifact_result)
+    if provider_artifact_result.status == "FAIL":
+        failure_commands.append(provider_artifact_result.command)
     
     # Determine overall success (all non-skipped checks must pass)
     non_skipped = [c for c in checks if c.status != "SKIP"]

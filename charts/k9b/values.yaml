@@ -284,3 +284,29 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Diagnosis provider configuration for LLM-powered incident diagnosis.
+# When diagnosisProvider.enabled=true, the backend API can call a configured
+# LLM provider for one-pass diagnosis of incidents.
+diagnosisProvider:
+  # enabled: Enable diagnosis provider integration.
+  enabled: false
+  # existingSecret: Name of a Kubernetes Secret containing K9B_DIAGNOSIS_API_KEY.
+  # The secret key must contain the raw API key value.
+  # Create via: kubectl create secret generic k9b-diagnosis-credentials \
+  #   --from-literal=K9B_DIAGNOSIS_API_KEY='your-api-key'
+  existingSecret: ""
+  # apiKeyKey: Key name in the Secret containing the API key.
+  apiKeyKey: K9B_DIAGNOSIS_API_KEY
+  # provider: LLM provider type.
+  # Supported: openai_compatible, gigachat, qwen
+  provider: "openai_compatible"
+  # baseUrl: Base URL for the LLM API (OpenAI-compatible endpoint).
+  # Example: http://your-llm-service:8080/v1
+  baseUrl: ""
+  # model: Model identifier to use for diagnosis.
+  model: ""
+  # timeoutSeconds: Request timeout in seconds (1-300).
+  timeoutSeconds: 120
+  # maxOutputChars: Maximum response length (100-100000).
+  maxOutputChars: 8000

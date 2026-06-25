@@ -31,6 +31,48 @@ _SLOW_REQUEST_THRESHOLD_MS = 1000
 _SAFE_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
+def _init_diagnosis_provider_at_startup() -> None:
+    """Initialize production diagnosis provider at server startup.
+
+    This function is called during server startup to initialize the production
+    diagnosis provider from environment configuration. It logs the initialization
+    status for observability.
+
+    The provider is only initialized if all required environment variables are set.
+    If not configured, the server runs without LLM diagnosis capability (graceful degradation).
+    """
+    from ..collect.api_incident_one_pass_diagnosis_provider import (
+        get_provider_config_status,
+        init_production_diagnosis_provider,
+    )
+
+    try:
+        config_status = get_provider_config_status()
+    except Exception as exc:
+        # Config status retrieval failed - log and continue without provider
+        print(f"Diagnosis provider: config status error (non-fatal): {exc}", file=sys.stderr)
+        return
+
+    # config_status is a dict, check if provider is configured
+    if not config_status.get("config_present"):
+        # No config found - provider not configured
+        print("Diagnosis provider: not configured (set K9B_DIAGNOSIS_PROVIDER_NAME, K9B_DIAGNOSIS_MODEL, K9B_DIAGNOSIS_BASE_URL to enable)", file=sys.stderr)
+        return
+
+    # Log safe config status (no raw API key - dict fields only)
+    print(f"Diagnosis provider: initializing (provider={config_status.get('provider_name')}, model={config_status.get('model')}, api_key_present={config_status.get('api_key_present')})", file=sys.stderr)
+
+    try:
+        initialized = init_production_diagnosis_provider()
+        if initialized:
+            print("Diagnosis provider: initialized successfully", file=sys.stderr)
+        else:
+            print("Diagnosis provider: initialization failed (check logs)", file=sys.stderr)
+    except Exception as exc:
+        # Log but don't fail startup - provider is optional
+        print(f"Diagnosis provider: initialization error (non-fatal): {exc}", file=sys.stderr)
+
+
 def _is_exposed_host(host: str) -> bool:
     """Check if the host is exposed (non-loopback).
 
@@ -126,6 +168,9 @@ def start_ui_server_impl(
     # Normalize and validate runs_dir
     normalized_runs_dir = _normalize_runs_dir(runs_dir)
     _validate_runs_dir(normalized_runs_dir)
+
+    # Initialize production diagnosis provider if configured
+    _init_diagnosis_provider_at_startup()
 
     assets = static_dir or DEFAULT_STATIC_DIR
     handler = functools.partial(

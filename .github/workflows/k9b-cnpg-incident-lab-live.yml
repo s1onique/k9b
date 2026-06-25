@@ -63,6 +63,11 @@ on:
         required: false
         type: string
         default: ''
+      enable_provider_smoke:
+        description: 'Enable provider-backed diagnosis smoke test (requires provider secrets)'
+        required: false
+        type: boolean
+        default: false
 
 env:
   PYTHON_VERSION: '3.13'
@@ -720,13 +725,65 @@ jobs:
           echo "Server-side dry-run validation PASSED"
 
       # =======================================================================
+      # Create diagnosis provider secret (when provider smoke is enabled)
+      # MUST run before Helm deploy so Secret exists for secretKeyRef injection.
+      # =======================================================================
+      - name: Create diagnosis provider secret
+        if: inputs.enable_provider_smoke == true
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Creating diagnosis provider secret ==="
+          
+          # Validate required secrets are present BEFORE doing anything
+          echo "Validating required provider secrets..."
+          if [[ -z "${{ secrets.K9B_DIAGNOSIS_BASE_URL }}" ]]; then
+            echo "ERROR: K9B_DIAGNOSIS_BASE_URL secret is required when enable_provider_smoke=true"
+            echo "PROVIDER_SECRET_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SECRET_CLASS=missing_base_url" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          if [[ -z "${{ secrets.K9B_DIAGNOSIS_MODEL }}" ]]; then
+            echo "ERROR: K9B_DIAGNOSIS_MODEL secret is required when enable_provider_smoke=true"
+            echo "PROVIDER_SECRET_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SECRET_CLASS=missing_model" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          if [[ -z "${{ secrets.K9B_DIAGNOSIS_API_KEY }}" ]]; then
+            echo "ERROR: K9B_DIAGNOSIS_API_KEY secret is required when enable_provider_smoke=true"
+            echo "PROVIDER_SECRET_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SECRET_CLASS=missing_api_key" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "All required provider secrets validated"
+          echo "provider_config_present=true" >> $GITHUB_OUTPUT
+          echo "provider_model_present=true" >> $GITHUB_OUTPUT
+          echo "provider_api_key_present=true" >> $GITHUB_OUTPUT
+          
+          # Create Kubernetes Secret for provider API key
+          kubectl --kubeconfig="${KUBECONFIG}" create secret generic k9b-diagnosis-credentials \
+            --namespace "$LAB_NAMESPACE" \
+            --from-literal=K9B_DIAGNOSIS_API_KEY="${{ secrets.K9B_DIAGNOSIS_API_KEY }}" \
+            --dry-run=client -o yaml | kubectl --kubeconfig="${KUBECONFIG}" apply -f -
+          
+          echo "Provider secret created: k9b-diagnosis-credentials"
+          echo "PROVIDER_SECRET_STATUS=created" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SECRET_CLASS=secret_created" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SECRET_CREATED=true" >> $GITHUB_ENV
+
+      # =======================================================================
       # Step 3: Deploy k9b via Helm chart (with proactive rollout monitor)
+      # When enable_provider_smoke=true, also injects diagnosisProvider config.
+      # Provider secret must exist before this step (created above).
       # =======================================================================
       - name: Deploy k9b via Helm chart (non-blocking)
         id: helm-deploy
         run: |
           source "${GITHUB_ENV}"
           echo "=== Deploying k9b via Helm chart ==="
+          echo "Provider smoke enabled: ${{ inputs.enable_provider_smoke }}"
           
           # Use already-resolved env vars for image refs
           BACKEND_REPO="${IMAGE_PREFLIGHT_BACKEND%:*}"
@@ -743,6 +800,23 @@ jobs:
             echo "Frontend: ${FRONTEND_REPO}:${FRONTEND_TAG}"
           else
             echo "Frontend: (using chart defaults)"
+          fi
+          
+          # Build provider config args when enable_provider_smoke is true
+          # Use --set-string for string values to ensure Helm treats them as strings
+          PROVIDER_SET_ARGS=()
+          if [[ "${{ inputs.enable_provider_smoke }}" == "true" ]]; then
+            echo "Adding diagnosisProvider config to Helm deployment..."
+            PROVIDER_SET_ARGS+=(--set-string "diagnosisProvider.enabled=true")
+            PROVIDER_SET_ARGS+=(--set-string "diagnosisProvider.existingSecret=k9b-diagnosis-credentials")
+            PROVIDER_SET_ARGS+=(--set-string "diagnosisProvider.apiKeyKey=K9B_DIAGNOSIS_API_KEY")
+            PROVIDER_SET_ARGS+=(--set-string "diagnosisProvider.baseUrl=${{ secrets.K9B_DIAGNOSIS_BASE_URL }}")
+            PROVIDER_SET_ARGS+=(--set-string "diagnosisProvider.model=${{ secrets.K9B_DIAGNOSIS_MODEL }}")
+            PROVIDER_SET_ARGS+=(--set-string "diagnosisProvider.provider=openai_compatible")
+            PROVIDER_SET_ARGS+=(--set "diagnosisProvider.timeoutSeconds=120")
+            PROVIDER_SET_ARGS+=(--set "diagnosisProvider.maxOutputChars=8000")
+          else
+            echo "Provider smoke disabled - using default diagnosisProvider config"
           fi
           
           # Create rollout-watch directory for proactive monitor
@@ -767,6 +841,7 @@ jobs:
             --set kubernetes.auth.mode=inCluster
             --set serviceAccount.automountServiceAccountToken=true
             "${FRONTEND_SET_ARGS[@]}"
+            "${PROVIDER_SET_ARGS[@]}"
           )
           "${HELM_UPGRADE_CMD[@]}" > "${HELM_LOG}" 2>&1
           HELM_RC=$?
@@ -853,6 +928,61 @@ jobs:
           fi
           
           echo "Rollout monitor: all workloads healthy"
+
+      # =======================================================================
+      # Provider smoke: Diagnose provider connectivity and sanitize artifacts
+      # When enable_provider_smoke=true:
+      #   - requires GitHub secrets for provider base URL/model/API key
+      #   - creates Kubernetes Secret for provider API key
+      #   - passes diagnosisProvider.* values into Helm install/upgrade
+      #   - waits for backend restart and confirms provider initialized
+      #   - calls POST /api/incidents/{incident_id}/one-pass-diagnosis against live backend
+      #   - captures provider_invocation_attempted=true and provider_configured=true
+      #   - fails if provider was not invoked
+      # When enable_provider_smoke=false: skips cleanly
+      # =======================================================================
+      - name: Provider smoke test
+        id: provider-smoke
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Running diagnosis provider smoke test ==="
+          echo "enable_provider_smoke: ${{ inputs.enable_provider_smoke }}"
+          
+          # Create provider artifact directory
+          mkdir -p ./lab-artifacts/live/provider-smoke
+          
+          # Skip cleanly when provider smoke is not enabled
+          if [[ "${{ inputs.enable_provider_smoke }}" != "true" ]]; then
+            echo "SKIP: Provider smoke test disabled (enable_provider_smoke=false)"
+            echo "PROVIDER_SMOKE_STATUS=skipped" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=disabled" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # When enabled, require provider secrets
+          if [[ -z "${{ secrets.K9B_DIAGNOSIS_BASE_URL }}" ]]; then
+            echo "ERROR: K9B_DIAGNOSIS_BASE_URL secret is required when enable_provider_smoke=true"
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=missing_secrets" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          if [[ -z "${{ secrets.K9B_DIAGNOSIS_MODEL }}" ]]; then
+            echo "ERROR: K9B_DIAGNOSIS_MODEL secret is required when enable_provider_smoke=true"
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=missing_secrets" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Log presence only (never log the actual URL value)
+          echo "Provider base URL configured: true"
+          echo "PROVIDER_SMOKE_ENABLED=true" >> $GITHUB_ENV
+          
+          echo "Provider smoke test: ENABLED"
+          
+          # Set default status (will be updated after backend API call)
+          echo "PROVIDER_SMOKE_STATUS=pending" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SMOKE_CLASS=awaiting_backend_call" >> $GITHUB_OUTPUT
 
       - name: Verify Helm release
         run: |
@@ -1117,6 +1247,181 @@ jobs:
           kubectl --kubeconfig="${KUBECONFIG}" get events -n "$LAB_NAMESPACE" --sort-by='.lastTimestamp' > ./lab-artifacts/live/incident/events.txt 2>/dev/null || true
           kubectl --kubeconfig="${KUBECONFIG}" describe pods -n "$LAB_NAMESPACE" > ./lab-artifacts/live/incident/describe-pods.txt 2>/dev/null || true
           kubectl --kubeconfig="${KUBECONFIG}" get incidents -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/incident/k9b-incidents.json 2>/dev/null || echo '[]' > ./lab-artifacts/live/incident/k9b-incidents.json
+
+      # =======================================================================
+      # Provider-backed diagnosis: Call backend API for one-pass diagnosis
+      # When enable_provider_smoke=true, this step:
+      #   - waits for backend restart (provider config just added via Helm upgrade)
+      #   - confirms provider is initialized
+      #   - calls POST /api/incidents/{incident_id}/one-pass-diagnosis
+      #   - captures provider_invocation_attempted and provider_configured
+      #   - fails if provider was not invoked when explicitly enabled
+      # =======================================================================
+      - name: Provider-backed diagnosis API call
+        id: provider-backed-diagnosis
+        if: inputs.enable_provider_smoke == true
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Provider-backed diagnosis API call ==="
+          echo "This step calls POST /api/incidents/{incident_id}/one-pass-diagnosis"
+          echo "when provider smoke is enabled."
+          
+          # Wait for backend to be ready after Helm upgrade with provider config
+          echo "Waiting for backend pod to restart with provider config..."
+          kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/k9b-k9b -n "$LAB_NAMESPACE" --timeout=120s || true
+          
+          # Get backend service URL
+          BACKEND_SVC="k9b-k9b"
+          BACKEND_PORT="8080"
+          echo "Backend service: ${BACKEND_SVC}:${BACKEND_PORT}"
+          
+          # Wait for backend to be ready and provider to initialize
+          echo "Checking backend readiness..."
+          set +e
+          MAX_RETRIES=30
+          RETRY_INTERVAL=5
+          for i in $(seq 1 $MAX_RETRIES); do
+            HTTP_CODE=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "$LAB_NAMESPACE" \
+              deploy/${BACKEND_SVC} -c backend -- \
+              curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:${BACKEND_PORT}/api/health 2>/dev/null || echo "000")
+            
+            if [[ "$HTTP_CODE" == "200" ]]; then
+              echo "Backend ready (attempt $i/$MAX_RETRIES)"
+              break
+            fi
+            echo "Waiting for backend... (attempt $i/$MAX_RETRIES, HTTP: $HTTP_CODE)"
+            sleep $RETRY_INTERVAL
+          done
+          set -e
+          
+          # Get the incident ID from the incident resource
+          echo "Getting incident ID..."
+          INCIDENT_ID=$(kubectl --kubeconfig="${KUBECONFIG}" get incidents -n "$LAB_NAMESPACE" \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          
+          if [[ -z "$INCIDENT_ID" ]]; then
+            echo "ERROR: No incident found in namespace"
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=no_incident" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "Incident ID: ${INCIDENT_ID}"
+          
+          # Create temp directory for raw response (outside lab-artifacts/live)
+          # Use RUNNER_TEMP which is cleaned between runs and not uploaded
+          PROVIDER_RAW_TMP="${RUNNER_TEMP}/provider-smoke-raw"
+          mkdir -p "${PROVIDER_RAW_TMP}"
+          
+          # Set trap to clean up raw artifacts on exit (success or failure)
+          trap 'rm -rf "${PROVIDER_RAW_TMP}"' EXIT
+          
+          # Call the one-pass-diagnosis endpoint with inline JSON body
+          # Use empty body {} - URL incident_id is authoritative
+          # Capture HTTP status code using curl -w "%{http_code}"
+          echo "Calling POST /api/incidents/${INCIDENT_ID}/one-pass-diagnosis..."
+          set +e
+          HTTP_OUTPUT=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "$LAB_NAMESPACE" \
+            deploy/${BACKEND_SVC} -c backend -- \
+            curl -sS -X POST \
+            "http://localhost:${BACKEND_PORT}/api/incidents/${INCIDENT_ID}/one-pass-diagnosis" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            -w "\n%{http_code}" \
+            --max-time 180 2>&1)
+          API_RC=$?
+          set -e
+          
+          # Parse HTTP status from last line
+          HTTP_STATUS=$(echo "$HTTP_OUTPUT" | tail -1)
+          RESPONSE_BODY=$(echo "$HTTP_OUTPUT" | sed '$d')
+          
+          echo "HTTP status: ${HTTP_STATUS}"
+          
+          # Fail immediately on non-200 HTTP status
+          if [[ "$HTTP_STATUS" != "200" ]]; then
+            echo "ERROR: Provider route smoke failed with HTTP ${HTTP_STATUS}"
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=http_error_${HTTP_STATUS}" >> $GITHUB_OUTPUT
+            echo "http_status=${HTTP_STATUS}" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "HTTP 200 OK - provider route smoke passed"
+          
+          # Save raw response to temp directory (never in lab-artifacts/live)
+          echo "$RESPONSE_BODY" > "${PROVIDER_RAW_TMP}/diagnosis-response.json"
+          echo "$HTTP_STATUS" > "${PROVIDER_RAW_TMP}/http-status.txt"
+          
+          # Verify response is valid JSON before proceeding
+          if ! echo "$RESPONSE_BODY" | .venv/bin/python -c "import json,sys; json.load(sys.stdin)" 2>/dev/null; then
+            echo "ERROR: Invalid JSON response from API (HTTP ${HTTP_STATUS})"
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=invalid_response" >> $GITHUB_OUTPUT
+            echo "http_status=${HTTP_STATUS}" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Parse response to check provider status
+          PROVIDER_INVOKED=$(echo "$RESPONSE_BODY" | .venv/bin/python -c \
+            "import json,sys; d=json.load(sys.stdin); print('true' if d.get('provider_invocation_attempted') else 'false')" 2>/dev/null || echo "unknown")
+          
+          PROVIDER_CONFIGURED=$(echo "$RESPONSE_BODY" | .venv/bin/python -c \
+            "import json,sys; d=json.load(sys.stdin); print('true' if d.get('provider_configured') else 'false')" 2>/dev/null || echo "unknown")
+          
+          echo "Provider invocation attempted: ${PROVIDER_INVOKED}"
+          echo "Provider configured: ${PROVIDER_CONFIGURED}"
+          echo "http_status=${HTTP_STATUS}" >> $GITHUB_OUTPUT
+          
+          # Determine overall status
+          # When smoke is explicitly enabled, ALL states except (configured=true, invoked=true) are failures
+          if [[ "$PROVIDER_CONFIGURED" == "true" ]] && [[ "$PROVIDER_INVOKED" == "true" ]]; then
+            echo "Provider smoke test: PASS"
+            echo "PROVIDER_SMOKE_STATUS=pass" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=provider_invoked" >> $GITHUB_OUTPUT
+            echo "provider_invoked=true" >> $GITHUB_OUTPUT
+            echo "provider_configured=true" >> $GITHUB_OUTPUT
+          elif [[ "$PROVIDER_CONFIGURED" == "false" ]]; then
+            echo "Provider smoke test: FAIL - provider not configured"
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=provider_not_configured" >> $GITHUB_OUTPUT
+            echo "provider_invoked=false" >> $GITHUB_OUTPUT
+            echo "provider_configured=false" >> $GITHUB_OUTPUT
+            exit 1
+          elif [[ "$PROVIDER_INVOKED" == "false" ]]; then
+            echo "Provider smoke test: FAIL - provider configured but not invoked"
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=provider_not_invoked" >> $GITHUB_OUTPUT
+            echo "provider_invoked=false" >> $GITHUB_OUTPUT
+            echo "provider_configured=true" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            # Unknown/missing fields - FAIL when smoke is explicitly enabled
+            echo "Provider smoke test: FAIL - unknown/missing provider status fields"
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=unknown_provider_status" >> $GITHUB_OUTPUT
+            echo "provider_invoked=${PROVIDER_INVOKED}" >> $GITHUB_OUTPUT
+            echo "provider_configured=${PROVIDER_CONFIGURED}" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Sanitize response for upload using directory-mode verifier (fail-closed)
+          mkdir -p ./lab-artifacts/live/provider-smoke
+          .venv/bin/python scripts/verify_diagnosis_provider_artifacts.py \
+            --input "${PROVIDER_RAW_TMP}" \
+            --output ./lab-artifacts/live/provider-smoke \
+            --directory
+          SANITIZE_RC=$?
+          
+          if [ ${SANITIZE_RC} -ne 0 ]; then
+            echo "Provider artifact verification FAILED - secrets or topology detected"
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=artifact_verification_failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "Provider smoke test: artifact verification passed"
 
       # =======================================================================
       # Recover

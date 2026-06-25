@@ -92,6 +92,25 @@ spec:
                   name: {{ .Values.uiAuth.secretName }}
                   key: K9B_UI_TOKEN
             {{- end }}
+            {{- if .Values.diagnosisProvider.enabled }}
+            - name: K9B_DIAGNOSIS_PROVIDER_NAME
+              value: {{ .Values.diagnosisProvider.provider | quote }}
+            - name: K9B_DIAGNOSIS_BASE_URL
+              value: {{ .Values.diagnosisProvider.baseUrl | quote }}
+            - name: K9B_DIAGNOSIS_MODEL
+              value: {{ .Values.diagnosisProvider.model | quote }}
+            - name: K9B_DIAGNOSIS_TIMEOUT_SECONDS
+              value: {{ .Values.diagnosisProvider.timeoutSeconds | quote }}
+            - name: K9B_DIAGNOSIS_MAX_OUTPUT_CHARS
+              value: {{ .Values.diagnosisProvider.maxOutputChars | quote }}
+            {{- if .Values.diagnosisProvider.existingSecret }}
+            - name: K9B_DIAGNOSIS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.diagnosisProvider.existingSecret }}
+                  key: {{ .Values.diagnosisProvider.apiKeyKey }}
+            {{- end }}
+            {{- end }}
             # Always render K9B_AUTH_ENABLED - backend defaults to enabled when this env var is absent
             - name: K9B_AUTH_ENABLED
               value: {{ .Values.backend.auth.enabled | quote }}
