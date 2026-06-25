@@ -112,3 +112,10 @@ docs/worklist-ranking-rationale.md,reference,stale,agents,,,false,Worklist ranki
 docs/doctrine/local-verification-profiles.md,doctrine,current,doctrine,,,true,Local verification profile definitions and evidence policy
 docs/doctrine/shell-containment.md,doctrine,current,doctrine,,,true,Shell containment doctrine for agent execution safety
 docs/generated/verification_profiles.md,reference,current,quality,,,false,Verification profiles reference - manually maintained
+docs/requirements/llm_security_requirements.csv,reference,current,security,,,true,LLM security requirements register CSV
+docs/security/ai-bom-provider-inventory.md,reference,current,security,,,true,AI-BOM provider inventory with provider_protocol, endpoint_scope, operator_control
+docs/security/llm-provider-boundary.md,reference,current,security,,,true,LLM provider boundary with protocol classification
+docs/security/llm-requirements-na-rag-mcp-self-hosted.md,reference,current,security,,,true,N/A requirements for RAG/MCP/self-hosted
+docs/security/llm-security-requirements-register.md,reference,current,security,,,true,LLM security requirements register index
+docs/security/llm-trust-levels.md,reference,current,security,,,true,LLM prompt context trust levels
+docs/security/read-only-agent-boundary.md,reference,current,security,,,true,Read-only agent boundary documentation

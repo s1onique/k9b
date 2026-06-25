@@ -74,6 +74,8 @@ jobs:
           .venv/bin/python scripts/verify_agentic_pipeline.py
           .venv/bin/python scripts/verify_llm_evidence_boundaries.py
           .venv/bin/python scripts/verify_llm_semantic_injection_detection.py
+          .venv/bin/python scripts/verify_llm_security_requirements.py
+          .venv/bin/python scripts/verify_security_claim_traceability.py
           .venv/bin/python scripts/verify_discovery_logging_hygiene.py
           .venv/bin/python scripts/verify_pvc_rollout_policy.py
           .venv/bin/python scripts/verify_shared_pvc_colocation.py

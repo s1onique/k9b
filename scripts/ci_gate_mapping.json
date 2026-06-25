@@ -280,6 +280,20 @@
       },
       "required_command_fragments": ["verify_docs_inventory.py"],
       "reason": "Docs inventory integrity - local-only gate"
+    },
+    "llm-security-requirements": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"]
+      },
+      "required_command_fragments": ["verify_llm_security_requirements.py"],
+      "reason": "LLM security requirements register integrity"
+    },
+    "security-claim-traceability": {
+      "ci_equivalent": {
+        ".github/workflows/harbor.yml": ["lint-policy"]
+      },
+      "required_command_fragments": ["verify_security_claim_traceability.py"],
+      "reason": "Security claim traceability verification"
     }
   },
   "workflows_to_check": [

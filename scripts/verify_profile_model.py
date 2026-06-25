@@ -278,6 +278,20 @@ STEPS: dict[str, dict] = {
         "description": "Data model documentation hygiene",
         "is_expensive": False,
     },
+    "llm-security-requirements": {
+        "command": "python scripts/verify_llm_security_requirements.py",
+        "lane": "python",
+        "category": StepCategory.DOCS,
+        "description": "LLM security requirements register integrity",
+        "is_expensive": False,
+    },
+    "security-claim-traceability": {
+        "command": "python scripts/verify_security_claim_traceability.py",
+        "lane": "python",
+        "category": StepCategory.DOCS,
+        "description": "Security claim traceability verification",
+        "is_expensive": False,
+    },
     "npm-ci": {
         "command": "npm ci",
         "lane": "frontend",
