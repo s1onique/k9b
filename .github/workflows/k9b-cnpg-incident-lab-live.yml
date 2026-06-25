@@ -1259,51 +1259,118 @@ jobs:
           kubectl --kubeconfig="${KUBECONFIG}" get incidents -n "$LAB_NAMESPACE" -o json > ./lab-artifacts/live/incident/k9b-incidents.json 2>/dev/null || echo '[]' > ./lab-artifacts/live/incident/k9b-incidents.json
 
       # =======================================================================
-      # Provider-backed diagnosis: Call backend API for one-pass diagnosis
-      # When enable_provider_smoke=true, this step:
-      #   - waits for backend restart (provider config just added via Helm upgrade)
-      #   - confirms provider is initialized
-      #   - calls POST /api/incidents/{incident_id}/one-pass-diagnosis
-      #   - captures provider_invocation_attempted and provider_configured
-      #   - fails if provider was not invoked when explicitly enabled
+      # Phase 1: Backend Health Gate
+      # Fails fast if backend /api/health returns persistent HTTP 500.
+      # Collects sanitized diagnostics and stops before incident discovery.
       # =======================================================================
-      - name: Provider-backed diagnosis API call
-        id: provider-backed-diagnosis
+      - name: "Phase 1: Backend Health Gate"
+        id: backend-health-gate
         if: inputs.enable_provider_smoke == true
         run: |
           source "${GITHUB_ENV}"
-          echo "=== Provider-backed diagnosis API call ==="
-          echo "This step calls POST /api/incidents/{incident_id}/one-pass-diagnosis"
-          echo "when provider smoke is enabled."
+          echo "=== Phase 1: Backend Health Gate ==="
+          echo "Polling /api/health until HTTP 200 or max retries reached."
+          echo ""
           
-          # Wait for backend to be ready after Helm upgrade with provider config
-          echo "Waiting for backend pod to restart with provider config..."
+          # Wait for backend to stabilize after Helm upgrade with provider config
+          echo "Waiting for backend deployment to settle..."
           kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/k9b-backend -n "$LAB_NAMESPACE" --timeout=120s || true
+          
+          # Run backend health gate script
+          set +e
+          .venv/bin/python scripts/check_backend_health_gate.py \
+            --kubeconfig "${KUBECONFIG}" \
+            --namespace "$LAB_NAMESPACE" \
+            --deployment k9b-backend \
+            --container backend \
+            --port 8080 \
+            --max-retries 30 \
+            --retry-interval 5 \
+            --artifact-dir ./lab-artifacts/live
+          GATE_RC=$?
+          set -e
+          
+          # Read result
+          if [ -f ./lab-artifacts/live/provider-smoke/backend-health/health-check-result.json ]; then
+            FAILURE_CLASS=$(.venv/bin/python -c "import json; print(json.load(open('./lab-artifacts/live/provider-smoke/backend-health/health-check-result.json')).get('failure_class', ''))")
+            FINAL_HTTP=$(.venv/bin/python -c "import json; print(json.load(open('./lab-artifacts/live/provider-smoke/backend-health/health-check-result.json')).get('final_http_code', ''))")
+            echo "Backend health result: failure_class=${FAILURE_CLASS}, http=${FINAL_HTTP}"
+            echo "BACKEND_HEALTH_FAILURE_CLASS=${FAILURE_CLASS}" >> $GITHUB_OUTPUT
+            echo "BACKEND_HEALTH_HTTP=${FINAL_HTTP}" >> $GITHUB_OUTPUT
+          fi
+          
+          # Fail fast on backend health failure
+          if [ ${GATE_RC} -ne 0 ]; then
+            echo ""
+            echo "FAILURE: Backend health check failed: ${FAILURE_CLASS:-unknown}"
+            echo ""
+            echo "The backend returned persistent HTTP ${FINAL_HTTP:-unknown} after all retries."
+            echo "Stopping workflow with precise failure class instead of continuing to incident discovery."
+            echo ""
+            echo "Artifacts written to: lab-artifacts/live/provider-smoke/backend-health/"
+            echo ""
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=${FAILURE_CLASS:-backend_health_failed}" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_PHASE=backend_health_gate" >> $GITHUB_OUTPUT
+            
+            # Verify backend-health artifacts with provider artifact verifier (fail-closed)
+            # Wrap with set +e to capture nonzero exit without shell exit
+            if [ -d ./lab-artifacts/live/provider-smoke/backend-health ]; then
+              echo ""
+              echo "Verifying backend-health artifacts for privacy..."
+              set +e
+              .venv/bin/python scripts/verify_diagnosis_provider_artifacts.py \
+                --input ./lab-artifacts/live/provider-smoke/backend-health \
+                --directory
+              VERIFY_RC=$?
+              set -e
+              
+              if [ ${VERIFY_RC} -ne 0 ]; then
+                echo "ERROR: Backend-health artifact verification FAILED - unsafe content detected"
+                echo "Quarantining unsafe backend-health artifacts..."
+                
+                # Quarantine: move to RUNNER_TEMP so it's not uploaded
+                if [ -d ./lab-artifacts/live/provider-smoke/backend-health ]; then
+                  mv ./lab-artifacts/live/provider-smoke/backend-health \
+                     "${RUNNER_TEMP}/k9b-backend-health-quarantined" 2>/dev/null || true
+                fi
+                
+                echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+                echo "PROVIDER_SMOKE_CLASS=backend_health_artifact_verification_failed" >> $GITHUB_OUTPUT
+                echo "PROVIDER_SMOKE_PHASE=backend_health_verification" >> $GITHUB_OUTPUT
+                exit 1
+              fi
+              
+              echo "Backend-health artifact verification passed"
+            fi
+            
+            # Do NOT proceed to incident discovery - this is the fail-fast point
+            exit 1
+          fi
+          
+          echo ""
+          echo "Backend health check PASSED: HTTP 200"
+          echo "PROVIDER_SMOKE_STATUS=pending" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SMOKE_PHASE=backend_health_gate" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SMOKE_CLASS=backend_healthy" >> $GITHUB_OUTPUT
+
+      # =======================================================================
+      # Phase 2: Incident Discovery
+      # Only runs if backend health gate passed (HTTP 200).
+      # =======================================================================
+      - name: "Phase 2: Incident Discovery"
+        id: incident-discovery
+        if: inputs.enable_provider_smoke == true && steps.backend-health-gate.outputs.PROVIDER_SMOKE_STATUS != 'fail'
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Phase 2: Incident Discovery ==="
+          echo "Backend health gate passed, proceeding to incident discovery."
+          echo ""
           
           # Get backend service URL (matches Helm chart k9b.backend.fullname = <release>-k9b-backend)
           BACKEND_SVC="k9b-backend"
           BACKEND_PORT="8080"
           echo "Backend service: ${BACKEND_SVC}:${BACKEND_PORT}"
-          
-          # Wait for backend to be ready and provider to initialize
-          echo "Checking backend readiness..."
-          set +e
-          MAX_RETRIES=30
-          RETRY_INTERVAL=5
-          for i in $(seq 1 $MAX_RETRIES); do
-            HTTP_CODE=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "$LAB_NAMESPACE" \
-              deploy/${BACKEND_SVC} -c backend -- \
-              curl -s -o /dev/null -w "%{http_code}" \
-              http://localhost:${BACKEND_PORT}/api/health 2>/dev/null || echo "000")
-            
-            if [[ "$HTTP_CODE" == "200" ]]; then
-              echo "Backend ready (attempt $i/$MAX_RETRIES)"
-              break
-            fi
-            echo "Waiting for backend... (attempt $i/$MAX_RETRIES, HTTP: $HTTP_CODE)"
-            sleep $RETRY_INTERVAL
-          done
-          set -e
           
           # Get incident ID from the backend API with bounded polling
           # (k9b incident discovery may lag behind symptom injection)
@@ -1336,18 +1403,44 @@ jobs:
             echo "ERROR: No incident found via backend API after ${MAX_RETRIES} attempts"
             echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
             echo "PROVIDER_SMOKE_CLASS=no_incident_after_timeout" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_PHASE=incident_discovery" >> $GITHUB_OUTPUT
             exit 1
           fi
           
           echo "Incident ID: ${INCIDENT_ID}"
+          echo "INCIDENT_ID=${INCIDENT_ID}" >> $GITHUB_ENV
+          echo "PROVIDER_SMOKE_PHASE=incident_discovery" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SMOKE_CLASS=incident_found" >> $GITHUB_OUTPUT
+
+      # =======================================================================
+      # Phase 3: One-Pass Diagnosis Call + Artifact Verification
+      # Only runs if incident discovery succeeded.
+      # Artifact verification happens here before raw temp cleanup.
+      # =======================================================================
+      - name: "Phase 3: One-Pass Diagnosis Call + Artifact Verification"
+        id: one-pass-diagnosis
+        if: inputs.enable_provider_smoke == true && steps.incident-discovery.outputs.PROVIDER_SMOKE_STATUS != 'fail'
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Phase 3: One-Pass Diagnosis Call + Artifact Verification ==="
+          
+          INCIDENT_ID="${INCIDENT_ID}"
+          if [[ -z "$INCIDENT_ID" ]]; then
+            echo "ERROR: No incident ID from phase 2"
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=missing_incident_id" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          BACKEND_SVC="k9b-backend"
+          BACKEND_PORT="8080"
           
           # Create temp directory for raw response (outside lab-artifacts/live)
           # Use RUNNER_TEMP which is cleaned between runs and not uploaded
           PROVIDER_RAW_TMP="${RUNNER_TEMP}/provider-smoke-raw"
           mkdir -p "${PROVIDER_RAW_TMP}"
-          
-          # Set trap to clean up raw artifacts on exit (success or failure)
-          trap 'rm -rf "${PROVIDER_RAW_TMP}"' EXIT
+          mkdir -p ./lab-artifacts/live/provider-smoke
+          mkdir -p ./lab-artifacts/live/provider-smoke/incident-provider
           
           # Call the one-pass-diagnosis endpoint with inline JSON body
           # Use empty body {} - URL incident_id is authoritative
@@ -1376,6 +1469,7 @@ jobs:
             echo "ERROR: Provider route smoke failed with HTTP ${HTTP_STATUS}"
             echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
             echo "PROVIDER_SMOKE_CLASS=http_error_${HTTP_STATUS}" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_PHASE=one_pass_diagnosis" >> $GITHUB_OUTPUT
             echo "http_status=${HTTP_STATUS}" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -1391,6 +1485,7 @@ jobs:
             echo "ERROR: Invalid JSON response from API (HTTP ${HTTP_STATUS})"
             echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
             echo "PROVIDER_SMOKE_CLASS=invalid_response" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_PHASE=one_pass_diagnosis" >> $GITHUB_OUTPUT
             echo "http_status=${HTTP_STATUS}" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -1405,6 +1500,7 @@ jobs:
           echo "Provider invocation attempted: ${PROVIDER_INVOKED}"
           echo "Provider configured: ${PROVIDER_CONFIGURED}"
           echo "http_status=${HTTP_STATUS}" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SMOKE_PHASE=one_pass_diagnosis" >> $GITHUB_OUTPUT
           
           # Determine overall status
           # When smoke is explicitly enabled, ALL states except (configured=true, invoked=true) are failures
@@ -1438,22 +1534,36 @@ jobs:
             exit 1
           fi
           
+          # =======================================================================
+          # Artifact Verification - runs BEFORE trap cleanup
           # Sanitize response for upload using directory-mode verifier (fail-closed)
-          mkdir -p ./lab-artifacts/live/provider-smoke
+          # Wrap with set +e to capture nonzero exit without shell exit
+          # =======================================================================
+          echo ""
+          echo "Running artifact verification on incident-provider artifacts..."
+          set +e
           .venv/bin/python scripts/verify_diagnosis_provider_artifacts.py \
             --input "${PROVIDER_RAW_TMP}" \
-            --output ./lab-artifacts/live/provider-smoke \
+            --output ./lab-artifacts/live/provider-smoke/incident-provider \
             --directory
           SANITIZE_RC=$?
+          set -e
           
           if [ ${SANITIZE_RC} -ne 0 ]; then
             echo "Provider artifact verification FAILED - secrets or topology detected"
             echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
             echo "PROVIDER_SMOKE_CLASS=artifact_verification_failed" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_PHASE=artifact_verification" >> $GITHUB_OUTPUT
             exit 1
           fi
           
           echo "Provider smoke test: artifact verification passed"
+          echo "PROVIDER_SMOKE_STATUS=pass" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SMOKE_CLASS=all_phases_passed" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SMOKE_PHASE=artifact_verification" >> $GITHUB_OUTPUT
+          
+          # Clean up raw temp directory now that sanitized artifacts are written
+          rm -rf "${PROVIDER_RAW_TMP}"
 
       # =======================================================================
       # Recover
