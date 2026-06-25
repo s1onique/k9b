@@ -6,9 +6,42 @@ from __future__ import annotations
 ALLOWED_DEPENDENCY_KEYS = frozenset({
     "dependency_name",
     "status",
+    "phase",
     "failure_class",
     "reason_code",
     "message_snippet",
+})
+
+# Allowlisted provider phase values (enum-only, no raw URLs/IPs/tokens)
+ALLOWED_PROVIDER_PHASES = frozenset({
+    # Success
+    "success",
+    "tcp_only",
+    "tcp_connected",
+    # Connectivity failures
+    "timeout",
+    "dns_failed",
+    "connection_refused",
+    "connection_failed",
+    "tcp_timeout",
+    "tcp_refused",
+    "tcp_error",
+    # HTTP-level failures
+    "http_auth_required",
+    "http_not_found",
+    "http_server_error",
+    # TLS failures
+    "tls_failed",
+    # Configuration/state failures
+    "config_missing",
+    "config_check_skipped",
+    "not_initialized",
+    "null_provider",
+    "import_failed",
+    "status_probe_failed",
+    # Legacy/error phases
+    "unknown",
+    "N/A",
 })
 
 # Allowlisted failure class values
@@ -122,3 +155,32 @@ def _normalize_reason_code(raw_reason: str | None, context: str = "unknown") -> 
         return "scheduler_waiting_unknown"
     
     return "container_state_waiting"
+
+
+def _normalize_provider_phase(raw_phase: str | None) -> str:
+    """Normalize a provider phase to an allowlisted enum value.
+    
+    This function prevents raw URLs, IPs, or tokens from leaking through
+    the phase field which is used for connectivity diagnosis.
+    
+    Args:
+        raw_phase: Raw phase string from provider status (may be None)
+        
+    Returns:
+        An allowlisted phase from ALLOWED_PROVIDER_PHASES, or "unknown" if invalid
+    """
+    if raw_phase is None:
+        return "unknown"
+    
+    if not isinstance(raw_phase, str):
+        return "unknown"
+    
+    # Trim whitespace
+    normalized = raw_phase.strip()
+    
+    # Check against allowlist
+    if normalized in ALLOWED_PROVIDER_PHASES:
+        return normalized
+    
+    # Unknown phase -> "unknown"
+    return "unknown"

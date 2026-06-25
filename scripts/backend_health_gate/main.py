@@ -211,8 +211,18 @@ def run_health_gate(
         
         if health_details and details_conclusive:
             # Backend provided conclusive self-diagnosis
-            print(f"Backend provided conclusive health details: primary_failure={normalized_details.get('primary_failure_class', 'unknown')}", flush=True)
+            primary_failure = normalized_details.get('primary_failure_class', 'unknown')
+            print(f"Backend provided conclusive health details: primary_failure={primary_failure}", flush=True)
             
+            # Print provider phase for diagnosis
+            for dep in normalized_details.get("dependencies", []):
+                if dep.get("dependency_name") == "diagnosis_provider":
+                    provider_status = dep.get("status", "unknown")
+                    provider_phase = dep.get("phase", "unknown")
+                    provider_reason_code = dep.get("reason_code", "unknown")
+                    provider_failure_class = dep.get("failure_class", "")
+                    print(f"  diagnosis_provider: status={provider_status}, reason_code={provider_reason_code}, phase={provider_phase}" +
+                          (f", failure_class={provider_failure_class}" if provider_failure_class else ""), flush=True)
             health_deps: dict[str, Any] = normalized_details
             
             # Merge Kubernetes-state as supplementary diagnostics

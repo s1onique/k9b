@@ -29,9 +29,11 @@ def _classify_connectivity_error(exc: Exception) -> tuple[str, str]:
         exc: The exception from connectivity probe
         
     Returns:
-        Tuple of (error_type, error_class) where both are sanitized enum strings.
-        error_type: One of timeout, connection, auth, unavailable, unknown
+        Tuple of (phase, error_class) where both are sanitized enum strings.
+        phase: One of timeout, dns_failed, connection_refused, connection_failed, tls_failed, http_auth_required, unavailable, unknown
         error_class: Full reason code like provider_timeout, provider_connection_failed
+        
+    Note: phase values are normalized to match ALLOWED_PROVIDER_PHASES in allowlists.py
     """
     exc_str = str(exc).lower()
     exc_type = type(exc).__name__.lower()
@@ -42,29 +44,29 @@ def _classify_connectivity_error(exc: Exception) -> tuple[str, str]:
     
     # DNS resolution failures
     if "name or service not known" in exc_str or "nodename nor servname" in exc_str:
-        return "dns", "provider_connection_failed"
+        return "dns_failed", "provider_connection_failed"
     
     # Connection refused/reset
     if "connection refused" in exc_str or "connection reset" in exc_str:
-        return "connection", "provider_connection_failed"
+        return "connection_refused", "provider_connection_failed"
     
     # Network unreachable
     if "network is unreachable" in exc_str or "no route to host" in exc_str:
-        return "network", "provider_connection_failed"
+        return "connection_failed", "provider_connection_failed"
     
     # TLS/SSL errors
     if "ssl" in exc_str or "tls" in exc_str or exc_type in ("sslfoundation", "sslerror"):
-        return "tls", "provider_connection_failed"
+        return "tls_failed", "provider_connection_failed"
     
     # Authentication/authorization
     if "401" in exc_str or "403" in exc_str or "auth" in exc_str:
-        return "auth", "provider_auth_failed"
+        return "http_auth_required", "provider_auth_failed"
     
     # Service unavailable (404, 503)
     if "404" in exc_str or "not found" in exc_str:
-        return "unavailable", "provider_unavailable"
+        return "http_not_found", "provider_unavailable"
     if "503" in exc_str or "unavailable" in exc_str:
-        return "unavailable", "provider_unavailable"
+        return "http_server_error", "provider_unavailable"
     
     # Default unknown
     return "unknown", "provider_unknown_error"

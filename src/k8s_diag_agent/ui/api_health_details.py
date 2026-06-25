@@ -174,6 +174,7 @@ def _build_health_dependencies() -> list[dict]:
     provider_dep = {
         "dependency_name": "diagnosis_provider",
         "status": "available" if provider_status["available"] else "unavailable",
+        "phase": provider_status.get("phase") or "unknown",
         "failure_class": HealthDependencyFailure.PROVIDER_CONNECTION_FAILED if raw_error else "",
         "reason_code": provider_reason_code,
         "message_snippet": "",  # Never include raw messages

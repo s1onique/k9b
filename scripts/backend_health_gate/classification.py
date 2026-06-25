@@ -11,6 +11,7 @@ from .allowlists import (
     ALLOWED_DEPENDENCY_KEYS,
     ALLOWED_FAILURE_CLASSES,
     ALLOWED_REASON_CODES,
+    _normalize_provider_phase,
     _normalize_reason_code,
 )
 from .constants import (
@@ -421,6 +422,9 @@ def _normalize_backend_health_details(
             elif key == "reason_code":
                 if value not in ALLOWED_REASON_CODES:
                     value = "unknown"  # Unknown reason code -> unknown
+            elif key == "phase":
+                # Normalize phase using helper (handles allowlist check + whitespace trimming)
+                value = _normalize_provider_phase(value)
             elif key == "message_snippet":
                 # Sanitize message_snippet from backend endpoint (defense-in-depth)
                 value = _sanitize_message_snippet(value, max_len=100)
