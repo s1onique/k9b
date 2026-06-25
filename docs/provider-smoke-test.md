@@ -2,9 +2,29 @@
 
 This document describes how to verify the diagnosis provider is functioning correctly in the live lab.
 
+## Workflow Topology
+
+```
+K3s CNPG Incident Lab (k9b-cnpg-incident-lab.yml)
+  └─ workflow_dispatch inputs:
+       enable_provider_smoke ← operator-facing checkbox
+       run_live_lab=true
+            ↓
+  Build and Verify (ubuntu-latest)
+            ↓
+  Build Lab Images (k9b-image-builder.yml)
+            ↓
+  Live K3s CNPG Lab (k9b-cnpg-incident-lab-live.yml)
+       └─ forwards enable_provider_smoke via workflow_call
+            ↓
+  Provider smoke test executes in namespace mode
+```
+
+**Important**: Always trigger the **K3s CNPG Incident Lab** workflow, not the Live workflow directly.
+
 ## Workflow-Owned Smoke Test
 
-The live-lab workflow (`k9b-cnpg-incident-lab-live.yml`) owns the smoke test. When `enable_provider_smoke=true`:
+The live-lab workflow (`k9b-cnpg-incident-lab-live.yml`) executes the smoke test. When `enable_provider_smoke=true`:
 
 1. Creates Kubernetes Secret `k9b-diagnosis-credentials` with API key
 2. Injects provider config via Helm values
@@ -15,20 +35,25 @@ The live-lab workflow (`k9b-cnpg-incident-lab-live.yml`) owns the smoke test. Wh
 
 ### Enabling Provider Smoke
 
-1. Set `diagnosisProvider.enabled=true` in values
-2. Add LLM endpoint and credentials to protected secrets
-3. Add `enable_provider_smoke=true` to workflow trigger:
+Use the **K3s CNPG Incident Lab** workflow (not the Live workflow) and:
+
+1. Set `run_live_lab=true`
+2. Check `enable_provider_smoke=true`
+3. Add LLM endpoint and credentials to protected secrets in the parent workflow environment:
 
 ```yaml
+# In k9b-cnpg-incident-lab.yml (parent workflow)
 on:
   workflow_dispatch:
     inputs:
       enable_provider_smoke:
-        description: 'Enable provider smoke test'
+        description: 'Enable provider-backed diagnosis smoke test (requires provider secrets)'
         required: false
-        type: boolean
         default: false
+        type: boolean
 ```
+
+The parent workflow forwards `enable_provider_smoke` to the live workflow via `jobs.live-k3s-lab.with`.
 
 ### Required Secrets
 

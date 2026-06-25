@@ -25,6 +25,11 @@ on:
         type: choice
         options:
           - pod-failure
+      enable_provider_smoke:
+        description: 'Enable provider-backed diagnosis smoke test (requires provider secrets)'
+        required: false
+        default: false
+        type: boolean
 
   # CI on PR when lab files change (build-and-verify only, no live lab)
   pull_request:
@@ -215,6 +220,7 @@ jobs:
     with:
       incident_scenario: ${{ inputs.incident_scenario || 'pod-failure' }}
       artifact_retention_days: ${{ inputs.artifact_retention_days || '7' }}
+      enable_provider_smoke: ${{ inputs.enable_provider_smoke || false }}
       backend_image_repository: ${{ needs.build-lab-images.outputs.backend_image_repository }}
       backend_image_tag: ${{ needs.build-lab-images.outputs.backend_image_tag }}
       backend_image_ref: ${{ needs.build-lab-images.outputs.backend_image_ref }}
