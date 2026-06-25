@@ -44,6 +44,10 @@ from act_local_golden_case_checks import (
 )
 from act_local_output import format_human_output, format_json_output
 from act_local_provider_checks import run_provider_artifact_verifier_check
+from act_local_small_provider_checks import (
+    run_small_provider_artifact_verifier_check,
+    run_small_provider_smoke_check,
+)
 
 # =============================================================================
 # ACT-Local Verification
@@ -177,6 +181,20 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(provider_artifact_result)
     if provider_artifact_result.status == "FAIL":
         failure_commands.append(provider_artifact_result.command)
+    
+    # Run small-provider smoke test
+    # Proves non-incident small-provider path reads env vars, initializes provider,
+    # invokes it, and emits upload-safe artifacts
+    small_provider_smoke_result = run_small_provider_smoke_check()
+    checks.append(small_provider_smoke_result)
+    if small_provider_smoke_result.status == "FAIL":
+        failure_commands.append(small_provider_smoke_result.command)
+    
+    # Verify small-provider artifacts are upload-safe
+    small_provider_artifact_result = run_small_provider_artifact_verifier_check()
+    checks.append(small_provider_artifact_result)
+    if small_provider_artifact_result.status == "FAIL":
+        failure_commands.append(small_provider_artifact_result.command)
     
     # Determine overall success (all non-skipped checks must pass)
     non_skipped = [c for c in checks if c.status != "SKIP"]

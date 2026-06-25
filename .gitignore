@@ -97,3 +97,6 @@ tests/tmp-health/
 .kilocode/package-lock.json
 
 runs/debug/
+
+# ACT-local smoke test artifacts (generated, not committed)
+provider-smoke/
