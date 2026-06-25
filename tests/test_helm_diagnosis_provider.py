@@ -271,3 +271,6 @@ class TestDiagnosisProviderSecretKeyRefRawValue:
         # for Helm chart integration with DiagnosisProviderConfig.
         assert "valueFrom" in e
         assert e["valueFrom"]["secretKeyRef"]["name"] == "k9b-diagnosis-credentials"
+
+
+# Small provider tests are in tests/test_helm_small_provider.py

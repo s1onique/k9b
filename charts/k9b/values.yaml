@@ -126,6 +126,18 @@ scheduler:
   #     - secretRef:
   #         name: k9b-external-analysis-credentials
   envFrom: []
+  # smallProvider: Configuration for the "small" provider used for non-incident checks
+  # (review enrichment, next-check planning, auto drilldown).
+  # When smallProvider.existingSecret is set, the API key is injected via secretKeyRef.
+  # Use the same secret as diagnosisProvider for shared credential bundle.
+  smallProvider:
+    # existingSecret: Name of a Kubernetes Secret containing K9B_EXTERNAL_ANALYSIS_API_KEY.
+    # The secret key must contain the raw API key value.
+    # Create via: kubectl create secret generic k9b-diagnosis-credentials \
+    #   --from-literal=K9B_EXTERNAL_ANALYSIS_API_KEY='your-api-key'
+    existingSecret: ""
+    # apiKeyKey: Key name in the Secret containing the API key.
+    apiKeyKey: K9B_EXTERNAL_ANALYSIS_API_KEY
   # initContainer: Optional init container to create /app/runs/health before scheduler starts.
   # Useful as additional hardening, but the scheduler script handles directory creation itself.
   initContainer:

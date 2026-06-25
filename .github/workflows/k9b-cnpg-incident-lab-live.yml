@@ -766,9 +766,10 @@ jobs:
           kubectl --kubeconfig="${KUBECONFIG}" create secret generic k9b-diagnosis-credentials \
             --namespace "$LAB_NAMESPACE" \
             --from-literal=K9B_DIAGNOSIS_API_KEY="${{ secrets.K9B_DIAGNOSIS_API_KEY }}" \
+            --from-literal=K9B_EXTERNAL_ANALYSIS_API_KEY="${{ secrets.K9B_DIAGNOSIS_API_KEY }}" \
             --dry-run=client -o yaml | kubectl --kubeconfig="${KUBECONFIG}" apply -f -
           
-          echo "Provider secret created: k9b-diagnosis-credentials"
+          echo "Provider secret created with both keys: k9b-diagnosis-credentials"
           echo "PROVIDER_SECRET_STATUS=created" >> $GITHUB_OUTPUT
           echo "PROVIDER_SECRET_CLASS=secret_created" >> $GITHUB_OUTPUT
           echo "PROVIDER_SECRET_CREATED=true" >> $GITHUB_ENV
@@ -815,6 +816,15 @@ jobs:
             PROVIDER_SET_ARGS+=(--set-string "diagnosisProvider.provider=openai_compatible")
             PROVIDER_SET_ARGS+=(--set "diagnosisProvider.timeoutSeconds=120")
             PROVIDER_SET_ARGS+=(--set "diagnosisProvider.maxOutputChars=8000")
+            
+            # Small provider: same base URL, same API key (via same secret, different key)
+            echo "Adding scheduler.smallProvider config to Helm deployment..."
+            PROVIDER_SET_ARGS+=(--set-string "scheduler.smallProvider.existingSecret=k9b-diagnosis-credentials")
+            PROVIDER_SET_ARGS+=(--set-string "scheduler.smallProvider.apiKeyKey=K9B_EXTERNAL_ANALYSIS_API_KEY")
+            # Small provider uses same base URL but can use a different model
+            PROVIDER_SET_ARGS+=(--set-string "scheduler.env.K9B_EXTERNAL_ANALYSIS_BASE_URL=${{ secrets.K9B_DIAGNOSIS_BASE_URL }}")
+            PROVIDER_SET_ARGS+=(--set-string "scheduler.env.K9B_EXTERNAL_ANALYSIS_MODEL=${{ secrets.K9B_DIAGNOSIS_MODEL }}")
+            PROVIDER_SET_ARGS+=(--set-string "scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED=true")
           else
             echo "Provider smoke disabled - using default diagnosisProvider config"
           fi
@@ -1268,10 +1278,10 @@ jobs:
           
           # Wait for backend to be ready after Helm upgrade with provider config
           echo "Waiting for backend pod to restart with provider config..."
-          kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/k9b-k9b -n "$LAB_NAMESPACE" --timeout=120s || true
+          kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/k9b-backend -n "$LAB_NAMESPACE" --timeout=120s || true
           
-          # Get backend service URL
-          BACKEND_SVC="k9b-k9b"
+          # Get backend service URL (matches Helm chart k9b.backend.fullname = <release>-k9b-backend)
+          BACKEND_SVC="k9b-backend"
           BACKEND_PORT="8080"
           echo "Backend service: ${BACKEND_SVC}:${BACKEND_PORT}"
           
@@ -1295,15 +1305,37 @@ jobs:
           done
           set -e
           
-          # Get the incident ID from the incident resource
-          echo "Getting incident ID..."
-          INCIDENT_ID=$(kubectl --kubeconfig="${KUBECONFIG}" get incidents -n "$LAB_NAMESPACE" \
-            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          # Get incident ID from the backend API with bounded polling
+          # (k9b incident discovery may lag behind symptom injection)
+          echo "Getting incident ID from backend API with bounded polling..."
+          INCIDENT_ID=""
+          MAX_RETRIES=12
+          RETRY_INTERVAL=10
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            API_RESPONSE=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "$LAB_NAMESPACE" \
+              deploy/${BACKEND_SVC} -c backend -- \
+              curl -sS "http://localhost:${BACKEND_PORT}/api/incidents" \
+              -H "Content-Type: application/json" \
+              --max-time 30 2>/dev/null || echo '{"incidents":[]}')
+            
+            # Extract first incident_id from the API response (bounded - no raw response logged)
+            INCIDENT_ID=$(echo "$API_RESPONSE" | .venv/bin/python -c \
+              "import json,sys; d=json.load(sys.stdin); ids=d.get('incidents',[]); print(ids[0].get('incident_id','') if ids else '')" 2>/dev/null || echo "")
+            
+            if [[ -n "$INCIDENT_ID" ]]; then
+              echo "Found incident ID: ${INCIDENT_ID} (attempt $i/$MAX_RETRIES)"
+              break
+            fi
+            
+            echo "No incident found yet... (attempt $i/$MAX_RETRIES, waiting ${RETRY_INTERVAL}s)"
+            sleep $RETRY_INTERVAL
+          done
           
           if [[ -z "$INCIDENT_ID" ]]; then
-            echo "ERROR: No incident found in namespace"
+            echo "ERROR: No incident found via backend API after ${MAX_RETRIES} attempts"
             echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
-            echo "PROVIDER_SMOKE_CLASS=no_incident" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=no_incident_after_timeout" >> $GITHUB_OUTPUT
             exit 1
           fi
           

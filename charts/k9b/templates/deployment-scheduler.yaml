@@ -114,6 +114,13 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             {{- end }}
+            {{- if .Values.scheduler.smallProvider.existingSecret }}
+            - name: K9B_EXTERNAL_ANALYSIS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.scheduler.smallProvider.existingSecret }}
+                  key: {{ .Values.scheduler.smallProvider.apiKeyKey }}
+            {{- end }}
           {{- with .Values.scheduler.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
