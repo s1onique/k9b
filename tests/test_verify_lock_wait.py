@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Test configuration
@@ -153,7 +153,7 @@ class TestWaitForLockCommand(unittest.TestCase):
             self.skipTest("verify_all.sh not found")
         os.chmod(VERIFY_ALL, 0o755)
         # Create a held lock fixture so wait-for-lock times out
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         self._lock_dir = REPO_ROOT / ".verify_lock"
         self._lock_dir.mkdir(parents=True, exist_ok=True)
         (self._lock_dir / "lock").touch()
