@@ -48,6 +48,17 @@ fi
 # Track failures
 FAILED=0
 
+# Track which specific checks failed (for targeted remediation output)
+FAILED_QEMU_IMAGE=0
+FAILED_BUILDX_IMAGE=0
+FAILED_GHA_CACHE=0
+FAILED_REGISTRY_CACHE=0
+FAILED_PIP_NO_CACHE=0
+FAILED_PIP_CACHE_MOUNT=0
+FAILED_PIP_ORDER=0
+FAILED_SSOT_STALE=0
+FAILED_SSOT_HARDCODED=0
+
 # =============================================================================
 # Self-test mode
 # =============================================================================
@@ -391,6 +402,7 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
             echo "        Expected: image: ${HARBOR_BINFMT_IMAGE}"
             echo "        QEMU silently falls back to DockerHub default without this override"
             FAILED=1
+            FAILED_QEMU_IMAGE=1
         else
             echo "  OK: All QEMU sections use Harbor image override"
         fi
@@ -515,6 +527,7 @@ for dockerfile in "${PYTHON_DOCKERFILES[@]}"; do
             echo "        This causes layer invalidation on every code change."
             echo "        Move pip install to before COPY src/ and use BuildKit cache mounts instead."
             FAILED=1
+            FAILED_PIP_NO_CACHE=1
         else
             echo "  OK: No anti-pattern pip install --no-cache-dir detected"
         fi
@@ -575,6 +588,7 @@ for dockerfile in "${PYTHON_DOCKERFILES[@]}"; do
             echo "  FAIL: requirements.docker.txt is stale (out of sync with pyproject.toml)"
             echo "        Run: bash scripts/sync-docker-requirements.sh"
             FAILED=1
+            FAILED_SSOT_STALE=1
         else
             echo "  OK: requirements.docker.txt is fresh (matches pyproject.toml)"
         fi
@@ -595,19 +609,68 @@ if [[ ${FAILED} -eq 1 ]]; then
     echo "RESULT: FAILED"
     echo ""
     echo "Build locality violations detected. Please fix:"
-    echo "  1. QEMU must have explicit Harbor image override:"
-    echo "     image: ${HARBOR_BINFMT_IMAGE}"
-    echo "  2. Remove amd64 from QEMU platforms (native architecture)"
-    echo "  3. Buildx must have Harbor BuildKit image override:"
-    echo "     driver-opts: |"
-    echo "       image=${HARBOR_BUILDKIT_IMAGE}"
-    echo "  4. Replace GHA cache with Harbor registry cache:"
-    echo "     cache-from: type=registry,ref=${PROXY_CACHE_HOST}/k9b/cache/<image>:buildcache"
-    echo "     cache-to: type=registry,ref=${PROXY_CACHE_HOST}/k9b/cache/<image>:buildcache,mode=max"
-    echo "  5. Python Dockerfiles:"
-    echo "     - Remove pip install --no-cache-dir"
-    echo "     - Add BuildKit pip cache mounts (--mount=type=cache,target=/root/.cache/pip)"
-    echo "     - Move pip install to before COPY src/"
+    
+    # Only show relevant remediation items based on what actually failed
+    # This avoids showing a wall of irrelevant fixes when only one check failed
+    
+    if [[ ${FAILED_SSOT_STALE} -eq 1 ]]; then
+        echo ""
+        echo "  [SSOT] requirements.docker.txt is stale:"
+        echo "    Run: bash scripts/sync-docker-requirements.sh"
+    fi
+    
+    if [[ ${FAILED_QEMU_IMAGE} -eq 1 ]]; then
+        echo ""
+        echo "  [QEMU] Missing Harbor image override:"
+        echo "    image: ${HARBOR_BINFMT_IMAGE}"
+    fi
+    
+    if [[ ${FAILED_BUILDX_IMAGE} -eq 1 ]]; then
+        echo ""
+        echo "  [Buildx] Missing Harbor BuildKit image override:"
+        echo "    driver-opts: |"
+        echo "      image=${HARBOR_BUILDKIT_IMAGE}"
+    fi
+    
+    if [[ ${FAILED_GHA_CACHE} -eq 1 ]]; then
+        echo ""
+        echo "  [Cache] GHA cache usage detected (must use Harbor registry cache):"
+        echo "    cache-from: type=registry,ref=${PROXY_CACHE_HOST}/k9b/cache/<image>:buildcache"
+        echo "    cache-to: type=registry,ref=${PROXY_CACHE_HOST}/k9b/cache/<image>:buildcache,mode=max"
+    fi
+    
+    if [[ ${FAILED_REGISTRY_CACHE} -eq 1 ]]; then
+        echo ""
+        echo "  [Cache] Missing registry cache for build-push-action:"
+        echo "    cache-from: type=registry,ref=${PROXY_CACHE_HOST}/k9b/cache/<image>:buildcache"
+        echo "    cache-to: type=registry,ref=${PROXY_CACHE_HOST}/k9b/cache/<image>:buildcache,mode=max"
+    fi
+    
+    if [[ ${FAILED_PIP_NO_CACHE} -eq 1 ]]; then
+        echo ""
+        echo "  [Dockerfile] pip install --no-cache-dir anti-pattern:"
+        echo "    Remove --no-cache-dir, use BuildKit pip cache mounts instead"
+    fi
+    
+    if [[ ${FAILED_PIP_CACHE_MOUNT} -eq 1 ]]; then
+        echo ""
+        echo "  [Dockerfile] Missing BuildKit pip cache mounts:"
+        echo "    Add: --mount=type=cache,target=/root/.cache/pip"
+    fi
+    
+    if [[ ${FAILED_PIP_ORDER} -eq 1 ]]; then
+        echo ""
+        echo "  [Dockerfile] pip install order issue:"
+        echo "    Move pip install to before COPY src/"
+    fi
+    
+    if [[ ${FAILED_SSOT_HARDCODED} -eq 1 ]]; then
+        echo ""
+        echo "  [SSOT] Dockerfile has hardcoded pip packages:"
+        echo "    Use requirements.docker.txt and sync from pyproject.toml"
+    fi
+    
+    echo ""
     exit 1
 else
     echo "RESULT: PASSED"
