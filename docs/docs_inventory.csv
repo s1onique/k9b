@@ -14,6 +14,8 @@ docs/ci-gate-drift.md,reference,current,ci,,,true,CI gate drift tracking
 docs/cluster_snapshot_plan.md,architecture,stale,collection,,,false,Cluster snapshot plan - needs update
 docs/coverage.md,reference,current,quality,,,true,Coverage reporting policy
 docs/data-model.md,canonical,current,data-model,,,true,Core data model index - canonical reference
+docs/product/market-positioning.md,reference,current,product,,,false,Market positioning - differentiation, claims to avoid, honest claims
+docs/product/pitch.md,reference,current,product,,,false,Product pitch - positioning line, pitch bullets
 docs/data-model/alertmanager-sources.md,reference,current,data-model,,,true,Alertmanager source data model
 docs/data-model/artifacts.md,reference,current,data-model,,,true,Artifact data model
 docs/data-model/incident-report-quality.md,reference,current,data-model,,,true,Incident report quality schema
