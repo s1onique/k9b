@@ -1,0 +1,31 @@
+# Test fixture: deployment with non-dict labelSelector (should fail)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k9b
+      app.kubernetes.io/instance: RELEASE_NAME
+      app.kubernetes.io/component: scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k9b
+        app.kubernetes.io/instance: RELEASE_NAME
+        app.kubernetes.io/component: scheduler
+    spec:
+      containers:
+        - name: scheduler
+          image: k9b:latest
+      volumes:
+        - name: runs
+          persistentVolumeClaim:
+            claimName: k9b-runs
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector: "invalid-string"
