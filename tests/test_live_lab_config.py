@@ -331,7 +331,7 @@ class TestWorkflowLiveLabNamespaceMode:
         cleanup_pos = content.find("Cleanup sensitive files")
         sanitize_pos = content.find("Sanitize artifacts for verification")
         verify_pos = content.find("Verify sanitized artifacts")
-        upload_pos = content.find("Upload sanitized artifacts")
+        upload_pos = content.find("Upload live lab artifacts")
         # Correct order: collect -> cleanup -> sanitize -> verify -> upload
         assert collect_logs_pos < cleanup_pos < sanitize_pos < verify_pos < upload_pos, \
             f"Step order wrong: collect={collect_logs_pos}, cleanup={cleanup_pos}, sanitize={sanitize_pos}, verify={verify_pos}, upload={upload_pos}"

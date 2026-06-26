@@ -259,7 +259,12 @@ def test_deterministic_llm_provider_returns_correct_diagnosis(
     expected: dict,
     evidence_provider: GoldenCaseEvidenceProvider,
 ) -> None:
-    """Deterministic provider returns correct readiness probe failure diagnosis."""
+    """Deterministic provider returns correct readiness probe failure diagnosis.
+    
+    Note: Returns 'medium' confidence intentionally to allow planner to run checks.
+    This proves the ACT requirement that fake handlers are exercised.
+    High confidence would cause early stop without running checks.
+    """
     provider = GoldenCaseDeterministicLLMProvider(
         manifest=manifest,
         expected=expected,
@@ -267,7 +272,7 @@ def test_deterministic_llm_provider_returns_correct_diagnosis(
     )
     result = provider.complete("test prompt")
     parsed = json.loads(result)
-    assert parsed["confidence"] == "high"
+    assert parsed["confidence"] == "medium"
     assert "readiness probe" in parsed["summary"].lower()
 
 
