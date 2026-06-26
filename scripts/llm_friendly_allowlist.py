@@ -47,7 +47,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("tests/unit/test_alertmanager_discovery.py", "[TEST] Alertmanager discovery tests"),
     ("tests/test_health_loop.py", "[TEST] Health loop tests - complex fixtures"),
     ("tests/test_alertmanager.py", "[TEST] Alertmanager tests - complex scenarios"),
-    ("tests/test_scripts.py", "[TEST] Script tests - complex test scenarios"),
     ("tests/test_security_path_validation.py", "[TEST] Security tests - complex scenarios"),
     ("tests/test_index_batch_eligibility.py", "[TEST] Batch eligibility tests"),
     ("tests/test_prompt_anonymization.py", "[TEST] Prompt tests - complex scenarios"),
