@@ -15,7 +15,7 @@ import pytest
 class TestNormalizeBackendHealthDetails:
     """Test _normalize_backend_health_details for safe artifact inclusion."""
 
-    def test_none_response_returns_inconclusive(self):
+    def test_none_response_returns_inconclusive(self) -> None:
         """None response returns is_conclusive=False."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -25,7 +25,7 @@ class TestNormalizeBackendHealthDetails:
         assert normalized["source"] == "backend_endpoint"
         assert normalized["backend_details_error"] == "no_response"
 
-    def test_conclusive_response_when_health_failed_with_primary_failure(self):
+    def test_conclusive_response_when_health_failed_with_primary_failure(self) -> None:
         """Conclusive response when /api/health failed and details have primary_failure."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -48,7 +48,7 @@ class TestNormalizeBackendHealthDetails:
         assert is_conclusive is True
         assert normalized["primary_failure_class"] == "dependency_provider_init_failed"
 
-    def test_inconclusive_when_health_failed_but_details_healthy(self):
+    def test_inconclusive_when_health_failed_but_details_healthy(self) -> None:
         """Inconclusive when /api/health returned 500 but details say healthy=true."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -63,7 +63,7 @@ class TestNormalizeBackendHealthDetails:
         assert is_conclusive is False
         assert "health_check_failed_but_details_healthy" in normalized["inconclusive_reasons"]
 
-    def test_inconclusive_when_no_primary_failure_class(self):
+    def test_inconclusive_when_no_primary_failure_class(self) -> None:
         """Inconclusive when /api/health failed but no primary_failure_class."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -78,7 +78,7 @@ class TestNormalizeBackendHealthDetails:
         assert is_conclusive is False
         assert "no_primary_failure_class" in normalized["inconclusive_reasons"]
 
-    def test_unknown_failure_class_normalized_to_empty(self):
+    def test_unknown_failure_class_normalized_to_empty(self) -> None:
         """Unknown failure_class is normalized to empty string."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -100,7 +100,7 @@ class TestNormalizeBackendHealthDetails:
 
         assert normalized["primary_failure_class"] == ""
 
-    def test_unknown_reason_code_normalized_to_unknown(self):
+    def test_unknown_reason_code_normalized_to_unknown(self) -> None:
         """Unknown reason_code is normalized to 'unknown'."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -125,7 +125,7 @@ class TestNormalizeBackendHealthDetails:
             if dep.get("dependency_name") == "test":
                 assert dep["reason_code"] == "unknown"
 
-    def test_extra_fields_dropped(self):
+    def test_extra_fields_dropped(self) -> None:
         """Extra fields not in allowlist are dropped."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -154,7 +154,7 @@ class TestNormalizeBackendHealthDetails:
         assert "provider_url" not in dep_str
         assert "extra_top_level" not in dep_str
 
-    def test_raw_provider_errors_not_in_reason_code(self):
+    def test_raw_provider_errors_not_in_reason_code(self) -> None:
         """Raw provider error strings do not appear in reason_code."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -180,7 +180,7 @@ class TestNormalizeBackendHealthDetails:
             assert "sk-1234567890" not in str(dep)
             assert dep["reason_code"] == "unknown"
 
-    def test_dependencies_capped_at_10(self):
+    def test_dependencies_capped_at_10(self) -> None:
         """Dependencies are capped at 10 entries."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -204,14 +204,14 @@ class TestNormalizeBackendHealthDetails:
 
         assert len(normalized["dependencies"]) <= 10
 
-    def test_provider_timeout_error_classified_correctly(self):
+    def test_provider_timeout_error_classified_correctly(self) -> None:
         """Provider timeout errors are classified as provider_timeout reason code."""
         from k8s_diag_agent.ui.api_health_details import _classify_provider_reason_code
 
         assert _classify_provider_reason_code("Request timeout after 30s") == "provider_timeout"
         assert _classify_provider_reason_code("Connection timed out") == "provider_timeout"
 
-    def test_provider_auth_error_classified_correctly(self):
+    def test_provider_auth_error_classified_correctly(self) -> None:
         """Provider auth errors are classified as provider_auth_failed."""
         from k8s_diag_agent.ui.api_health_details import _classify_provider_reason_code
 
@@ -219,14 +219,14 @@ class TestNormalizeBackendHealthDetails:
         assert _classify_provider_reason_code("HTTP 401 Unauthorized") == "provider_auth_failed"
         assert _classify_provider_reason_code("HTTP 403 Forbidden") == "provider_auth_failed"
 
-    def test_provider_connection_error_classified_correctly(self):
+    def test_provider_connection_error_classified_correctly(self) -> None:
         """Provider connection errors are classified correctly."""
         from k8s_diag_agent.ui.api_health_details import _classify_provider_reason_code
 
         assert _classify_provider_reason_code("Connection refused") == "provider_connection_failed"
         assert _classify_provider_reason_code("Connection reset by peer") == "provider_connection_failed"
 
-    def test_backend_endpoint_message_snippet_is_sanitized_before_artifact_inclusion(self):
+    def test_backend_endpoint_message_snippet_is_sanitized_before_artifact_inclusion(self) -> None:
         """Backend /api/health/details message_snippet is sanitized before artifact inclusion."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 

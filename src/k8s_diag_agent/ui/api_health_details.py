@@ -15,10 +15,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Final, cast
+from typing import Final, cast
 
-if TYPE_CHECKING:
-    from .server import HealthUIRequestHandler
+from .protocols import JsonResponseSender
 
 logger = logging.getLogger(__name__)
 
@@ -424,7 +423,7 @@ def _classify_primary_failure(dependencies: list[dict]) -> str:
     return ""
 
 
-def handle_health_details(handler: HealthUIRequestHandler) -> None:
+def handle_health_details(handler: JsonResponseSender) -> None:
     """Handle GET /api/health/details route.
     
     This endpoint provides a safe, bounded health dependency diagnosis

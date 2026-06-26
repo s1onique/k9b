@@ -22,7 +22,7 @@ from tests.test_backend_health_gate_dependencies_fixtures import (
 class TestDependencyClassification:
     """Test _classify_dependency_failure and _collect_health_dependencies."""
 
-    def test_classifies_backend_crashloopbackoff(self):
+    def test_classifies_backend_crashloopbackoff(self) -> None:
         """CrashLoopBackOff container state maps to dependency_backend_crashed."""
         from scripts.backend_health_gate.classification import (
             FAILURE_DEP_BACKEND_CRASHED,
@@ -52,7 +52,7 @@ class TestDependencyClassification:
         assert backend_dep["failure_class"] == FAILURE_DEP_BACKEND_CRASHED
         assert backend_dep["reason_code"] == "container_waiting_crashloopbackoff"
 
-    def test_classifies_pvc_mount_pending(self):
+    def test_classifies_pvc_mount_pending(self) -> None:
         """PVC mount pending maps to dependency_pvc_mount_error."""
         from scripts.backend_health_gate.classification import (
             FAILURE_DEP_PVC_MOUNT_ERROR,
@@ -81,7 +81,7 @@ class TestDependencyClassification:
         assert backend_dep["failure_class"] == FAILURE_DEP_PVC_MOUNT_ERROR
         assert backend_dep["reason_code"] == "pvc_mount_pending"
 
-    def test_classifies_scheduler_not_found(self):
+    def test_classifies_scheduler_not_found(self) -> None:
         """No scheduler pods maps to dependency_scheduler_unavailable."""
         from scripts.backend_health_gate.classification import (
             FAILURE_DEP_SCHEDULER_UNAVAILABLE,
@@ -89,7 +89,7 @@ class TestDependencyClassification:
         )
 
         backend_diags = _make_backend_diags()
-        scheduler_diags = {}  # No scheduler pods
+        scheduler_diags: dict[str, object] = {}  # No scheduler pods
         provider_status = _make_provider_status()
 
         primary_failure, dependencies = _classify_dependency_failure(
@@ -101,7 +101,7 @@ class TestDependencyClassification:
         assert scheduler_dep["failure_class"] == FAILURE_DEP_SCHEDULER_UNAVAILABLE
         assert scheduler_dep["reason_code"] == "scheduler_pods_not_found"
 
-    def test_classifies_provider_misconfigured(self):
+    def test_classifies_provider_misconfigured(self) -> None:
         """Provider enabled without secret maps to dependency_provider_init_failed."""
         from scripts.backend_health_gate.classification import (
             FAILURE_DEP_PROVIDER_INIT_FAILED,
@@ -122,7 +122,7 @@ class TestDependencyClassification:
         assert provider_dep["failure_class"] == FAILURE_DEP_PROVIDER_INIT_FAILED
         assert provider_dep["status"] == "misconfigured"
 
-    def test_collect_health_dependencies_returns_bounded_structure(self):
+    def test_collect_health_dependencies_returns_bounded_structure(self) -> None:
         """_collect_health_dependencies returns sanitized structure without secrets."""
         backend_diags = _make_backend_diags()
         scheduler_diags = _make_scheduler_diags()
@@ -152,7 +152,7 @@ class TestDependencyClassification:
                 assert isinstance(config.get("api_key_present"), bool)
                 assert isinstance(config.get("secret_ref_present"), bool)
 
-    def test_health_dependencies_no_raw_logs(self):
+    def test_health_dependencies_no_raw_logs(self) -> None:
         """health-dependencies.json does not include raw logs or API responses."""
         # Use message_snippet (already sanitized by diagnostic collectors)
         backend_diags = _make_backend_diags(
@@ -175,7 +175,7 @@ class TestDependencyClassification:
                 # Verify message snippet is truncated (max 100 chars)
                 assert len(dep["message_snippet"]) <= 100
 
-    def test_health_dependencies_no_private_ips_in_message_snippet(self):
+    def test_health_dependencies_no_private_ips_in_message_snippet(self) -> None:
         """Private IPs and internal URLs are redacted from message_snippet in fallback artifacts."""
         from scripts.backend_health_gate.classification import _collect_health_dependencies
 
@@ -204,7 +204,7 @@ class TestDependencyClassification:
                 assert "<REDACTED_PRIVATE_IP>" in dep["message_snippet"]
                 assert "<REDACTED_PRIVATE_URL>" in dep["message_snippet"]
 
-    def test_health_dependencies_redacts_various_private_ip_ranges(self):
+    def test_health_dependencies_redacts_various_private_ip_ranges(self) -> None:
         """Various private IP ranges are preserved as already-sanitized message_snippet."""
         from scripts.backend_health_gate.classification import _collect_health_dependencies
 

@@ -39,7 +39,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 class TestHealthCheckResult:
     """Test HealthCheckResult dataclass."""
 
-    def test_to_dict_includes_failure_class(self):
+    def test_to_dict_includes_failure_class(self) -> None:
         """HealthCheckResult.to_dict() includes failure_class."""
         result = HealthCheckResult()
         result.failure_class = FAILURE_BACKEND_HEALTH_500
@@ -51,7 +51,7 @@ class TestHealthCheckResult:
         assert data["failure_class"] == FAILURE_BACKEND_HEALTH_500
         assert data["final_http_code"] == "500"
 
-    def test_to_dict_includes_poll_count(self):
+    def test_to_dict_includes_poll_count(self) -> None:
         """HealthCheckResult.to_dict() includes poll_count."""
         result = HealthCheckResult()
         result.poll_count = 10
@@ -62,7 +62,7 @@ class TestHealthCheckResult:
         assert data["poll_count"] == 10
         assert data["total_elapsed_seconds"] == 45.5
 
-    def test_to_dict_includes_http_statuses_seen(self):
+    def test_to_dict_includes_http_statuses_seen(self) -> None:
         """HealthCheckResult.to_dict() includes http_statuses_seen."""
         result = HealthCheckResult()
         result.http_statuses_seen = ["500", "500", "ERR:timeout"]
@@ -71,7 +71,7 @@ class TestHealthCheckResult:
         
         assert data["http_statuses_seen"] == ["500", "500", "ERR:timeout"]
 
-    def test_to_dict_includes_diagnostics(self):
+    def test_to_dict_includes_diagnostics(self) -> None:
         """HealthCheckResult.to_dict() includes diagnostics."""
         result = HealthCheckResult()
         result.diagnostics = {"backend": {"pod_k9b-backend-0": {"phase": "Running"}}}
@@ -85,19 +85,19 @@ class TestHealthCheckResult:
 class TestFailureClassConstants:
     """Test failure class constants are properly defined."""
 
-    def test_backend_health_500_defined(self):
+    def test_backend_health_500_defined(self) -> None:
         """FAILURE_BACKEND_HEALTH_500 is defined correctly."""
         assert FAILURE_BACKEND_HEALTH_500 == "backend_health_500"
 
-    def test_backend_health_timeout_defined(self):
+    def test_backend_health_timeout_defined(self) -> None:
         """FAILURE_BACKEND_HEALTH_TIMEOUT is defined correctly."""
         assert FAILURE_BACKEND_HEALTH_TIMEOUT == "backend_health_timeout"
 
-    def test_backend_health_invalid_response_defined(self):
+    def test_backend_health_invalid_response_defined(self) -> None:
         """FAILURE_BACKEND_HEALTH_INVALID_RESPONSE is defined correctly."""
         assert FAILURE_BACKEND_HEALTH_INVALID_RESPONSE == "backend_health_invalid_response"
 
-    def test_backend_health_transport_error_defined(self):
+    def test_backend_health_transport_error_defined(self) -> None:
         """FAILURE_BACKEND_HEALTH_TRANSPORT_ERROR is defined correctly."""
         assert FAILURE_BACKEND_HEALTH_TRANSPORT_ERROR == "backend_health_transport_error"
 
@@ -105,7 +105,7 @@ class TestFailureClassConstants:
 class TestClassifyFailure:
     """Test _classify_failure function."""
 
-    def test_classifies_200_as_passed(self):
+    def test_classifies_200_as_passed(self) -> None:
         """HTTP 200 returns passed=True."""
         result = HealthCheckResult()
         result.passed = True
@@ -118,7 +118,7 @@ class TestClassifyFailure:
         assert result.passed is True
         assert result.failure_class == ""
 
-    def test_classifies_500_as_backend_health_500(self):
+    def test_classifies_500_as_backend_health_500(self) -> None:
         """HTTP 500 returns backend_health_500."""
         result = HealthCheckResult()
         result.passed = False
@@ -131,7 +131,7 @@ class TestClassifyFailure:
         
         assert result.failure_class == FAILURE_BACKEND_HEALTH_500
 
-    def test_classifies_transport_error(self):
+    def test_classifies_transport_error(self) -> None:
         """Transport error returns backend_health_transport_error."""
         result = HealthCheckResult()
         result.passed = False
@@ -144,7 +144,7 @@ class TestClassifyFailure:
         
         assert result.failure_class == FAILURE_BACKEND_HEALTH_TRANSPORT_ERROR
 
-    def test_classifies_timeout_after_max_retries(self):
+    def test_classifies_timeout_after_max_retries(self) -> None:
         """Timeout after max retries returns backend_health_timeout."""
         result = HealthCheckResult()
         result.passed = False
@@ -168,7 +168,7 @@ class TestClassifyFailure:
 class TestSanitizedDiagnostics:
     """Test that diagnostics collection is sanitized (no secrets)."""
 
-    def test_provider_config_status_has_boolean_fields(self):
+    def test_provider_config_status_has_boolean_fields(self) -> None:
         """Provider config status has only boolean fields, no secrets."""
         # Mock kubectl output
         mock_result = MagicMock()
@@ -191,7 +191,7 @@ class TestSanitizedDiagnostics:
         assert "api_key_secret_value" not in str(status)
         assert "base_url_secret_value" not in str(status)
 
-    def test_backend_diagnostics_no_raw_health_body(self):
+    def test_backend_diagnostics_no_raw_health_body(self) -> None:
         """Backend diagnostics don't include raw /api/health body."""
         # Mock kubectl output
         mock_pods_result = MagicMock()
@@ -218,7 +218,7 @@ class TestSanitizedDiagnostics:
         assert "{\"status\"" not in diag_str or "health" not in diag_str.lower()
         assert "200" not in diag_str  # No HTTP status codes from health endpoint
 
-    def test_scheduler_diagnostics_includes_restart_count(self):
+    def test_scheduler_diagnostics_includes_restart_count(self) -> None:
         """Scheduler diagnostics include restart count for troubleshooting."""
         mock_pods_result = MagicMock()
         mock_pods_result.returncode = 0
@@ -247,7 +247,7 @@ class TestSanitizedDiagnostics:
 class TestArtifactStructure:
     """Test artifact structure for upload safety."""
 
-    def test_status_json_includes_required_fields(self):
+    def test_status_json_includes_required_fields(self) -> None:
         """Status.json artifact includes all required fields."""
         result = HealthCheckResult()
         result.failure_class = FAILURE_BACKEND_HEALTH_500
@@ -282,9 +282,10 @@ class TestArtifactStructure:
         assert "diagnostics" in status_data
         
         # Verify sanitized logs field (no raw API responses)
-        assert "sanitized_logs" not in status_data or "backend_tail" in status_data.get("sanitized_logs", {})
+        sanitized_logs = status_data.get("sanitized_logs")
+        assert sanitized_logs is None or isinstance(sanitized_logs, str) and "backend_tail" in sanitized_logs
 
-    def test_health_gate_result_json_includes_all_fields(self):
+    def test_health_gate_result_json_includes_all_fields(self) -> None:
         """health-check-result.json includes all HealthCheckResult fields."""
         result = HealthCheckResult()
         result.failure_class = FAILURE_BACKEND_HEALTH_TIMEOUT
@@ -314,7 +315,7 @@ class TestArtifactStructure:
 class TestProviderArtifactVerification:
     """Test that backend-health artifacts are safe for verification."""
 
-    def test_status_json_no_raw_secrets(self):
+    def test_status_json_no_raw_secrets(self) -> None:
         """status.json contains no raw secrets."""
         status_data = {
             "failure_class": "backend_health_500",
@@ -354,7 +355,7 @@ class TestProviderArtifactVerification:
         # No actual base URLs
         assert "https://" not in status_str or "example" not in status_str.lower()
 
-    def test_bounded_summary_no_raw_health_body(self):
+    def test_bounded_summary_no_raw_health_body(self) -> None:
         """Bounded summary doesn't echo raw /api/health body."""
         # This simulates what the script writes to bounded-summary.txt
         summary_lines = [
@@ -381,7 +382,7 @@ class TestProviderArtifactVerification:
 class TestWorkflowIntegration:
     """Test integration with workflow behavior."""
 
-    def test_fails_fast_on_backend_health_500(self):
+    def test_fails_fast_on_backend_health_500(self) -> None:
         """Workflow should fail with backend_health_500 when health returns 500."""
         result = HealthCheckResult()
         result.passed = False
@@ -399,7 +400,7 @@ class TestWorkflowIntegration:
         assert result.failure_class == FAILURE_BACKEND_HEALTH_500
         assert workflow_should_fail is True
 
-    def test_proceeds_to_incident_discovery_on_health_200(self):
+    def test_proceeds_to_incident_discovery_on_health_200(self) -> None:
         """Workflow should proceed to incident discovery when health returns 200."""
         result = HealthCheckResult()
         result.passed = True
@@ -413,7 +414,7 @@ class TestWorkflowIntegration:
         assert result.passed is True
         assert should_continue is True
 
-    def test_phase_gate_order(self):
+    def test_phase_gate_order(self) -> None:
         """Phases run in correct order: health_gate -> incident_discovery -> one_pass_diagnosis."""
         phases = ["backend_health_gate", "incident_discovery", "one_pass_diagnosis", "provider_artifact_verification"]
         
@@ -431,7 +432,7 @@ class TestWrapperImportMode:
     sets the first path entry to the script's directory, not the repo root.
     """
 
-    def test_wrapper_imports_when_run_as_file(self):
+    def test_wrapper_imports_when_run_as_file(self) -> None:
         """Wrapper script imports correctly when executed as `python scripts/check_backend_health_gate.py`.
 
         This is the exact failure mode that caused the live gate to fail before polling.

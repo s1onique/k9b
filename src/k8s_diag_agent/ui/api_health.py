@@ -19,17 +19,14 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 
 from .api_health_details import evaluate_backend_health
-
-if TYPE_CHECKING:
-    from .server import HealthUIRequestHandler
+from .protocols import JsonResponseSender
 
 logger = logging.getLogger(__name__)
 
 
-def handle_health(handler: HealthUIRequestHandler) -> None:
+def handle_health(handler: JsonResponseSender) -> None:
     """Handle GET /api/health route.
     
     This endpoint is used by the provider-smoke Kubernetes probe.
@@ -65,7 +62,7 @@ def handle_health(handler: HealthUIRequestHandler) -> None:
         handler._send_json(response, code=500)
 
 
-def handle_health_route(handler: HealthUIRequestHandler) -> None:
+def handle_health_route(handler: JsonResponseSender) -> None:
     """Handle GET /api/health route.
     
     Public endpoint (no auth required) for Kubernetes liveness/readiness probes.

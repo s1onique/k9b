@@ -19,11 +19,11 @@ import pytest
 class MockHandler:
     """Mock HTTP request handler for testing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.sent_code: int | None = None
-        self.sent_body: dict | None = None
+        self.sent_body: dict[str, object] | None = None
 
-    def _send_json(self, body: dict, code: int) -> None:
+    def _send_json(self, body: dict[str, object], code: int) -> None:
         self.sent_code = code
         self.sent_body = body
 
@@ -31,7 +31,7 @@ class MockHandler:
 class TestApiHealthRouteParity:
     """Test parity between /api/health and /api/health/details."""
 
-    def test_healthy_health_returns_200(self):
+    def test_healthy_health_returns_200(self) -> None:
         """GET /api/health when healthy returns HTTP 200."""
         from k8s_diag_agent.ui.api_health import handle_health
 
@@ -46,10 +46,11 @@ class TestApiHealthRouteParity:
             handle_health(handler)
 
             assert handler.sent_code == 200
+            assert handler.sent_body is not None
             assert handler.sent_body["healthy"] is True
             assert handler.sent_body["primary_failure_class"] == ""
 
-    def test_healthy_details_returns_200_healthy_true(self):
+    def test_healthy_details_returns_200_healthy_true(self) -> None:
         """GET /api/health/details when healthy returns HTTP 200 and healthy=true."""
         from k8s_diag_agent.ui.api_health_details import handle_health_details
 
@@ -64,10 +65,11 @@ class TestApiHealthRouteParity:
             handle_health_details(handler)
 
             assert handler.sent_code == 200
+            assert handler.sent_body is not None
             assert handler.sent_body["healthy"] is True
             assert handler.sent_body["primary_failure_class"] == ""
 
-    def test_provider_failure_health_returns_500(self):
+    def test_provider_failure_health_returns_500(self) -> None:
         """GET /api/health when provider unavailable returns HTTP 500."""
         from k8s_diag_agent.ui.api_health import handle_health
 
@@ -87,10 +89,11 @@ class TestApiHealthRouteParity:
             handle_health(handler)
 
             assert handler.sent_code == 500
+            assert handler.sent_body is not None
             assert handler.sent_body["healthy"] is False
             assert "dependency" in handler.sent_body["primary_failure_class"].lower()
 
-    def test_provider_failure_details_returns_503_with_same_class(self):
+    def test_provider_failure_details_returns_503_with_same_class(self) -> None:
         """GET /api/health/details when provider unavailable returns HTTP 503 with same failure class."""
         from k8s_diag_agent.ui.api_health_details import handle_health_details
 
@@ -110,6 +113,7 @@ class TestApiHealthRouteParity:
             handle_health_details(handler)
 
             assert handler.sent_code == 503
+            assert handler.sent_body is not None
             assert handler.sent_body["healthy"] is False
             # Should have dependency_provider_connection_failed
             assert "dependency" in handler.sent_body["primary_failure_class"].lower()
@@ -119,7 +123,7 @@ class TestApiHealthRouteParity:
             assert provider_dep is not None
             assert provider_dep.get("failure_class") == "dependency_provider_connection_failed"
 
-    def test_evaluator_exception_returns_backend_health_internal_error(self):
+    def test_evaluator_exception_returns_backend_health_internal_error(self) -> None:
         """safe_evaluate_backend_health returns backend_health_internal_error on exception."""
         from k8s_diag_agent.ui.api_health_details import safe_evaluate_backend_health
 
@@ -144,18 +148,18 @@ class TestApiHealthRouteParity:
             # message_snippet should be empty
             assert route_dep.get("message_snippet") == ""
 
-    def test_details_evaluates_fresh_after_failed_health(self):
+    def test_details_evaluates_fresh_after_failed_health(self) -> None:
         """GET /api/health/details re-evaluates fresh, does not reuse stale state."""
         from k8s_diag_agent.ui.api_health_details import handle_health_details
 
         call_count = 0
 
-        def counting_health_status():
+        def counting_health_status() -> dict[str, object]:
             nonlocal call_count
             call_count += 1
             return {"healthy": True, "error": None}
 
-        def counting_provider_status():
+        def counting_provider_status() -> dict[str, object]:
             nonlocal call_count
             call_count += 1
             return {"available": True, "error": None, "phase": "success", "error_class": "provider_available"}
@@ -179,6 +183,8 @@ class TestApiHealthRouteParity:
             # Both should be healthy and have the same result
             assert handler1.sent_code == 200
             assert handler2.sent_code == 200
+            assert first_body is not None
+            assert second_body is not None
             assert first_body["healthy"] is True
             assert second_body["healthy"] is True
 
@@ -186,7 +192,7 @@ class TestApiHealthRouteParity:
             # Each call makes 2 status calls (runtime + provider)
             assert call_count == 4, f"Expected 4 calls, got {call_count}"
 
-    def test_no_raw_secrets_in_health_response(self):
+    def test_no_raw_secrets_in_health_response(self) -> None:
         """Raw exception text, URLs, IPs, and tokens do not appear in health responses."""
         from k8s_diag_agent.ui.api_health_details import handle_health_details
 
@@ -198,6 +204,7 @@ class TestApiHealthRouteParity:
             handle_health_details(handler)
 
             # Serialize to JSON and check for leaks
+            assert handler.sent_body is not None
             response_json = json.dumps(handler.sent_body)
 
             # Should NOT contain raw secrets/IPs/URLs
@@ -212,13 +219,13 @@ class TestApiHealthRouteParity:
             assert "health_route_exception" in response_json
             assert "health_handler" in response_json
 
-    def test_backend_health_internal_error_allowlisted(self):
+    def test_backend_health_internal_error_allowlisted(self) -> None:
         """backend_health_internal_error is in the failure class allowlist."""
         from scripts.backend_health_gate.allowlists import ALLOWED_FAILURE_CLASSES
 
         assert "backend_health_internal_error" in ALLOWED_FAILURE_CLASSES
 
-    def test_health_route_reason_codes_allowlisted(self):
+    def test_health_route_reason_codes_allowlisted(self) -> None:
         """health_route_exception and health_route_returned_500 are in the reason code allowlist."""
         from scripts.backend_health_gate.allowlists import ALLOWED_REASON_CODES
 
@@ -226,7 +233,7 @@ class TestApiHealthRouteParity:
         assert "health_route_returned_500" in ALLOWED_REASON_CODES
         assert "health_route_healthy" in ALLOWED_REASON_CODES
 
-    def test_health_handler_phase_allowlisted(self):
+    def test_health_handler_phase_allowlisted(self) -> None:
         """health_handler is in the phase allowlist."""
         from scripts.backend_health_gate.allowlists import ALLOWED_PROVIDER_PHASES
 

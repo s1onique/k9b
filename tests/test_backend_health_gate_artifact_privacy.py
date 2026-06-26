@@ -6,6 +6,7 @@ raw secrets, private IPs, or internal URLs.
 """
 
 import json
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,7 +21,7 @@ from scripts.backend_health_gate.k8s_diagnostics import (
 class TestArtifactPrivacy:
     """Test that uploadable artifacts contain no raw secrets/private endpoints."""
 
-    def _make_pod_with_waiting_message(self, message: str) -> dict:
+    def _make_pod_with_waiting_message(self, message: str) -> dict[str, Any]:
         """Create a mock pod with waiting container state."""
         return {
             "metadata": {"name": "test-pod-abc123"},
@@ -39,7 +40,7 @@ class TestArtifactPrivacy:
             },
         }
 
-    def test_collect_backend_diagnostics_no_raw_secrets_in_message(self):
+    def test_collect_backend_diagnostics_no_raw_secrets_in_message(self) -> None:
         """Backend diagnostics container waiting messages do not contain raw secrets."""
         mock_pods = {"items": [self._make_pod_with_waiting_message(
             "Failed to connect to https://api.internal.example.com: Connection refused - API key sk-12345678901234567890"
@@ -59,7 +60,7 @@ class TestArtifactPrivacy:
         # Verify redaction markers ARE present
         assert "<REDACTED_API_KEY>" in diag_json or "<REDACTED_PRIVATE_URL>" in diag_json
 
-    def test_collect_backend_diagnostics_no_private_ips_in_message(self):
+    def test_collect_backend_diagnostics_no_private_ips_in_message(self) -> None:
         """Backend diagnostics container waiting messages do not contain private IPs."""
         test_cases = [
             ("10.0.0.5:8080", "10.x.x.x"),
@@ -81,7 +82,7 @@ class TestArtifactPrivacy:
             assert private_endpoint not in diag_json, f"{description} ({private_endpoint}) should not appear in artifact"
             assert "<REDACTED_PRIVATE_IP>" in diag_json, f"{description} should use <REDACTED_PRIVATE_IP> marker"
 
-    def test_collect_scheduler_diagnostics_no_raw_secrets_in_message(self):
+    def test_collect_scheduler_diagnostics_no_raw_secrets_in_message(self) -> None:
         """Scheduler diagnostics container waiting messages do not contain raw secrets."""
         mock_pods = {"items": [self._make_pod_with_waiting_message(
             "Failed to connect to https://api.internal.example.com: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
@@ -100,7 +101,7 @@ class TestArtifactPrivacy:
         # Verify redaction markers ARE present
         assert "<REDACTED_API_KEY>" in diag_json or "<REDACTED_PRIVATE_URL>" in diag_json
 
-    def test_collect_scheduler_diagnostics_no_private_ips_in_message(self):
+    def test_collect_scheduler_diagnostics_no_private_ips_in_message(self) -> None:
         """Scheduler diagnostics container waiting messages do not contain private IPs."""
         mock_pods = {"items": [self._make_pod_with_waiting_message(
             "Failed to connect to 10.255.255.1:6443"
@@ -115,7 +116,7 @@ class TestArtifactPrivacy:
         assert "10.255.255.1" not in diag_json, "Private IP should not appear in artifact"
         assert "<REDACTED_PRIVATE_IP>" in diag_json
 
-    def test_sanitize_message_snippet_redacts_all_sensitive_patterns(self):
+    def test_sanitize_message_snippet_redacts_all_sensitive_patterns(self) -> None:
         """_sanitize_message_snippet properly redacts API keys, IPs, and URLs."""
         raw_message = (
             "Failed to connect to 10.0.0.5:8080 via https://api.internal.example.com "
@@ -135,12 +136,12 @@ class TestArtifactPrivacy:
         assert "<REDACTED_PRIVATE_URL>" in sanitized
         assert "<REDACTED_API_KEY>" in sanitized
 
-    def test_sanitize_message_snippet_handles_empty_message(self):
+    def test_sanitize_message_snippet_handles_empty_message(self) -> None:
         """_sanitize_message_snippet handles empty messages gracefully."""
         assert _sanitize_message_snippet("") == ""
         assert _sanitize_message_snippet(None) == ""
 
-    def test_sanitize_message_snippet_truncates_long_messages(self):
+    def test_sanitize_message_snippet_truncates_long_messages(self) -> None:
         """_sanitize_message_snippet truncates long messages."""
         long_message = "A" * 200
         sanitized = _sanitize_message_snippet(long_message, max_len=100)
@@ -150,7 +151,7 @@ class TestArtifactPrivacy:
 class TestStatusJsonSimulation:
     """Simulate status.json writing to verify full artifact privacy."""
 
-    def _make_mock_status_data(self, backend_diags: dict, scheduler_diags: dict) -> dict:
+    def _make_mock_status_data(self, backend_diags: dict[str, Any], scheduler_diags: dict[str, Any]) -> dict[str, Any]:
         """Create mock status_data structure as written to status.json."""
         return {
             "failure_class": "dependency_backend_pending",
@@ -167,7 +168,7 @@ class TestStatusJsonSimulation:
             },
         }
 
-    def test_status_json_simulated_no_raw_secrets(self):
+    def test_status_json_simulated_no_raw_secrets(self) -> None:
         """Simulated status.json does not contain raw secrets in diagnostics."""
         from scripts.backend_health_gate.k8s_diagnostics import _collect_backend_diagnostics, _collect_scheduler_diagnostics
 
@@ -201,9 +202,9 @@ class TestStatusJsonSimulation:
         }]}
 
         with patch("subprocess.run") as mock_run:
-            def side_effect(*args, **kwargs):
-                cmd = args[0]
-                if "-l" in cmd and "k9b-scheduler" in " ".join(cmd):
+            def side_effect(*args: object, **kwargs: object) -> MagicMock:
+                cmd_args: list[str] = args[0] if args else kwargs.get("args", [])  # type: ignore[assignment]
+                if "-l" in cmd_args and "k9b-scheduler" in " ".join(cmd_args):
                     return MagicMock(returncode=0, stdout=json.dumps(mock_scheduler_pods), stderr="")
                 return MagicMock(returncode=0, stdout=json.dumps(mock_backend_pods), stderr="")
 

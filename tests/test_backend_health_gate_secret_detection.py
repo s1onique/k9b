@@ -15,7 +15,7 @@ from scripts.backend_health_gate.classification import _get_provider_config_stat
 class TestSecretKeyRefDetection:
     """Test proof-based secretKeyRef detection for provider config."""
 
-    def _make_deployment_json(self, env_vars):
+    def _make_deployment_json(self, env_vars: list[dict[str, object]]) -> str:
         """Create deployment JSON with specified env vars."""
         containers = [{"name": "backend", "env": env_vars}]
         items = [{
@@ -29,7 +29,7 @@ class TestSecretKeyRefDetection:
         }]
         return json.dumps({"items": items})
 
-    def test_detects_diagnosis_api_key_secret_ref(self):
+    def test_detects_diagnosis_api_key_secret_ref(self) -> None:
         """K9B_DIAGNOSIS_API_KEY + secretKeyRef sets diagnosis_provider_secret_ref_present=true."""
         deployment_json = self._make_deployment_json([
             {
@@ -52,7 +52,7 @@ class TestSecretKeyRefDetection:
         assert status["diagnosis_provider_enabled"] is True
         assert status["api_key_present"] is True
 
-    def test_detects_external_analysis_api_key_secret_ref(self):
+    def test_detects_external_analysis_api_key_secret_ref(self) -> None:
         """K9B_EXTERNAL_ANALYSIS_API_KEY + secretKeyRef sets small_provider_secret_ref_present=true."""
         deployment_json = self._make_deployment_json([
             {
@@ -75,7 +75,7 @@ class TestSecretKeyRefDetection:
         assert status["api_key_present"] is True
         assert status["diagnosis_provider_secret_ref_present"] is False
 
-    def test_plain_env_var_without_secret_ref_does_not_set_secret_ref_present(self):
+    def test_plain_env_var_without_secret_ref_does_not_set_secret_ref_present(self) -> None:
         """Plain env var (no secretKeyRef) does NOT set *_secret_ref_present=true."""
         deployment_json = self._make_deployment_json([
             {

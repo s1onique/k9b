@@ -8,16 +8,20 @@ the index-backed path returned executionSummary=None for all rows, causing Recen
 to fall back to batchExecutable and show Execute even after all work was executed.
 """
 
+from __future__ import annotations
+
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, cast
 
 from k8s_diag_agent.ui.api import (
     _build_runs_list_with_batch_eligibility_index,
     _compute_execution_summary_indexed,
     _normalize_execution_indices_from_index,
 )
+from k8s_diag_agent.ui.api_payloads import RunsListTimings
 
 
 class IndexBackedExecutionSummaryTests(unittest.TestCase):
@@ -57,7 +61,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
     def test_compute_execution_summary_fully_executed(self) -> None:
         """Test that execution summary shows fully-executed when all candidates executed."""
         # Create plan data with 5 candidates (all batch-executable)
-        plan_data = {
+        plan_data: dict[str, object] = {
             "purpose": "next-check-planning",
             "payload": {
                 "candidates": [
@@ -96,7 +100,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
         }
 
         # Create execution indices for all 5 candidates (all success)
-        execution_indices = {0: "success", 1: "success", 2: "success", 3: "success", 4: "success"}
+        execution_indices: dict[int, str] = {0: "success", 1: "success", 2: "success", 3: "success", 4: "success"}
 
         summary = _compute_execution_summary_indexed(plan_data, execution_indices)
 
@@ -108,7 +112,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
 
     def test_compute_execution_summary_partially_executed(self) -> None:
         """Test that execution summary shows partially-executed when some candidates pending."""
-        plan_data = {
+        plan_data: dict[str, object] = {
             "purpose": "next-check-planning",
             "payload": {
                 "candidates": [
@@ -135,7 +139,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
         }
 
         # Only 1 of 3 candidates executed
-        execution_indices = {0: "success"}
+        execution_indices: dict[int, str] = {0: "success"}
 
         summary = _compute_execution_summary_indexed(plan_data, execution_indices)
 
@@ -147,7 +151,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
 
     def test_compute_execution_summary_not_started(self) -> None:
         """Test that execution summary shows not-started when no executions exist."""
-        plan_data = {
+        plan_data: dict[str, object] = {
             "purpose": "next-check-planning",
             "payload": {
                 "candidates": [
@@ -162,7 +166,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
         }
 
         # No executions
-        execution_indices = {}
+        execution_indices: dict[int, str] = {}
 
         summary = _compute_execution_summary_indexed(plan_data, execution_indices)
 
@@ -173,14 +177,14 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
 
     def test_compute_execution_summary_no_candidates(self) -> None:
         """Test that execution summary shows no-candidates when plan has none."""
-        plan_data = {
+        plan_data: dict[str, object] = {
             "purpose": "next-check-planning",
             "payload": {
                 "candidates": []
             },
         }
 
-        execution_indices = {}
+        execution_indices: dict[int, str] = {}
 
         summary = _compute_execution_summary_indexed(plan_data, execution_indices)
 
@@ -260,7 +264,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
             self.assertIn("_plan_data", recent_summary)
             self.assertIn("_execution_indices", recent_summary)
 
-            plan_data = recent_summary["_plan_data"]
+            plan_data: dict[str, Any] = cast(dict[str, Any], recent_summary["_plan_data"])
             exec_indices = _normalize_execution_indices_from_index(
                 recent_summary["_execution_indices"]
             )
@@ -271,7 +275,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
             self.assertEqual(len(exec_indices["run-exec-summary"]), 2)
 
             # Build the runs list with batch eligibility
-            runs_from_index = recent_summary.get("runs", [])
+            runs_from_index = cast(list[dict[str, object]], recent_summary.get("runs", []))
             # Add batch eligibility fields to the runs
             for run in runs_from_index:
                 if run["run_id"] == "run-exec-summary":
@@ -280,12 +284,12 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
                     run["batchEligibleCount"] = 0
                     break
 
-            timings: dict[str, object] = {}
+            timings = cast(RunsListTimings, {})
             start_time = __import__("time").time()
             result = _build_runs_list_with_batch_eligibility_index(
                 runs_dir,
                 runs_from_index,
-                recent_summary,
+                cast(Any, recent_summary),
                 limit=10,
                 timings=timings,
                 start_time=start_time,
@@ -293,17 +297,17 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
 
             # Find our run in the result
             found = False
-            for run in result["runs"]:
+            runs_list: list[dict[str, object]] = cast(list[dict[str, object]], result["runs"])
+            for run in runs_list:
                 if run["runId"] == "run-exec-summary":
                     found = True
                     # Key assertion: executionSummary must be present
-                    self.assertIsNotNone(run.get("executionSummary"))
-                    exec_summary = run["executionSummary"]
+                    exec_summary = run.get("executionSummary")
                     self.assertIsNotNone(exec_summary)
                     # Verify execution state
-                    self.assertEqual(exec_summary["executedCandidates"], 2)
-                    self.assertEqual(exec_summary["pendingExecutableCandidates"], 1)
-                    self.assertEqual(exec_summary["batchExecutionState"], "partially-executed")
+                    self.assertEqual(exec_summary["executedCandidates"], 2)  # type: ignore[index]
+                    self.assertEqual(exec_summary["pendingExecutableCandidates"], 1)  # type: ignore[index]
+                    self.assertEqual(exec_summary["batchExecutionState"], "partially-executed")  # type: ignore[index]
                     break
 
             self.assertTrue(found, "run-exec-summary not found in result")
@@ -368,7 +372,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
                 reviews_dir, external_analysis_dir=external_analysis_dir
             )
 
-            plan_data = recent_summary["_plan_data"]
+            plan_data: dict[str, Any] = cast(dict[str, Any], recent_summary["_plan_data"])
             exec_indices = _normalize_execution_indices_from_index(
                 recent_summary["_execution_indices"]
             )
@@ -378,9 +382,9 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
             self.assertEqual(len(exec_indices["run-fully-exec"]), 2)
 
             # Compute execution summary for the run
-            summary = _compute_execution_summary_indexed(
-                plan_data["run-fully-exec"], exec_indices["run-fully-exec"]
-            )
+            plan_for_run: dict[str, object] = cast(dict[str, object], plan_data["run-fully-exec"])
+            exec_for_run: dict[int, str] = exec_indices["run-fully-exec"]
+            summary = _compute_execution_summary_indexed(plan_for_run, exec_for_run)
 
             # Key assertions: all candidates executed, no pending
             self.assertEqual(summary["executedCandidates"], 2)
@@ -402,7 +406,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
         don't match integer lookups in _compute_execution_summary_indexed().
         """
         # Create plan data with 2 candidates
-        plan_data = {
+        plan_data: dict[str, object] = {
             "purpose": "next-check-planning",
             "payload": {
                 "candidates": [
@@ -460,8 +464,6 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
         when ui-index.json has string-key execution indices (JSON round-trip artifact).
         """
         import os
-        import tempfile
-        from pathlib import Path
 
         # Enable debug endpoints for this test
         os.environ["K9B_ENABLE_DEBUG_ENDPOINTS"] = "true"
@@ -522,11 +524,11 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
 
                 # Verify the summary has execution indices for our run
                 raw_exec_indices = recent_summary.get("_execution_indices", {})
-                self.assertIn("health-run-20260515T195410Z", raw_exec_indices)
+                self.assertIn("health-run-20260515T195410Z", cast(dict[str, Any], raw_exec_indices))
 
                 # The implementation stores int keys directly (not as JSON strings)
                 # The important thing is that the diagnostics function normalizes them
-                run_indices = raw_exec_indices["health-run-20260515T195410Z"]
+                run_indices = cast(dict[str, str], cast(dict[str, Any], raw_exec_indices)["health-run-20260515T195410Z"])
                 self.assertEqual(len(run_indices), 8, "All 8 execution indices should be present")
 
                 # Write a ui-index.json that the diagnostics function can read
@@ -547,14 +549,16 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
                 self.assertIsNotNone(diagnostic, "Diagnostic should be computed")
 
                 # Key assertion: executedCandidates should be 8, not 0
+                assert diagnostic is not None
                 computed = diagnostic.get("computed_execution_summary")
                 self.assertIsNotNone(computed, "Computed execution summary must be present")
+                computed_dict: dict[str, Any] = cast(dict[str, Any], computed)
                 self.assertEqual(
-                    computed["executedCandidates"], 8,
+                    computed_dict["executedCandidates"], 8,
                     "All 8 candidates must be counted as executed (not 0 due to string key mismatch)"
                 )
-                self.assertEqual(computed["pendingExecutableCandidates"], 0)
-                self.assertEqual(computed["failedCandidates"], 4, "4 failures expected (indices 0,2,4,6)")
+                self.assertEqual(computed_dict["pendingExecutableCandidates"], 0)
+                self.assertEqual(computed_dict["failedCandidates"], 4, "4 failures expected (indices 0,2,4,6)")
 
         finally:
             # Clean up environment

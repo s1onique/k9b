@@ -231,21 +231,21 @@ class TestPVCPending:
     def test_detects_pending_pvc(self) -> None:
         """Should detect PVC not in Bound state."""
         pvcs = [{"name": "data-pvc", "status": "Pending", "reason": "Waiting for volume"}]
-        is_fatal, status, reason = _check_pvc_pending(pvcs)
+        is_fatal, status, reason, _failure_class = _check_pvc_pending(pvcs)
         assert is_fatal is True
         assert status == "Pending"
 
     def test_detects_lost_pvc(self) -> None:
         """Should detect PVC in Lost state."""
         pvcs = [{"name": "data-pvc", "status": "Lost", "reason": "ClaimLost"}]
-        is_fatal, status, reason = _check_pvc_pending(pvcs)
+        is_fatal, status, reason, _failure_class = _check_pvc_pending(pvcs)
         assert is_fatal is True
         assert status == "Lost"
 
     def test_no_false_positive_for_bound_pvc(self) -> None:
         """Should NOT detect issue for Bound PVC."""
         pvcs = [{"name": "data-pvc", "status": "Bound", "reason": ""}]
-        is_fatal, status, reason = _check_pvc_pending(pvcs)
+        is_fatal, status, reason, _failure_class = _check_pvc_pending(pvcs)
         assert is_fatal is False
 
     def test_classify_rollout_state_detects_pvc_pending(self) -> None:

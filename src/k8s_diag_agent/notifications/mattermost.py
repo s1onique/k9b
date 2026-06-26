@@ -6,6 +6,7 @@ import json
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import cast
 
 import requests
 
@@ -44,7 +45,8 @@ class MattermostNotifier:
         last_error: requests.RequestException | None = None
         for attempt in range(1, self.max_attempts + 1):
             try:
-                response = self.session.post(self.webhook_url, json=payload, timeout=10)
+                json_payload = cast("dict[str, object]", payload)
+                response = self.session.post(self.webhook_url, json=json_payload, timeout=10)  # type: ignore[arg-type]
                 response.raise_for_status()
                 return response
             except requests.RequestException as exc:

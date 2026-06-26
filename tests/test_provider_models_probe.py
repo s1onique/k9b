@@ -22,39 +22,39 @@ from k8s_diag_agent.external_analysis.provider import (
 class TestNormalizeOpenAICompatibleUrl:
     """Test _normalize_openai_compatible_url function."""
 
-    def test_url_with_v1_suffix(self):
+    def test_url_with_v1_suffix(self) -> None:
         """URL ending with /v1 gets /models appended."""
         assert _normalize_openai_compatible_url("https://api.openai.com/v1") == "https://api.openai.com/v1/models"
         assert _normalize_openai_compatible_url("http://localhost:8080/v1") == "http://localhost:8080/v1/models"
 
-    def test_url_with_v1_chat_completions(self):
+    def test_url_with_v1_chat_completions(self) -> None:
         """URL with /v1/chat/completions normalizes to /v1/models."""
         assert _normalize_openai_compatible_url("https://api.deepseek.com/v1/chat/completions") == "https://api.deepseek.com/v1/models"
         assert _normalize_openai_compatible_url("https://api.openai.com/v1/chat/completions") == "https://api.openai.com/v1/models"
 
-    def test_url_with_v1_responses(self):
+    def test_url_with_v1_responses(self) -> None:
         """URL with /v1/responses normalizes to /v1/models."""
         assert _normalize_openai_compatible_url("https://api.anthropic.com/v1/responses") == "https://api.anthropic.com/v1/models"
 
-    def test_url_with_v1_completions(self):
+    def test_url_with_v1_completions(self) -> None:
         """URL with /v1/completions normalizes to /v1/models."""
         assert _normalize_openai_compatible_url("https://api.openai.com/v1/completions") == "https://api.openai.com/v1/models"
 
-    def test_url_with_v1_embeddings(self):
+    def test_url_with_v1_embeddings(self) -> None:
         """URL with /v1/embeddings normalizes to /v1/models."""
         assert _normalize_openai_compatible_url("https://api.openai.com/v1/embeddings") == "https://api.openai.com/v1/models"
 
-    def test_url_without_v1_suffix(self):
+    def test_url_without_v1_suffix(self) -> None:
         """URL without /v1 gets /v1/models appended."""
         assert _normalize_openai_compatible_url("http://localhost:11434") == "http://localhost:11434/v1/models"
         assert _normalize_openai_compatible_url("https://api.openai.com") == "https://api.openai.com/v1/models"
 
-    def test_url_with_trailing_slash(self):
+    def test_url_with_trailing_slash(self) -> None:
         """URLs with trailing slashes are normalized correctly."""
         assert _normalize_openai_compatible_url("https://api.openai.com/v1/") == "https://api.openai.com/v1/models"
         assert _normalize_openai_compatible_url("http://localhost:11434/") == "http://localhost:11434/v1/models"
 
-    def test_url_already_has_models_is_idempotent(self):
+    def test_url_already_has_models_is_idempotent(self) -> None:
         """URL already ending with /v1/models stays unchanged (idempotent)."""
         assert _normalize_openai_compatible_url("https://api.openai.com/v1/models") == "https://api.openai.com/v1/models"
         assert _normalize_openai_compatible_url("https://api.deepseek.com/v1/models") == "https://api.deepseek.com/v1/models"
@@ -63,7 +63,7 @@ class TestNormalizeOpenAICompatibleUrl:
 class TestProbeModelsEndpoint:
     """Test _probe_models_endpoint function with mocked requests."""
 
-    def test_200_with_dict_response(self):
+    def test_200_with_dict_response(self) -> None:
         """200 with JSON object containing data array returns models_list_ok."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -78,7 +78,7 @@ class TestProbeModelsEndpoint:
         assert phase == "models_list_ok"
         assert error_class == "provider_available"
 
-    def test_200_with_list_response(self):
+    def test_200_with_list_response(self) -> None:
         """200 with JSON array returns models_list_ok."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -93,7 +93,7 @@ class TestProbeModelsEndpoint:
         assert phase == "models_list_ok"
         assert error_class == "provider_available"
 
-    def test_200_with_empty_response(self):
+    def test_200_with_empty_response(self) -> None:
         """200 with unexpected JSON structure still returns models_list_ok."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -107,7 +107,7 @@ class TestProbeModelsEndpoint:
         assert success is True
         assert phase == "models_list_ok"
 
-    def test_401_returns_auth_failed(self):
+    def test_401_returns_auth_failed(self) -> None:
         """401 returns http_auth_required and provider_auth_failed."""
         mock_response = MagicMock()
         mock_response.status_code = 401
@@ -121,7 +121,7 @@ class TestProbeModelsEndpoint:
         assert phase == "http_auth_required"
         assert error_class == "provider_auth_failed"
 
-    def test_403_returns_auth_failed(self):
+    def test_403_returns_auth_failed(self) -> None:
         """403 returns http_auth_required and provider_auth_failed."""
         mock_response = MagicMock()
         mock_response.status_code = 403
@@ -135,7 +135,7 @@ class TestProbeModelsEndpoint:
         assert phase == "http_auth_required"
         assert error_class == "provider_auth_failed"
 
-    def test_404_returns_endpoint_not_found(self):
+    def test_404_returns_endpoint_not_found(self) -> None:
         """404 returns models_endpoint_not_found and provider_unavailable."""
         mock_response = MagicMock()
         mock_response.status_code = 404
@@ -149,7 +149,7 @@ class TestProbeModelsEndpoint:
         assert phase == "models_endpoint_not_found"
         assert error_class == "provider_unavailable"
 
-    def test_429_returns_rate_limited(self):
+    def test_429_returns_rate_limited(self) -> None:
         """429 returns http_rate_limited without raw body."""
         mock_response = MagicMock()
         mock_response.status_code = 429
@@ -166,7 +166,7 @@ class TestProbeModelsEndpoint:
         # Verify no body content is in error
         assert error_class != "Rate limit exceeded"
 
-    def test_500_returns_server_error(self):
+    def test_500_returns_server_error(self) -> None:
         """5xx returns http_server_error and provider_unavailable."""
         mock_response = MagicMock()
         mock_response.status_code = 500
@@ -180,7 +180,7 @@ class TestProbeModelsEndpoint:
         assert phase == "http_server_error"
         assert error_class == "provider_unavailable"
 
-    def test_timeout_returns_timeout_phase(self):
+    def test_timeout_returns_timeout_phase(self) -> None:
         """Timeout returns timeout phase and provider_timeout."""
         import requests as req
 
@@ -193,7 +193,7 @@ class TestProbeModelsEndpoint:
         assert phase == "timeout"
         assert error_class == "provider_timeout"
 
-    def test_connection_refused_returns_refused_phase(self):
+    def test_connection_refused_returns_refused_phase(self) -> None:
         """Connection refused returns connection_refused phase."""
         import requests as req
 
@@ -210,7 +210,7 @@ class TestProbeModelsEndpoint:
 class TestProbeModelsEndpointPrivacy:
     """Test that /models probe doesn't leak secrets in output."""
 
-    def test_api_key_not_in_output(self):
+    def test_api_key_not_in_output(self) -> None:
         """API key never appears in phase or error_class."""
         mock_response = MagicMock()
         mock_response.status_code = 401
@@ -226,7 +226,7 @@ class TestProbeModelsEndpointPrivacy:
         assert "sk-1234567890" not in output_str
         assert "abcdefghijklmnop" not in output_str
 
-    def test_url_not_in_output(self):
+    def test_url_not_in_output(self) -> None:
         """URL never appears in phase or error_class."""
         mock_response = MagicMock()
         mock_response.status_code = 404
@@ -241,7 +241,7 @@ class TestProbeModelsEndpointPrivacy:
         assert "api.openai.com" not in output_str
         assert "/v1/models" not in output_str
 
-    def test_response_body_not_in_output(self):
+    def test_response_body_not_in_output(self) -> None:
         """Response body content doesn't appear in phase or error_class."""
         mock_response = MagicMock()
         mock_response.status_code = 429
@@ -265,7 +265,7 @@ class TestProbeModelsEndpointPrivacy:
         assert "Rate limit exceeded" not in output_str
         assert "sk-exposed-key" not in output_str
 
-    def test_sends_authorization_header(self):
+    def test_sends_authorization_header(self) -> None:
         """Request includes Authorization header when api_key provided."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -285,7 +285,7 @@ class TestProbeModelsEndpointPrivacy:
             assert "Authorization" in headers
             assert headers["Authorization"] == "Bearer sk-test-key"
 
-    def test_no_authorization_header_when_no_key(self):
+    def test_no_authorization_header_when_no_key(self) -> None:
         """Request has no Authorization header when api_key is None."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -306,28 +306,28 @@ class TestProbeModelsEndpointPrivacy:
 class TestProviderPhaseNormalization:
     """Test phase normalization with new /models phases."""
 
-    def test_models_list_ok_in_allowlist(self):
+    def test_models_list_ok_in_allowlist(self) -> None:
         """models_list_ok is a valid allowlisted phase."""
         from scripts.backend_health_gate.allowlists import ALLOWED_PROVIDER_PHASES, _normalize_provider_phase
 
         assert "models_list_ok" in ALLOWED_PROVIDER_PHASES
         assert _normalize_provider_phase("models_list_ok") == "models_list_ok"
 
-    def test_models_endpoint_not_found_in_allowlist(self):
+    def test_models_endpoint_not_found_in_allowlist(self) -> None:
         """models_endpoint_not_found is a valid allowlisted phase."""
         from scripts.backend_health_gate.allowlists import ALLOWED_PROVIDER_PHASES, _normalize_provider_phase
 
         assert "models_endpoint_not_found" in ALLOWED_PROVIDER_PHASES
         assert _normalize_provider_phase("models_endpoint_not_found") == "models_endpoint_not_found"
 
-    def test_http_rate_limited_in_allowlist(self):
+    def test_http_rate_limited_in_allowlist(self) -> None:
         """http_rate_limited is a valid allowlisted phase."""
         from scripts.backend_health_gate.allowlists import ALLOWED_PROVIDER_PHASES, _normalize_provider_phase
 
         assert "http_rate_limited" in ALLOWED_PROVIDER_PHASES
         assert _normalize_provider_phase("http_rate_limited") == "http_rate_limited"
 
-    def test_full_phase_roundtrip_in_health_details(self):
+    def test_full_phase_roundtrip_in_health_details(self) -> None:
         """Full roundtrip: provider -> health details -> normalized."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -353,7 +353,7 @@ class TestProviderPhaseNormalization:
         assert provider_dep is not None
         assert provider_dep["phase"] == "models_endpoint_not_found"
 
-    def test_health_dependencies_json_phase_normalization(self):
+    def test_health_dependencies_json_phase_normalization(self) -> None:
         """health-dependencies.json normalizes phases correctly."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 

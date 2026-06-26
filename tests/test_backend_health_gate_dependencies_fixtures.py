@@ -6,8 +6,10 @@ for creating mock backend diagnostics, scheduler diagnostics, and
 provider status data.
 """
 
+from typing import Any
 
-def _make_backend_diags(phase: str = "Running", containers: list = None) -> dict:
+
+def _make_backend_diags(phase: str = "Running", containers: list[Any] | None = None) -> dict:
     """Create mock backend diagnostics.
     
     Args:
@@ -31,7 +33,7 @@ def _make_backend_diags(phase: str = "Running", containers: list = None) -> dict
     }
 
 
-def _make_scheduler_diags(phase: str = "Running", containers: list = None) -> dict:
+def _make_scheduler_diags(phase: str = "Running", containers: list[Any] | None = None) -> dict:
     """Create mock scheduler diagnostics.
     
     Args:

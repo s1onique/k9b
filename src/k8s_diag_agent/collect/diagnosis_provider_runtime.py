@@ -172,7 +172,7 @@ class OpenAICompatibleDiagnosisProvider:
                 f"Diagnosis provider connection failed: {exc}"
             ) from exc
         except HTTPError as exc:
-            status = exc.response.status_code
+            status = exc.response.status_code if exc.response is not None else 0
             if status == 401 or status == 403:
                 raise RuntimeError(
                     f"Diagnosis provider authentication failed (HTTP {status}): "
