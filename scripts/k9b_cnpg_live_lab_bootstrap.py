@@ -71,6 +71,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 
 def _setup_path() -> None:
@@ -92,12 +93,28 @@ _setup_path()
 
 
 # =============================================================================
-# Re-export all constants for backward compatibility
-# =============================================================================
-# These are re-exported so consumers can import from this module
-# =============================================================================
 # Re-export CLI functions
 # =============================================================================
+# Import json module (needed for tests to verify JSON safety)
+import json  # noqa: F401,F811
+
+# =============================================================================
+# Re-export bootstrap functions (needed by tests to verify contract surface)
+# =============================================================================
+from scripts.k9b_cnpg_live_lab_bootstrap_funcs import (  # noqa: F401,F811
+    # Parse helpers
+    _parse_crash_loop_from_pods,
+    _parse_deployment_not_ready_from_deployments,
+    _parse_image_pull_failure_from_pods,
+    _parse_pvc_pending_from_pods,
+    bootstrap_decode_kubeconfig,
+    classify_helm_error,
+    classify_schema_error,
+    classify_wait_timeout,
+    collect_failure_artifacts,
+    run_preflight_checks,
+    validate_credential_source,
+)
 from scripts.k9b_cnpg_live_lab_cli import (  # noqa: F401,F811
     main_bootstrap,
     main_classify_error,
@@ -108,25 +125,6 @@ from scripts.k9b_cnpg_live_lab_cli import (  # noqa: F401,F811
     main_extract_schema_evidence,
     main_monitor_rollout,
 )
-
-# Re-export bootstrap functions (needed by tests to verify contract surface)
-from scripts.k9b_cnpg_live_lab_bootstrap_funcs import (  # noqa: F401,F811
-    bootstrap_decode_kubeconfig,
-    classify_helm_error,
-    classify_schema_error,
-    classify_wait_timeout,
-    collect_failure_artifacts,
-    run_preflight_checks,
-    validate_credential_source,
-    # Parse helpers
-    _parse_crash_loop_from_pods,
-    _parse_deployment_not_ready_from_deployments,
-    _parse_image_pull_failure_from_pods,
-    _parse_pvc_pending_from_pods,
-)
-
-# Import json module (needed for tests to verify JSON safety)
-import json  # noqa: F401,F811
 
 # =============================================================================
 # Re-export config classes
@@ -168,10 +166,39 @@ from scripts.k9b_cnpg_live_lab_constants import (  # noqa: F401,F811
     SCHEMA_VALIDATION_PATTERNS,
     VALID_RESOURCE_NAME_PATTERN,
 )
-from scripts.k9b_cnpg_live_lab_helm_evidence import (  # noqa: F401,F811
-    collect_helm_evidence,
-    collect_rendered_manifest_evidence,
-)
+
+# =============================================================================
+# Lazy wrapper re-exports for Helm evidence functions
+# These preserve the backward-compatible import surface while deferring
+# the PyYAML import until the function is actually called.
+# =============================================================================
+
+
+def collect_helm_evidence(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
+    """Lazy wrapper for collect_helm_evidence from helm_evidence module.
+
+    This preserves the backward-compatible import surface while deferring
+    the PyYAML import until the function is actually called.
+    """
+    from scripts.k9b_cnpg_live_lab_helm_evidence import (  # pylint: disable=import-outside-toplevel
+        collect_helm_evidence as _impl,
+    )
+
+    return _impl(*args, **kwargs)
+
+
+def collect_rendered_manifest_evidence(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
+    """Lazy wrapper for collect_rendered_manifest_evidence from helm_evidence module.
+
+    This preserves the backward-compatible import surface while deferring
+    the PyYAML import until the function is actually called.
+    """
+    from scripts.k9b_cnpg_live_lab_helm_evidence import (  # pylint: disable=import-outside-toplevel
+        collect_rendered_manifest_evidence as _impl,
+    )
+
+    return _impl(*args, **kwargs)
+
 
 # =============================================================================
 # Re-export helpers for backward compatibility
@@ -216,10 +243,7 @@ from scripts.k9b_cnpg_live_lab_rollout import (  # noqa: F401,F811
 # =============================================================================
 # Re-export schema functions
 # =============================================================================
-# =============================================================================
-# Re-export schema helper (needed by tests)
-# =============================================================================
-from scripts.k9b_cnpg_live_lab_schema import (  # noqa: F401,F811  # noqa: F401,F811
+from scripts.k9b_cnpg_live_lab_schema import (  # noqa: F401,F811
     _parse_rendered_yaml_for_resource,
     extract_schema_warnings,
     generate_bounded_summary,

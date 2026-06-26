@@ -748,5 +748,73 @@ class TestWorkflowContractPreservation(unittest.TestCase):
                     )
 
 
+class TestPyYAMLDependencyContract(unittest.TestCase):
+    """Regression tests for PyYAML dependency contract.
+
+    These tests verify that:
+    1. The bootstrap facade imports cleanly without requiring PyYAML
+    2. PyYAML is declared in the project dependency manifest
+    """
+
+    def test_bootstrap_import_does_not_require_helm_yaml_dependency(self) -> None:
+        """Bootstrap facade must import cleanly without triggering PyYAML dependency.
+
+        This is a regression guard for CI failure where importing
+        scripts/k9b_cnpg_live_lab_bootstrap.py transitively required PyYAML
+        via the Helm evidence/inventory import chain.
+
+        This test actually blocks yaml imports to prove the bootstrap façade
+        truly does not require PyYAML, even when PyYAML is installed.
+        """
+        import builtins
+        import importlib
+        import sys
+        from unittest import mock
+
+        # Remove any cached imports to force fresh import
+        modules_to_remove = [
+            key for key in sys.modules.keys()
+            if key.startswith("scripts.k9b_cnpg_live_lab") or key == "yaml"
+        ]
+        for mod in modules_to_remove:
+            del sys.modules[mod]
+
+        real_import = builtins.__import__
+
+        def blocked_yaml_import(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "yaml" or name.startswith("yaml."):
+                raise ModuleNotFoundError("No module named 'yaml'")
+            return real_import(name, *args, **kwargs)
+
+        # This import must NOT raise ModuleNotFoundError: No module named 'yaml'
+        # even when yaml is blocked - proving the bootstrap façade truly doesn't need it
+        with mock.patch("builtins.__import__", side_effect=blocked_yaml_import):
+            module = importlib.import_module("scripts.k9b_cnpg_live_lab_bootstrap")
+            self.assertIsNotNone(module)
+
+    def test_pyyaml_declared_in_dependency_manifest(self) -> None:
+        """PyYAML must be declared in the project dependency manifest.
+
+        This ensures CI installs PyYAML before running live-lab scripts.
+        """
+        from pathlib import Path
+
+        # Check pyproject.toml (main dependency manifest)
+        pyproject = Path("pyproject.toml")
+        self.assertTrue(
+            pyproject.exists(),
+            "pyproject.toml must exist at repository root"
+        )
+
+        content = pyproject.read_text().lower()
+
+        # Verify PyYAML is declared (either as pyyaml or PyYAML)
+        self.assertTrue(
+            "pyyaml" in content,
+            "PyYAML must be declared in pyproject.toml dependencies. "
+            "Add 'pyyaml>=6.0' to the dependencies list."
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -29,10 +29,10 @@ from scripts.k9b_cnpg_live_lab_bootstrap_funcs import (
 )
 from scripts.k9b_cnpg_live_lab_config import DiagnosisGenerator, PreflightData
 from scripts.k9b_cnpg_live_lab_constants import FAILURE_HELM_MANIFEST_SCHEMA_WARNING
-from scripts.k9b_cnpg_live_lab_helm_evidence import (
-    collect_helm_evidence,
-    collect_rendered_manifest_evidence,
-)
+
+# NOTE: Helm evidence imports are lazy (inside subcommand handlers) to avoid
+# requiring PyYAML at module import time when Helm functionality isn't used.
+# See: scripts/k9b_cnpg_live_lab_helm_evidence.py for PyYAML dependency handling.
 from scripts.k9b_cnpg_live_lab_helpers import (
     error,
     log,
@@ -338,6 +338,9 @@ def main_collect_rendered_manifest_evidence() -> int:
 
     Replaces inline python -c blocks in workflows with proper CLI subcommand.
     """
+    # Lazy import to avoid requiring PyYAML at module import time
+    from scripts.k9b_cnpg_live_lab_helm_evidence import collect_rendered_manifest_evidence
+
     parser = argparse.ArgumentParser(description="Collect rendered manifest evidence")
     parser.add_argument("--chart-path", required=True, help="Path to Helm chart directory")
     parser.add_argument("--values-path", default="", help="Path to values file")
@@ -374,7 +377,10 @@ def main_collect_helm_evidence() -> int:
 
     Replaces inline python -c blocks in workflows with proper CLI subcommand.
     """
+    # Lazy import to avoid requiring PyYAML at module import time
     import json
+
+    from scripts.k9b_cnpg_live_lab_helm_evidence import collect_helm_evidence
 
     parser = argparse.ArgumentParser(description="Collect Helm evidence")
     parser.add_argument("--kubeconfig", required=True, help="Path to kubeconfig file")
