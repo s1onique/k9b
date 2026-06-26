@@ -129,6 +129,12 @@ ACT-Local: Use --act-local as the default close-check for local agent ACTs.
     )
     
     parser.add_argument(
+        "--print-plan",
+        action="store_true",
+        help="Print the verification plan without executing (for contract testing)",
+    )
+    
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Emit only JSON summary to stdout",
@@ -276,6 +282,30 @@ def main(argv: list[str] | None = None) -> int:
     
     # Resolve profile and scope
     profile, scope = resolve_profile_and_scope(args)
+    
+    # Handle --print-plan mode (non-executing contract testing mode)
+    if args.print_plan:
+        from verify_profile_plan import emit_full_plan
+        plan = emit_full_plan(profile, scope)
+        if args.json:
+            print(json.dumps(plan, indent=2))
+        else:
+            print(f"Profile: {plan['profile']}")
+            print(f"Scope: {plan['scope']}")
+            print(f"Lanes: {list(plan['lanes'].keys())}")
+            print(f"Step count: {plan['step_count']}")
+            print(f"Skipped count: {plan['skipped_count']}")
+            print("\nSteps:")
+            for lane, steps in plan['lanes'].items():
+                if steps:
+                    print(f"  {lane}:")
+                    for step in steps:
+                        print(f"    - {step['id']}: {step['description']}")
+            if plan['skipped']:
+                print("\nSkipped steps:")
+                for s in plan['skipped']:
+                    print(f"  - {s['id']}: {s['reason']}")
+        return 0
     
     # Check for Python availability
     python_path = repo_root / ".venv" / "bin" / "python"
