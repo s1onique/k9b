@@ -66,21 +66,27 @@ def wait_for_lock(
     start_time = time.time()
     poll_count = 0
     
-    while time.time() - start_time < timeout_seconds:
+    while True:
+        # Check if we've exceeded the timeout
+        elapsed = time.time() - start_time
+        if elapsed >= timeout_seconds:
+            # Timeout - check lock status for the message
+            status = get_lock_status(lock_dir)
+            return False, f"Timeout after {timeout_seconds}s - lock still held by PID {status.owner_pid}"
+        
         status = get_lock_status(lock_dir)
         
         if not status.locked:
             return True, "Lock released - proceeding"
         
         poll_count += 1
-        elapsed = int(time.time() - start_time)
         
-        # Print periodic diagnostics
-        if poll_count % 3 == 1:  # Every ~15 seconds
-            print(f"Waiting for lock... ({elapsed}s elapsed, owner PID: {status.owner_pid})", file=sys.stderr)
+        # Print periodic diagnostics (every ~15 seconds)
+        if poll_count % 3 == 1:
+            print(f"Waiting for lock... ({int(elapsed)}s elapsed, owner PID: {status.owner_pid})", file=sys.stderr)
         
-        time.sleep(poll_interval)
-    
-    # Timeout
-    status = get_lock_status(lock_dir)
-    return False, f"Timeout after {timeout_seconds}s - lock still held by PID {status.owner_pid}"
+        # Calculate remaining time and sleep for min(poll_interval, remaining_time)
+        remaining = timeout_seconds - elapsed
+        sleep_time = min(poll_interval, remaining)
+        if sleep_time > 0:
+            time.sleep(sleep_time)

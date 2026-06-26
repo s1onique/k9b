@@ -109,3 +109,28 @@ health/loop_automatic_diagnosis.py run_automatic_diagnosis_loop failure isolatio
 
 # === Debug HTTP Client ===
 scripts/debug_http_client.py fetch_json HTTP client fallback boundary - HTTP client error handling, returns safe fallback tuple, no credential exposure
+
+# === Diagnosis Provider Runtime ===
+collect/diagnosis_provider_runtime.py complete JSON parsing error boundary - explicit RuntimeError with sanitized message, no credential exposure
+
+# === Diagnosis Service Boundaries ===
+collect/incident_diagnosis_service.py run_incident_one_pass_diagnosis incident diagnosis service boundary - sanitize_exception_message prevents credential leakage
+
+# === One-Pass Diagnosis Service ===
+collect/api_incident_one_pass_diagnosis_service.py handle_one_pass_diagnosis_service diagnosis loop error boundary - sanitize_exception_message prevents credential leakage
+
+# === Golden Case Evidence Provider ===
+collect/golden_case_evidence_provider.py _load_evidence evidence cache loading fallback - graceful continue, no credential exposure
+
+# === External Analysis Provider ===
+external_analysis/provider.py _probe_models_endpoint connectivity check boundary - error classification with safe fallback, no credential exposure
+external_analysis/provider.py get_provider_status provider availability check boundary - error classification with safe fallback, no credential exposure
+
+# === UI Health Details ===
+ui/api_health_details.py _unsafe_evaluate_backend_health health evaluation fallback - returns sanitized HealthEvaluation, never propagates traceback
+ui/api_health_details.py _get_health_status_from_result health status retrieval fallback - graceful continue, no credential exposure
+ui/api_health_details.py _get_api_status api status retrieval fallback - returns safe unavailable state, no credential exposure
+
+# === UI Server Runtime ===
+ui/server_runtime.py get_provider_config_status config status retrieval fallback - non-fatal, logs error, provider is optional
+ui/server_runtime.py run_diagnosis_provider_provider initialization fallback - non-fatal, logs error, provider is optional
