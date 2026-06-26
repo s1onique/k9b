@@ -26,7 +26,7 @@ Avoid claiming:
 
 * autonomous remediation
 * guaranteed root cause
-* production-ready autopilot operation
+* production-targeted autopilot-style automation
 * replacement for observability platforms
 * replacement for incident management systems
 * broad multi-cloud / VM / database / SaaS incident coverage unless implemented and verified
