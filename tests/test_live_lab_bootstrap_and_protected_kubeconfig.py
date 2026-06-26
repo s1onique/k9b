@@ -22,6 +22,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 # Import the facade module - this tests the public contract
@@ -643,7 +644,7 @@ class TestClassifyWaitTimeout(unittest.TestCase):
             # Mock subprocess for kubectl commands
             with patch("subprocess.run") as mock_run:
                 # Return appropriate output based on the command
-                def run_side_effect(*args, **kwargs):
+                def run_side_effect(*args: Any, **kwargs: Any) -> MagicMock:
                     cmd = args[0] if args else kwargs.get("args", [])
                     mock_result = MagicMock()
                     mock_result.stdout = ""
