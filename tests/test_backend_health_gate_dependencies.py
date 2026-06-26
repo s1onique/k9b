@@ -35,7 +35,7 @@ from tests.test_backend_health_gate_dependencies_normalize import (  # noqa: F40
 class TestProviderPhaseNormalization:
     """Test phase normalization in backend health gate."""
 
-    def test_normalize_provider_phase_function(self):
+    def test_normalize_provider_phase_function(self) -> None:
         """Test _normalize_provider_phase function directly."""
         from scripts.backend_health_gate.allowlists import ALLOWED_PROVIDER_PHASES, _normalize_provider_phase
 
@@ -72,7 +72,7 @@ class TestProviderPhaseNormalization:
         for phase in ALLOWED_PROVIDER_PHASES:
             assert _normalize_provider_phase(phase) == phase
 
-    def test_phase_included_in_provider_dependency_output(self):
+    def test_phase_included_in_provider_dependency_output(self) -> None:
         """Phase is included in provider dependency from health details."""
         from unittest.mock import patch
 
@@ -102,7 +102,7 @@ class TestProviderPhaseNormalization:
             assert "phase" in provider_dep, "phase field should be in provider dependency"
             assert provider_dep["phase"] == "http_not_found"
 
-    def test_unknown_phase_normalized_to_unknown(self):
+    def test_unknown_phase_normalized_to_unknown(self) -> None:
         """Unknown phase is normalized to 'unknown'."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -127,7 +127,7 @@ class TestProviderPhaseNormalization:
         assert provider_dep is not None
         assert provider_dep["phase"] == "unknown"
 
-    def test_raw_url_in_phase_blocked(self):
+    def test_raw_url_in_phase_blocked(self) -> None:
         """Raw URL in phase cannot pass through."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -155,7 +155,7 @@ class TestProviderPhaseNormalization:
         normalized_json = json.dumps(normalized)
         assert "api.openai.com" not in normalized_json
 
-    def test_raw_ip_in_phase_blocked(self):
+    def test_raw_ip_in_phase_blocked(self) -> None:
         """Raw IP address in phase cannot pass through."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -180,7 +180,7 @@ class TestProviderPhaseNormalization:
         assert provider_dep is not None
         assert provider_dep["phase"] == "unknown"
 
-    def test_raw_token_in_phase_blocked(self):
+    def test_raw_token_in_phase_blocked(self) -> None:
         """Raw API token in phase cannot pass through."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -205,7 +205,7 @@ class TestProviderPhaseNormalization:
         assert provider_dep is not None
         assert provider_dep["phase"] == "unknown"
 
-    def test_http_not_found_distinguishable_from_connection_refused(self):
+    def test_http_not_found_distinguishable_from_connection_refused(self) -> None:
         """provider_unavailable + http_not_found is distinguishable from connection_refused."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -259,7 +259,7 @@ class TestProviderPhaseNormalization:
         assert provider_not_found["phase"] != provider_refused["phase"]
         assert provider_not_found["reason_code"] != provider_refused["reason_code"]
 
-    def test_timeout_distinguishable_from_http_not_found(self):
+    def test_timeout_distinguishable_from_http_not_found(self) -> None:
         """provider_timeout + timeout is distinguishable from provider_unavailable + http_not_found."""
         from scripts.backend_health_gate.classification import _normalize_backend_health_details
 
@@ -317,7 +317,7 @@ class TestProviderPhaseNormalization:
 class TestProviderStatusFallback:
     """Test provider status fallback when status subsystem fails."""
 
-    def test_provider_status_unavailable_preserved_in_health_details(self):
+    def test_provider_status_unavailable_preserved_in_health_details(self) -> None:
         """Provider status subsystem failure yields provider_status_unavailable reason_code.
         
         Regression test: When get_provider_status import/call fails, the endpoint
@@ -357,7 +357,7 @@ class TestProviderStatusFallback:
             assert provider_dep["message_snippet"] == "", "message_snippet should be empty"
             assert provider_dep["status"] == "unavailable"
 
-    def test_provider_available_preserved_in_health_details(self):
+    def test_provider_available_preserved_in_health_details(self) -> None:
         """Provider probe success yields diagnosis_provider.status=available, reason_code=provider_available.
         
         Regression test: When provider connectivity probe succeeds, the success path should
