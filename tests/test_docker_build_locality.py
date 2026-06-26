@@ -30,13 +30,20 @@ class TestDockerBuildLocalityVerifier(unittest.TestCase):
         os.chmod(self.VERIFY_SCRIPT, 0o755)
 
     def test_verifier_passes_when_requirements_fresh(self) -> None:
-        """Verifier should pass when requirements.docker.txt matches pyproject.toml."""
-        # Ensure requirements are fresh first
-        subprocess.run(
-            [str(self.SYNC_SCRIPT)],
-            check=True,
+        """Verifier should pass when requirements.docker.txt matches pyproject.toml.
+        
+        Note: Uses --check mode to verify freshness without modifying repo state.
+        """
+        # Verify requirements are fresh using --check (no modification)
+        check_result = subprocess.run(
+            [str(self.SYNC_SCRIPT), "--check"],
             capture_output=True,
+            text=True,
+            cwd=self.REPO_ROOT,
         )
+        
+        if check_result.returncode != 0:
+            self.skipTest("requirements.docker.txt is stale - run sync-docker-requirements.sh first")
 
         result = subprocess.run(
             [str(self.VERIFY_SCRIPT)],
