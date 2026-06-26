@@ -99,7 +99,7 @@ doctrines:
       - baseline CSV has valid schema
       - paths are repo-relative and non-escaping
     manual_only: false
-    notes: Enforced via scripts/verify_no_new_llm_allowlist.py. Baseline: docs/tooling/llm_large_file_allowlist_baseline.csv.
+    notes: "Enforced via scripts/verify_no_new_llm_allowlist.py. Baseline: docs/tooling/llm_large_file_allowlist_baseline.csv."
 
   - id: path-security
     title: Path and Artifact Security
