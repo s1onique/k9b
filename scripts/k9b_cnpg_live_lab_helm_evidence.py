@@ -87,10 +87,15 @@ def collect_helm_evidence(
 
         try:
             status_data = json.loads(status_result["stdout"])
-            results["helm_release_status"] = status_data.get("info", {}).get("status", {}).get("status")
-            results["helm_release_revision"] = status_data.get("info", {}).get("last_deployed", {}).get("Revision")
+            results["helm_release_status"] = _extract_helm_release_status(status_data)
+            results["helm_release_revision"] = _extract_helm_revision(status_data)
         except json.JSONDecodeError:
+            results["errors"].append("Failed to parse helm status JSON")
             pass
+        except AttributeError as e:
+            # Shape mismatch - info.status is not a dict (e.g., it's a string)
+            results["parser_warning"] = f"Helm status shape mismatch: {e}"
+            results["errors"].append(f"Helm status shape mismatch: {e}")
     else:
         _write_file(helm_dir / "status.json", status_result["stderr"])
         results["evidence_artifacts"].append("helm/status.json")
@@ -297,6 +302,68 @@ def _write_file(path: Path, content: str) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content or "", encoding="utf-8")
+
+
+def _extract_helm_release_status(status_data: dict[str, object]) -> str | None:
+    """Extract Helm release status from status JSON.
+
+    Handles multiple Helm status shapes:
+    - {"info": {"status": "deployed"}} - string form (Helm v3)
+    - {"info": {"status": {"status": "deployed"}}} - nested dict form (legacy)
+    - {"info": {"status": {"code": "deployed"}}} - code form (some Helm versions)
+
+    Args:
+        status_data: Parsed Helm status JSON
+
+    Returns:
+        Release status string or None if not extractable
+    """
+    info = status_data.get("info")
+    if not isinstance(info, dict):
+        return None
+
+    raw_status = info.get("status")
+
+    # Handle string form: {"status": "deployed"}
+    if isinstance(raw_status, str):
+        return raw_status
+
+    # Handle nested dict form: {"status": {"status": "deployed"}} or {"code": "deployed"}
+    if isinstance(raw_status, dict):
+        nested = raw_status.get("status") or raw_status.get("code")
+        return str(nested) if nested is not None else None
+
+    return None
+
+
+def _extract_helm_revision(status_data: dict[str, object]) -> int | None:
+    """Extract Helm revision from status JSON.
+
+    Args:
+        status_data: Parsed Helm status JSON
+
+    Returns:
+        Revision number or None if not extractable
+    """
+    info = status_data.get("info")
+    if not isinstance(info, dict):
+        return None
+
+    # Try last_deployed.Revision first
+    last_deployed = info.get("last_deployed")
+    if isinstance(last_deployed, dict):
+        revision = last_deployed.get("Revision")
+        if revision is not None:
+            return int(revision) if isinstance(revision, (int, str)) else None
+
+    # Try first_charted.Revision as fallback
+    first_charted = info.get("first_charted")
+    if isinstance(first_charted, dict):
+        revision = first_charted.get("Revision")
+        if revision is not None:
+            return int(revision) if isinstance(revision, (int, str)) else None
+
+    return None
 
 
 def check_helm_release_failed(

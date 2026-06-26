@@ -44,6 +44,7 @@ from .k9b_cnpg_live_lab_rollout_subprocess import (  # noqa: F401,F811
     _check_pvc_pending,
     _check_readiness_probe_failed,
     _check_rollout_success,
+    _check_rollout_success_multi,
     _collect_rollout_snapshot,
 )
 from .k9b_cnpg_live_lab_rollout_types import (  # noqa: F401,F811

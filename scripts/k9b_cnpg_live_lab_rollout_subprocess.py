@@ -124,7 +124,11 @@ def _check_rollout_success(
     release: str,
     target_count: int = 1,
 ) -> tuple[bool, str]:
-    """Check if rollout succeeded - all replicas are ready (subprocess-based)."""
+    """Check if rollout succeeded - all replicas are ready (subprocess-based).
+
+    DEPRECATED: Use _check_rollout_success_multi() instead for multi-deployment charts.
+    This function only checks for a single deployment named `release`.
+    """
     result = subprocess.run(
         ["kubectl", "--kubeconfig", kubeconfig, "get", "deployments", "-n", namespace, "-o", "json"],
         capture_output=True, text=True,
@@ -149,6 +153,65 @@ def _check_rollout_success(
             return False, f"Deployment {release} not ready: {ready}/{replicas} ready, {available} available"
 
     return False, f"Deployment {release} not found"
+
+
+def _check_rollout_success_multi(
+    kubeconfig: str,
+    namespace: str,
+    expected_deployments: list[str],
+    target_count: int = 1,
+) -> tuple[bool, str]:
+    """Check if rollout succeeded for multiple expected deployments.
+
+    All expected deployments must exist and have availableReplicas >= target_count.
+
+    Args:
+        kubeconfig: Path to kubeconfig
+        namespace: Kubernetes namespace
+        expected_deployments: List of expected deployment names
+        target_count: Expected replica count per deployment
+
+    Returns:
+        Tuple of (success, status_message)
+    """
+    result = subprocess.run(
+        ["kubectl", "--kubeconfig", kubeconfig, "get", "deployments", "-n", namespace, "-o", "json"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return False, f"kubectl failed: {result.stderr}"
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return False, "Failed to parse deployment JSON"
+
+    # Build map of cluster deployments
+    cluster_deployments: dict[str, dict[str, Any]] = {}
+    for deploy in data.get("items", []):
+        deploy_name = deploy.get("metadata", {}).get("name", "")
+        cluster_deployments[deploy_name] = deploy
+
+    # Check for missing deployments
+    missing = [name for name in expected_deployments if name not in cluster_deployments]
+    if missing:
+        return False, f"Expected deployment(s) not found: {', '.join(missing)}"
+
+    # Check all expected deployments are healthy
+    not_ready = []
+    for name in expected_deployments:
+        deploy = cluster_deployments[name]
+        status = deploy.get("status", {})
+        replicas = status.get("replicas", 0)
+        available = status.get("availableReplicas", 0)
+        ready = status.get("readyReplicas", 0)
+        if available < target_count or ready < target_count:
+            not_ready.append(f"{name}({ready}/{replicas} ready, {available} available)")
+
+    if not_ready:
+        return False, f"Deployment(s) not ready: {', '.join(not_ready)}"
+
+    return True, f"All {len(expected_deployments)} deployments healthy"
 
 
 def _collect_rollout_snapshot(

@@ -218,4 +218,10 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [TEST] Live lab tests - comprehensive but coherent
     ("tests/test_live_lab_config.py", "[TEST] Live lab config tests - comprehensive coverage"),
     ("tests/test_live_lab_bootstrap_and_protected_kubeconfig.py", "[TEST] Bootstrap tests - comprehensive coverage"),
+
+    # [TEST] CNPG live lab rollout classifier tests - comprehensive coverage for VolumeBinding conflict detection
+    ("tests/test_rollout_classifier_volume_binding.py", "[TEST] Rollout classifier VolumeBinding tests - comprehensive coverage"),
+
+    # [SCRIPT] CNPG live lab evidence collection - comprehensive but coherent
+    ("scripts/k9b_cnpg_live_lab_helm_evidence.py", "[SCRIPT] Live lab Helm evidence - comprehensive collection logic"),
 ]

@@ -18,9 +18,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .k9b_cnpg_live_lab_helm_inventory import (
+    parse_workload_inventory_from_file,
+)
 from .k9b_cnpg_live_lab_helpers import log, write_json_atomically
 from .k9b_cnpg_live_lab_rollout import (
     _check_rollout_success,
+    _check_rollout_success_multi,
     _collect_rollout_snapshot,
 )
 
@@ -45,6 +49,7 @@ def monitor_rollout(
     *,
     max_wait: int | None = None,  # New preferred name
     interval: int | None = None,  # New preferred name
+    expected_deployments: list[str] | None = None,  # Multi-deployment mode
 ) -> tuple[bool, str, dict[str, Any]]:
     """Monitor rollout until success or timeout.
 
@@ -178,6 +183,14 @@ def main_monitor_rollout() -> int:
         default=os.environ.get("ARTIFACT_DIR", "./lab-artifacts/live"),
         help="Artifact directory (default: $ARTIFACT_DIR or ./lab-artifacts/live)",
     )
+    # Fallback: explicit expected deployments when rendered manifest is unavailable
+    parser.add_argument(
+        "--expected-deployment",
+        action="append",
+        default=[],
+        dest="expected_deployments",
+        help="Expected deployment name (can be repeated). Used when rendered manifest is unavailable.",
+    )
     args = parser.parse_args(sys.argv[2:])
 
     artifact_dir = Path(args.artifact_dir)
@@ -187,7 +200,116 @@ def main_monitor_rollout() -> int:
     max_wait = args.deadline if args.deadline is not None else args.max_wait
     interval = args.poll_interval if args.poll_interval is not None else args.interval
 
-    # Monitor rollout
+    # Determine expected deployments for multi-deployment monitoring
+    expected_deployments = get_expected_deployments_from_manifest(artifact_dir, args.release, args.namespace)
+
+    if not expected_deployments and args.expected_deployments:
+        # Fall back to explicit --expected-deployment flags
+        expected_deployments = args.expected_deployments
+        log(f"Using explicit expected deployments: {expected_deployments}")
+
+    if not expected_deployments:
+        log("No expected deployments found, using single-deployment mode")
+
+    # Monitor rollout with multi-deployment support
+    if len(expected_deployments) > 1:
+        log(f"Monitoring multi-deployment rollout: {expected_deployments}")
+        # Run inside polling loop - same semantics as single-deployment mode
+        start_time = time.time()
+        last_snapshot: dict[str, Any] | None = None
+        snapshot_count = 0
+
+        while time.time() - start_time < max_wait:
+            elapsed = int(time.time() - start_time)
+
+            # Get multi-deployment status
+            success, status = _check_rollout_success_multi(
+                args.kubeconfig, args.namespace, expected_deployments, args.target_count
+            )
+
+            if success:
+                log(f"Multi-deployment rollout successful after {elapsed}s")
+                result = {
+                    "success": True,
+                    "status": status,
+                    "failure_class": "",
+                    "rollout_checks": {},
+                    "expected_deployments": expected_deployments,
+                }
+                write_json_atomically(artifact_dir / "rollout-result.json", result)
+                diagnosis_result = {"failure_class": "", "status": status, "success": True}
+                write_json_atomically(artifact_dir / "final-diagnosis.json", diagnosis_result)
+                bounded_content = f"""### Rollout Monitor Result
+
+**Success**: True
+**Status**: {status}
+"""
+                (artifact_dir / "bounded-summary.txt").write_text(bounded_content)
+                print(json.dumps(result, indent=2))
+                return 0
+
+            log(f"[{elapsed}s] Multi-deployment rollout not complete: {status}")
+
+            # Collect periodic snapshots
+            if snapshot_count == 0 or elapsed >= 60:
+                snapshot_ts = datetime.now(UTC).isoformat()
+                snapshot = _collect_rollout_snapshot(
+                    args.kubeconfig, args.namespace,
+                    artifact_dir, args.release, snapshot_ts
+                )
+                if snapshot:
+                    last_snapshot = snapshot
+                    snapshot_count += 1
+                    snapshot_path = artifact_dir / f"rollout-snapshot-{snapshot_count}.json"
+                    write_json_atomically(snapshot_path, snapshot)
+                    log(f"Snapshot written to {snapshot_path}")
+
+            time.sleep(interval)
+
+        # Timed out - collect final snapshot and classify
+        elapsed = int(time.time() - start_time)
+        log(f"Multi-deployment rollout timed out after {elapsed}s")
+
+        final_snapshot = _collect_rollout_snapshot(
+            args.kubeconfig, args.namespace,
+            artifact_dir, args.release, datetime.now(UTC).isoformat()
+        )
+
+        if final_snapshot:
+            last_snapshot = final_snapshot
+            write_json_atomically(artifact_dir / "rollout-final.json", final_snapshot)
+
+        # Classify the failure using the snapshot data
+        failure_class = last_snapshot.get("rollout_checks", {}).get("failure_class", "") if last_snapshot else ""
+
+        # Hardening: if _check_rollout_success_multi reported missing deployments
+        # but classifier returned empty failure_class, set expected_deployment_missing directly
+        if not failure_class and "not found" in status.lower():
+            failure_class = "expected_deployment_missing"
+            log(f"Setting failure_class to 'expected_deployment_missing' based on status: {status}")
+
+        result = {
+            "success": False,
+            "status": f"Rollout timed out after {elapsed}s",
+            "failure_class": failure_class,
+            "rollout_checks": {"failure_class": failure_class},
+            "expected_deployments": expected_deployments,
+        }
+        write_json_atomically(artifact_dir / "rollout-result.json", result)
+        diagnosis_result = {"failure_class": failure_class, "status": status, "success": False}
+        write_json_atomically(artifact_dir / "final-diagnosis.json", diagnosis_result)
+        failure_line = f"**Failure class**: `{failure_class}`" if failure_class else ""
+        bounded_content = f"""### Rollout Monitor Result
+
+**Success**: False
+**Status**: Rollout timed out after {elapsed}s
+{failure_line}
+"""
+        (artifact_dir / "bounded-summary.txt").write_text(bounded_content)
+        print(json.dumps(result, indent=2))
+        return 1
+
+    # Single-deployment mode (backward compatibility)
     success, status, snapshot = monitor_rollout(
         args.kubeconfig,
         args.namespace,
@@ -232,3 +354,57 @@ def main_monitor_rollout() -> int:
     print(json.dumps(result, indent=2))
 
     return 0 if success else 1
+
+
+def get_expected_deployments_from_manifest(
+    artifact_dir: Path,
+    release_name: str = "k9b",
+    namespace: str = "",
+) -> list[str]:
+    """Get expected deployment names from rendered manifest inventory.
+
+    This function is the primary source for determining which deployments
+    should be monitored. It parses the rendered-manifest.yaml captured
+    during the preflight/render phase.
+
+    Args:
+        artifact_dir: Directory containing rendered manifest artifacts
+        release_name: Helm release name (used for label selector fallback)
+        namespace: Kubernetes namespace (used for filtering)
+
+    Returns:
+        List of expected deployment names sorted alphabetically.
+        Empty list if no rendered manifest is available.
+    """
+    rendered_path = artifact_dir / "helm" / "rendered-manifest.yaml"
+
+    if not rendered_path.exists():
+        log(f"No rendered manifest at {rendered_path}, cannot derive expected deployments")
+        return []
+
+    try:
+        inventory = parse_workload_inventory_from_file(
+            rendered_path,
+            expected_name=release_name,
+            expected_namespace=namespace,
+        )
+
+        all_workloads = inventory.get("rendered", {}).get("all_workloads", [])
+
+        # Extract deployment names, sorted for determinism
+        deployment_names = sorted([
+            w["metadata"]["name"]
+            for w in all_workloads
+            if w.get("kind") == "Deployment" and w.get("metadata", {}).get("name")
+        ])
+
+        if deployment_names:
+            log(f"Derived expected deployments from rendered manifest: {deployment_names}")
+        else:
+            log("Rendered manifest has no Deployment resources")
+
+        return deployment_names
+
+    except Exception as e:
+        log(f"Failed to parse rendered manifest for expected deployments: {e}")
+        return []

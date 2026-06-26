@@ -7,6 +7,7 @@ coordinates all rollout checks and returns a RolloutResult.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from .k9b_cnpg_live_lab_constants import (
@@ -62,16 +63,30 @@ def classify_rollout_state(
     """
     diagnostics: dict[str, Any] = {}
 
-    # Check for transient VolumeBinding conflict first (highest priority - nonfatal)
+    # Check for transient VolumeBinding conflict first (nonfatal - diagnostic only)
+    # This is recorded as evidence but does NOT short-circuit other checks
     is_transient, transient_msg, transient_pod = _detect_transient_volume_binding_conflict(events_json)
     if is_transient:
         diagnostics["transient_volume_binding_conflict"] = True
         diagnostics["transient_volume_binding_message"] = transient_msg
         diagnostics["transient_volume_binding_pod"] = transient_pod
-        return RolloutResult(fatal=False, failure_class="", diagnostics=diagnostics)
+        # DO NOT return early - continue to check for actual failures
 
     # Priority order for fatal failures
-    # 1. Image pull backoff
+    # 1. Check for missing deployments first - this catches the case where rendered
+    #    chart has multiple workloads but cluster has zero deployments
+    deployments_data = json.loads(deployments_json) if deployments_json else {}
+    deployment_items = deployments_data.get("items", []) if isinstance(deployments_data, dict) else []
+    if not deployment_items:
+        # No deployments found in cluster - this is a fatal condition
+        diagnostics["expected_deployment_missing"] = True
+        return RolloutResult(
+            fatal=True,
+            failure_class="expected_deployment_missing",
+            diagnostics=diagnostics,
+        )
+
+    # 2. Image pull backoff
     image_pull_affected = _check_image_pull_backoff_from_pods(pods_json)
     if image_pull_affected:
         affected_pods = [item["pod"] for item in image_pull_affected]
