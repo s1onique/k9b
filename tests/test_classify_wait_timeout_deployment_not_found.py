@@ -119,22 +119,29 @@ class TestDeploymentNotFoundClassification(unittest.TestCase):
     def test_source_code_has_deployment_not_found_check(self) -> None:
         """Verify source code contains the deployment_not_found classification check.
 
-        This is a source-code verification test rather than a full integration test,
-        as mocking subprocess.run and Path correctly is complex. The parser unit tests
-        verify the logic works correctly, and this test verifies the code is wired up.
+        The classify-wait-timeout functionality is delegated to k9b_cnpg_live_lab_wait_timeout.py
+        which imports and uses _parse_deployment_not_found from bootstrap_funcs.py.
+        This test verifies the wiring is correct.
         """
+        # CLI delegates to wait_timeout module
         cli_source = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_cli.py"
-        content = cli_source.read_text()
+        cli_content = cli_source.read_text()
 
-        # Verify the check is present
-        self.assertIn("_parse_deployment_not_found(deployments_json)", content)
-        self.assertIn("FAILURE_EXPECTED_WORKLOAD_MISSING", content)
-        # The string value is used via the constant assignment
-        self.assertIn("failure_class = FAILURE_EXPECTED_WORKLOAD_MISSING", content)
+        # Verify CLI delegates to wait_timeout
+        self.assertIn("_classify_wait_timeout_main", cli_content,
+            "CLI should delegate to wait_timeout module")
+
+        # Verify wait_timeout module uses the parser
+        wait_timeout_source = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_wait_timeout.py"
+        wt_content = wait_timeout_source.read_text()
+
+        self.assertIn("_parse_deployment_not_found", wt_content)
+        self.assertIn("FAILURE_EXPECTED_WORKLOAD_MISSING", wt_content)
+        self.assertIn("failure_class = FAILURE_EXPECTED_WORKLOAD_MISSING", wt_content)
 
         # Verify it's the first check (before crash_loop, image_pull, etc.)
-        deploy_not_found_pos = content.find("_parse_deployment_not_found(deployments_json)")
-        crash_loop_pos = content.find("_parse_crash_loop_from_pods(pods_json)")
+        deploy_not_found_pos = wt_content.find("_parse_deployment_not_found(deployments_json)")
+        crash_loop_pos = wt_content.find("_parse_crash_loop_from_pods(pods_json)")
         self.assertLess(deploy_not_found_pos, crash_loop_pos,
             "deployment_not_found check should come before crash_loop check")
 
@@ -144,11 +151,13 @@ class TestClassifyWaitTimeoutWithKubeconfig(unittest.TestCase):
 
     def test_uses_parse_deployment_not_found(self) -> None:
         """classify-wait-timeout must use _parse_deployment_not_found parser."""
-        # Verify the parser is imported and used in the function
-        cli_source = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_cli.py"
-        content = cli_source.read_text()
-        self.assertIn("_parse_deployment_not_found", content, "Should import _parse_deployment_not_found")
-        self.assertIn("FAILURE_EXPECTED_WORKLOAD_MISSING", content, "Should use FAILURE_EXPECTED_WORKLOAD_MISSING")
+        # Verify the parser is used in wait_timeout module (CLI delegates to it)
+        wait_timeout_source = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_wait_timeout.py"
+        content = wait_timeout_source.read_text()
+        self.assertIn("_parse_deployment_not_found", content,
+            "Should use _parse_deployment_not_found")
+        self.assertIn("FAILURE_EXPECTED_WORKLOAD_MISSING", content,
+            "Should use FAILURE_EXPECTED_WORKLOAD_MISSING")
 
 
 if __name__ == "__main__":

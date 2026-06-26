@@ -74,14 +74,28 @@ def classify_rollout_state(
     # 1. Image pull backoff
     image_pull_affected = _check_image_pull_backoff_from_pods(pods_json)
     if image_pull_affected:
+        affected_pods = [item["pod"] for item in image_pull_affected]
         diagnostics["image_pull_backoff"] = image_pull_affected
-        return RolloutResult(fatal=True, failure_class=FAILURE_IMAGE_PULL_BACKOFF, diagnostics=diagnostics)
+        return RolloutResult(
+            fatal=True,
+            failure_class=FAILURE_IMAGE_PULL_BACKOFF,
+            diagnostics=diagnostics,
+            affected_pods=affected_pods,
+        )
 
     # 2. Crash loop
     crash_loop_affected = _check_crash_loop_from_pods(pods_json)
     if crash_loop_affected:
+        affected_pods = [item["pod"] for item in crash_loop_affected]
+        pod_phase = crash_loop_affected[0].get("phase", "CrashLoopBackOff") if crash_loop_affected else ""
         diagnostics["crash_loop"] = crash_loop_affected
-        return RolloutResult(fatal=True, failure_class=FAILURE_CRASH_LOOP, diagnostics=diagnostics)
+        return RolloutResult(
+            fatal=True,
+            failure_class=FAILURE_CRASH_LOOP,
+            diagnostics=diagnostics,
+            affected_pods=affected_pods,
+            pod_phase=pod_phase,
+        )
 
     # 3. Failed scheduling from events
     sched_fatal, sched_reason, sched_msg = _check_failed_scheduling_from_events(events_json)
@@ -103,11 +117,17 @@ def classify_rollout_state(
         diagnostics["readiness_probe_message"] = probe_msg
         return RolloutResult(fatal=True, failure_class=FAILURE_READINESS_PROBE_FAILED, diagnostics=diagnostics)
 
-    # 6. Readiness probe failed from pods (fallback)
+    # 6. Readiness probe failed from pods (fallback) - includes ContainersNotReady waiting reason
     probe_affected = _check_readiness_probe_failed_from_pods(pods_json)
     if probe_affected:
+        affected_pods = [item["pod"] for item in probe_affected]
         diagnostics["readiness_probe"] = probe_affected
-        return RolloutResult(fatal=True, failure_class=FAILURE_READINESS_PROBE_FAILED, diagnostics=diagnostics)
+        return RolloutResult(
+            fatal=True,
+            failure_class=FAILURE_READINESS_PROBE_FAILED,
+            diagnostics=diagnostics,
+            affected_pods=affected_pods,
+        )
 
     # 7. PVC pending
     pvc_affected = _check_pvc_pending_from_json(pvc_json)

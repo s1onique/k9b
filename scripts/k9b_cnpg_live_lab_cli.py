@@ -29,6 +29,10 @@ from scripts.k9b_cnpg_live_lab_bootstrap_funcs import (
 )
 from scripts.k9b_cnpg_live_lab_config import DiagnosisGenerator, PreflightData
 from scripts.k9b_cnpg_live_lab_constants import FAILURE_HELM_MANIFEST_SCHEMA_WARNING
+from scripts.k9b_cnpg_live_lab_helm_evidence import (
+    collect_helm_evidence,
+    collect_rendered_manifest_evidence,
+)
 from scripts.k9b_cnpg_live_lab_helpers import (
     error,
     log,
@@ -324,3 +328,113 @@ def main_monitor_rollout() -> int:
     print(json.dumps(result, indent=2))
 
     return 0 if success else 1
+
+
+def main_collect_rendered_manifest_evidence() -> int:
+    """CLI entry point for collecting rendered manifest evidence.
+
+    Replaces inline python -c blocks in workflows with proper CLI subcommand.
+    """
+    parser = argparse.ArgumentParser(description="Collect rendered manifest evidence")
+    parser.add_argument("--chart-path", required=True, help="Path to Helm chart directory")
+    parser.add_argument("--values-path", default="", help="Path to values file")
+    parser.add_argument(
+        "--artifact-dir",
+        default=os.environ.get("ARTIFACT_DIR", "./lab-artifacts/live"),
+        help="Artifact directory",
+    )
+    parser.add_argument("--namespace", default="", help="Kubernetes namespace")
+    parser.add_argument("--release-name", default="k9b", help="Release name")
+    args = parser.parse_args(sys.argv[2:])
+
+    artifact_dir = Path(args.artifact_dir)
+
+    result = collect_rendered_manifest_evidence(
+        chart_path=args.chart_path,
+        values_path=args.values_path or None,
+        artifact_dir=artifact_dir,
+        namespace=args.namespace,
+        release_name=args.release_name,
+    )
+
+    print(f"Rendered manifest evidence collected: {result.get('rendered_manifest_path', 'N/A')}")
+    if result.get("errors"):
+        print("Errors:")
+        for error_msg in result["errors"]:
+            print(f"  - {error_msg}")
+
+    return 0
+
+
+def main_collect_helm_evidence() -> int:
+    """CLI entry point for collecting Helm evidence.
+
+    Replaces inline python -c blocks in workflows with proper CLI subcommand.
+    """
+    import json
+
+    parser = argparse.ArgumentParser(description="Collect Helm evidence")
+    parser.add_argument("--kubeconfig", required=True, help="Path to kubeconfig file")
+    parser.add_argument("--namespace", required=True, help="Kubernetes namespace")
+    parser.add_argument("--release-name", default="k9b", help="Release name")
+    parser.add_argument(
+        "--artifact-dir",
+        default=os.environ.get("ARTIFACT_DIR", "./lab-artifacts/live"),
+        help="Artifact directory",
+    )
+    parser.add_argument(
+        "--helm-returncode",
+        type=int,
+        help="Helm install/upgrade exit code",
+    )
+    parser.add_argument(
+        "--helm-stdout",
+        default="",
+        help="Helm install/upgrade stdout (or use --helm-stdout-file)",
+    )
+    parser.add_argument(
+        "--helm-stderr",
+        default="",
+        help="Helm install/upgrade stderr (or use --helm-stderr-file)",
+    )
+    parser.add_argument(
+        "--helm-stdout-file",
+        default="",
+        help="Path to file containing Helm stdout",
+    )
+    parser.add_argument(
+        "--helm-stderr-file",
+        default="",
+        help="Path to file containing Helm stderr",
+    )
+    args = parser.parse_args(sys.argv[2:])
+
+    artifact_dir = Path(args.artifact_dir)
+
+    # Read stdout from file or argument
+    helm_stdout = args.helm_stdout
+    if args.helm_stdout_file:
+        stdout_path = Path(args.helm_stdout_file)
+        if stdout_path.exists():
+            helm_stdout = stdout_path.read_text()
+
+    # Read stderr from file or argument
+    helm_stderr = args.helm_stderr
+    if args.helm_stderr_file:
+        stderr_path = Path(args.helm_stderr_file)
+        if stderr_path.exists():
+            helm_stderr = stderr_path.read_text()
+
+    result = collect_helm_evidence(
+        kubeconfig=args.kubeconfig,
+        namespace=args.namespace,
+        release_name=args.release_name,
+        artifact_dir=artifact_dir,
+        helm_install_returncode=args.helm_returncode,
+        helm_install_stdout=helm_stdout,
+        helm_install_stderr=helm_stderr,
+    )
+
+    print(json.dumps(result, indent=2))
+
+    return 0 if not result.get("errors") else 1

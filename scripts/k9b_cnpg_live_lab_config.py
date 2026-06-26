@@ -53,6 +53,7 @@ class PreflightData:
 
     def save(self) -> None:
         """Save preflight data to JSON file."""
+        self.artifact_dir.mkdir(parents=True, exist_ok=True)
         path = self.artifact_dir / "lab-preflight.json"
         write_json_atomically(path, self.to_dict())
 
@@ -95,5 +96,6 @@ class DiagnosisGenerator:
 
     def save(self) -> None:
         """Save diagnosis to markdown file."""
+        self.artifact_dir.mkdir(parents=True, exist_ok=True)
         path = self.artifact_dir / "lab-diagnosis.md"
         path.write_text("".join(self.lines))

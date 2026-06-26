@@ -189,6 +189,65 @@ class TestReadinessProbeFailed:
         assert result.failure_class == FAILURE_READINESS_PROBE_FAILED
         assert "unready-pod" in result.affected_pods
 
+    def test_detects_ready_condition_false(self) -> None:
+        """Should detect Ready=False in Pod status conditions (canonical K8s check)."""
+        pods_json = json.dumps({
+            "items": [{
+                "metadata": {"name": "condition-unready-pod"},
+                "status": {
+                    "phase": "Running",
+                    "conditions": [{
+                        "type": "Ready",
+                        "status": "False",
+                        "reason": "ContainersNotReady",
+                        "message": "containers not ready"
+                    }]
+                }
+            }]
+        })
+        result = classify_rollout_state(pods_json, "{}", "{}", "")
+        assert result.fatal is True
+        assert result.failure_class == FAILURE_READINESS_PROBE_FAILED
+
+    def test_detects_containers_ready_condition_false(self) -> None:
+        """Should detect ContainersReady=False in Pod status conditions."""
+        pods_json = json.dumps({
+            "items": [{
+                "metadata": {"name": "containers-not-ready-pod"},
+                "status": {
+                    "phase": "Running",
+                    "conditions": [{
+                        "type": "ContainersReady",
+                        "status": "False",
+                        "reason": "ContainersNotReady",
+                        "message": "containers not ready ( readiness probe failed )"
+                    }]
+                }
+            }]
+        })
+        result = classify_rollout_state(pods_json, "{}", "{}", "")
+        assert result.fatal is True
+        assert result.failure_class == FAILURE_READINESS_PROBE_FAILED
+
+    def test_no_false_positive_for_ready_condition_true(self) -> None:
+        """Should NOT detect readiness failure when Ready=True."""
+        pods_json = json.dumps({
+            "items": [{
+                "metadata": {"name": "ready-pod"},
+                "status": {
+                    "phase": "Running",
+                    "conditions": [{
+                        "type": "Ready",
+                        "status": "True",
+                        "reason": "KubeletReady",
+                        "message": "kubelet is ready"
+                    }]
+                }
+            }]
+        })
+        result = classify_rollout_state(pods_json, "{}", "{}", "")
+        assert result.fatal is False
+
 
 class TestPriorityOrder:
     """Tests that failure classes are checked in correct priority order."""

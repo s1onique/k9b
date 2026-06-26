@@ -67,6 +67,7 @@ def _check_crash_loop_from_pods(pods_json: str) -> list[dict[str, Any]]:
 
     for pod in items:
         pod_name = pod.get("metadata", {}).get("name", "")
+        phase = pod.get("status", {}).get("phase", "")
         container_statuses = pod.get("status", {}).get("containerStatuses", [])
         for cs in container_statuses:
             state = cs.get("state", {})
@@ -79,6 +80,7 @@ def _check_crash_loop_from_pods(pods_json: str) -> list[dict[str, Any]]:
                     "reason": reason,
                     "restart_count": cs.get("restartCount", 0),
                     "message": waiting.get("message", ""),
+                    "phase": phase,
                 })
 
         init_container_statuses = pod.get("status", {}).get("initContainerStatuses", [])
@@ -93,6 +95,7 @@ def _check_crash_loop_from_pods(pods_json: str) -> list[dict[str, Any]]:
                     "reason": reason,
                     "restart_count": cs.get("restartCount", 0),
                     "message": waiting.get("message", ""),
+                    "phase": phase,
                 })
 
     return affected
@@ -128,7 +131,13 @@ def _check_failed_scheduling_from_pods(pods_json: str) -> list[dict[str, Any]]:
 
 
 def _check_readiness_probe_failed_from_pods(pods_json: str) -> list[dict[str, Any]]:
-    """Check if readiness probes have failed (from JSON)."""
+    """Check if readiness probes have failed (from JSON).
+
+    Detects:
+    - Pod status conditions Ready/ContainersReady with status=False
+    - ContainersNotReady waiting reason (container not ready)
+    - Containers with terminated state indicating readiness probe failures
+    """
     try:
         data = json.loads(pods_json)
         if not isinstance(data, dict):
@@ -141,13 +150,40 @@ def _check_readiness_probe_failed_from_pods(pods_json: str) -> list[dict[str, An
 
     for pod in items:
         pod_name = pod.get("metadata", {}).get("name", "")
+
+        # Check Pod status conditions (canonical Kubernetes readiness check)
+        conditions = pod.get("status", {}).get("conditions", [])
+        for cond in conditions:
+            cond_type = cond.get("type", "")
+            cond_status = cond.get("status", "")
+            if cond_type in ("Ready", "ContainersReady") and cond_status == "False":
+                affected.append({
+                    "pod": pod_name,
+                    "condition_type": cond_type,
+                    "reason": cond.get("reason", "ContainersNotReady"),
+                    "message": cond.get("message", ""),
+                })
+
         container_statuses = pod.get("status", {}).get("containerStatuses", [])
         for cs in container_statuses:
             state = cs.get("state", {})
+            waiting = state.get("waiting", {})
             terminated = state.get("terminated", {})
             last_state = cs.get("lastState", {})
             last_terminated = last_state.get("terminated", {})
 
+            # Check for ContainersNotReady waiting reason
+            waiting_reason = waiting.get("reason", "")
+            if waiting_reason == "ContainersNotReady":
+                affected.append({
+                    "pod": pod_name,
+                    "container": cs.get("name", ""),
+                    "reason": waiting_reason,
+                    "message": waiting.get("message", ""),
+                })
+                continue
+
+            # Check for terminated containers with failed exit codes
             if terminated:
                 exit_code = terminated.get("exitCode", 0)
                 reason = terminated.get("reason", "")

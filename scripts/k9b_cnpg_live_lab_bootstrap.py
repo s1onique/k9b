@@ -55,6 +55,8 @@ from scripts.k9b_cnpg_live_lab_cli import (  # noqa: F401,F811
     main_classify_error,
     main_classify_schema,
     main_classify_wait_timeout,
+    main_collect_helm_evidence,
+    main_collect_rendered_manifest_evidence,
     main_extract_schema_evidence,
     main_monitor_rollout,
 )
@@ -98,6 +100,10 @@ from scripts.k9b_cnpg_live_lab_constants import (  # noqa: F401,F811
     # Patterns
     SCHEMA_VALIDATION_PATTERNS,
     VALID_RESOURCE_NAME_PATTERN,
+)
+from scripts.k9b_cnpg_live_lab_helm_evidence import (  # noqa: F401,F811
+    collect_helm_evidence,
+    collect_rendered_manifest_evidence,
 )
 
 # =============================================================================
@@ -170,6 +176,10 @@ if __name__ == "__main__":
             sys.exit(main_extract_schema_evidence())
         elif subcommand == "monitor-rollout":
             sys.exit(main_monitor_rollout())
+        elif subcommand == "collect-rendered-manifest-evidence":
+            sys.exit(main_collect_rendered_manifest_evidence())
+        elif subcommand == "collect-helm-evidence":
+            sys.exit(main_collect_helm_evidence())
 
     env_secret = sys.argv[1] if len(sys.argv) > 1 else "K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64"
     out_var = sys.argv[2] if len(sys.argv) > 2 else "KUBECONFIG"

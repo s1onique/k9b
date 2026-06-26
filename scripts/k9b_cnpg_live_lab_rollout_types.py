@@ -17,3 +17,5 @@ class RolloutResult:
     fatal: bool
     failure_class: str
     diagnostics: dict[str, Any] = field(default_factory=dict)
+    affected_pods: list[str] = field(default_factory=list)
+    pod_phase: str = ""
