@@ -32,9 +32,9 @@ class TestMonitorRolloutCliContract(unittest.TestCase):
             "--namespace", "test-ns",
             "--max-wait", "90",
         ]
-        # Patch sys.argv and _monitor_rollout to verify parsing
+        # Patch sys.argv and monitor_rollout to verify parsing
         with patch.object(sys, "argv", ["k9b_cnpg_live_lab_bootstrap.py"] + test_args):
-            with patch.object(cli_module, "_monitor_rollout") as mock_monitor:
+            with patch("scripts.k9b_cnpg_live_lab_monitor.monitor_rollout") as mock_monitor:
                 mock_monitor.return_value = (True, "Ready", None)
                 # Should not raise argparse error
                 try:
@@ -60,7 +60,7 @@ class TestMonitorRolloutCliContract(unittest.TestCase):
             "--deadline", "90",  # Legacy alias from workflow
         ]
         with patch.object(sys, "argv", ["k9b_cnpg_live_lab_bootstrap.py"] + test_args):
-            with patch.object(cli_module, "_monitor_rollout") as mock_monitor:
+            with patch("scripts.k9b_cnpg_live_lab_monitor.monitor_rollout") as mock_monitor:
                 mock_monitor.return_value = (True, "Ready", None)
                 # Should not raise argparse error
                 try:
@@ -81,7 +81,7 @@ class TestMonitorRolloutCliContract(unittest.TestCase):
             "--interval", "8",
         ]
         with patch.object(sys, "argv", ["k9b_cnpg_live_lab_bootstrap.py"] + test_args):
-            with patch.object(cli_module, "_monitor_rollout") as mock_monitor:
+            with patch("scripts.k9b_cnpg_live_lab_monitor.monitor_rollout") as mock_monitor:
                 mock_monitor.return_value = (True, "Ready", None)
                 try:
                     cli_module.main_monitor_rollout()
@@ -104,7 +104,7 @@ class TestMonitorRolloutCliContract(unittest.TestCase):
             "--poll-interval", "8",  # Legacy alias from workflow
         ]
         with patch.object(sys, "argv", ["k9b_cnpg_live_lab_bootstrap.py"] + test_args):
-            with patch.object(cli_module, "_monitor_rollout") as mock_monitor:
+            with patch("scripts.k9b_cnpg_live_lab_monitor.monitor_rollout") as mock_monitor:
                 mock_monitor.return_value = (True, "Ready", None)
                 try:
                     cli_module.main_monitor_rollout()
@@ -129,7 +129,7 @@ class TestMonitorRolloutCliContract(unittest.TestCase):
             "--poll-interval", "8",  # Legacy alias
         ]
         with patch.object(sys, "argv", ["k9b_cnpg_live_lab_bootstrap.py"] + test_args):
-            with patch.object(cli_module, "_monitor_rollout") as mock_monitor:
+            with patch("scripts.k9b_cnpg_live_lab_monitor.monitor_rollout") as mock_monitor:
                 mock_monitor.return_value = (True, "Ready", None)
                 try:
                     cli_module.main_monitor_rollout()
@@ -280,7 +280,7 @@ class TestWorkflowContractIntegration(unittest.TestCase):
         ]
 
         with patch.object(sys, "argv", ["k9b_cnpg_live_lab_bootstrap.py"] + monitor_args):
-            with patch.object(cli_module, "_monitor_rollout") as mock_monitor:
+            with patch("scripts.k9b_cnpg_live_lab_monitor.monitor_rollout") as mock_monitor:
                 mock_monitor.return_value = (False, "Timeout", None)  # Simulate failure
                 with patch.object(cli_module, "write_json_atomically"):
                     # Should not raise argparse error
@@ -321,7 +321,7 @@ class TestWorkflowContractIntegration(unittest.TestCase):
             "--namespace", "test-ns",
         ]
         with patch.object(sys, "argv", ["k9b_cnpg_live_lab_bootstrap.py"] + test_args):
-            with patch.object(cli_module, "_monitor_rollout") as mock_monitor:
+            with patch("scripts.k9b_cnpg_live_lab_monitor.monitor_rollout") as mock_monitor:
                 mock_monitor.return_value = (True, "Ready", None)
                 cli_module.main_monitor_rollout()
                 call_kwargs = mock_monitor.call_args

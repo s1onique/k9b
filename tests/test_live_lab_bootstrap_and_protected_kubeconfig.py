@@ -815,6 +815,178 @@ class TestPyYAMLDependencyContract(unittest.TestCase):
             "Add 'pyyaml>=6.0' to the dependencies list."
         )
 
+    def test_cli_module_import_does_not_require_pyyaml(self) -> None:
+        """CLI module must import cleanly without requiring PyYAML.
+
+        Regression test for the import chain:
+        cli -> monitor -> helm_inventory -> yaml (ModuleNotFoundError)
+
+        After the fix, importing k9b_cnpg_live_lab_cli should NOT fail
+        even when yaml module is unavailable.
+        """
+        import builtins
+        import importlib
+        import sys
+        from unittest import mock
+
+        # Remove any cached imports
+        modules_to_remove = [
+            key for key in sys.modules.keys()
+            if key.startswith("scripts.k9b_cnpg_live_lab") or key == "yaml"
+        ]
+        for mod in modules_to_remove:
+            del sys.modules[mod]
+
+        real_import = builtins.__import__
+
+        def blocked_yaml_import(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "yaml" or name.startswith("yaml."):
+                raise ModuleNotFoundError("No module named 'yaml'")
+            return real_import(name, *args, **kwargs)
+
+        # Import should succeed without PyYAML
+        with mock.patch("builtins.__import__", side_effect=blocked_yaml_import):
+            module = importlib.import_module("scripts.k9b_cnpg_live_lab_cli")
+            self.assertIsNotNone(module)
+            # Verify the main functions are accessible
+            self.assertTrue(hasattr(module, "main_monitor_rollout"))
+            self.assertTrue(hasattr(module, "main_classify_wait_timeout"))
+
+    def test_bootstrap_entrypoint_import_does_not_require_pyyaml(self) -> None:
+        """Bootstrap module must import cleanly without requiring PyYAML.
+
+        The bootstrap module is the primary entrypoint for the CNPG live-lab.
+        Its import chain is: bootstrap → cli → monitor → helm_inventory → yaml.
+
+        After the lazy import fix, importing bootstrap should succeed without
+        requiring PyYAML, and only fail when inventory parsing is invoked.
+        """
+        import builtins
+        import importlib
+        import sys
+        from unittest import mock
+
+        # Remove any cached imports
+        modules_to_remove = [
+            key for key in sys.modules.keys()
+            if key.startswith("scripts.k9b_cnpg_live_lab") or key == "yaml"
+        ]
+        for mod in modules_to_remove:
+            del sys.modules[mod]
+
+        real_import = builtins.__import__
+
+        def blocked_yaml_import(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "yaml" or name.startswith("yaml."):
+                raise ModuleNotFoundError("No module named 'yaml'")
+            return real_import(name, *args, **kwargs)
+
+        # Import should succeed without PyYAML
+        with mock.patch("builtins.__import__", side_effect=blocked_yaml_import):
+            module = importlib.import_module("scripts.k9b_cnpg_live_lab_bootstrap")
+            self.assertIsNotNone(module)
+            # Verify main bootstrap classes are accessible
+            self.assertTrue(hasattr(module, "PreflightData"))
+            self.assertTrue(hasattr(module, "DiagnosisGenerator"))
+            self.assertTrue(hasattr(module, "validate_credential_source"))
+
+    def test_monitor_module_import_does_not_require_pyyaml(self) -> None:
+        """Monitor module must import cleanly without requiring PyYAML.
+
+        The monitor module imports helm_inventory, which previously had a
+        top-level import yaml that would fail if PyYAML wasn't installed.
+
+        After the fix, the yaml import is lazy and only happens when
+        inventory parsing functions are called.
+        """
+        import builtins
+        import importlib
+        import sys
+        from unittest import mock
+
+        # Remove any cached imports
+        modules_to_remove = [
+            key for key in sys.modules.keys()
+            if key.startswith("scripts.k9b_cnpg_live_lab") or key == "yaml"
+        ]
+        for mod in modules_to_remove:
+            del sys.modules[mod]
+
+        real_import = builtins.__import__
+
+        def blocked_yaml_import(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "yaml" or name.startswith("yaml."):
+                raise ModuleNotFoundError("No module named 'yaml'")
+            return real_import(name, *args, **kwargs)
+
+        # Import should succeed without PyYAML
+        with mock.patch("builtins.__import__", side_effect=blocked_yaml_import):
+            module = importlib.import_module("scripts.k9b_cnpg_live_lab_monitor")
+            self.assertIsNotNone(module)
+            # Verify the main function is accessible
+            self.assertTrue(hasattr(module, "monitor_rollout"))
+
+    def test_inventory_parser_reports_missing_pyyaml_only_when_used(self) -> None:
+        """Inventory parser must raise RuntimeError only when actually invoked without PyYAML.
+
+        Importing the module should succeed. Only when parse_workload_inventory
+        is called should it fail with a clear RuntimeError.
+        """
+        import builtins
+        import importlib
+        import sys
+        from unittest import mock
+
+        # Remove any cached imports
+        modules_to_remove = [
+            key for key in sys.modules.keys()
+            if key.startswith("scripts.k9b_cnpg_live_lab") or key == "yaml"
+        ]
+        for mod in modules_to_remove:
+            del sys.modules[mod]
+
+        real_import = builtins.__import__
+
+        def blocked_yaml_import(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "yaml" or name.startswith("yaml."):
+                raise ModuleNotFoundError("No module named 'yaml'")
+            return real_import(name, *args, **kwargs)
+
+        # Import should succeed without PyYAML
+        with mock.patch("builtins.__import__", side_effect=blocked_yaml_import):
+            module = importlib.import_module("scripts.k9b_cnpg_live_lab_helm_inventory")
+            self.assertIsNotNone(module)
+
+            # But calling the parser should raise RuntimeError
+            with self.assertRaises(RuntimeError) as context:
+                module.parse_workload_inventory("apiVersion: v1\nkind: Deployment")
+
+            self.assertIn("PyYAML", str(context.exception))
+            self.assertIn("required", str(context.exception).lower())
+
+    def test_inventory_parser_works_with_pyyaml(self) -> None:
+        """Inventory parser must work correctly when PyYAML is installed."""
+        import scripts.k9b_cnpg_live_lab_helm_inventory as inventory
+
+        # Valid YAML with a Deployment
+        yaml_content = """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b
+  namespace: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k9b-svc
+"""
+        result = inventory.parse_workload_inventory(yaml_content)
+
+        self.assertTrue(result["rendered"]["deployment_k9b_present"])
+        self.assertEqual(len(result["rendered"]["matching_workloads"]), 1)
+        self.assertEqual(result["rendered"]["matching_workloads"][0]["metadata"]["name"], "k9b")
+
 
 if __name__ == "__main__":
     unittest.main()

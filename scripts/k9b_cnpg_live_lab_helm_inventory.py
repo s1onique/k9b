@@ -3,6 +3,12 @@
 
 This module parses Helm-rendered YAML manifests and builds a workload inventory
 focused on workload identity (Deployment, StatefulSet, DaemonSet, Job, CronJob, Pod, ReplicaSet).
+
+PyYAML dependency handling:
+    PyYAML is loaded lazily via _load_yaml_module() to avoid requiring it at
+    import time. This allows the bootstrap facade and CLI to be imported without
+    PyYAML installed. PyYAML is only required when inventory parsing functions
+    are actually called.
 """
 
 from __future__ import annotations
@@ -10,14 +16,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
-
-try:
-    import yaml
-except ModuleNotFoundError as exc:
-    raise RuntimeError(
-        "PyYAML is required for CNPG live-lab Helm inventory parsing. "
-        "Install the project Python dependencies with: pip install pyyaml"
-    ) from exc
 
 # Workload kinds to track
 WORKLOAD_KINDS = frozenset([
@@ -29,6 +27,27 @@ WORKLOAD_KINDS = frozenset([
     "Pod",
     "ReplicaSet",
 ])
+
+
+def _load_yaml_module() -> Any:
+    """Lazily load the PyYAML module.
+
+    This avoids requiring PyYAML at module import time, allowing the bootstrap
+    facade and CLI to be imported without PyYAML installed. PyYAML is only
+    required when inventory parsing functions are actually called.
+
+    Raises:
+        RuntimeError: If PyYAML is not installed and inventory parsing is invoked.
+    """
+    try:
+        import yaml
+
+        return yaml
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "PyYAML is required for CNPG live-lab Helm inventory parsing. "
+            "Install project Python dependencies: pip install pyyaml"
+        ) from exc
 
 
 def parse_workload_inventory(
@@ -51,7 +70,12 @@ def parse_workload_inventory(
           - matching_workloads: list of matching workload manifests
           - all_workloads: list of all workloads found
         - parse_errors: list of errors encountered
+
+    Raises:
+        RuntimeError: If PyYAML is not installed.
     """
+    yaml = _load_yaml_module()
+
     result: dict[str, Any] = {
         "expected": {
             "kind": "Deployment",
@@ -126,6 +150,9 @@ def parse_workload_inventory_from_file(
 
     Returns:
         Dictionary with workload inventory (same as parse_workload_inventory)
+
+    Raises:
+        RuntimeError: If PyYAML is not installed.
     """
     if not file_path.exists():
         return {

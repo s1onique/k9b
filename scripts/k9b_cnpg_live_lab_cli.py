@@ -19,6 +19,9 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+# Helm/live-lab subcommand dependencies are imported lazily inside handlers.
+# This keeps generic bootstrap/CLI imports independent from optional parser deps
+# such as PyYAML unless the corresponding feature is actually executed.
 from scripts.k9b_cnpg_live_lab_bootstrap_funcs import (
     bootstrap_decode_kubeconfig,
     classify_helm_error,
@@ -29,26 +32,17 @@ from scripts.k9b_cnpg_live_lab_bootstrap_funcs import (
 )
 from scripts.k9b_cnpg_live_lab_config import DiagnosisGenerator, PreflightData
 from scripts.k9b_cnpg_live_lab_constants import FAILURE_HELM_MANIFEST_SCHEMA_WARNING
-
-# NOTE: Helm evidence imports are lazy (inside subcommand handlers) to avoid
-# requiring PyYAML at module import time when Helm functionality isn't used.
-# See: scripts/k9b_cnpg_live_lab_helm_evidence.py for PyYAML dependency handling.
 from scripts.k9b_cnpg_live_lab_helpers import (
     error,
     log,
     read_json,
     write_json_atomically,
 )
-from scripts.k9b_cnpg_live_lab_monitor import monitor_rollout as _monitor_rollout
 from scripts.k9b_cnpg_live_lab_schema import (
     extract_schema_warnings,
     generate_bounded_summary,
     write_schema_warnings_json,
 )
-
-# NOTE: _classify_wait_timeout_main is imported lazily in main_classify_wait_timeout()
-# to avoid importing the full classifier stack (including PyYAML-dependent modules)
-# when running --help or other commands that don't need the wait-timeout classifier.
 
 
 def main_bootstrap(
@@ -253,6 +247,9 @@ def main_classify_wait_timeout() -> int:
 def main_monitor_rollout() -> int:
     """CLI entry point for rollout monitor."""
     import json
+
+    # Lazy import to avoid requiring PyYAML at module import time
+    from scripts.k9b_cnpg_live_lab_monitor import monitor_rollout as _monitor_rollout
 
     parser = argparse.ArgumentParser(
         description="Monitor Kubernetes rollout until success or timeout"
