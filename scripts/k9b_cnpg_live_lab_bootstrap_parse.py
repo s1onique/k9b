@@ -146,3 +146,28 @@ def _parse_pvc_pending_from_pods(pods_json_str: str, events_str: str) -> bool:
         return False
     except (json.JSONDecodeError, TypeError):
         return False
+
+
+def _parse_deployment_not_found(deployments_json_str: str) -> bool:
+    """Parse deployments JSON and detect when expected deployment is completely absent.
+
+    This detects the case where the namespace exists but the expected Deployment
+    resource was never created, indicating the Helm chart failed to deploy
+    or the resource was deleted. An empty items list means no deployments exist.
+    """
+    import json
+
+    try:
+        data = json.loads(deployments_json_str)
+        if not isinstance(data, dict):
+            return False
+
+        # Only consider this "deployment not found" if items key exists and is empty
+        # Malformed JSON like {} without "items" key should not be treated as deployment missing
+        if "items" not in data:
+            return False
+        items = data["items"]
+        return items is None or items == []
+
+    except (json.JSONDecodeError, TypeError):
+        return False

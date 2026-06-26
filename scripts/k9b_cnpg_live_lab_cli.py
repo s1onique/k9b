@@ -241,6 +241,7 @@ def main_classify_wait_timeout() -> int:
     """Classify Helm wait timeout using watchdog artifacts."""
     from scripts.k9b_cnpg_live_lab_bootstrap_funcs import (
         _parse_crash_loop_from_pods,
+        _parse_deployment_not_found,
         _parse_deployment_not_ready_from_deployments,
         _parse_image_pull_failure_from_pods,
         _parse_probe_failure_from_pods,
@@ -248,6 +249,7 @@ def main_classify_wait_timeout() -> int:
     )
     from scripts.k9b_cnpg_live_lab_constants import (
         FAILURE_DEPLOYMENT_NOT_AVAILABLE,
+        FAILURE_EXPECTED_WORKLOAD_MISSING,
         FAILURE_HELM_MANIFEST_SCHEMA_WARNING,
         FAILURE_HELM_WAIT_TIMEOUT_UNKNOWN,
         FAILURE_IMAGE_PULL_FAILED,
@@ -311,7 +313,9 @@ def main_classify_wait_timeout() -> int:
                 capture_output=True,
                 text=True,
             )
-            (artifact_dir / filename).write_text(result.stdout or "(empty)")
+            artifact_path = artifact_dir / filename
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            artifact_path.write_text(result.stdout or "(empty)", encoding="utf-8")
 
         # Parse and classify based on actual state
         pods_json = ""
@@ -333,7 +337,14 @@ def main_classify_wait_timeout() -> int:
         helm_lower = helm_output.lower()
 
         # Priority order: most specific first
-        if _parse_crash_loop_from_pods(pods_json):
+        # Check for expected workload missing first (primary failure indicator)
+        if _parse_deployment_not_found(deployments_json):
+            failure_class = FAILURE_EXPECTED_WORKLOAD_MISSING
+            diagnosis.text(f"**Classification**: `{failure_class}`")
+            diagnosis.text("**Cause**: Expected Deployment was never observed before rollout deadline.")
+            diagnosis.text("**Evidence**: watchdog/deployments-final.json (empty items list)")
+
+        elif _parse_crash_loop_from_pods(pods_json):
             failure_class = FAILURE_POD_CRASH_LOOP
             diagnosis.text(f"**Classification**: `{failure_class}`")
             diagnosis.text("**Cause**: Pod containers are in CrashLoopBackOff state.")

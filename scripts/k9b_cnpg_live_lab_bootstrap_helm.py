@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .k9b_cnpg_live_lab_bootstrap_parse import (
     _parse_crash_loop_from_pods,
+    _parse_deployment_not_found,
     _parse_deployment_not_ready_from_deployments,
     _parse_image_pull_failure_from_pods,
     _parse_probe_failure_from_pods,
@@ -22,6 +23,7 @@ from .k9b_cnpg_live_lab_config import DiagnosisGenerator, PreflightData
 from .k9b_cnpg_live_lab_constants import (
     FAILURE_CNPG_CRD_MISSING,
     FAILURE_DEPLOYMENT_NOT_AVAILABLE,
+    FAILURE_EXPECTED_WORKLOAD_MISSING,
     FAILURE_HELM_MANIFEST_SCHEMA_WARNING,
     FAILURE_HELM_MANIFEST_SERVER_DRY_RUN_FAILED,
     FAILURE_HELM_RBAC_DENIED,
@@ -123,7 +125,9 @@ def classify_wait_timeout(
                 capture_output=True,
                 text=True,
             )
-            (artifact_dir / filename).write_text(result.stdout or "(empty)")
+            artifact_path = artifact_dir / filename
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            artifact_path.write_text(result.stdout or "(empty)", encoding="utf-8")
 
         # Get JSON for proper parsing
         pods_result = subprocess.run(
@@ -148,7 +152,14 @@ def classify_wait_timeout(
         helm_lower = helm_output.lower()
 
         # Use JSON-based parsers for accurate detection
-        if _parse_crash_loop_from_pods(pods_json):
+        # Check for expected workload missing first (primary failure indicator)
+        if _parse_deployment_not_found(deployments_json):
+            failure_class = FAILURE_EXPECTED_WORKLOAD_MISSING
+            diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
+            diagnosis.text(f"{diagnosis.bold('Cause')}: Expected Deployment was never observed before rollout deadline.")
+            diagnosis.text(f"{diagnosis.bold('Evidence')}: watchdog/deployments.txt (empty items list)")
+
+        elif _parse_crash_loop_from_pods(pods_json):
             failure_class = FAILURE_POD_CRASH_LOOP
             diagnosis.text(f"{diagnosis.bold('Classification')}: {diagnosis.inline_code(failure_class)}")
             diagnosis.text(f"{diagnosis.bold('Cause')}: Pod is in CrashLoopBackOff state.")

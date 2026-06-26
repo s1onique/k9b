@@ -28,6 +28,7 @@ FAILURE_POD_CRASH_LOOP = "pod_crash_loop"
 FAILURE_PROBE_FAILED = "probe_failed"
 FAILURE_PVC_PENDING = "pvc_pending"
 FAILURE_HELM_WAIT_TIMEOUT_UNKNOWN = "helm_wait_timeout_unknown"
+FAILURE_EXPECTED_WORKLOAD_MISSING = "expected_workload_missing"
 FAILURE_HELM_UNKNOWN = "helm_unknown_error"
 
 # Rollout failure classes (proactive monitor)

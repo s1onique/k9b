@@ -25,6 +25,7 @@ from .k9b_cnpg_live_lab_bootstrap_helm import (  # noqa: F401,F811
 )
 from .k9b_cnpg_live_lab_bootstrap_parse import (  # noqa: F401,F811
     _parse_crash_loop_from_pods,
+    _parse_deployment_not_found,
     _parse_deployment_not_ready_from_deployments,
     _parse_image_pull_failure_from_pods,
     _parse_probe_failure_from_pods,
