@@ -22,10 +22,13 @@ _FORBIDDEN_CONCLUSION_PATTERNS = [
 _MUTATION_PATTERNS = [
     r"kubectl\s+apply",
     r"kubectl\s+delete",
+    r"kubectl\s+scale",
     r"helm\s+upgrade",
     r"helm\s+install",
+    r"helm\s+uninstall",
     r"kubectl\s+edit",
     r"kubectl\s+replace",
     r"kubectl\s+patch",
     r"kubectl\s+rollout",
+    r"kubectl\s+set",
 ]

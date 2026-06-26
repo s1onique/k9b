@@ -265,13 +265,12 @@ class TestServerHandlerContract(unittest.TestCase):
         """Empty body should use URL incident_id, not fail with 'incident_id is required'."""
         from io import BytesIO
         from tempfile import TemporaryDirectory
-        from pathlib import Path
 
-        from k8s_diag_agent.ui.server_incident_one_pass_diagnosis_service import (
-            handle_incident_one_pass_diagnosis_service_api,
-        )
         from k8s_diag_agent.collect.api_incident_one_pass_diagnosis_provider import (
             reset_providers,
+        )
+        from k8s_diag_agent.ui.server_incident_one_pass_diagnosis_service import (
+            handle_incident_one_pass_diagnosis_service_api,
         )
 
         try:
@@ -335,13 +334,12 @@ class TestServerHandlerContract(unittest.TestCase):
         import json
         from io import BytesIO
         from tempfile import TemporaryDirectory
-        from pathlib import Path
 
-        from k8s_diag_agent.ui.server_incident_one_pass_diagnosis_service import (
-            handle_incident_one_pass_diagnosis_service_api,
-        )
         from k8s_diag_agent.collect.api_incident_one_pass_diagnosis_provider import (
             reset_providers,
+        )
+        from k8s_diag_agent.ui.server_incident_one_pass_diagnosis_service import (
+            handle_incident_one_pass_diagnosis_service_api,
         )
 
         try:
@@ -406,8 +404,8 @@ class TestServerHandlerContract(unittest.TestCase):
         """Provider registry should be reset properly."""
         from k8s_diag_agent.collect.api_incident_one_pass_diagnosis_provider import (
             get_diagnosis_provider,
-            set_diagnosis_provider,
             reset_providers,
+            set_diagnosis_provider,
         )
 
         # Verify reset clears state

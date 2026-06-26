@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator
-from unittest.mock import patch
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from k8s_diag_agent.collect.incident_lifecycle import Incident
@@ -82,7 +82,7 @@ def _create_test_incident(
     object_kind: str = "Pod",
     object_name: str = "test-pod",
     severity: str = "medium",
-) -> "Incident":
+) -> Incident:
     """Create a valid test incident with all required fields."""
     from k8s_diag_agent.collect.incident_lifecycle import Incident, IncidentStatus
 
