@@ -337,6 +337,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {e}", file=sys.stderr)
         print("Hint: Run ./scripts/verify_all.sh --lock-status for diagnostics", file=sys.stderr)
         return 4
+    
+    # Announce lock acquisition for test observability (human mode only - JSON mode must be pure)
+    if not args.json:
+        print(f"[verify-all] acquired lock for {profile} verification")
+    
     # Set recursion guard
     set_recursion_guard()
     
