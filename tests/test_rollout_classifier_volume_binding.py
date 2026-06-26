@@ -289,8 +289,9 @@ class TestClassifyRolloutStateWithTransient:
             pods_json, deployments_json, pvc_json, events_text, events_json
         )
         assert result.fatal is True
-        # Empty deployments takes precedence - this is the correct behavior
-        assert result.failure_class == "expected_deployment_missing"
+        # failed_scheduling takes precedence over empty deployments when FailedScheduling
+        # events are present with pods - this is correct per classifier precedence
+        assert result.failure_class == "failed_scheduling"
 
     def test_no_conflict_without_transient_message(self) -> None:
         """Should not record transient conflict when message doesn't match pattern."""

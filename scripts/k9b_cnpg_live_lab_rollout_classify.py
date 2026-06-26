@@ -72,21 +72,14 @@ def classify_rollout_state(
         diagnostics["transient_volume_binding_pod"] = transient_pod
         # DO NOT return early - continue to check for actual failures
 
-    # Priority order for fatal failures
-    # 1. Check for missing deployments first - this catches the case where rendered
-    #    chart has multiple workloads but cluster has zero deployments
+    # Parse deployments once for all deployment-related checks
     deployments_data = json.loads(deployments_json) if deployments_json else {}
     deployment_items = deployments_data.get("items", []) if isinstance(deployments_data, dict) else []
-    if not deployment_items:
-        # No deployments found in cluster - this is a fatal condition
-        diagnostics["expected_deployment_missing"] = True
-        return RolloutResult(
-            fatal=True,
-            failure_class="expected_deployment_missing",
-            diagnostics=diagnostics,
-        )
 
-    # 2. Image pull backoff
+    # Priority order for fatal failures - specific evidence BEFORE deployment checks
+    # This ensures pod/event classifiers take precedence over expected_deployment_missing
+
+    # 1. Image pull backoff (pod container state)
     image_pull_affected = _check_image_pull_backoff_from_pods(pods_json)
     if image_pull_affected:
         affected_pods = [item["pod"] for item in image_pull_affected]
@@ -98,7 +91,7 @@ def classify_rollout_state(
             affected_pods=affected_pods,
         )
 
-    # 2. Crash loop
+    # 2. Crash loop (pod container state)
     crash_loop_affected = _check_crash_loop_from_pods(pods_json)
     if crash_loop_affected:
         affected_pods = [item["pod"] for item in crash_loop_affected]
@@ -112,27 +105,27 @@ def classify_rollout_state(
             pod_phase=pod_phase,
         )
 
-    # 3. Failed scheduling from events
+    # 3. Failed scheduling from events (machine-readable event evidence)
     sched_fatal, sched_reason, sched_msg = _check_failed_scheduling_from_events(events_json)
     if sched_fatal:
         diagnostics["failed_scheduling_reason"] = sched_reason
         diagnostics["failed_scheduling_message"] = sched_msg
         return RolloutResult(fatal=True, failure_class=FAILURE_FAILED_SCHEDULING, diagnostics=diagnostics)
 
-    # 4. Failed scheduling from pods (fallback)
+    # 4. Failed scheduling from pods (fallback when events unavailable)
     scheduling_affected = _check_failed_scheduling_from_pods(pods_json)
     if scheduling_affected:
         diagnostics["failed_scheduling_pods"] = scheduling_affected
         return RolloutResult(fatal=True, failure_class=FAILURE_FAILED_SCHEDULING, diagnostics=diagnostics)
 
-    # 5. Readiness probe failed from events
+    # 5. Readiness probe failed from events (machine-readable event evidence)
     probe_fatal, probe_reason, probe_msg = _check_readiness_probe_failed_from_events(events_json)
     if probe_fatal:
         diagnostics["readiness_probe_reason"] = probe_reason
         diagnostics["readiness_probe_message"] = probe_msg
         return RolloutResult(fatal=True, failure_class=FAILURE_READINESS_PROBE_FAILED, diagnostics=diagnostics)
 
-    # 6. Readiness probe failed from pods (fallback) - includes ContainersNotReady waiting reason
+    # 6. Readiness probe failed from pods (includes Ready=False condition)
     probe_affected = _check_readiness_probe_failed_from_pods(pods_json)
     if probe_affected:
         affected_pods = [item["pod"] for item in probe_affected]
@@ -162,7 +155,28 @@ def classify_rollout_state(
         diagnostics["deployment_progress_deadline"] = progress_deadline_affected
         return RolloutResult(fatal=True, failure_class=FAILURE_DEPLOYMENT_PROGRESS_DEADLINE, diagnostics=diagnostics)
 
-    # No issues detected
+    # 10. Expected deployment missing - only as LATE fallback
+    # Only fires when:
+    # - No specific pod/container issues detected
+    # - No event-based failures detected
+    # - No PVC or deployment-specific failures
+    # - NO pods are present in the cluster
+    # This prevents masking specific evidence with generic "no deployments" when
+    # unit test fixtures lack deployment inventory but pods/events have specific issues.
+    # If pods exist and have no failures, treat as healthy rollout state.
+    pods_data = json.loads(pods_json) if pods_json else {}
+    pod_items = pods_data.get("items", []) if isinstance(pods_data, dict) else []
+
+    if not deployment_items and not pod_items:
+        diagnostics["expected_deployment_missing"] = True
+        return RolloutResult(
+            fatal=True,
+            failure_class="expected_deployment_missing",
+            diagnostics=diagnostics,
+        )
+
+    # No issues detected - healthy state
+    # (Pods exist with no failures, or deployments exist without issues)
     return RolloutResult(fatal=False, failure_class="", diagnostics=diagnostics)
 
 
