@@ -237,7 +237,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  {{- toYaml $backendLabels | nindent 16 }}
+                  {{- toYaml $backendLabels | nindent 18 }}
               topologyKey: kubernetes.io/hostname
         {{- end }}
       {{- end }}

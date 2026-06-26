@@ -193,8 +193,23 @@ def check_deployment_colocation(
                 f"Zone topology does not guarantee same-node placement for RWO PVCs."
             )
         
-        label_selector = affinity_term.get("labelSelector", {})
-        match_labels = label_selector.get("matchLabels", {})
+        label_selector = affinity_term.get("labelSelector") or {}
+        
+        if not isinstance(label_selector, dict):
+            return False, (
+                f"Deployment '{name}' has podAffinity labelSelector "
+                f"that is not a dict (got {type(label_selector).__name__}). "
+                f"Only labelSelector dict is supported for backend targeting."
+            )
+        
+        match_labels = label_selector.get("matchLabels") or {}
+        
+        if not isinstance(match_labels, dict):
+            return False, (
+                f"Deployment '{name}' has podAffinity labelSelector.matchLabels "
+                f"that is not a dict (got {type(match_labels).__name__}). "
+                f"Only matchLabels dict is supported for backend targeting."
+            )
         
         if match_labels.get("app.kubernetes.io/component") != "backend":
             return False, (

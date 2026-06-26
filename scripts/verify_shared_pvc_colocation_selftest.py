@@ -58,6 +58,13 @@ TEST_CASES = [
     ("bad-zone-topology.yaml", "k9b-scheduler", False, "topology.kubernetes.io/zone"),
     ("bad-wrong-target.yaml", "k9b-scheduler", False, "app.kubernetes.io/component=backend"),
     ("bad-missing-component.yaml", "k9b-scheduler", False, "app.kubernetes.io/component=backend"),
+    # Selector edge case fixtures (should FAIL with clear diagnostics)
+    # Null values are normalized to {} which fails the backend targeting check
+    ("bad-null-label-selector.yaml", "k9b-scheduler", False, "app.kubernetes.io/component=backend"),
+    ("bad-null-match-labels.yaml", "k9b-scheduler", False, "app.kubernetes.io/component=backend"),
+    # Non-dict labelSelector and matchLabels are caught by the type check
+    ("bad-non-dict-label-selector.yaml", "k9b-scheduler", False, "not a dict"),
+    ("bad-non-dict-match-labels.yaml", "k9b-scheduler", False, "not a dict"),
     # Good fixtures (should PASS)
     ("good-required-affinity.yaml", "k9b-scheduler", True, None),
     ("good-non-shared.yaml", "k9b-frontend", True, None),
