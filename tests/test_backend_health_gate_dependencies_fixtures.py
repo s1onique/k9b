@@ -6,8 +6,6 @@ for creating mock backend diagnostics, scheduler diagnostics, and
 provider status data.
 """
 
-import pytest
-
 
 def _make_backend_diags(phase: str = "Running", containers: list = None) -> dict:
     """Create mock backend diagnostics.

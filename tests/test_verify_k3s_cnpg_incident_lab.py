@@ -8,37 +8,37 @@ This module is a thin re-export wrapper. Tests are organized into focused module
 
 # Re-export all test classes from the split modules for backward compatibility
 from tests.test_verify_k3s_cnpg_incident_lab_fixtures import (
-    VERIFIER_SCRIPT,
-    SANITIZER_SCRIPT,
-    FIXTURES_DIR,
-    PASS_FIXTURE,
     FAIL_NO_INCIDENT_FIXTURE,
     FAIL_SECRET_FIXTURE,
-)
-
-# Verifier tests
-from tests.test_verify_k3s_cnpg_incident_lab_verifier import (
-    TestVerifierScriptExists,
-    TestVerifierPassFixture,
-    TestVerifierFailNoIncident,
-    TestVerifierFailSecret,
-    TestVerifierMissingFiles,
-    TestVerifierMalformedJSON,
-    TestVerifierMissingRequiredFields,
-    TestVerifierInconsistentState,
-    TestVerifierNonExistentDirectory,
+    FIXTURES_DIR,
+    PASS_FIXTURE,
+    SANITIZER_SCRIPT,
+    VERIFIER_SCRIPT,
 )
 
 # Sanitizer tests
 from tests.test_verify_k3s_cnpg_incident_lab_sanitizer import (
-    TestSanitizerScriptExists,
-    TestSanitizerSafeK8sFields,
     TestSanitizerActualSecrets,
-    TestSanitizerFindings,
-    TestSanitizerMultiDocumentYAML,
-    TestSanitizerEndToEnd,
     TestSanitizerDeduplication,
     TestSanitizerDependencies,
+    TestSanitizerEndToEnd,
+    TestSanitizerFindings,
+    TestSanitizerMultiDocumentYAML,
+    TestSanitizerSafeK8sFields,
+    TestSanitizerScriptExists,
+)
+
+# Verifier tests
+from tests.test_verify_k3s_cnpg_incident_lab_verifier import (
+    TestVerifierFailNoIncident,
+    TestVerifierFailSecret,
+    TestVerifierInconsistentState,
+    TestVerifierMalformedJSON,
+    TestVerifierMissingFiles,
+    TestVerifierMissingRequiredFields,
+    TestVerifierNonExistentDirectory,
+    TestVerifierPassFixture,
+    TestVerifierScriptExists,
 )
 
 __all__ = [

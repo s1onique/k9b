@@ -26,10 +26,10 @@ from k9b_cnpg_image_preflight_registry import (
     sanitize_error,
 )
 from k9b_cnpg_image_preflight_types import (
+    FAIL_IMAGE_FORBIDDEN,
     FAIL_IMAGE_MISSING,
     FAIL_IMAGE_TLS,
     FAIL_IMAGE_UNAUTHORIZED,
-    FAIL_IMAGE_FORBIDDEN,
     FAIL_IMAGE_UNKNOWN,
     RegistryResult,
 )

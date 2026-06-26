@@ -6,10 +6,10 @@ import sys
 from pathlib import Path
 
 from tests.test_verify_k3s_cnpg_incident_lab_fixtures import (
-    VERIFIER_SCRIPT,
-    PASS_FIXTURE,
     FAIL_NO_INCIDENT_FIXTURE,
     FAIL_SECRET_FIXTURE,
+    PASS_FIXTURE,
+    VERIFIER_SCRIPT,
 )
 
 

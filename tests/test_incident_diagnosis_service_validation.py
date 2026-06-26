@@ -10,8 +10,6 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-
 from k8s_diag_agent.collect.incident_diagnosis_service import (
     IncidentOnePassServiceRequest,
     run_incident_one_pass_diagnosis,

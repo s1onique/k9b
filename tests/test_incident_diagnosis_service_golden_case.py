@@ -7,10 +7,12 @@ the one-pass diagnosis loop.
 
 from __future__ import annotations
 
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+from k8s_diag_agent.collect.golden_case_evidence_provider import (
+    GoldenCaseEvidenceProvider,
+)
 from k8s_diag_agent.collect.golden_case_fake_handlers import (
     create_golden_case_fake_handlers,
 )
@@ -25,10 +27,6 @@ from k8s_diag_agent.collect.incident_diagnosis_service import (
 from .test_incident_diagnosis_service_fixtures import (
     FakeArtifactWriter,
     _create_test_incident,
-    case_dir,
-    expected,
-    evidence_provider,
-    manifest,
     set_incident_store,
 )
 
@@ -38,6 +36,7 @@ def test_golden_case_pod_failure_through_service_seam(
     manifest: dict,
     expected: dict,
     evidence_provider: GoldenCaseEvidenceProvider,
+    tmp_path: Path,
 ) -> None:
     """Pod-failure golden case passes through the service/API seam."""
     from k8s_diag_agent.collect.incident_store import IncidentStore
@@ -62,7 +61,7 @@ def test_golden_case_pod_failure_through_service_seam(
 
     request = IncidentOnePassServiceRequest(
         incident_id=manifest["case_id"],
-        external_analysis_dir=Path(tempfile.mkdtemp()),
+        external_analysis_dir=tmp_path,
         diagnosis_provider=llm_provider,
         fake_handlers=fake_handlers,
         artifact_writer=fake_writer,
@@ -114,6 +113,7 @@ def test_service_uses_same_one_pass_loop(
     manifest: dict,
     expected: dict,
     evidence_provider: GoldenCaseEvidenceProvider,
+    tmp_path: Path,
 ) -> None:
     """Service uses the same run_one_read_only_diagnosis_loop_pass function."""
     from k8s_diag_agent.collect.incident_store import IncidentStore
@@ -136,7 +136,7 @@ def test_service_uses_same_one_pass_loop(
 
     request = IncidentOnePassServiceRequest(
         incident_id=manifest["case_id"],
-        external_analysis_dir=Path(tempfile.mkdtemp()),
+        external_analysis_dir=tmp_path,
         diagnosis_provider=llm_provider,
         fake_handlers=create_golden_case_fake_handlers(evidence_provider),
         now=datetime.now(UTC),

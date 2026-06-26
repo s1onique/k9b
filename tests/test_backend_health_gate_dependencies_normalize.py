@@ -11,10 +11,6 @@ import json
 
 import pytest
 
-from scripts.backend_health_gate.classification import (
-    _normalize_backend_health_details,
-)
-
 
 class TestNormalizeBackendHealthDetails:
     """Test _normalize_backend_health_details for safe artifact inclusion."""

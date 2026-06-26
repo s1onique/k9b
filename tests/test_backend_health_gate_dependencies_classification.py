@@ -11,15 +11,11 @@ Verifies:
 
 import pytest
 
-from scripts.backend_health_gate.classification import (
-    _classify_dependency_failure,
-    _collect_health_dependencies,
-)
-
+from scripts.backend_health_gate.classification import _collect_health_dependencies
 from tests.test_backend_health_gate_dependencies_fixtures import (
     _make_backend_diags,
-    _make_scheduler_diags,
     _make_provider_status,
+    _make_scheduler_diags,
 )
 
 

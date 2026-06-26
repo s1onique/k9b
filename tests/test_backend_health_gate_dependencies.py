@@ -17,19 +17,17 @@ This module re-exports all test classes from the focused test modules:
 For new tests or modifications, prefer adding to the focused modules.
 """
 
+from __future__ import annotations
+
 import json
 
 import pytest
 
-from scripts.backend_health_gate.classification import (
-    _collect_health_dependencies,
-)
-
 # Re-export test classes from focused modules
-from tests.test_backend_health_gate_dependencies_classification import (
+from tests.test_backend_health_gate_dependencies_classification import (  # noqa: F401
     TestDependencyClassification,
 )
-from tests.test_backend_health_gate_dependencies_normalize import (
+from tests.test_backend_health_gate_dependencies_normalize import (  # noqa: F401
     TestNormalizeBackendHealthDetails,
 )
 

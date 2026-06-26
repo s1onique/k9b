@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 
 from tests.test_verify_k3s_cnpg_incident_lab_fixtures import (
-    VERIFIER_SCRIPT,
     SANITIZER_SCRIPT,
+    VERIFIER_SCRIPT,
 )
 
 

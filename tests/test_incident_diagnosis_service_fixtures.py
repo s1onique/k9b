@@ -7,7 +7,6 @@ used across all incident diagnosis service test modules.
 from __future__ import annotations
 
 import json
-import tempfile
 from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,7 +22,7 @@ from k8s_diag_agent.collect.golden_case_evidence_provider import (
 )
 from k8s_diag_agent.collect.incident_store_provider import (
     reset_incident_store,
-    set_incident_store,
+    set_incident_store,  # noqa: F401 - re-exported for use by test modules
 )
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
