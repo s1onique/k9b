@@ -46,8 +46,9 @@ from scripts.k9b_cnpg_live_lab_schema import (
     write_schema_warnings_json,
 )
 
-# Import wait-timeout from dedicated module (delegation pattern)
-from scripts.k9b_cnpg_live_lab_wait_timeout import main_classify_wait_timeout as _classify_wait_timeout_main
+# NOTE: _classify_wait_timeout_main is imported lazily in main_classify_wait_timeout()
+# to avoid importing the full classifier stack (including PyYAML-dependent modules)
+# when running --help or other commands that don't need the wait-timeout classifier.
 
 
 def main_bootstrap(
@@ -243,8 +244,10 @@ def main_classify_wait_timeout() -> int:
     """Classify Helm wait timeout using watchdog artifacts.
     
     Delegates to scripts/k9b_cnpg_live_lab_wait_timeout module.
+    Uses lazy import to avoid loading PyYAML-dependent modules when not needed.
     """
-    return _classify_wait_timeout_main()
+    from scripts.k9b_cnpg_live_lab_wait_timeout import main_classify_wait_timeout as _func
+    return _func()
 
 
 def main_monitor_rollout() -> int:

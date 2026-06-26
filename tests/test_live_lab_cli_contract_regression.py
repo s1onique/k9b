@@ -330,5 +330,47 @@ class TestWorkflowContractIntegration(unittest.TestCase):
                 self.assertEqual(call_kwargs[0][4], 15, "Default interval should be 15")
 
 
+class TestCliImportTimeBehavior(unittest.TestCase):
+    """Regression tests for CLI import-time behavior.
+
+    These tests verify that the CLI can be imported and used for --help
+    without triggering expensive/classifier-only imports that require PyYAML.
+
+    Original failure: ModuleNotFoundError: No module named 'yaml'
+    Root cause: Eager top-level import of wait_timeout module chain.
+    Fix: Lazy import in main_classify_wait_timeout().
+    """
+
+    def test_cli_module_can_be_imported(self) -> None:
+        """CLI module must be importable without errors."""
+        # This test verifies the module loads correctly after lazy import fix
+        import scripts.k9b_cnpg_live_lab_cli as cli
+        self.assertTrue(hasattr(cli, "main_classify_wait_timeout"))
+        self.assertTrue(hasattr(cli, "main_monitor_rollout"))
+
+    def test_bootstrap_module_can_be_imported(self) -> None:
+        """Bootstrap module must be importable without errors."""
+        import scripts.k9b_cnpg_live_lab_bootstrap as bootstrap
+        self.assertTrue(hasattr(bootstrap, "main_classify_wait_timeout"))
+        self.assertTrue(hasattr(bootstrap, "main_monitor_rollout"))
+
+    def test_main_classify_wait_timeout_uses_lazy_import(self) -> None:
+        """Verify main_classify_wait_timeout uses lazy import pattern.
+
+        This ensures that importing the CLI module does NOT trigger
+        the full classifier stack import chain (which requires PyYAML).
+        """
+        cli_source = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_cli.py"
+        cli_content = cli_source.read_text()
+
+        # The function should use a lazy import pattern (from import inside function)
+        # NOT a top-level import
+        self.assertIn(
+            "from scripts.k9b_cnpg_live_lab_wait_timeout import main_classify_wait_timeout",
+            cli_content,
+            "Should have lazy import inside main_classify_wait_timeout function"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,7 +11,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-import yaml
+try:
+    import yaml
+except ModuleNotFoundError as exc:
+    raise RuntimeError(
+        "PyYAML is required for CNPG live-lab Helm inventory parsing. "
+        "Install the project Python dependencies with: pip install pyyaml"
+    ) from exc
 
 # Workload kinds to track
 WORKLOAD_KINDS = frozenset([
