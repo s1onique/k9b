@@ -240,8 +240,9 @@ class TestClassifyWaitTimeoutCliContract(unittest.TestCase):
                                     # Other exit codes are fine (e.g., 0 for success)
 
             # Now verify the default path is correct by checking the source
-            cli_source = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_cli.py"
-            source_content = cli_source.read_text()
+            # The HELM_LOG default is in the wait_timeout module (delegation pattern)
+            wait_timeout_source = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_wait_timeout.py"
+            source_content = wait_timeout_source.read_text()
 
             # The default should be set from environment or fallback to standard path
             self.assertIn("HELM_LOG", source_content, "Should have HELM_LOG env var support")
