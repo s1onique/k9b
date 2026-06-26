@@ -215,7 +215,6 @@ ALLOWLIST: list[tuple[str, str]] = [
 
     # [SCRIPT] Live lab scripts - comprehensive but coherent
     ("scripts/k9b_cnpg_live_lab_bootstrap.sh", "[SCRIPT] Live lab bootstrap - comprehensive credential handling"),
-    ("scripts/k9b_cnpg_live_lab_bootstrap.py", "[SCRIPT] Live lab bootstrap - comprehensive credential handling, ported from shell"),
 
     # [TEST] Live lab tests - comprehensive but coherent
     ("tests/test_live_lab_config.py", "[TEST] Live lab config tests - comprehensive coverage"),

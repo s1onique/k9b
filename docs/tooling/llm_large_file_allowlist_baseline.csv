@@ -154,6 +154,5 @@ scripts/verify_verification_discipline.py,llm_friendly_allowlist_py,[VERIFIER] V
 tests/test_act_local_verification.py,llm_friendly_allowlist_py,[TEST] ACT-local verification tests - comprehensive coverage,platform-team,planned_removal,Split by verification type
 .github/workflows/k9b-cnpg-incident-lab-live.yml,llm_friendly_allowlist_py,"[CI WORKFLOW] Live lab workflow - comprehensive deployment steps",platform-team,grandfathered,Consider splitting by deployment stage
 scripts/k9b_cnpg_live_lab_bootstrap.sh,llm_friendly_allowlist_py,[SCRIPT] Live lab bootstrap - comprehensive credential handling,platform-team,planned_removal,Migrate to Python
-scripts/k9b_cnpg_live_lab_bootstrap.py,llm_friendly_allowlist_py,"[SCRIPT] Live lab bootstrap - comprehensive credential handling, ported from shell",platform-team,planned_removal,Extract credential handling
 tests/test_live_lab_config.py,llm_friendly_allowlist_py,[TEST] Live lab config tests - comprehensive coverage,platform-team,planned_removal,Split by config type
 tests/test_live_lab_bootstrap_and_protected_kubeconfig.py,llm_friendly_allowlist_py,[TEST] Bootstrap tests - comprehensive coverage,platform-team,planned_removal,Split by bootstrap scenario
