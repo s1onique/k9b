@@ -204,7 +204,14 @@ step_run() {
         _STEP_RESULTS["$step_id"]="PASS|$duration_ms|$exit_code"
         # Only emit to console if not in JSON mode
         if [[ -z "${STEP_JSON_MODE:-}" ]]; then
-            echo "[$step_id] PASS (${duration_fmt}) - $message"
+            # Include captured output in summary line for observability
+            local output_preview
+            output_preview=$(tail -n 3 "$log_file" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            if [[ -n "$output_preview" ]]; then
+                echo "[$step_id] PASS (${duration_fmt}) - $message | $output_preview"
+            else
+                echo "[$step_id] PASS (${duration_fmt}) - $message"
+            fi
         fi
     else
         _STEP_RESULTS["$step_id"]="FAIL|$duration_ms|$exit_code"

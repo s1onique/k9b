@@ -88,6 +88,7 @@ ACT-Local: Use --act-local as the default close-check for local agent ACTs.
     )
     
     # Profile group (mutually exclusive)
+    # Support both shorthand flags (--fast, --full, --act-local) and legacy --profile form
     profile_group = parser.add_mutually_exclusive_group()
     profile_group.add_argument(
         "--fast",
@@ -109,6 +110,22 @@ ACT-Local: Use --act-local as the default close-check for local agent ACTs.
         const="act-local",
         dest="profile",
         help="Bounded verification on changed files only (local agent default)",
+    )
+    # Legacy --profile option (backward compatibility)
+    profile_group.add_argument(
+        "--profile",
+        action="store",
+        dest="profile",
+        choices=["fast", "full", "act-local"],
+        help="Legacy option for profile selection (use --fast, --full, or --act-local instead)",
+        default=None,
+    )
+    
+    # Profile listing option (for --list-profiles support)
+    parser.add_argument(
+        "--list-profiles",
+        action="store_true",
+        help="List available profiles and exit",
     )
     
     parser.add_argument(
@@ -241,6 +258,14 @@ def main(argv: list[str] | None = None) -> int:
     
     # Get repo root
     repo_root = get_repo_root()
+    
+    # Handle --list-profiles
+    if args.list_profiles:
+        print("Available profiles:")
+        print("  fast       - Fast local profile (≤60s, policy + smoke checks)")
+        print("  full       - Exhaustive merge-grade verification")
+        print("  act-local  - Bounded verification on changed files only")
+        return 0
     
     # Handle lock-only commands (don't need full setup)
     if args.lock_status:
