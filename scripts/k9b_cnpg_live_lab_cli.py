@@ -257,7 +257,11 @@ def main_classify_wait_timeout() -> int:
     )
 
     parser = argparse.ArgumentParser(description="Classify Helm wait timeout")
-    parser.add_argument("--helm-log", required=True, help="Path to Helm install log")
+    parser.add_argument(
+        "--helm-log",
+        default=os.environ.get("HELM_LOG", "./lab-artifacts/live/logs/helm-install.log"),
+        help="Path to Helm install log (default: $HELM_LOG or ./lab-artifacts/live/logs/helm-install.log)",
+    )
     parser.add_argument("--namespace", required=True, help="Namespace name")
     parser.add_argument(
         "--kubeconfig",
@@ -415,15 +419,19 @@ def main_monitor_rollout() -> int:
     )
     parser.add_argument(
         "--max-wait",
+        "--deadline",
+        dest="max_wait",
         type=int,
         default=300,
-        help="Max wait time in seconds (default: 300)",
+        help="Max wait time in seconds (default: 300). Alias: --deadline",
     )
     parser.add_argument(
         "--interval",
+        "--poll-interval",
+        dest="interval",
         type=int,
         default=15,
-        help="Polling interval in seconds (default: 15)",
+        help="Polling interval in seconds (default: 15). Alias: --poll-interval",
     )
     parser.add_argument(
         "--target-count",
