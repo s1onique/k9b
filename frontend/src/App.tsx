@@ -54,6 +54,7 @@ import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
 import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLaneProps";
 import { useManualExecutionController } from "./app/manualExecution";
 import { useApprovalFlowController } from "./app/approvalFlow";
+import { useRunDetailController } from "./app/runDetail";
 import { useAppRunSelectionHandlers } from "./app/useAppRunSelectionHandlers";
 import { useAppClusterSelectionHandlers } from "./app/useAppClusterSelectionHandlers";
 import { useBatchExecutionController } from "./app/batchExecution";
@@ -571,6 +572,20 @@ const App = ({ clock }: AppProps = {}) => {
     scrollToSection,
   });
 
+  // Elm-ish run-detail controller - owns debug diagnostics and activeTab state
+  // This prevents React #310 "Rendered more hooks than during the previous render"
+  // by ensuring all hooks are called unconditionally at the top level
+  const {
+    model: runDetailModel,
+    setActiveTab: controllerSetActiveTab,
+    isDebugDiagnosticsEnabled,
+    debugDiagnosticsError,
+    isDownloadingDiagnostics,
+    downloadDiagnostics,
+  } = useRunDetailController({
+    autoCheckDebugDiagnostics: true,
+  });
+
   // Build props for RunSummaryPanel using the extracted hook
   const {
     runSummaryLoadedProps,
@@ -599,6 +614,12 @@ const App = ({ clock }: AppProps = {}) => {
     discoveryVariantOrder,
     discoveryVariantCounts,
     discoveryClusters,
+    // Elm-ish run-detail controller values
+    debugDiagnosticsEnabled: isDebugDiagnosticsEnabled,
+    debugDiagnosticsError,
+    activeTab: runDetailModel.activeTab,
+    onTabChange: controllerSetActiveTab,
+    onDownloadDiagnostics: downloadDiagnostics,
   });
 
   const queuePanelProps = useAppQueuePanelProps({

@@ -15,8 +15,6 @@ import type { NextCheckPlanCandidate, NextCheckStatusVariant, RunPayload, RunsLi
 import { getRunsDisplayStatus, type RunsDisplayStatus } from "../hooks/useRunSelection";
 import type { LlmTelemetryPreviewData } from "./run-summary/RunOverviewDashboard";
 import { artifactUrl, formatTimestamp, relativeRecency, statusClass } from "../utils";
-import { useState, useEffect } from "react";
-import { fetchDebugDiagnosticsEnabled, downloadExecutionStateDiagnostics } from "../api";
 import {
   RunHeader,
   RunKpiStrip,
@@ -443,6 +441,17 @@ export type RunSummaryPanelProps = {
   onRetrySelectedRun?: () => void;
   /** The selected run ID for display in slow/failed states */
   selectedRunId?: string | null;
+  // Elm-ish run-detail controller props (moved from local hooks)
+  /** Whether debug diagnostics are enabled on the backend */
+  debugDiagnosticsEnabled?: boolean;
+  /** Error from debug diagnostics check/download */
+  debugDiagnosticsError?: string | null;
+  /** Current active tab in the run summary */
+  activeTab?: RunSummaryTabId;
+  /** Callback when tab changes */
+  onTabChange?: (tab: RunSummaryTabId) => void;
+  /** Callback to download diagnostics */
+  onDownloadDiagnostics?: (runId: string) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -537,56 +546,17 @@ export const RunSummaryPanel = ({
   selectedRunError,
   onRetrySelectedRun,
   selectedRunId,
+  // Elm-ish run-detail controller props
+  debugDiagnosticsEnabled = false,
+  debugDiagnosticsError = null,
+  activeTab: controlledActiveTab = "overview",
+  onTabChange: controlledOnTabChange,
+  onDownloadDiagnostics: controlledOnDownloadDiagnostics,
 }: RunSummaryPanelProps) => {
-  // Check if debug diagnostics are enabled on the backend
-  const [debugDiagnosticsEnabled, setDebugDiagnosticsEnabled] = useState(false);
-  const [debugDiagnosticsError, setDebugDiagnosticsError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDebugDiagnosticsEnabled() {
-      try {
-        const response = await fetchDebugDiagnosticsEnabled();
-        if (!cancelled) {
-          // Defensive: treat undefined/null/malformed response as disabled
-          setDebugDiagnosticsEnabled(response?.debugExecutionDiagnosticsEnabled === true);
-          setDebugDiagnosticsError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          // Silently disable if fetch fails (e.g., endpoint not available)
-          setDebugDiagnosticsEnabled(false);
-        }
-      }
-    }
-
-    void loadDebugDiagnosticsEnabled();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Handler for downloading execution state diagnostics bundle
-  const handleDownloadDiagnostics = async () => {
-    if (!selectedRunId) return;
-
-    try {
-      const blob = await downloadExecutionStateDiagnostics(selectedRunId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `k9b-execution-state-diagnostics-${selectedRunId}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      setDebugDiagnosticsError(null);
-    } catch (err) {
-      // Preserve backend error message so operators see "Debug endpoints disabled" etc.
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setDebugDiagnosticsError(errorMessage || "Failed to download diagnostics bundle");
+  // Handler for downloading execution state diagnostics bundle (passed from controller)
+  const handleDownloadDiagnostics = () => {
+    if (selectedRunId && controlledOnDownloadDiagnostics) {
+      controlledOnDownloadDiagnostics(selectedRunId);
     }
   };
 
@@ -619,17 +589,19 @@ export const RunSummaryPanel = ({
 
   const runFresh = !isStaleTimestamp(run.timestamp);
 
-  // Active tab state - managed locally within the panel
-  const [activeTab, setActiveTab] = useState<RunSummaryTabId>("overview");
+  // Active tab - prefer controlled prop, fallback to controlledActiveTab
+  const activeTab = controlledActiveTab;
 
   // Handler for "Review next checks" button
   const handleReviewNextChecks = () => {
     onFocusClusterForNextChecks();
   };
 
-  // Handler for tab changes
+  // Handler for tab changes - prefer controlled prop, fallback to local handler
   const handleTabChange = (tab: RunSummaryTabId) => {
-    setActiveTab(tab);
+    if (controlledOnTabChange) {
+      controlledOnTabChange(tab);
+    }
   };
 
   return (

@@ -49,6 +49,12 @@ export interface UseAppRunSummaryPropsArgs {
   discoveryVariantOrder: NextCheckStatusVariant[];
   discoveryVariantCounts: Record<NextCheckStatusVariant, number>;
   discoveryClusters: string[];
+  // Elm-ish run-detail controller values
+  debugDiagnosticsEnabled?: boolean;
+  debugDiagnosticsError?: string | null;
+  activeTab?: import("../components/run-summary").RunSummaryTabId;
+  onTabChange?: (tab: import("../components/run-summary").RunSummaryTabId) => void;
+  onDownloadDiagnostics?: (runId: string) => void;
 }
 
 // Return type using ComponentProps pattern
@@ -93,6 +99,12 @@ export function useAppRunSummaryProps({
   discoveryVariantOrder,
   discoveryVariantCounts,
   discoveryClusters,
+  // Elm-ish run-detail controller values
+  debugDiagnosticsEnabled,
+  debugDiagnosticsError,
+  activeTab,
+  onTabChange,
+  onDownloadDiagnostics,
 }: UseAppRunSummaryPropsArgs): UseAppRunSummaryPropsResult {
   // Derive RunSummaryPanel-specific stats from extracted builder
   const { runStatsSummary, runSummaryStats, hasDegradedClusters } = buildRunSummaryProps({
@@ -152,6 +164,12 @@ export function useAppRunSummaryProps({
     selectedRunError,
     onRetrySelectedRun,
     selectedRunId,
+    // Elm-ish run-detail controller props
+    debugDiagnosticsEnabled,
+    debugDiagnosticsError,
+    activeTab,
+    onTabChange,
+    onDownloadDiagnostics,
   };
 
   const runSummaryUnavailableProps: RunSummaryPanelProps = {
