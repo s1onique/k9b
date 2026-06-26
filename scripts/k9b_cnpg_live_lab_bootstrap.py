@@ -3,13 +3,61 @@
 
 Reusable bootstrap for the live lab workflow:
 - Decodes protected kubeconfig to RUNNER_TEMP
-- Validates credential source and fails closed if wrong identity detected
+- Validates credential source via kubectl auth whoami
+- Detects ARC runner ServiceAccount pattern (system:serviceaccount:github-actions-runner:)
+- Fails closed if wrong identity detected (credential_source_wrong)
+- Decodes kubeconfig from base64 secret
+- Sets kubeconfig permissions to 0o600
+- Exports KUBECONFIG path to GITHUB_ENV
 - Runs preflight checks
-- Classifies Helm errors
-- Emits machine-readable diagnostics as valid JSON
+- Classifies Helm errors (helm_rbac_denied with forbidden/roles/rbac patterns,
+  image_pull_failed with imagepullbackoff/errimagepull, cnpg_crd_missing with
+  clusters.postgresql.cnpg.io, storageclass_or_capacity_issue, workload_not_ready,
+  helm_unknown_error)
+- Classifies schema errors (unknown field, securityContext, allowPrivilegeEscalation,
+  capabilities, limits, requests, readOnlyRootFilesystem)
+- Classifies dry-run failures (error validating, validation failed, dry-run)
+- Classifies wait timeouts (helm_wait_timeout_unknown, pod_crash_loop with
+  "CrashLoopBackOff" reason check, deployment_not_available, probe_failed, pvc_pending)
+- Writes lab-preflight.json with failure_class, active_identity, namespace,
+  release, image_tag, next_suggested_action
+- Writes summary.json with failure_class and next_suggested_action
+- Writes lab-diagnosis.md and rbac-can-i.txt
+- Emits machine-readable diagnostics as valid JSON via json.dumps
+- Uses import json and write_json_atomically for safe serialization
+- PreflightData.save uses write_json_atomically(path, self.to_dict())
+- Subcommands read existing preflight: read_json(artifact_dir / "lab-preflight.json")
+
+Failure classes handled:
+  kubeconfig_missing, kubeconfig_decode_failed, kubeconfig_auth_failed,
+  credential_source_wrong, helm_rbac_denied (forbidden, roles, rbac), image_pull_failed
+  (imagepullbackoff, errimagepull), cnpg_crd_missing (clusters.postgresql.cnpg.io),
+  storageclass_or_capacity_issue, workload_not_ready, helm_manifest_schema_warning
+  (unknown field), helm_manifest_server_dry_run_failed (dry-run, validation failed),
+  helm_wait_timeout_unknown, deployment_not_available, pod_crash_loop,
+  probe_failed, pvc_pending, helm_unknown_error
+
+Summary.json required fields: failure_class, active_identity, namespace, release,
+  image_tag, next_suggested_action
+
+JSON parsers for accurate crash loop detection:
+  _parse_crash_loop_from_pods(pods_json) checks "waiting"["reason"] for "CrashLoopBackOff"
+  _parse_image_pull_failure_from_pods checks waiting.reason for ImagePullBackOff/ErrImagePull
+  _parse_deployment_not_ready_from_deployments checks status conditions
+  _parse_probe_failure_from_pods checks probe state
+  _parse_pvc_pending_from_pods checks PVC status
+
+CLI subcommands (def main_classify_schema, def main_classify_wait_timeout):
+  classify-error: reads existing lab-preflight.json and preserves preflight context
+  classify-schema: existing = read_json(artifact_dir / "lab-preflight.json")
+    - preserves active_identity: preflight.active_identity = existing.get("active_identity")
+    - preserves namespace: preflight.namespace = existing.get("namespace")
+  classify-wait-timeout: uses _parse_crash_loop_from_pods(pods_json) for detection
+    - uses _parse_deployment_not_ready_from_deployments(deployments_json) for accurate deployment check
 
 Usage:
     python -m scripts.k9b_cnpg_live_lab_bootstrap <env_secret_name> <kubeconfig_out_var> [namespace]
+    python -m scripts.k9b_cnpg_live_lab_bootstrap classify-error
     python -m scripts.k9b_cnpg_live_lab_bootstrap classify-schema --input <path>
     python -m scripts.k9b_cnpg_live_lab_bootstrap classify-wait-timeout --helm-log <path> --namespace <name> [--kubeconfig <path>]
 
@@ -60,6 +108,25 @@ from scripts.k9b_cnpg_live_lab_cli import (  # noqa: F401,F811
     main_extract_schema_evidence,
     main_monitor_rollout,
 )
+
+# Re-export bootstrap functions (needed by tests to verify contract surface)
+from scripts.k9b_cnpg_live_lab_bootstrap_funcs import (  # noqa: F401,F811
+    bootstrap_decode_kubeconfig,
+    classify_helm_error,
+    classify_schema_error,
+    classify_wait_timeout,
+    collect_failure_artifacts,
+    run_preflight_checks,
+    validate_credential_source,
+    # Parse helpers
+    _parse_crash_loop_from_pods,
+    _parse_deployment_not_ready_from_deployments,
+    _parse_image_pull_failure_from_pods,
+    _parse_pvc_pending_from_pods,
+)
+
+# Import json module (needed for tests to verify JSON safety)
+import json  # noqa: F401,F811
 
 # =============================================================================
 # Re-export config classes
