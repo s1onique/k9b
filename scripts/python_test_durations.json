@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "description": "Bootstrap duration manifest for Python unit tests. Unknown tests use weight=1.0.",
+  "note": "This is a bootstrap/placeholder. In production, durations are generated from CI runs.",
+  "durations": []
+}

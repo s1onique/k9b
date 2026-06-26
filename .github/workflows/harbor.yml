@@ -86,7 +86,7 @@ jobs:
           .venv/bin/python scripts/verify_production_readiness_disclaimer.py
           .venv/bin/python scripts/verify_docs_claim_candidate_dispositions.py
 
-  # Python unit-test shards in parallel matrix
+  # Python unit-test shards in parallel matrix (4-way duration-weighted)
   python-unit-tests:
     needs: lint-policy
     name: Python unit tests shard ${{ matrix.shard_index }}/${{ matrix.shard_total }}
@@ -97,8 +97,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard_index: [0, 1]
-        shard_total: [2]
+        shard_index: [0, 1, 2, 3]
+        shard_total: [4]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -120,6 +120,7 @@ jobs:
       - name: Run Python unit test shard
         run: |
           echo "Running Python unit tests shard ${{ matrix.shard_index }}/${{ matrix.shard_total }}"
+          echo "Using duration-weighted sharding for optimal balance"
           scripts/run_unit_tests.sh --shard "${{ matrix.shard_index }}" "${{ matrix.shard_total }}"
 
       - name: Upload test timing artifacts
@@ -132,12 +133,12 @@ jobs:
           retention-days: 7
           compression-level: 9
 
-  # Verify shard union completeness
+  # Verify shard union completeness (4-way)
   python-unit-shard-union:
     needs: python-unit-tests
     name: Verify shard union completeness
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -160,8 +161,13 @@ jobs:
 
       - name: Verify shard completeness
         run: |
-          echo "Verifying 2-way shard partition completeness"
-          scripts/run_unit_tests.sh --verify-shards 2
+          echo "Verifying 4-way shard partition completeness"
+          scripts/run_unit_tests.sh --verify-shards 4
+
+      - name: Verify test exclusion policy
+        run: |
+          echo "Verifying test exclusion policy is enforced"
+          .venv/bin/python scripts/verify_test_exclusions.py
 
   # Frontend verification - runs independently (no needs: lint-policy)
   frontend-tests:
