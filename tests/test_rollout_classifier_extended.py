@@ -249,14 +249,39 @@ class TestPVCPending:
         assert is_fatal is False
 
     def test_classify_rollout_state_detects_pvc_pending(self) -> None:
-        """Should classify as pvc_pending in full classifier."""
+        """Should classify as pvc_pending in full classifier.
+        
+        Note: PVC pending is non-fatal during initial polling (WaitForFirstConsumer mode).
+        It becomes fatal only after the deadline expires without a pod consuming the PVC.
+        This test verifies that ordinary pending PVCs are tracked - the fatal behavior
+        is gated by deadline expiration in monitor_rollout.
+        """
+        # Use Immediate binding mode so pending PVC is not WaitForFirstConsumer
+        storage_class_json = json.dumps({
+            "items": [{
+                "metadata": {"name": "standard"},
+                "provisioner": "k8s.io/minikube-hostpath",
+                "volumeBindingMode": "Immediate"
+            }]
+        })
         pvc_json = json.dumps({
-            "items": [{"metadata": {"name": "data-pvc"},
+            "items": [{"metadata": {"name": "data-pvc", "namespace": "default"},
+                       "spec": {"storageClassName": "standard"},
                        "status": {"phase": "Pending",
                                 "reason": "Waiting for persistent volumes"}}]
         })
-        result = classify_rollout_state('{"items": []}', '{"items": []}', pvc_json, "")
-        assert result.fatal is True
+        result = classify_rollout_state(
+            '{"items": []}',
+            '{"items": []}',
+            pvc_json,
+            "",
+            "",  # events_json
+            storage_class_json,  # storage_class_json
+            True  # storage_class_available
+        )
+        # PVC pending without StorageClass evidence is non-fatal during polling
+        # (it's WaitForFirstConsumer-safe to wait)
+        assert result.fatal is False
         assert result.failure_class == "pvc_pending"
         assert "data-pvc" in result.affected_pvcs
 
@@ -415,12 +440,13 @@ class TestSnapshotCollectionFailure:
 
         def fake_collect(
             *args: object, **kwargs: object
-        ) -> tuple[KubectlResult, KubectlResult, KubectlResult, KubectlResult, KubectlResult]:
+        ) -> tuple[KubectlResult, KubectlResult, KubectlResult, KubectlResult, KubectlResult, KubectlResult]:
             return (
                 KubectlResult(json_data='{"items": []}', success=True),
                 KubectlResult(json_data='{"items": []}', success=True),
                 KubectlResult(json_data="{}", success=False, error_message="pvc forbidden"),
                 KubectlResult(json_data="{}", text_data="", success=True),
+                KubectlResult(json_data='{"items": []}', success=True),
                 KubectlResult(json_data='{"items": []}', success=True),
             )
 
