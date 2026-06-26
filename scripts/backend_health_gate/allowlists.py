@@ -18,6 +18,8 @@ ALLOWED_PROVIDER_PHASES = frozenset({
     "success",
     "tcp_only",
     "tcp_connected",
+    # OpenAI-compatible /models probe success
+    "models_list_ok",
     # Connectivity failures
     "timeout",
     "dns_failed",
@@ -29,7 +31,9 @@ ALLOWED_PROVIDER_PHASES = frozenset({
     # HTTP-level failures
     "http_auth_required",
     "http_not_found",
+    "models_endpoint_not_found",
     "http_server_error",
+    "http_rate_limited",
     # TLS failures
     "tls_failed",
     # Configuration/state failures

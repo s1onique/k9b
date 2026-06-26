@@ -2,7 +2,7 @@
 
 This module provides a one-shot sanitized provider connectivity probe that:
 - Checks if provider is configured
-- Attempts a lightweight connectivity check (HEAD/GET to health endpoint)
+- Attempts a lightweight connectivity check (GET to /models endpoint)
 - Returns only status enum, HTTP class, and connectivity phase
 - Never prints raw URL, hostname, IP, token, or response body
 
@@ -20,6 +20,57 @@ logger = logging.getLogger(__name__)
 
 # Timeout for connectivity probe (seconds)
 _CONNECTIVITY_TIMEOUT_SECONDS = 5
+
+
+def _normalize_openai_compatible_url(base_url: str) -> str:
+    """Normalize base_url to OpenAI-compatible /models endpoint.
+    
+    For OpenAI-compatible providers, this function produces an idempotent normalization:
+    - /v1 -> /v1/models
+    - /v1/models -> /v1/models (already normalized)
+    - /v1/chat/completions -> /v1/models
+    - /v1/responses -> /v1/models
+    - /v1/completions -> /v1/models
+    - /v1/embeddings -> /v1/models
+    - no /v1 suffix -> /v1/models
+    
+    This handles the common OpenAI API patterns:
+    - https://api.openai.com/v1 -> https://api.openai.com/v1/models
+    - https://api.openai.com/v1/chat/completions -> https://api.openai.com/v1/models
+    - http://localhost:11434 -> http://localhost:11434/v1/models (Ollama)
+    - http://localhost:8080/v1 -> http://localhost:8080/v1/models
+    
+    Args:
+        base_url: The provider's base URL (may or may not include /v1)
+        
+    Returns:
+        The normalized /models endpoint URL
+    """
+    normalized = base_url.rstrip("/")
+    
+    # Already normalized - return as-is
+    if normalized.endswith("/v1/models"):
+        return normalized
+    
+    # Common endpoint suffixes to strip
+    endpoint_suffixes = (
+        "/v1/chat/completions",
+        "/v1/responses",
+        "/v1/completions",
+        "/v1/embeddings",
+    )
+    
+    for suffix in endpoint_suffixes:
+        if normalized.endswith(suffix):
+            base = normalized[: -len(suffix)]
+            return f"{base}/v1/models"
+    
+    # If ends with /v1, append /models
+    if normalized.endswith("/v1"):
+        return f"{normalized}/models"
+    
+    # Otherwise append /v1/models
+    return f"{normalized}/v1/models"
 
 
 def _classify_connectivity_error(exc: Exception) -> tuple[str, str]:
@@ -64,7 +115,7 @@ def _classify_connectivity_error(exc: Exception) -> tuple[str, str]:
     
     # Service unavailable (404, 503)
     if "404" in exc_str or "not found" in exc_str:
-        return "http_not_found", "provider_unavailable"
+        return "models_endpoint_not_found", "provider_unavailable"
     if "503" in exc_str or "unavailable" in exc_str:
         return "http_server_error", "provider_unavailable"
     
@@ -104,17 +155,18 @@ def _probe_tcp_connectivity(host: str, port: int, timeout: int = _CONNECTIVITY_T
         return False, "tcp_error"
 
 
-def _probe_https_connectivity(url: str, timeout: int = _CONNECTIVITY_TIMEOUT_SECONDS) -> tuple[bool, str, str]:
-    """Probe HTTPS connectivity with sanitized output.
+def _probe_models_endpoint(url: str, api_key: str | None, timeout: int = _CONNECTIVITY_TIMEOUT_SECONDS) -> tuple[bool, str, str]:
+    """Probe OpenAI-compatible /models endpoint with sanitized output.
     
     Args:
-        url: Full URL to probe (https only)
+        url: Full URL to /models endpoint
+        api_key: Optional API key for Authorization header (must be resolved secret value)
         timeout: Request timeout in seconds
         
     Returns:
         Tuple of (success, phase, error_class):
-        - success: True if connection succeeded
-        - phase: One of dns, connect, tls, http, success
+        - success: True if models list returned successfully
+        - phase: One of models_list_ok, models_endpoint_not_found, http_auth_required, http_rate_limited, http_server_error, timeout, dns_failed, connection_refused, connection_failed, tls_failed, unknown
         - error_class: Sanitized error classification
     """
     try:
@@ -129,24 +181,55 @@ def _probe_https_connectivity(url: str, timeout: int = _CONNECTIVITY_TIMEOUT_SEC
             return True, "tcp_only", "provider_available"
         return False, tcp_phase, _classify_connectivity_error(Exception(tcp_phase))[1]
     
+    # Build headers - never log api_key
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    
     try:
-        # Use HEAD request for minimal data transfer
-        response = requests.head(url, timeout=timeout, allow_redirects=True)
-        if response.status_code < 400:
-            return True, "success", "provider_available"
+        # Use GET request for /models endpoint (HEAD may not work for all providers)
+        response = requests.get(url, timeout=timeout, allow_redirects=True, headers=headers)
+        
+        # 200: Models list OK - verify JSON structure
+        if response.status_code == 200:
+            try:
+                data = response.json()
+                # Accept both object with "data" array and plain array
+                if isinstance(data, dict) and "data" in data:
+                    return True, "models_list_ok", "provider_available"
+                elif isinstance(data, list):
+                    return True, "models_list_ok", "provider_available"
+                else:
+                    # Valid JSON but unexpected structure - still consider available
+                    return True, "models_list_ok", "provider_available"
+            except ValueError:
+                # Valid HTTP but not JSON - still available if we got 200
+                return True, "models_list_ok", "provider_available"
+        
+        # 401/403: Authentication required
         elif response.status_code == 401 or response.status_code == 403:
             return False, "http_auth_required", "provider_auth_failed"
+        
+        # 404: Models endpoint not found
         elif response.status_code == 404:
-            return False, "http_not_found", "provider_unavailable"
+            return False, "models_endpoint_not_found", "provider_unavailable"
+        
+        # 429: Rate limited
+        elif response.status_code == 429:
+            return False, "http_rate_limited", "provider_unavailable"
+        
+        # 5xx: Server error
         elif response.status_code >= 500:
             return False, "http_server_error", "provider_unavailable"
+        
+        # Other 2xx/3xx: Treat as success
         else:
-            return True, "success", "provider_available"
+            return True, "models_list_ok", "provider_available"
+            
     except requests.Timeout:
         return False, "timeout", "provider_timeout"
     except requests.ConnectionError as exc:
         exc_str = str(exc).lower()
-        # Extract phase from error message
         if "name or service not known" in exc_str:
             return False, "dns_failed", "provider_connection_failed"
         if "connection refused" in exc_str:
@@ -165,15 +248,16 @@ def _probe_https_connectivity(url: str, timeout: int = _CONNECTIVITY_TIMEOUT_SEC
 def get_provider_status() -> dict[str, Any]:
     """Get the external analysis provider health status.
     
-    This function performs a one-shot sanitized connectivity probe and returns
-    only status enums, HTTP classes, and connectivity phases - never raw URLs,
-    hostnames, IPs, tokens, or response bodies.
+    This function performs a one-shot sanitized connectivity probe against
+    the OpenAI-compatible /models endpoint and returns only status enums,
+    HTTP classes, and connectivity phases - never raw URLs, hostnames, IPs,
+    tokens, or response bodies.
     
     Returns:
         dict with keys:
         - available: bool - whether provider is available
         - error: str | None - sanitized error classification (enum value)
-        - phase: str | None - connectivity phase (dns, tcp, tls, http, success)
+        - phase: str | None - connectivity phase (models_list_ok, models_endpoint_not_found, etc.)
         - error_class: str | None - full reason code (provider_timeout, etc.)
     """
     try:
@@ -221,12 +305,16 @@ def get_provider_status() -> dict[str, Any]:
                 "error_class": "provider_unavailable",
             }
         
-        # Build health endpoint URL (probe the base URL for connectivity)
-        base_url = config.base_url.rstrip("/")
-        health_url = f"{base_url}/health"
+        # Normalize base_url to OpenAI-compatible /models endpoint
+        models_url = _normalize_openai_compatible_url(config.base_url)
         
-        # Perform sanitized connectivity probe
-        success, phase, error_class = _probe_https_connectivity(health_url)
+        # Get API key using the config's get_api_key() method
+        # This returns the resolved secret value from K9B_DIAGNOSIS_API_KEY env var
+        # (not the env var name itself)
+        api_key = config.get_api_key()
+        
+        # Perform sanitized connectivity probe to /models endpoint
+        success, phase, error_class = _probe_models_endpoint(models_url, api_key)
         
         if success:
             return {
@@ -263,4 +351,6 @@ def get_provider_status() -> dict[str, Any]:
 
 __all__ = [
     "get_provider_status",
+    "_normalize_openai_compatible_url",
+    "_probe_models_endpoint",
 ]
