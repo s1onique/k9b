@@ -29,6 +29,16 @@ FAILURE_PROBE_FAILED = "probe_failed"
 FAILURE_PVC_PENDING = "pvc_pending"
 FAILURE_HELM_WAIT_TIMEOUT_UNKNOWN = "helm_wait_timeout_unknown"
 FAILURE_EXPECTED_WORKLOAD_MISSING = "expected_workload_missing"
+# Sub-classifications for expected_workload_missing
+FAILURE_WORKLOAD_RENDERED_MISSING_DEPLOYMENT = "rendered_manifest_missing_deployment"
+FAILURE_WORKLOAD_RENDERED_BUT_CLUSTER_MISSING = "rendered_manifest_has_deployment_but_cluster_missing"
+FAILURE_HELM_RELEASE_MISSING = "helm_release_missing_after_install"
+FAILURE_HELM_RELEASE_FAILED_BEFORE_WORKLOAD = "helm_release_failed_before_workload_create"
+FAILURE_CHART_VALUES_SUPPRESSED = "chart_values_suppressed_workload"
+FAILURE_ADMISSION_OR_RBAC_REJECTED = "admission_or_rbac_rejected_workload"
+# Deferred: requires rollout snapshot history integration
+FAILURE_WORKLOAD_DISAPPEARED = "workload_created_then_disappeared"  # TODO: implement with rollout snapshots
+FAILURE_EVIDENCE_COLLECTION_FAILED = "render_apply_evidence_collection_failed"
 FAILURE_HELM_UNKNOWN = "helm_unknown_error"
 
 # Rollout failure classes (proactive monitor)

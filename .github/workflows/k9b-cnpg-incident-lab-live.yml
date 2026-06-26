@@ -854,8 +854,16 @@ jobs:
           # Create rollout-watch directory for proactive monitor
           mkdir -p ./lab-artifacts/live/rollout-watch
           
-          # Capture Helm output to file
+          # Capture Helm output to separate files for proper stdout/stderr splitting
+          HELM_LOG_STDOUT="./lab-artifacts/live/logs/helm-install-stdout.log"
+          HELM_LOG_STDERR="./lab-artifacts/live/logs/helm-install-stderr.log"
           HELM_LOG="./lab-artifacts/live/logs/helm-install.log"
+          
+          # ===================================================================
+          # Evidence collection: Rendered manifest BEFORE helm upgrade
+          # ===================================================================
+          echo "Collecting rendered manifest evidence before deployment..."
+          .venv/bin/python -c "import sys; sys.path.insert(0, 'scripts'); from k9b_cnpg_live_lab_helm_evidence import collect_rendered_manifest_evidence; from pathlib import Path; result = collect_rendered_manifest_evidence(chart_path='./charts/k9b', values_path='./charts/k9b/values-live-lab.yaml', artifact_dir=Path('./lab-artifacts/live'), namespace='${LAB_NAMESPACE}', release_name='k9b'); print('Rendered manifest evidence collected:', result.get('rendered_manifest_path')); [print('Errors:', e) for e in result.get('errors', [])]" || echo "Warning: Failed to collect rendered manifest evidence"
           
           # Deploy with --wait=false to avoid blocking using array
           set +e
@@ -875,11 +883,26 @@ jobs:
             "${FRONTEND_SET_ARGS[@]}"
             "${PROVIDER_SET_ARGS[@]}"
           )
-          "${HELM_UPGRADE_CMD[@]}" > "${HELM_LOG}" 2>&1
+          # Capture stdout and stderr separately for proper evidence collection
+          "${HELM_UPGRADE_CMD[@]}" > "${HELM_LOG_STDOUT}" 2> "${HELM_LOG_STDERR}"
           HELM_RC=$?
+          # Combine for backward compatibility (e.g., classify-error reads combined log)
+          cat "${HELM_LOG_STDOUT}" "${HELM_LOG_STDERR}" > "${HELM_LOG}" 2>/dev/null || true
           set -e
           
           echo "Helm install completed with exit code ${HELM_RC}"
+          
+          # ===================================================================
+          # Evidence collection: Helm status/history/values IMMEDIATELY after Helm exits
+          # Collects evidence on BOTH success and failure paths
+          # ===================================================================
+          echo "Collecting Helm evidence (both success and failure paths)..."
+          # Read stdout and stderr separately for proper evidence passing
+          export HELM_STDOUT_CONTENT
+          export HELM_STDERR_CONTENT
+          HELM_STDOUT_CONTENT=$(cat "${HELM_LOG_STDOUT}" 2>/dev/null || echo "")
+          HELM_STDERR_CONTENT=$(cat "${HELM_LOG_STDERR}" 2>/dev/null || echo "")
+          .venv/bin/python -c "import sys; sys.path.insert(0, 'scripts'); from k9b_cnpg_live_lab_helm_evidence import collect_helm_evidence; from pathlib import Path; import os; stdout=os.environ.get('HELM_STDOUT_CONTENT', ''); stderr=os.environ.get('HELM_STDERR_CONTENT', ''); result = collect_helm_evidence(kubeconfig='${KUBECONFIG}', namespace='${LAB_NAMESPACE}', release_name='k9b', artifact_dir=Path('./lab-artifacts/live'), helm_install_returncode=${HELM_RC}, helm_install_stdout=stdout, helm_install_stderr=stderr); print('Helm evidence collected:', len(result.get('evidence_artifacts', [])), 'artifacts'); [print('Errors:', e) for e in result.get('errors', [])]" || echo "Warning: Failed to collect Helm evidence"
           
           # Check if Helm itself failed (e.g., RBAC, CRD, schema errors)
           if [ ${HELM_RC} -ne 0 ]; then

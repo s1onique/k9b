@@ -257,7 +257,6 @@ def main_classify_wait_timeout() -> int:
         FAILURE_PROBE_FAILED,
         FAILURE_PVC_PENDING,
     )
-
     parser = argparse.ArgumentParser(description="Classify Helm wait timeout")
     parser.add_argument(
         "--helm-log",
@@ -274,6 +273,11 @@ def main_classify_wait_timeout() -> int:
         "--artifact-dir",
         default=os.environ.get("ARTIFACT_DIR", "./lab-artifacts/live"),
         help="Artifact directory",
+    )
+    parser.add_argument(
+        "--release-name",
+        default="k9b",
+        help="Helm release name (default: k9b)",
     )
     args = parser.parse_args(sys.argv[2:])
 
@@ -299,6 +303,7 @@ def main_classify_wait_timeout() -> int:
         preflight.timestamp = existing.get("bootstrap_timestamp", preflight.timestamp)
 
     # If we have kubeconfig, collect and analyze watchdog artifacts
+    failure_subclass = ""
     if kubeconfig and Path(kubeconfig).exists():
         # Collect current state
         kubectl_artifacts = [
@@ -343,6 +348,101 @@ def main_classify_wait_timeout() -> int:
             diagnosis.text(f"**Classification**: `{failure_class}`")
             diagnosis.text("**Cause**: Expected Deployment was never observed before rollout deadline.")
             diagnosis.text("**Evidence**: watchdog/deployments-final.json (empty items list)")
+
+            # Sub-classify expected_workload_missing
+            from scripts.k9b_cnpg_live_lab_workload_missing_classify import (
+                classify_expected_workload_missing,
+            )
+
+            # Collect render metadata (trust check)
+            render_exit_code_path = artifact_dir / "helm" / "rendered-manifest-exit-code.txt"
+            render_stderr_path = artifact_dir / "helm" / "rendered-manifest-stderr.log"
+            render_exit_code = ""
+            render_stderr = ""
+            rendered_manifest = ""
+            
+            if render_exit_code_path.exists():
+                render_exit_code = render_exit_code_path.read_text().strip()
+            
+            if render_stderr_path.exists():
+                render_stderr = render_stderr_path.read_text()
+            
+            # Only trust rendered manifest when exit code is 0
+            if render_exit_code == "0":
+                rendered_path = artifact_dir / "helm" / "rendered-manifest.yaml"
+                if rendered_path.exists():
+                    rendered_manifest = rendered_path.read_text()
+            else:
+                diagnosis.text(f"**Note**: helm template failed (exit code: {render_exit_code}), ignoring rendered manifest")
+                if render_stderr:
+                    diagnosis.text(f"**Render stderr**: {render_stderr[:500]}...")
+
+            # Collect Helm install logs (trust check)
+            install_exit_code_path = artifact_dir / "helm" / "install-exit-code.txt"
+            install_stderr_path = artifact_dir / "helm" / "install-stderr.log"
+            install_exit_code = ""
+            install_stderr = ""
+            
+            if install_exit_code_path.exists():
+                install_exit_code = install_exit_code_path.read_text().strip()
+            
+            if install_stderr_path.exists():
+                install_stderr = install_stderr_path.read_text()
+
+            # Collect Helm evidence
+            helm_status_json = ""
+            helm_history_json = ""
+            helm_values_json = ""
+
+            status_path = artifact_dir / "helm" / "status.json"
+            if status_path.exists():
+                helm_status_json = status_path.read_text()
+
+            history_path = artifact_dir / "helm" / "history.json"
+            if history_path.exists():
+                helm_history_json = history_path.read_text()
+
+            values_path = artifact_dir / "helm" / "get-values.json"
+            if values_path.exists():
+                helm_values_json = values_path.read_text()
+
+            # Run sub-classification
+            failure_subclass, subclass_diagnostics = classify_expected_workload_missing(
+                artifact_dir=artifact_dir,
+                namespace=namespace,
+                deployments_json=deployments_json,
+                helm_install_stdout=helm_output,
+                helm_install_stderr=install_stderr,
+                helm_status_json=helm_status_json,
+                helm_history_json=helm_history_json,
+                helm_values_json=helm_values_json,
+                rendered_manifest_yaml=rendered_manifest,
+            )
+
+            # Report sub-classification
+            diagnosis.text("")
+            diagnosis.text(f"**Sub-classification**: `{failure_subclass}`")
+
+            # Add diagnostics about rendered workload inventory
+            if subclass_diagnostics.get("rendered_manifest_captured"):
+                rendered_deployment_present = subclass_diagnostics.get("rendered_deployment_present", False)
+                cluster_deployment_present = subclass_diagnostics.get("cluster_deployment_present", False)
+                diagnosis.text(f"**Rendered manifest captured**: {rendered_deployment_present}")
+                diagnosis.text(f"**Cluster deployment present**: {cluster_deployment_present}")
+
+                if subclass_diagnostics.get("evidence_artifacts"):
+                    artifacts = subclass_diagnostics["evidence_artifacts"]
+                    diagnosis.text(f"**Evidence artifacts**: {', '.join(artifacts)}")
+
+            # Add Helm release status if available
+            if helm_status_json:
+                import json
+                try:
+                    status_data = json.loads(helm_status_json)
+                    release_status = status_data.get("info", {}).get("status", {}).get("status")
+                    diagnosis.text(f"**Helm release status**: {release_status}")
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
         elif _parse_crash_loop_from_pods(pods_json):
             failure_class = FAILURE_POD_CRASH_LOOP
@@ -399,10 +499,18 @@ def main_classify_wait_timeout() -> int:
     if preflight.failure_class is None:
         preflight.failure_class = failure_class
         preflight.failure_stage = "helm_deploy"
+        # Store subclass in failure_reason if present
+        if failure_subclass:
+            preflight.failure_reason = failure_subclass
 
     preflight.save()
     diagnosis.save()
-    print(failure_class)
+
+    # Output classification to stdout
+    output = failure_class
+    if failure_subclass:
+        output = f"{failure_class}::{failure_subclass}"
+    print(output)
     return 0
 
 

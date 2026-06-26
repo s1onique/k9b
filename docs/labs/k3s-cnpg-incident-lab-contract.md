@@ -100,6 +100,79 @@ The lab explicitly avoids uploading:
 
 **Safety**: Non-destructive, reversible, no data loss.
 
+## Failure Classes
+
+### Bootstrap Failures
+
+| Failure Class | Description |
+|--------------|-------------|
+| `kubeconfig_missing` | Kubeconfig secret not found |
+| `kubeconfig_decode_failed` | Base64 decode failed |
+| `kubeconfig_auth_failed` | Authentication check failed |
+| `credential_source_wrong` | Wrong identity detected |
+| `helm_rbac_denied` | RBAC permissions insufficient |
+| `helm_manifest_schema_warning` | Chart has schema drift |
+| `helm_manifest_server_dry_run_failed` | Server-side validation failed |
+| `image_pull_failed` | Container image pull failed |
+| `cnpg_crd_missing` | CNPG CRD not installed |
+| `storageclass_or_capacity_issue` | PVC stuck pending |
+| `workload_not_ready` | Deployment timeout |
+| `deployment_not_available` | No replicas available |
+| `pod_crash_loop` | CrashLoopBackOff detected |
+| `probe_failed` | Probe exit code != 0 |
+| `pvc_pending` | PVC stuck pending |
+| `helm_wait_timeout_unknown` | Timeout without specific cause |
+
+### Rollout Failures
+
+| Failure Class | Description |
+|--------------|-------------|
+| `image_pull_backoff` | ImagePullBackOff state |
+| `crash_loop` | CrashLoopBackOff state |
+| `failed_scheduling` | Scheduling failure |
+| `pvc_pending` | PVC stuck pending |
+| `readiness_probe_failed` | Readiness probe failure |
+| `deployment_replica_failure` | Replica failure |
+| `deployment_progress_deadline` | Progress deadline exceeded |
+| `rollout_timeout` | Rollout timed out |
+| `rollout_snapshot_collection_failed` | Snapshot collection failed |
+
+### Expected Workload Missing
+
+When `Deployment/k9b` is not found, the classifier provides a specific sub-classification:
+
+| Sub-class | Description | Indicates |
+|-----------|-------------|-----------|
+| `rendered_manifest_missing_deployment` | Deployment not in rendered YAML | Chart values/suppression or render bug |
+| `rendered_manifest_has_deployment_but_cluster_missing` | Rendered but not in cluster | Apply path, namespace mismatch, or cleanup |
+| `helm_release_missing_after_install` | Helm release does not exist | Install failure or name mismatch |
+| `helm_release_failed_before_workload_create` | Release failed/pending | Install error before workload creation |
+| `chart_values_suppressed_workload` | Values explicitly disable k9b | Intentional suppression |
+| `admission_or_rbac_rejected_workload` | RBAC/admission denied | Validation or permission issue |
+| `workload_created_then_disappeared` | Workload existed then deleted | **Deferred**: requires rollout snapshot history |
+| `render_apply_evidence_collection_failed` | Evidence collection failed | Tool/script error |
+
+**Note**: Transient PVC VolumeBinding conflicts may appear as secondary diagnostics when `expected_workload_missing` is detected, but the primary failure class remains `expected_workload_missing` with a specific sub-classification.
+
+## Helm Artifact Collection
+
+When a rollout failure occurs, the workflow collects Helm artifacts in `lab-artifacts/live/helm/`:
+
+```
+helm/
+├── rendered-manifest.yaml           # helm template output
+├── rendered-workload-inventory.json # Parsed workload inventory
+├── install-output.log               # Helm install/upgrade stdout
+├── install-stderr.log              # Helm install/upgrade stderr
+├── install-exit-code.txt           # Helm exit code
+├── status.json                     # helm status -o json
+├── history.json                    # helm history -o json
+├── get-manifest.yaml               # helm get manifest
+└── get-values.json                 # helm get values -o json
+```
+
+**Automated diagnostics**: The workflow performs automated classification without requiring manual `kubectl` or `helm` commands from the operator.
+
 ## Files Changed
 
 | File | Purpose |
