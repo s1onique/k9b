@@ -61,7 +61,7 @@ def get_full_collection() -> tuple[set[str], set[str]]:
     return nodeids, error_files
 
 
-def get_shaded_collection() -> set[str]:
+def get_sharded_collection() -> set[str]:
     """Get sharded pytest collection (with ignore flags).
     
     Returns:
@@ -96,7 +96,7 @@ def main() -> int:
     
     # Get collections
     full_nodeids, error_files = get_full_collection()
-    sharded_nodeids = get_shaded_collection()
+    sharded_nodeids = get_sharded_collection()
     
     print(f"\nFull collection: {len(full_nodeids)} tests")
     print(f"Error files in full collection: {len(error_files)}")
