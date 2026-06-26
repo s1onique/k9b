@@ -14,6 +14,7 @@ This endpoint is available even when /api/health returns HTTP 500.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Final, cast
 
 if TYPE_CHECKING:
@@ -48,6 +49,9 @@ class HealthDependencyFailure:
     RUNTIME_ERROR = "dependency_runtime_error"
     RUNTIME_TIMEOUT = "dependency_runtime_timeout"
     
+    # Backend health route failures (when /api/health returns 500)
+    BACKEND_HEALTH_INTERNAL_ERROR = "backend_health_internal_error"
+    
     # Unknown
     UNKNOWN = "dependency_unknown"
 
@@ -70,6 +74,198 @@ class HealthReasonCode:
     PROVIDER_AUTH_FAILED: Final[str] = "provider_auth_failed"
     PROVIDER_TIMEOUT: Final[str] = "provider_timeout"
     PROVIDER_UNKNOWN_ERROR: Final[str] = "provider_unknown_error"
+    
+    # Backend health route reasons
+    HEALTH_ROUTE_HEALTHY: Final[str] = "health_route_healthy"
+    HEALTH_ROUTE_EXCEPTION: Final[str] = "health_route_exception"
+    HEALTH_ROUTE_RETURNED_500: Final[str] = "health_route_returned_500"
+
+
+# Shared evaluator state - tracks if /api/health route encountered an exception
+# This is set by evaluate_backend_health() before calling /api/health handlers
+_backend_health_evaluation: HealthEvaluation | None = None
+
+
+@dataclass
+class HealthEvaluation:
+    """Result of backend health evaluation used by both /api/health and /api/health/details.
+    
+    This is the shared backend health evaluator result that ensures consistency
+    between /api/health and /api/health/details responses.
+    """
+    healthy: bool
+    primary_failure_class: str = ""
+    dependencies: list[dict] = field(default_factory=list)
+    reason_code: str = ""
+    phase: str = ""
+    # Internal state tracking
+    _route_exception: str | None = None
+    _route_returned_500: bool = False
+    
+    def to_dict(self) -> dict:
+        """Convert to dict for JSON serialization."""
+        return {
+            "healthy": self.healthy,
+            "primary_failure_class": self.primary_failure_class,
+            "dependencies": self.dependencies,
+            "reason_code": self.reason_code,
+            "phase": self.phase,
+        }
+
+
+def set_backend_health_evaluation(evaluation: HealthEvaluation | None) -> None:
+    """Set the shared backend health evaluation result.
+    
+    DEPRECATED: Routes now call safe_evaluate_backend_health() directly.
+    This function is kept for backwards compatibility only.
+    """
+    global _backend_health_evaluation
+    _backend_health_evaluation = evaluation
+
+
+def get_backend_health_evaluation() -> HealthEvaluation | None:
+    """Get the current backend health evaluation result.
+    
+    DEPRECATED: Routes now call safe_evaluate_backend_health() directly.
+    This function is kept for backwards compatibility only.
+    """
+    global _backend_health_evaluation
+    return _backend_health_evaluation
+
+
+def clear_backend_health_evaluation() -> None:
+    """Clear the backend health evaluation result.
+    
+    DEPRECATED: Routes now call safe_evaluate_backend_health() directly.
+    This function is kept for backwards compatibility only.
+    """
+    global _backend_health_evaluation
+    _backend_health_evaluation = None
+
+
+def _unsafe_evaluate_backend_health() -> HealthEvaluation:
+    """Internal evaluator that raises on exception. Use safe_evaluate_backend_health() instead."""
+    dependencies = _build_health_dependencies()
+    primary_failure = _classify_primary_failure(dependencies)
+    
+    # Determine overall health from dependencies
+    healthy = all(d.get("status") in ("healthy", "available", "running") for d in dependencies)
+    
+    # Determine reason_code from primary failure
+    reason_code = _get_reason_code_for_failure(primary_failure, dependencies)
+    
+    # Determine phase (which component failed)
+    phase = _get_phase_for_failure(primary_failure, dependencies)
+    
+    return HealthEvaluation(
+        healthy=healthy,
+        primary_failure_class=primary_failure,
+        dependencies=dependencies,
+        reason_code=reason_code,
+        phase=phase,
+    )
+
+
+def safe_evaluate_backend_health() -> HealthEvaluation:
+    """Safe backend health evaluator that catches exceptions and returns sanitized result.
+    
+    This function evaluates the health of all backend dependencies and returns
+    a sanitized HealthEvaluation with enum fields only. If any exception occurs
+    during evaluation, it returns a HealthEvaluation with:
+    - healthy: False
+    - primary_failure_class: BACKEND_HEALTH_INTERNAL_ERROR
+    - backend_health_route dependency with health_handler phase
+    
+    No raw URLs, IPs, tokens, or exception text are included.
+    
+    Returns:
+        HealthEvaluation with sanitized fields
+    """
+    try:
+        return _unsafe_evaluate_backend_health()
+    except Exception:
+        # Evaluator exception - return internal error result
+        return HealthEvaluation(
+            healthy=False,
+            primary_failure_class=HealthDependencyFailure.BACKEND_HEALTH_INTERNAL_ERROR,
+            dependencies=[{
+                "dependency_name": "backend_health_route",
+                "status": "unavailable",
+                "phase": "health_handler",
+                "failure_class": HealthDependencyFailure.BACKEND_HEALTH_INTERNAL_ERROR,
+                "reason_code": HealthReasonCode.HEALTH_ROUTE_EXCEPTION,
+                "message_snippet": "",
+            }],
+            reason_code=HealthReasonCode.HEALTH_ROUTE_EXCEPTION,
+            phase="health_handler",
+        )
+
+
+# Backward compatibility alias
+evaluate_backend_health = safe_evaluate_backend_health
+
+
+def _get_reason_code_for_failure(primary_failure: str, dependencies: list[dict]) -> str:
+    """Get the reason code for the primary failure."""
+    if not primary_failure:
+        return HealthReasonCode.HEALTH_ROUTE_HEALTHY
+    
+    if primary_failure == HealthDependencyFailure.RUNTIME_ERROR:
+        return HealthReasonCode.RUNTIME_ERROR_PRESENT
+    elif primary_failure == HealthDependencyFailure.PROVIDER_INIT_FAILED:
+        return HealthReasonCode.PROVIDER_UNAVAILABLE
+    elif primary_failure == HealthDependencyFailure.PROVIDER_CONNECTION_FAILED:
+        return HealthReasonCode.PROVIDER_CONNECTION_FAILED
+    elif primary_failure == HealthDependencyFailure.SCHEDULER_UNAVAILABLE:
+        return "scheduler_unavailable"
+    elif primary_failure == HealthDependencyFailure.SCHEDULER_UNHEALTHY:
+        return "scheduler_unhealthy"
+    elif primary_failure == HealthDependencyFailure.BACKEND_CRASHED:
+        return "backend_crashed"
+    elif primary_failure == HealthDependencyFailure.BACKEND_PENDING:
+        return "backend_pending"
+    elif primary_failure == HealthDependencyFailure.BACKEND_RESTARTING:
+        return "backend_restarting"
+    elif primary_failure == HealthDependencyFailure.PVC_MOUNT_ERROR:
+        return "pvc_mount_error"
+    elif primary_failure == HealthDependencyFailure.BACKEND_HEALTH_INTERNAL_ERROR:
+        return HealthReasonCode.HEALTH_ROUTE_EXCEPTION
+    
+    return "unknown"
+
+
+def _get_phase_for_failure(primary_failure: str, dependencies: list[dict]) -> str:
+    """Get the phase (which component failed) for the primary failure."""
+    if not primary_failure:
+        return "healthy"
+    
+    # Find the dependency with the failure
+    for dep in dependencies:
+        if dep.get("failure_class") == primary_failure:
+            phase: str = dep.get("phase", "unknown")
+            return phase
+    
+    # Map failure class to default phase
+    if primary_failure == HealthDependencyFailure.RUNTIME_ERROR:
+        return "health_loop"
+    elif primary_failure == HealthDependencyFailure.PROVIDER_INIT_FAILED:
+        return "provider_init"
+    elif primary_failure == HealthDependencyFailure.PROVIDER_CONNECTION_FAILED:
+        return "provider_connect"
+    elif primary_failure == HealthDependencyFailure.SCHEDULER_UNAVAILABLE:
+        return "scheduler"
+    elif primary_failure == HealthDependencyFailure.SCHEDULER_UNHEALTHY:
+        return "scheduler"
+    elif primary_failure == HealthDependencyFailure.BACKEND_CRASHED:
+        return "backend"
+    elif primary_failure == HealthDependencyFailure.BACKEND_PENDING:
+        return "backend"
+    elif primary_failure == HealthDependencyFailure.BACKEND_RESTARTING:
+        return "backend"
+    elif primary_failure == HealthDependencyFailure.BACKEND_HEALTH_INTERNAL_ERROR:
+        return "health_handler"
+    
+    return "unknown"
 
 
 def _get_runtime_health_status() -> dict:
@@ -257,22 +453,21 @@ def handle_health_details(handler: HealthUIRequestHandler) -> None:
     """
     from datetime import UTC, datetime
     
-    dependencies = _build_health_dependencies()
-    primary_failure = _classify_primary_failure(dependencies)
+    # Always evaluate fresh - no stale cached state
+    evaluation = safe_evaluate_backend_health()
     
-    # Determine overall health from dependencies
-    healthy = all(d.get("status") in ("healthy", "available", "running") for d in dependencies)
-    
-    response = {
+    deps: list[dict] = list(evaluation.dependencies)  # Copy to avoid mutation
+    response: dict = {
         "timestamp": datetime.now(UTC).isoformat(),
-        "healthy": healthy,
-        "primary_failure_class": primary_failure,
-        "dependency_count": len(dependencies),
-        "dependencies": dependencies,
+        "healthy": evaluation.healthy,
+        "primary_failure_class": evaluation.primary_failure_class,
+        "dependency_count": len(deps),
+        "dependencies": deps,
         "summary": {
-            "dependencies_checked": len(dependencies),
-            "failures_detected": len([d for d in dependencies if d.get("failure_class")]),
+            "dependencies_checked": len(deps),
+            "failures_detected": len([d for d in deps if d.get("failure_class")]),
         },
     }
     
-    handler._send_json(response, code=200 if healthy else 503)
+    # Return consistent code: 200 if healthy, 503 if unhealthy
+    handler._send_json(response, code=200 if evaluation.healthy else 503)

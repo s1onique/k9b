@@ -244,6 +244,15 @@ def run_health_gate(
             if health_details and not details_conclusive:
                 print(f"Backend details inconclusive: {normalized_details.get('inconclusive_reasons', [])}", flush=True)
                 health_deps["backend_endpoint_inconclusive"] = normalized_details
+                
+                # Log diagnosis_provider fields even when primary_failure_class is absent
+                # This helps with debugging even when overall result is inconclusive
+                for dep in normalized_details.get("dependencies", []):
+                    if dep.get("dependency_name") == "diagnosis_provider":
+                        provider_status = dep.get("status", "unknown")
+                        provider_phase = dep.get("phase", "unknown")
+                        provider_reason_code = dep.get("reason_code", "unknown")
+                        print(f"  diagnosis_provider (from inconclusive details): status={provider_status}, reason_code={provider_reason_code}, phase={provider_phase}", flush=True)
             
             health_deps["backend_details_error"] = details_error if not health_details else ""
         

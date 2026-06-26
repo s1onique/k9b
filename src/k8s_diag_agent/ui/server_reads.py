@@ -123,6 +123,15 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         handle_runtime_status_route(handler)
         return
 
+    if route == "/api/health":
+        # Backend health check for Kubernetes liveness/readiness probes
+        # Uses shared evaluator for consistency with /api/health/details
+        # This is a public endpoint (no auth required) for health gate
+        from .api_health import handle_health_route
+
+        handle_health_route(handler)
+        return
+
     if route == "/api/health/details":
         # Health details for self-diagnosis - available even when /api/health returns 500
         # This is a public endpoint (no auth required) for health gate diagnostics

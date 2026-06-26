@@ -46,6 +46,8 @@ ALLOWED_PROVIDER_PHASES = frozenset({
     # Legacy/error phases
     "unknown",
     "N/A",
+    # Health route phases
+    "health_handler",
 })
 
 # Allowlisted failure class values
@@ -61,6 +63,7 @@ ALLOWED_FAILURE_CLASSES = frozenset({
     "dependency_provider_connection_failed",
     "dependency_runtime_error",
     "dependency_runtime_timeout",
+    "backend_health_internal_error",  # When /api/health route throws exception
     "dependency_unknown",
     "",  # Empty string for healthy dependencies
 })
@@ -110,6 +113,10 @@ ALLOWED_REASON_CODES = frozenset({
     "provider_configured",
     "provider_disabled",
     "provider_enabled_no_secret",
+    # Health route reason codes
+    "health_route_healthy",
+    "health_route_exception",
+    "health_route_returned_500",
     # Generic
     "unknown",
 })
