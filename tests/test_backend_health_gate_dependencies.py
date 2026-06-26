@@ -76,7 +76,7 @@ class TestProviderPhaseNormalization:
         """Phase is included in provider dependency from health details."""
         from unittest.mock import patch
 
-        from src.k8s_diag_agent.ui.api_health_details import _build_health_dependencies
+        from k8s_diag_agent.ui.api_health_details import _build_health_dependencies
 
         # Simulate provider with http_not_found phase
         mock_provider_status = {
@@ -87,7 +87,7 @@ class TestProviderPhaseNormalization:
         }
         
         with patch(
-            "src.k8s_diag_agent.external_analysis.provider.get_provider_status",
+            "k8s_diag_agent.external_analysis.provider.get_provider_status",
             return_value=mock_provider_status,
         ):
             dependencies = _build_health_dependencies()
@@ -326,12 +326,12 @@ class TestProviderStatusFallback:
         """
         from unittest.mock import patch
 
-        from src.k8s_diag_agent.ui.api_health_details import _build_health_dependencies, _get_provider_health_status
+        from k8s_diag_agent.ui.api_health_details import _build_health_dependencies, _get_provider_health_status
 
         # Simulate provider status import/call failure
         # Note: get_provider_status is imported inside the function, so we patch the external_analysis.provider module
         with patch(
-            "src.k8s_diag_agent.external_analysis.provider.get_provider_status",
+            "k8s_diag_agent.external_analysis.provider.get_provider_status",
             side_effect=RuntimeError("Module not found"),
         ):
             provider_status = _get_provider_health_status()
@@ -365,7 +365,7 @@ class TestProviderStatusFallback:
         """
         from unittest.mock import patch
 
-        from src.k8s_diag_agent.ui.api_health_details import _build_health_dependencies, _get_provider_health_status
+        from k8s_diag_agent.ui.api_health_details import _build_health_dependencies, _get_provider_health_status
 
         # Simulate successful provider status
         mock_provider_status = {
@@ -376,7 +376,7 @@ class TestProviderStatusFallback:
         }
         
         with patch(
-            "src.k8s_diag_agent.external_analysis.provider.get_provider_status",
+            "k8s_diag_agent.external_analysis.provider.get_provider_status",
             return_value=mock_provider_status,
         ):
             provider_status = _get_provider_health_status()

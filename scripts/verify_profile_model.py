@@ -54,6 +54,13 @@ STEPS: dict[str, dict] = {
         "description": "File size check for LLM-friendliness",
         "is_expensive": False,
     },
+    "package-import-hygiene": {
+        "command": "python scripts/verify_package_import_hygiene.py",
+        "lane": "python",
+        "category": StepCategory.POLICY,
+        "description": "Prevent src.k8s_diag_agent import anti-pattern",
+        "is_expensive": False,
+    },
     "no-new-llm-allowlist": {
         "command": "python scripts/verify_no_new_llm_allowlist.py",
         "lane": "python",

@@ -250,7 +250,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
                 exec_path.write_text(json.dumps(exec_content), encoding="utf-8")
 
             # Build recent_runs_summary with plan_data and execution_indices
-            from src.k8s_diag_agent.health.ui import _build_recent_runs_summary
+            from k8s_diag_agent.health.ui import _build_recent_runs_summary
 
             recent_summary = _build_recent_runs_summary(
                 reviews_dir, external_analysis_dir=external_analysis_dir
@@ -362,7 +362,7 @@ class IndexBackedExecutionSummaryTests(unittest.TestCase):
                 exec_path.write_text(json.dumps(exec_content), encoding="utf-8")
 
             # Build recent_runs_summary
-            from src.k8s_diag_agent.health.ui import _build_recent_runs_summary
+            from k8s_diag_agent.health.ui import _build_recent_runs_summary
 
             recent_summary = _build_recent_runs_summary(
                 reviews_dir, external_analysis_dir=external_analysis_dir

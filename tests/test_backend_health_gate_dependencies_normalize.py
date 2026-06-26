@@ -206,14 +206,14 @@ class TestNormalizeBackendHealthDetails:
 
     def test_provider_timeout_error_classified_correctly(self):
         """Provider timeout errors are classified as provider_timeout reason code."""
-        from src.k8s_diag_agent.ui.api_health_details import _classify_provider_reason_code
+        from k8s_diag_agent.ui.api_health_details import _classify_provider_reason_code
 
         assert _classify_provider_reason_code("Request timeout after 30s") == "provider_timeout"
         assert _classify_provider_reason_code("Connection timed out") == "provider_timeout"
 
     def test_provider_auth_error_classified_correctly(self):
         """Provider auth errors are classified as provider_auth_failed."""
-        from src.k8s_diag_agent.ui.api_health_details import _classify_provider_reason_code
+        from k8s_diag_agent.ui.api_health_details import _classify_provider_reason_code
 
         assert _classify_provider_reason_code("Authentication failed: invalid API key") == "provider_auth_failed"
         assert _classify_provider_reason_code("HTTP 401 Unauthorized") == "provider_auth_failed"
@@ -221,7 +221,7 @@ class TestNormalizeBackendHealthDetails:
 
     def test_provider_connection_error_classified_correctly(self):
         """Provider connection errors are classified correctly."""
-        from src.k8s_diag_agent.ui.api_health_details import _classify_provider_reason_code
+        from k8s_diag_agent.ui.api_health_details import _classify_provider_reason_code
 
         assert _classify_provider_reason_code("Connection refused") == "provider_connection_failed"
         assert _classify_provider_reason_code("Connection reset by peer") == "provider_connection_failed"

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.k8s_diag_agent.external_analysis.provider import (
+from k8s_diag_agent.external_analysis.provider import (
     _normalize_openai_compatible_url,
     _probe_models_endpoint,
 )
