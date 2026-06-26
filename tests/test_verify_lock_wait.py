@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Test configuration
@@ -151,12 +152,30 @@ class TestWaitForLockCommand(unittest.TestCase):
         if not VERIFY_ALL.exists():
             self.skipTest("verify_all.sh not found")
         os.chmod(VERIFY_ALL, 0o755)
+        # Create a held lock fixture so wait-for-lock times out
+        now = datetime.now(timezone.utc).isoformat()
+        self._lock_dir = REPO_ROOT / ".verify_lock"
+        self._lock_dir.mkdir(parents=True, exist_ok=True)
+        (self._lock_dir / "lock").touch()
+        metadata = {
+            "owner_pid": os.getpid(),
+            "parent_pid": os.getppid(),
+            "process_group_id": os.getpgid(os.getpid()),
+            "command_line": [str(VERIFY_ALL), "--act-local"],
+            "cwd": str(REPO_ROOT),
+            "hostname": "test fixture",
+            "user": "test",
+            "created_at": now,
+            "last_heartbeat": now,
+            "profile": "test",
+        }
+        with open(self._lock_dir / "metadata.json", "w") as f:
+            json.dump(metadata, f)
     
     def tearDown(self) -> None:
         """Clean up any existing lock."""
-        lock_dir = REPO_ROOT / ".verify_lock"
-        if lock_dir.exists():
-            shutil.rmtree(lock_dir, ignore_errors=True)
+        if hasattr(self, "_lock_dir") and self._lock_dir.exists():
+            shutil.rmtree(self._lock_dir, ignore_errors=True)
     
     def test_wait_for_lock_short_timeout(self) -> None:
         """--wait-for-lock with short timeout should work."""
@@ -168,9 +187,8 @@ class TestWaitForLockCommand(unittest.TestCase):
             cwd=REPO_ROOT,
         )
         
-        # Should complete - exit code indicates act-local result
-        # 0 = act-local passed, 1 = act-local failed, 4 = lock timeout
-        self.assertIn(result.returncode, [0, 1, 4])
+        # Lock is held by fixture - should timeout with exit code 4
+        self.assertEqual(result.returncode, 4)
 
 
 if __name__ == "__main__":
