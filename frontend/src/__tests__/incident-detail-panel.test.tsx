@@ -27,6 +27,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { IncidentDetailPanel } from "../components/IncidentDetailPanel";
 import type { IncidentDetailPayload } from "../api";
+import { expectAllButtonsAreSafe } from "./safety-test-utils";
 
 // Full fixture using IncidentDetailPayload
 const createIncidentFixture = (overrides: Partial<IncidentDetailPayload> = {}): IncidentDetailPayload => ({
@@ -445,25 +446,28 @@ describe("IncidentDetailPanel", () => {
   });
 
   describe("16. Does not render remediation/action buttons", () => {
-    // Note: IncidentDetailPanel now includes IncidentDiagnosisLoopPanel which has
-    // a "Run one read-only pass" button. This is intentional safe functionality.
-    // The button does NOT contain remediation/action words.
+    // Note: IncidentDetailPanel includes:
+    // - IncidentDiagnosisLoopPanel with "Run one read-only pass" button
+    // - IncidentOnePassDiagnosisPanel with "Run read-only diagnosis" button
+    // Both are intentional safe functionality - no remediation/action buttons.
 
     it("has no remediation/action buttons", () => {
       const incident = createIncidentFixture();
       render(<IncidentDetailPanel incident={incident} />);
 
-      const buttons = document.querySelectorAll("button");
-      // There should be exactly 1 button: the "Run one read-only pass" button
-      expect(buttons.length).toBe(1);
+      const buttons = screen.getAllByRole("button");
 
-      // The button should NOT contain remediation/action words
-      const FORBIDDEN_WORDS = ["Apply", "Delete", "Patch", "Scale", "Restart", "Rollout", "Remediate", "Fix", "Resolve automatically"];
-      for (const button of buttons) {
-        for (const word of FORBIDDEN_WORDS) {
-          expect(button.textContent).not.toContain(word);
-        }
-      }
+      // Both safe buttons should be present
+      expect(
+        screen.getByRole("button", { name: /run one read-only pass/i }),
+      ).toBeInTheDocument();
+
+      expect(
+        screen.getByRole("button", { name: /run read-only one-pass diagnosis/i }),
+      ).toBeInTheDocument();
+
+      // Neither button should contain remediation/action words
+      expectAllButtonsAreSafe(Array.from(buttons));
     });
   });
 

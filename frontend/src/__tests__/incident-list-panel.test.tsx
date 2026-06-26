@@ -171,7 +171,7 @@ describe("IncidentListPanel", () => {
 
     it("calls listIncidents with status filter when selected", async () => {
       const user = userEvent.setup();
-      vi.mocked(listIncidents).mockResolvedValueOnce({
+      vi.mocked(listIncidents).mockResolvedValue({
         incidents: [],
         total: 0,
       });
@@ -183,11 +183,13 @@ describe("IncidentListPanel", () => {
       });
 
       const select = screen.getByRole("combobox");
-      await act(async () => {
-        await user.selectOptions(select, "open");
-      });
+      
+      // Use userEvent.selectOptions which properly triggers React's onChange
+      await user.selectOptions(select, "open");
 
+      // Wait for the filter change to trigger a new API call
       await waitFor(() => {
+        // After selecting "open", listIncidents should be called with "open"
         expect(listIncidents).toHaveBeenLastCalledWith("open");
       }, { timeout: 2000 });
     });
