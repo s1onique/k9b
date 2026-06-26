@@ -38,10 +38,13 @@ def monitor_rollout(
     kubeconfig: str,
     namespace: str,
     release: str = "k9b",
-    max_wait: int = 300,
-    interval: int = 15,
+    deadline_seconds: int | None = None,
+    poll_interval: int | None = None,
     target_count: int = 1,
     artifact_dir: Path | None = None,
+    *,
+    max_wait: int | None = None,  # New preferred name
+    interval: int | None = None,  # New preferred name
 ) -> tuple[bool, str, dict[str, Any]]:
     """Monitor rollout until success or timeout.
 
@@ -49,22 +52,28 @@ def monitor_rollout(
         kubeconfig: Path to kubeconfig file
         namespace: Kubernetes namespace
         release: Release name to monitor
-        max_wait: Maximum time to wait in seconds
-        interval: Polling interval in seconds
+        deadline_seconds: Maximum time to wait in seconds (backward-compatible alias for max_wait)
+        poll_interval: Polling interval in seconds (backward-compatible alias for interval)
         target_count: Expected number of replicas
         artifact_dir: Directory for artifacts
+        max_wait: Maximum time to wait in seconds (new preferred name)
+        interval: Polling interval in seconds (new preferred name)
 
     Returns:
         Tuple of (success, status_message, snapshot)
     """
+    # Resolve max_wait: deadline_seconds takes precedence for backward compat
+    effective_max_wait = deadline_seconds if deadline_seconds is not None else (max_wait if max_wait is not None else 300)
+    # Resolve interval: poll_interval takes precedence for backward compat
+    effective_interval = poll_interval if poll_interval is not None else (interval if interval is not None else 15)
     start_time = time.time()
     last_snapshot: dict[str, Any] | None = None
     snapshot_count = 0
 
     log(f"Starting rollout monitor for {release} in {namespace}")
-    log(f"Max wait: {max_wait}s, interval: {interval}s, target: {target_count}")
+    log(f"Max wait: {effective_max_wait}s, interval: {effective_interval}s, target: {target_count}")
 
-    while time.time() - start_time < max_wait:
+    while time.time() - start_time < effective_max_wait:
         elapsed = int(time.time() - start_time)
 
         # Get deployment status
@@ -94,7 +103,7 @@ def monitor_rollout(
                     write_json_atomically(snapshot_path, snapshot)
                     log(f"Snapshot written to {snapshot_path}")
 
-        time.sleep(interval)
+        time.sleep(effective_interval)
 
     # Timed out - collect final snapshot
     elapsed = int(time.time() - start_time)
@@ -183,10 +192,10 @@ def main_monitor_rollout() -> int:
         args.kubeconfig,
         args.namespace,
         args.release,
-        max_wait,
-        interval,
-        args.target_count,
-        artifact_dir,
+        deadline_seconds=max_wait,
+        poll_interval=interval,
+        target_count=args.target_count,
+        artifact_dir=artifact_dir,
     )
 
     # Output result

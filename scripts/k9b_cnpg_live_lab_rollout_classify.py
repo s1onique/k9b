@@ -42,7 +42,9 @@ def classify_rollout_state(
     deployments_json: str,
     pvc_json: str,
     events_text: str,
-    events_json: str,
+    events_json: str = "",
+    storage_class_json: str = "",
+    storage_class_available: bool = True,
 ) -> RolloutResult:
     """Classify rollout state based on JSON inputs.
 
@@ -51,7 +53,9 @@ def classify_rollout_state(
         deployments_json: JSON string of deployments list
         pvc_json: JSON string of PVCs list
         events_text: Plain text events (ignored, use events_json)
-        events_json: JSON string of events list
+        events_json: JSON string of events list (optional for backward compatibility)
+        storage_class_json: JSON string of storage class list (optional for extended checks)
+        storage_class_available: Whether storage class is available (optional for backward compatibility)
 
     Returns:
         RolloutResult with fatal, failure_class, and diagnostics

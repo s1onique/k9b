@@ -22,14 +22,51 @@ from typing import Any, cast
 
 @dataclass
 class KubectlResult:
-    """Structured result from kubectl command."""
+    """Structured result from kubectl command.
 
-    stdout: str
-    stderr: str
-    returncode: int
-    success: bool
+    Supports both old field names (json_data, text_data, error_message) and
+    new field names (stdout, stderr, returncode, data) for backward compatibility.
+    """
+
+    # All fields have defaults to support both old and new call patterns
+    stdout: str = ""
+    stderr: str = ""
+    returncode: int = 0
+    success: bool = False
     data: dict[str, Any] | None = None
     parsed_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    # Backward-compatible aliases for old field names
+    json_data: str = ""  # Alias for stdout (JSON format)
+    text_data: str = ""  # Alias for stdout (text format)
+    error_message: str = ""  # Alias for stderr
+
+    def __post_init__(self) -> None:
+        """Initialize backward-compatible aliases if not provided."""
+        # When called with old-style kwargs (json_data, text_data, error_message),
+        # populate the new fields accordingly
+        if not self.stdout and self.json_data:
+            # Old-style call: KubectlResult(json_data="...", ...)
+            self.stdout = self.json_data
+            self.data = None
+            try:
+                self.data = json.loads(self.json_data)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not self.stdout and self.text_data:
+            self.stdout = self.text_data
+        if not self.stderr and self.error_message:
+            self.stderr = self.error_message
+        # Set json_data from stdout if not explicitly set
+        if not self.json_data and self.stdout:
+            try:
+                json.loads(self.stdout)
+                self.json_data = self.stdout
+            except (json.JSONDecodeError, TypeError):
+                self.json_data = "{}"  # Default to empty JSON object
+        if not self.text_data:
+            self.text_data = self.stdout
+        if not self.error_message:
+            self.error_message = self.stderr
 
     @classmethod
     def from_subprocess(
@@ -39,9 +76,11 @@ class KubectlResult:
     ) -> KubectlResult:
         """Create KubectlResult from subprocess result."""
         data = None
+        json_data = ""
         if parse_json and result.returncode == 0:
             try:
                 data = json.loads(result.stdout)
+                json_data = result.stdout
             except json.JSONDecodeError:
                 pass
 
@@ -51,6 +90,9 @@ class KubectlResult:
             returncode=result.returncode,
             success=result.returncode == 0,
             data=data,
+            json_data=json_data,
+            text_data=result.stdout,
+            error_message=result.stderr,
         )
 
 
