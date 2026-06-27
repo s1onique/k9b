@@ -1420,16 +1420,78 @@ jobs:
           echo "PROVIDER_SMOKE_CLASS=backend_healthy" >> $GITHUB_OUTPUT
 
       # =======================================================================
-      # Phase 2: Incident Discovery
-      # Only runs if backend health gate passed (HTTP 200).
+      # Phase 1b: Scheduler Health Gate
+      # Checks scheduler health BEFORE incident discovery to fail fast when
+      # the scheduler is unhealthy instead of waiting 120s for incidents
+      # that will never be produced.
       # =======================================================================
-      - name: "Phase 2: Incident Discovery"
-        id: incident-discovery
+      - name: "Phase 1b: Scheduler Health Gate"
+        id: scheduler-health-gate
         if: inputs.enable_provider_smoke == true && steps.backend-health-gate.outputs.PROVIDER_SMOKE_STATUS != 'fail'
         run: |
           source "${GITHUB_ENV}"
+          echo "=== Phase 1b: Scheduler Health Gate ==="
+          echo "Checking scheduler health before incident discovery."
+          echo ""
+          
+          # Run scheduler health gate script
+          set +e
+          .venv/bin/python scripts/check_scheduler_health_gate.py \
+            --kubeconfig "${KUBECONFIG}" \
+            --namespace "$LAB_NAMESPACE" \
+            --artifact-dir ./lab-artifacts/live
+          GATE_RC=$?
+          set -e
+          
+          # Read result
+          if [ -f ./lab-artifacts/live/provider-smoke/scheduler-health/scheduler-health-result.json ]; then
+            FAILURE_CLASS=$(.venv/bin/python scripts/extract_json_value.py ./lab-artifacts/live/provider-smoke/scheduler-health/scheduler-health-result.json --key failure_class)
+            echo "Scheduler health result: failure_class=${FAILURE_CLASS}"
+            echo "SCHEDULER_HEALTH_FAILURE_CLASS=${FAILURE_CLASS}" >> $GITHUB_OUTPUT
+          fi
+          
+          # Show bounded summary if available
+          if [ -f ./lab-artifacts/live/provider-smoke/scheduler-health/bounded-summary.txt ]; then
+            echo ""
+            echo "=== Scheduler Health Summary ==="
+            cat ./lab-artifacts/live/provider-smoke/scheduler-health/bounded-summary.txt
+          fi
+          
+          # Fail fast on scheduler health failure
+          if [ ${GATE_RC} -ne 0 ]; then
+            echo ""
+            echo "FAILURE: Scheduler health check failed: ${FAILURE_CLASS:-unknown}"
+            echo ""
+            echo "The scheduler is not healthy - incidents cannot be produced."
+            echo "Stopping workflow with precise failure class instead of waiting for incidents."
+            echo ""
+            echo "Artifacts written to: lab-artifacts/live/provider-smoke/scheduler-health/"
+            echo ""
+            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=${FAILURE_CLASS:-scheduler_health_failed}" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_PHASE=scheduler_health_gate" >> $GITHUB_OUTPUT
+            
+            # Do NOT proceed to incident discovery - this is the fail-fast point
+            exit 1
+          fi
+          
+          echo ""
+          echo "Scheduler health check PASSED: scheduler is Ready"
+          echo "PROVIDER_SMOKE_STATUS=pending" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SMOKE_PHASE=scheduler_health_gate" >> $GITHUB_OUTPUT
+          echo "PROVIDER_SMOKE_CLASS=scheduler_healthy" >> $GITHUB_OUTPUT
+
+      # =======================================================================
+      # Phase 2: Incident Discovery
+      # Only runs if backend health gate passed (HTTP 200) AND scheduler is healthy.
+      # =======================================================================
+      - name: "Phase 2: Incident Discovery"
+        id: incident-discovery
+        if: inputs.enable_provider_smoke == true && steps.backend-health-gate.outputs.PROVIDER_SMOKE_STATUS != 'fail' && steps.scheduler-health-gate.outputs.PROVIDER_SMOKE_STATUS != 'fail'
+        run: |
+          source "${GITHUB_ENV}"
           echo "=== Phase 2: Incident Discovery ==="
-          echo "Backend health gate passed, proceeding to incident discovery."
+          echo "Backend health gate passed, scheduler is healthy, proceeding to incident discovery."
           echo ""
           
           # Get backend service URL (matches Helm chart k9b.backend.fullname = <release>-k9b-backend)
