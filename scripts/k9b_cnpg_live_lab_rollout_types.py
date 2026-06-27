@@ -19,3 +19,7 @@ class RolloutResult:
     diagnostics: dict[str, Any] = field(default_factory=dict)
     affected_pods: list[str] = field(default_factory=list)
     pod_phase: str = ""
+    # Crash-loop specific fields for human-readable status
+    crash_pod_name: str = ""
+    crash_container_name: str = ""
+    crash_restart_count: int = 0

@@ -28,6 +28,9 @@ from .k9b_cnpg_live_lab_rollout import (
     _collect_rollout_snapshot,
 )
 
+# Import crash artifact collection - module is required as part of monitor contract
+from .k9b_cnpg_live_lab_crash_artifacts import collect_crash_artifacts
+
 # Monitoring intervals in seconds
 INTERVAL_SHORT = 5  # First few minutes
 INTERVAL_MEDIUM = 15  # After initial checks
@@ -213,7 +216,9 @@ def main_monitor_rollout() -> int:
 
     # Monitor rollout with multi-deployment support
     if len(expected_deployments) > 1:
-        log(f"Monitoring multi-deployment rollout: {expected_deployments}")
+        # Log expected deployments in header - DO NOT use stale "Deployment k9b" message
+        deployments_str = ", ".join(expected_deployments)
+        log(f"Monitoring multi-deployment rollout for expected deployments: {deployments_str}")
         # Run inside polling loop - same semantics as single-deployment mode
         start_time = time.time()
         last_snapshot: dict[str, Any] | None = None
@@ -243,12 +248,14 @@ def main_monitor_rollout() -> int:
 
 **Success**: True
 **Status**: {status}
+**Expected deployments**: {deployments_str}
 """
                 (artifact_dir / "bounded-summary.txt").write_text(bounded_content)
                 print(json.dumps(result, indent=2))
                 return 0
 
-            log(f"[{elapsed}s] Multi-deployment rollout not complete: {status}")
+            # Use expected deployments in progress message - NOT hardcoded "Deployment k9b"
+            log(f"[{elapsed}s] Rollout not complete: {status}")
 
             # Collect periodic snapshots
             if snapshot_count == 0 or elapsed >= 60:
@@ -282,28 +289,79 @@ def main_monitor_rollout() -> int:
         # Classify the failure using the snapshot data
         failure_class = last_snapshot.get("rollout_checks", {}).get("failure_class", "") if last_snapshot else ""
 
+        # Extract crash-loop details for human-readable status if applicable
+        rollout_checks = last_snapshot.get("rollout_checks", {}) if last_snapshot else {}
+        diagnostics = rollout_checks.get("diagnostics", {}) if rollout_checks else {}
+        crash_loop_data = diagnostics.get("crash_loop", [])
+        crash_artifacts_collected = False
+
+        # Collect crash artifacts when crash loop is detected
+        if failure_class == "crash_loop" and crash_loop_data and collect_crash_artifacts:
+            log(f"Crash loop detected, collecting artifacts...")
+            try:
+                artifact_paths = collect_crash_artifacts(
+                    args.kubeconfig,
+                    args.namespace,
+                    artifact_dir,
+                    crash_loop_data,
+                )
+                if artifact_paths:
+                    log(f"Crash artifacts collected: {len(artifact_paths)} files")
+                    crash_artifacts_collected = True
+            except Exception as e:
+                log(f"Warning: Failed to collect crash artifacts: {e}")
+                diagnostics["artifact_collection_failed"] = True
+                diagnostics["artifact_collection_error"] = str(e)
+
         # Hardening: if _check_rollout_success_multi reported missing deployments
         # but classifier returned empty failure_class, set expected_deployment_missing directly
         if not failure_class and "not found" in status.lower():
             failure_class = "expected_deployment_missing"
             log(f"Setting failure_class to 'expected_deployment_missing' based on status: {status}")
 
+        # Generate human-readable status message based on failure class
+        if failure_class == "crash_loop" and crash_loop_data:
+            first_crash = crash_loop_data[0] if crash_loop_data else {}
+            crash_pod = first_crash.get("pod", "unknown")
+            crash_container = first_crash.get("container", "unknown")
+            crash_restarts = first_crash.get("restart_count", 0)
+            final_status = (
+                f"Rollout failed: pod {crash_pod} container {crash_container} "
+                f"is in CrashLoopBackOff after {crash_restarts} restarts"
+            )
+        elif failure_class == "expected_deployment_missing":
+            # Use actual expected deployment names from rendered manifests
+            final_status = (
+                f"Rollout failed: expected deployment(s) not found in cluster: {deployments_str}. "
+                "Check Helm install/upgrade status."
+            )
+        else:
+            final_status = f"Rollout timed out after {elapsed}s"
+
         result = {
             "success": False,
-            "status": f"Rollout timed out after {elapsed}s",
+            "status": final_status,
             "failure_class": failure_class,
-            "rollout_checks": {"failure_class": failure_class},
+            "rollout_checks": {"failure_class": failure_class, "diagnostics": diagnostics},
             "expected_deployments": expected_deployments,
         }
         write_json_atomically(artifact_dir / "rollout-result.json", result)
-        diagnosis_result = {"failure_class": failure_class, "status": status, "success": False}
+        diagnosis_result = {
+            "failure_class": failure_class,
+            "status": final_status,
+            "success": False,
+            "diagnostics": diagnostics,
+        }
         write_json_atomically(artifact_dir / "final-diagnosis.json", diagnosis_result)
         failure_line = f"**Failure class**: `{failure_class}`" if failure_class else ""
+        artifact_line = "**Crash artifacts**: collected" if crash_artifacts_collected else ""
         bounded_content = f"""### Rollout Monitor Result
 
 **Success**: False
-**Status**: Rollout timed out after {elapsed}s
+**Status**: {final_status}
 {failure_line}
+{artifact_line}
+**Expected deployments**: {deployments_str}
 """
         (artifact_dir / "bounded-summary.txt").write_text(bounded_content)
         print(json.dumps(result, indent=2))

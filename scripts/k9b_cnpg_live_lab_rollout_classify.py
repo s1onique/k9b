@@ -97,12 +97,17 @@ def classify_rollout_state(
         affected_pods = [item["pod"] for item in crash_loop_affected]
         pod_phase = crash_loop_affected[0].get("phase", "CrashLoopBackOff") if crash_loop_affected else ""
         diagnostics["crash_loop"] = crash_loop_affected
+        # Extract crash-specific details for human-readable status
+        first_crash = crash_loop_affected[0]
         return RolloutResult(
             fatal=True,
             failure_class=FAILURE_CRASH_LOOP,
             diagnostics=diagnostics,
             affected_pods=affected_pods,
             pod_phase=pod_phase,
+            crash_pod_name=first_crash.get("pod", ""),
+            crash_container_name=first_crash.get("container", ""),
+            crash_restart_count=first_crash.get("restart_count", 0),
         )
 
     # 3. Failed scheduling from events (machine-readable event evidence)
