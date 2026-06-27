@@ -116,34 +116,97 @@ class TestArtifactDirectoryCreation(unittest.TestCase):
 class TestDeploymentNotFoundClassification(unittest.TestCase):
     """Regression test: missing deployment must be classified as expected_workload_missing."""
 
-    def test_source_code_has_deployment_not_found_check(self) -> None:
-        """Verify source code contains the deployment_not_found classification check.
+    def test_cli_delegates_to_wait_timeout_module(self) -> None:
+        """Verify CLI facade delegates to wait_timeout module and preserves return code.
 
-        The classify-wait-timeout functionality is delegated to k9b_cnpg_live_lab_wait_timeout.py
-        which imports and uses _parse_deployment_not_found from bootstrap_funcs.py.
-        This test verifies the wiring is correct.
+        This is a true behavioral test using sys.modules mocking to verify:
+        1. CLI calls the wait_timeout module's main_classify_wait_timeout()
+        2. The delegated return code is preserved
         """
-        # CLI delegates to wait_timeout module
-        cli_source = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_cli.py"
-        cli_content = cli_source.read_text()
+        import types
 
-        # Verify CLI delegates to wait_timeout
-        self.assertIn("_classify_wait_timeout_main", cli_content,
-            "CLI should delegate to wait_timeout module")
+        from scripts import k9b_cnpg_live_lab_cli as cli
 
-        # Verify wait_timeout module uses the parser
-        wait_timeout_source = Path(__file__).parent.parent / "scripts" / "k9b_cnpg_live_lab_wait_timeout.py"
-        wt_content = wait_timeout_source.read_text()
+        module_name = "scripts.k9b_cnpg_live_lab_wait_timeout"
 
-        self.assertIn("_parse_deployment_not_found", wt_content)
-        self.assertIn("FAILURE_EXPECTED_WORKLOAD_MISSING", wt_content)
-        self.assertIn("failure_class = FAILURE_EXPECTED_WORKLOAD_MISSING", wt_content)
+        # Track calls for verification
+        calls: list[str] = []
+        fake_module = types.ModuleType(module_name)
 
-        # Verify it's the first check (before crash_loop, image_pull, etc.)
-        deploy_not_found_pos = wt_content.find("_parse_deployment_not_found(deployments_json)")
-        crash_loop_pos = wt_content.find("_parse_crash_loop_from_pods(pods_json)")
-        self.assertLess(deploy_not_found_pos, crash_loop_pos,
-            "deployment_not_found check should come before crash_loop check")
+        def fake_main() -> int:
+            calls.append("called")
+            return 42
+
+        fake_module.main_classify_wait_timeout = fake_main
+
+        # Inject fake module and verify delegation
+        previous = sys.modules.get(module_name)
+        sys.modules[module_name] = fake_module
+        try:
+            result = cli.main_classify_wait_timeout()
+            self.assertEqual(42, result, "CLI should return the delegated function's return code")
+            self.assertEqual(["called"], calls, "CLI should have called the delegated function")
+        finally:
+            # Restore original module state
+            if previous is None:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = previous
+
+    def test_deployment_not_found_classification_behavior(self) -> None:
+        """Verify deployment-not-found triggers FAILURE_EXPECTED_WORKLOAD_MISSING classification.
+
+        This is a true behavioral test that:
+        1. Mocks kubectl to return empty deployments (deployment not found)
+        2. Invokes the classifier
+        3. Verifies FAILURE_EXPECTED_WORKLOAD_MISSING is returned
+        """
+        import shutil
+        import tempfile
+
+        from scripts.k9b_cnpg_live_lab_config import DiagnosisGenerator, PreflightData
+        from scripts.k9b_cnpg_live_lab_constants import FAILURE_EXPECTED_WORKLOAD_MISSING
+        from scripts.k9b_cnpg_live_lab_wait_timeout import _classify_failure
+        temp_dir = Path(tempfile.mkdtemp())
+        try:
+            # Create fake kubeconfig file so classifier enters cluster-state path
+            kubeconfig_path = temp_dir / "kubeconfig"
+            kubeconfig_path.write_text("fake kubeconfig content")
+
+            temp_dir.mkdir(parents=True, exist_ok=True)
+
+            def mock_subprocess_run(cmd: list, *args: object, **kwargs: object) -> MagicMock:
+                """Mock kubectl to return empty List (no deployments found)."""
+                result = MagicMock()
+                if "deployments" in cmd:
+                    # Return empty deployments List - simulates namespace with no deployments
+                    result.stdout = '{"apiVersion": "v1", "kind": "List", "items": []}'
+                elif "pods" in cmd:
+                    result.stdout = '{"items": []}'
+                else:
+                    result.stdout = ""
+                return result
+
+            with patch("scripts.k9b_cnpg_live_lab_wait_timeout.subprocess.run", side_effect=mock_subprocess_run):
+                preflight = PreflightData(temp_dir, "test-ns")
+                diagnosis = DiagnosisGenerator(temp_dir, "test-ns")
+
+                failure_class, failure_subclass = _classify_failure(
+                    kubeconfig=str(kubeconfig_path),
+                    namespace="test-ns",
+                    artifact_dir=temp_dir,
+                    helm_log_path=temp_dir / "helm.log",
+                    helm_output="timeout",
+                    preflight=preflight,
+                    diagnosis=diagnosis,
+                )
+
+            # Verify deployment-not-found triggers expected workload missing
+            self.assertEqual(FAILURE_EXPECTED_WORKLOAD_MISSING, failure_class,
+                "Empty deployments (deployment not found) should trigger FAILURE_EXPECTED_WORKLOAD_MISSING")
+
+        finally:
+            shutil.rmtree(temp_dir)
 
 
 class TestClassifyWaitTimeoutWithKubeconfig(unittest.TestCase):
