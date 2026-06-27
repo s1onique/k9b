@@ -25,5 +25,12 @@ FAILURE_LLM_PROVIDER_CLIENT_NOT_INVOKED = "llm_provider_client_not_invoked"
 FAILURE_LLM_PROVIDER_REQUEST_FAILED = "llm_provider_request_failed"
 FAILURE_LLM_PROVIDER_RESPONSE_NOT_PERSISTED = "llm_provider_response_not_persisted"
 
+# Snapshot/capture failure constants (Phase 2c)
+FAILURE_SNAPSHOT_NOT_TRIGGERED = "snapshot_not_triggered"
+FAILURE_SNAPSHOT_COMPLETED_NO_CANDIDATES = "snapshot_completed_no_candidates"
+FAILURE_CANDIDATE_GENERATED_NOT_PROMOTED = "candidate_generated_not_promoted"
+FAILURE_INCIDENT_PROMOTED_NOT_LISTED = "incident_promoted_not_listed"
+FAILURE_WRONG_BACKEND_PROCESS = "wrong_backend_process"
+
 # Default fixture name (from fixtures/lab/live/pod-failure/injected-change.yaml)
 DEFAULT_FIXTURE_NAME = "cnpg-lab-failing-app"

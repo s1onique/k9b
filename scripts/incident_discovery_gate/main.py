@@ -20,18 +20,25 @@ from .classify import (
 )
 from .collect import (
     call_backend_incidents_api,
+    call_backend_snapshot_api,
     collect_backend_logs,
     collect_scheduler_logs,
+    get_backend_pod_info,
     get_namespace_events,
     get_pod_status,
     list_pods_in_namespace,
 )
 from .constants import (
+    FAILURE_CANDIDATE_GENERATED_NOT_PROMOTED,
     FAILURE_INCIDENT_CANDIDATE_NOT_DETECTED,
     FAILURE_INCIDENT_CANDIDATE_NOT_PROMOTED,
     FAILURE_INCIDENT_DISCOVERY_TIMEOUT,
     FAILURE_INCIDENT_FIXTURE_HEALTHY_UNEXPECTEDLY,
     FAILURE_INCIDENT_FIXTURE_MISSING,
+    FAILURE_INCIDENT_PROMOTED_NOT_LISTED,
+    FAILURE_SNAPSHOT_COMPLETED_NO_CANDIDATES,
+    FAILURE_SNAPSHOT_NOT_TRIGGERED,
+    FAILURE_WRONG_BACKEND_PROCESS,
 )
 from .enrich import (
     check_incident_enriched,
@@ -171,15 +178,158 @@ def run_incident_discovery(
     print(f"  Candidate detected: {candidate_type}", flush=True)
 
     # ===================================================================
-    # Phase 2c: Incident Polling with Classification
+    # Phase 2c: Trigger Snapshot Capture and Poll for Incidents
     # ===================================================================
-    print(f"Phase 2c: Polling backend API (max {max_retries} attempts)...", flush=True)
+    print("Phase 2c: Triggering backend snapshot capture...", flush=True)
+
+    # Step 1: Select a single backend pod for identity consistency
+    # Since IncidentStore is process-local, all API calls must go to the same pod
+    snapshot_pod_info = get_backend_pod_info(kubeconfig, namespace, backend_deployment)
+    result.diagnostics["snapshot_pod_info"] = snapshot_pod_info
+
+    if not snapshot_pod_info.get("found"):
+        result.passed = False
+        result.failure_class = FAILURE_SNAPSHOT_NOT_TRIGGERED
+        result.total_elapsed_seconds = time.time() - start_time
+        result.diagnostics["snapshot_error"] = "Could not find backend pod"
+
+        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
+
+        print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
+        print("  Could not find backend pod for snapshot capture", flush=True)
+        return result
+
+    snapshot_pod_name = snapshot_pod_info.get("pod_name", "")
+    print(f"  Using backend pod: {snapshot_pod_name}", flush=True)
+    if snapshot_pod_info.get("total_running_pods", 0) > 1:
+        print(f"  WARNING: Multiple backend replicas detected ({snapshot_pod_info.get('total_running_pods')}). Using oldest pod for consistency.", flush=True)
+
+    # Step 2: Trigger snapshot capture
+    # Pass snapshot_pod_name to ensure we use the same pod for snapshot and incidents API calls
+    snapshot_response, snapshot_http_status, snapshot_actual_pod = call_backend_snapshot_api(
+        kubeconfig=kubeconfig,
+        namespace=namespace,
+        backend_deployment=backend_deployment,
+        backend_container=backend_container,
+        backend_port=backend_port,
+        snapshot_namespace=namespace,
+        backend_pod_name=snapshot_pod_name,
+    )
+
+    # Verify the snapshot was actually called on the expected pod
+    if snapshot_actual_pod != snapshot_pod_name:
+        result.passed = False
+        result.failure_class = FAILURE_WRONG_BACKEND_PROCESS
+        result.total_elapsed_seconds = time.time() - start_time
+        result.diagnostics["wrong_backend_process_detected"] = True
+        result.diagnostics["expected_pod"] = snapshot_pod_name
+        result.diagnostics["actual_pod"] = snapshot_actual_pod
+
+        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
+
+        print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
+        print("  Snapshot API called on unexpected pod", flush=True)
+        print(f"  Expected: {snapshot_pod_name}, Actual: {snapshot_actual_pod}", flush=True)
+        return result
+
+    result.diagnostics["snapshot_request"] = {
+        "namespace": namespace,
+        "pod_name": snapshot_pod_name,
+        "http_status": snapshot_http_status,
+    }
+    result.diagnostics["snapshot_response"] = snapshot_response
+
+    # Step 3: Parse snapshot response
+    if snapshot_http_status != 200:
+        result.passed = False
+        result.failure_class = FAILURE_SNAPSHOT_NOT_TRIGGERED
+        result.total_elapsed_seconds = time.time() - start_time
+        result.diagnostics["snapshot_error"] = f"HTTP {snapshot_http_status}"
+
+        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
+
+        print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
+        print(f"  Snapshot API returned HTTP {snapshot_http_status}", flush=True)
+        return result
+
+    if snapshot_response.get("error"):
+        result.passed = False
+        result.failure_class = FAILURE_SNAPSHOT_NOT_TRIGGERED
+        result.total_elapsed_seconds = time.time() - start_time
+        result.diagnostics["snapshot_error"] = snapshot_response.get("error", "Unknown error")
+
+        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
+
+        print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
+        print(f"  Snapshot error: {snapshot_response.get('error')}", flush=True)
+        return result
+
+    # Extract snapshot metadata
+    bundle_id = snapshot_response.get("bundle_id", "")
+    summary = snapshot_response.get("summary", {})
+    candidates_count = summary.get("candidates_count", 0)
+    incidents_promoted_count = summary.get("incidents_promoted_count", 0)
+    promoted_incidents = snapshot_response.get("promoted_incidents", [])
+
+    print(f"  Snapshot captured: bundle_id={bundle_id}", flush=True)
+    print(f"  Candidates found: {candidates_count}", flush=True)
+    print(f"  Incidents promoted: {incidents_promoted_count}", flush=True)
+
+    result.diagnostics["snapshot_bundle_id"] = bundle_id
+    result.diagnostics["snapshot_candidates_count"] = candidates_count
+    result.diagnostics["snapshot_incidents_promoted_count"] = incidents_promoted_count
+
+    # Step 4: Check if snapshot generated candidates
+    if candidates_count == 0:
+        result.passed = False
+        result.failure_class = FAILURE_SNAPSHOT_COMPLETED_NO_CANDIDATES
+        result.total_elapsed_seconds = time.time() - start_time
+
+        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
+
+        print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
+        print("  Snapshot completed but generated zero candidates", flush=True)
+        return result
+
+    # Step 5: Check if candidates were promoted
+    if incidents_promoted_count == 0 and not promoted_incidents:
+        result.passed = False
+        result.failure_class = FAILURE_CANDIDATE_GENERATED_NOT_PROMOTED
+        result.total_elapsed_seconds = time.time() - start_time
+
+        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
+
+        print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
+        print("  Snapshot generated candidates but none were promoted to incident store", flush=True)
+        return result
+
+    # Step 6: Poll incidents API using the SAME backend pod
+    print(f"Phase 2c: Polling incidents API (max {max_retries} attempts)...", flush=True)
+
+    # Track the pod used for incidents polling to verify consistency
+    incidents_pod_name: str | None = None
 
     for poll_num in range(1, max_retries + 1):
-        # Call backend API
+        # Call incidents API targeting the SAME pod as snapshot
         response_body, http_status = call_backend_incidents_api(
-            kubeconfig, namespace, backend_deployment, backend_container, backend_port
+            kubeconfig, namespace, backend_deployment, backend_container, backend_port,
+            backend_pod_name=snapshot_pod_name,
         )
+        # Track which pod was used for the first poll
+        if poll_num == 1:
+            incidents_pod_name = snapshot_pod_name
 
         total_elapsed = time.time() - start_time
 
@@ -198,6 +348,8 @@ def run_incident_discovery(
             "http_status": http_status,
             "response_shape": response_shape,
             "incident_id": "",
+            "snapshot_pod": snapshot_pod_name,
+            "incidents_pod": incidents_pod_name,
         })
 
         # Check for API contract issues
@@ -255,9 +407,13 @@ def run_incident_discovery(
     result.passed = False
     result.total_elapsed_seconds = time.time() - start_time
 
-    # Classify the timeout based on what we observed
-    if result.candidate_detected:
-        # Candidate detected but not promoted
+    # The snapshot promoted incidents but they don't appear in the list API
+    # This could indicate a backend process identity mismatch
+    if incidents_promoted_count > 0 or promoted_incidents:
+        result.failure_class = FAILURE_INCIDENT_PROMOTED_NOT_LISTED
+    elif candidates_count > 0:
+        result.failure_class = FAILURE_CANDIDATE_GENERATED_NOT_PROMOTED
+    elif result.candidate_detected:
         result.failure_class = FAILURE_INCIDENT_CANDIDATE_NOT_PROMOTED
     elif not result.fixture_exists:
         result.failure_class = FAILURE_INCIDENT_FIXTURE_MISSING
@@ -277,8 +433,8 @@ def run_incident_discovery(
     write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
     print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
-    print(f"  No incident after {max_retries} polls ({result.total_elapsed_seconds:.1f}s total)", flush=True)
-    print(f"  Candidate detected: {result.candidate_detected}", flush=True)
+    print(f"  Snapshot triggered with {incidents_promoted_count} incidents promoted", flush=True)
+    print(f"  But /api/incidents returned empty after {max_retries} polls", flush=True)
     print("  Polling history:", flush=True)
     print(format_polling_history(poll_results), flush=True)
 

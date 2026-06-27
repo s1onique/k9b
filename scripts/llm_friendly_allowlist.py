@@ -224,4 +224,8 @@ ALLOWLIST: list[tuple[str, str]] = [
 
     # [SCRIPT] CNPG live lab evidence collection - comprehensive but coherent
     ("scripts/k9b_cnpg_live_lab_helm_evidence.py", "[SCRIPT] Live lab Helm evidence - comprehensive collection logic"),
+
+    # [SCRIPT] Incident discovery gate - Phase 2c snapshot trigger enhancement
+    ("scripts/incident_discovery_gate/collect.py", "[SCRIPT] Incident gate collection - kubectl and API helpers"),
+    ("scripts/incident_discovery_gate/main.py", "[SCRIPT] Incident gate orchestration - Phase 2a-2e orchestration"),
 ]
