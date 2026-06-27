@@ -8,6 +8,10 @@ are:
 2. Actually broken (import errors)
 3. Not accidentally hiding working tests
 
+Collection Policy:
+    - Test collection uses the shared helper from test_collection.py
+    - No raw --ignore=tests/... literals (enforced by regression guard)
+
 Usage:
     python scripts/verify_test_exclusions.py
 """
@@ -18,10 +22,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from test_collection import ALLOWED_COLLECTION_EXCLUSIONS, collect_test_nodeids, verify_no_hard_coded_ignores
+
 REPO_ROOT = Path(__file__).parent.parent
 
 # Allowlisted exclusions - files that are documented as broken
-ALLOWLISTED_EXCLUSIONS: set[str] = set()
+# These are sourced from ALLOWED_COLLECTION_EXCLUSIONS in test_collection.py
+# to ensure a single source of truth.
+ALLOWLISTED_EXCLUSIONS: set[str] = ALLOWED_COLLECTION_EXCLUSIONS
 
 
 def get_full_collection() -> tuple[set[str], set[str]]:
@@ -61,33 +69,34 @@ def get_full_collection() -> tuple[set[str], set[str]]:
 def get_sharded_collection() -> set[str]:
     """Get sharded pytest collection (with ignore flags).
     
+    This function uses the shared collection helper from test_collection.py
+    to ensure the same collection method is used by both the verifier and
+    the shard runner.
+    
     Returns:
         Set of nodeids
     """
-    result = subprocess.run(
-        [
-            sys.executable, "-m", "pytest",
-            "--collect-only", "-q",
-            "tests/",
-        ],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-    )
-    
-    nodeids: set[str] = set()
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if line.startswith("tests/") and "::" in line:
-            nodeids.add(line)
-    
-    return nodeids
+    # Use the shared collection helper - same as shard_tests.py
+    result = collect_test_nodeids()
+    return set(result.nodeids)
 
 
 def main() -> int:
     print("=" * 70)
     print("Test Exclusion Verification")
     print("=" * 70)
+    
+    # Run regression guard first
+    print("\nRegression Guard: Checking for hard-coded --ignore=tests/...")
+    guard_passed, guard_violations = verify_no_hard_coded_ignores()
+    if not guard_passed:
+        print("ERROR: Regression guard failed!")
+        print("".join(guard_violations))
+        print("\nRaw --ignore=tests/... literals found in collection code.")
+        print("Future exclusions must be added to ALLOWED_COLLECTION_EXCLUSIONS")
+        print("in scripts/test_collection.py and documented in scripts/test_exclusions.md")
+        return 1
+    print("  [OK] No hard-coded --ignore=tests/... found")
     
     # Get collections
     full_nodeids, error_files = get_full_collection()
@@ -124,7 +133,8 @@ def main() -> int:
         
         if errors > 0:
             print(f"\nERROR: {errors} unallowlisted file(s) missing from sharded collection")
-            print("Update scripts/test_exclusions.md to document these exclusions")
+            print("Update ALLOWED_COLLECTION_EXCLUSIONS in scripts/test_collection.py")
+            print("and scripts/test_exclusions.md to document these exclusions")
             return 1
     
     # Check that allowlisted files actually have errors (fail-closed)
@@ -143,7 +153,8 @@ def main() -> int:
         print("VERIFICATION FAILED")
         print("=" * 70)
         print(f"\nERROR: {stale_allowlist_errors} stale exclusion(s) in allowlist")
-        print("Remove these files from ALLOWLISTED_EXCLUSIONS or fix their import errors")
+        print("Remove these files from ALLOWED_COLLECTION_EXCLUSIONS in")
+        print("scripts/test_collection.py and update scripts/test_exclusions.md")
         return 1
     
     print("VERIFICATION PASSED")
@@ -152,6 +163,7 @@ def main() -> int:
     print(f"  - {len(ALLOWLISTED_EXCLUSIONS)} allowlisted exclusions")
     print(f"  - {len(sharded_nodeids)} tests in sharded collection")
     print("  - All missing tests are documented in scripts/test_exclusions.md")
+    print("  - No hard-coded --ignore=tests/... found (regression guard passed)")
     
     return 0
 

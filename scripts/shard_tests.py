@@ -18,17 +18,22 @@ Algorithm:
 
 The output is stable for unchanged inputs: same nodeids + same durations
 produces identical shard assignments.
+
+Collection Policy:
+    - Test collection uses the shared helper from test_collection.py
+    - No raw --ignore=tests/... literals (enforced by regression guard)
 """
 from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO
+
+from test_collection import collect_test_nodeids as _collect_tests
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 DEFAULT_DURATIONS_FILE = REPO_ROOT / "scripts" / "python_test_durations.json"
@@ -80,35 +85,19 @@ def load_duration_weights(durations_file: Path | None) -> dict[str, float]:
 
 
 def collect_test_nodeids() -> list[str]:
-    """Collect all test nodeids deterministically using pytest --collect-only."""
-    result = subprocess.run(
-        [
-            sys.executable, "-m", "pytest",
-            "--collect-only", "-q",
-            "tests/",
-        ],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-    )
+    """Collect all test nodeids deterministically using pytest --collect-only.
+    
+    This function delegates to the shared helper in test_collection.py
+    to ensure the same collection method is used by both shard_tests.py
+    and verify_test_exclusions.py.
+    """
+    result = _collect_tests()
     
     if result.returncode != 0:
         print(f"ERROR: pytest collection failed:\n{result.stderr}", file=sys.stderr)
         sys.exit(1)
     
-    nodeids: list[str] = []
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if line.startswith("tests/") or line.startswith("test_"):
-            # Handle both full nodeids and file-only paths
-            if "::" in line:
-                nodeids.append(line)
-            else:
-                # File-only path, convert to wildcard pattern for later matching
-                nodeids.append(line)
-    
-    # Sort for deterministic ordering
-    return sorted(nodeids)
+    return list(result.nodeids)
 
 
 def assign_shards_lpt(

@@ -410,3 +410,63 @@ class TestIntegration:
             union.update(shard.nodeids)
         
         assert union == all_nodeids
+
+
+class TestRegressionGuard:
+    """Tests for the hard-coded ignore regression guard."""
+
+    def test_no_hard_coded_ignores_in_shard_tests(self) -> None:
+        """Verify shard_tests.py has no hard-coded --ignore=tests/... literals."""
+        import test_collection
+        
+        shard_tests_path = Path(__file__).parent.parent.parent / "scripts" / "shard_tests.py"
+        violations = test_collection.check_for_hard_coded_ignores(shard_tests_path)
+        
+        assert len(violations) == 0, (
+            "Found hard-coded --ignore=tests/... in shard_tests.py:\n"
+            + "\n".join(violations)
+        )
+
+    def test_no_hard_coded_ignores_in_verify_test_exclusions(self) -> None:
+        """Verify verify_test_exclusions.py has no hard-coded --ignore=tests/... literals."""
+        import test_collection
+        
+        verify_path = Path(__file__).parent.parent.parent / "scripts" / "verify_test_exclusions.py"
+        violations = test_collection.check_for_hard_coded_ignores(verify_path)
+        
+        assert len(violations) == 0, (
+            "Found hard-coded --ignore=tests/... in verify_test_exclusions.py:\n"
+            + "\n".join(violations)
+        )
+
+    def test_no_hard_coded_ignores_in_test_collection(self) -> None:
+        """Verify test_collection.py itself has no hard-coded --ignore=tests/... literals."""
+        import test_collection
+        
+        collection_path = Path(__file__).parent.parent.parent / "scripts" / "test_collection.py"
+        violations = test_collection.check_for_hard_coded_ignores(collection_path)
+        
+        assert len(violations) == 0, (
+            "Found hard-coded --ignore=tests/... in test_collection.py:\n"
+            + "\n".join(violations)
+        )
+
+    def test_allowlist_exclusions_match_expected_state(self) -> None:
+        """Verify ALLOWED_COLLECTION_EXCLUSIONS matches documented policy."""
+        import test_collection
+        
+        # Current state: no exclusions
+        assert len(test_collection.ALLOWED_COLLECTION_EXCLUSIONS) == 0, (
+            "ALLOWED_COLLECTION_EXCLUSIONS should be empty when no files are broken"
+        )
+
+    def test_verify_no_hard_coded_ignores_passes(self) -> None:
+        """Verify the full regression guard check passes."""
+        import test_collection
+        
+        passed, violations = test_collection.verify_no_hard_coded_ignores()
+        
+        assert passed, (
+            "Regression guard failed:\n"
+            + "".join(violations)
+        )
