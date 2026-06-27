@@ -29,6 +29,7 @@ class PodHealthStatus(StrEnum):
     FAILED = "failed"
     CRASH_LOOP = "crash_loop"
     IMAGE_PULL_ERROR = "image_pull_error"
+    READINESS_FAILURE = "readiness_failure"
     UNKNOWN = "unknown"
 
 

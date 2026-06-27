@@ -87,13 +87,24 @@ def parse_pod_summary(pod: Mapping[str, Any]) -> PodSummary:
 
     # Get reason/message from pod status conditions
     conditions = status.get("conditions") or []
+    readiness_not_ready = False
     for cond in conditions:
         if str(cond.get("type") or "") == "Ready":
             if cond.get("status") != "True":
+                readiness_not_ready = True
                 if not is_failing:
                     is_failing = True
                     reason = "NotReady"
                     message = str(cond.get("message") or "")
+
+    # Set READINESS_FAILURE status if running but not ready (after checking container statuses)
+    if health_status == PodHealthStatus.RUNNING and readiness_not_ready:
+        health_status = PodHealthStatus.READINESS_FAILURE
+        is_failing = True
+        if not reason:
+            reason = "ReadinessFailure"
+        if not message:
+            message = "Pod is Running but not Ready"
 
     # Sanitize the summary
     sanitized_message = message

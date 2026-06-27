@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from .incident_models import DeploymentSummary, EventSummary, PodSummary
+from .incident_models import DeploymentSummary, EventSummary, PodHealthStatus, PodSummary
 
 
 class CandidateClass(StrEnum):
@@ -29,6 +29,7 @@ class CandidateClass(StrEnum):
     IMAGE_PULL_ERROR = "image_pull_error"
     PENDING_POD = "pending_pod"
     FAILED_POD = "failed_pod"
+    READINESS_FAILURE = "readiness_failure"
     DEPLOYMENT_UNAVAILABLE = "deployment_unavailable"
     WARNING_EVENT_BURST = "warning_event_burst"
     UNKNOWN = "unknown"
@@ -221,7 +222,7 @@ def detect_incident_candidates(
         if pod.namespace == "":
             continue  # Skip pods without namespace
 
-        if pod.health_status.value == "crash_loop":
+        elif pod.health_status == PodHealthStatus.CRASH_LOOP:
             candidate = _make_pod_candidate(
                 pod=pod,
                 candidate_class=CandidateClass.CRASH_LOOP,
@@ -232,7 +233,7 @@ def detect_incident_candidates(
             )
             candidates[candidate.candidate_id] = candidate
 
-        elif pod.health_status.value == "image_pull_error":
+        elif pod.health_status == PodHealthStatus.IMAGE_PULL_ERROR:
             candidate = _make_pod_candidate(
                 pod=pod,
                 candidate_class=CandidateClass.IMAGE_PULL_ERROR,
@@ -243,7 +244,7 @@ def detect_incident_candidates(
             )
             candidates[candidate.candidate_id] = candidate
 
-        elif pod.health_status.value == "pending":
+        elif pod.health_status == PodHealthStatus.PENDING:
             candidate = _make_pod_candidate(
                 pod=pod,
                 candidate_class=CandidateClass.PENDING_POD,
@@ -254,7 +255,7 @@ def detect_incident_candidates(
             )
             candidates[candidate.candidate_id] = candidate
 
-        elif pod.health_status.value == "failed":
+        elif pod.health_status == PodHealthStatus.FAILED:
             candidate = _make_pod_candidate(
                 pod=pod,
                 candidate_class=CandidateClass.FAILED_POD,
@@ -262,6 +263,17 @@ def detect_incident_candidates(
                 reason=pod.reason or "Failed",
                 message=pod.message or "Pod failed",
                 evidence_needed=("pod_logs", "pod_events"),
+            )
+            candidates[candidate.candidate_id] = candidate
+
+        elif pod.health_status == PodHealthStatus.READINESS_FAILURE:
+            candidate = _make_pod_candidate(
+                pod=pod,
+                candidate_class=CandidateClass.READINESS_FAILURE,
+                severity=Severity.WARNING,
+                reason=pod.reason or "NotReady",
+                message=pod.message or "Pod is Running but not Ready",
+                evidence_needed=("pod_describe", "readiness_probe_status"),
             )
             candidates[candidate.candidate_id] = candidate
 
