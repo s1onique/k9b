@@ -6,38 +6,37 @@ Tests: success detection, PVC pending, deployment conditions, timeout handling
 This test file verifies rollout JSON classifier behavior directly by feeding
 minimal JSON-shaped rollout snapshots into classify_rollout_state and asserting
 the emitted classification fields.
+
+DE-BRITTLING NOTE:
+This test file was refactored to remove indirect dependencies on subprocess-based
+helpers through k9b_cnpg_live_lab_bootstrap. All tests now import directly from:
+- scripts.k9b_cnpg_live_lab_rollout_classify: classify_rollout_state
+- scripts.k9b_cnpg_live_lab_constants: FAILURE_* constants
+- scripts.k9b_cnpg_live_lab_rollout: _check_*_from_json/_from_pods helpers
 """
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-import importlib
-
-import scripts.k9b_cnpg_live_lab_bootstrap as bootstrap  # noqa: E402
-
-importlib.reload(bootstrap)
-
-from scripts.k9b_cnpg_live_lab_bootstrap import (  # noqa: E402
+from scripts.k9b_cnpg_live_lab_constants import (
     FAILURE_CRASH_LOOP,
     FAILURE_DEPLOYMENT_PROGRESS_DEADLINE,
     FAILURE_DEPLOYMENT_REPLICA_FAILURE,
     FAILURE_FAILED_SCHEDULING,
     FAILURE_IMAGE_PULL_BACKOFF,
     FAILURE_ROLLOUT_TIMEOUT,
-    classify_rollout_state,
 )
-from scripts.k9b_cnpg_live_lab_rollout import (  # noqa: E402
+from scripts.k9b_cnpg_live_lab_rollout import (  # noqa: I001
     _check_deployment_progress_deadline_from_json,
     _check_deployment_replica_failure_from_json,
     _check_failed_scheduling_from_pods,
     _check_pvc_pending_from_json,
 )
-from tests.rollout_classifier_extended_fixtures import (  # noqa: E402
+from scripts.k9b_cnpg_live_lab_rollout_classify import (  # noqa: I001
+    classify_rollout_state,
+)
+from tests.rollout_classifier_extended_fixtures import (  # noqa: I001
     make_deployments_json,
     make_events_json,
     make_pods_json,
