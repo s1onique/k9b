@@ -226,8 +226,23 @@ def _collect_rollout_snapshot(
     artifact_dir: Path,
     release: str,
     snapshot_ts: str,
+    expected_deployments: list[str] | None = None,
+    target_count: int = 1,
 ) -> dict[str, Any] | None:
-    """Collect a snapshot of rollout state."""
+    """Collect a snapshot of rollout state.
+
+    Args:
+        kubeconfig: Path to kubeconfig
+        namespace: Kubernetes namespace
+        artifact_dir: Directory for artifacts (unused, kept for API compatibility)
+        release: Helm release name (used for artifact metadata)
+        snapshot_ts: Timestamp for the snapshot
+        expected_deployments: List of expected deployment names. When provided and non-empty,
+            uses multi-deployment checks. When None or empty, falls back to single-deployment
+            mode using release name as deployment name.
+        target_count: Expected number of deployment objects that must satisfy rollout checks
+            when using manifest-derived inventory.
+    """
     try:
         pods_result = subprocess.run(
             ["kubectl", "--kubeconfig", kubeconfig, "get", "pods", "-n", namespace, "-o", "json"],
@@ -256,16 +271,28 @@ def _collect_rollout_snapshot(
 
         result = classify_rollout_state(pods_json, deploys_json, pvcs_json, events_text, events_json)
 
+        # Use multi-deployment check when expected_deployments is provided and non-empty
+        # This fixes the bug where release="k9b" was incorrectly used as deployment name
+        # when rendered manifests produce k9b-backend, k9b-scheduler
+        if expected_deployments and len(expected_deployments) > 0:
+            rollout_success, _ = _check_rollout_success_multi(
+                kubeconfig, namespace, expected_deployments, target_count=target_count
+            )
+        else:
+            # Fallback to single-deployment mode for backward compatibility
+            rollout_success, _ = _check_rollout_success(kubeconfig, namespace, release)
+
         return {
             "timestamp": snapshot_ts,
             "namespace": namespace,
             "release": release,
+            "expected_deployments": expected_deployments or [],
             "rollout_checks": {
                 "fatal": result.fatal,
                 "failure_class": result.failure_class,
                 "diagnostics": result.diagnostics,
             },
-            "rollout_success": _check_rollout_success(kubeconfig, namespace, release) == (True, ""),
+            "rollout_success": rollout_success,
         }
     except Exception:
         return None

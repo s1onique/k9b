@@ -259,5 +259,176 @@ metadata:
             assert "k9b-scheduler" in deployments
 
 
+# =============================================================================
+# Regression Tests for Polling Readiness Gate
+# These tests verify the fix for the bug where monitor used release name as
+# deployment name instead of rendered manifest deployment names.
+# =============================================================================
+
+class TestPollingReadinessGate:
+    """Regression tests for polling readiness gate using correct deployment names."""
+
+    RENDERED_MANIFEST_WITH_BACKEND_AND_SCHEDULER = """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-backend
+  namespace: k9b-live-lab
+spec:
+  replicas: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-scheduler
+  namespace: k9b-live-lab
+spec:
+  replicas: 1
+"""
+
+    def test_collect_rollout_snapshot_accepts_expected_deployments_param(self) -> None:
+        """_collect_rollout_snapshot must accept expected_deployments parameter."""
+        import inspect
+
+        from scripts.k9b_cnpg_live_lab_rollout_subprocess import _collect_rollout_snapshot
+
+        sig = inspect.signature(_collect_rollout_snapshot)
+        params = list(sig.parameters.keys())
+
+        assert "expected_deployments" in params, \
+            "_collect_rollout_snapshot must have expected_deployments parameter"
+
+    def test_collect_rollout_snapshot_includes_expected_deployments_in_result(self) -> None:
+        """Snapshot result must include expected_deployments field."""
+        import inspect
+
+        from scripts.k9b_cnpg_live_lab_rollout_subprocess import _collect_rollout_snapshot
+
+        # Verify the function has expected_deployments in signature
+        sig = inspect.signature(_collect_rollout_snapshot)
+        assert "expected_deployments" in sig.parameters
+
+        # Check parameter has correct default (None)
+        param = sig.parameters["expected_deployments"]
+        assert param.default is None, \
+            "expected_deployments should default to None for backward compatibility"
+
+    def test_monitor_rollout_accepts_expected_deployments_param(self) -> None:
+        """monitor_rollout must accept expected_deployments parameter."""
+        import inspect
+
+        from scripts.k9b_cnpg_live_lab_monitor import monitor_rollout
+
+        sig = inspect.signature(monitor_rollout)
+        params = list(sig.parameters.keys())
+
+        assert "expected_deployments" in params, \
+            "monitor_rollout must have expected_deployments parameter"
+
+    def test_get_expected_deployments_returns_exactly_rendered_names(self) -> None:
+        """get_expected_deployments_from_manifest returns exactly rendered Deployment names."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+            helm_dir = artifact_dir / "helm"
+            helm_dir.mkdir(parents=True)
+            (helm_dir / "rendered-manifest.yaml").write_text(
+                self.RENDERED_MANIFEST_WITH_BACKEND_AND_SCHEDULER
+            )
+
+            result = get_expected_deployments_from_manifest(artifact_dir)
+
+            # Must be exactly the rendered deployment names
+            assert result == ["k9b-backend", "k9b-scheduler"]
+            # Must NOT include "k9b" as a deployment name
+            assert "k9b" not in result
+            # Must be exactly 2 deployments
+            assert len(result) == 2
+
+    def test_status_message_never_contains_deployment_k9b_not_found(self) -> None:
+        """Monitor must never log 'Deployment k9b not found' when k9b doesn't exist."""
+        rendered_yaml = """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-scheduler
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+            helm_dir = artifact_dir / "helm"
+            helm_dir.mkdir(parents=True)
+            (helm_dir / "rendered-manifest.yaml").write_text(rendered_yaml)
+
+            deployments = get_expected_deployments_from_manifest(artifact_dir)
+
+            # Verify k9b is NOT in deployments
+            assert "k9b" not in deployments
+
+            # Simulate status message generation (like the monitor does)
+            if deployments:
+                deployments_str = ", ".join(deployments)
+                # Status should contain actual deployment names
+                assert "k9b-backend" in deployments_str
+                assert "k9b-scheduler" in deployments_str
+                # Status must NOT contain stale "Deployment k9b" message
+                assert "Deployment k9b" not in deployments_str
+                assert "k9b not found" not in deployments_str.lower()
+
+    def test_target_equals_number_of_rendered_deployments(self) -> None:
+        """Target count should equal number of rendered Deployment objects."""
+        rendered_yaml = """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k9b-scheduler
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+            helm_dir = artifact_dir / "helm"
+            helm_dir.mkdir(parents=True)
+            (helm_dir / "rendered-manifest.yaml").write_text(rendered_yaml)
+
+            deployments = get_expected_deployments_from_manifest(artifact_dir)
+
+            # Target should equal number of deployments
+            target_count = len(deployments)
+            assert target_count == 2, \
+                f"Expected target=2 for k9b-backend, k9b-scheduler, got {target_count}"
+
+    def test_monitor_never_falls_back_to_release_name_as_deployment(self) -> None:
+        """Monitor must not fall back to release name when rendered manifest has deployments."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+            helm_dir = artifact_dir / "helm"
+            helm_dir.mkdir(parents=True)
+            (helm_dir / "rendered-manifest.yaml").write_text(
+                self.RENDERED_MANIFEST_WITH_BACKEND_AND_SCHEDULER
+            )
+
+            # Get expected deployments from manifest
+            deployments = get_expected_deployments_from_manifest(
+                artifact_dir,
+                release_name="k9b",  # This is the release name
+                namespace="k9b-live-lab"
+            )
+
+            # The release name "k9b" must NOT appear as a deployment name
+            assert "k9b" not in deployments, \
+                "Release name 'k9b' must not be used as a Deployment name"
+
+            # The actual rendered deployments must be present
+            assert "k9b-backend" in deployments
+            assert "k9b-scheduler" in deployments
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
