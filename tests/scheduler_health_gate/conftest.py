@@ -95,7 +95,7 @@ def healthy_pods_response() -> dict[str, Any]:
 
 @pytest.fixture
 def crash_loop_pods_response() -> dict[str, Any]:
-    """A scheduler pod in CrashLoopBackOff."""
+    """A scheduler pod in CrashLoopBackOff with lastState for evidence."""
     return {
         "apiVersion": "v1",
         "items": [
@@ -113,6 +113,52 @@ def crash_loop_pods_response() -> dict[str, Any]:
                                 }
                             },
                             "restartCount": 5,
+                            "lastState": {
+                                "terminated": {
+                                    "exitCode": 1,
+                                    "reason": "Error",
+                                    "message": "Exception in thread main: ConfigError: missing required env K9B_KUBERNETES_AUTH_MODE",
+                                    "startedAt": "2026-06-27T10:00:00Z",
+                                    "finishedAt": "2026-06-27T10:00:01Z",
+                                }
+                            },
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def crash_loop_pods_with_logs_response() -> dict[str, Any]:
+    """A scheduler pod in CrashLoopBackOff with logs for full evidence testing."""
+    return {
+        "apiVersion": "v1",
+        "items": [
+            {
+                "metadata": {"name": "k9b-scheduler-crashing"},
+                "status": {
+                    "phase": "Running",
+                    "containerStatuses": [
+                        {
+                            "name": "scheduler",
+                            "state": {
+                                "waiting": {
+                                    "reason": "CrashLoopBackOff",
+                                    "message": "back-off 5m0s starting",
+                                }
+                            },
+                            "restartCount": 5,
+                            "lastState": {
+                                "terminated": {
+                                    "exitCode": 1,
+                                    "reason": "Error",
+                                    "message": "ConfigError: missing required env K9B_KUBERNETES_AUTH_MODE",
+                                    "startedAt": "2026-06-27T10:00:00Z",
+                                    "finishedAt": "2026-06-27T10:00:01Z",
+                                }
+                            },
                         }
                     ],
                 },

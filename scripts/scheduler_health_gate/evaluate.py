@@ -41,6 +41,11 @@ def check_crash_loop(pods_data: dict[str, Any]) -> list[dict[str, Any]]:
             last_state = cs.get("lastState", {})
             last_terminated = last_state.get("terminated", {})
             
+            # Extract lastState.terminated details for evidence capture
+            last_exit_code = last_terminated.get("exitCode", 0) if last_terminated else None
+            last_exit_reason = last_terminated.get("reason", "") if last_terminated else ""
+            last_exit_message = last_terminated.get("message", "") if last_terminated else ""
+            
             # Check CrashLoopBackOff
             if waiting_reason == "CrashLoopBackOff":
                 crash_loop_pods.append({
@@ -50,6 +55,10 @@ def check_crash_loop(pods_data: dict[str, Any]) -> list[dict[str, Any]]:
                     "restart_count": restart_count,
                     "message": waiting.get("message", ""),
                     "phase": phase,
+                    # Include previous termination details for crash loop evidence
+                    "last_exit_code": last_exit_code,
+                    "last_exit_reason": last_exit_reason,
+                    "last_exit_message": last_exit_message,
                 })
             
             # Check Error state
@@ -61,18 +70,25 @@ def check_crash_loop(pods_data: dict[str, Any]) -> list[dict[str, Any]]:
                     "restart_count": restart_count,
                     "message": waiting.get("message", ""),
                     "phase": phase,
+                    # Include previous termination details for crash loop evidence
+                    "last_exit_code": last_exit_code,
+                    "last_exit_reason": last_exit_reason,
+                    "last_exit_message": last_exit_message,
                 })
             
             # Check terminated with non-zero exit
             elif terminated:
                 exit_code = terminated.get("exitCode", 0)
-                reason = terminated.get("reason", "")
-                if exit_code != 0 and reason in ("Error", "Completed", ""):
+                exit_reason = terminated.get("reason", "")
+                exit_message = terminated.get("message", "")
+                if exit_code != 0 and exit_reason in ("Error", "Completed", ""):
                     crash_loop_pods.append({
                         "pod": pod_name,
                         "container": container_name,
                         "reason": f"exit_code_{exit_code}",
                         "exit_code": exit_code,
+                        "exit_reason": exit_reason,
+                        "exit_message": exit_message,
                         "restart_count": restart_count,
                         "phase": phase,
                     })
@@ -80,13 +96,16 @@ def check_crash_loop(pods_data: dict[str, Any]) -> list[dict[str, Any]]:
             # Check lastState.terminated
             elif last_terminated:
                 exit_code = last_terminated.get("exitCode", 0)
-                reason = last_terminated.get("reason", "")
-                if exit_code != 0 and reason in ("Error", "Completed", ""):
+                exit_reason = last_terminated.get("reason", "")
+                exit_message = last_terminated.get("message", "")
+                if exit_code != 0 and exit_reason in ("Error", "Completed", ""):
                     crash_loop_pods.append({
                         "pod": pod_name,
                         "container": container_name,
                         "reason": f"previous_exit_code_{exit_code}",
                         "exit_code": exit_code,
+                        "exit_reason": exit_reason,
+                        "exit_message": exit_message,
                         "restart_count": restart_count,
                         "phase": phase,
                     })

@@ -11,6 +11,9 @@ from pathlib import Path
 
 from .contracts import SchedulerHealthResult
 
+# Maximum lines to include from logs in bounded summary
+MAX_LOG_LINES = 20
+
 # =============================================================================
 # Console output rendering
 # =============================================================================
@@ -62,11 +65,90 @@ def write_result_artifact(
     return result_path
 
 
+def _bound_log_content(log_content: str | None, max_lines: int = MAX_LOG_LINES) -> str:
+    """Bound log content to at most max_lines, preserving head and tail.
+    
+    Shows startup context at the head and crash/error context at the tail,
+    with a marker line indicating how many lines were omitted.
+    """
+    if not log_content:
+        return "(no log content)"
+
+    lines = log_content.strip().split("\n")
+    if len(lines) <= max_lines:
+        return log_content.strip()
+
+    # Reserve 1 line for the ellipsis marker, split remainder between head and tail
+    retained = max_lines - 1
+    omitted_count = len(lines) - retained
+    marker = f"... [{omitted_count} more lines] ..."
+    head_count = retained // 2
+    tail_count = retained - head_count
+
+    return "\n".join([
+        *lines[:head_count],
+        marker,
+        *lines[-tail_count:],
+    ])
+
+
+def _format_crash_evidence(crash: dict, logs: dict[str, str]) -> list[str]:
+    """Format crash loop evidence with termination details and log excerpts."""
+    pod_name = crash.get("pod", "")
+    container = crash.get("container", "")
+    reason = crash.get("reason", "")
+    restart_count = crash.get("restart_count", 0)
+    message = crash.get("message", "")
+    
+    lines = [
+        f"  - {pod_name}/{container}: {reason} (restarts={restart_count})",
+    ]
+    
+    # Include termination details if available
+    last_exit_code = crash.get("last_exit_code")
+    last_exit_reason = crash.get("last_exit_reason")
+    last_exit_message = crash.get("last_exit_message")
+    exit_code = crash.get("exit_code")
+    exit_reason = crash.get("exit_reason")
+    exit_message = crash.get("exit_message")
+    
+    if last_exit_code is not None:
+        term_reason = last_exit_reason or "Unknown"
+        lines.append(f"    Previous termination: exit={last_exit_code} reason={term_reason}")
+        if last_exit_message:
+            lines.append(f"    Last exit message: {last_exit_message[:200]}")
+    elif exit_code is not None:
+        term_reason = exit_reason or "Unknown"
+        lines.append(f"    Termination: exit={exit_code} reason={term_reason}")
+        if exit_message:
+            lines.append(f"    Exit message: {exit_message[:200]}")
+    
+    if message:
+        lines.append(f"    Waiting message: {message[:200]}")
+    
+    # Include bounded log excerpts
+    if logs:
+        current_log = logs.get(pod_name, "")
+        prev_log = logs.get(f"{pod_name}.previous", "")
+        
+        if current_log:
+            lines.append(f"    Current log excerpt (max {MAX_LOG_LINES} lines):")
+            for line in _bound_log_content(current_log, MAX_LOG_LINES).split("\n"):
+                lines.append(f"      {line[:200]}")
+        
+        if prev_log:
+            lines.append(f"    Previous log excerpt (max {MAX_LOG_LINES} lines):")
+            for line in _bound_log_content(prev_log, MAX_LOG_LINES).split("\n"):
+                lines.append(f"      {line[:200]}")
+    
+    return lines
+
+
 def write_bounded_summary(
     scheduler_dir: Path,
     result: SchedulerHealthResult,
 ) -> Path:
-    """Write bounded summary text artifact.
+    """Write bounded summary text artifact with crash loop evidence.
     
     Returns:
         Path to the written summary file.
@@ -86,11 +168,9 @@ def write_bounded_summary(
         f"Crash loop pods: {len(result.crash_loop_pods)}",
     ]
     
+    # Include detailed evidence for crash loop pods
     for crash in result.crash_loop_pods:
-        summary_lines.append(
-            f"  - {crash['pod']}/{crash['container']}: "
-            f"{crash['reason']} (restarts={crash['restart_count']})"
-        )
+        summary_lines.extend(_format_crash_evidence(crash, result.scheduler_logs))
     
     summary_lines.extend([
         "",

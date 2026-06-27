@@ -29,6 +29,43 @@ class TestCheckCrashLoop:
         assert result[0]["pod"] == "k9b-scheduler-crashing"
         assert result[0]["container"] == "scheduler"
 
+    def test_crash_loop_includes_last_state_evidence(self) -> None:
+        """Includes lastState.terminated evidence in crash loop detection."""
+        pods_data = {
+            "items": [
+                {
+                    "metadata": {"name": "k9b-scheduler-crashing"},
+                    "status": {
+                        "phase": "Running",
+                        "containerStatuses": [
+                            {
+                                "name": "scheduler",
+                                "state": {
+                                    "waiting": {
+                                        "reason": "CrashLoopBackOff",
+                                        "message": "back-off 5m0s starting",
+                                    }
+                                },
+                                "restartCount": 2,
+                                "lastState": {
+                                    "terminated": {
+                                        "exitCode": 1,
+                                        "reason": "Error",
+                                        "message": "ConfigError: missing required env",
+                                    }
+                                },
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+        result = check_crash_loop(pods_data)
+        assert len(result) == 1
+        assert result[0]["last_exit_code"] == 1
+        assert result[0]["last_exit_reason"] == "Error"
+        assert result[0]["last_exit_message"] == "ConfigError: missing required env"
+
     def test_error_state(self) -> None:
         """Detects Error waiting state."""
         pods_data = {
@@ -82,6 +119,37 @@ class TestCheckCrashLoop:
         assert len(result) == 1
         assert result[0]["reason"] == "exit_code_1"
         assert result[0]["exit_code"] == 1
+
+    def test_terminated_includes_exit_message(self) -> None:
+        """Includes exit message in terminated container detection."""
+        pods_data = {
+            "items": [
+                {
+                    "metadata": {"name": "scheduler-crashed"},
+                    "status": {
+                        "phase": "Running",
+                        "containerStatuses": [
+                            {
+                                "name": "scheduler",
+                                "state": {
+                                    "terminated": {
+                                        "exitCode": 127,
+                                        "reason": "Error",
+                                        "message": "File not found: /app/scripts/run_scheduler.py",
+                                    }
+                                },
+                                "restartCount": 1,
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+        result = check_crash_loop(pods_data)
+        assert len(result) == 1
+        assert result[0]["exit_code"] == 127
+        assert result[0]["exit_reason"] == "Error"
+        assert result[0]["exit_message"] == "File not found: /app/scripts/run_scheduler.py"
 
     def test_empty_items(self) -> None:
         """Handles empty items list."""

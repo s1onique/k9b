@@ -56,6 +56,9 @@ class SchedulerHealthResult:
     # Diagnostics collected
     scheduler_pods_json: str = ""
     scheduler_diagnosis: dict[str, Any] = field(default_factory=dict)
+    
+    # Collected logs (for bounded summary rendering)
+    scheduler_logs: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""

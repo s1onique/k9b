@@ -174,6 +174,7 @@ def run_scheduler_health_gate(
         result.namespace_events = get_namespace_events(kubeconfig, namespace)
         result.scheduler_diagnosis["namespace_events_count"] = len(result.namespace_events)
         logs = collect_scheduler_logs(kubeconfig, namespace, pod_selector)
+        result.scheduler_logs = logs  # Store for bounded summary
         write_all_artifacts(scheduler_dir, result, logs)
         return result
     
@@ -223,6 +224,7 @@ def run_scheduler_health_gate(
         result.namespace_events = get_namespace_events(kubeconfig, namespace)
         result.scheduler_diagnosis["namespace_events_count"] = len(result.namespace_events)
         logs = collect_scheduler_logs(kubeconfig, namespace, pod_selector)
+        result.scheduler_logs = logs  # Store for bounded summary
         write_all_artifacts(scheduler_dir, result, logs)
         return result
     
