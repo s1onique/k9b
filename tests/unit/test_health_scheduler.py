@@ -602,3 +602,68 @@ class SchedulerImportSmokeTests(unittest.TestCase):
             HealthRunConfig.__module__,
             "k8s_diag_agent.health.loop",
         )
+
+
+class SchedulerConfigValidationTests(unittest.TestCase):
+    """Regression tests for scheduler health config validation.
+
+    Ensures the scheduler fails fast with a clear error when targets is empty.
+    This is a critical contract: provider-smoke/live-lab must provide at least
+    one valid target, and the scheduler must reject empty targets explicitly.
+    """
+
+    def test_empty_targets_raises_valueerror(self) -> None:
+        """Verify scheduler rejects empty targets with explicit error message.
+
+        Regression test for Phase 1b crash: k9b-scheduler was exiting with
+        ValueError("`targets` must include at least one entry") because
+        Helm chart rendered health-config.json with targets: [].
+        """
+        from k8s_diag_agent.health.loop import HealthRunConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "health-config.json"
+            config_path.write_text(
+                '{"run_label": "test", "targets": []}',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, r"targets.*must include at least one entry"):
+                HealthRunConfig.load(config_path)
+
+    def test_single_valid_target_succeeds(self) -> None:
+        """Verify scheduler accepts config with at least one valid target.
+
+        This is the positive case: provider-smoke/live-lab should render
+        health-config.json with a valid lab target.
+        """
+        from k8s_diag_agent.health.loop import HealthRunConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            # HealthRunConfig.load requires a baseline policy file to exist
+            baseline_dir = tmp_path / "health"
+            baseline_dir.mkdir()
+            baseline_path = baseline_dir / "baseline-policy.json"
+            baseline_path.write_text("{}", encoding="utf-8")
+
+            config_path = tmp_path / "health-config.json"
+            config_path.write_text(
+                json.dumps({
+                    "run_label": "lab-run",
+                    "baseline_policy_path": str(baseline_path),
+                    "targets": [{
+                        "context": "in-cluster",
+                        "label": "lab-cluster",
+                        "monitor_health": True,
+                        "watched_helm_releases": [],
+                        "watched_crd_families": [],
+                        "cluster_class": "lab",
+                        "cluster_role": "primary",
+                        "baseline_cohort": "fleet-lab",
+                    }],
+                }),
+                encoding="utf-8",
+            )
+            config = HealthRunConfig.load(config_path)
+            self.assertEqual(len(config.targets), 1)
+            self.assertEqual(config.targets[0].label, "lab-cluster")

@@ -54,3 +54,20 @@ frontend:
     limits:
       cpu: 250m
       memory: 128Mi
+
+# =============================================================================
+# Health Configuration: Required for scheduler startup
+# The scheduler health gate validates that targets is non-empty.
+# Provider-smoke/live-lab deployments need at least one target to start.
+# =============================================================================
+healthConfig:
+  data:
+    targets:
+      - context: "in-cluster"
+        label: "lab-cluster"
+        monitor_health: true
+        watched_helm_releases: []
+        watched_crd_families: []
+        cluster_class: "lab"
+        cluster_role: "primary"
+        baseline_cohort: "fleet-lab"
