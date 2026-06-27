@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 # Import crash artifact collection - module is required as part of monitor contract
+from .k9b_cnpg_live_lab_constants import FAILURE_CRASH_LOOP
 from .k9b_cnpg_live_lab_crash_artifacts import collect_crash_artifacts
 from .k9b_cnpg_live_lab_helm_inventory import (
     parse_workload_inventory_from_file,
@@ -119,21 +120,61 @@ def monitor_rollout(
 
         log(f"[{elapsed}s] Rollout not complete: {status}")
 
-        # Collect periodic snapshots with expected deployments
-        if snapshot_count == 0 or elapsed >= 60:
-            snapshot_ts = datetime.now(UTC).isoformat()
-            snapshot = _collect_rollout_snapshot(
-                kubeconfig, namespace,
-                artifact_dir or Path("/tmp"),
-                release, snapshot_ts,
-                expected_deployments=resolved_expected_deployments if use_manifest_inventory else None,
-                target_count=effective_target_count,
-            )
-            if snapshot:
-                last_snapshot = snapshot
-                snapshot_count += 1
+        # Collect snapshot for classification check on every poll iteration
+        # This enables fail-fast detection of fatal conditions like CrashLoopBackOff
+        snapshot_ts = datetime.now(UTC).isoformat()
+        snapshot = _collect_rollout_snapshot(
+            kubeconfig, namespace,
+            artifact_dir or Path("/tmp"),
+            release, snapshot_ts,
+            expected_deployments=resolved_expected_deployments if use_manifest_inventory else None,
+            target_count=effective_target_count,
+        )
+        if snapshot:
+            last_snapshot = snapshot
+            snapshot_count += 1
 
-                # Write snapshot to file
+            # FAIL-FAST: Check for fatal crash loop and exit immediately
+            # CrashLoopBackOff is a Kubernetes-reported fatal condition - no point
+            # waiting for full timeout when the container is already failing repeatedly
+            rollout_checks = snapshot.get("rollout_checks", {})
+            failure_class = rollout_checks.get("failure_class", "")
+            diagnostics = rollout_checks.get("diagnostics", {})
+
+            if failure_class == FAILURE_CRASH_LOOP:
+                crash_loop_data = diagnostics.get("crash_loop", [])
+                if crash_loop_data:
+                    first_crash = crash_loop_data[0]
+                    crash_pod = first_crash.get("pod", "unknown")
+                    crash_container = first_crash.get("container", "unknown")
+                    crash_restarts = first_crash.get("restart_count", 0)
+                    log(f"FAIL-FAST: CrashLoopBackOff detected for {crash_pod}/{crash_container} "
+                        f"after {crash_restarts} restarts at {elapsed}s")
+
+                    # Write final diagnosis with crash loop details
+                    final_diagnosis = {
+                        "fatal": True,
+                        "failure_class": failure_class,
+                        "status": f"Rollout failed: pod {crash_pod} container {crash_container} "
+                                  f"is in CrashLoopBackOff after {crash_restarts} restarts",
+                        "diagnostics": diagnostics,
+                        "crash_pod_name": crash_pod,
+                        "crash_container_name": crash_container,
+                        "crash_restart_count": crash_restarts,
+                    }
+                    if artifact_dir:
+                        write_json_atomically(artifact_dir / "final-diagnosis.json", final_diagnosis)
+
+                    # Write snapshot to file
+                    if artifact_dir:
+                        snapshot_path = artifact_dir / f"rollout-snapshot-{snapshot_count}.json"
+                        write_json_atomically(snapshot_path, snapshot)
+                        log(f"Snapshot written to {snapshot_path}")
+
+                    return False, final_diagnosis["status"], snapshot
+
+            # Write periodic snapshot only on first or long intervals to reduce artifact noise
+            if snapshot_count == 1 or elapsed >= 60:
                 if artifact_dir:
                     snapshot_path = artifact_dir / f"rollout-snapshot-{snapshot_count}.json"
                     write_json_atomically(snapshot_path, snapshot)

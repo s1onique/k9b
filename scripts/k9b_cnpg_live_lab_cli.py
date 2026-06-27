@@ -248,8 +248,13 @@ def main_monitor_rollout() -> int:
     """CLI entry point for rollout monitor."""
     import json
 
-    # Lazy import to avoid requiring PyYAML at module import time
-    from scripts.k9b_cnpg_live_lab_monitor import monitor_rollout as _monitor_rollout
+    # Lazy imports to avoid requiring PyYAML at module import time
+    from scripts.k9b_cnpg_live_lab_monitor import (
+        get_expected_deployments_from_manifest,
+    )
+    from scripts.k9b_cnpg_live_lab_monitor import (
+        monitor_rollout as _monitor_rollout,
+    )
 
     parser = argparse.ArgumentParser(
         description="Monitor Kubernetes rollout until success or timeout"
@@ -301,7 +306,32 @@ def main_monitor_rollout() -> int:
     artifact_dir = Path(args.artifact_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    # Monitor rollout
+    # Derive expected deployments from rendered manifest (if available)
+    # This is the authoritative source - rendered manifest must be used
+    # instead of inferring deployment names from release name
+    rendered_manifest_path = artifact_dir / "helm" / "rendered-manifest.yaml"
+    expected_deployments = get_expected_deployments_from_manifest(
+        artifact_dir, args.release, args.namespace
+    )
+
+    # Manifest contract: if rendered manifest exists, it MUST contain Deployments
+    # Silent fallback to legacy mode would allow stale "Deployment k9b" to resurface
+    if rendered_manifest_path.exists() and not expected_deployments:
+        log(f"ERROR: Rendered manifest exists but yielded no Deployments: {rendered_manifest_path}")
+        log("ERROR: Manifest contract violation - expected Deployment objects not found")
+        log("ERROR: Cannot proceed with rollout monitoring without valid deployment names")
+        result = {
+            "success": False,
+            "status": f"Manifest contract violation: no Deployments in {rendered_manifest_path}",
+            "failure_class": "manifest_contract_error",
+            "expected_deployments": [],
+            "rollout_checks": {},
+        }
+        write_json_atomically(artifact_dir / "rollout-result.json", result)
+        print(json.dumps(result, indent=2))
+        return 1
+
+    # Monitor rollout with manifest-derived deployments
     success, status, snapshot = _monitor_rollout(
         args.kubeconfig,
         args.namespace,
@@ -310,6 +340,7 @@ def main_monitor_rollout() -> int:
         args.interval,
         args.target_count,
         artifact_dir,
+        expected_deployments=expected_deployments if expected_deployments else None,
     )
 
     # Output result
@@ -319,6 +350,7 @@ def main_monitor_rollout() -> int:
         "failure_class": snapshot.get("rollout_checks", {}).get("failure_class", "")
             if snapshot else "",
         "rollout_checks": snapshot.get("rollout_checks", {}) if snapshot else {},
+        "expected_deployments": expected_deployments,
     }
 
     # Write result JSON
