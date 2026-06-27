@@ -233,8 +233,17 @@ from scripts.k9b_cnpg_live_lab_monitor import (  # noqa: F401,F811
 # =============================================================================
 from scripts.k9b_cnpg_live_lab_rollout import (  # noqa: F401,F811
     RolloutResult,
+    _check_crash_loop,
+    _check_deployment_progress_deadline,
+    _check_deployment_replica_failure,
+    _check_failed_scheduling,
     _check_failed_scheduling_from_events,
+    _check_image_pull_backoff,
+    _check_pvc_pending,
+    _check_readiness_probe_failed,
     _check_readiness_probe_failed_from_events,
+    _check_rollout_success,
+    _check_rollout_success_multi,
     _collect_rollout_snapshot,
     _is_transient_volume_binding_conflict,
     classify_rollout_state,
