@@ -85,8 +85,6 @@ def collect_test_nodeids() -> list[str]:
         [
             sys.executable, "-m", "pytest",
             "--collect-only", "-q",
-            "--ignore=tests/test_rollout_classifier_extended.py",
-            "--ignore=tests/unit/test_property_checks.py",
             "tests/",
         ],
         capture_output=True,

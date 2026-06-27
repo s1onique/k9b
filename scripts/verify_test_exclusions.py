@@ -21,9 +21,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).parent.parent
 
 # Allowlisted exclusions - files that are documented as broken
-ALLOWLISTED_EXCLUSIONS = {
-    "tests/unit/test_property_checks.py",
-}
+ALLOWLISTED_EXCLUSIONS: set[str] = set()
 
 
 def get_full_collection() -> tuple[set[str], set[str]]:
@@ -70,7 +68,6 @@ def get_sharded_collection() -> set[str]:
         [
             sys.executable, "-m", "pytest",
             "--collect-only", "-q",
-            "--ignore=tests/unit/test_property_checks.py",
             "tests/",
         ],
         capture_output=True,
