@@ -26,13 +26,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.k9b_cnpg_live_lab_crash_artifacts import (
-    _collect_container_logs,
-)
 from scripts.k9b_cnpg_live_lab_monitor import (
     get_expected_deployments_from_manifest,
 )
-
 
 # =============================================================================
 # Regression Test 1: Rendered manifest fixture with k9b-backend, k9b-scheduler
