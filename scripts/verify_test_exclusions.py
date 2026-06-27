@@ -22,8 +22,7 @@ REPO_ROOT = Path(__file__).parent.parent
 
 # Allowlisted exclusions - files that are documented as broken
 ALLOWLISTED_EXCLUSIONS = {
-    "tests/test_rollout_classifier_extended.py",
-    "tests/unit/test_property_checks.py",  # Missing: hypothesis (dev-only dep)
+    "tests/unit/test_property_checks.py",
 }
 
 
@@ -71,7 +70,6 @@ def get_sharded_collection() -> set[str]:
         [
             sys.executable, "-m", "pytest",
             "--collect-only", "-q",
-            "--ignore=tests/test_rollout_classifier_extended.py",
             "--ignore=tests/unit/test_property_checks.py",
             "tests/",
         ],
