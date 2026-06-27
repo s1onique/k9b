@@ -8,8 +8,8 @@ The scheduler is responsible for incident ingestion - if it's not healthy,
 no incidents will be produced regardless of backend health.
 """
 
+from .contracts import SchedulerHealthResult
 from .main import run_scheduler_health_gate
-from .types import SchedulerHealthResult
 
 __all__ = [
     "run_scheduler_health_gate",
