@@ -1484,6 +1484,7 @@ jobs:
       # =======================================================================
       # Phase 2: Incident Discovery
       # Only runs if backend health gate passed (HTTP 200) AND scheduler is healthy.
+      # Replaces inline polling with classified failure modes and diagnostic collection.
       # =======================================================================
       - name: "Phase 2: Incident Discovery"
         id: incident-discovery
@@ -1494,47 +1495,63 @@ jobs:
           echo "Backend health gate passed, scheduler is healthy, proceeding to incident discovery."
           echo ""
           
-          # Get backend service URL (matches Helm chart k9b.backend.fullname = <release>-k9b-backend)
-          BACKEND_SVC="k9b-backend"
-          BACKEND_PORT="8080"
-          echo "Backend service: ${BACKEND_SVC}:${BACKEND_PORT}"
+          # Run incident discovery gate with classified failure modes
+          # The gate:
+          # 1. Verifies the incident fixture exists and is failing
+          # 2. Detects candidate from fixture state
+          # 3. Polls backend API with bounded retries
+          # 4. Collects diagnostics on failure
+          # 5. Classifies failure into actionable categories
+          # 6. When --expect-llm-enrichment: checks LLM provider invocation
+          #
+          # Use set +e to capture exit code so artifact reading happens even on failure
+          set +e
+          .venv/bin/python scripts/check_incident_discovery_gate.py \
+            --kubeconfig "${KUBECONFIG}" \
+            --namespace "$LAB_NAMESPACE" \
+            --backend-deployment k9b-backend \
+            --backend-container backend \
+            --backend-port 8080 \
+            --fixture-name cnpg-lab-failing-app \
+            --max-retries 12 \
+            --retry-interval 10 \
+            --artifact-dir ./lab-artifacts/live/provider-smoke/incident-discovery \
+            --expect-llm-enrichment
+          GATE_RC=$?
+          set -e
           
-          # Get incident ID from the backend API with bounded polling
-          # (k9b incident discovery may lag behind symptom injection)
-          echo "Getting incident ID from backend API with bounded polling..."
-          INCIDENT_ID=""
-          MAX_RETRIES=12
-          RETRY_INTERVAL=10
+          # Read result
+          if [ -f ./lab-artifacts/live/provider-smoke/incident-discovery/incident-discovery-result.json ]; then
+            INCIDENT_ID=$(.venv/bin/python scripts/extract_json_value.py ./lab-artifacts/live/provider-smoke/incident-discovery/incident-discovery-result.json --key incident_id 2>/dev/null || echo "")
+            FAILURE_CLASS=$(.venv/bin/python scripts/extract_json_value.py ./lab-artifacts/live/provider-smoke/incident-discovery/incident-discovery-result.json --key failure_class 2>/dev/null || echo "")
+            echo "Incident discovery result: failure_class=${FAILURE_CLASS}, incident_id=${INCIDENT_ID}"
+            echo "INCIDENT_ID=${INCIDENT_ID}" >> $GITHUB_ENV
+            echo "INCIDENT_DISCOVERY_FAILURE_CLASS=${FAILURE_CLASS}" >> $GITHUB_OUTPUT
+          fi
           
-          for i in $(seq 1 $MAX_RETRIES); do
-            API_RESPONSE=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "$LAB_NAMESPACE" \
-              deploy/${BACKEND_SVC} -c backend -- \
-              curl -sS "http://localhost:${BACKEND_PORT}/api/incidents" \
-              -H "Content-Type: application/json" \
-              --max-time 30 2>/dev/null || echo '{"incidents":[]}')
-            
-            # Extract first incident_id from the API response (bounded - no raw response logged)
-            INCIDENT_ID=$(echo "$API_RESPONSE" | .venv/bin/python scripts/extract_incident_id.py 2>/dev/null || echo "")
-            
-            if [[ -n "$INCIDENT_ID" ]]; then
-              echo "Found incident ID: ${INCIDENT_ID} (attempt $i/$MAX_RETRIES)"
-              break
-            fi
-            
-            echo "No incident found yet... (attempt $i/$MAX_RETRIES, waiting ${RETRY_INTERVAL}s)"
-            sleep $RETRY_INTERVAL
-          done
+          # Show bounded summary if available
+          if [ -f ./lab-artifacts/live/provider-smoke/incident-discovery/bounded-summary.txt ]; then
+            echo ""
+            echo "=== Incident Discovery Summary ==="
+            cat ./lab-artifacts/live/provider-smoke/incident-discovery/bounded-summary.txt
+          fi
           
-          if [[ -z "$INCIDENT_ID" ]]; then
-            echo "ERROR: No incident found via backend API after ${MAX_RETRIES} attempts"
+          # Fail or succeed based on gate result
+          if [ ${GATE_RC} -ne 0 ]; then
+            echo ""
+            echo "FAILURE: Incident discovery failed: ${FAILURE_CLASS:-unknown_failure}"
+            echo ""
+            echo "The incident was not discovered within the timeout period."
+            echo "Check ./lab-artifacts/live/provider-smoke/incident-discovery/ for diagnostics."
+            echo ""
             echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
-            echo "PROVIDER_SMOKE_CLASS=no_incident_after_timeout" >> $GITHUB_OUTPUT
+            echo "PROVIDER_SMOKE_CLASS=${FAILURE_CLASS:-incident_discovery_failed}" >> $GITHUB_OUTPUT
             echo "PROVIDER_SMOKE_PHASE=incident_discovery" >> $GITHUB_OUTPUT
             exit 1
           fi
           
-          echo "Incident ID: ${INCIDENT_ID}"
-          echo "INCIDENT_ID=${INCIDENT_ID}" >> $GITHUB_ENV
+          echo ""
+          echo "SUCCESS: Incident discovered: ${INCIDENT_ID}"
           echo "PROVIDER_SMOKE_PHASE=incident_discovery" >> $GITHUB_OUTPUT
           echo "PROVIDER_SMOKE_CLASS=incident_found" >> $GITHUB_OUTPUT
 

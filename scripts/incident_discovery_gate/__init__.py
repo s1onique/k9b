@@ -1,0 +1,64 @@
+"""Incident discovery gate module.
+
+This module provides incident discovery functionality for provider smoke testing.
+It verifies the incident fixture exists, detects candidates, and polls the backend
+API with bounded retries and classified failures.
+
+Public API:
+- run_incident_discovery: Main function to run the incident discovery gate
+- IncidentDiscoveryResult: Dataclass for structured results
+- Constants: FAILURE_INCIDENT_*, FAILURE_FIXTURE_*
+
+Exit codes:
+    0 - Incident discovered (HTTP 200 with incident ID)
+    1 - Incident discovery failed (classified with failure artifact written)
+"""
+
+from .constants import (
+    FAILURE_INCIDENT_API_CONTRACT_MISMATCH,
+    FAILURE_INCIDENT_CANDIDATE_NOT_DETECTED,
+    FAILURE_INCIDENT_CANDIDATE_NOT_PROMOTED,
+    FAILURE_INCIDENT_DISCOVERY_TIMEOUT,
+    FAILURE_INCIDENT_FIXTURE_HEALTHY_UNEXPECTEDLY,
+    FAILURE_INCIDENT_FIXTURE_MISSING,
+    FAILURE_INCIDENT_FIXTURE_NAMESPACE_MISMATCH,
+    FAILURE_INCIDENT_SCHEDULER_COMMUNICATION_ERROR,
+    # LLM enrichment failure constants (Phase 2d/2e)
+    FAILURE_LLM_ENRICHMENT_DISABLED,
+    FAILURE_LLM_ENRICHMENT_NOT_TRIGGERED_NO_INCIDENT,
+    FAILURE_LLM_ENRICHMENT_NOT_TRIGGERED_POLICY_GATE,
+    FAILURE_LLM_PROVIDER_CLIENT_NOT_INVOKED,
+    FAILURE_LLM_PROVIDER_ENV_MISSING,
+    FAILURE_LLM_PROVIDER_NOT_CONFIGURED,
+    FAILURE_LLM_PROVIDER_REQUEST_FAILED,
+    FAILURE_LLM_PROVIDER_RESPONSE_NOT_PERSISTED,
+    FAILURE_LLM_PROVIDER_SECRET_MISSING,
+)
+from .main import run_incident_discovery
+from .types import IncidentDiscoveryResult
+
+__all__ = [
+    "run_incident_discovery",
+    "IncidentDiscoveryResult",
+    # Fixture failures
+    "FAILURE_INCIDENT_FIXTURE_MISSING",
+    "FAILURE_INCIDENT_FIXTURE_HEALTHY_UNEXPECTEDLY",
+    "FAILURE_INCIDENT_FIXTURE_NAMESPACE_MISMATCH",
+    # Candidate failures
+    "FAILURE_INCIDENT_CANDIDATE_NOT_DETECTED",
+    "FAILURE_INCIDENT_CANDIDATE_NOT_PROMOTED",
+    # API failures
+    "FAILURE_INCIDENT_API_CONTRACT_MISMATCH",
+    "FAILURE_INCIDENT_DISCOVERY_TIMEOUT",
+    "FAILURE_INCIDENT_SCHEDULER_COMMUNICATION_ERROR",
+    # LLM enrichment failures (Phase 2d/2e)
+    "FAILURE_LLM_ENRICHMENT_NOT_TRIGGERED_NO_INCIDENT",
+    "FAILURE_LLM_ENRICHMENT_DISABLED",
+    "FAILURE_LLM_PROVIDER_NOT_CONFIGURED",
+    "FAILURE_LLM_PROVIDER_SECRET_MISSING",
+    "FAILURE_LLM_PROVIDER_ENV_MISSING",
+    "FAILURE_LLM_ENRICHMENT_NOT_TRIGGERED_POLICY_GATE",
+    "FAILURE_LLM_PROVIDER_CLIENT_NOT_INVOKED",
+    "FAILURE_LLM_PROVIDER_REQUEST_FAILED",
+    "FAILURE_LLM_PROVIDER_RESPONSE_NOT_PERSISTED",
+]
