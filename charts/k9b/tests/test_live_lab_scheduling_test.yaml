@@ -335,7 +335,7 @@ tests:
           path: data["health-config.json"]
       - matchRegex:
           path: data["health-config.json"]
-          pattern: targets
+          pattern: '"targets"\s*:\s*\[\s*\]'
       - notMatchRegex:
           path: data["health-config.json"]
           pattern: '"label":'
