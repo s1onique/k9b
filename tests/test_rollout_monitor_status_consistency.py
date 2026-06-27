@@ -19,7 +19,9 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -28,6 +30,25 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts.k9b_cnpg_live_lab_monitor import (
     get_expected_deployments_from_manifest,
 )
+
+
+def _assert_mapping(value: object) -> Mapping[str, Any]:
+    """Narrow an object to Mapping for type-safe membership checks."""
+    assert isinstance(value, Mapping), f"Expected Mapping, got {type(value).__name__}"
+    return value
+
+
+def _assert_sequence(value: object) -> Sequence[Any]:
+    """Narrow an object to Sequence for type-safe membership checks.
+
+    Rejects str/bytes/bytearray which technically satisfy Sequence ABC
+    but are not the intended container types for membership checks.
+    """
+    assert isinstance(value, Sequence), f"Expected Sequence, got {type(value).__name__}"
+    assert not isinstance(value, (str, bytes, bytearray)), (
+        f"Expected list-like Sequence, got {type(value).__name__}"
+    )
+    return value
 
 
 class TestNoStaleK9bDeploymentMessage:
@@ -343,7 +364,7 @@ class TestArtifactCollectionIntegration:
         crash_evidence = _check_crash_loop_from_pods(pods_json)
 
         assert len(crash_evidence) == 1
-        evidence = crash_evidence[0]
+        evidence = _assert_mapping(crash_evidence[0])
         # Required fields for artifact collection
         assert "pod" in evidence
         assert "container" in evidence
@@ -383,12 +404,13 @@ class TestRolloutSnapshotContainsDeployments:
 
         # Snapshot must have expected_deployments for diagnostics
         assert "expected_deployments" in result
-        assert "k9b-scheduler" in result["expected_deployments"]
-        assert "k9b-backend" in result["expected_deployments"]
+        expected_deployments = _assert_sequence(result["expected_deployments"])
+        assert "k9b-scheduler" in expected_deployments
+        assert "k9b-backend" in expected_deployments
         # Must NOT contain "Deployment k9b" as a standalone item
-        assert "Deployment k9b" not in result["expected_deployments"]
+        assert "Deployment k9b" not in expected_deployments
         # Verify all names start with the release prefix "k9b"
-        assert all(d.startswith("k9b") for d in result["expected_deployments"])
+        assert all(d.startswith("k9b") for d in expected_deployments)
 
 
 if __name__ == "__main__":
