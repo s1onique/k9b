@@ -13,6 +13,7 @@ from typing import Any
 
 from .k9b_cnpg_live_lab_rollout_classify import classify_rollout_state
 from .k9b_cnpg_live_lab_rollout_deploy import (
+    _check_deployment_complete_from_json,
     _check_deployment_progress_deadline_from_json,
     _check_deployment_replica_failure_from_json,
     _check_pvc_pending_from_json,
@@ -163,7 +164,15 @@ def _check_rollout_success_multi(
 ) -> tuple[bool, str]:
     """Check if rollout succeeded for multiple expected deployments.
 
-    All expected deployments must exist and have availableReplicas >= target_count.
+    Uses strict rollout-complete semantics:
+    - observedGeneration >= generation
+    - updatedReplicas >= desired_replicas
+    - availableReplicas >= desired_replicas
+    - No old replicas remain
+    - unavailableReplicas == 0 (when present)
+
+    Only checks the deployments specified in expected_deployments, not all
+    deployments in the namespace.
 
     Args:
         kubeconfig: Path to kubeconfig
@@ -181,37 +190,34 @@ def _check_rollout_success_multi(
     if result.returncode != 0:
         return False, f"kubectl failed: {result.stderr}"
 
+    deployments_json = result.stdout
+
+    # Parse and filter to only expected deployments
     try:
-        data = json.loads(result.stdout)
+        data = json.loads(deployments_json)
     except json.JSONDecodeError:
         return False, "Failed to parse deployment JSON"
 
-    # Build map of cluster deployments
-    cluster_deployments: dict[str, dict[str, Any]] = {}
-    for deploy in data.get("items", []):
-        deploy_name = deploy.get("metadata", {}).get("name", "")
-        cluster_deployments[deploy_name] = deploy
+    expected_set = set(expected_deployments)
+    filtered_items = [
+        deploy for deploy in data.get("items", [])
+        if deploy.get("metadata", {}).get("name", "") in expected_set
+    ]
 
-    # Check for missing deployments
-    missing = [name for name in expected_deployments if name not in cluster_deployments]
+    # Check for missing expected deployments
+    cluster_names = {deploy.get("metadata", {}).get("name", "") for deploy in filtered_items}
+    missing = [name for name in expected_deployments if name not in cluster_names]
     if missing:
         return False, f"Expected deployment(s) not found: {', '.join(missing)}"
 
-    # Check all expected deployments are healthy
-    not_ready = []
-    for name in expected_deployments:
-        deploy = cluster_deployments[name]
-        status = deploy.get("status", {})
-        replicas = status.get("replicas", 0)
-        available = status.get("availableReplicas", 0)
-        ready = status.get("readyReplicas", 0)
-        if available < target_count or ready < target_count:
-            not_ready.append(f"{name}({ready}/{replicas} ready, {available} available)")
+    # Check completion only for filtered (expected) deployments
+    filtered_json = json.dumps({"items": filtered_items})
+    all_complete, states, summary = _check_deployment_complete_from_json(filtered_json)
 
-    if not_ready:
-        return False, f"Deployment(s) not ready: {', '.join(not_ready)}"
+    if not all_complete:
+        return False, summary
 
-    return True, f"All {len(expected_deployments)} deployments healthy"
+    return True, summary
 
 
 def _collect_rollout_snapshot(

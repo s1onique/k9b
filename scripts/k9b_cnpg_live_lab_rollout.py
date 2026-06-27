@@ -14,6 +14,8 @@ from .k9b_cnpg_live_lab_rollout_classify import (  # noqa: F401,F811
 
 # Re-export deploy check functions
 from .k9b_cnpg_live_lab_rollout_deploy import (  # noqa: F401,F811
+    DeploymentRolloutState,
+    _check_deployment_complete_from_json,
     _check_deployment_progress_deadline_from_json,
     _check_deployment_replica_failure_from_json,
     _check_pvc_pending_from_json,
