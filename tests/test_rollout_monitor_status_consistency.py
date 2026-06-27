@@ -125,32 +125,6 @@ class TestCrashLoopStatusNamesActualPod:
 
     def test_crash_status_format_includes_pod_and_container(self) -> None:
         """Crash-loop status must include actual pod name and container name."""
-        # Simulate the exact scenario from the failing lab
-        pods_json = json.dumps({
-            "items": [{
-                "metadata": {
-                    "name": "k9b-scheduler-6bd59ddfd5-nthjf",
-                    "ownerReferences": [{
-                        "kind": "ReplicaSet",
-                        "name": "k9b-scheduler-6bd59ddfd5"
-                    }]
-                },
-                "status": {
-                    "phase": "Running",
-                    "containerStatuses": [{
-                        "name": "scheduler",
-                        "restartCount": 3,
-                        "state": {
-                            "waiting": {
-                                "reason": "CrashLoopBackOff",
-                                "message": "back-off 1m0s restarting"
-                            }
-                        }
-                    }]
-                }
-            }]
-        })
-
         # The crash_loop data should contain the actual pod/container names
         crash_loop_data = [{
             "pod": "k9b-scheduler-6bd59ddfd5-nthjf",
@@ -181,8 +155,8 @@ class TestCrashLoopStatusNamesActualPod:
     def test_classifier_returns_crash_loop_for_scheduler_crash(self) -> None:
         """Classifier must return crash_loop for scheduler container crash."""
         from scripts.k9b_cnpg_live_lab_rollout_classify import (
-            classify_rollout_state,
             FAILURE_CRASH_LOOP,
+            classify_rollout_state,
         )
 
         # Exact pod state from the failing lab
@@ -231,8 +205,8 @@ class TestTransientVolumeBindingDiagnosticOnly:
     def test_transient_volume_binding_with_crash_remains_crash_loop(self) -> None:
         """VolumeBinding conflict + crash evidence must classify as crash_loop."""
         from scripts.k9b_cnpg_live_lab_rollout_classify import (
-            classify_rollout_state,
             FAILURE_CRASH_LOOP,
+            classify_rollout_state,
         )
 
         # Crash loop evidence
@@ -334,8 +308,8 @@ class TestArtifactCollectionIntegration:
         """Verify crash artifact collection module has required functions."""
         try:
             from scripts.k9b_cnpg_live_lab_crash_artifacts import (
-                collect_crash_artifacts,
                 CRASH_ARTIFACT_COLLECTED_SENTINEL,
+                collect_crash_artifacts,
             )
             assert callable(collect_crash_artifacts)
             assert CRASH_ARTIFACT_COLLECTED_SENTINEL is not None
