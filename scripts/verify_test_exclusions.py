@@ -10,7 +10,7 @@ are:
 
 Collection Policy:
     - Test collection uses the shared helper from test_collection.py
-    - No raw --ignore=tests/... literals (enforced by regression guard)
+    - No raw ignore flags for test files (enforced by regression guard)
 
 Usage:
     python scripts/verify_test_exclusions.py
@@ -87,16 +87,16 @@ def main() -> int:
     print("=" * 70)
     
     # Run regression guard first
-    print("\nRegression Guard: Checking for hard-coded --ignore=tests/...")
+    print("\nRegression Guard: Checking for hard-coded ignore flags...")
     guard_passed, guard_violations = verify_no_hard_coded_ignores()
     if not guard_passed:
         print("ERROR: Regression guard failed!")
         print("".join(guard_violations))
-        print("\nRaw --ignore=tests/... literals found in collection code.")
+        print("\nRaw --ignore patterns found in collection code.")
         print("Future exclusions must be added to ALLOWED_COLLECTION_EXCLUSIONS")
         print("in scripts/test_collection.py and documented in scripts/test_exclusions.md")
         return 1
-    print("  [OK] No hard-coded --ignore=tests/... found")
+    print("  [OK] No hard-coded ignore flags found")
     
     # Get collections
     full_nodeids, error_files = get_full_collection()
@@ -163,7 +163,7 @@ def main() -> int:
     print(f"  - {len(ALLOWLISTED_EXCLUSIONS)} allowlisted exclusions")
     print(f"  - {len(sharded_nodeids)} tests in sharded collection")
     print("  - All missing tests are documented in scripts/test_exclusions.md")
-    print("  - No hard-coded --ignore=tests/... found (regression guard passed)")
+    print("  - No hard-coded ignore flags found (regression guard passed)")
     
     return 0
 

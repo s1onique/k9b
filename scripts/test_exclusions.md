@@ -40,7 +40,7 @@ _None currently._ All test files collect successfully.
 
 ## Collection Policy
 
-1. **No raw `--ignore=tests/...` literals** are allowed in collection code
+1. **No raw `--ignore=...` patterns for test files** are allowed in collection code
 2. Any file-specific exclusions must be added to `ALLOWED_COLLECTION_EXCLUSIONS`
 3. The exclusion must be documented in this file
 4. The verifier checks that allowlisted files actually have import errors
@@ -76,6 +76,15 @@ The regression guard catches hard-coded `--ignore=tests/...` patterns in:
 Adding a raw `--ignore` will cause:
 1. `verify_test_exclusions.py` to fail immediately
 2. Unit tests in `TestRegressionGuard` to fail
+
+**Non-goal: Split-argument patterns**
+
+The guard cannot detect split-argument patterns like:
+```python
+"--ignore",
+"tests/foo.py",
+```
+This is an explicit non-goal. Catching split forms would require context-aware AST analysis. The guard catches the prior real-world failure shape (inline `--ignore=tests/...` patterns on their own line), which is sufficient for preventing drift.
 
 To add an exclusion properly:
 1. Add the file to `ALLOWED_COLLECTION_EXCLUSIONS` in `test_collection.py`

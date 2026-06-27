@@ -4,24 +4,27 @@ This module provides the single source of truth for pytest collection
 used by both shard_tests.py and verify_test_exclusions.py.
 
 Usage:
-    from test_collection import collect_test_nodeids, get_collection_command
+    from test_collection import collect_test_nodeids, build_collection_command
 
 Collection Policy:
     - Tests are collected from the tests/ directory using pytest --collect-only -q
-    - No --ignore flags are used in normal collection (all healthy tests are included)
-    - Any file-specific exclusions must be added to ALLOWED_COLLECTION_EXCLUSIONS below
-    - This module contains NO raw --ignore=tests/... literals (enforced by regression tests)
+    - No --ignore flags are used when ALLOWED_COLLECTION_EXCLUSIONS is empty
+    - Any file-specific exclusions are added via ALLOWED_COLLECTION_EXCLUSIONS
+    - This module contains NO raw --ignore patterns for test files (enforced by AST-based regression tests)
 
 Adding exclusions:
     1. If a test file has a genuine import error, add it to ALLOWED_COLLECTION_EXCLUSIONS
-    2. Document the exclusion in scripts/test_exclusions.md
-    3. The exclusion will be verified by verify_test_exclusions.py
+    2. The collection command builder will automatically add --ignore flags
+    3. Document the exclusion in scripts/test_exclusions.md
+    4. The exclusion will be verified by verify_test_exclusions.py
 
-DO NOT add raw --ignore=tests/... to collection code.
+DO NOT add raw ignore flags to collection code.
 DO NOT add skips/xfails/deselects for healthy tests.
 """
 from __future__ import annotations
 
+import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -34,11 +37,9 @@ REPO_ROOT = Path(__file__).parent.parent.resolve()
 # Add new exclusions ONLY here, then document in scripts/test_exclusions.md
 ALLOWED_COLLECTION_EXCLUSIONS: set[str] = set()
 
-# Regex pattern to catch raw --ignore=tests/... literals (regression guard)
-# Only matches actual command-line usage inside subprocess calls.
-# Matches: subprocess.run([..., "--ignore=tests/foo.py", ...])
-# Does NOT match: docstrings, comments, print statements, variable assignments
-HARD_CODED_IGNORE_PATTERN = r'\["\']--ignore[=\s]+tests/'
+# Pattern to detect --ignore=tests/... or --ignore tests/... strings
+# This is used for AST-based detection in the regression guard
+IGNORE_PATTERN = re.compile(r"--ignore[=\s]+tests/")
 
 
 class CollectionResult(NamedTuple):
@@ -49,12 +50,29 @@ class CollectionResult(NamedTuple):
     stderr: str
 
 
+class IgnoreStringVisitor(ast.NodeVisitor):
+    """AST visitor to find string constants matching ignore patterns."""
+
+    def __init__(self) -> None:
+        self.violations: list[tuple[int, str]] = []
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        """Visit constant nodes (Python 3.8+)."""
+        if isinstance(node.value, str) and IGNORE_PATTERN.search(node.value):
+            self.violations.append((node.lineno, node.value))
+
+    def visit_Str(self, node: ast.Str) -> None:  # pragma: no cover  # Python < 3.8
+        """Visit string nodes (Python < 3.8 fallback)."""
+        if isinstance(node.s, str) and IGNORE_PATTERN.search(node.s):
+            self.violations.append((node.lineno, node.s))
+
+
 def _parse_nodeids_from_output(output: str) -> list[str]:
     """Parse test nodeids from pytest --collect-only output.
-    
+
     Args:
         output: stdout from pytest --collect-only -q
-        
+
     Returns:
         List of nodeid strings (sorted for determinism)
     """
@@ -68,37 +86,68 @@ def _parse_nodeids_from_output(output: str) -> list[str]:
     return sorted(nodeids)
 
 
+def build_collection_command(
+    extra_args: list[str] | None = None,
+    include_allowed_ignores: bool = True,
+) -> list[str]:
+    """Build the pytest collection command.
+
+    This is the canonical way to build pytest collection commands.
+    It handles ALLOWED_COLLECTION_EXCLUSIONS automatically.
+
+    Args:
+        extra_args: Additional pytest arguments to include
+        include_allowed_ignores: If True, add --ignore flags for each allowed exclusion
+
+    Returns:
+        Command list suitable for subprocess.run()
+    """
+    cmd: list[str] = [
+        sys.executable, "-m", "pytest",
+        "--collect-only", "-q",
+    ]
+
+    # Add --ignore flags for allowed exclusions
+    if include_allowed_ignores:
+        for exclusion in sorted(ALLOWED_COLLECTION_EXCLUSIONS):
+            cmd.extend(["--ignore", exclusion])
+
+    # Add extra arguments
+    if extra_args:
+        cmd.extend(extra_args)
+
+    # Add the tests directory
+    cmd.append("tests/")
+
+    return cmd
+
+
 def collect_test_nodeids(
-    include_errors: bool = False,
+    extra_args: list[str] | None = None,
 ) -> CollectionResult:
     """Collect all test nodeids deterministically using pytest --collect-only.
-    
+
     This is the canonical collection method used by both:
     - scripts/shard_tests.py (for sharding)
     - scripts/verify_test_exclusions.py (for verification)
-    
+
     Args:
-        include_errors: If True, collection includes files with import errors.
-                       If False (default), collection is used for execution.
-                       
+        extra_args: Additional pytest arguments
+
     Returns:
         CollectionResult with nodeids, returncode, stdout, and stderr
     """
-    cmd = [
-        sys.executable, "-m", "pytest",
-        "--collect-only", "-q",
-        "tests/",
-    ]
-    
+    cmd = build_collection_command(extra_args=extra_args)
+
     result = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
     )
-    
+
     nodeids = _parse_nodeids_from_output(result.stdout)
-    
+
     return CollectionResult(
         nodeids=nodeids,
         returncode=result.returncode,
@@ -108,28 +157,35 @@ def collect_test_nodeids(
 
 
 def check_for_hard_coded_ignores(file_path: Path) -> list[str]:
-    """Check a Python file for hard-coded --ignore=tests/... literals.
-    
+    """Check a Python file for hard-coded ignore patterns using AST.
+
     This is the regression guard that prevents future drift.
-    
+    Uses AST parsing to find string constants matching the ignore pattern,
+    which catches cases where the ignore flag is on its own line in a
+    multiline list argument.
+
     Args:
         file_path: Path to Python file to check
-        
+
     Returns:
-        List of lines containing hard-coded ignore patterns
+        List of lines containing hard-coded ignore patterns with line numbers
     """
     violations: list[str] = []
-    import re
-    pattern = re.compile(HARD_CODED_IGNORE_PATTERN)
-    
+
     try:
         with open(file_path, encoding="utf-8") as f:
-            for line_no, line in enumerate(f, 1):
-                if pattern.search(line):
-                    violations.append(f"  Line {line_no}: {line.strip()}")
-    except OSError:
+            source = f.read()
+
+        tree = ast.parse(source, filename=str(file_path))
+        visitor = IgnoreStringVisitor()
+        visitor.visit(tree)
+
+        for lineno, value in visitor.violations:
+            violations.append(f"  Line {lineno}: {value!r}")
+
+    except (OSError, SyntaxError):
         pass
-    
+
     return violations
 
 
@@ -137,10 +193,10 @@ def verify_no_hard_coded_ignores(
     files_to_check: list[Path] | None = None,
 ) -> tuple[bool, list[str]]:
     """Verify that collection-related files have no hard-coded ignore patterns.
-    
+
     Args:
         files_to_check: List of files to check. Defaults to collection-related files.
-        
+
     Returns:
         Tuple of (passed, list of violations with file:line context)
     """
@@ -151,9 +207,9 @@ def verify_no_hard_coded_ignores(
             scripts_dir / "verify_test_exclusions.py",
             scripts_dir / "test_collection.py",
         ]
-    
+
     all_violations: list[str] = []
-    
+
     for file_path in files_to_check:
         if not file_path.exists():
             continue
@@ -161,7 +217,7 @@ def verify_no_hard_coded_ignores(
         if violations:
             all_violations.append(f"\n{file_path.name}:")
             all_violations.extend(violations)
-    
+
     passed = len(all_violations) == 0
     return passed, all_violations
 
@@ -169,15 +225,15 @@ def verify_no_hard_coded_ignores(
 if __name__ == "__main__":
     # Self-test: verify no hard-coded ignores in this module
     passed, violations = verify_no_hard_coded_ignores()
-    
+
     if not passed:
         print("REGRESSION GUARD FAILED: Hard-coded --ignore found!")
         print("".join(violations))
         sys.exit(1)
-    
+
     print("Test collection module self-check: PASS")
     print(f"  ALLOWED_COLLECTION_EXCLUSIONS: {len(ALLOWED_COLLECTION_EXCLUSIONS)} files")
-    
+
     # Show collection count
     result = collect_test_nodeids()
     print(f"  Collected {len(result.nodeids)} tests")

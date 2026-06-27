@@ -21,7 +21,7 @@ produces identical shard assignments.
 
 Collection Policy:
     - Test collection uses the shared helper from test_collection.py
-    - No raw --ignore=tests/... literals (enforced by regression guard)
+    - No raw ignore flags for test files (enforced by regression guard)
 """
 from __future__ import annotations
 
