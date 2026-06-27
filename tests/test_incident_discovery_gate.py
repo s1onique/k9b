@@ -634,6 +634,7 @@ class TestArtifactPathConsistency:
         # We verify this by checking the code doesn't append subdirectories.
         # The run_incident_discovery function should use artifact_dir directly.
         import inspect
+
         from scripts.incident_discovery_gate.main import run_incident_discovery
 
         source = inspect.getsource(run_incident_discovery)
