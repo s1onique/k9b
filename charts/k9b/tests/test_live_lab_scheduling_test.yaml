@@ -7,6 +7,7 @@ templates:
   - deployment-scheduler.yaml
   - deployment.yaml
   - deployment-frontend.yaml
+  - configmap-health-config.yaml
 
 tests:
   # =============================================================================
@@ -297,3 +298,44 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
           value: 64Mi
+
+  # =============================================================================
+  # HEALTH CONFIG: Targets must be non-empty for scheduler to start
+  # Regression test for Phase 1b scheduler crash: targets must include at least one entry
+  # =============================================================================
+
+  - it: live-lab health config should include lab target
+    template: configmap-health-config.yaml
+    values:
+      - ../values-live-lab.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - exists:
+          path: data["health-config.json"]
+      - matchRegex:
+          path: data["health-config.json"]
+          pattern: '"targets":'
+      - matchRegex:
+          path: data["health-config.json"]
+          pattern: '"label": "lab-cluster"'
+      - matchRegex:
+          path: data["health-config.json"]
+          pattern: '"context": "in-cluster"'
+      - matchRegex:
+          path: data["health-config.json"]
+          pattern: '"baseline_cohort": "fleet-lab"'
+
+  - it: default health config should have empty targets (operator must override)
+    template: configmap-health-config.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - exists:
+          path: data["health-config.json"]
+      - matchRegex:
+          path: data["health-config.json"]
+          pattern: targets
+      - notMatchRegex:
+          path: data["health-config.json"]
+          pattern: '"label":'
