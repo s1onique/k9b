@@ -33,6 +33,12 @@ from ..collect.api_incident_one_pass_diagnosis_service import (
     OnePassServiceRequest,
     handle_one_pass_diagnosis_service,
 )
+from ..collect.diagnosis_service_errors import (
+    DiagnosisServiceError,
+    IncidentNotFoundError,
+    LLMProviderError,
+    LLMProviderNotConfiguredError,
+)
 from .server_response import send_json_response
 
 if TYPE_CHECKING:
@@ -176,20 +182,60 @@ def handle_incident_one_pass_diagnosis_service_api(
     golden_case_evidence_provider = get_golden_case_evidence_provider() if golden_case_mode else None
 
     # Step 8: Handle the request with injected dependencies
-    response = handle_one_pass_diagnosis_service(
-        incident_id=incident_id,
-        external_analysis_dir=external_analysis_dir,
-        request=request,
-        diagnosis_provider=diagnosis_provider,
-        fake_handlers=fake_handlers,
-        artifact_writer=artifact_writer,
-        golden_case_mode=golden_case_mode,
-        golden_case_manifest=golden_case_manifest,
-        golden_case_case_dir=golden_case_case_dir,
-        golden_case_evidence_provider=golden_case_evidence_provider,
-    )
+    # Catch structured errors and map to proper HTTP status codes
+    try:
+        response = handle_one_pass_diagnosis_service(
+            incident_id=incident_id,
+            external_analysis_dir=external_analysis_dir,
+            request=request,
+            diagnosis_provider=diagnosis_provider,
+            fake_handlers=fake_handlers,
+            artifact_writer=artifact_writer,
+            golden_case_mode=golden_case_mode,
+            golden_case_manifest=golden_case_manifest,
+            golden_case_case_dir=golden_case_case_dir,
+            golden_case_evidence_provider=golden_case_evidence_provider,
+        )
+    except LLMProviderNotConfiguredError as exc:
+        _logger.warning("LLM provider not configured for incident %s: %s", incident_id, exc)
+        send_json_response(
+            handler,
+            _make_structured_error_response(incident_id, request.run_id, exc),
+            code=503,
+        )
+        return
+    except LLMProviderError as exc:
+        _logger.warning("LLM provider failed for incident %s: %s", incident_id, exc)
+        send_json_response(
+            handler,
+            _make_structured_error_response(incident_id, request.run_id, exc),
+            code=502,
+        )
+        return
+    except IncidentNotFoundError as exc:
+        _logger.warning("Incident not found for incident %s: %s", incident_id, exc)
+        send_json_response(
+            handler,
+            _make_structured_error_response(incident_id, request.run_id, exc),
+            code=404,
+        )
+        return
+    except DiagnosisServiceError as exc:
+        _logger.error(
+            "Diagnosis service error for incident %s: %s (error_code=%s)",
+            incident_id,
+            exc,
+            exc.error_code,
+            exc_info=True,
+        )
+        send_json_response(
+            handler,
+            _make_structured_error_response(incident_id, request.run_id, exc),
+            code=exc.http_status,
+        )
+        return
 
-    # Step 9: Determine response code
+    # Step 9: Determine response code from service result
     code = 404 if response.error == "Incident not found" else 200
     if response.error and "not found" in response.error.lower():
         code = 404
@@ -227,6 +273,40 @@ def _make_error_response(
         "allowed_actions": [],
         "error": error,
     }
+    if request_run_id:
+        result["run_id"] = request_run_id
+    return result
+
+
+def _make_structured_error_response(
+    incident_id: str,
+    request_run_id: str | None,
+    exc: DiagnosisServiceError,
+) -> dict[str, object]:
+    """Create a structured error response from a DiagnosisServiceError.
+
+    Args:
+        incident_id: The incident ID
+        request_run_id: The run_id from request (may be None)
+        exc: The structured error exception
+
+    Returns:
+        Structured error response dict with error_code, message, and retryable fields
+    """
+    result: dict[str, object] = {
+        "schema_version": "1.0",
+        "incident_id": incident_id,
+        "read_only": True,
+        "allowed_actions": [],
+        "error": exc.error_code,
+        "message": str(exc),
+        "retryable": exc.retryable,
+    }
+    # Add extra fields from exception (e.g., provider_enabled for LLMProviderNotConfiguredError)
+    extra = exc.to_dict()
+    for key, value in extra.items():
+        if key not in result:
+            result[key] = value
     if request_run_id:
         result["run_id"] = request_run_id
     return result

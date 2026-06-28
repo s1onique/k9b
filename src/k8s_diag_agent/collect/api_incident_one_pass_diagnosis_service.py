@@ -32,6 +32,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..security import sanitize_exception_message
+from .diagnosis_service_errors import (
+    DiagnosisServiceError,
+    DiagnosisServiceInternalError,
+    IncidentNotFoundError,
+    LLMProviderError,
+    LLMProviderNotConfiguredError,
+)
 from .incident_diagnosis_service import (
     ArtifactWriter,
     DiagnosisProvider,
@@ -324,12 +331,7 @@ def handle_one_pass_diagnosis_service(
     incident = store.get_incident(incident_id)
 
     if incident is None:
-        return OnePassServiceResponse(
-            schema_version="1.0",
-            incident_id=incident_id,
-            run_id=request.run_id or "unknown",
-            error="Incident not found",
-        )
+        raise IncidentNotFoundError(f"Incident {incident_id!r} not found in store")
 
     # Step 2: Build service request with dependencies
     now = datetime.now(UTC)
@@ -348,18 +350,22 @@ def handle_one_pass_diagnosis_service(
         use_live_command_guard=True,  # Always block live-command fallback
     )
 
-    # Step 3: Run diagnosis service
+    # Step 3: Run diagnosis service with structured error handling
+    # Raise structured errors so the API layer can map to proper HTTP codes
     try:
         service_result = run_incident_one_pass_diagnosis(service_request)
+    except LLMProviderNotConfiguredError:
+        raise  # Re-raise structured errors unchanged
+    except LLMProviderError:
+        raise  # Re-raise structured errors unchanged
+    except IncidentNotFoundError:
+        raise  # Re-raise structured errors unchanged
+    except DiagnosisServiceError:
+        raise  # Re-raise structured errors unchanged
     except Exception as exc:
         # Bound error message, don't leak traceback
         sanitized = sanitize_exception_message(exc, max_length=200)
-        return OnePassServiceResponse(
-            schema_version="1.0",
-            incident_id=incident_id,
-            run_id=request.run_id or "unknown",
-            error=f"Service error: {sanitized}",
-        )
+        raise DiagnosisServiceInternalError(f"Service error: {sanitized}") from exc
 
     # Step 4: Convert to API response
     return OnePassServiceResponse.from_service_result(
