@@ -1,0 +1,121 @@
+name: Prewarm Python Tool Cache
+
+# Prewarm Python tool cache for self-hosted runners.
+#
+# Background:
+#   actions/setup-python first checks the runner tool cache (RUNNER_TOOL_CACHE/Python/*).
+#   If the requested Python version is not found, it downloads from actions/python-versions.
+#
+# Usage:
+#   - Run manually via workflow_dispatch on a self-hosted runner to prewarm the cache.
+#   - After prewarming, subsequent jobs on the same persistent runner will hit local cache.
+#
+# For air-gapped runners, see:
+#   https://docs.github.com/en/enterprise-server@3.18/admin/managing-github-actions-for-your-enterprise/managing-access-to-actions-from-githubcom/setting-up-the-tool-cache-on-self-hosted-runners-without-internet-access
+
+on:
+  workflow_dispatch:
+    inputs:
+      python_version:
+        description: 'Python version to prewarm'
+        required: false
+        default: '3.13'
+        type: string
+      architecture:
+        description: 'CPU architecture'
+        required: false
+        default: 'x64'
+        type: choice
+        options:
+          - x64
+          - x86
+
+jobs:
+  prewarm-python:
+    name: Prewarm Python ${{ inputs.python_version }} (${{ inputs.architecture }})
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 10
+    steps:
+      - name: Show tool cache paths
+        run: |
+          echo "RUNNER_TOOL_CACHE=$RUNNER_TOOL_CACHE"
+          echo "runner.tool_cache=${{ runner.tool_cache }}"
+          echo "AGENT_TOOLSDIRECTORY=${AGENT_TOOLSDIRECTORY:-<not set>}"
+
+      - name: Check existing cache contents
+        run: |
+          if [ -d "${RUNNER_TOOL_CACHE}/Python" ]; then
+            echo "Existing Python cache entries:"
+            find "${RUNNER_TOOL_CACHE}/Python" -maxdepth 2 -type d | sort
+          else
+            echo "No Python cache found at ${RUNNER_TOOL_CACHE}/Python"
+          fi
+
+      - name: Install Python into runner tool cache
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python_version }}
+          architecture: ${{ inputs.architecture }}
+          check-latest: false
+
+      - name: Verify Python installation
+        run: |
+          echo "Python version: $(python --version)"
+          echo "Python executable: $(which python)"
+          echo "Pip version: $(python -m pip --version)"
+
+      - name: Verify cache contents
+        run: |
+          echo "Updated Python cache entries:"
+          find "${RUNNER_TOOL_CACHE}/Python" -maxdepth 3 -type d | sort
+
+      - name: Display cache size
+        run: |
+          if [ -d "${RUNNER_TOOL_CACHE}/Python" ]; then
+            du -sh "${RUNNER_TOOL_CACHE}/Python"
+          fi
+
+  export-cache:
+    name: Export Python Tool Cache (for air-gapped runners)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: none
+    steps:
+      - name: Reset temporary tool cache
+        run: |
+          sudo rm -rf "${{ runner.tool_cache }}"
+          sudo mkdir -p "${{ runner.tool_cache }}"
+          sudo chown -R "$USER" "${{ runner.tool_cache }}"
+
+      - name: Install Python into tool cache
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python_version }}
+          architecture: ${{ inputs.architecture }}
+          check-latest: false
+
+      - name: Archive Python tool cache
+        run: |
+          ARCHIVE_NAME="python-toolcache-${{ inputs.python_version }}-ubuntu-24.04-${{ inputs.architecture }}.tar.gz"
+          cd "${{ runner.tool_cache }}"
+          tar -czf "$RUNNER_TEMP/${ARCHIVE_NAME}" Python
+          echo "Archive created: ${ARCHIVE_NAME}"
+          ls -lh "$RUNNER_TEMP/${ARCHIVE_NAME}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: python-toolcache-${{ inputs.python_version }}-ubuntu-24.04-${{ inputs.architecture }}
+          path: ${{ runner.temp }}/python-toolcache-${{ inputs.python_version }}-ubuntu-24.04-${{ inputs.architecture }}.tar.gz
+          retention-days: 7
+
+# Instructions for air-gapped setup:
+# 1. Download the artifact from the export-cache job
+# 2. Transfer it to the air-gapped self-hosted runner
+# 3. Extract into the configured tool cache directory:
+#    sudo mkdir -p /opt/hostedtoolcache
+#    sudo tar -xzf python-toolcache-<version>-ubuntu-24.04-x64.tar.gz -C /opt/hostedtoolcache
+#    sudo chown -R <runner-user>:<runner-group> /opt/hostedtoolcache
+# 4. Set in runner .env: AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache
+# 5. Restart the runner service
