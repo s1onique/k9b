@@ -16,6 +16,10 @@ name: Prewarm Python Tool Cache
 on:
   workflow_dispatch:
     inputs:
+      runner_label:
+        description: 'Self-hosted runner label for the prewarm job'
+        required: true
+        type: string
       python_version:
         description: 'Python version to prewarm'
         required: false
@@ -33,7 +37,7 @@ on:
 jobs:
   prewarm-python:
     name: Prewarm Python ${{ inputs.python_version }} (${{ inputs.architecture }})
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ${{ inputs.runner_label }}
     timeout-minutes: 10
     steps:
       - name: Show tool cache paths
