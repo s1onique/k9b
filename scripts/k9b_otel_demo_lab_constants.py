@@ -11,6 +11,8 @@ This module defines:
 
 from __future__ import annotations
 
+import os
+
 # =============================================================================
 # Lab configuration
 # =============================================================================
@@ -31,7 +33,29 @@ OTEL_DEMO_HELM_REPO_URL = "https://open-telemetry.github.io/opentelemetry-helm-c
 OTEL_DEMO_CHART = "open-telemetry/opentelemetry-demo"
 
 # Helm chart version
-OTEL_DEMO_CHART_VERSION = "0.45.0"
+# Current upstream chart version is 0.40.9 (appVersion 2.2.0)
+# See: https://github.com/open-telemetry/opentelemetry-helm-charts/blob/main/charts/opentelemetry-demo/Chart.yaml
+OTEL_DEMO_CHART_VERSION = "0.40.9"
+
+# Environment variable name for chart version override
+CONFIGURED_OTEL_DEMO_CHART_VERSION_ENV = "K9B_OTEL_DEMO_CHART_VERSION"
+
+
+def get_configured_otel_demo_chart_version() -> str:
+    """Get the configured OTel Demo chart version.
+
+    Supports runtime override via K9B_OTEL_DEMO_CHART_VERSION environment variable.
+    Falls back to OTEL_DEMO_CHART_VERSION if not set.
+
+    Note: The OTel Demo chart does NOT support in-place upgrades between versions.
+    When changing chart versions on an existing deployment, the release must be
+    deleted first (helm uninstall) before installing the new version.
+    """
+    return os.environ.get(CONFIGURED_OTEL_DEMO_CHART_VERSION_ENV, OTEL_DEMO_CHART_VERSION)
+
+
+# Failure class for missing chart version (Phase 1, before provider smoke)
+FAILURE_HELM_CHART_VERSION_NOT_FOUND = "helm_chart_version_not_found"
 
 # k9b backend configuration (when k9b is deployed alongside OTel Demo)
 K9B_BACKEND_DEPLOYMENT = "k9b-backend"

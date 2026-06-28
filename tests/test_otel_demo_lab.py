@@ -3,10 +3,22 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scripts.k9b_otel_demo_lab_types import LabResult
+from scripts.k9b_otel_demo_lab_constants import (
+    CONFIGURED_OTEL_DEMO_CHART_VERSION_ENV,
+    FAILURE_HELM_CHART_VERSION_NOT_FOUND,
+    OTEL_DEMO_CHART,
+    OTEL_DEMO_CHART_VERSION,
+    get_configured_otel_demo_chart_version,
+)
+from scripts.k9b_otel_demo_lab_deployment import (
+    _classify_helm_chart_version_error,
+    _validate_chart_version,
+)
+from scripts.k9b_otel_demo_lab_types import LabConfig, LabResult
 from scripts.k9b_otel_demo_lab_verify import (
     VerificationResult,
     _verify_diagnosis,
@@ -311,3 +323,171 @@ class TestLabResultSummaryOutput:
         print(f"Provider smoke: {'PASSED' if result.provider_smoke_passed else 'SKIPPED/FAILED'}")
         out = capsys.readouterr().out
         assert "Provider smoke: SKIPPED/FAILED" in out
+
+
+class TestHelmChartVersionHandling:
+    """Regression tests for Helm chart version handling.
+
+    These tests verify the fix for the OTel Demo live lab failure where
+    the lab was dying in Phase 1 because it pinned a non-existent Helm
+    chart version (0.45.0 instead of the actual 0.40.9).
+    """
+
+    def test_default_chart_version_is_0_40_9(self) -> None:
+        """Default chart version must be 0.40.9 (the actual published version)."""
+        assert OTEL_DEMO_CHART_VERSION == "0.40.9"
+
+    def test_failure_constant_exists_for_missing_chart_version(self) -> None:
+        """FAILURE_HELM_CHART_VERSION_NOT_FOUND constant must be defined."""
+        assert FAILURE_HELM_CHART_VERSION_NOT_FOUND == "helm_chart_version_not_found"
+
+    def test_chart_version_error_classifier_detects_no_chart_version_found(self) -> None:
+        """Classifier must detect 'no chart version found' errors."""
+        error_output = "Error: no chart version found for opentelemetry-demo-0.45.0"
+        result = _classify_helm_chart_version_error(error_output)
+        assert result == FAILURE_HELM_CHART_VERSION_NOT_FOUND
+
+    def test_chart_version_error_classifier_detects_couldnt_find_version(self) -> None:
+        """Classifier must detect 'couldn't find that version' errors."""
+        error_output = "Error: couldn't find that version (0.45.0)"
+        result = _classify_helm_chart_version_error(error_output)
+        assert result == FAILURE_HELM_CHART_VERSION_NOT_FOUND
+
+    def test_chart_version_error_classifier_returns_none_for_other_errors(self) -> None:
+        """Classifier must return None for non-version errors."""
+        error_output = "Error: this is some other error"
+        result = _classify_helm_chart_version_error(error_output)
+        assert result is None
+
+    def test_validate_chart_version_returns_valid_when_version_found(self) -> None:
+        """Validation should return valid when version exists in search results."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = '[{"version": "0.40.9"}]'
+
+        with patch("subprocess.run", return_value=mock_result):
+            is_valid, available = _validate_chart_version("open-telemetry", OTEL_DEMO_CHART, "0.40.9")
+            assert is_valid is True
+            assert available == ""
+
+    def test_validate_chart_version_returns_invalid_when_version_missing(self) -> None:
+        """Validation should return invalid with available versions when version not found."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = '[{"version": "0.40.9"}, {"version": "0.40.8"}]'
+
+        with patch("subprocess.run", return_value=mock_result):
+            is_valid, available = _validate_chart_version("open-telemetry", OTEL_DEMO_CHART, "0.45.0")
+            assert is_valid is False
+            assert "0.40.9" in available
+            assert "0.45.0" not in available
+
+    def test_lab_config_uses_configurable_chart_version(self) -> None:
+        """LabConfig must use the configurable chart version default."""
+        config = LabConfig()
+        # The default should be the configured value (0.40.9 or env override)
+        assert config.helm_chart_version == OTEL_DEMO_CHART_VERSION
+
+    def test_lab_config_chart_version_can_be_overridden(self) -> None:
+        """LabConfig allows explicit chart version override."""
+        config = LabConfig(helm_chart_version="0.45.0")
+        assert config.helm_chart_version == "0.45.0"
+
+    def test_get_configured_chart_version_respects_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """get_configured_otel_demo_chart_version respects K9B_OTEL_DEMO_CHART_VERSION env var."""
+        # Set env override
+        monkeypatch.setenv(CONFIGURED_OTEL_DEMO_CHART_VERSION_ENV, "0.50.0")
+        # Function should return env value
+        assert get_configured_otel_demo_chart_version() == "0.50.0"
+        
+        # Unset env and verify fallback
+        monkeypatch.delenv(CONFIGURED_OTEL_DEMO_CHART_VERSION_ENV, raising=False)
+        assert get_configured_otel_demo_chart_version() == OTEL_DEMO_CHART_VERSION
+
+
+    @patch("subprocess.run")
+    def test_phase1_fails_fast_with_clear_message_on_missing_version(self, mock_run: MagicMock, tmp_path: Path) -> None:
+        """Phase 1 must fail fast with clear message when chart version not found.
+
+        This prevents the misleading 'Provider smoke: SKIPPED/FAILED' result
+        when the provider was never reached due to Phase 1 failure.
+        """
+        from scripts.k9b_otel_demo_lab_deployment import phase1_deploy_otel_demo
+
+        # Mock helm repo add to succeed
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="", stderr=""),  # helm repo add
+            MagicMock(returncode=0, stdout="", stderr=""),  # helm repo update
+            MagicMock(returncode=0, stdout='[{"version": "0.40.9"}]', stderr=""),  # helm search (version exists)
+        ]
+
+        config = LabConfig(helm_chart_version="0.45.0")  # Request missing version
+
+        with patch("scripts.k9b_otel_demo_lab_deployment.write_json_artifact") as mock_write:
+            mock_write.return_value = str(tmp_path / "preflight-failure.json")
+            result = phase1_deploy_otel_demo(config, tmp_path)
+
+        # Should fail fast before attempting install
+        assert result.success is False
+        assert "not available" in result.message
+        assert "0.45.0" in result.message
+        assert "0.40.9" in result.message  # Should show available versions
+        assert "preflight_failure" in result.artifacts
+
+    @patch("subprocess.run")
+    def test_phase1_fails_at_preflight_with_preflight_failure_artifact(self, mock_run: MagicMock, tmp_path: Path) -> None:
+        """Phase 1 fails at preflight (not post-install) when version is missing.
+
+        This is the desired behavior - we fail fast with a clear preflight failure
+        rather than failing during install with a generic error.
+        """
+        from scripts.k9b_otel_demo_lab_deployment import phase1_deploy_otel_demo
+
+        # Mock helm commands - repo add/update succeed, search shows version NOT available
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="", stderr=""),  # helm repo add
+            MagicMock(returncode=0, stdout="", stderr=""),  # helm repo update
+            MagicMock(returncode=0, stdout='[{"version": "0.40.9"}]', stderr=""),  # helm search - 0.45.0 not in list
+        ]
+
+        config = LabConfig(helm_chart_version="0.45.0")
+
+        with patch("scripts.k9b_otel_demo_lab_deployment.write_json_artifact") as mock_write:
+            mock_write.return_value = str(tmp_path / "preflight-failure.json")
+            result = phase1_deploy_otel_demo(config, tmp_path)
+
+        # Should fail at preflight, not at install
+        assert result.success is False
+        assert "preflight_failure" in result.artifacts
+        # Message should be clear about the problem
+        assert "not available" in result.message
+        assert "0.45.0" in result.message
+        assert "0.40.9" in result.message  # Available version shown
+
+    @patch("subprocess.run")
+    def test_phase1_classifies_version_error_on_install_failure(self, mock_run: MagicMock, tmp_path: Path) -> None:
+        """Phase 1 classifies Helm version errors in post-install error handling.
+
+        This is a fallback for cases where preflight didn't catch it (e.g., race
+        condition where version was removed between preflight and install).
+        """
+        from scripts.k9b_otel_demo_lab_deployment import phase1_deploy_otel_demo
+
+        # Mock helm commands - repo add/update succeed, search shows version IS available
+        # (simulating a race condition where it was available at search but not at install)
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="", stderr=""),  # helm repo add
+            MagicMock(returncode=0, stdout="", stderr=""),  # helm repo update
+            MagicMock(returncode=0, stdout='[{"version": "0.45.0"}]', stderr=""),  # helm search - version appears available
+            MagicMock(returncode=1, stdout="", stderr="no chart version found for opentelemetry-demo-0.45.0"),  # helm install fails
+        ]
+
+        config = LabConfig(helm_chart_version="0.45.0")
+
+        with patch("scripts.k9b_otel_demo_lab_deployment.write_json_artifact") as mock_write:
+            mock_write.return_value = str(tmp_path / "helm-failure.json")
+            result = phase1_deploy_otel_demo(config, tmp_path)
+
+        # Should fail during install with version classification
+        assert result.success is False
+        assert "failure_classification" in result.artifacts

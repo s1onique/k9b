@@ -11,11 +11,11 @@ from typing import Any, Literal
 
 from .k9b_otel_demo_lab_constants import (
     OTEL_DEMO_CHART,
-    OTEL_DEMO_CHART_VERSION,
     OTEL_DEMO_HELM_REPO_NAME,
     OTEL_DEMO_HELM_REPO_URL,
     OTEL_DEMO_NAMESPACE,
     OTEL_DEMO_RELEASE,
+    get_configured_otel_demo_chart_version,
 )
 
 # Lab mode constants
@@ -35,7 +35,7 @@ class LabConfig:
     helm_repo_url: str = OTEL_DEMO_HELM_REPO_URL
     helm_repo_name: str = OTEL_DEMO_HELM_REPO_NAME
     helm_chart: str = OTEL_DEMO_CHART
-    helm_chart_version: str = OTEL_DEMO_CHART_VERSION
+    helm_chart_version: str = field(default_factory=get_configured_otel_demo_chart_version)
     helm_release: str = OTEL_DEMO_RELEASE
     readiness_timeout: int = 600  # 10 minutes for full demo deploy
     readiness_poll_interval: int = 30

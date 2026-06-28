@@ -27,6 +27,7 @@ from .k9b_lab_common_readiness import (
 )
 from .k9b_otel_demo_lab_constants import (
     FAILURE_CLUSTER_API_TIMEOUT,
+    FAILURE_HELM_CHART_VERSION_NOT_FOUND,
     PHASE_CLUSTER_BASELINE,
     PHASE_OTEL_BASELINE,
     REQUIRED_DEPLOYMENTS,
@@ -41,6 +42,70 @@ _CLUSTER_API_TIMEOUT_PATTERNS = [
     re.compile(r"no route to host", re.IGNORECASE),
     re.compile(r"network is unreachable", re.IGNORECASE),
 ]
+
+
+def _classify_helm_chart_version_error(error_output: str) -> str | None:
+    """Classify Helm chart version not found error.
+
+    Returns the failure class string if classified, None otherwise.
+
+    Only classifies version-specific errors, not generic "chart not found" errors
+    (which could be repo issues, network problems, etc.).
+    """
+    if not error_output:
+        return None
+
+    # Check for version-specific not found patterns
+    version_not_found_patterns = [
+        re.compile(r"no chart version found", re.IGNORECASE),
+        re.compile(r"couldn'?t find that version", re.IGNORECASE),
+        re.compile(r"version .+ not found", re.IGNORECASE),
+        re.compile(r"no .+ version .+ found", re.IGNORECASE),
+    ]
+
+    for pattern in version_not_found_patterns:
+        if pattern.search(error_output):
+            return FAILURE_HELM_CHART_VERSION_NOT_FOUND
+
+    return None
+
+
+def _validate_chart_version(repo_name: str, chart: str, version: str) -> tuple[bool, str]:
+    """Validate that the requested chart version exists in the Helm repo.
+
+    Returns:
+        Tuple of (is_valid, message). If invalid, message contains available versions.
+    """
+    log(f"Validating chart version {version} for {chart}")
+
+    # Search for available versions
+    search_cmd = ["helm", "search", "repo", chart, "--versions", "--output", "json"]
+    result = subprocess.run(search_cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        log(f"Warning: Could not search Helm repo: {result.stderr}")
+        return True, "Could not validate version"
+
+    import json
+    try:
+        data = json.loads(result.stdout)
+        versions = []
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict) and "version" in item:
+                    versions.append(item["version"])
+
+        if version in versions:
+            log(f"Chart version {version} is available")
+            return True, ""
+        else:
+            available = ", ".join(versions[:10])  # Limit to first 10
+            if len(versions) > 10:
+                available += f", ... ({len(versions)} total)"
+            return False, available
+    except (json.JSONDecodeError, KeyError):
+        log("Warning: Could not parse helm search output")
+        return True, ""
 
 
 def _classify_connectivity_error(error_output: str) -> str | None:
@@ -169,6 +234,36 @@ def phase1_deploy_otel_demo(config: LabConfig, artifact_dir: Path) -> LabPhaseRe
     # Update Helm repos
     subprocess.run(["helm", "repo", "update"], capture_output=True)
 
+    # Preflight: validate chart version exists
+    is_valid, available_versions = _validate_chart_version(
+        config.helm_repo_name, config.helm_chart, config.helm_chart_version
+    )
+    if not is_valid:
+        failure_msg = (
+            f"OpenTelemetry Demo chart version {config.helm_chart_version} is not available in Helm repo {config.helm_repo_name}.\n"
+            f"Available versions include: {available_versions}\n"
+            f"Set K9B_OTEL_DEMO_CHART_VERSION or update OTEL_DEMO_CHART_VERSION."
+        )
+        log(f"Preflight failed: {failure_msg}")
+
+        # Write preflight failure artifact
+        preflight_failure = {
+            "failure_class": FAILURE_HELM_CHART_VERSION_NOT_FOUND,
+            "phase": PHASE_OTEL_BASELINE,
+            "requested_version": config.helm_chart_version,
+            "available_versions": available_versions,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        preflight_path = write_json_artifact(phase_dir, "preflight-failure.json", preflight_failure)
+
+        return LabPhaseResult(
+            phase=PHASE_OTEL_BASELINE,
+            success=False,
+            message=failure_msg,
+            artifacts={"preflight_failure": str(preflight_path)},
+            duration_seconds=time.time() - start,
+        )
+
     # Write Helm install log
     helm_log_path = phase_dir / "helm-install.log"
 
@@ -210,6 +305,22 @@ flagd:
     }
 
     if result.returncode != 0:
+        # Classify the error if possible
+        error_output = result.stderr or result.stdout
+        failure_class = _classify_helm_chart_version_error(error_output)
+        
+        # Write failure classification artifact
+        if failure_class:
+            failure_result = {
+                "failure_class": failure_class,
+                "phase": PHASE_OTEL_BASELINE,
+                "requested_version": config.helm_chart_version,
+                "error_snippet": error_output[:500],
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            failure_path = write_json_artifact(phase_dir, "helm-failure.json", failure_result)
+            artifacts["failure_classification"] = str(failure_path)
+        
         return LabPhaseResult(
             phase=PHASE_OTEL_BASELINE,
             success=False,
