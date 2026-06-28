@@ -6,6 +6,7 @@ This module defines:
 - Required deployments for OTel Demo
 - Incident scenarios
 - Failure class constants
+- Provider smoke phase constants
 """
 
 from __future__ import annotations
@@ -31,6 +32,12 @@ OTEL_DEMO_CHART = "open-telemetry/opentelemetry-demo"
 
 # Helm chart version
 OTEL_DEMO_CHART_VERSION = "0.45.0"
+
+# k9b backend configuration (when k9b is deployed alongside OTel Demo)
+K9B_BACKEND_DEPLOYMENT = "k9b-backend"
+K9B_BACKEND_CONTAINER = "backend"
+K9B_BACKEND_PORT = 8080
+K9B_NAMESPACE = "k9b"
 
 
 # =============================================================================
@@ -105,6 +112,28 @@ FAILURE_LIVE_SYMPTOM_EVIDENCE_MISSING = "live_symptom_evidence_missing"
 FAILURE_LIVE_TELEMETRY_UNAVAILABLE = "live_telemetry_unavailable"
 FAILURE_LIVE_TELEMETRY_SIGNAL_MISSING = "live_telemetry_signal_missing"
 
+# Provider smoke failure classes
+FAILURE_BACKEND_HEALTH_FAILED = "backend_health_failed"
+FAILURE_BACKEND_HEALTH_TIMEOUT = "backend_health_timeout"
+FAILURE_SCHEDULER_HEALTH_FAILED = "scheduler_health_failed"
+FAILURE_INCIDENT_DISCOVERY_FAILED = "incident_discovery_failed"
+FAILURE_INCIDENT_DISCOVERY_TIMEOUT = "incident_discovery_timeout"
+FAILURE_PROVIDER_SMOKE_HTTP_ERROR = "provider_smoke_http_error"
+FAILURE_PROVIDER_SMOKE_NOT_CONFIGURED = "provider_smoke_not_configured"
+FAILURE_PROVIDER_SMOKE_NOT_INVOKED = "provider_smoke_not_invoked"
+FAILURE_PERSISTED_DIAGNOSIS_FAILED = "persisted_diagnosis_failed"
+FAILURE_ARTIFACT_VERIFICATION_FAILED = "artifact_verification_failed"
+
+# Connectivity failure classes (for cluster_api_timeout classification)
+FAILURE_CLUSTER_API_TIMEOUT = "cluster_api_timeout"
+FAILURE_KUBECONFIG_MISSING = "kubeconfig_missing"
+FAILURE_KUBECONFIG_INVALID = "kubeconfig_invalid"
+FAILURE_KUBECONFIG_DECODE_FAILED = "kubeconfig_decode_failed"
+FAILURE_CLUSTER_AUTH_FAILED = "cluster_auth_failed"
+FAILURE_API_DISCOVERY_FAILED = "api_discovery_failed"
+FAILURE_NAMESPACE_RBAC_DENIED = "namespace_rbac_denied"
+FAILURE_UNKNOWN_CLUSTER_CONNECTIVITY = "unknown_cluster_connectivity_failure"
+
 
 # =============================================================================
 # Expected components for diagnosis oracle
@@ -147,3 +176,10 @@ PHASE_INJECTED = "phase2-injected"
 PHASE_DISCOVERY = "phase3-discovery"
 PHASE_DIAGNOSIS = "phase4-diagnosis"
 PHASE_VERIFICATION = "phase5-verification"
+
+# Provider smoke phase directories (under lab-artifacts/otel/provider-smoke/)
+PHASE_BACKEND_HEALTH = "provider-smoke/backend-health"
+PHASE_SCHEDULER_HEALTH = "provider-smoke/scheduler-health"
+PHASE_INCIDENT_DISCOVERY = "provider-smoke/incident-discovery"
+PHASE_PROVIDER_SMOKE = "provider-smoke/incident-provider"
+PHASE_PERSISTED_DIAGNOSIS = "provider-smoke/persisted-diagnosis"

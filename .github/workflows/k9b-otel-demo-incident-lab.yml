@@ -246,6 +246,7 @@ jobs:
             --kubeconfig "$KUBECONFIG" \
             --artifact-dir ./lab-artifacts/otel-demo \
             --mode live \
+            --enable-provider-smoke \
             --live-traffic-duration "${{ inputs.live_traffic_duration_seconds || '600' }}" \
             --live-observation-wait "${{ inputs.live_observation_wait_seconds || '600' }}" \
             --live-poll-interval "${{ inputs.live_poll_interval_seconds || '30' }}"

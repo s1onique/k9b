@@ -2,6 +2,8 @@
 """OpenTelemetry Demo Lab - orchestrator.
 
 This module orchestrates the complete OTel Demo incident lab lifecycle:
+
+Original phases:
 1. Cluster + k9b baseline (Phase 0)
 2. Deploy OpenTelemetry Demo (Phase 1)
 3. Prove baseline readiness (Phase 1b)
@@ -10,12 +12,25 @@ This module orchestrates the complete OTel Demo incident lab lifecycle:
 6. Run diagnosis (Phase 4)
 7. Verify final diagnosis with oracle (Phase 5)
 
+Provider smoke phases (optional, for parity with CNPG):
+P1. Backend Health Gate - verify k9b backend is healthy
+P1b. Scheduler Health Gate - verify k9b scheduler is healthy
+P2. Incident Discovery (k9b API-backed) - real k9b incident discovery
+P3. One-Pass Diagnosis Provider Smoke - call POST /api/incidents/{id}/one-pass-diagnosis
+P4. Persisted Diagnosis Contract Verification - verify persisted diagnosis
+
+Provider smoke phases run AFTER the OTel failure injection (Phase 2) because
+they need an injected incident to discover. When --enable-provider-smoke is set,
+any P1/P1b/P2/P3/P4 failure fails the lab (fail-closed behavior).
+
 For LLM-friendly reading, see the companion modules:
 - k9b_otel_demo_lab_types.py - dataclasses and types
 - k9b_otel_demo_lab_phases.py - phase implementations
 - k9b_otel_demo_lab_constants.py - constants
 - k9b_otel_demo_lab_inject.py - incident injection
 - k9b_otel_demo_lab_verify.py - oracle verification
+- k9b_otel_demo_lab_provider_health.py - provider smoke health gates (P1, P1b)
+- k9b_otel_demo_lab_provider_diagnosis.py - provider smoke diagnosis phases (P2, P3, P4)
 """
 
 from __future__ import annotations
@@ -34,6 +49,12 @@ from .k9b_otel_demo_lab_phases import (
     phase3_incident_discovery,
     phase4_diagnosis,
     phase5_verification,
+    # Provider smoke phases
+    phase_p1_backend_health_gate,
+    phase_p1b_scheduler_health_gate,
+    phase_p2_incident_discovery_provider,
+    phase_p3_provider_smoke,
+    phase_p4_persisted_diagnosis,
 )
 from .k9b_otel_demo_lab_types import LabConfig, LabPhaseResult, LabResult
 
@@ -55,6 +76,7 @@ def run_lab(config: LabConfig) -> LabResult:
             "helm_chart": config.helm_chart,
             "helm_version": config.helm_chart_version,
             "readiness_timeout": config.readiness_timeout,
+            "enable_provider_smoke": config.enable_provider_smoke,
         },
     )
     
@@ -91,6 +113,10 @@ def run_lab(config: LabConfig) -> LabResult:
             result.failure_reason = f"Baseline readiness failed: {phase1b.message}"
             return _finish_result(result, artifact_dir, start_time)
         
+        # =====================================================================
+        # Original OTel Demo Phases
+        # =====================================================================
+        
         # Phase 2: Inject incident
         log("=" * 60)
         log("PHASE 2: Inject recommendation cache failure")
@@ -101,13 +127,12 @@ def run_lab(config: LabConfig) -> LabResult:
             result.failure_reason = f"Incident injection failed: {phase2.message}"
             return _finish_result(result, artifact_dir, start_time)
         
-        # Phase 3: Incident discovery
+        # Phase 3: Incident discovery (placeholder - OTel telemetry-oriented)
         log("=" * 60)
         log("PHASE 3: Run k9b incident discovery")
         log("=" * 60)
         phase3 = phase3_incident_discovery(config, artifact_dir)
         result.phases.append(_phase_to_dict(phase3))
-        # Non-fatal - incident discovery might not find anything
         
         # Phase 4: Diagnosis
         log("=" * 60)
@@ -116,7 +141,92 @@ def run_lab(config: LabConfig) -> LabResult:
         phase4 = phase4_diagnosis(config, artifact_dir)
         result.phases.append(_phase_to_dict(phase4))
         
-        # Phase 5: Verification
+        # =====================================================================
+        # Provider Smoke Phases (run AFTER incident injection, fail-closed)
+        # These phases run AFTER the OTel failure injection because they need
+        # an injected incident to discover. They are fail-closed when enabled.
+        # =====================================================================
+        provider_smoke_passed = False
+        
+        if config.enable_provider_smoke:
+            log("=" * 60)
+            log("PROVIDER SMOKE: Starting provider smoke phases (fail-closed)")
+            log("=" * 60)
+            
+            # Phase P1: Backend Health Gate
+            log("=" * 60)
+            log("PHASE P1: Backend Health Gate")
+            log("=" * 60)
+            phase_p1 = phase_p1_backend_health_gate(config, artifact_dir)
+            result.phases.append(_phase_to_dict(phase_p1))
+            if not phase_p1.success:
+                log(f"PROVIDER SMOKE FAILED at P1 (backend health): {phase_p1.message}")
+                result.failure_reason = f"Provider smoke failed at backend health gate: {phase_p1.message}"
+                result.provider_smoke_passed = False
+                return _finish_result(result, artifact_dir, start_time)
+            
+            # Phase P1b: Scheduler Health Gate
+            log("=" * 60)
+            log("PHASE P1b: Scheduler Health Gate")
+            log("=" * 60)
+            phase_p1b = phase_p1b_scheduler_health_gate(config, artifact_dir)
+            result.phases.append(_phase_to_dict(phase_p1b))
+            if not phase_p1b.success:
+                log(f"PROVIDER SMOKE FAILED at P1b (scheduler health): {phase_p1b.message}")
+                result.failure_reason = f"Provider smoke failed at scheduler health gate: {phase_p1b.message}"
+                result.provider_smoke_passed = False
+                return _finish_result(result, artifact_dir, start_time)
+            
+            # Phase P2: Incident Discovery (k9b API-backed)
+            log("=" * 60)
+            log("PHASE P2: Incident Discovery (k9b API)")
+            log("=" * 60)
+            phase_p2, discovered_incident_id = phase_p2_incident_discovery_provider(config, artifact_dir)
+            result.phases.append(_phase_to_dict(phase_p2))
+            
+            if not phase_p2.success or not discovered_incident_id:
+                log(f"PROVIDER SMOKE FAILED at P2 (incident discovery): {phase_p2.message}")
+                result.failure_reason = f"Provider smoke failed at incident discovery: {phase_p2.message}"
+                result.provider_smoke_passed = False
+                return _finish_result(result, artifact_dir, start_time)
+            
+            # Phase P3: One-Pass Diagnosis Provider Smoke
+            log("=" * 60)
+            log("PHASE P3: One-Pass Diagnosis Provider Smoke")
+            log("=" * 60)
+            phase_p3 = phase_p3_provider_smoke(config, artifact_dir, discovered_incident_id)
+            result.phases.append(_phase_to_dict(phase_p3))
+            
+            if not phase_p3.success:
+                log(f"PROVIDER SMOKE FAILED at P3 (one-pass diagnosis): {phase_p3.message}")
+                result.failure_reason = f"Provider smoke failed at one-pass diagnosis: {phase_p3.message}"
+                result.provider_smoke_passed = False
+                return _finish_result(result, artifact_dir, start_time)
+            
+            # Phase P4: Persisted Diagnosis Contract Verification
+            log("=" * 60)
+            log("PHASE P4: Persisted Diagnosis Contract Verification")
+            log("=" * 60)
+            phase_p4 = phase_p4_persisted_diagnosis(config, artifact_dir, discovered_incident_id)
+            result.phases.append(_phase_to_dict(phase_p4))
+            
+            if not phase_p4.success:
+                log(f"PROVIDER SMOKE FAILED at P4 (persisted diagnosis): {phase_p4.message}")
+                result.failure_reason = f"Provider smoke failed at persisted diagnosis: {phase_p4.message}"
+                result.provider_smoke_passed = False
+                return _finish_result(result, artifact_dir, start_time)
+            
+            provider_smoke_passed = True
+            log("PROVIDER SMOKE: All phases passed")
+        else:
+            log("=" * 60)
+            log("PROVIDER SMOKE: Disabled (enable_provider_smoke=false)")
+            log("=" * 60)
+        
+        # =====================================================================
+        # Phase 5: Verification (original OTel oracle)
+        # =====================================================================
+        
         log("=" * 60)
         log("PHASE 5: Verify with oracle")
         log("=" * 60)
@@ -125,7 +235,16 @@ def run_lab(config: LabConfig) -> LabResult:
         result.verification_passed = phase5.success
         result.verification_details = phase5.artifacts
         
-        result.success = phase5.success
+        # When provider smoke is enabled, lab success requires BOTH verification AND provider smoke
+        # When provider smoke is disabled, lab success is based on verification alone
+        if config.enable_provider_smoke:
+            result.success = phase5.success and provider_smoke_passed
+            if not provider_smoke_passed:
+                result.failure_reason = result.failure_reason or "Provider smoke phases failed"
+        else:
+            result.success = phase5.success
+        
+        result.provider_smoke_passed = provider_smoke_passed
         
     except Exception as e:
         log(f"Lab execution error: {e}")
@@ -168,6 +287,7 @@ def _result_to_dict(result: LabResult) -> dict[str, Any]:
         "failure_reason": result.failure_reason,
         "verification_passed": result.verification_passed,
         "verification_details": result.verification_details,
+        "provider_smoke_passed": getattr(result, "provider_smoke_passed", False),
         "config": result.config,
         "phases": result.phases,
     }
@@ -210,6 +330,13 @@ def main() -> int:
         default=30,
         help="Poll interval for observation in seconds (default: 30)",
     )
+    # Provider smoke option (runs AFTER incident injection, fail-closed)
+    parser.add_argument(
+        "--enable-provider-smoke",
+        action="store_true",
+        default=False,
+        help="Enable provider smoke phases (fail-closed: any P1/P1b/P2/P3/P4 failure fails the lab)",
+    )
     
     args = parser.parse_args()
     
@@ -222,17 +349,19 @@ def main() -> int:
         live_traffic_duration_seconds=args.live_traffic_duration,
         live_observation_wait_seconds=args.live_observation_wait,
         live_poll_interval_seconds=args.live_poll_interval,
+        enable_provider_smoke=args.enable_provider_smoke,
     )
     
     result = run_lab(config)
     
-    if result.success:
-        print(f"LAB RESULT: SUCCESS (mode={args.mode})")
-        print(f"Elapsed: {result.elapsed_seconds:.1f}s")
-        return 0
-    else:
-        print(f"LAB RESULT: FAILED - {result.failure_reason} (mode={args.mode})")
-        return 1
+    print(f"LAB RESULT: {'SUCCESS' if result.success else 'FAILED'} (mode={args.mode})")
+    print(f"Provider smoke: {'PASSED' if result.provider_smoke_passed else 'SKIPPED/FAILED'}")
+    print(f"Elapsed: {result.elapsed_seconds:.1f}s")
+    
+    if not result.success:
+        print(f"Failure reason: {result.failure_reason}")
+    
+    return 0 if result.success else 1
 
 
 if __name__ == "__main__":

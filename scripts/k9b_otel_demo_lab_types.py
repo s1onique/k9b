@@ -48,6 +48,9 @@ class LabConfig:
     live_traffic_duration_seconds: int = 600  # 10 minutes
     live_observation_wait_seconds: int = 600  # 10 minutes for symptoms
     live_poll_interval_seconds: int = 30
+    
+    # Provider smoke config (k9b API integration)
+    enable_provider_smoke: bool = False
 
 
 @dataclass

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """OTel Demo Lab lifecycle phases.
 
-Contains phase 2 (inject), phase 3 (discovery), phase 4 (diagnosis),
-and phase 5 (verification).
+Contains the original OTel demo phases:
+- Phase 2: Inject recommendation cache failure
+- Phase 3: Run k9b incident discovery
+- Phase 4: Run diagnosis
+- Phase 5: Verify final diagnosis with oracle
 """
 
 from __future__ import annotations
@@ -28,6 +31,9 @@ from .k9b_otel_demo_lab_constants import (
 )
 from .k9b_otel_demo_lab_types import LAB_MODE_LIVE, LabConfig, LabPhaseResult
 
+# =============================================================================
+# Original OTel Demo Phases
+# =============================================================================
 
 def phase2_inject_incident(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
     """Phase 2: Inject the recommendation cache failure incident."""
@@ -39,7 +45,6 @@ def phase2_inject_incident(config: LabConfig, artifact_dir: Path) -> LabPhaseRes
     phase_dir = artifact_dir / PHASE_INJECTED
     phase_dir.mkdir(parents=True, exist_ok=True)
 
-    # Inject the incident
     injection_result = inject_recommendation_cache_failure(
         config.kubeconfig,
         artifact_dir,
@@ -67,7 +72,6 @@ def phase2_inject_incident(config: LabConfig, artifact_dir: Path) -> LabPhaseRes
 
     # Generate traffic based on mode
     if config.mode == "live":
-        # Live mode: generate real traffic
         log(f"Generating live traffic for {config.live_traffic_duration_seconds}s...")
         traffic_result = generate_live_traffic(
             kubeconfig=config.kubeconfig,
@@ -78,11 +82,9 @@ def phase2_inject_incident(config: LabConfig, artifact_dir: Path) -> LabPhaseRes
         )
         artifacts["traffic"] = traffic_result
 
-        # Wait for observation window in live mode
         log(f"Waiting {config.live_observation_wait_seconds}s for symptoms to manifest...")
         time.sleep(config.live_observation_wait_seconds)
 
-        # Collect live observation evidence (pods, events, logs after traffic)
         evidence_artifacts = collect_injection_evidence(
             config.kubeconfig,
             artifact_dir,
@@ -90,7 +92,6 @@ def phase2_inject_incident(config: LabConfig, artifact_dir: Path) -> LabPhaseRes
         )
         artifacts.update({k: str(v) for k, v in evidence_artifacts.items()})
     else:
-        # Scaffold mode: record traffic plan only
         traffic_result = record_traffic_plan(
             config.kubeconfig,
             artifact_dir,
@@ -98,7 +99,6 @@ def phase2_inject_incident(config: LabConfig, artifact_dir: Path) -> LabPhaseRes
         )
         artifacts["traffic"] = traffic_result
 
-        # Collect scaffold evidence
         evidence_artifacts = collect_injection_evidence(
             config.kubeconfig,
             artifact_dir,
@@ -116,12 +116,14 @@ def phase2_inject_incident(config: LabConfig, artifact_dir: Path) -> LabPhaseRes
 
 
 def phase3_incident_discovery(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
-    """Phase 3: Run k9b incident discovery gate."""
+    """Phase 3: Run k9b incident discovery gate.
+    
+    Collects OTel telemetry evidence and looks for incident indicators.
+    """
     start = time.time()
     phase_dir = artifact_dir / PHASE_DISCOVERY
     phase_dir.mkdir(parents=True, exist_ok=True)
 
-    # Collect current state for incident discovery
     pods_result = kubectl_json(config.kubeconfig, "pods", config.namespace)
     events_result = kubectl_events(config.kubeconfig, config.namespace)
 
@@ -135,19 +137,15 @@ def phase3_incident_discovery(config: LabConfig, artifact_dir: Path) -> LabPhase
         events_path = write_text_artifact(phase_dir, "events.txt", events_result.stdout)
         artifacts["events"] = str(events_path)
 
-    # Try to call k9b incident discovery API if available
-    # This would integrate with the k9b backend when deployed
     discovery_result: dict[str, Any] = {
-        "message": "Incident discovery gate - k9b API integration placeholder",
+        "message": "OTel telemetry-oriented incident discovery",
         "phase": PHASE_DISCOVERY,
         "timestamp": datetime.now(UTC).isoformat(),
         "incidents_found": [],
     }
 
-    # Check for incident indicators in collected artifacts
     incidents_found: list[dict[str, Any]] = []
 
-    # Look for restart storms, CrashLoopBackOff, etc.
     if pods_result.success and pods_result.data:
         for pod in pods_result.data.get("items", []):
             pod_name = pod.get("metadata", {}).get("name", "")
@@ -171,7 +169,6 @@ def phase3_incident_discovery(config: LabConfig, artifact_dir: Path) -> LabPhase
     discovery_path = write_json_artifact(phase_dir, "incidents-list.json", discovery_result)
     artifacts["incidents"] = str(discovery_path)
 
-    # Write selected incident
     if incidents_found:
         selected = incidents_found[0]
         write_text_artifact(phase_dir, "selected-incident.json", json.dumps(selected))
@@ -195,7 +192,6 @@ def phase4_diagnosis(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
 
     artifacts: dict[str, Any] = {}
 
-    # Branch on mode
     if config.mode == LAB_MODE_LIVE:
         diagnosis = _generate_live_diagnosis(artifact_dir, phase_dir)
         message = "Live mode diagnosis generated"
@@ -203,7 +199,6 @@ def phase4_diagnosis(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
         diagnosis = _generate_fake_diagnosis(artifact_dir, phase_dir)
         message = "Scaffold mode diagnosis generated"
 
-    # Write final diagnosis
     diagnosis_path = write_json_artifact(phase_dir, "final-diagnosis.json", diagnosis)
     artifacts["final_diagnosis"] = str(diagnosis_path)
 
@@ -286,7 +281,6 @@ def phase5_verification(config: LabConfig, artifact_dir: Path) -> LabPhaseResult
 
     artifacts: dict[str, Any] = {}
 
-    # Branch on mode to select appropriate verifier
     if config.mode == LAB_MODE_LIVE:
         from .k9b_otel_demo_lab_verify_live import verify_otel_demo_lab_live
         verification_dict = verify_otel_demo_lab_live(artifact_dir)
