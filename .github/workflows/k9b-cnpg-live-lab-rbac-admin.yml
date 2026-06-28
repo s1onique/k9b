@@ -228,12 +228,36 @@ jobs:
           echo "Admin kubeconfig decoded to temporary file"
 
       # =========================================================================
+      # Restore kubectl tool cache
+      # Uses restore/save split to save cache immediately after setup-kubectl,
+      # even if the job fails later. This is more robust for live-lab workflows.
+      # =========================================================================
+      - name: Restore kubectl tool cache
+        id: cache-kubectl
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.tool_cache }}/kubectl
+          key: kubectl-${{ runner.os }}-${{ runner.arch }}-${{ env.KUBECTL_VERSION }}
+
+      # =========================================================================
       # Set up kubectl
       # =========================================================================
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: '${{ env.KUBECTL_VERSION }}'
+
+      # =========================================================================
+      # Save kubectl tool cache
+      # Saves cache immediately after setup-kubectl (even if job fails later).
+      # Only saves when there was a cache miss (cache-hit != 'true').
+      # =========================================================================
+      - name: Save kubectl tool cache
+        if: steps.cache-kubectl.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.tool_cache }}/kubectl
+          key: ${{ steps.cache-kubectl.outputs.cache-primary-key }}
 
       # =========================================================================
       # Pre-apply diagnostics / API reachability check

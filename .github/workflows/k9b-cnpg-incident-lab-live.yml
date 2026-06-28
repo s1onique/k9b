@@ -71,6 +71,8 @@ on:
 
 env:
   PYTHON_VERSION: '3.13'
+  # kubectl version (pinned for cache key stability)
+  KUBECTL_VERSION: 'v1.31.0'
   # Lab namespace derived from run ID
   LAB_NAMESPACE: k9b-cnpg-lab-${{ github.run_id }}
   # Use ConfigMap driver to avoid Secret read permissions for Helm release metadata
@@ -98,12 +100,36 @@ jobs:
       - uses: actions/checkout@v4
 
       # =======================================================================
+      # Restore kubectl tool cache
+      # Uses restore/save split to save cache immediately after setup-kubectl,
+      # even if the job fails later. This is more robust for live-lab workflows.
+      # =======================================================================
+      - name: Restore kubectl tool cache
+        id: cache-kubectl
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.tool_cache }}/kubectl
+          key: kubectl-${{ runner.os }}-${{ runner.arch }}-${{ env.KUBECTL_VERSION }}
+
+      # =======================================================================
       # Setup kubectl (pinned version compatible with cluster)
       # =======================================================================
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
         with:
-          version: 'v1.31.0'
+          version: '${{ env.KUBECTL_VERSION }}'
+
+      # =======================================================================
+      # Save kubectl tool cache
+      # Saves cache immediately after setup-kubectl (even if job fails later).
+      # Only saves when there was a cache miss (cache-hit != 'true').
+      # =======================================================================
+      - name: Save kubectl tool cache
+        if: steps.cache-kubectl.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.tool_cache }}/kubectl
+          key: ${{ steps.cache-kubectl.outputs.cache-primary-key }}
 
       # =======================================================================
       # Set up Helm
