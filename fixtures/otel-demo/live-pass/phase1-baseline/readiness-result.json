@@ -1,0 +1,7 @@
+{
+  "success": true,
+  "message": "All deployments ready",
+  "deployments_checked": 10,
+  "deployments": ["frontend", "recommendationservice", "productcatalogservice", "cartservice", "checkoutservice", "paymentservice", "shippingservice", "currencyservice", "emailservice", "flagd"],
+  "timestamp": "2026-06-28T18:00:00+00:00"
+}

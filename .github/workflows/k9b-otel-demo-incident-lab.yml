@@ -25,6 +25,21 @@ on:
         options:
           - recommendation-cache-failure
           - recommendation-pod-stress
+      live_traffic_duration_seconds:
+        description: 'Live traffic generation duration (seconds)'
+        required: false
+        default: '600'
+        type: string
+      live_observation_wait_seconds:
+        description: 'Wait time for symptoms to manifest (seconds)'
+        required: false
+        default: '600'
+        type: string
+      live_poll_interval_seconds:
+        description: 'Poll interval between traffic requests (seconds)'
+        required: false
+        default: '30'
+        type: string
 
   # CI on PR when lab files change
   pull_request:
@@ -128,7 +143,96 @@ jobs:
           echo "Passing fixture: PASSED"
           echo "Fail fixtures: Correctly rejected"
           if [[ "${{ inputs.run_live_lab }}" == "true" ]]; then
-            echo "Live namespace-mode lab will run in 'live-k3s-lab' job."
+            echo "Live lab requested - see 'live-k3s-lab' job"
           else
             echo "NOTE: Live lab not requested. Use workflow_dispatch with run_live_lab=true."
           fi
+
+  # ===========================================================================
+  # Live K3s Lab Job (manual only)
+  # ===========================================================================
+  live-k3s-lab:
+    name: Live K3s Lab (Manual)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_lab == true
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+          cache: 'pip'
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install Python dependencies
+        run: |
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install pytest pyyaml
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p "$RUNNER_TEMP/kubeconfig"
+          KUBECONFIG_PATH="$RUNNER_TEMP/kubeconfig/k9b-otel-demo"
+          echo "${{ secrets.KUBECONFIG }}" > "$KUBECONFIG_PATH"
+          chmod 600 "$KUBECONFIG_PATH"
+          echo "KUBECONFIG=$KUBECONFIG_PATH" >> $GITHUB_ENV
+          echo "KUBECONFIG_PATH=$KUBECONFIG_PATH" >> $GITHUB_ENV
+
+      - name: Verify cluster connectivity
+        run: kubectl get nodes
+
+      - name: Create artifact directory
+        run: mkdir -p ./lab-artifacts/otel-demo
+
+      - name: Run Live OTel Demo Lab
+        run: |
+          echo "=== Starting Live OTel Demo Lab ==="
+          .venv/bin/python -m scripts.k9b_otel_demo_lab \
+            --kubeconfig "$KUBECONFIG" \
+            --artifact-dir ./lab-artifacts/otel-demo \
+            --mode live \
+            --live-traffic-duration "${{ inputs.live_traffic_duration_seconds || '600' }}" \
+            --live-observation-wait "${{ inputs.live_observation_wait_seconds || '600' }}" \
+            --live-poll-interval "${{ inputs.live_poll_interval_seconds || '30' }}"
+
+      - name: Verify Live Lab
+        run: |
+          echo "=== Verifying Live Lab Results ==="
+          .venv/bin/python -m scripts.k9b_otel_demo_lab_verify \
+            --artifact-dir ./lab-artifacts/otel-demo \
+            --mode live \
+            --json
+
+      - name: Upload Live Lab Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k9b-otel-demo-live-lab-${{ github.run_id }}
+          path: |
+            ./lab-artifacts/otel-demo/**
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact_retention_days || '7' }}
+
+      - name: Summary
+        run: |
+          echo "=== Live K3s OTel Demo Lab Summary ==="
+          echo "Lab artifacts saved to ./lab-artifacts/otel-demo/"
+          echo "See 'k9b-otel-demo-live-lab' artifact for full results"

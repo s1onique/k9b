@@ -1,0 +1,10 @@
+{
+  "apiVersion": "v1",
+  "kind": "ServiceList",
+  "items": [
+    {"metadata": {"name": "frontend"}},
+    {"metadata": {"name": "frontend-proxy"}},
+    {"metadata": {"name": "recommendationservice"}},
+    {"metadata": {"name": "flagd"}}
+  ]
+}

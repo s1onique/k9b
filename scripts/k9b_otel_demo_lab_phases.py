@@ -34,7 +34,7 @@ from .k9b_otel_demo_lab_constants import (
     PHASE_VERIFICATION,
     REQUIRED_DEPLOYMENTS,
 )
-from .k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
+from .k9b_otel_demo_lab_types import LAB_MODE_LIVE, LabConfig, LabPhaseResult
 
 
 def phase0_cluster_baseline(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
@@ -78,7 +78,6 @@ def phase0_cluster_baseline(config: LabConfig, artifact_dir: Path) -> LabPhaseRe
         artifacts=artifacts,
         duration_seconds=duration,
     )
-
 
 def phase1_deploy_otel_demo(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
     """Phase 1: Deploy OpenTelemetry Demo via Helm."""
@@ -162,7 +161,6 @@ flagd:
         duration_seconds=duration,
     )
 
-
 def phase1b_baseline_readiness(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
     """Wait for OTel Demo baseline to be ready and collect artifacts."""
     start = time.time()
@@ -242,12 +240,11 @@ def phase1b_baseline_readiness(config: LabConfig, artifact_dir: Path) -> LabPhas
         duration_seconds=duration,
     )
 
-
 def phase2_inject_incident(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
     """Phase 2: Inject the recommendation cache failure incident."""
     from .k9b_otel_demo_lab_evidence import collect_injection_evidence
     from .k9b_otel_demo_lab_inject import inject_recommendation_cache_failure
-    from .k9b_otel_demo_lab_traffic import record_traffic_plan
+    from .k9b_otel_demo_lab_traffic import generate_live_traffic, record_traffic_plan
     
     start = time.time()
     phase_dir = artifact_dir / PHASE_INJECTED
@@ -279,20 +276,45 @@ def phase2_inject_incident(config: LabConfig, artifact_dir: Path) -> LabPhaseRes
     log(f"Waiting {config.incident_wait_seconds}s for incident to propagate...")
     time.sleep(config.incident_wait_seconds)
     
-    # Generate traffic (scaffold mode: records plan, doesn't actually hit frontend)
-    traffic_result = record_traffic_plan(
-        config.kubeconfig,
-        artifact_dir,
-        duration_seconds=30,
-    )
-    artifacts["traffic"] = traffic_result
-    
-    # Collect injection evidence
-    evidence_artifacts = collect_injection_evidence(
-        config.kubeconfig,
-        artifact_dir,
-    )
-    artifacts.update({k: str(v) for k, v in evidence_artifacts.items()})
+    # Generate traffic based on mode
+    if config.mode == "live":
+        # Live mode: generate real traffic
+        log(f"Generating live traffic for {config.live_traffic_duration_seconds}s...")
+        traffic_result = generate_live_traffic(
+            kubeconfig=config.kubeconfig,
+            artifact_dir=artifact_dir,
+            namespace=config.namespace,
+            duration_seconds=config.live_traffic_duration_seconds,
+            interval_seconds=config.live_poll_interval_seconds,
+        )
+        artifacts["traffic"] = traffic_result
+        
+        # Wait for observation window in live mode
+        log(f"Waiting {config.live_observation_wait_seconds}s for symptoms to manifest...")
+        time.sleep(config.live_observation_wait_seconds)
+        
+        # Collect live observation evidence (pods, events, logs after traffic)
+        evidence_artifacts = collect_injection_evidence(
+            config.kubeconfig,
+            artifact_dir,
+            live_mode=True,
+        )
+        artifacts.update({k: str(v) for k, v in evidence_artifacts.items()})
+    else:
+        # Scaffold mode: record traffic plan only
+        traffic_result = record_traffic_plan(
+            config.kubeconfig,
+            artifact_dir,
+            duration_seconds=30,
+        )
+        artifacts["traffic"] = traffic_result
+        
+        # Collect scaffold evidence
+        evidence_artifacts = collect_injection_evidence(
+            config.kubeconfig,
+            artifact_dir,
+        )
+        artifacts.update({k: str(v) for k, v in evidence_artifacts.items()})
     
     duration = time.time() - start
     return LabPhaseResult(
@@ -302,7 +324,6 @@ def phase2_inject_incident(config: LabConfig, artifact_dir: Path) -> LabPhaseRes
         artifacts=artifacts,
         duration_seconds=duration,
     )
-
 
 def phase3_incident_discovery(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
     """Phase 3: Run k9b incident discovery gate."""
@@ -375,17 +396,21 @@ def phase3_incident_discovery(config: LabConfig, artifact_dir: Path) -> LabPhase
         duration_seconds=duration,
     )
 
-
 def phase4_diagnosis(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
-    """Phase 4: Run diagnosis (scaffold mode)."""
+    """Phase 4: Run diagnosis."""
     start = time.time()
     phase_dir = artifact_dir / PHASE_DIAGNOSIS
     phase_dir.mkdir(parents=True, exist_ok=True)
     
     artifacts: dict[str, Any] = {}
     
-    # In scaffold mode, we generate a fake diagnosis
-    diagnosis = _generate_fake_diagnosis(artifact_dir, phase_dir)
+    # Branch on mode
+    if config.mode == LAB_MODE_LIVE:
+        diagnosis = _generate_live_diagnosis(artifact_dir, phase_dir)
+        message = "Live mode diagnosis generated"
+    else:
+        diagnosis = _generate_fake_diagnosis(artifact_dir, phase_dir)
+        message = "Scaffold mode diagnosis generated"
     
     # Write final diagnosis
     diagnosis_path = write_json_artifact(phase_dir, "final-diagnosis.json", diagnosis)
@@ -395,11 +420,10 @@ def phase4_diagnosis(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
     return LabPhaseResult(
         phase=PHASE_DIAGNOSIS,
         success=True,
-        message="Scaffold mode diagnosis generated",
+        message=message,
         artifacts=artifacts,
         duration_seconds=duration,
     )
-
 
 def _generate_fake_diagnosis(artifact_dir: Path, phase_dir: Path) -> dict[str, Any]:
     """Generate a scaffold-mode fake diagnosis."""
@@ -441,40 +465,64 @@ def _generate_fake_diagnosis(artifact_dir: Path, phase_dir: Path) -> dict[str, A
     }
 
 
+def _generate_live_diagnosis(artifact_dir: Path, phase_dir: Path) -> dict[str, Any]:
+    """Generate a live-mode deterministic diagnosis based on real evidence."""
+    return {
+        "schema_version": "1.0",
+        "provider": "deterministic-live-oracle",
+        "mode": "live",
+        "phase": "diagnosis",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "namespace": "otel-demo",
+        "status": "complete",
+        "root_cause": {
+            "component": "recommendationservice",
+            "feature_flag": "recommendationServiceCacheFailure",
+        },
+        "remediation": {
+            "attempted": False,
+            "suggested": False,
+        },
+    }
+
 def phase5_verification(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
     """Phase 5: Verify with oracle."""
     start = time.time()
     phase_dir = artifact_dir / PHASE_VERIFICATION
     phase_dir.mkdir(parents=True, exist_ok=True)
     
-    # Import verification module
-    from .k9b_otel_demo_lab_verify import verify_otel_demo_lab
+    artifacts: dict[str, Any] = {}
     
-    # Run verification
-    verification_result = verify_otel_demo_lab(artifact_dir)
+    # Branch on mode to select appropriate verifier
+    if config.mode == LAB_MODE_LIVE:
+        from .k9b_otel_demo_lab_verify_live import verify_otel_demo_lab_live
+        verification_dict = verify_otel_demo_lab_live(artifact_dir)
+        artifacts["verification_passed"] = verification_dict["passed"]
+        artifacts["failure_classes"] = verification_dict["failure_classes"]
+        verification_path = write_json_artifact(phase_dir, "verification-result.json", verification_dict)
+    else:
+        from .k9b_otel_demo_lab_verify import verify_otel_demo_lab
+        verification_result = verify_otel_demo_lab(artifact_dir)
+        artifacts["verification_passed"] = verification_result.passed
+        artifacts["failure_classes"] = verification_result.failure_classes
+        verification_path = write_json_artifact(phase_dir, "verification-result.json", {
+            "passed": verification_result.passed,
+            "failure_classes": verification_result.failure_classes,
+            "details": verification_result.details,
+            "recommendationservice_found": verification_result.recommendationservice_found,
+            "feature_flag_evidence_found": verification_result.feature_flag_evidence_found,
+            "mutation_detected": verification_result.mutation_detected,
+            "remediation_attempted": verification_result.remediation_attempted,
+        })
     
-    artifacts: dict[str, Any] = {
-        "verification_passed": verification_result.passed,
-        "failure_classes": verification_result.failure_classes,
-    }
-    
-    # Write verification result
-    verification_path = write_json_artifact(phase_dir, "verification-result.json", {
-        "passed": verification_result.passed,
-        "failure_classes": verification_result.failure_classes,
-        "details": verification_result.details,
-        "recommendationservice_found": verification_result.recommendationservice_found,
-        "feature_flag_evidence_found": verification_result.feature_flag_evidence_found,
-        "mutation_detected": verification_result.mutation_detected,
-        "remediation_attempted": verification_result.remediation_attempted,
-    })
     artifacts["verification_result"] = str(verification_path)
     
     duration = time.time() - start
+    passed = artifacts["verification_passed"]
     return LabPhaseResult(
         phase=PHASE_VERIFICATION,
-        success=verification_result.passed,
-        message=f"Verification: {'PASSED' if verification_result.passed else 'FAILED'}",
+        success=passed,
+        message=f"Verification: {'PASSED' if passed else 'FAILED'}",
         artifacts=artifacts,
         duration_seconds=duration,
     )

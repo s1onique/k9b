@@ -1,0 +1,6 @@
+{
+  "command": "Enable recommendationServiceCacheFailure feature flag",
+  "method": "configmap-patch",
+  "timestamp": "2026-06-28T18:05:00+00:00",
+  "namespace": "otel-demo"
+}

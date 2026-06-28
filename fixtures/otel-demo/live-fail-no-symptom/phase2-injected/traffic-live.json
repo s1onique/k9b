@@ -1,0 +1,8 @@
+{
+  "mode": "live",
+  "actual_attempts": 20,
+  "estimated_attempts": 20,
+  "summary_found": true,
+  "success_count": 18,
+  "failure_count": 2
+}

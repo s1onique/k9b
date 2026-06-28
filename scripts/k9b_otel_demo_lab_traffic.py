@@ -2,10 +2,14 @@
 """Traffic generation for OTel Demo Lab.
 
 In scaffold mode, records traffic plan without generating real traffic.
+In live mode, generates real HTTP traffic via a temporary curl pod.
 """
 
 from __future__ import annotations
 
+import subprocess
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +22,7 @@ def record_traffic_plan(
     artifact_dir: Path,
     duration_seconds: int = 30,
 ) -> dict[str, Any]:
-    """Record traffic generation plan (scaffold mode).
+    """Record traffic generation plan (scaffold mode only).
     
     In scaffold mode, this function only records the traffic generation plan
     to artifacts; it does not actually generate real traffic.
@@ -48,7 +52,7 @@ def record_traffic_plan(
     
     if not frontend_svc:
         log("Warning: Could not find frontend service for traffic generation")
-        return {"error": "frontend service not found"}
+        return {"mode": "scaffold", "error": "frontend service not found"}
     
     # Get frontend pod IP
     frontend_pod_ip = None
@@ -63,14 +67,16 @@ def record_traffic_plan(
                     break
     
     result = {
+        "mode": "scaffold",
         "frontend_service": frontend_svc,
         "frontend_pod_ip": frontend_pod_ip,
         "duration_seconds": duration_seconds,
-        "started_at": __import__("time").time(),
+        "started_at": time.time(),
     }
     
     # Write traffic command info
     traffic_cmd = {
+        "mode": "scaffold",
         "command": "generate traffic to frontend",
         "service": frontend_svc,
         "pod_ip": frontend_pod_ip,
@@ -96,3 +102,221 @@ def generate_traffic(
         to record_traffic_plan since scaffold mode only records plans.
     """
     return record_traffic_plan(kubeconfig, artifact_dir, duration_seconds)
+
+
+def generate_live_traffic(
+    kubeconfig: str,
+    artifact_dir: Path,
+    namespace: str,
+    duration_seconds: int = 600,
+    interval_seconds: int = 30,
+) -> dict[str, Any]:
+    """Generate real HTTP traffic to the frontend (live mode only).
+    
+    Creates a temporary curl pod that hits the frontend service repeatedly.
+    
+    Args:
+        kubeconfig: Path to kubeconfig
+        artifact_dir: Directory to write artifacts
+        namespace: OTel Demo namespace
+        duration_seconds: How long to generate traffic
+        interval_seconds: Interval between requests
+        
+    Returns:
+        Traffic result with success/failure counts and errors
+    """
+    traffic_dir = artifact_dir / "phase2-injected"
+    traffic_dir.mkdir(parents=True, exist_ok=True)
+    
+    log(f"Starting live traffic generation for {duration_seconds}s...")
+    
+    # Find frontend service
+    frontend_svc = _find_frontend_service(kubeconfig, namespace)
+    if not frontend_svc:
+        log("Error: Could not find frontend service")
+        result = {
+            "mode": "live",
+            "error": "frontend service not found",
+            "success_count": 0,
+            "failure_count": 0,
+            "actual_attempts": 0,
+            "estimated_attempts": duration_seconds // interval_seconds,
+            "summary_found": False,
+        }
+        write_json_artifact(traffic_dir, "traffic-live.json", result)
+        return result
+    
+    # Find frontend-proxy service (preferred) or use frontend
+    frontend_proxy = _find_frontend_proxy_service(kubeconfig, namespace)
+    target_service = frontend_proxy or frontend_svc
+    target_url = f"http://{target_service}/"
+    
+    log(f"Target service: {target_service} -> {target_url}")
+    
+    # Create traffic pod manifest
+    traffic_pod_name = f"k9b-traffic-generator-{int(time.time())}"
+    pod_manifest = f"""apiVersion: v1
+kind: Pod
+metadata:
+  name: {traffic_pod_name}
+  namespace: {namespace}
+  labels:
+    app: k9b-traffic-generator
+    created-by: k9b-otel-demo-lab
+spec:
+  restartPolicy: Never
+  containers:
+  - name: curl
+    image: curlimages/curl:latest
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        end=$(( $(date +%s) + {duration_seconds} ))
+        success=0
+        fail=0
+        while [ $(date +%s) -lt $end ]; do
+          if curl -s -o /dev/null -w "%{{http_code}}" {target_url} | grep -qE "^[23]"; then
+            success=$((success + 1))
+          else
+            fail=$((fail + 1))
+          fi
+          sleep {interval_seconds}
+        done
+        echo "TRAFFIC_SUMMARY: success=$success fail=$fail"
+"""
+    
+    # Apply traffic pod
+    log(f"Creating traffic pod: {traffic_pod_name}")
+    apply_result = kubectl_apply(kubeconfig, pod_manifest, namespace)
+    
+    if not apply_result.success:
+        log(f"Failed to create traffic pod: {apply_result.stderr}")
+        result = {
+            "mode": "live",
+            "error": apply_result.stderr,
+            "success_count": 0,
+            "failure_count": 0,
+            "actual_attempts": 0,
+            "estimated_attempts": duration_seconds // interval_seconds,
+            "summary_found": False,
+        }
+        write_json_artifact(traffic_dir, "traffic-live.json", result)
+        return result
+    
+    # Poll for Succeeded phase (pod has finished)
+    max_wait = duration_seconds + 60
+    elapsed = 0
+    pod_phase = "Unknown"
+    while elapsed < max_wait:
+        phase_result = subprocess.run(
+            ["kubectl", "--kubeconfig", kubeconfig, "get", "pod", traffic_pod_name,
+             "-n", namespace, "-o", "jsonpath={.status.phase}"],
+            capture_output=True, text=True
+        )
+        if phase_result.returncode == 0:
+            pod_phase = phase_result.stdout.strip()
+            if pod_phase == "Succeeded":
+                log(f"Traffic pod completed with phase: {pod_phase}")
+                break
+            elif pod_phase == "Failed":
+                log(f"Traffic pod failed with phase: {pod_phase}")
+                break
+        time.sleep(5)
+        elapsed += 5
+    
+    log(f"Traffic pod final phase: {pod_phase} after {elapsed}s")
+    
+    # Get pod logs
+    logs_result = kubectl_logs(kubeconfig, traffic_pod_name, namespace)
+    pod_logs = logs_result.stdout if logs_result.success else logs_result.stderr
+    
+    # Parse results from logs
+    success_count = 0
+    failure_count = 0
+    summary_found = False
+    summary_line = ""
+    for line in pod_logs.split("\n"):
+        if "TRAFFIC_SUMMARY:" in line:
+            summary_line = line
+            summary_found = True
+            parts = line.split("success=")
+            if len(parts) > 1:
+                success_fail = parts[1].split()[0]
+                success_count = int(success_fail)
+                fail_parts = parts[1].split("fail=")
+                if len(fail_parts) > 1:
+                    failure_count = int(fail_parts[1])
+    
+    # Calculate actual attempts (only if we found summary)
+    actual_attempts = success_count + failure_count if summary_found else 0
+    estimated_attempts = duration_seconds // interval_seconds
+    
+    # Delete traffic pod
+    log(f"Deleting traffic pod: {traffic_pod_name}")
+    subprocess.run(
+        ["kubectl", "--kubeconfig", kubeconfig, "delete", "pod", traffic_pod_name,
+         "-n", namespace, "--wait=true"],
+        capture_output=True
+    )
+    
+    result = {
+        "mode": "live",
+        "traffic_pod_name": traffic_pod_name,
+        "target_service": target_service,
+        "target_url": target_url,
+        "duration_seconds": duration_seconds,
+        "interval_seconds": interval_seconds,
+        "success_count": success_count,
+        "failure_count": failure_count,
+        "actual_attempts": actual_attempts,
+        "estimated_attempts": estimated_attempts,
+        "summary_found": summary_found,
+        "pod_phase": pod_phase,
+        "pod_logs": pod_logs[-2000:],  # Last 2000 chars
+        "summary": summary_line,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
+    
+    # Write traffic artifact
+    write_json_artifact(traffic_dir, "traffic-live.json", result)
+    
+    log(f"Live traffic complete: {success_count} success, {failure_count} failures, actual={actual_attempts}, estimated={estimated_attempts}")
+    return result
+
+
+def _find_frontend_service(kubeconfig: str, namespace: str) -> str | None:
+    """Find the frontend service name."""
+    svc_result = kubectl_json(kubeconfig, "services", namespace)
+    if svc_result.success and svc_result.data:
+        for svc in svc_result.data.get("items", []):
+            svc_name: str = svc.get("metadata", {}).get("name", "") or ""
+            if svc_name == "frontend":
+                return svc_name
+    return None
+
+
+def _find_frontend_proxy_service(kubeconfig: str, namespace: str) -> str | None:
+    """Find the frontend-proxy service name."""
+    svc_result = kubectl_json(kubeconfig, "services", namespace)
+    if svc_result.success and svc_result.data:
+        for svc in svc_result.data.get("items", []):
+            svc_name: str = svc.get("metadata", {}).get("name", "") or ""
+            if svc_name == "frontend-proxy":
+                return svc_name
+    return None
+
+
+def kubectl_apply(kubeconfig: str, manifest: str, namespace: str) -> Any:
+    """Apply a manifest using kubectl."""
+    from .k9b_lab_common_helpers import KubectlResult
+    cmd = ["kubectl", "--kubeconfig", kubeconfig, "apply", "-f", "-"]
+    result = subprocess.run(cmd, input=manifest, capture_output=True, text=True)
+    return KubectlResult.from_subprocess(result)
+
+
+def kubectl_logs(kubeconfig: str, pod: str, namespace: str) -> Any:
+    """Get pod logs."""
+    from .k9b_lab_common_helpers import KubectlResult
+    cmd = ["kubectl", "--kubeconfig", kubeconfig, "logs", pod, "-n", namespace]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return KubectlResult.from_subprocess(result)

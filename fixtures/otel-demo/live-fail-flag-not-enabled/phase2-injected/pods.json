@@ -1,0 +1,5 @@
+{
+  "items": [
+    {"metadata": {"name": "recommendationservice-def456"}, "status": {"phase": "Running", "containerStatuses": [{"restartCount": 0}]}}
+  ]
+}

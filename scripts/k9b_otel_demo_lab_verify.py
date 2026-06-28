@@ -158,6 +158,8 @@ def main() -> int:
     
     parser = argparse.ArgumentParser(description="Verify OTel Demo lab artifacts")
     parser.add_argument("--artifact-dir", required=True, help="Root artifact directory")
+    parser.add_argument("--mode", choices=["scaffold", "live"], default="scaffold",
+                       help="Verification mode: scaffold or live (default: scaffold)")
     parser.add_argument("--fixture", choices=["pass", "fail-no-recommendationservice", "fail-missing-flag", "fail-mutation"],
                        help="Fixture type to verify")
     parser.add_argument("--json", action="store_true", help="Output JSON format")
@@ -165,7 +167,17 @@ def main() -> int:
     args = parser.parse_args()
     artifact_dir = Path(args.artifact_dir)
     
-    if args.fixture == "pass":
+    if args.mode == "live":
+        from .k9b_otel_demo_lab_verify_live import verify_otel_demo_lab_live
+        live_result = verify_otel_demo_lab_live(artifact_dir)
+        result = VerificationResult(
+            passed=live_result["passed"],
+            failure_classes=live_result["failure_classes"],
+            details=live_result["details"],
+            recommendationservice_found=live_result.get("recommendationservice_found", False),
+            feature_flag_evidence_found=live_result.get("flag_enabled", False),
+        )
+    elif args.fixture == "pass":
         result = verify_pass_fixture(artifact_dir)
     elif args.fixture == "fail-no-recommendationservice":
         result = verify_fail_no_recommendationservice(artifact_dir)
@@ -181,12 +193,13 @@ def main() -> int:
             "passed": result.passed,
             "failure_classes": result.failure_classes,
             "details": result.details,
+            "mode": args.mode,
         }, indent=2))
     else:
         if result.passed:
-            print("VERIFICATION PASSED")
+            print(f"VERIFICATION PASSED (mode={args.mode})")
         else:
-            print(f"VERIFICATION FAILED: {', '.join(result.failure_classes)}")
+            print(f"VERIFICATION FAILED: {', '.join(result.failure_classes)} (mode={args.mode})")
             print("\nDetails:")
             print(json.dumps(result.details, indent=2))
     

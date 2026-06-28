@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "provider": "deterministic-live-oracle",
+  "mode": "live",
+  "phase": "diagnosis",
+  "timestamp": "2026-06-28T18:30:00+00:00",
+  "namespace": "otel-demo",
+  "status": "complete",
+  "summary": "Live diagnosis identifies recommendationservice cache failure due to feature flag recommendationServiceCacheFailure being enabled",
+  "root_cause": {
+    "component": "recommendationservice",
+    "feature_flag": "recommendationServiceCacheFailure",
+    "description": "The recommendationservice is experiencing cache failures caused by the recommendationServiceCacheFailure feature flag being enabled in flagd."
+  },
+  "confidence": "high",
+  "evidence": [
+    "recommendationservice pod shows 2 restarts after incident injection",
+    "recommendationservice liveness probe failing with Unhealthy status",
+    "feature flag recommendationServiceCacheFailure is enabled in flagd configmap",
+    "traffic to frontend generated 20 requests, 2 failures observed"
+  ],
+  "telemetry_evidence": {
+    "kubernetes": {
+      "recommendationservice_restarts": 2,
+      "recommendationservice_status": "Unhealthy liveness probe"
+    },
+    "traffic": {
+      "requests": 20,
+      "successes": 18,
+      "failures": 2
+    }
+  },
+  "affected_component": "recommendationservice",
+  "feature_flag": "recommendationServiceCacheFailure",
+  "next_checks": [
+    {"check": "Review flagd configuration history", "purpose": "Identify if flag was changed intentionally"},
+    {"check": "Examine recommendationservice logs for cache-related errors", "purpose": "Confirm cache failure behavior"}
+  ],
+  "remediation": {
+    "attempted": false,
+    "suggested": false,
+    "reason": "Live mode - diagnosis only, no remediation"
+  },
+  "safe_to_investigate": true,
+  "requires_mutations": false
+}

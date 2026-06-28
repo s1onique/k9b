@@ -1,0 +1,15 @@
+{
+  "mode": "live",
+  "traffic_pod_name": "k9b-traffic-generator-1719599100",
+  "target_service": "frontend-proxy",
+  "target_url": "http://frontend-proxy/",
+  "duration_seconds": 600,
+  "interval_seconds": 30,
+  "success_count": 18,
+  "failure_count": 2,
+  "actual_attempts": 20,
+  "estimated_attempts": 20,
+  "summary_found": true,
+  "pod_phase": "Succeeded",
+  "timestamp": "2026-06-28T18:10:00+00:00"
+}

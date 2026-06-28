@@ -1,0 +1,6 @@
+{
+  "items": [
+    {"metadata": {"name": "frontend-abc123"}, "status": {"phase": "Running", "containerStatuses": []}},
+    {"metadata": {"name": "recommendationservice-def456"}, "status": {"phase": "Running", "containerStatuses": [{"name": "recommendationservice", "restartCount": 0, "state": {"running": {}}}]}}
+  ]
+}

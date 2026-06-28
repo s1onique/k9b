@@ -95,6 +95,16 @@ FAILURE_DIAGNOSIS_GENERIC_POD_CRASH = "diagnosis_generic_pod_crash"
 FAILURE_MUTATION_DETECTED = "mutation_detected"
 FAILURE_REMEDIATION_ATTEMPTED = "remediation_attempted"
 
+# Live mode failure classes
+FAILURE_LIVE_TRAFFIC_NOT_ATTEMPTED = "live_traffic_not_attempted"
+FAILURE_LIVE_TRAFFIC_FAILED = "live_traffic_failed"
+FAILURE_LIVE_OBSERVATION_MISSING = "live_observation_missing"
+FAILURE_LIVE_RECOMMENDATIONSERVICE_EVIDENCE_MISSING = "live_recommendationservice_evidence_missing"
+FAILURE_LIVE_FEATURE_FLAG_NOT_ENABLED = "live_feature_flag_not_enabled"
+FAILURE_LIVE_SYMPTOM_EVIDENCE_MISSING = "live_symptom_evidence_missing"
+FAILURE_LIVE_TELEMETRY_UNAVAILABLE = "live_telemetry_unavailable"
+FAILURE_LIVE_TELEMETRY_SIGNAL_MISSING = "live_telemetry_signal_missing"
+
 
 # =============================================================================
 # Expected components for diagnosis oracle

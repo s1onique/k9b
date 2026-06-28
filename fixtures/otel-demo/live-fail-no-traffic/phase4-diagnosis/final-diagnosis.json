@@ -1,0 +1,5 @@
+{
+  "provider": "deterministic-live-oracle",
+  "mode": "live",
+  "affected_component": "recommendationservice"
+}

@@ -185,6 +185,31 @@ def main() -> int:
         default="./lab-artifacts/otel-demo",
         help="Artifact directory",
     )
+    parser.add_argument(
+        "--mode",
+        choices=["scaffold", "live"],
+        default="scaffold",
+        help="Lab mode: scaffold (fixture-based) or live (real cluster traffic)",
+    )
+    # Live mode timing overrides
+    parser.add_argument(
+        "--live-traffic-duration",
+        type=int,
+        default=600,
+        help="Duration of live traffic generation in seconds (default: 600)",
+    )
+    parser.add_argument(
+        "--live-observation-wait",
+        type=int,
+        default=600,
+        help="Wait time for symptoms to manifest in seconds (default: 600)",
+    )
+    parser.add_argument(
+        "--live-poll-interval",
+        type=int,
+        default=30,
+        help="Poll interval for observation in seconds (default: 30)",
+    )
     
     args = parser.parse_args()
     
@@ -193,16 +218,20 @@ def main() -> int:
     config = LabConfig(
         kubeconfig=args.kubeconfig,
         artifact_dir=args.artifact_dir,
+        mode=args.mode,
+        live_traffic_duration_seconds=args.live_traffic_duration,
+        live_observation_wait_seconds=args.live_observation_wait,
+        live_poll_interval_seconds=args.live_poll_interval,
     )
     
     result = run_lab(config)
     
     if result.success:
-        print("LAB RESULT: SUCCESS")
+        print(f"LAB RESULT: SUCCESS (mode={args.mode})")
         print(f"Elapsed: {result.elapsed_seconds:.1f}s")
         return 0
     else:
-        print(f"LAB RESULT: FAILED - {result.failure_reason}")
+        print(f"LAB RESULT: FAILED - {result.failure_reason} (mode={args.mode})")
         return 1
 
 

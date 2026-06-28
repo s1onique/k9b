@@ -1,0 +1,10 @@
+{
+  "source": "configmap",
+  "configmap_name": "otel-demo-feature-flags",
+  "flags": {
+    "recommendationServiceCacheFailure": {
+      "enabled": false,
+      "description": "Cache failure disabled"
+    }
+  }
+}
