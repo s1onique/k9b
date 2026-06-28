@@ -6,12 +6,81 @@ This module contains preflight checks for cluster reachability and permissions.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .k9b_cnpg_live_lab_config import DiagnosisGenerator, PreflightData
+from .k9b_cnpg_live_lab_constants import (
+    FAILURE_API_DISCOVERY_FAILED,
+    FAILURE_CLUSTER_API_TIMEOUT,
+)
 from .k9b_cnpg_live_lab_helpers import log
+
+# Patterns that indicate cluster_api_timeout
+_CLUSTER_API_TIMEOUT_PATTERNS = [
+    re.compile(r"i/o timeout", re.IGNORECASE),
+    re.compile(r"dial tcp.*timeout", re.IGNORECASE),
+    re.compile(r"connection refused", re.IGNORECASE),
+    re.compile(r"no route to host", re.IGNORECASE),
+    re.compile(r"network is unreachable", re.IGNORECASE),
+]
+
+# Patterns that indicate API discovery failed
+_API_DISCOVERY_PATTERNS = [
+    re.compile(r"couldn't get current server API group list", re.IGNORECASE),
+    re.compile(r"error: unable to read kubectl configuration", re.IGNORECASE),
+    re.compile(r"no configuration has been provided", re.IGNORECASE),
+]
+
+
+def _classify_connectivity_error(error_output: str | None) -> str | None:
+    """Classify a kubectl connectivity error.
+
+    Returns the failure class string if classified, None otherwise.
+    """
+    if not error_output:
+        return None
+
+    for pattern in _CLUSTER_API_TIMEOUT_PATTERNS:
+        if pattern.search(error_output):
+            return FAILURE_CLUSTER_API_TIMEOUT
+
+    for pattern in _API_DISCOVERY_PATTERNS:
+        if pattern.search(error_output):
+            return FAILURE_API_DISCOVERY_FAILED
+
+    # Generic check for timeout keywords (case-insensitive)
+    lower_output = error_output.lower()
+    if "timeout" in lower_output or "timed out" in lower_output:
+        return FAILURE_CLUSTER_API_TIMEOUT
+
+    return None
+
+
+def _extract_api_endpoint(kubeconfig: str) -> tuple[str | None, int | None]:
+    """Extract API server endpoint from kubeconfig.
+
+    Returns (host, port) tuple or (None, None) if not found.
+    """
+    try:
+        result = subprocess.run(
+            ["kubectl", "--kubeconfig", kubeconfig, "config", "view",
+             "--minify", "-o", "jsonpath={.clusters[0].cluster.server}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            url = urlparse(result.stdout.strip())
+            host = url.hostname
+            port = url.port or 443
+            return host, port
+    except Exception:
+        pass
+    return None, None
 
 
 def run_preflight_checks(
@@ -21,7 +90,11 @@ def run_preflight_checks(
     preflight: PreflightData,
     diagnosis: DiagnosisGenerator,
 ) -> None:
-    """Run preflight checks for cluster reachability and permissions."""
+    """Run preflight checks for cluster reachability and permissions.
+
+    Classifies cluster connectivity failures as cluster_api_timeout when
+    TCP-level connectivity to the API server fails.
+    """
     if not namespace:
         return
 
@@ -38,18 +111,35 @@ def run_preflight_checks(
     preflight.current_context = ctx
     diagnosis.text(f"**Current context**: {diagnosis.inline_code(ctx)}")
 
-    # API reachability
+    # API reachability with classification
     diagnosis.text("**API reachability**: checking...")
     result = subprocess.run(
         ["kubectl", "--kubeconfig", kubeconfig, "cluster-info"],
         capture_output=True,
         text=True,
+        timeout=30,
     )
     preflight.api_reachable = result.returncode == 0
+
+    error_output = result.stderr or result.stdout
+
     if result.returncode == 0:
         diagnosis.code(result.stdout, "")
     else:
-        diagnosis.code(result.stderr or "cluster-info failed", "")
+        diagnosis.code(error_output or "cluster-info failed", "")
+
+        # Classify connectivity errors
+        failure_class = _classify_connectivity_error(error_output)
+        if failure_class:
+            preflight.failure_class = failure_class
+            preflight.failure_stage = "cluster_connectivity"
+            preflight.failure_reason = f"API server unreachable: {error_output[:200]}"
+            log(f"Classified connectivity error as: {failure_class}")
+
+            # Extract API endpoint for diagnostics
+            api_host, api_port = _extract_api_endpoint(kubeconfig)
+            if api_host:
+                diagnosis.text(f"**Target API endpoint**: {api_host}:{api_port}")
 
     # Namespace check
     diagnosis.text(f"**Namespace {diagnosis.inline_code(namespace)}**: checking...")

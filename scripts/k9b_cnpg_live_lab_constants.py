@@ -52,6 +52,11 @@ FAILURE_DEPLOYMENT_PROGRESS_DEADLINE = "deployment_progress_deadline"
 FAILURE_ROLLOUT_TIMEOUT = "rollout_timeout"
 FAILURE_SNAPSHOT_COLLECTION_FAILED = "rollout_snapshot_collection_failed"
 
+# Connectivity failure classes
+FAILURE_CLUSTER_API_TIMEOUT = "cluster_api_timeout"
+FAILURE_API_DISCOVERY_FAILED = "api_discovery_failed"
+FAILURE_UNKNOWN_CLUSTER_CONNECTIVITY = "unknown_cluster_connectivity_failure"
+
 
 # =============================================================================
 # Schema validation patterns

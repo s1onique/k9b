@@ -7,6 +7,7 @@ phase 1b (baseline readiness).
 
 from __future__ import annotations
 
+import re
 import subprocess
 import time
 from datetime import UTC, datetime
@@ -25,47 +26,118 @@ from .k9b_lab_common_readiness import (
     wait_for_deployments_ready,
 )
 from .k9b_otel_demo_lab_constants import (
+    FAILURE_CLUSTER_API_TIMEOUT,
     PHASE_CLUSTER_BASELINE,
     PHASE_OTEL_BASELINE,
     REQUIRED_DEPLOYMENTS,
 )
 from .k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
 
+# Patterns that indicate cluster_api_timeout
+_CLUSTER_API_TIMEOUT_PATTERNS = [
+    re.compile(r"i/o timeout", re.IGNORECASE),
+    re.compile(r"dial tcp.*timeout", re.IGNORECASE),
+    re.compile(r"connection refused", re.IGNORECASE),
+    re.compile(r"no route to host", re.IGNORECASE),
+    re.compile(r"network is unreachable", re.IGNORECASE),
+]
+
+
+def _classify_connectivity_error(error_output: str) -> str | None:
+    """Classify a kubectl connectivity error.
+
+    Returns the failure class string if classified, None otherwise.
+    """
+    if not error_output:
+        return None
+
+    for pattern in _CLUSTER_API_TIMEOUT_PATTERNS:
+        if pattern.search(error_output):
+            return FAILURE_CLUSTER_API_TIMEOUT
+
+    # Generic check for timeout keywords
+    if "timeout" in error_output.lower():
+        return FAILURE_CLUSTER_API_TIMEOUT
+
+    return None
+
 
 def phase0_cluster_baseline(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
-    """Phase 0: Collect cluster and k9b baseline."""
+    """Phase 0: Collect cluster and k9b baseline.
+
+    Classifies cluster_api_timeout when kubectl commands fail with TCP-level
+    connectivity errors (e.g., dial tcp ... i/o timeout).
+    """
     start = time.time()
     phase_dir = artifact_dir / PHASE_CLUSTER_BASELINE
     phase_dir.mkdir(parents=True, exist_ok=True)
 
     artifacts: dict[str, Any] = {}
+    failure_class: str | None = None
+    failure_reason: str | None = None
 
-    # Get cluster nodes
+    # Get cluster nodes with connectivity classification
     nodes_result = kubectl_json(config.kubeconfig, "nodes")
     if nodes_result.success and nodes_result.data:
         nodes_path = write_json_artifact(phase_dir, "nodes.json", nodes_result.data)
         artifacts["nodes"] = str(nodes_path)
+    else:
+        # Check for connectivity errors
+        error_output = nodes_result.stderr or nodes_result.stdout
+        failure_class = _classify_connectivity_error(error_output)
+        if failure_class:
+            failure_reason = f"API server unreachable: {error_output[:200]}"
+            log(f"Phase 0 connectivity failure classified as: {failure_class}")
 
-    # Get namespaces
-    ns_result = kubectl_json(config.kubeconfig, "namespaces")
-    if ns_result.success and ns_result.data:
-        ns_path = write_json_artifact(phase_dir, "namespaces.json", ns_result.data)
-        artifacts["namespaces"] = str(ns_path)
+    # Get namespaces (only if nodes succeeded - avoid redundant failures)
+    if not failure_class:
+        ns_result = kubectl_json(config.kubeconfig, "namespaces")
+        if ns_result.success and ns_result.data:
+            ns_path = write_json_artifact(phase_dir, "namespaces.json", ns_result.data)
+            artifacts["namespaces"] = str(ns_path)
+        else:
+            error_output = ns_result.stderr or ns_result.stdout
+            failure_class = _classify_connectivity_error(error_output)
+            if failure_class:
+                failure_reason = f"API server unreachable: {error_output[:200]}"
 
     # Get k9b pods if it exists
-    k9b_ns = "k9b"  # k9b namespace
-    k9b_result = kubectl_json(config.kubeconfig, "pods", k9b_ns)
-    if k9b_result.success and k9b_result.data:
-        k9b_path = write_json_artifact(phase_dir, "k9b-pods.json", k9b_result.data)
-        artifacts["k9b_pods"] = str(k9b_path)
+    if not failure_class:
+        k9b_ns = "k9b"  # k9b namespace
+        k9b_result = kubectl_json(config.kubeconfig, "pods", k9b_ns)
+        if k9b_result.success and k9b_result.data:
+            k9b_path = write_json_artifact(phase_dir, "k9b-pods.json", k9b_result.data)
+            artifacts["k9b_pods"] = str(k9b_path)
 
-    # Get k9b service
-    k9b_svc_result = kubectl_json(config.kubeconfig, "services", k9b_ns)
-    if k9b_svc_result.success and k9b_svc_result.data:
-        k9b_svc_path = write_json_artifact(phase_dir, "k9b-service.json", k9b_svc_result.data)
-        artifacts["k9b_service"] = str(k9b_svc_path)
+        # Get k9b service
+        k9b_svc_result = kubectl_json(config.kubeconfig, "services", k9b_ns)
+        if k9b_svc_result.success and k9b_svc_result.data:
+            k9b_svc_path = write_json_artifact(phase_dir, "k9b-service.json", k9b_svc_result.data)
+            artifacts["k9b_service"] = str(k9b_svc_path)
+
+    # Write connectivity failure artifact if classified
+    if failure_class:
+        connectivity_result = {
+            "failure_class": failure_class,
+            "failure_reason": failure_reason,
+            "phase": PHASE_CLUSTER_BASELINE,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        connectivity_path = write_json_artifact(phase_dir, "connectivity-failure.json", connectivity_result)
+        artifacts["connectivity_failure"] = str(connectivity_path)
 
     duration = time.time() - start
+
+    # Return failure result if connectivity error classified
+    if failure_class:
+        return LabPhaseResult(
+            phase=PHASE_CLUSTER_BASELINE,
+            success=False,
+            message=f"Cluster connectivity failed: {failure_class}",
+            artifacts=artifacts,
+            duration_seconds=duration,
+        )
+
     return LabPhaseResult(
         phase=PHASE_CLUSTER_BASELINE,
         success=True,

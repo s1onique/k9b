@@ -135,6 +135,9 @@ from scripts.k9b_cnpg_live_lab_config import (  # noqa: F401,F811
 )
 from scripts.k9b_cnpg_live_lab_constants import (  # noqa: F401,F811
     EXPECTED_WORKLOADS,
+    FAILURE_API_DISCOVERY_FAILED,
+    # Connectivity failure classes
+    FAILURE_CLUSTER_API_TIMEOUT,
     FAILURE_CNPG_CRD_MISSING,
     FAILURE_CRASH_LOOP,
     FAILURE_CREDENTIAL_SOURCE_WRONG,
@@ -161,6 +164,7 @@ from scripts.k9b_cnpg_live_lab_constants import (  # noqa: F401,F811
     FAILURE_ROLLOUT_TIMEOUT,
     FAILURE_SNAPSHOT_COLLECTION_FAILED,
     FAILURE_STORAGE_OR_CAPACITY,
+    FAILURE_UNKNOWN_CLUSTER_CONNECTIVITY,
     FAILURE_WORKLOAD_NOT_READY,
     # Patterns
     SCHEMA_VALIDATION_PATTERNS,
