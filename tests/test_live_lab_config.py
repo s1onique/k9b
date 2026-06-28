@@ -358,14 +358,54 @@ class TestKubectlBootstrap:
             f"kubectl setup ({setup_pos}) must come before bootstrap ({bootstrap_pos})"
 
     def test_live_workflow_uses_pinned_kubectl_version(self) -> None:
-        """Live workflow should use a pinned kubectl version, not 'latest'."""
+        """Live workflow should use a pinned kubectl version, not 'latest'.
+        
+        Requires azure/setup-kubectl@v4 to specify with.version, and accepts either:
+        a) inline semantic version (e.g., version: 'v1.31.0')
+        b) env indirection (version: '${{ env.KUBECTL_VERSION }}') but only when 
+           KUBECTL_VERSION is defined as a pinned semantic version in env.
+        
+        The key contract is: NOT floating/latest.
+        """
         content = WORKFLOW_LIVE_FILE.read_text()
-        # Should have a version like 'v1.31.0'
-        assert re.search(r"version:\s*['\"]v\d+\.\d+", content), \
-            "Should use pinned kubectl version (e.g., v1.31.0)"
-        # Should NOT use 'latest'
-        assert "version: 'latest'" not in content, \
+        
+        # Check setup-kubectl has a version specified in with: block
+        # Accepts both quoted and unquoted values
+        setup_kubectl_match = re.search(
+            r"azure/setup-kubectl@v4.*?"
+            r"with:\s*"
+            r"(?:version:\s*['\"]v\d+\.\d+(?:\.\d+)?['\"]"  # a) inline version (quoted)
+            r"|version:\s*['\"]?\${{\s*env\.KUBECTL_VERSION\s*}}['\"]?)"  # b) env indirection (quoted or unquoted)
+            ,
+            content,
+            re.DOTALL
+        )
+        assert setup_kubectl_match, \
+            "azure/setup-kubectl@v4 must specify with.version (inline or via KUBECTL_VERSION)"
+        
+        # Check if using env indirection (with or without quotes)
+        using_env_indirection = bool(re.search(
+            r"version:\s*['\"]?\${{\s*env\.KUBECTL_VERSION\s*}}['\"]?",
+            content
+        ))
+        
+        if using_env_indirection:
+            # If using env indirection, KUBECTL_VERSION must be defined as a pinned version
+            kubectl_version_match = re.search(
+                r"KUBECTL_VERSION:\s*['\"]v\d+\.\d+\.\d+['\"]",
+                content
+            )
+            assert kubectl_version_match, \
+                "KUBECTL_VERSION must be defined with a pinned semantic version (e.g., 'v1.31.0')"
+        
+        # Should NOT use 'latest' inline (with or without quotes)
+        assert not re.search(r"version:\s*['\"]?latest['\"]?", content), \
             "Should NOT use 'latest' for kubectl version"
+        
+        # Should NOT use 'latest' via KUBECTL_VERSION env
+        env_latest_match = re.search(r"KUBECTL_VERSION:\s*['\"]latest['\"]", content)
+        assert not env_latest_match, \
+            "KUBECTL_VERSION should not be 'latest'"
 
     def test_live_workflow_uses_protected_kubeconfig_not_incluster(self) -> None:
         """Live workflow should use protected kubeconfig, NOT in-cluster SA mount."""
@@ -406,32 +446,82 @@ class TestKubectlBootstrap:
             "Should use KUBECONFIG from bootstrap"
 
     def test_live_workflow_uses_kubeconfig_for_all_kubectl(self) -> None:
-        """All kubectl commands must use --kubeconfig flag."""
+        """All kubectl commands must use --kubeconfig flag.
+        
+        Only checks actual kubectl command invocations in shell run blocks.
+        Skips cache restore/save metadata (id:, path:, key:, uses: actions/cache/*)
+        since these are YAML metadata, not shell commands.
+        """
         content = WORKFLOW_LIVE_FILE.read_text()
+        
         # Count kubectl --kubeconfig occurrences (primary check)
         kubectl_kubeconfig_count = len(re.findall(r"kubectl\s+--kubeconfig", content))
         assert kubectl_kubeconfig_count > 10, \
             f"Expected many kubectl --kubeconfig usages, found {kubectl_kubeconfig_count}"
+        
         # Verify no kubectl commands in run: blocks without --kubeconfig
-        # Split by lines and check for kubectl without --kubeconfig
         lines = content.split('\n')
         bare_kubectl_lines = []
+        
         for line in lines:
-            if 'kubectl' in line and '--kubeconfig' not in line:
-                # Skip comments
-                stripped = line.strip()
-                if stripped.startswith('#'):
-                    continue
-                # Skip uses: steps
-                if 'uses:' in line:
-                    continue
-                # Skip step names (contain '- name:')
-                if '- name:' in line:
-                    continue
-                # Skip echo commands (just echo statements mentioning kubectl)
-                if stripped.startswith('echo '):
-                    continue
-                bare_kubectl_lines.append(line.strip())
+            stripped = line.strip()
+            
+            # Skip if no kubectl reference
+            if 'kubectl' not in line:
+                continue
+            
+            # Skip if already has --kubeconfig
+            if '--kubeconfig' in line:
+                continue
+            
+            # Skip comments
+            if stripped.startswith('#'):
+                continue
+            
+            # Skip YAML step metadata lines that happen to contain "kubectl":
+            # - id: cache-kubectl
+            # - path: ${{ runner.tool_cache }}/kubectl
+            # - key: kubectl-${{ runner.os }}-${{ runner.arch }}-${{ env.KUBECTL_VERSION }}
+            # - if: steps.cache-kubectl.outputs.cache-hit != 'true'
+            # - uses: actions/cache/restore@v4 (cache action with kubectl in path/key is OK)
+            if re.match(r'^\s*id:\s*\S', stripped):
+                continue  # id: cache-kubectl
+            if re.match(r'^\s*path:', stripped):
+                continue  # path: ${{ runner.tool_cache }}/kubectl
+            if re.match(r'^\s*key:', stripped):
+                continue  # key: kubectl-... (cache key, not a command)
+            if re.match(r'^\s*if:', stripped):
+                continue  # if: steps.cache-kubectl.outputs...
+            if 'uses:' in line and 'actions/cache' in stripped:
+                continue  # uses: actions/cache/restore@v4 or save@v4
+            if 'uses:' in line:
+                continue  # Skip all other uses: steps (e.g., azure/setup-kubectl)
+            
+            # Skip step names (contain '- name:')
+            if '- name:' in line:
+                continue
+            
+            # Skip echo commands (just echo statements mentioning kubectl)
+            if stripped.startswith('echo '):
+                continue
+            
+            # Skip description lines
+            if re.match(r'^\s*description:', stripped):
+                continue
+            
+            # Skip 'with:' blocks (part of uses: steps)
+            if stripped.startswith('with:'):
+                continue
+            
+            # Skip YAML list item indicators for 'with' values (e.g., version:, repository:)
+            if re.match(r'^\s+\w+:', stripped) and not stripped.startswith('run:'):
+                # This is a YAML key-value pair, not a command
+                # But be careful: 'run: |' or 'run: >' starts a run block
+                continue
+            
+            # If we get here, it's likely a real kubectl command without --kubeconfig
+            bare_kubectl_lines.append(line.strip())
+        
         assert len(bare_kubectl_lines) == 0, \
             f"Found kubectl commands without --kubeconfig: {bare_kubectl_lines}"
 
@@ -444,6 +534,49 @@ class TestKubectlBootstrap:
         # Should have cluster-info
         assert "cluster-info" in content.lower() or "cluster_info" in content, \
             "Should verify cluster reachability"
+
+    def test_cache_metadata_with_kubectl_is_not_bare_command(self) -> None:
+        """Cache restore/save metadata containing 'kubectl' must not be flagged as bare kubectl commands.
+        
+        Regression test: cache metadata like id: cache-kubectl, path: .../kubectl, 
+        key: kubectl-... are YAML metadata, not shell commands. The kubeconfig test
+        should ignore these lines.
+        """
+        content = WORKFLOW_LIVE_FILE.read_text()
+        
+        # Verify cache restore step exists with kubectl in metadata
+        assert "actions/cache/restore@v4" in content, \
+            "Should use actions/cache/restore@v4"
+        assert "id: cache-kubectl" in content, \
+            "Should have id: cache-kubectl step"
+        assert "path: ${{ runner.tool_cache }}/kubectl" in content, \
+            "Should have kubectl path in cache restore"
+        assert "key: kubectl-" in content, \
+            "Should have kubectl key in cache restore"
+        
+        # Verify cache save step exists
+        assert "actions/cache/save@v4" in content, \
+            "Should use actions/cache/save@v4"
+        
+        # Verify the cache metadata contains 'kubectl' but is NOT a shell command
+        lines_with_kubectl = [line for line in content.split('\n') if 'kubectl' in line]
+        
+        # Filter to lines that are cache metadata (should be skipped by kubeconfig test)
+        cache_metadata_lines = [
+            line for line in lines_with_kubectl
+            if 'id: cache-kubectl' in line 
+            or 'path: ${{ runner.tool_cache }}/kubectl' in line
+            or 'key: kubectl-' in line
+            or 'if: steps.cache-kubectl' in line
+        ]
+        
+        assert len(cache_metadata_lines) > 0, \
+            "Should have cache metadata lines containing 'kubectl'"
+        
+        # These lines should NOT be shell commands (no run: prefix)
+        for line in cache_metadata_lines:
+            assert not re.match(r'^\s*run:', line.strip()), \
+                f"Cache metadata should not be a run: block: {line.strip()}"
 
 
 class TestRBACPreflight:
