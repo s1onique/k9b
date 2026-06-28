@@ -92,9 +92,8 @@ spec:
         # But base64 data should be redacted
         assert "cGFzc3dvcmQ=" not in manifest, f"Base64 api_key leaked: {manifest}"
         assert "dXNlcm5hbWU=" not in manifest, f"Base64 db_pass leaked: {manifest}"
-        # Should contain redaction marker
+        # Should contain redaction marker (simple string value, not nested object)
         assert "<redacted>" in manifest, f"Redaction marker missing: {manifest}"
-        assert "contains base64-encoded secret values" in manifest, f"Redaction message missing: {manifest}"
 
     def test_embedded_secret_with_stringdata_is_sanitized(self, tmp_path: Path) -> None:
         """Embedded Secret with stringData (plaintext secrets) should be sanitized."""

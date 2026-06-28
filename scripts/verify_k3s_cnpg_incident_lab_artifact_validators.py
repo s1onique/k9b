@@ -6,9 +6,11 @@ This module contains the verification logic for checking lab artifacts.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
+from sanitize_live_lab_artifacts_contract import REDACTION_PLACEHOLDER
 from verify_k3s_cnpg_incident_lab_artifact_contract import (
     BENIGN_K8S_PATTERNS,
     REQUIRED_BASELINE,
@@ -19,6 +21,22 @@ from verify_k3s_cnpg_incident_lab_artifact_contract import (
     SAFE_K8S_PATTERNS,
     VerificationContext,
 )
+
+# Regex patterns for anchored field detection in YAML content
+# Using anchored patterns prevents false matches like "metadata:" containing "data:"
+_DATA_FIELD_RE = re.compile(r"(?im)^\s*data\s*:")
+_STRINGDATA_FIELD_RE = re.compile(r"(?im)^\s*stringData\s*:")
+_BINARYDATA_FIELD_RE = re.compile(r"(?im)^\s*binaryData\s*:")
+
+# Pattern for redacted field values (the field followed by <redacted>)
+_DATA_REDACTED_RE = re.compile(r"(?im)^\s*data\s*:\s*['\"]?<redacted>['\"]?\s*$")
+_STRINGDATA_REDACTED_RE = re.compile(r"(?im)^\s*stringData\s*:\s*['\"]?<redacted>['\"]?\s*$")
+_BINARYDATA_REDACTED_RE = re.compile(r"(?im)^\s*binaryData\s*:\s*['\"]?<redacted>['\"]?\s*$")
+
+# Pattern for REDACTION_PLACEHOLDER field values
+_DATA_PLACEHOLDER_RE = re.compile(r"(?im)^\s*data\s*:\s*" + REDACTION_PLACEHOLDER.lower() + r"\s*$")
+_STRINGDATA_PLACEHOLDER_RE = re.compile(r"(?im)^\s*stringData\s*:\s*" + REDACTION_PLACEHOLDER.lower() + r"\s*$")
+_BINARYDATA_PLACEHOLDER_RE = re.compile(r"(?im)^\s*binaryData\s*:\s*" + REDACTION_PLACEHOLDER.lower() + r"\s*$")
 
 
 def _is_safe_k8s_vocabulary(line: str) -> tuple[bool, str | None]:
@@ -50,7 +68,7 @@ def _check_structured_secrets_in_file(ctx: VerificationContext, filepath: Path) 
     Even Pod/Deployment objects can contain env vars, annotations, or embedded
     values with sensitive data that needs detection.
     """
-    from sanitize_live_lab_artifacts_contract import _FATAL_PATTERNS, REDACTION_PLACEHOLDER
+    from sanitize_live_lab_artifacts_contract import _FATAL_PATTERNS
 
     try:
         content = filepath.read_text(errors="replace")
@@ -97,23 +115,45 @@ def _check_structured_secrets_in_file(ctx: VerificationContext, filepath: Path) 
 
         # Additional check: raw text files containing Secret manifests
         if "kind:" in stripped.lower() and "secret" in stripped.lower():
-            # This is a Kubernetes Secret manifest - check if it's just metadata
-            if "data:" not in content.lower() and "stringData:" not in content.lower():
-                ctx.add_info("Secret resource reference (not actual secret value)", rel_path)
-            elif "data:" in content.lower():
-                # Secret with data - should have been sanitized
-                # Check for sanitized Secret data field:
-                # 1. REDACTION_PLACEHOLDER ("<REDACTED>") - full redaction of field
-                # 2. "<redacted>" - structural sanitization (Secret data replaced with placeholder)
-                #    The embedded manifest sanitizer uses "<redacted>" as key name with
-                #    descriptive value like "contains base64-encoded secret values"
-                if REDACTION_PLACEHOLDER in content:
-                    ctx.add_info("Secret.data appears sanitized", rel_path)
-                elif '<redacted>' in content.lower():
-                    ctx.add_info("Secret.data structurally sanitized (<redacted> marker found)", rel_path)
+            # This is a Kubernetes Secret manifest - use anchored regex to detect sensitive fields
+            # This prevents false matches like "metadata:" containing "data:"
+            has_data = _DATA_FIELD_RE.search(content) is not None
+            has_stringdata = _STRINGDATA_FIELD_RE.search(content) is not None
+            has_binarydata = _BINARYDATA_FIELD_RE.search(content) is not None
+
+            # Secret with data fields - should have been sanitized
+            if has_data or has_stringdata or has_binarydata:
+                # Check for specific redaction patterns using anchored regex
+                # This ensures we match "data: <redacted>" not just "data:" anywhere
+                has_data_redacted = (
+                    _DATA_REDACTED_RE.search(content) is not None
+                    or _DATA_PLACEHOLDER_RE.search(content) is not None
+                )
+                has_stringdata_redacted = (
+                    _STRINGDATA_REDACTED_RE.search(content) is not None
+                    or _STRINGDATA_PLACEHOLDER_RE.search(content) is not None
+                )
+                has_binarydata_redacted = (
+                    _BINARYDATA_REDACTED_RE.search(content) is not None
+                    or _BINARYDATA_PLACEHOLDER_RE.search(content) is not None
+                )
+
+                data_sanitized = (has_data and has_data_redacted) or not has_data
+                stringdata_sanitized = (has_stringdata and has_stringdata_redacted) or not has_stringdata
+                binarydata_sanitized = (has_binarydata and has_binarydata_redacted) or not has_binarydata
+
+                if data_sanitized and stringdata_sanitized and binarydata_sanitized:
+                    if has_data:
+                        ctx.add_info("Secret.data sanitized", rel_path)
+                    if has_stringdata:
+                        ctx.add_info("Secret.stringData sanitized", rel_path)
+                    if has_binarydata:
+                        ctx.add_info("Secret.binaryData sanitized", rel_path)
                 else:
                     ctx.add_fatal("Secret manifest with data field not sanitized", rel_path)
                     found_actual_secret = True
+            else:
+                ctx.add_info("Secret resource reference (not actual secret value)", rel_path)
 
     return found_actual_secret
 

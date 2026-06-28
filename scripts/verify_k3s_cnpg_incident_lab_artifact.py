@@ -153,6 +153,41 @@ def main() -> int:
     if findings_report:
         print(findings_report)
 
+    # Update _findings.json with verifier findings
+    findings_path = artifact_dir / "_findings.json"
+    verifier_fatal_count = sum(1 for f in ctx.findings if f.kind == FindingKind.FATAL)
+    
+    if findings_path.exists():
+        try:
+            findings_data = json.loads(findings_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            findings_data = {}
+    else:
+        findings_data = {}
+    
+    # Merge verifier findings into the combined findings
+    sanitizer_findings = findings_data.get("findings", [])
+    verifier_findings = [
+        {"kind": f.kind, "message": f.message, "file": f.file, "context": f.context}
+        for f in ctx.findings
+    ]
+    
+    # Combined fatal count (sanitizer + verifier)
+    sanitizer_fatal_count = findings_data.get("fatal_count", 0)
+    combined_fatal_count = sanitizer_fatal_count + verifier_fatal_count
+    
+    # Update findings data with combined results
+    findings_data.update({
+        "verifier_passed": passed,
+        "verifier_errors": list(ctx.errors),
+        "combined_fatal_count": combined_fatal_count,
+        "upload_safe": combined_fatal_count == 0 and passed,
+        "sanitizer_findings": sanitizer_findings,
+        "verifier_findings": verifier_findings,
+        "findings": sanitizer_findings + verifier_findings,  # Combined for backward compatibility
+    })
+    findings_path.write_text(json.dumps(findings_data, indent=2))
+
     if passed:
         print()
         print("=" * 50)
@@ -161,14 +196,15 @@ def main() -> int:
         print()
 
         # Summary of findings
-        fatal_count = sum(1 for f in ctx.findings if f.kind == FindingKind.FATAL)
         warning_count = sum(1 for f in ctx.findings if f.kind == FindingKind.WARNING)
         info_count = sum(1 for f in ctx.findings if f.kind == FindingKind.INFO)
 
         if ctx.findings:
-            print(f"Findings: {fatal_count} fatal, {warning_count} warnings, {info_count} info")
+            print(f"Findings: {verifier_fatal_count} fatal, {warning_count} warnings, {info_count} info")
         else:
             print("No findings.")
+        
+        print(f"\nCombined findings written to: {findings_path}")
 
         return 0
     else:
@@ -187,6 +223,8 @@ def main() -> int:
         # Print findings report
         if findings_report:
             print(findings_report)
+
+        print(f"\nCombined findings written to: {findings_path}")
 
         return 1
 
