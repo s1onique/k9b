@@ -1,0 +1,17 @@
+{
+  "apiVersion": "v1",
+  "items": [
+    {
+      "type": "Normal",
+      "reason": "Pulled",
+      "involvedObject": {"name": "recommendationservice-def456", "namespace": "otel-demo"},
+      "message": "Container image pulled successfully"
+    },
+    {
+      "type": "Warning",
+      "reason": "Unhealthy",
+      "involvedObject": {"name": "recommendationservice-def456", "namespace": "otel-demo"},
+      "message": "Liveness probe failed: HTTP probe failed with status code: 503"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "timestamp": "2026-06-28T10:05:00Z",
+  "command": "kubectl patch configmap featureflags -n otel-demo --type merge -p '{\"data\":{\"recommendationServiceCacheFailure\":\"true\"}}'",
+  "scenario": "recommendation-cache-failure",
+  "feature_flag": "recommendationServiceCacheFailure",
+  "status": "success"
+}

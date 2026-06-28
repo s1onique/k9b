@@ -1,0 +1,10 @@
+{
+  "phase": "baseline",
+  "timestamp": "2026-06-28T10:00:00Z",
+  "namespace": "otel-demo",
+  "status": "ready",
+  "deployments_checked": 10,
+  "deployments_ready": 10,
+  "services_checked": 10,
+  "message": "All required OTel Demo services are ready"
+}

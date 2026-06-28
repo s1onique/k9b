@@ -1,0 +1,134 @@
+name: K3s OTel Demo Incident Lab
+
+# Build-and-verify workflow for the OTel Demo incident lab scaffold.
+# Live lab runs in an existing K3s cluster with OTel Demo Helm chart deployed.
+
+on:
+  # Manual workflow dispatch for ad-hoc runs
+  workflow_dispatch:
+    inputs:
+      artifact_retention_days:
+        description: 'Artifact retention days'
+        required: false
+        default: '7'
+        type: string
+      run_live_lab:
+        description: 'Run live namespace-mode lab after build-and-verify'
+        required: false
+        default: false
+        type: boolean
+      incident_scenario:
+        description: 'Incident scenario'
+        required: false
+        default: 'recommendation-cache-failure'
+        type: choice
+        options:
+          - recommendation-cache-failure
+          - recommendation-pod-stress
+
+  # CI on PR when lab files change
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/workflows/k9b-otel-demo-incident-lab*.yml"
+      - "scripts/k9b_otel_demo_lab*.py"
+      - "scripts/k9b_lab_common*.py"
+      - "tests/test_otel_demo_lab.py"
+      - "fixtures/otel-demo/**"
+      - "Makefile"
+
+  # CI on push to main when lab files change
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/k9b-otel-demo-incident-lab*.yml"
+      - "scripts/k9b_otel_demo_lab*.py"
+      - "scripts/k9b_lab_common*.py"
+      - "tests/test_otel_demo_lab.py"
+      - "fixtures/otel-demo/**"
+      - "Makefile"
+
+env:
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  # ===========================================================================
+  # Build and Verify Job (always runs on ubuntu-latest)
+  # ===========================================================================
+  build-and-verify:
+    name: Build and Verify Lab
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+          cache: 'pip'
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install Python dependencies
+        run: |
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install pytest pyyaml
+
+      # Run Python verifier tests
+      - name: Run Python verifier tests
+        run: |
+          echo "=== Running Python verifier tests ==="
+          .venv/bin/python -c "import yaml; print('PyYAML import OK')"
+          .venv/bin/python -m pytest tests/test_otel_demo_lab.py -v
+
+      # Verify passing fixture
+      - name: Verify passing fixture
+        run: |
+          echo "=== Verifying passing fixture ==="
+          .venv/bin/python -m scripts.k9b_otel_demo_lab_verify --artifact-dir fixtures/otel-demo/pass
+
+      # Verify fail-no-recommendationservice fixture fails
+      - name: Verify fail-no-recommendationservice fixture fails as expected
+        run: |
+          echo "=== Verifying fail-no-recommendationservice fixture (should fail) ==="
+          set +e
+          .venv/bin/python -m scripts.k9b_otel_demo_lab_verify --artifact-dir fixtures/otel-demo/fail-no-recommendationservice > /tmp/fail-no-recommendationservice.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "ERROR: fail-no-recommendationservice fixture unexpectedly passed"
+            cat /tmp/fail-no-recommendationservice.log
+            exit 1
+          fi
+          echo "fail-no-recommendationservice correctly failed with exit code $rc"
+          grep -E "recommendationservice|feature flag" /tmp/fail-no-recommendationservice.log
+
+      # Upload build artifacts
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k9b-otel-demo-incident-lab-ci-${{ github.run_id }}
+          path: |
+            /tmp/fail-no-recommendationservice.log
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact_retention_days || '7' }}
+
+      - name: Summary
+        run: |
+          echo "=== K3s OTel Demo Incident Lab CI Summary ==="
+          echo "Python verifier tests: PASSED"
+          echo "Passing fixture: PASSED"
+          echo "Fail fixtures: Correctly rejected"
+          if [[ "${{ inputs.run_live_lab }}" == "true" ]]; then
+            echo "Live namespace-mode lab will run in 'live-k3s-lab' job."
+          else
+            echo "NOTE: Live lab not requested. Use workflow_dispatch with run_live_lab=true."
+          fi

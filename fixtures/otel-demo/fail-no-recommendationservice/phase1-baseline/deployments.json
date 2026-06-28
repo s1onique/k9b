@@ -1,0 +1,15 @@
+{
+  "apiVersion": "v1",
+  "items": [
+    {"metadata": {"name": "frontend", "namespace": "otel-demo"}, "status": {"replicas": 1, "readyReplicas": 1}},
+    {"metadata": {"name": "recommendationservice", "namespace": "otel-demo"}, "status": {"replicas": 1, "readyReplicas": 1}},
+    {"metadata": {"name": "productcatalogservice", "namespace": "otel-demo"}, "status": {"replicas": 1, "readyReplicas": 1}},
+    {"metadata": {"name": "cartservice", "namespace": "otel-demo"}, "status": {"replicas": 1, "readyReplicas": 1}},
+    {"metadata": {"name": "checkoutservice", "namespace": "otel-demo"}, "status": {"replicas": 1, "readyReplicas": 1}},
+    {"metadata": {"name": "paymentservice", "namespace": "otel-demo"}, "status": {"replicas": 1, "readyReplicas": 1}},
+    {"metadata": {"name": "shippingservice", "namespace": "otel-demo"}, "status": {"replicas": 1, "readyReplicas": 1}},
+    {"metadata": {"name": "currencyservice", "namespace": "otel-demo"}, "status": {"replicas": 1, "readyReplicas": 1}},
+    {"metadata": {"name": "emailservice", "namespace": "otel-demo"}, "status": {"replicas": 1, "readyReplicas": 1}},
+    {"metadata": {"name": "flagd", "namespace": "otel-demo"}, "status": {"replicas": 1, "readyReplicas": 1}}
+  ]
+}

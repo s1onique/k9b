@@ -1,0 +1,11 @@
+{
+  "apiVersion": "v1",
+  "items": [
+    {
+      "type": "Warning",
+      "reason": "Unhealthy",
+      "involvedObject": {"name": "frontend-abc123", "namespace": "otel-demo"},
+      "message": "Liveness probe failed: HTTP probe failed with status code: 500"
+    }
+  ]
+}

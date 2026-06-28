@@ -1,0 +1,15 @@
+{
+  "apiVersion": "v1",
+  "items": [
+    {"metadata": {"name": "frontend", "namespace": "otel-demo"}},
+    {"metadata": {"name": "recommendationservice", "namespace": "otel-demo"}},
+    {"metadata": {"name": "productcatalogservice", "namespace": "otel-demo"}},
+    {"metadata": {"name": "cartservice", "namespace": "otel-demo"}},
+    {"metadata": {"name": "checkoutservice", "namespace": "otel-demo"}},
+    {"metadata": {"name": "paymentservice", "namespace": "otel-demo"}},
+    {"metadata": {"name": "shippingservice", "namespace": "otel-demo"}},
+    {"metadata": {"name": "currencyservice", "namespace": "otel-demo"}},
+    {"metadata": {"name": "emailservice", "namespace": "otel-demo"}},
+    {"metadata": {"name": "flagd", "namespace": "otel-demo"}}
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "provider": "fake-provider",
+  "mode": "scaffold",
+  "phase": "diagnosis",
+  "timestamp": "2026-06-28T10:15:00Z",
+  "namespace": "otel-demo",
+  "status": "complete",
+  "summary": "Diagnosis identifies recommendationservice cache failure due to feature flag misconfiguration",
+  "root_cause": "The recommendationservice is experiencing cache failures caused by the recommendationServiceCacheFailure feature flag being enabled in flagd. This causes the recommendation service to enter a state where it cannot properly cache product recommendations, leading to degraded service and potential 503 errors on the frontend.",
+  "confidence": "high",
+  "evidence": [
+    "recommendationservice pod shows 503 errors in liveness probe",
+    "feature flag recommendationServiceCacheFailure is set to 'true' in flagd configmap",
+    "frontend logs show connection errors to recommendationservice",
+    "events show Unhealthy liveness probe warnings for recommendationservice"
+  ],
+  "affected_component": "recommendationservice",
+  "feature_flag": "recommendationServiceCacheFailure",
+  "next_checks": [
+    {
+      "check": "Review flagd configuration history",
+      "purpose": "Identify if flag was changed intentionally"
+    },
+    {
+      "check": "Check for recent flag changes",
+      "purpose": "Correlate with symptom timeline"
+    },
+    {
+      "check": "Examine recommendationservice logs for cache-related errors",
+      "purpose": "Confirm cache failure behavior"
+    }
+  ],
+  "remediation": {
+    "attempted": false,
+    "suggested": false,
+    "reason": "Scaffold mode - diagnosis only"
+  },
+  "safe_to_investigate": true,
+  "requires_mutations": false
+}

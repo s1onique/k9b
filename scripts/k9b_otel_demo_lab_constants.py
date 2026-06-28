@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Constants for the OpenTelemetry Demo Lab.
+
+This module defines:
+- Lab namespace
+- Required deployments for OTel Demo
+- Incident scenarios
+- Failure class constants
+"""
+
+from __future__ import annotations
+
+# =============================================================================
+# Lab configuration
+# =============================================================================
+
+# Lab namespace for OTel Demo
+OTEL_DEMO_NAMESPACE = "otel-demo"
+
+# Lab name for labeling
+LAB_NAME = "k9b-otel-demo-incident"
+
+# Helm release name for OTel Demo
+OTEL_DEMO_RELEASE = "opentelemetry-demo"
+
+# Helm chart repository configuration
+# Split into repo name and chart reference for proper Helm CLI usage
+OTEL_DEMO_HELM_REPO_NAME = "open-telemetry"
+OTEL_DEMO_HELM_REPO_URL = "https://open-telemetry.github.io/opentelemetry-helm-charts"
+OTEL_DEMO_CHART = "open-telemetry/opentelemetry-demo"
+
+# Helm chart version
+OTEL_DEMO_CHART_VERSION = "0.45.0"
+
+
+# =============================================================================
+# Required deployments for OTel Demo baseline readiness
+# =============================================================================
+
+# Core services that must be ready for baseline
+REQUIRED_DEPLOYMENTS = [
+    "frontend",
+    "recommendationservice",
+    "productcatalogservice",
+    "cartservice",
+    "checkoutservice",
+    "paymentservice",
+    "shippingservice",
+    "currencyservice",
+    "emailservice",
+    "flagd",  # Feature flag service
+]
+
+# Optional deployments (may not exist in all configurations)
+OPTIONAL_DEPLOYMENTS = [
+    "loadgenerator",
+    "grafana",
+    "jaeger",
+    "prometheus",
+]
+
+
+# =============================================================================
+# Incident scenarios
+# =============================================================================
+
+class IncidentScenario:
+    """Available incident scenarios for OTel Demo."""
+    
+    # Primary scenario: recommendation cache failure via feature flag
+    RECOMMENDATION_CACHE_FAILURE = "recommendation-cache-failure"
+    
+    # Fallback scenario: direct pod stress
+    RECOMMENDATION_POD_STRESS = "recommendation-pod-stress"
+
+
+# =============================================================================
+# Feature flag names (for recommendationServiceCacheFailure)
+# =============================================================================
+
+FEATURE_FLAG_CACHE_FAILURE = "recommendationServiceCacheFailure"
+
+
+# =============================================================================
+# Failure class constants
+# =============================================================================
+
+FAILURE_BASELINE_NOT_READY = "baseline_not_ready"
+FAILURE_INJECTION_FAILED = "injection_failed"
+FAILURE_INCIDENT_NOT_DETECTED = "incident_not_detected"
+FAILURE_DIAGNOSIS_WRONG_COMPONENT = "diagnosis_wrong_component"
+FAILURE_DIAGNOSIS_MISSING_FLAG_EVIDENCE = "diagnosis_missing_flag_evidence"
+FAILURE_DIAGNOSIS_MISSING_RECOMMENDATIONSERVICE_EVIDENCE = "diagnosis_missing_recommendationservice_evidence"
+FAILURE_DIAGNOSIS_GENERIC_POD_CRASH = "diagnosis_generic_pod_crash"
+FAILURE_MUTATION_DETECTED = "mutation_detected"
+FAILURE_REMEDIATION_ATTEMPTED = "remediation_attempted"
+
+
+# =============================================================================
+# Expected components for diagnosis oracle
+# =============================================================================
+
+EXPECTED_COMPONENT = "recommendationservice"
+EXPECTED_NAMESPACE = "otel-demo"
+
+# Keywords that indicate correct diagnosis
+ACCEPTED_DIAGNOSIS_KEYWORDS = [
+    "recommendationservice",
+    "recommendation",
+    "recommendationServiceCacheFailure",
+    "feature_flag",
+    "feature flag",
+    "flagd",
+    "cache",
+    "cache failure",
+    "memory leak",
+]
+
+# Keywords that indicate wrong diagnosis
+REJECTED_DIAGNOSIS_PATTERNS = [
+    "frontend only",
+    "frontend-only",
+    "only frontend",
+    "generic pod crash",
+    "random pod",
+    "unrelated component",
+]
+
+
+# =============================================================================
+# Artifact phase directories
+# =============================================================================
+
+PHASE_CLUSTER_BASELINE = "phase0-cluster"
+PHASE_OTEL_BASELINE = "phase1-baseline"
+PHASE_INJECTED = "phase2-injected"
+PHASE_DISCOVERY = "phase3-discovery"
+PHASE_DIAGNOSIS = "phase4-diagnosis"
+PHASE_VERIFICATION = "phase5-verification"

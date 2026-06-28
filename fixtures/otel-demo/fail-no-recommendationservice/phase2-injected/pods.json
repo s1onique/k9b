@@ -1,0 +1,14 @@
+{
+  "apiVersion": "v1",
+  "items": [
+    {"metadata": {"name": "frontend-abc123", "namespace": "otel-demo"}, "status": {"phase": "Running"}},
+    {"metadata": {"name": "productcatalogservice-ghi789", "namespace": "otel-demo"}, "status": {"phase": "Running"}},
+    {"metadata": {"name": "cartservice-jkl012", "namespace": "otel-demo"}, "status": {"phase": "Running"}},
+    {"metadata": {"name": "checkoutservice-mno345", "namespace": "otel-demo"}, "status": {"phase": "Running"}},
+    {"metadata": {"name": "paymentservice-pqr678", "namespace": "otel-demo"}, "status": {"phase": "Running"}},
+    {"metadata": {"name": "shippingservice-stu901", "namespace": "otel-demo"}, "status": {"phase": "Running"}},
+    {"metadata": {"name": "currencyservice-vwx234", "namespace": "otel-demo"}, "status": {"phase": "Running"}},
+    {"metadata": {"name": "emailservice-yza567", "namespace": "otel-demo"}, "status": {"phase": "Running"}},
+    {"metadata": {"name": "flagd-bcd890", "namespace": "otel-demo"}, "status": {"phase": "Running"}}
+  ]
+}

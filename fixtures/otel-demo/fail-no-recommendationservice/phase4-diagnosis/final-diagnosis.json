@@ -1,0 +1,21 @@
+{
+  "phase": "diagnosis",
+  "timestamp": "2026-06-28T10:15:00Z",
+  "namespace": "otel-demo",
+  "status": "complete",
+  "summary": "Diagnosis incorrectly blames frontend for generic pod crash",
+  "root_cause": "The frontend service is experiencing errors due to a generic pod crash. The frontend pod should be restarted to resolve the issue.",
+  "confidence": "medium",
+  "evidence": [
+    "frontend pod shows 500 errors in liveness probe",
+    "frontend service is returning errors to users"
+  ],
+  "affected_component": "frontend",
+  "recommendations": [
+    "Restart the frontend deployment",
+    "Check frontend logs for errors",
+    "Scale up frontend replicas"
+  ],
+  "safe_to_investigate": false,
+  "requires_mutations": false
+}
