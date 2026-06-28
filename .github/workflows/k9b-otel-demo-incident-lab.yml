@@ -153,7 +153,7 @@ jobs:
   # ===========================================================================
   live-k3s-lab:
     name: Live K3s Lab (Manual)
-    runs-on: ubuntu-latest
+    runs-on: spbnix-k8s
     timeout-minutes: 60
     if: github.event_name == 'workflow_dispatch' && inputs.run_live_lab == true
     environment: k9b-live-lab-admin

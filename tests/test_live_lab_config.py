@@ -1140,3 +1140,55 @@ class TestRBACManifest:
             "Role for cnpg-system should use apiGroups: [\"apps\"] for deployments"
         assert 'resources: ["deployments"]' in role_rules, \
             "Role for cnpg-system should grant deployments"
+
+
+class TestOtelLiveLabRunnerContract:
+    """Test that OTel demo lab uses the same runner selector as CNPG live lab."""
+
+    def test_otel_workflow_file_exists(self) -> None:
+        """The OTel demo workflow file should exist."""
+        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+        assert OTEL_WORKFLOW_FILE.exists(), f"OTel workflow file not found at {OTEL_WORKFLOW_FILE}"
+
+    def test_otel_live_lab_uses_spbnix_k8s(self) -> None:
+        """OTel live lab should use spbnix-k8s runner (same as CNPG live lab)."""
+        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+        content = OTEL_WORKFLOW_FILE.read_text()
+        assert "runs-on: spbnix-k8s" in content, \
+            "OTel live lab should run on spbnix-k8s (same as CNPG live lab)"
+
+    def test_otel_live_lab_does_not_use_ubuntu_latest(self) -> None:
+        """OTel live lab should NOT use ubuntu-latest runner (cannot reach private API)."""
+        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+        content = OTEL_WORKFLOW_FILE.read_text()
+        # Find the live-k3s-lab job section and check its runs-on
+        live_lab_match = re.search(
+            r'live-k3s-lab:.*?runs-on:\s*(\S+)',
+            content,
+            re.DOTALL
+        )
+        assert live_lab_match, "live-k3s-lab job should have runs-on"
+        runner = live_lab_match.group(1)
+        assert runner != "ubuntu-latest", \
+            f"OTel live lab should NOT use ubuntu-latest (uses {runner})"
+
+    def test_both_live_labs_use_same_runner(self) -> None:
+        """Both CNPG and OTel live labs should use the same spbnix-k8s runner."""
+        content_cnpg = WORKFLOW_LIVE_FILE.read_text()
+        content_otel = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+        content_otel = content_otel.read_text()
+
+        # Extract runs-on for each live lab
+        cnpg_match = re.search(r'live-k3s-lab:.*?runs-on:\s*(\S+)', content_cnpg, re.DOTALL)
+        otel_match = re.search(r'live-k3s-lab:.*?runs-on:\s*(\S+)', content_otel, re.DOTALL)
+
+        assert cnpg_match, "CNPG live lab should have runs-on"
+        assert otel_match, "OTel live lab should have runs-on"
+
+        cnpg_runner = cnpg_match.group(1)
+        otel_runner = otel_match.group(1)
+
+        assert cnpg_runner == otel_runner, \
+            f"Both live labs should use same runner: CNPG={cnpg_runner}, OTel={otel_runner}"
+        assert cnpg_runner == "spbnix-k8s", \
+            f"Both live labs should use spbnix-k8s, got {cnpg_runner}"
