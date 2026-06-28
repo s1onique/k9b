@@ -21,6 +21,12 @@ import yaml
 from sanitize_live_lab_artifacts_contract import Finding, FindingKind
 
 
+# Sentinel maps that preserve Kubernetes Secret field semantics while redacting values
+_SECRET_DATA_SENTINEL = {"<redacted>": "contains base64-encoded secret values"}
+_SECRET_STRING_DATA_SENTINEL = {"<redacted>": "contains plaintext secret values"}
+_SECRET_BINARY_DATA_SENTINEL = {"<redacted>": "contains binary secret values"}
+
+
 def _sanitize_secret_object(
     data: Mapping[str, Any], file_path: str
 ) -> tuple[dict[str, Any], list[Finding]]:
@@ -40,8 +46,9 @@ def _sanitize_secret_object(
     sanitized["_sanitized"] = "secret"
 
     if "data" in data:
-        # Use simple string value so verifier can detect '<redacted>' substring in output
-        sanitized["data"] = "<redacted>"
+        # Use sentinel map to preserve Kubernetes Secret.data field semantics
+        # (mapping of keys to base64-encoded values)
+        sanitized["data"] = _SECRET_DATA_SENTINEL.copy()
         findings.append(Finding(
             kind=FindingKind.WARNING,
             message="Secret.data field redacted (contains sensitive values)",
@@ -50,8 +57,9 @@ def _sanitize_secret_object(
         ))
 
     if "stringData" in data:
-        # Use simple string value so verifier can detect '<redacted>' substring in output
-        sanitized["stringData"] = "<redacted>"
+        # Use sentinel map to preserve Kubernetes Secret.stringData field semantics
+        # (mapping of keys to plaintext secret values)
+        sanitized["stringData"] = _SECRET_STRING_DATA_SENTINEL.copy()
         findings.append(Finding(
             kind=FindingKind.WARNING,
             message="Secret.stringData field redacted (contains sensitive values)",
@@ -60,8 +68,9 @@ def _sanitize_secret_object(
         ))
 
     if "binaryData" in data:
-        # Use simple string value so verifier can detect '<redacted>' substring in output
-        sanitized["binaryData"] = "<redacted>"
+        # Use sentinel map to preserve Kubernetes Secret.binaryData field semantics
+        # (mapping of keys to binary/base64-encoded values)
+        sanitized["binaryData"] = _SECRET_BINARY_DATA_SENTINEL.copy()
         findings.append(Finding(
             kind=FindingKind.WARNING,
             message="Secret.binaryData field redacted (contains sensitive values)",
