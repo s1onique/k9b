@@ -15,6 +15,8 @@ on:
 env:
   # Force color output for better CI logs
   FORCE_COLOR: '1'
+  # Python version - pinned to specific patch for reproducible toolcache hits
+  PYTHON_VERSION: '3.13.14'
   # Harbor registry configuration (internal hostname for ARC/k3s runners)
   REGISTRY: harbor-pve1.spbnix.local
   HARBOR_PROJECT: k9b
@@ -37,12 +39,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Restore Python toolcache
+        id: restore-python-toolcache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py${{ env.PYTHON_VERSION }}
+          restore-keys: |
+            python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
           cache: 'pip'
+
+      - name: Save Python toolcache
+        if: always() && steps.restore-python-toolcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py${{ env.PYTHON_VERSION }}
 
       - name: Create virtual environment
         run: python -m venv .venv
@@ -104,12 +122,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Restore Python toolcache
+        id: restore-python-toolcache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py${{ env.PYTHON_VERSION }}
+          restore-keys: |
+            python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
           cache: 'pip'
+
+      - name: Save Python toolcache
+        if: always() && steps.restore-python-toolcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py${{ env.PYTHON_VERSION }}
 
       - name: Create virtual environment
         run: python -m venv .venv
@@ -147,12 +181,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Restore Python toolcache
+        id: restore-python-toolcache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py${{ env.PYTHON_VERSION }}
+          restore-keys: |
+            python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
           cache: 'pip'
+
+      - name: Save Python toolcache
+        if: always() && steps.restore-python-toolcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py${{ env.PYTHON_VERSION }}
 
       - name: Create virtual environment
         run: python -m venv .venv
@@ -213,12 +263,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Restore Python toolcache
+        id: restore-python-toolcache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py${{ env.PYTHON_VERSION }}
+          restore-keys: |
+            python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
           cache: 'pip'
+
+      - name: Save Python toolcache
+        if: always() && steps.restore-python-toolcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-ubuntu24-py${{ env.PYTHON_VERSION }}
 
       - name: Create virtual environment
         run: python -m venv .venv
