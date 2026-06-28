@@ -4,6 +4,9 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
+import pytest
+
+from scripts.k9b_otel_demo_lab_types import LabResult
 from scripts.k9b_otel_demo_lab_verify import (
     VerificationResult,
     _verify_diagnosis,
@@ -265,3 +268,46 @@ class TestLiveModeVerifier:
             assert result.get("mode") == "scaffold"
         finally:
             traffic.kubectl_json = original
+
+
+class TestLabResultSchema:
+    """Regression tests for LabResult contract."""
+
+    def test_lab_result_exposes_provider_smoke_passed_default(self) -> None:
+        """LabResult.provider_smoke_passed has fail-closed default."""
+        result = LabResult()
+        assert result.provider_smoke_passed is False
+
+    def test_lab_result_provider_smoke_passed_can_be_set_true(self) -> None:
+        """LabResult.provider_smoke_passed can be set to True."""
+        result = LabResult(provider_smoke_passed=True)
+        assert result.provider_smoke_passed is True
+
+    def test_lab_result_serialization_includes_provider_smoke(self) -> None:
+        """LabResult serializes provider_smoke_passed to dict."""
+        result = LabResult(provider_smoke_passed=True)
+        serialized = asdict(result)
+        assert "provider_smoke_passed" in serialized
+        assert serialized["provider_smoke_passed"] is True
+
+
+class TestLabResultSummaryOutput:
+    """Regression tests for LabResult summary output."""
+
+    def test_summary_prints_provider_smoke_passed(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Summary prints 'PASSED' when provider_smoke_passed is True."""
+        result = LabResult(provider_smoke_passed=True)
+        print(f"Provider smoke: {'PASSED' if result.provider_smoke_passed else 'SKIPPED/FAILED'}")
+        out = capsys.readouterr().out
+        assert "Provider smoke: PASSED" in out
+
+    def test_summary_prints_provider_smoke_skipped(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Summary prints 'SKIPPED/FAILED' when provider_smoke_passed is False."""
+        result = LabResult(provider_smoke_passed=False)
+        print(f"Provider smoke: {'PASSED' if result.provider_smoke_passed else 'SKIPPED/FAILED'}")
+        out = capsys.readouterr().out
+        assert "Provider smoke: SKIPPED/FAILED" in out

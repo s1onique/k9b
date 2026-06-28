@@ -287,7 +287,7 @@ def _result_to_dict(result: LabResult) -> dict[str, Any]:
         "failure_reason": result.failure_reason,
         "verification_passed": result.verification_passed,
         "verification_details": result.verification_details,
-        "provider_smoke_passed": getattr(result, "provider_smoke_passed", False),
+        "provider_smoke_passed": result.provider_smoke_passed,
         "config": result.config,
         "phases": result.phases,
     }

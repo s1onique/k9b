@@ -77,3 +77,4 @@ class LabResult:
     failure_reason: str = ""
     verification_passed: bool = False
     verification_details: dict[str, Any] = field(default_factory=dict)
+    provider_smoke_passed: bool = False
