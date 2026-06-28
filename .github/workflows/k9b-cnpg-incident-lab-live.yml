@@ -106,7 +106,7 @@ jobs:
       # =======================================================================
       - name: Restore kubectl tool cache
         id: cache-kubectl
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.tool_cache }}/kubectl
           key: kubectl-${{ runner.os }}-${{ runner.arch }}-${{ env.KUBECTL_VERSION }}
@@ -126,7 +126,7 @@ jobs:
       # =======================================================================
       - name: Save kubectl tool cache
         if: steps.cache-kubectl.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.tool_cache }}/kubectl
           key: ${{ steps.cache-kubectl.outputs.cache-primary-key }}
@@ -149,7 +149,7 @@ jobs:
       # =======================================================================
       - name: Restore Python tool cache
         id: cache-python
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.tool_cache }}/Python
           key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
@@ -184,7 +184,7 @@ jobs:
       # =======================================================================
       - name: Save Python tool cache
         if: steps.cache-python.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         continue-on-error: true
         with:
           path: ${{ runner.tool_cache }}/Python
@@ -2090,7 +2090,7 @@ jobs:
       # GitHub Actions cache and save back after setup-python.
       - name: Restore Python tool cache (sanitize)
         id: cache-python-sanitize
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.tool_cache }}/Python
           key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
@@ -2118,7 +2118,7 @@ jobs:
       # continue-on-error: true avoids failing if another parallel job saved first.
       - name: Save Python tool cache (sanitize)
         if: steps.cache-python-sanitize.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         continue-on-error: true
         with:
           path: ${{ runner.tool_cache }}/Python

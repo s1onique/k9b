@@ -234,7 +234,7 @@ jobs:
       # =========================================================================
       - name: Restore kubectl tool cache
         id: cache-kubectl
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.tool_cache }}/kubectl
           key: kubectl-${{ runner.os }}-${{ runner.arch }}-${{ env.KUBECTL_VERSION }}
@@ -254,7 +254,7 @@ jobs:
       # =========================================================================
       - name: Save kubectl tool cache
         if: steps.cache-kubectl.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.tool_cache }}/kubectl
           key: ${{ steps.cache-kubectl.outputs.cache-primary-key }}

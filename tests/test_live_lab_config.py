@@ -545,8 +545,8 @@ class TestKubectlBootstrap:
         content = WORKFLOW_LIVE_FILE.read_text()
         
         # Verify cache restore step exists with kubectl in metadata
-        assert "actions/cache/restore@v5" in content, \
-            "Should use actions/cache/restore@v5"
+        assert "actions/cache/restore@v6" in content, \
+            "Should use actions/cache/restore@v6"
         assert "id: cache-kubectl" in content, \
             "Should have id: cache-kubectl step"
         assert "path: ${{ runner.tool_cache }}/kubectl" in content, \
@@ -555,8 +555,8 @@ class TestKubectlBootstrap:
             "Should have kubectl key in cache restore"
         
         # Verify cache save step exists
-        assert "actions/cache/save@v5" in content, \
-            "Should use actions/cache/save@v5"
+        assert "actions/cache/save@v6" in content, \
+            "Should use actions/cache/save@v6"
         
         # Verify the cache metadata contains 'kubectl' but is NOT a shell command
         lines_with_kubectl = [line for line in content.split('\n') if 'kubectl' in line]
