@@ -10,6 +10,44 @@ import json
 import subprocess
 from typing import Any
 
+# Label selectors for backend discovery (in order of preference)
+# These are used when Deployment/Service selectors cannot be derived
+_BACKEND_LABEL_SELECTORS = [
+    "app.kubernetes.io/name=k9b",
+    "app=k9b",
+    "app.kubernetes.io/component=backend",
+]
+
+
+def _all_containers_ready(container_statuses: list[dict[str, Any]]) -> bool:
+    """Check if all containers are ready.
+
+    Empty container_statuses returns False (no containers = not ready).
+
+    Args:
+        container_statuses: List of container status dicts
+
+    Returns:
+        True only if all containers have ready=True
+    """
+    return bool(container_statuses) and all(
+        cs.get("ready", False) for cs in container_statuses
+    )
+
+
+def _selector_from_match_labels(match_labels: dict[str, str]) -> str | None:
+    """Convert matchLabels dict to kubectl label selector string.
+
+    Args:
+        match_labels: Dict of label key->value pairs
+
+    Returns:
+        Selector string like "app=k9b,component=backend" or None if empty
+    """
+    if not match_labels:
+        return None
+    return ",".join(f"{k}={v}" for k, v in match_labels.items())
+
 
 def get_pod_status(
     kubeconfig: str,
@@ -428,16 +466,242 @@ def collect_scheduler_logs(
         return ""
 
 
+def _get_deployment_selector(
+    kubeconfig: str,
+    namespace: str,
+    deployment_name: str,
+) -> str | None:
+    """Extract label selector from Deployment.
+
+    Reads Deployment.spec.selector and converts it to a kubectl label selector.
+    This is the canonical way to find pods owned by a Deployment.
+
+    Args:
+        kubeconfig: Path to kubeconfig file
+        namespace: Kubernetes namespace
+        deployment_name: Name of the deployment
+
+    Returns:
+        Label selector string like "app=k9b,component=backend" or None if not found
+    """
+    cmd = [
+        "kubectl",
+        "--kubeconfig", kubeconfig,
+        "get", "deployment", deployment_name,
+        "-n", namespace,
+        "-o", "json",
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            return None
+
+        data = json.loads(result.stdout)
+        selector = data.get("spec", {}).get("selector", {})
+        match_labels = selector.get("matchLabels", {})
+
+        return _selector_from_match_labels(match_labels)
+
+    except Exception:
+        return None
+
+
+def _get_service_selector(
+    kubeconfig: str,
+    namespace: str,
+    service_name: str,
+) -> str | None:
+    """Extract label selector from Service.
+
+    Reads Service.spec.selector and converts it to a kubectl label selector.
+    This can be used as a fallback when Deployment selector is not available.
+
+    Args:
+        kubeconfig: Path to kubeconfig file
+        namespace: Kubernetes namespace
+        service_name: Name of the service
+
+    Returns:
+        Label selector string like "app=k9b" or None if not found
+    """
+    cmd = [
+        "kubectl",
+        "--kubeconfig", kubeconfig,
+        "get", "service", service_name,
+        "-n", namespace,
+        "-o", "json",
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            return None
+
+        data = json.loads(result.stdout)
+        selector = data.get("spec", {}).get("selector", {})
+
+        if not selector:
+            return None
+
+        # Convert to kubectl label selector format
+        selector_parts = [f"{k}={v}" for k, v in selector.items()]
+        return ",".join(selector_parts)
+
+    except Exception:
+        return None
+
+
+def _collect_namespace_diagnostics(
+    kubeconfig: str,
+    namespace: str,
+) -> dict[str, Any]:
+    """Collect namespace diagnostics for failure reporting.
+
+    Args:
+        kubeconfig: Path to kubeconfig file
+        namespace: Kubernetes namespace
+
+    Returns:
+        Dict with deployments, services, and pods info
+    """
+    diagnostics: dict[str, Any] = {
+        "namespace": namespace,
+        "errors": [],
+    }
+
+    # Get deployments with selectors
+    deploy_cmd = [
+        "kubectl",
+        "--kubeconfig", kubeconfig,
+        "get", "deployments",
+        "-n", namespace,
+        "-o", "json",
+    ]
+
+    try:
+        result = subprocess.run(
+            deploy_cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            deployments = []
+            for item in data.get("items", []):
+                name = item.get("metadata", {}).get("name", "")
+                selector = item.get("spec", {}).get("selector", {})
+                match_labels = selector.get("matchLabels", {})
+                labels = item.get("metadata", {}).get("labels", {})
+                deployments.append({
+                    "name": name,
+                    "match_labels": match_labels,
+                    "selector_str": _selector_from_match_labels(match_labels),
+                    "labels": labels,
+                })
+            diagnostics["deployments"] = deployments
+    except Exception as e:
+        diagnostics["errors"].append(f"deployments: {e}")
+
+    # Get services with selectors
+    svc_cmd = [
+        "kubectl",
+        "--kubeconfig", kubeconfig,
+        "get", "services",
+        "-n", namespace,
+        "-o", "json",
+    ]
+
+    try:
+        result = subprocess.run(
+            svc_cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            services = []
+            for item in data.get("items", []):
+                name = item.get("metadata", {}).get("name", "")
+                selector = item.get("spec", {}).get("selector", {})
+                labels = item.get("metadata", {}).get("labels", {})
+                services.append({
+                    "name": name,
+                    "selector": selector,
+                    "selector_str": ",".join(f"{k}={v}" for k, v in selector.items()) if selector else "",
+                    "labels": labels,
+                })
+            diagnostics["services"] = services
+    except Exception as e:
+        diagnostics["errors"].append(f"services: {e}")
+
+    # Get pods with labels (limited to first 20)
+    pod_cmd = [
+        "kubectl",
+        "--kubeconfig", kubeconfig,
+        "get", "pods",
+        "-n", namespace,
+        "-o", "json",
+    ]
+
+    try:
+        result = subprocess.run(
+            pod_cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            all_items = data.get("items", [])
+            diagnostics["pods_total"] = len(all_items)
+            pods = []
+            for item in all_items[:20]:
+                name = item.get("metadata", {}).get("name", "")
+                labels = item.get("metadata", {}).get("labels", {})
+                phase = item.get("status", {}).get("phase", "")
+                container_statuses = item.get("status", {}).get("containerStatuses", [])
+                ready = _all_containers_ready(container_statuses)
+                pods.append({
+                    "name": name,
+                    "phase": phase,
+                    "ready": ready,
+                    "labels": labels,
+                })
+            diagnostics["pods"] = pods
+            diagnostics["pods_shown"] = len(pods)
+    except Exception as e:
+        diagnostics["errors"].append(f"pods: {e}")
+
+    return diagnostics
+
+
 def get_backend_pod_info(
     kubeconfig: str,
     namespace: str,
     backend_deployment: str,
 ) -> dict[str, Any]:
-    """Get backend pod name and identity info.
+    """Get backend pod name and identity info using robust selector discovery.
 
-    This function selects a single backend pod and returns its identity
-    for consistency checks. Since IncidentStore is process-local, all
-    API calls in Phase 2c must go to the same pod.
+    This function finds backend pods using a multi-step fallback chain:
+    1. Deployment selector (canonical - from Deployment.spec.selector.matchLabels)
+    2. Service selector (from Service.spec.selector)
+    3. Known Helm/Kubernetes label patterns
+
+    Since IncidentStore is process-local, all API calls in Phase 2c must go
+    to the same pod for consistency.
 
     Args:
         kubeconfig: Path to kubeconfig file
@@ -445,14 +709,97 @@ def get_backend_pod_info(
         backend_deployment: Backend deployment name
 
     Returns:
-        Dict with pod_name, namespace, pod_ip, node_name, and uid
+        Dict with pod_name, namespace, pod_ip, node_name, uid, and diagnostics
+    """
+    attempted_selectors: list[dict[str, str]] = []
+    last_error = "Unknown error"
+
+    # Step 1: Try Deployment selector (canonical source)
+    deployment_selector = _get_deployment_selector(kubeconfig, namespace, backend_deployment)
+    if deployment_selector:
+        attempted_selectors.append({
+            "source": "deployment",
+            "selector": deployment_selector,
+            "deployment": backend_deployment,
+        })
+
+        pod_result = _find_pods_with_selector(kubeconfig, namespace, deployment_selector)
+        if pod_result.get("found"):
+            pod_result["selector_used"] = deployment_selector
+            pod_result["selector_source"] = "deployment"
+            pod_result["attempted_selectors"] = attempted_selectors
+            return pod_result
+
+        last_error = pod_result.get("error", "No running pods found")
+
+    # Step 2: Try Service selector (from backend service)
+    service_selector = _get_service_selector(kubeconfig, namespace, backend_deployment)
+    if service_selector:
+        attempted_selectors.append({
+            "source": "service",
+            "selector": service_selector,
+            "service": backend_deployment,
+        })
+
+        pod_result = _find_pods_with_selector(kubeconfig, namespace, service_selector)
+        if pod_result.get("found"):
+            pod_result["selector_used"] = service_selector
+            pod_result["selector_source"] = "service"
+            pod_result["attempted_selectors"] = attempted_selectors
+            return pod_result
+
+        last_error = pod_result.get("error", "No running pods found")
+
+    # Step 3: Try known Helm/Kubernetes label patterns
+    for fallback_selector in _BACKEND_LABEL_SELECTORS:
+        attempted_selectors.append({
+            "source": "fallback",
+            "selector": fallback_selector,
+        })
+
+        pod_result = _find_pods_with_selector(kubeconfig, namespace, fallback_selector)
+        if pod_result.get("found"):
+            pod_result["selector_used"] = fallback_selector
+            pod_result["selector_source"] = "fallback"
+            pod_result["attempted_selectors"] = attempted_selectors
+            return pod_result
+
+        last_error = pod_result.get("error", "No running pods found")
+
+    # All selectors failed - collect diagnostics
+    diagnostics = _collect_namespace_diagnostics(kubeconfig, namespace)
+
+    return {
+        "found": False,
+        "error": last_error,
+        "attempted_selectors": attempted_selectors,
+        "diagnostics": diagnostics,
+    }
+
+
+def _find_pods_with_selector(
+    kubeconfig: str,
+    namespace: str,
+    label_selector: str,
+) -> dict[str, Any]:
+    """Find and select a backend pod using the given label selector.
+
+    Prefers Running pods with Ready=True containers.
+
+    Args:
+        kubeconfig: Path to kubeconfig file
+        namespace: Kubernetes namespace
+        label_selector: kubectl label selector
+
+    Returns:
+        Dict with pod info or found=False with error
     """
     cmd = [
         "kubectl",
         "--kubeconfig", kubeconfig,
         "get", "pods",
         "-n", namespace,
-        "-l", f"app={backend_deployment}",
+        "-l", label_selector,
         "-o", "json",
     ]
 
@@ -469,18 +816,32 @@ def get_backend_pod_info(
         data = json.loads(result.stdout)
         items = data.get("items", [])
 
-        # Filter to running pods only
-        running_pods = [
-            pod for pod in items
-            if pod.get("status", {}).get("phase") == "Running"
-        ]
+        if not items:
+            return {"found": False, "error": f"No pods found with selector: {label_selector}"}
 
-        if not running_pods:
+        # Filter to running pods with ready containers
+        ready_pods = []
+        running_pods = []
+
+        for pod in items:
+            phase = pod.get("status", {}).get("phase", "")
+            container_statuses = pod.get("status", {}).get("containerStatuses", [])
+            all_ready = _all_containers_ready(container_statuses)
+
+            if phase == "Running":
+                if all_ready:
+                    ready_pods.append(pod)
+                running_pods.append(pod)
+
+        # Prefer ready pods, fall back to any running pod
+        target_pods = ready_pods if ready_pods else running_pods
+
+        if not target_pods:
             return {"found": False, "error": "No running backend pods"}
 
         # Sort by creation timestamp to get the oldest (most stable) pod first
         sorted_pods = sorted(
-            running_pods,
+            target_pods,
             key=lambda p: p.get("metadata", {}).get("creationTimestamp", ""),
         )
         pod = sorted_pods[0]
@@ -494,6 +855,7 @@ def get_backend_pod_info(
             "uid": pod.get("metadata", {}).get("uid", ""),
             "creation_timestamp": pod.get("metadata", {}).get("creationTimestamp", ""),
             "total_running_pods": len(running_pods),
+            "total_ready_pods": len(ready_pods),
         }
 
     except subprocess.TimeoutExpired:

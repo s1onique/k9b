@@ -5,6 +5,7 @@ assertion helpers used across the incident discovery gate test modules.
 """
 
 from scripts.incident_discovery_gate import (
+    FAILURE_BACKEND_POD_NOT_FOUND,
     FAILURE_CANDIDATE_GENERATED_NOT_PROMOTED,
     FAILURE_INCIDENT_API_CONTRACT_MISMATCH,
     FAILURE_INCIDENT_CANDIDATE_NOT_DETECTED,
@@ -48,6 +49,7 @@ from scripts.incident_discovery_gate.types import IncidentDiscoveryResult
 # Re-export everything for convenience
 __all__ = [
     # Constants
+    "FAILURE_BACKEND_POD_NOT_FOUND",
     "FAILURE_CANDIDATE_GENERATED_NOT_PROMOTED",
     "FAILURE_INCIDENT_API_CONTRACT_MISMATCH",
     "FAILURE_INCIDENT_CANDIDATE_NOT_DETECTED",

@@ -29,6 +29,7 @@ from .collect import (
     list_pods_in_namespace,
 )
 from .constants import (
+    FAILURE_BACKEND_POD_NOT_FOUND,
     FAILURE_CANDIDATE_GENERATED_NOT_PROMOTED,
     FAILURE_INCIDENT_CANDIDATE_NOT_DETECTED,
     FAILURE_INCIDENT_CANDIDATE_NOT_PROMOTED,
@@ -189,9 +190,15 @@ def run_incident_discovery(
 
     if not snapshot_pod_info.get("found"):
         result.passed = False
-        result.failure_class = FAILURE_SNAPSHOT_NOT_TRIGGERED
+        result.failure_class = FAILURE_BACKEND_POD_NOT_FOUND
         result.total_elapsed_seconds = time.time() - start_time
         result.diagnostics["snapshot_error"] = "Could not find backend pod"
+
+        # Include attempted selectors in diagnostics for debugging
+        attempted = snapshot_pod_info.get("attempted_selectors", [])
+        if attempted:
+            result.diagnostics["attempted_selectors"] = attempted
+            result.diagnostics["namespace_diagnostics"] = snapshot_pod_info.get("diagnostics", {})
 
         backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
         scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
@@ -199,6 +206,11 @@ def run_incident_discovery(
 
         print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
         print("  Could not find backend pod for snapshot capture", flush=True)
+        # Print attempted selectors for debugging
+        for attempt in attempted:
+            source = attempt.get("source", "unknown")
+            selector = attempt.get("selector", "unknown")
+            print(f"    Tried {source} selector: {selector}", flush=True)
         return result
 
     snapshot_pod_name = snapshot_pod_info.get("pod_name", "")

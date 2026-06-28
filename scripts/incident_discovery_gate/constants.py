@@ -32,5 +32,8 @@ FAILURE_CANDIDATE_GENERATED_NOT_PROMOTED = "candidate_generated_not_promoted"
 FAILURE_INCIDENT_PROMOTED_NOT_LISTED = "incident_promoted_not_listed"
 FAILURE_WRONG_BACKEND_PROCESS = "wrong_backend_process"
 
+# Backend pod discovery failure constants
+FAILURE_BACKEND_POD_NOT_FOUND = "backend_pod_not_found"
+
 # Default fixture name (from fixtures/lab/live/pod-failure/injected-change.yaml)
 DEFAULT_FIXTURE_NAME = "cnpg-lab-failing-app"

@@ -15,6 +15,7 @@ Exit codes:
 """
 
 from .constants import (
+    FAILURE_BACKEND_POD_NOT_FOUND,
     FAILURE_CANDIDATE_GENERATED_NOT_PROMOTED,
     FAILURE_INCIDENT_API_CONTRACT_MISMATCH,
     FAILURE_INCIDENT_CANDIDATE_NOT_DETECTED,
@@ -46,6 +47,8 @@ from .types import IncidentDiscoveryResult
 __all__ = [
     "run_incident_discovery",
     "IncidentDiscoveryResult",
+    # Backend pod discovery failures
+    "FAILURE_BACKEND_POD_NOT_FOUND",
     # Fixture failures
     "FAILURE_INCIDENT_FIXTURE_MISSING",
     "FAILURE_INCIDENT_FIXTURE_HEALTHY_UNEXPECTEDLY",
