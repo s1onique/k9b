@@ -383,16 +383,18 @@ def run_incident_discovery(
         incident_id = extract_incident_id_from_response(response_body)
 
         if incident_id:
-            result.passed = True
+            # Phase 2c: Incident discovered successfully
+            result.passed = True  # Overall gate passes unless enrichment fails
             result.incident_found = True
             result.incident_id = incident_id
             result.total_elapsed_seconds = total_elapsed
+            result.discovery_status = "passed"  # Incident discovery PASSED
 
             poll_results[-1]["incident_id"] = incident_id
 
             print(f"  Incident found: {incident_id} (poll {poll_num}/{max_retries}, {total_elapsed:.1f}s)", flush=True)
 
-            # Write success artifacts
+            # Write initial success artifacts
             result.diagnostics["poll_results"] = poll_results
             backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
             scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
@@ -404,6 +406,13 @@ def run_incident_discovery(
                     result, kubeconfig, namespace, backend_deployment,
                     backend_container, backend_port, incident_id, discovery_dir
                 )
+                # If enrichment failed, overall passed is False but discovery_status remains passed
+                if not result.passed:
+                    result.discovery_status = "passed"  # Discovery still passed, only enrichment failed
+            else:
+                # Enrichment not expected, mark as skipped/disabled
+                result.enrichment_gate_status = "skipped"
+                result.enrichment_status = "skipped"
 
             return result
 
@@ -552,12 +561,21 @@ def _check_llm_enrichment(
         result.failure_class = enrichment_failure
         result.enrichment_status = "failed"
 
-        print(f"LLM ENRICHMENT GATE FAILED: {enrichment_failure}", flush=True)
+        # Distinguish between "disabled" (expected but not enabled) vs "configured but not working"
+        if enrichment_failure == "llm_enrichment_disabled":
+            result.enrichment_gate_status = "disabled"
+            print("LLM enrichment gate: DISABLED", flush=True)
+            print(f"  Provider enabled: {result.provider_enabled}", flush=True)
+            print(f"  Provider configured: {result.provider_configured}", flush=True)
+        else:
+            result.enrichment_gate_status = "failed"
+            print(f"LLM ENRICHMENT GATE FAILED: {enrichment_failure}", flush=True)
 
         # Write updated artifacts
         scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
         write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
     else:
+        result.enrichment_gate_status = "passed"
         print(f"LLM enrichment status: {result.enrichment_status}", flush=True)
         if result.provider_invocation_expected:
             print(f"  Provider invocation count: {result.provider_invocation_count}", flush=True)

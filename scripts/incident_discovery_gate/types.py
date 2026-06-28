@@ -47,7 +47,11 @@ class IncidentDiscoveryResult:
     provider_env_vars: list[str] = field(default_factory=list)
     provider_invocation_count: int = 0
     provider_invocation_expected: bool = False
-    enrichment_status: str = ""  # "not_triggered", "triggered", "completed", "failed"
+    enrichment_status: str = ""  # "not_triggered", "triggered", "completed", "failed", "skipped", "disabled"
+    
+    # Phase-level pass/fail tracking for clear separation
+    discovery_status: str = ""  # "passed", "failed", "skipped"
+    enrichment_gate_status: str = ""  # "passed", "failed", "skipped", "disabled"
 
     # Diagnostics for JSON artifact
     diagnostics: dict = field(default_factory=dict)
@@ -85,6 +89,8 @@ class IncidentDiscoveryResult:
             "provider_invocation_count": self.provider_invocation_count,
             "provider_invocation_expected": self.provider_invocation_expected,
             "enrichment_status": self.enrichment_status,
+            "discovery_status": self.discovery_status,
+            "enrichment_gate_status": self.enrichment_gate_status,
             "diagnostics": self.diagnostics,
             "last_api_response": self.last_api_response,
         }

@@ -107,10 +107,24 @@ def render_bounded_summary(result: IncidentDiscoveryResult) -> str:
     Returns:
         Formatted summary string
     """
+    # Determine phase statuses with clear separation
+    discovery_status = result.discovery_status or ("passed" if result.incident_found else "failed")
+    enrichment_status = result.enrichment_gate_status or "skipped"
+    
+    # Never say "incident was not discovered" if incident_id is present
+    if result.incident_id and "was not discovered" in str(result.failure_class or ""):
+        failure_display = f"enrichment: {result.failure_class}"
+    else:
+        failure_display = result.failure_class or "(none)"
+    
     lines = [
         "=== Incident Discovery Gate Result ===",
         f"Status: {'PASSED' if result.passed else 'FAILED'}",
-        f"Failure class: {result.failure_class or '(none)'}",
+        f"Failure class: {failure_display}",
+        "",
+        "--- Phase Status ---",
+        f"Incident discovery: {discovery_status.upper()}",
+        f"LLM enrichment: {enrichment_status.upper()}",
         "",
         "--- Timing ---",
         f"Polls: {result.poll_count}",
