@@ -188,16 +188,51 @@ jobs:
           version: '3.14.0'
 
       - name: Configure kubectl
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG }}
         run: |
+          set -euo pipefail
+
           mkdir -p "$RUNNER_TEMP/kubeconfig"
           KUBECONFIG_PATH="$RUNNER_TEMP/kubeconfig/k9b-otel-demo"
-          echo "${{ secrets.KUBECONFIG }}" > "$KUBECONFIG_PATH"
+
+          if [[ -z "${KUBECONFIG_CONTENT//[[:space:]]/}" ]]; then
+            echo "::error title=Missing KUBECONFIG secret::secrets.KUBECONFIG is empty or unavailable for this workflow run"
+            exit 1
+          fi
+
+          printf '%s' "$KUBECONFIG_CONTENT" > "$KUBECONFIG_PATH"
           chmod 600 "$KUBECONFIG_PATH"
-          echo "KUBECONFIG=$KUBECONFIG_PATH" >> $GITHUB_ENV
-          echo "KUBECONFIG_PATH=$KUBECONFIG_PATH" >> $GITHUB_ENV
+
+          echo "KUBECONFIG=$KUBECONFIG_PATH" >> "$GITHUB_ENV"
+          echo "KUBECONFIG_PATH=$KUBECONFIG_PATH" >> "$GITHUB_ENV"
+
+          kubectl --kubeconfig "$KUBECONFIG_PATH" config current-context >/dev/null
+          kubectl --kubeconfig "$KUBECONFIG_PATH" config view --minify >/dev/null
+
+          # Preflight: validate server address is not localhost
+          SERVER="$(kubectl --kubeconfig "$KUBECONFIG_PATH" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+
+          if [[ -z "$SERVER" ]]; then
+            echo "::error title=Invalid kubeconfig::kubeconfig has no cluster server URL in the current context"
+            exit 1
+          fi
+
+          case "$SERVER" in
+            *localhost*|*127.0.0.1*|*"[::1]"*)
+              echo "::error title=Invalid K3s kubeconfig server::kubeconfig points to local API server. Replace it with the reachable K3s API address."
+              exit 1
+              ;;
+          esac
+
+          echo "::add-mask::$SERVER"
+          echo "Kubeconfig server configured"
 
       - name: Verify cluster connectivity
-        run: kubectl get nodes
+        run: |
+          set -euo pipefail
+          kubectl --kubeconfig "$KUBECONFIG" cluster-info
+          kubectl --kubeconfig "$KUBECONFIG" get nodes -o wide
 
       - name: Create artifact directory
         run: mkdir -p ./lab-artifacts/otel-demo
