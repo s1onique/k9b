@@ -225,6 +225,8 @@ def build_automatic_diagnosis_review_payload(
         "read_only": True,
         "review_required_before_any_action": True,
         "no_remediation_attempted": True,
+        # Provider status - persisted for Phase 4 contract verification
+        "provider_status": summary.get("provider_status", {}),
     }
 
 

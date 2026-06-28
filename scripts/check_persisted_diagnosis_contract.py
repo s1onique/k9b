@@ -157,14 +157,22 @@ def check_provider_status(
     """
     findings = []
 
-    # Provider status may be embedded in the incident or in a nested response
-    # For one-pass diagnosis, the provider status comes from the diagnosis response
-    # Look for provider_configured and provider_invocation_attempted at various levels
+    # Provider status is now persisted at the canonical path:
+    # automatic_diagnosis_review.provider_status
+    # This is the Phase 4 contract-verified path.
 
-    provider_configured = incident.get("provider_configured")
-    provider_invoked = incident.get("provider_invocation_attempted")
+    auto_review = incident.get("automatic_diagnosis_review", {})
+    provider_status = auto_review.get("provider_status", {})
 
-    # Also check nested structures
+    # Extract provider fields from canonical path
+    provider_configured = provider_status.get("provider_configured")
+    provider_invoked = provider_status.get("provider_invocation_attempted")
+
+    # Also check legacy paths for backward compatibility
+    if provider_configured is None:
+        provider_configured = incident.get("provider_configured")
+    if provider_invoked is None:
+        provider_invoked = incident.get("provider_invocation_attempted")
     if provider_configured is None:
         provider_configured = incident.get("one_pass_diagnosis", {}).get("provider_configured")
     if provider_invoked is None:

@@ -377,6 +377,11 @@ def run_incident_one_pass_diagnosis(
     # Compute provider proof fields early for error returns
     provider_configured, provider_invoked = get_provider_proof_fields(request.diagnosis_provider)
 
+    # Get provider name for persistence
+    provider_name: str | None = getattr(request.diagnosis_provider, "model_name", None)
+    if provider_name is None:
+        provider_name = getattr(request.diagnosis_provider, "name", None)
+
     try:
         # Write review packet for operator/ChatGPT review
         # This makes automatic_diagnosis_review.available=true in Phase 4
@@ -395,6 +400,9 @@ def run_incident_one_pass_diagnosis(
             now=resolved_now,
             case_file=case_file,
             orchestrator_result=orchestrator_result,
+            provider_configured=provider_configured,
+            provider_invocation_attempted=provider_invoked,
+            provider_name=provider_name,
         )
         if review_packet_meta.get("written"):
             review_packet_written = True

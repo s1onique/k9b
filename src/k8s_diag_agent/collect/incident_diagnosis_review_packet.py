@@ -115,6 +115,9 @@ def write_diagnosis_review_packet(
     now: datetime | None = None,
     case_file: dict[str, Any] | None = None,
     orchestrator_result: dict[str, Any] | None = None,
+    provider_configured: bool = False,
+    provider_invocation_attempted: bool = False,
+    provider_name: str | None = None,
 ) -> dict[str, object]:
     """Write a bounded diagnosis loop review packet artifact.
 
@@ -253,6 +256,15 @@ def write_diagnosis_review_packet(
             "no_llm_calls": True,
             "no_execution": True,
             "bounded": True,
+        },
+
+        # Provider status - persisted for Phase 4 contract verification
+        # These fields expose LLM provider configuration/invocation state
+        "provider_status": {
+            "provider_enabled": provider_configured,
+            "provider_configured": provider_configured,
+            "provider_invocation_attempted": provider_invocation_attempted,
+            "provider_name": provider_name,
         },
     }
 
@@ -490,6 +502,8 @@ def load_review_packet_summary(
             "artifact_name": data.get("run_id") + "-diagnosis-review-packet.json",
             "eligible": data.get("eligibility", {}).get("eligible"),
             "eligibility_reason": data.get("eligibility", {}).get("reason"),
+            # Provider status - for Phase 4 contract verification
+            "provider_status": data.get("provider_status", {}),
         }
     except (OSError, json.JSONDecodeError, KeyError) as exc:
         raise AutomaticDiagnosisReviewPacketUnavailable(

@@ -129,6 +129,19 @@ class IncidentSuggestedCheckPayload(TypedDict, total=False):
     run_id: str | None  # Associated run ID if available
 
 
+class ProviderStatusPayload(TypedDict, total=False):
+    """LLM provider status metadata for diagnosis review packets.
+
+    This payload exposes LLM provider configuration and invocation state
+    for Phase 4 contract verification.
+    """
+
+    provider_enabled: bool | None  # Feature flag: is diagnosis feature enabled
+    provider_configured: bool | None  # Provider: is a real LLM provider configured
+    provider_invocation_attempted: bool | None  # Provider: was invocation attempted
+    provider_name: str | None  # Provider: name/model identifier
+
+
 class AutomaticDiagnosisReviewPayload(TypedDict, total=False):
     """Bounded automatic diagnosis review packet summary for incident detail views.
 
@@ -171,6 +184,10 @@ class AutomaticDiagnosisReviewPayload(TypedDict, total=False):
 
     # When available=False: reason for unavailability
     unavailable_reason: str | None  # "no_review_packet" or "malformed_review_packet"
+
+    # Provider status - persisted for Phase 4 contract verification
+    # Canonical path: automatic_diagnosis_review.provider_status
+    provider_status: ProviderStatusPayload | None
 
 
 class AutomaticDiagnosisReviewHandoffPayload(TypedDict, total=False):

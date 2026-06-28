@@ -207,6 +207,130 @@ class TestPersistedDiagnosisContract:
             "and automatic_diagnosis_loop_summary.status=completed"
         )
 
+    def test_provider_status_persisted_in_review_packet(self, tmp_path: Path) -> None:
+        """Provider status is persisted in review packet and visible in auto_review.
+
+        This test verifies the Phase 4 provider_status_missing fix:
+        - Provider metadata is now persisted when one-pass diagnosis completes
+        - Provider status appears in automatic_diagnosis_review.provider_status
+        - The contract checker can find provider fields at the canonical path
+        """
+        # Setup
+        store = IncidentStore()
+        incident = _create_test_incident("test-contract-incident-004")
+        store._incidents["test-contract-incident-004"] = incident
+        set_incident_store(store)
+
+        external_analysis_dir = tmp_path
+
+        # Use FakeDiagnosisProvider which reports as configured but not invoked
+        request = IncidentOnePassServiceRequest(
+            incident_id="test-contract-incident-004",
+            external_analysis_dir=external_analysis_dir,
+            diagnosis_provider=FakeDiagnosisProvider({
+                "summary": "Provider status test",
+                "confidence": "medium",
+                "likely_causes": ["resource pressure"],
+                "recommended_investigations": [],
+            }),
+        )
+
+        # Execute
+        result = run_incident_one_pass_diagnosis(request)
+        assert result.error is None
+
+        # Verify: Provider status fields are persisted
+        auto_review = build_automatic_diagnosis_review_payload(
+            external_analysis_dir, "test-contract-incident-004"
+        )
+        assert auto_review["available"] is True, (
+            "automatic_diagnosis_review.available should be True after one-pass diagnosis"
+        )
+
+        # Provider status should be present in the canonical path
+        provider_status = auto_review.get("provider_status")
+        assert provider_status is not None, (
+            "automatic_diagnosis_review.provider_status should be present "
+            "to satisfy Phase 4 provider_status_missing contract"
+        )
+
+        # Verify provider status fields
+        assert "provider_configured" in provider_status or "provider_enabled" in provider_status, (
+            "provider_status should contain provider_configured or provider_enabled"
+        )
+
+        # Provider configured should match the FakeDiagnosisProvider behavior
+        # (FakeDiagnosisProvider is a non-NoOp provider, so it should be configured=True)
+        provider_configured = provider_status.get("provider_configured")
+        assert provider_configured is not None, (
+            "provider_status.provider_configured should be present"
+        )
+
+        # Verify the review packet JSON contains provider_status
+        from k8s_diag_agent.collect.incident_diagnosis_review_packet import (
+            load_review_packet_summary,
+        )
+        packet_summary = load_review_packet_summary(external_analysis_dir, "test-contract-incident-004")
+        assert packet_summary is not None
+        assert "provider_status" in packet_summary, (
+            "Review packet summary should include provider_status"
+        )
+
+    def test_contract_checker_finds_provider_status_at_canonical_path(self, tmp_path: Path) -> None:
+        """Contract checker uses canonical path automatic_diagnosis_review.provider_status."""
+        # Setup
+        store = IncidentStore()
+        incident = _create_test_incident("test-contract-incident-005")
+        store._incidents["test-contract-incident-005"] = incident
+        set_incident_store(store)
+
+        external_analysis_dir = tmp_path
+
+        request = IncidentOnePassServiceRequest(
+            incident_id="test-contract-incident-005",
+            external_analysis_dir=external_analysis_dir,
+            diagnosis_provider=FakeDiagnosisProvider({
+                "summary": "Canonical path test",
+                "confidence": "high",
+                "likely_causes": ["probe failure"],
+                "recommended_investigations": [],
+            }),
+        )
+
+        # Execute
+        result = run_incident_one_pass_diagnosis(request)
+        assert result.error is None
+
+        # Build incident detail payload (simulates GET /api/incidents/{id})
+        auto_review = build_automatic_diagnosis_review_payload(
+            external_analysis_dir, "test-contract-incident-005"
+        )
+
+        # Simulate the incident JSON that contract checker would see
+        incident_json = {
+            "incident_id": "test-contract-incident-005",
+            "automatic_diagnosis_review": auto_review,
+            "automatic_diagnosis_loop_summary": {
+                "status": "completed",
+            },
+        }
+
+        # Test the contract checker's canonical path logic
+        from scripts.check_persisted_diagnosis_contract import check_provider_status
+
+        provider_ok, failure_class, findings = check_provider_status(incident_json)
+
+        # Provider should be found at canonical path
+        assert provider_ok, (
+            f"Contract checker should find provider status at canonical path. "
+            f"Failure: {failure_class}, Findings: {findings}"
+        )
+
+        # Verify findings mention provider_configured
+        assert any("provider_configured" in f for f in findings), (
+            f"Findings should mention provider_configured. Got: {findings}"
+        )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
