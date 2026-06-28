@@ -1489,11 +1489,33 @@ jobs:
       - name: "Phase 2: Incident Discovery"
         id: incident-discovery
         if: inputs.enable_provider_smoke == true && steps.backend-health-gate.outputs.PROVIDER_SMOKE_STATUS != 'fail' && steps.scheduler-health-gate.outputs.PROVIDER_SMOKE_STATUS != 'fail'
+        shell: bash
         run: |
           source "${GITHUB_ENV}"
           echo "=== Phase 2: Incident Discovery ==="
           echo "Backend health gate passed, scheduler is healthy, proceeding to incident discovery."
           echo ""
+          
+          # Build gate arguments
+          # EXPECT_LLM_ENRICHMENT defaults to false; only set true when provider secrets are present
+          EXPECT_LLM_ENRICHMENT="${EXPECT_LLM_ENRICHMENT:-false}"
+          echo "Expect LLM enrichment: ${EXPECT_LLM_ENRICHMENT}"
+          
+          GATE_ARGS=(
+            --kubeconfig "${KUBECONFIG}"
+            --namespace "${LAB_NAMESPACE}"
+            --backend-deployment k9b-backend
+            --backend-container backend
+            --backend-port 8080
+            --fixture-name cnpg-lab-failing-app
+            --max-retries 12
+            --retry-interval 10
+            --artifact-dir ./lab-artifacts/live/provider-smoke/incident-discovery
+          )
+          
+          if [ "${EXPECT_LLM_ENRICHMENT}" = "true" ]; then
+            GATE_ARGS+=(--expect-llm-enrichment)
+          fi
           
           # Run incident discovery gate with classified failure modes
           # The gate:
@@ -1506,17 +1528,7 @@ jobs:
           #
           # Use set +e to capture exit code so artifact reading happens even on failure
           set +e
-          .venv/bin/python scripts/check_incident_discovery_gate.py \
-            --kubeconfig "${KUBECONFIG}" \
-            --namespace "$LAB_NAMESPACE" \
-            --backend-deployment k9b-backend \
-            --backend-container backend \
-            --backend-port 8080 \
-            --fixture-name cnpg-lab-failing-app \
-            --max-retries 12 \
-            --retry-interval 10 \
-            --artifact-dir ./lab-artifacts/live/provider-smoke/incident-discovery \
-            --expect-llm-enrichment
+          .venv/bin/python scripts/check_incident_discovery_gate.py "${GATE_ARGS[@]}"
           GATE_RC=$?
           set -e
           
@@ -1524,7 +1536,11 @@ jobs:
           if [ -f ./lab-artifacts/live/provider-smoke/incident-discovery/incident-discovery-result.json ]; then
             INCIDENT_ID=$(.venv/bin/python scripts/extract_json_value.py ./lab-artifacts/live/provider-smoke/incident-discovery/incident-discovery-result.json --key incident_id 2>/dev/null || echo "")
             FAILURE_CLASS=$(.venv/bin/python scripts/extract_json_value.py ./lab-artifacts/live/provider-smoke/incident-discovery/incident-discovery-result.json --key failure_class 2>/dev/null || echo "")
-            echo "Incident discovery result: failure_class=${FAILURE_CLASS}, incident_id=${INCIDENT_ID}"
+            DISCOVERY_STATUS=$(.venv/bin/python scripts/extract_json_value.py ./lab-artifacts/live/provider-smoke/incident-discovery/incident-discovery-result.json --key discovery_status 2>/dev/null || echo "")
+            ENRICHMENT_GATE_STATUS=$(.venv/bin/python scripts/extract_json_value.py ./lab-artifacts/live/provider-smoke/incident-discovery/incident-discovery-result.json --key enrichment_gate_status 2>/dev/null || echo "")
+            PROVIDER_ENABLED=$(.venv/bin/python scripts/extract_json_value.py ./lab-artifacts/live/provider-smoke/incident-discovery/incident-discovery-result.json --key provider_enabled 2>/dev/null || echo "")
+            PROVIDER_CONFIGURED=$(.venv/bin/python scripts/extract_json_value.py ./lab-artifacts/live/provider-smoke/incident-discovery/incident-discovery-result.json --key provider_configured 2>/dev/null || echo "")
+            echo "Incident discovery result: failure_class=${FAILURE_CLASS}, incident_id=${INCIDENT_ID}, discovery_status=${DISCOVERY_STATUS}, enrichment_gate_status=${ENRICHMENT_GATE_STATUS}"
             echo "INCIDENT_ID=${INCIDENT_ID}" >> $GITHUB_ENV
             echo "INCIDENT_DISCOVERY_FAILURE_CLASS=${FAILURE_CLASS}" >> $GITHUB_OUTPUT
           fi
@@ -1539,19 +1555,66 @@ jobs:
           # Fail or succeed based on gate result
           if [ ${GATE_RC} -ne 0 ]; then
             echo ""
-            echo "FAILURE: Incident discovery failed: ${FAILURE_CLASS:-unknown_failure}"
-            echo ""
-            echo "The incident was not discovered within the timeout period."
-            echo "Check ./lab-artifacts/live/provider-smoke/incident-discovery/ for diagnostics."
-            echo ""
-            echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
-            echo "PROVIDER_SMOKE_CLASS=${FAILURE_CLASS:-incident_discovery_failed}" >> $GITHUB_OUTPUT
-            echo "PROVIDER_SMOKE_PHASE=incident_discovery" >> $GITHUB_OUTPUT
+            # Phase-aware failure message: incident discovery vs LLM enrichment failure
+            # Use ${VAR:-} defaults to protect against missing JSON fields
+            if [ -n "${INCIDENT_ID:-}" ] && [ "${DISCOVERY_STATUS:-}" = "passed" ]; then
+              # Incident was found but gate failed due to enrichment/config issue
+              case "${ENRICHMENT_GATE_STATUS:-}" in
+                disabled)
+                  echo "FAILURE: LLM enrichment failed: ${FAILURE_CLASS:-llm_enrichment_disabled}"
+                  echo ""
+                  echo "Incident discovery: PASSED (incident_id=${INCIDENT_ID})"
+                  echo "LLM enrichment: DISABLED"
+                  if [ -n "${PROVIDER_ENABLED:-}" ]; then
+                    echo "Provider enabled: ${PROVIDER_ENABLED}"
+                  fi
+                  if [ -n "${PROVIDER_CONFIGURED:-}" ]; then
+                    echo "Provider configured: ${PROVIDER_CONFIGURED}"
+                  fi
+                  echo ""
+                  echo "The incident was discovered successfully, but LLM enrichment is disabled or not configured."
+                  echo ""
+                  echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+                  echo "PROVIDER_SMOKE_CLASS=${FAILURE_CLASS:-llm_enrichment_disabled}" >> $GITHUB_OUTPUT
+                  echo "PROVIDER_SMOKE_PHASE=llm_enrichment" >> $GITHUB_OUTPUT
+                  ;;
+                *)
+                  echo "FAILURE: LLM enrichment failed: ${FAILURE_CLASS:-unknown_enrichment_failure}"
+                  echo ""
+                  echo "Incident discovery: PASSED (incident_id=${INCIDENT_ID})"
+                  echo "LLM enrichment: ${ENRICHMENT_GATE_STATUS:-FAILED}"
+                  echo ""
+                  echo "The incident was discovered successfully, but LLM enrichment failed."
+                  echo ""
+                  echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+                  echo "PROVIDER_SMOKE_CLASS=${FAILURE_CLASS:-llm_enrichment_failed}" >> $GITHUB_OUTPUT
+                  echo "PROVIDER_SMOKE_PHASE=llm_enrichment" >> $GITHUB_OUTPUT
+                  ;;
+              esac
+            else
+              # True discovery failure
+              echo "FAILURE: Incident discovery failed: ${FAILURE_CLASS:-unknown_failure}"
+              echo ""
+              case "${FAILURE_CLASS:-}" in
+                incident_discovery_timeout|incident_promoted_not_listed|incident_candidate_not_promoted)
+                  echo "The incident was not discovered within the timeout period."
+                  ;;
+                incident_fixture_missing)
+                  echo "The incident fixture was not found in the namespace."
+                  ;;
+              esac
+              echo ""
+              echo "Check ./lab-artifacts/live/provider-smoke/incident-discovery/ for diagnostics."
+              echo ""
+              echo "PROVIDER_SMOKE_STATUS=fail" >> $GITHUB_OUTPUT
+              echo "PROVIDER_SMOKE_CLASS=${FAILURE_CLASS:-incident_discovery_failed}" >> $GITHUB_OUTPUT
+              echo "PROVIDER_SMOKE_PHASE=incident_discovery" >> $GITHUB_OUTPUT
+            fi
             exit 1
           fi
           
           echo ""
-          echo "SUCCESS: Incident discovered: ${INCIDENT_ID}"
+          echo "SUCCESS: Incident discovered: ${INCIDENT_ID:-unknown}"
           echo "PROVIDER_SMOKE_PHASE=incident_discovery" >> $GITHUB_OUTPUT
           echo "PROVIDER_SMOKE_CLASS=incident_found" >> $GITHUB_OUTPUT
 
