@@ -545,8 +545,8 @@ class TestKubectlBootstrap:
         content = WORKFLOW_LIVE_FILE.read_text()
         
         # Verify cache restore step exists with kubectl in metadata
-        assert "actions/cache/restore@v4" in content, \
-            "Should use actions/cache/restore@v4"
+        assert "actions/cache/restore@v5" in content, \
+            "Should use actions/cache/restore@v5"
         assert "id: cache-kubectl" in content, \
             "Should have id: cache-kubectl step"
         assert "path: ${{ runner.tool_cache }}/kubectl" in content, \
@@ -555,8 +555,8 @@ class TestKubectlBootstrap:
             "Should have kubectl key in cache restore"
         
         # Verify cache save step exists
-        assert "actions/cache/save@v4" in content, \
-            "Should use actions/cache/save@v4"
+        assert "actions/cache/save@v5" in content, \
+            "Should use actions/cache/save@v5"
         
         # Verify the cache metadata contains 'kubectl' but is NOT a shell command
         lines_with_kubectl = [line for line in content.split('\n') if 'kubectl' in line]
@@ -1175,8 +1175,8 @@ class TestOtelLiveLabRunnerContract:
     def test_both_live_labs_use_same_runner(self) -> None:
         """Both CNPG and OTel live labs should use the same spbnix-k8s runner."""
         content_cnpg = WORKFLOW_LIVE_FILE.read_text()
-        content_otel = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
-        content_otel = content_otel.read_text()
+        otel_workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+        content_otel = otel_workflow_path.read_text()
 
         # Extract runs-on for each live lab
         cnpg_match = re.search(r'live-k3s-lab:.*?runs-on:\s*(\S+)', content_cnpg, re.DOTALL)
