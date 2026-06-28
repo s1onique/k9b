@@ -26,6 +26,7 @@ Module organization:
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -37,6 +38,9 @@ from .golden_case_one_pass_enforcement import (
 )
 from .incident_diagnosis_loop_orchestrator import (
     run_one_read_only_diagnosis_loop_pass,
+)
+from .incident_diagnosis_review_packet import (
+    write_diagnosis_review_packet,
 )
 from .incident_diagnosis_types import (
     IncidentDiagnosisServiceResult,
@@ -172,9 +176,21 @@ def run_incident_one_pass_diagnosis(
             error=f"Diagnosis provider error: {exc}",
         )
 
-    # Step 4: Run one-pass orchestrator
-    run_id = f"service-{incident_id}-{resolved_now.strftime('%Y%m%d-%H%M%S')}"
+    # Step 4: Generate run IDs and emit started event
+    # NOTE: run_id must use "auto-" prefix so find_latest_review_packet() can locate
+    # the packet (it searches for "auto-{incident_id}-*" pattern)
+    run_id = f"auto-{incident_id}-{resolved_now.strftime('%Y%m%d%H%M%S')}"
+    collector_run_id = f"auto-{resolved_now.strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
 
+    # Emit diagnosis_loop_started event BEFORE orchestrator runs
+    # This ensures Phase 4 sees loop_status != "not_run" even if subsequent steps fail
+    store.mark_diagnosis_loop_started(
+        incident_id=incident_id,
+        run_id=run_id,
+        collector_run_id=collector_run_id,
+    )
+
+    # Step 5: Run one-pass orchestrator
     # Import LiveCommandGuard for golden-case mode
     handler_invocations: list[dict[str, Any]] = []
     orchestrator_result: dict[str, Any] = {}
@@ -353,7 +369,62 @@ def run_incident_one_pass_diagnosis(
                 error=f"Fake-handler enforcement failed: {exc}",
             )
 
-    # Step 14: Persist diagnosis artifact
+    # Step 14: Persist review packet and emit completed event
+    # This must happen BEFORE returning so Phase 4 sees persisted state
+    review_packet_written = False
+    review_packet_name: str | None = None
+
+    # Compute provider proof fields early for error returns
+    provider_configured, provider_invoked = get_provider_proof_fields(request.diagnosis_provider)
+
+    try:
+        # Write review packet for operator/ChatGPT review
+        # This makes automatic_diagnosis_review.available=true in Phase 4
+        review_packet_meta = write_diagnosis_review_packet(
+            external_analysis_dir=request.external_analysis_dir,
+            incident_id=incident_id,
+            collector_run_id=collector_run_id,
+            run_id=run_id,
+            decision=str(orchestrator_result.get("decision", "")),
+            checks_requested=0,  # Not available from orchestrator result
+            checks_run=checks_run,
+            checks_skipped=0,  # Not available from orchestrator result
+            checks_rejected=0,  # Not available from orchestrator result
+            eligible=True,
+            eligibility_reason="service-initiated one-pass diagnosis",
+            now=resolved_now,
+            case_file=case_file,
+            orchestrator_result=orchestrator_result,
+        )
+        if review_packet_meta.get("written"):
+            review_packet_written = True
+            review_packet_name = str(review_packet_meta.get("name")) if review_packet_meta.get("name") else None
+    except Exception as exc:
+        # Contract-critical: If review packet write fails, Phase 4 will fail.
+        # Return error to avoid silent partial state.
+        return IncidentDiagnosisServiceResult(
+            incident_id=incident_id,
+            run_id=run_id,
+            error=f"Failed to persist diagnosis review packet: {exc}",
+            provider_configured=provider_configured,
+            provider_invocation_attempted=provider_invoked,
+        )
+
+    # Emit diagnosis_loop_completed event AFTER review packet write succeeds
+    # This makes automatic_diagnosis_loop_summary.status="completed" in Phase 4
+    # Only emit if review packet was written to avoid partial state
+    if review_packet_written:
+        store.mark_diagnosis_loop_completed(
+            incident_id=incident_id,
+            run_id=run_id,
+            collector_run_id=collector_run_id,
+            review_packet_name=review_packet_name,
+            checks_requested=0,
+            checks_run=checks_run,
+            checks_rejected=0,
+        )
+
+    # Step 15: Persist diagnosis artifact (legacy artifact, non-blocking)
     artifact_written = False
     artifact_name: str | None = None
 
@@ -371,9 +442,6 @@ def run_incident_one_pass_diagnosis(
     except Exception:
         # Artifact write failure is non-fatal
         pass
-
-    # Provider proof fields for live-lab smoke testing
-    provider_configured, provider_invoked = get_provider_proof_fields(request.diagnosis_provider)
 
     return IncidentDiagnosisServiceResult(
         schema_version="1.0", incident_id=incident_id, run_id=run_id, category=category,
