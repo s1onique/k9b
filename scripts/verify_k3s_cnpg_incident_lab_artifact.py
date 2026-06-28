@@ -145,6 +145,14 @@ def main() -> int:
     print(f"\nVerifying artifacts in: {artifact_dir}")
     print()
 
+    if not artifact_dir.exists():
+        print(f"ERROR: artifact directory does not exist: {artifact_dir}")
+        return 1
+
+    if not artifact_dir.is_dir():
+        print(f"ERROR: artifact path is not a directory: {artifact_dir}")
+        return 1
+
     ctx = VerificationContext(artifact_dir=artifact_dir, verbose=args.verbose)
     passed = verify_artifact_dir(ctx)
 
