@@ -61,7 +61,9 @@ def write_findings_json(
     succeeded = sum(1 for r in results if r.success)
     
     findings_data = {
+        "scan_completed": True,
         "success": success,
+        "upload_safe": fatal_count == 0 and success,
         "total_files": total,
         "succeeded": succeeded,
         "fatal_count": fatal_count,

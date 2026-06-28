@@ -15,6 +15,8 @@ from typing import Any
 import yaml
 from sanitize_live_lab_artifacts_contract import (
     _FATAL_PATTERNS,
+    _NON_SECRET_AUTH_PATH_SUFFIXES,
+    _NON_SECRET_AUTH_PATHS,
     _SAFE_BOOLEAN_PATTERNS,
     _SAFE_K8S_FIELDS,
     _SENSITIVE_VALUE_FIELDS,
@@ -26,55 +28,30 @@ from sanitize_live_lab_artifacts_contract import (
 
 
 def _is_safe_k8s_field(key: str) -> bool:
-    """Check if a field name is safe Kubernetes vocabulary (not actual secret)."""
     normalized = key.lower().replace("-", "").replace("_", "")
-    # Check exact match first
-    if normalized in _SAFE_K8S_FIELDS:
-        return True
-    # Check if it's a boolean flag containing "token" but not a value
-    if normalized in _SAFE_BOOLEAN_PATTERNS:
-        return True
-    return False
+    return normalized in _SAFE_K8S_FIELDS or normalized in _SAFE_BOOLEAN_PATTERNS
 
 
 def _should_redact_value_for_field(key: str) -> bool:
-    """Check if the VALUE for this field should be redacted."""
     normalized = key.lower().replace("-", "").replace("_", "")
-    # Fields that contain actual secret data
     return normalized in _SENSITIVE_VALUE_FIELDS
 
 
 def _check_for_fatal_patterns(value: str) -> list[str]:
-    """Check if a string value contains fatal patterns."""
-    found = []
-    for pattern in _FATAL_PATTERNS:
-        if pattern.search(value):
-            found.append(pattern.pattern[:50] + "..." if len(pattern.pattern) > 50 else pattern.pattern)
-    return found
+    return [p.pattern[:50] + "..." if len(p.pattern) > 50 else p.pattern
+            for p in _FATAL_PATTERNS if p.search(value)]
 
 
 def _sanitize_string_value(value: str, field_key: str | None = None) -> tuple[str, list[Finding]]:
-    """
-    Sanitize a string value, returning (sanitized_value, findings).
-    """
     if not isinstance(value, str):
         return value, []
-
     findings = []
-    sanitized = value
-
-    # Check for fatal patterns
-    fatal_matches = _check_for_fatal_patterns(value)
-    for match in fatal_matches:
-        findings.append(Finding(
-            kind=FindingKind.FATAL,
-            message=f"Found credential pattern: {match}",
-            file="",
-            context=field_key,
-        ))
-        sanitized = REDACTION_PLACEHOLDER
-
-    return sanitized, findings
+    for match in _check_for_fatal_patterns(value):
+        findings.append(Finding(kind=FindingKind.FATAL,
+            message=f"Found credential pattern: {match}", file="", context=field_key))
+    if findings:
+        return REDACTION_PLACEHOLDER, findings
+    return value, findings
 
 
 def _sanitize_secret_object(data: Mapping[str, Any], file_path: str) -> tuple[dict[str, Any], list[Finding]]:
@@ -191,6 +168,16 @@ def _sanitize_sequence(
     return sanitized, findings
 
 
+def _is_non_secret_auth_path(current_path: str) -> bool:
+    """Check if path is a known non-secret auth configuration."""
+    if current_path in _NON_SECRET_AUTH_PATHS:
+        return True
+    for suffix in _NON_SECRET_AUTH_PATH_SUFFIXES:
+        if current_path.endswith(suffix):
+            return True
+    return False
+
+
 def _sanitize_mapping(
     data: Mapping[str, Any],
     parent_key: str | None = None,
@@ -257,20 +244,42 @@ def _sanitize_mapping(
 
         # Check if this field's value should be redacted
         if _should_redact_value_for_field(key_str):
+            # Build the current path for allowlist check
+            current_path = key_str if parent_key is None else f"{parent_key}.{key_str}"
+            
+            # Not a sensitive field - process normally
             if isinstance(value, str):
                 sanitized_value, sub_findings = _sanitize_string_value(value, key_str)
                 sanitized[key_str] = sanitized_value
                 findings.extend(sub_findings)
             elif isinstance(value, Mapping):
-                # Complex structure - redact all string values
+                # Complex structure under sensitive field - need to check each child against allowlist
                 sanitized[key_str] = {}
                 for sub_key, sub_value in value.items():
-                    if isinstance(sub_value, str):
+                    sub_path = f"{current_path}.{sub_key}"
+                    # Check if this specific path is in the allowlist
+                    if _is_non_secret_auth_path(sub_path):
+                        # Allowlist match: keep the value, but still check for embedded patterns
+                        if isinstance(sub_value, str):
+                            sanitized_value, sub_findings = _sanitize_string_value(sub_value, sub_key)
+                            sanitized[key_str][sub_key] = sanitized_value
+                            findings.extend(sub_findings)
+                        elif isinstance(sub_value, Mapping):
+                            # Recursively sanitize nested objects
+                            sanitized[key_str][sub_key], sub_findings = _sanitize_mapping(sub_value, sub_path, file_path)
+                            findings.extend(sub_findings)
+                        elif isinstance(sub_value, list):
+                            sanitized[key_str][sub_key], sub_findings = _sanitize_sequence(sub_value, sub_path, file_path)
+                            findings.extend(sub_findings)
+                        else:
+                            sanitized[key_str][sub_key] = sub_value
+                    elif isinstance(sub_value, str):
+                        # Not in allowlist - redact string values
                         findings.append(Finding(
                             kind=FindingKind.FATAL,
-                            message=f"Credential data in {key_str}.{sub_key} redacted",
+                            message=f"Credential data in {current_path}.{sub_key} redacted",
                             file=file_path,
-                            context=f"{key_str}.{sub_key}",
+                            context=sub_path,
                         ))
                         sanitized[key_str][sub_key] = REDACTION_PLACEHOLDER
                     else:

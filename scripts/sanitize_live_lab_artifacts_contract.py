@@ -87,6 +87,47 @@ _FATAL_PATTERNS: list[re.Pattern[str]] = [
 ]
 
 
+# Known non-secret configuration paths that should NOT trigger redaction.
+# These are auth configuration fields like mode, enabled, provider, etc.
+# that contain safe enum/string values, not actual credentials.
+# Format: dot-separated path from root, with container names joined.
+_NON_SECRET_AUTH_PATHS: frozenset[str] = frozenset({
+    # Top-level auth configuration
+    "auth.mode",
+    "auth.enabled",
+    "auth.provider",
+    "auth.secureCookie",
+    "auth.sessionCookieName",
+    "auth.sessionMaxAgeSeconds",
+    "auth.sessionIdleTimeoutSeconds",
+    # Nested backend auth configuration
+    "backend.auth.mode",
+    "backend.auth.enabled",
+    "backend.auth.provider",
+    "backend.auth.secureCookie",
+    "backend.auth.sessionCookieName",
+    "backend.auth.sessionMaxAgeSeconds",
+    "backend.auth.sessionIdleTimeoutSeconds",
+    # Additional common auth config fields
+    "auth.cookieSecure",
+    "backend.auth.cookieSecure",
+    "auth.tlsEnabled",
+    "backend.auth.tlsEnabled",
+    "auth.oidcProviderUrl",
+    "backend.auth.oidcProviderUrl",
+})
+
+
+# Suffix patterns for nested auth config paths (e.g., values.auth.mode)
+_NON_SECRET_AUTH_PATH_SUFFIXES: frozenset[str] = frozenset({
+    ".auth.mode",
+    ".auth.enabled",
+    ".auth.provider",
+    ".backend.auth.mode",
+    ".backend.auth.enabled",
+})
+
+
 # Sensitive field names that should trigger redaction of VALUES (not keys)
 # These are field names that contain actual credential data
 # NOTE: "data", "stringdata", "binarydata" are handled specially for Secrets
@@ -100,13 +141,14 @@ _SENSITIVE_VALUE_FIELDS: frozenset[str] = frozenset({
     "client-key",
     "client-certificate",
     "password",
+    # Auth container (values nested under auth.* may be sensitive)
+    "auth",
+    # Auth-related credential fields
+    "authorization",
     # Generic credentials
     "secret",
     "credential",
     "credentials",
-    # Auth headers
-    "authorization",
-    "auth",
     # Private keys
     "privatekey",
     "private-key",
