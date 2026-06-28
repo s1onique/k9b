@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
@@ -59,7 +59,7 @@ jobs:
       package_file: ${{ steps.package.outputs.package_file }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
@@ -102,7 +102,7 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
