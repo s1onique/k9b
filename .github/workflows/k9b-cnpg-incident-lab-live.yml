@@ -106,7 +106,7 @@ jobs:
       # =======================================================================
       - name: Restore kubectl tool cache
         id: cache-kubectl
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ${{ runner.tool_cache }}/kubectl
           key: kubectl-${{ runner.os }}-${{ runner.arch }}-${{ env.KUBECTL_VERSION }}
@@ -126,7 +126,7 @@ jobs:
       # =======================================================================
       - name: Save kubectl tool cache
         if: steps.cache-kubectl.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ${{ runner.tool_cache }}/kubectl
           key: ${{ steps.cache-kubectl.outputs.cache-primary-key }}
@@ -143,12 +143,52 @@ jobs:
         run: helm version --short
 
       # =======================================================================
+      # Restore Python tool cache (for ephemeral K8s runners)
+      # Ephemeral pods lose the tool cache between jobs, so we restore from
+      # GitHub Actions cache and save back after setup-python.
+      # =======================================================================
+      - name: Restore Python tool cache
+        id: cache-python
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
+
+      # =======================================================================
+      # Show Python tool cache before setup-python (diagnostic)
+      # =======================================================================
+      - name: Show Python tool cache before setup-python
+        run: |
+          echo "RUNNER_NAME=${RUNNER_NAME:-<unset>}"
+          echo "RUNNER_OS=${RUNNER_OS:-<unset>}"
+          echo "RUNNER_ARCH=${RUNNER_ARCH:-<unset>}"
+          echo "RUNNER_TOOL_CACHE=${RUNNER_TOOL_CACHE:-<unset>}"
+          echo "runner.tool_cache=${{ runner.tool_cache }}"
+          find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type d -print 2>/dev/null | sort || true
+          find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type f -name '*.complete' -print 2>/dev/null | sort || true
+
+      # =======================================================================
       # Setup Python environment (needed for preflight scripts)
       # =======================================================================
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
+          cache: 'pip'
+
+      # =======================================================================
+      # Save Python tool cache (for ephemeral K8s runners)
+      # Saves cache immediately after setup-python (even if job fails later).
+      # Only saves when there was a cache miss (cache-hit != 'true').
+      # continue-on-error: true avoids failing if another parallel job saved first.
+      # =======================================================================
+      - name: Save Python tool cache
+        if: steps.cache-python.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
 
       - name: Create virtual environment
         run: python -m venv .venv
