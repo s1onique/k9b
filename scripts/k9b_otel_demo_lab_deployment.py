@@ -278,13 +278,16 @@ def phase1_deploy_otel_demo(config: LabConfig, artifact_dir: Path) -> LabPhaseRe
     ]
 
     # Minimal values to enable feature flags
+    # Note: Chart 0.40.9 has additionalProperties:false at root, so flagd and
+    # recommendation must be nested under components (not at root level).
     values = """
-recommendation:
-  featureFlags:
-    - name: recommendationServiceCacheFailure
-      enabled: false
-flagd:
-  enabled: true
+components:
+  recommendation:
+    featureFlags:
+      - name: recommendationServiceCacheFailure
+        enabled: false
+  flagd:
+    enabled: true
 """
 
     log(f"Installing OTel Demo to namespace {config.namespace}")

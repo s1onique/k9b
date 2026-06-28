@@ -491,3 +491,5 @@ class TestHelmChartVersionHandling:
         # Should fail during install with version classification
         assert result.success is False
         assert "failure_classification" in result.artifacts
+
+
