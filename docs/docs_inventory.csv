@@ -121,3 +121,13 @@ docs/security/llm-requirements-na-rag-mcp-self-hosted.md,reference,current,secur
 docs/security/llm-security-requirements-register.md,reference,current,security,,,true,LLM security requirements register index
 docs/security/llm-trust-levels.md,reference,current,security,,,true,LLM prompt context trust levels
 docs/security/read-only-agent-boundary.md,reference,current,security,,,true,Read-only agent boundary documentation
+docs/labs/cnpg-vs-otel-lab-contract-comparison.md,architecture,current,labs,,,false,CNPG vs OTel lab contract comparison - identifies shared vs lab-specific phases and parity gaps
+docs/labs/k3s-cnpg-incident-lab.md,reference,current,labs,,,false,K3s CNPG incident lab entrypoint
+docs/labs/k3s-cnpg-incident-lab-architecture.md,architecture,current,labs,,,false,K3s CNPG incident lab architecture and design
+docs/labs/k3s-cnpg-incident-lab-contract.md,reference,current,labs,,,false,K3s CNPG incident lab artifact contracts and schemas
+docs/labs/k3s-cnpg-incident-lab-runbook.md,runbook,current,labs,,,false,K3s CNPG incident lab runbook
+docs/labs/pod-failure-golden-case.md,reference,current,labs,,,false,Pod failure golden case for CNPG incident lab
+docs/provider-smoke-test.md,reference,stale,labs,,,false,Provider smoke test documentation - needs review
+docs/diagnosis-provider.md,reference,stale,labs,,,false,Diagnosis provider documentation - needs review
+docs/doctrine/no-force-push.md,doctrine,current,doctrine,,,false,No-force-push doctrine
+docs/doctrine/no-new-llm-large-file-allowlist.md,doctrine,current,doctrine,,,false,No new LLM large file allowlist doctrine
