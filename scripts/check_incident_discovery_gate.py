@@ -135,8 +135,42 @@ def main() -> int:
         print(f"Discovery time: {result.total_elapsed_seconds:.1f}s after {result.poll_count} polls", flush=True)
         return 0
     else:
-        print(f"\nIncident discovery gate FAILED: {result.failure_class}", flush=True)
-        print(f"Final HTTP statuses: {', '.join(set(result.http_status_codes_seen[-3:]))}", flush=True)
+        # Use phase-aware failure message
+        if result.failure_class == "llm_enrichment_disabled" and result.incident_id:
+            # Incident was found but enrichment failed because provider is disabled
+            print("\nIncident discovery gate FAILED", flush=True)
+            print(f"  Incident discovered: {result.incident_id}", flush=True)
+            print("  Discovery status: PASSED", flush=True)
+            print("  LLM enrichment status: DISABLED", flush=True)
+            print(f"  Failure class: {result.failure_class}", flush=True)
+            print(f"  Provider enabled: {result.provider_enabled}", flush=True)
+            print(f"  Provider configured: {result.provider_configured}", flush=True)
+        elif result.failure_class == "llm_enrichment_disabled" and not result.incident_id:
+            # No incident found AND enrichment disabled - this is an unexpected state
+            # but we should not use the misleading "not discovered within timeout" wording
+            print(f"\nIncident discovery gate FAILED: {result.failure_class}", flush=True)
+            print("  Incident discovered: No", flush=True)
+            print(f"  Failure class: {result.failure_class}", flush=True)
+        elif result.discovery_status == "passed" and result.enrichment_gate_status in ("disabled", "failed"):
+            # Phase separation: discovery passed but enrichment failed
+            print("\nIncident discovery gate FAILED", flush=True)
+            print(f"  Incident discovered: {result.incident_id or 'unknown'}", flush=True)
+            print("  Discovery status: PASSED", flush=True)
+            print(f"  LLM enrichment status: {result.enrichment_gate_status.upper()}", flush=True)
+            print(f"  Failure class: {result.failure_class}", flush=True)
+            if result.provider_enabled is not None:
+                print(f"  Provider enabled: {result.provider_enabled}", flush=True)
+            if result.provider_configured is not None:
+                print(f"  Provider configured: {result.provider_configured}", flush=True)
+        else:
+            # True discovery failures
+            print(f"\nIncident discovery gate FAILED: {result.failure_class}", flush=True)
+            if result.failure_class == "incident_fixture_missing":
+                print(f"  Incident fixture '{result.fixture_name}' was not found in namespace '{result.fixture_namespace}'.", flush=True)
+            elif result.failure_class in ("incident_discovery_timeout", "incident_promoted_not_listed",
+                                        "incident_candidate_not_promoted"):
+                print("  The incident was not discovered within the timeout period.", flush=True)
+            print(f"  Discovery status: {result.discovery_status or 'failed'}", flush=True)
         print(f"Artifacts: {artifact_dir}/", flush=True)
         return 1
 

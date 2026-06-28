@@ -208,5 +208,99 @@ class TestContractScenarios:
         assert result.discovery_status == "failed"
 
 
+class TestTerminalOutputBehavior:
+    """Test terminal output behavior for enrichment-disabled scenarios.
+    
+    Regression tests for the bug where terminal output said:
+    "Incident discovery failed: llm_enrichment_disabled"
+    "The incident was not discovered within the timeout period."
+    
+    When incident was actually found.
+    """
+
+    def test_failure_display_shows_enrichment_when_incident_found(self) -> None:
+        """When incident found + enrichment disabled, failure_display attributes to enrichment."""
+        result = IncidentDiscoveryResult()
+        result.passed = False
+        result.incident_found = True
+        result.incident_id = "test-incident-456"
+        result.failure_class = "llm_enrichment_disabled"
+        result.discovery_status = "passed"
+        result.enrichment_gate_status = "disabled"
+        
+        summary = render_bounded_summary(result)
+        # Must NOT say "was not discovered"
+        assert "was not discovered" not in summary.lower()
+        # Should attribute failure to enrichment
+        assert "enrichment: llm_enrichment_disabled" in summary
+
+    def test_failure_display_shows_phase_status_correctly(self) -> None:
+        """Summary shows discovery: PASSED when incident found even if overall failed."""
+        result = IncidentDiscoveryResult()
+        result.passed = False
+        result.incident_found = True
+        result.incident_id = "test-incident-789"
+        result.failure_class = "llm_enrichment_disabled"
+        result.discovery_status = "passed"
+        result.enrichment_gate_status = "disabled"
+        
+        summary = render_bounded_summary(result)
+        assert "Incident discovery: PASSED" in summary
+        assert "LLM enrichment: DISABLED" in summary
+
+    def test_true_timeout_scenario_shows_timeout_message(self) -> None:
+        """True discovery timeout should show timeout message."""
+        result = IncidentDiscoveryResult()
+        result.passed = False
+        result.incident_found = False
+        result.failure_class = "incident_discovery_timeout"
+        result.discovery_status = "failed"
+        result.poll_count = 12
+        result.total_elapsed_seconds = 120.0
+        
+        summary = render_bounded_summary(result)
+        assert "Incident discovery: FAILED" in summary
+        # For true discovery failures, the timeout message is appropriate in bounded summary
+
+    def test_llm_enrichment_failure_prefixed_in_summary(self) -> None:
+        """LLM enrichment failures should be prefixed with 'enrichment:' in failure_display."""
+        llm_failures = [
+            "llm_enrichment_disabled",
+            "llm_provider_not_configured",
+            "llm_provider_secret_missing",
+            "llm_provider_env_missing",
+            "llm_provider_client_not_invoked",
+        ]
+        
+        for failure_class in llm_failures:
+            result = IncidentDiscoveryResult()
+            result.passed = False
+            result.incident_found = True
+            result.incident_id = f"test-{failure_class}"
+            result.failure_class = failure_class
+            result.discovery_status = "passed"
+            result.enrichment_gate_status = "failed"
+            
+            summary = render_bounded_summary(result)
+            assert f"enrichment: {failure_class}" in summary, f"Failed for {failure_class}"
+            assert "was not discovered" not in summary.lower()
+
+    def test_post_discovery_failure_uses_post_discovery_prefix(self) -> None:
+        """Post-discovery failures (not enrichment) should be attributed as 'post-discovery:'."""
+        result = IncidentDiscoveryResult()
+        result.passed = False
+        result.incident_found = True
+        result.incident_id = "test-incident-123"
+        result.failure_class = "some_other_failure"
+        result.discovery_status = "passed"
+        result.enrichment_gate_status = ""  # Not enrichment-related
+        
+        summary = render_bounded_summary(result)
+        # Should use neutral post-discovery attribution, not enrichment
+        assert "post-discovery: some_other_failure" in summary
+        assert "enrichment: some_other_failure" not in summary
+        assert "was not discovered" not in summary.lower()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

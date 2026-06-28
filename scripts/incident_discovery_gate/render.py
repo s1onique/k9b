@@ -111,9 +111,18 @@ def render_bounded_summary(result: IncidentDiscoveryResult) -> str:
     discovery_status = result.discovery_status or ("passed" if result.incident_found else "failed")
     enrichment_status = result.enrichment_gate_status or "skipped"
     
-    # Never say "incident was not discovered" if incident_id is present
-    if result.incident_id and "was not discovered" in str(result.failure_class or ""):
+    # Build failure_display with clear phase attribution
+    # Never attribute enrichment failures to discovery
+    if result.incident_id and result.failure_class == "llm_enrichment_disabled":
         failure_display = f"enrichment: {result.failure_class}"
+    elif result.incident_id and result.failure_class and result.failure_class.startswith("llm_"):
+        failure_display = f"enrichment: {result.failure_class}"
+    elif result.incident_id and result.enrichment_gate_status in ("disabled", "failed"):
+        # Incident found but enrichment failed - attribute to enrichment phase
+        failure_display = f"enrichment: {result.failure_class or '(unknown)'}"
+    elif result.incident_id:
+        # Incident found but overall failed - post-discovery failure (neutral attribution)
+        failure_display = f"post-discovery: {result.failure_class or '(unknown)'}"
     else:
         failure_display = result.failure_class or "(none)"
     
