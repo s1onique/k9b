@@ -156,6 +156,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     if: github.event_name == 'workflow_dispatch' && inputs.run_live_lab == true
+    environment: k9b-live-lab-admin
     permissions:
       contents: read
     steps:
@@ -189,19 +190,20 @@ jobs:
 
       - name: Configure kubectl
         env:
-          KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG }}
+          KUBECONFIG_B64: ${{ secrets.K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 }}
         run: |
           set -euo pipefail
+
+          if [[ -z "${KUBECONFIG_B64:-}" ]]; then
+            echo "::error::secrets.K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 is empty or unavailable for this workflow run"
+            echo "::error::Check environment attachment, secret name, and workflow trigger (fork/PR/Dependabot blocks secrets)"
+            exit 1
+          fi
 
           mkdir -p "$RUNNER_TEMP/kubeconfig"
           KUBECONFIG_PATH="$RUNNER_TEMP/kubeconfig/k9b-otel-demo"
 
-          if [[ -z "${KUBECONFIG_CONTENT//[[:space:]]/}" ]]; then
-            echo "::error title=Missing KUBECONFIG secret::secrets.KUBECONFIG is empty or unavailable for this workflow run"
-            exit 1
-          fi
-
-          printf '%s' "$KUBECONFIG_CONTENT" > "$KUBECONFIG_PATH"
+          printf '%s' "$KUBECONFIG_B64" | base64 -d > "$KUBECONFIG_PATH"
           chmod 600 "$KUBECONFIG_PATH"
 
           echo "KUBECONFIG=$KUBECONFIG_PATH" >> "$GITHUB_ENV"
