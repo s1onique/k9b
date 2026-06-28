@@ -7,15 +7,16 @@ Verifies:
 - Diagnostic collection on failure
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.incident_discovery_gate.collect import (
+    _BACKEND_LABEL_SELECTORS,
+    _find_pods_with_selector,
     _get_deployment_selector,
     _get_service_selector,
     get_backend_pod_info,
-    _find_pods_with_selector,
-    _BACKEND_LABEL_SELECTORS,
 )
 
 
