@@ -8,6 +8,7 @@ This module tests:
 """
 
 import json
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -36,8 +37,10 @@ def _write_review_artifact(
     instance_suffix: str = "",
 ) -> Path:
     """Write a mock review artifact and return its path."""
-    uuid = f"test-{hash((run_id, relevance, str(provenance), instance_suffix))}"[:8]
-    filename = f"{run_id}-next-check-execution-alertmanager-review-{uuid}.json"
+    # Use uuid.uuid4() instead of hash() to avoid Python's random hash seed
+    # which causes non-deterministic behavior across test runs/CI processes
+    unique_id = uuid.uuid4().hex[:8]
+    filename = f"{run_id}-next-check-execution-alertmanager-review-{unique_id}.json"
     path = dir / filename
 
     artifact = {
