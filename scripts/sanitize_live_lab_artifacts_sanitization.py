@@ -25,6 +25,10 @@ from sanitize_live_lab_artifacts_contract import (
     FindingKind,
     SanitizationResult,
 )
+from sanitize_live_lab_artifacts_embedded import (
+    _sanitize_embedded_manifest_string,
+    _sanitize_secret_object,
+)
 
 
 def _is_safe_k8s_field(key: str) -> bool:
@@ -42,81 +46,47 @@ def _check_for_fatal_patterns(value: str) -> list[str]:
             for p in _FATAL_PATTERNS if p.search(value)]
 
 
-def _sanitize_string_value(value: str, field_key: str | None = None) -> tuple[str, list[Finding]]:
+def _sanitize_string_value(
+    value: str,
+    field_key: str | None = None,
+    file_path: str = "",
+) -> tuple[str, list[Finding]]:
     if not isinstance(value, str):
         return value, []
+    
+    # Check for embedded Kubernetes manifests FIRST (before credential patterns)
+    # This ensures Secret manifests get proper sanitization instead of being
+    # redacted wholesale with <REDACTED> due to credential patterns inside
+    sanitized_manifest, manifest_findings = _sanitize_embedded_manifest_string(
+        value,
+        field_key=field_key,
+        file_path=file_path,
+    )
+    if manifest_findings:
+        # After sanitizing embedded manifests, check for residual credential patterns
+        # in the sanitized result (e.g., ConfigMap with private_key among Secrets)
+        fatal_findings = [
+            Finding(
+                kind=FindingKind.FATAL,
+                message=f"Found credential pattern: {match}",
+                file=file_path,
+                context=field_key,
+            )
+            for match in _check_for_fatal_patterns(sanitized_manifest)
+        ]
+        if fatal_findings:
+            return REDACTION_PLACEHOLDER, [*manifest_findings, *fatal_findings]
+        return sanitized_manifest, manifest_findings
+    
+    # Only check for credential patterns if no embedded manifests were found
     findings = []
     for match in _check_for_fatal_patterns(value):
         findings.append(Finding(kind=FindingKind.FATAL,
-            message=f"Found credential pattern: {match}", file="", context=field_key))
+            message=f"Found credential pattern: {match}", file=file_path, context=field_key))
     if findings:
         return REDACTION_PLACEHOLDER, findings
-    return value, findings
-
-
-def _sanitize_secret_object(data: Mapping[str, Any], file_path: str) -> tuple[dict[str, Any], list[Finding]]:
-    """
-    Object-level sanitization for Kubernetes Secret manifests.
     
-    This is an EARLY RETURN function - it handles Secret objects at the object level
-    BEFORE iterating over keys, preventing the original data/stringData/binaryData
-    keys from being processed and potentially leaking into output.
-    
-    Returns (sanitized_data, findings).
-    """
-    findings: list[Finding] = []
-    sanitized: dict[str, Any] = {}
-
-    # Keep metadata as-is (contains safe information like name, namespace, labels)
-    if "metadata" in data:
-        sanitized["metadata"] = dict(data["metadata"])
-    
-    # Keep the kind field
-    if "kind" in data:
-        sanitized["kind"] = data["kind"]
-    
-    # Keep apiVersion if present
-    if "apiVersion" in data:
-        sanitized["apiVersion"] = data["apiVersion"]
-    
-    # Keep type if present (Opaque, kubernetes.io/tls, etc.)
-    if "type" in data:
-        sanitized["type"] = data["type"]
-    
-    # Mark that this was a Secret and its data fields were redacted
-    sanitized["_sanitized"] = "secret"
-    
-    # Redact data field (base64-encoded sensitive values)
-    if "data" in data:
-        sanitized["data"] = {"<redacted>": "contains base64-encoded secret values"}
-        findings.append(Finding(
-            kind=FindingKind.WARNING,
-            message="Secret.data field redacted (contains sensitive values)",
-            file=file_path,
-            context="Secret.data",
-        ))
-    
-    # Redact stringData field (plaintext input that gets merged into data)
-    if "stringData" in data:
-        sanitized["stringData"] = {"<redacted>": "contains plaintext secret values"}
-        findings.append(Finding(
-            kind=FindingKind.WARNING,
-            message="Secret.stringData field redacted (contains sensitive values)",
-            file=file_path,
-            context="Secret.stringData",
-        ))
-    
-    # Redact binaryData field (base64-encoded binary sensitive values)
-    if "binaryData" in data:
-        sanitized["binaryData"] = {"<redacted>": "contains binary secret values"}
-        findings.append(Finding(
-            kind=FindingKind.WARNING,
-            message="Secret.binaryData field redacted (contains sensitive values)",
-            file=file_path,
-            context="Secret.binaryData",
-        ))
-    
-    return sanitized, findings
+    return value, []
 
 
 def _sanitize_value(
@@ -139,7 +109,7 @@ def _sanitize_value(
     if isinstance(value, list):
         return _sanitize_sequence(value, parent_key, file_path)
     if isinstance(value, str):
-        return _sanitize_string_value(value, parent_key)
+        return _sanitize_string_value(value, parent_key, file_path)
     return value, []
 
 
@@ -195,7 +165,9 @@ def _sanitize_mapping(
     # This prevents the original data/stringData/binaryData keys from being
     # processed later in the loop and potentially leaking into output
     if str(data.get("kind", "")).lower() == "secret":
-        return _sanitize_secret_object(data, file_path)
+        # Cast needed: _sanitize_secret_object returns tuple[dict, list[Finding]]
+        # but _sanitize_mapping returns tuple[Any, list[Finding]]
+        return _sanitize_secret_object(data, file_path)  # type: ignore[no-any-return]
 
     for key, value in data.items():
         key_str = str(key)
@@ -249,7 +221,7 @@ def _sanitize_mapping(
             
             # Not a sensitive field - process normally
             if isinstance(value, str):
-                sanitized_value, sub_findings = _sanitize_string_value(value, key_str)
+                sanitized_value, sub_findings = _sanitize_string_value(value, key_str, file_path)
                 sanitized[key_str] = sanitized_value
                 findings.extend(sub_findings)
             elif isinstance(value, Mapping):
@@ -261,7 +233,7 @@ def _sanitize_mapping(
                     if _is_non_secret_auth_path(sub_path):
                         # Allowlist match: keep the value, but still check for embedded patterns
                         if isinstance(sub_value, str):
-                            sanitized_value, sub_findings = _sanitize_string_value(sub_value, sub_key)
+                            sanitized_value, sub_findings = _sanitize_string_value(sub_value, sub_key, file_path)
                             sanitized[key_str][sub_key] = sanitized_value
                             findings.extend(sub_findings)
                         elif isinstance(sub_value, Mapping):
@@ -296,7 +268,7 @@ def _sanitize_mapping(
 
         # Safe Kubernetes field - keep value but check for embedded secrets
         if isinstance(value, str):
-            sanitized_value, sub_findings = _sanitize_string_value(value, key_str)
+            sanitized_value, sub_findings = _sanitize_string_value(value, key_str, file_path)
             sanitized[key_str] = sanitized_value
             findings.extend(sub_findings)
         elif isinstance(value, Mapping):
