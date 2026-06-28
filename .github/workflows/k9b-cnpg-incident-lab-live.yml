@@ -1641,6 +1641,7 @@ jobs:
           
           echo ""
           echo "SUCCESS: Incident discovered: ${INCIDENT_ID:-unknown}"
+          echo "INCIDENT_DISCOVERY_STATUS=passed" >> $GITHUB_OUTPUT
           echo "PROVIDER_SMOKE_PHASE=incident_discovery" >> $GITHUB_OUTPUT
           echo "PROVIDER_SMOKE_CLASS=incident_found" >> $GITHUB_OUTPUT
 
@@ -1795,6 +1796,150 @@ jobs:
           
           # Clean up raw temp directory now that sanitized artifacts are written
           rm -rf "${PROVIDER_RAW_TMP}"
+
+      # =======================================================================
+      # Phase 4: Persisted Diagnosis Contract Gate
+      # Only runs if Phase 3 (provider route smoke) passed.
+      # Fetches the incident after one-pass diagnosis to verify persisted state.
+      # =======================================================================
+      - name: "Phase 4: Persisted Diagnosis Contract Gate"
+        id: persisted-diagnosis-contract
+        if: inputs.enable_provider_smoke == true && steps.one-pass-diagnosis.outputs.PROVIDER_SMOKE_STATUS == 'pass'
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Phase 4: Persisted Diagnosis Contract Gate ==="
+          
+          INCIDENT_ID="${INCIDENT_ID}"
+          if [[ -z "$INCIDENT_ID" ]]; then
+            echo "ERROR: No incident ID from phase 2"
+            echo "PERSISTED_DIAGNOSIS_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PERSISTED_DIAGNOSIS_CLASS=missing_incident_id" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          BACKEND_SVC="k9b-backend"
+          BACKEND_PORT="8080"
+          
+          # Create temp directory for raw response (outside lab-artifacts/live)
+          # Use RUNNER_TEMP which is cleaned between runs and not uploaded
+          PERSISTED_RAW_TMP="${RUNNER_TEMP}/persisted-diagnosis-raw"
+          mkdir -p "${PERSISTED_RAW_TMP}"
+          mkdir -p ./lab-artifacts/live/provider-smoke/persisted-diagnosis
+          
+          # Fetch the incident after one-pass diagnosis
+          echo "Fetching incident ${INCIDENT_ID} to verify persisted diagnosis state..."
+          set +e
+          HTTP_OUTPUT=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "$LAB_NAMESPACE" \
+            deploy/${BACKEND_SVC} -c backend -- \
+            curl -sS -X GET \
+            "http://localhost:${BACKEND_PORT}/api/incidents/${INCIDENT_ID}" \
+            -w "\n%{http_code}" \
+            --max-time 60 2>&1)
+          API_RC=$?
+          set -e
+          
+          # Parse HTTP status from last line
+          HTTP_STATUS=$(echo "$HTTP_OUTPUT" | tail -1)
+          RESPONSE_BODY=$(echo "$HTTP_OUTPUT" | sed '$d')
+          
+          echo "Incident fetch HTTP status: ${HTTP_STATUS}"
+          
+          # Fail immediately on non-200 HTTP status
+          if [[ "$HTTP_STATUS" != "200" ]]; then
+            echo "ERROR: Incident fetch failed with HTTP ${HTTP_STATUS}"
+            echo "PERSISTED_DIAGNOSIS_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PERSISTED_DIAGNOSIS_CLASS=incident_fetch_http_error" >> $GITHUB_OUTPUT
+            echo "PERSISTED_DIAGNOSIS_HTTP=${HTTP_STATUS}" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "Incident fetch: HTTP 200 OK"
+          
+          # Save raw response to temp directory (never in lab-artifacts/live)
+          echo "$RESPONSE_BODY" > "${PERSISTED_RAW_TMP}/incident-response.json"
+          echo "$HTTP_STATUS" > "${PERSISTED_RAW_TMP}/http-status.txt"
+          
+          # Validate JSON before proceeding
+          if ! echo "$RESPONSE_BODY" | .venv/bin/python scripts/validate_json.py 2>/dev/null; then
+            echo "ERROR: Invalid JSON response from incident fetch (HTTP ${HTTP_STATUS})"
+            echo "PERSISTED_DIAGNOSIS_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PERSISTED_DIAGNOSIS_CLASS=invalid_incident_json" >> $GITHUB_OUTPUT
+            echo "PERSISTED_DIAGNOSIS_HTTP=${HTTP_STATUS}" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "JSON validation passed"
+          echo "PERSISTED_DIAGNOSIS_HTTP=${HTTP_STATUS}" >> $GITHUB_OUTPUT
+          
+          # =======================================================================
+          # Verify persisted diagnosis contract using dedicated script
+          # =======================================================================
+          echo ""
+          echo "Running persisted diagnosis contract verification..."
+          set +e
+          .venv/bin/python scripts/check_persisted_diagnosis_contract.py \
+            --incident-json "${PERSISTED_RAW_TMP}/incident-response.json" \
+            --output-dir ./lab-artifacts/live/provider-smoke/persisted-diagnosis \
+            --incident-http-status ${HTTP_STATUS} \
+            --require-provider-invoked
+          CONTRACT_RC=$?
+          set -e
+          
+          if [ ${CONTRACT_RC} -ne 0 ]; then
+            echo ""
+            echo "Persisted diagnosis contract FAILED"
+            
+            # Extract failure class from result
+            if [ -f ./lab-artifacts/live/provider-smoke/persisted-diagnosis/persisted-diagnosis-result.json ]; then
+              FAILURE_CLASS=$(.venv/bin/python scripts/extract_json_value.py \
+                ./lab-artifacts/live/provider-smoke/persisted-diagnosis/persisted-diagnosis-result.json \
+                --key failure_class 2>/dev/null || echo "unknown")
+              echo "PERSISTED_DIAGNOSIS_CLASS=${FAILURE_CLASS}" >> $GITHUB_OUTPUT
+            fi
+            
+            echo "PERSISTED_DIAGNOSIS_STATUS=fail" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo ""
+          echo "Persisted diagnosis contract PASSED"
+          echo "PERSISTED_DIAGNOSIS_STATUS=pass" >> $GITHUB_OUTPUT
+          echo "PERSISTED_DIAGNOSIS_CLASS=all_passed" >> $GITHUB_OUTPUT
+          
+          # =======================================================================
+          # Artifact Verification - runs BEFORE raw temp cleanup
+          # Sanitize response for upload using existing verifier (fail-closed)
+          # =======================================================================
+          echo ""
+          echo "Running artifact verification on persisted-diagnosis artifacts..."
+          set +e
+          .venv/bin/python scripts/verify_diagnosis_provider_artifacts.py \
+            --input "${PERSISTED_RAW_TMP}" \
+            --output ./lab-artifacts/live/provider-smoke/persisted-diagnosis \
+            --directory
+          SANITIZE_RC=$?
+          set -e
+          
+          if [ ${SANITIZE_RC} -ne 0 ]; then
+            echo "Provider artifact verification FAILED - secrets or topology detected"
+            echo "PERSISTED_DIAGNOSIS_STATUS=fail" >> $GITHUB_OUTPUT
+            echo "PERSISTED_DIAGNOSIS_CLASS=artifact_verification_failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "Persisted diagnosis contract: artifact verification passed"
+          echo "PERSISTED_DIAGNOSIS_STATUS=pass" >> $GITHUB_OUTPUT
+          echo "PERSISTED_DIAGNOSIS_CLASS=all_passed" >> $GITHUB_OUTPUT
+          
+          # Clean up raw temp directory now that sanitized artifacts are written
+          rm -rf "${PERSISTED_RAW_TMP}"
+          
+          # Show bounded summary
+          if [ -f ./lab-artifacts/live/provider-smoke/persisted-diagnosis/bounded-summary.txt ]; then
+            echo ""
+            echo "=== Persisted Diagnosis Contract Summary ==="
+            cat ./lab-artifacts/live/provider-smoke/persisted-diagnosis/bounded-summary.txt
+          fi
 
       # =======================================================================
       # Recover
@@ -2015,5 +2160,37 @@ jobs:
           echo "k9b Image: ${{ inputs.backend_image_ref }}"
           echo "Artifact: k9b-cnpg-incident-lab-live-${{ github.run_id }}"
           echo "Credential Source: protected-environment (k9b-live-lab-admin)"
-          echo "Infrastructure: EXISTING | k9b Detection: DEFERRED | LLM: NOT CALLED"
+          
+          # Compute phase-aware summary from step outputs
+          # Note: GitHub Actions step outputs must use expression syntax: ${{ steps.*.outputs.* }}
+          PROVIDER_SMOKE_STATUS="${{ steps.one-pass-diagnosis.outputs.PROVIDER_SMOKE_STATUS || 'not_run' }}"
+          PROVIDER_SMOKE_CLASS="${{ steps.one-pass-diagnosis.outputs.PROVIDER_SMOKE_CLASS || 'not_run' }}"
+          PERSISTED_STATUS="${{ steps.persisted-diagnosis-contract.outputs.PERSISTED_DIAGNOSIS_STATUS || 'not_run' }}"
+          PERSISTED_CLASS="${{ steps.persisted-diagnosis-contract.outputs.PERSISTED_DIAGNOSIS_CLASS || 'not_run' }}"
+          INCIDENT_DISCOVERY_STATUS="${{ steps.incident-discovery.outputs.INCIDENT_DISCOVERY_STATUS || 'not_run' }}"
+          
+          # Compute detection status from phase-specific outputs only
+          # Phase 2 (incident discovery) is authoritative for detection status
+          if [[ "$INCIDENT_DISCOVERY_STATUS" == "passed" ]]; then
+            DETECTION_STATUS="PASSED"
+          elif [[ "${{ inputs.enable_provider_smoke }}" == "true" ]]; then
+            DETECTION_STATUS="FAILED"
+          else
+            DETECTION_STATUS="DEFERRED"
+          fi
+          
+          # Compute LLM status
+          if [[ "${{ inputs.enable_provider_smoke }}" != "true" ]]; then
+            LLM_STATUS="DISABLED"
+          elif [[ "$PERSISTED_STATUS" == "pass" ]]; then
+            LLM_STATUS="PERSISTED"
+          elif [[ "$PROVIDER_SMOKE_STATUS" == "pass" ]]; then
+            LLM_STATUS="PROVIDER_SMOKE_PASSED"
+          elif [[ "$PROVIDER_SMOKE_STATUS" == "skipped" ]]; then
+            LLM_STATUS="NOT_CALLED"
+          else
+            LLM_STATUS="FAILED"
+          fi
+          
+          echo "Infrastructure: EXISTING | k9b Detection: ${DETECTION_STATUS} | LLM diagnosis persisted: ${LLM_STATUS}"
           echo "Namespace cleanup: always()"

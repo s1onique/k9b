@@ -218,9 +218,14 @@ def _classify_and_write_results(
 ) -> None:
     """Write classification results to artifact files."""
     final_status = status
+    final_failure_class = ""
+    final_diagnostics: dict[str, Any] = {}
+
     if not success:
         if failure_class == "crash_loop":
             crash_loop_data = diagnostics.get("crash_loop", [])
+            final_failure_class = failure_class
+            final_diagnostics = diagnostics
             if crash_loop_data:
                 first_crash = crash_loop_data[0]
                 crash_pod = first_crash.get("pod", "unknown")
@@ -235,15 +240,21 @@ def _classify_and_write_results(
                 f"Rollout failed: expected deployment(s) not found in cluster: {deployments_str}. "
                 "Check Helm install/upgrade status."
             )
+            final_failure_class = failure_class
+            final_diagnostics = diagnostics
         else:
             # Use the actual status from monitor_rollout (avoids "timed out after 0s" when elapsed is not tracked)
             final_status = status
+            final_failure_class = failure_class
+            final_diagnostics = diagnostics
+    # When success=True: failure_class and diagnostics are intentionally cleared
+    # to prevent stale fatal state from appearing in successful rollout output
 
     result = {
         "success": success,
         "status": final_status,
-        "failure_class": failure_class,
-        "rollout_checks": {"failure_class": failure_class, "diagnostics": diagnostics},
+        "failure_class": final_failure_class,
+        "rollout_checks": {"failure_class": final_failure_class, "diagnostics": final_diagnostics},
         "expected_deployments": expected_deployments,
     }
     write_json_atomically(artifact_dir / "rollout-result.json", result)
@@ -254,7 +265,7 @@ def _classify_and_write_results(
         "diagnostics": diagnostics,
     }
     write_json_atomically(artifact_dir / "final-diagnosis.json", diagnosis_result)
-    failure_line = f"**Failure class**: `{failure_class}`" if failure_class else ""
+    failure_line = f"**Failure class**: `{final_failure_class}`" if final_failure_class else ""
     artifact_line = "**Crash artifacts**: collected" if crash_artifacts_collected else ""
     bounded_content = f"""### Rollout Monitor Result
 
