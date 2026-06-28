@@ -89,8 +89,14 @@ def main() -> int:
 
         # Write findings for downstream use FIRST (before any exit)
         findings_path = artifact_dir / "_findings.json"
+        fatal_count = sum(1 for f in findings if f.kind == FindingKind.FATAL)
         findings_data = {
+            "scan_completed": True,
             "success": success,
+            "upload_safe": fatal_count == 0 and success,
+            "total_files": len(results),
+            "succeeded": sum(1 for r in results if r.success),
+            "fatal_count": fatal_count,
             "findings": [
                 {"kind": f.kind, "message": f.message, "file": f.file, "context": f.context}
                 for f in findings

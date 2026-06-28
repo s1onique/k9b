@@ -102,8 +102,15 @@ def _check_structured_secrets_in_file(ctx: VerificationContext, filepath: Path) 
                 ctx.add_info("Secret resource reference (not actual secret value)", rel_path)
             elif "data:" in content.lower():
                 # Secret with data - should have been sanitized
+                # Check for sanitized Secret data field:
+                # 1. REDACTION_PLACEHOLDER ("<REDACTED>") - full redaction of field
+                # 2. "<redacted>" - structural sanitization (Secret data replaced with placeholder)
+                #    The embedded manifest sanitizer uses "<redacted>" as key name with
+                #    descriptive value like "contains base64-encoded secret values"
                 if REDACTION_PLACEHOLDER in content:
                     ctx.add_info("Secret.data appears sanitized", rel_path)
+                elif '<redacted>' in content.lower():
+                    ctx.add_info("Secret.data structurally sanitized (<redacted> marker found)", rel_path)
                 else:
                     ctx.add_fatal("Secret manifest with data field not sanitized", rel_path)
                     found_actual_secret = True
