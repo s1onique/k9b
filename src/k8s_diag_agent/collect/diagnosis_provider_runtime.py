@@ -21,6 +21,8 @@ from requests.exceptions import HTTPError
 if TYPE_CHECKING:
     from .diagnosis_provider_config import DiagnosisProviderConfig
 
+from ..llm.openai_compatible_urls import build_chat_completions_url
+
 logger = logging.getLogger(__name__)
 
 # Default system instructions for diagnosis
@@ -107,11 +109,9 @@ class OpenAICompatibleDiagnosisProvider:
         self._session_factory = session_factory or requests.Session
         self._session: requests.Session | None = None
 
-        # Build endpoint URL
-        # base_url is the API v1 base, e.g. https://api.openai.com/v1
-        # We append only the path segment to form the full endpoint
-        base = config.base_url.rstrip("/")
-        self._endpoint = f"{base}/chat/completions"
+        # Build endpoint URL using normalized URL construction
+        # Handles provider API root, /v1 suffix, or full /chat/completions paths
+        self._endpoint = build_chat_completions_url(config.base_url)
 
     def _get_session(self) -> requests.Session:
         """Get or create session."""

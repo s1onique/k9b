@@ -6,6 +6,8 @@ import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from .openai_compatible_urls import build_chat_completions_url
+
 DEFAULT_TIMEOUT_SECONDS = 120
 DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN = 768
 DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT = 1200
@@ -115,8 +117,7 @@ class LlamaCppProviderConfig:
 
     @property
     def endpoint(self) -> str:
-        base = self.base_url.rstrip('/')
-        return f"{base}/v1/chat/completions"
+        return build_chat_completions_url(self.base_url)
 
     @property
     def generation_settings(self) -> dict[str, object]:
@@ -378,4 +379,5 @@ __all__ = [
     "LlamaCppProviderConfig",
     "_SYSTEM_INSTRUCTIONS",
     "_REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS",
+    "build_chat_completions_url",
 ]

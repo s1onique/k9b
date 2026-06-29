@@ -11,6 +11,139 @@ from k8s_diag_agent.llm.llamacpp_provider_config import (
     _CANONICAL_ENV_MODEL,
     LlamaCppProviderConfig,
 )
+from k8s_diag_agent.llm.openai_compatible_urls import build_chat_completions_url
+
+
+class TestBuildChatCompletionsUrl:
+    """Tests for build_chat_completions_url URL normalization."""
+
+    @pytest.mark.parametrize(
+        ("base_url", "expected"),
+        [
+            # Provider API root -> appends /v1/chat/completions
+            (
+                "http://localhost:8080",
+                "http://localhost:8080/v1/chat/completions",
+            ),
+            (
+                "https://openrouter.ai/api",
+                "https://openrouter.ai/api/v1/chat/completions",
+            ),
+            # API version root -> appends /chat/completions
+            (
+                "http://localhost:8080/v1",
+                "http://localhost:8080/v1/chat/completions",
+            ),
+            (
+                "https://openrouter.ai/api/v1",
+                "https://openrouter.ai/api/v1/chat/completions",
+            ),
+            (
+                "https://api.openai.com/v1",
+                "https://api.openai.com/v1/chat/completions",
+            ),
+            # Full endpoint -> returns as-is
+            (
+                "https://openrouter.ai/api/v1/chat/completions",
+                "https://openrouter.ai/api/v1/chat/completions",
+            ),
+            (
+                "http://localhost:8080/v1/chat/completions",
+                "http://localhost:8080/v1/chat/completions",
+            ),
+            # Trailing slash variants
+            (
+                "http://localhost:8080/",
+                "http://localhost:8080/v1/chat/completions",
+            ),
+            (
+                "https://openrouter.ai/api/v1/",
+                "https://openrouter.ai/api/v1/chat/completions",
+            ),
+        ],
+    )
+    def test_chat_completions_url_normalization(self, base_url: str, expected: str) -> None:
+        """URL normalization handles provider API root, /v1 suffix, or full path."""
+        assert build_chat_completions_url(base_url) == expected
+
+    def test_openrouter_base_url_does_not_duplicate_v1(self) -> None:
+        """Regression test: OpenRouter /v1 base URL should not produce /v1/v1/."""
+        url = build_chat_completions_url("https://openrouter.ai/api/v1")
+
+        assert url == "https://openrouter.ai/api/v1/chat/completions"
+        assert "/v1/v1/" not in url
+
+    def test_provider_api_root_does_not_duplicate_v1(self) -> None:
+        """Regression test: Provider API root should not produce /v1/v1/."""
+        url = build_chat_completions_url("https://openrouter.ai/api")
+
+        assert url == "https://openrouter.ai/api/v1/chat/completions"
+        assert "/v1/v1/" not in url
+
+    def test_full_endpoint_unchanged(self) -> None:
+        """Full /chat/completions endpoint should be returned unchanged."""
+        url = build_chat_completions_url("https://openrouter.ai/api/v1/chat/completions")
+
+        assert url == "https://openrouter.ai/api/v1/chat/completions"
+        assert "/v1/v1/" not in url
+
+    def test_whitespace_is_stripped(self) -> None:
+        """Whitespace in base_url is stripped to protect against env var mistakes."""
+        url = build_chat_completions_url("  https://openrouter.ai/api/v1  ")
+
+        assert url == "https://openrouter.ai/api/v1/chat/completions"
+        assert "/v1/v1/" not in url
+
+
+class TestLlamaCppProviderConfigEndpoint:
+    """Tests for LlamaCppProviderConfig.endpoint property URL normalization."""
+
+    @pytest.mark.parametrize(
+        ("base_url", "expected_endpoint"),
+        [
+            # Provider API root -> appends /v1/chat/completions
+            (
+                "http://localhost:8080",
+                "http://localhost:8080/v1/chat/completions",
+            ),
+            (
+                "https://openrouter.ai/api",
+                "https://openrouter.ai/api/v1/chat/completions",
+            ),
+            # API version root -> appends /chat/completions
+            (
+                "http://localhost:8080/v1",
+                "http://localhost:8080/v1/chat/completions",
+            ),
+            (
+                "https://openrouter.ai/api/v1",
+                "https://openrouter.ai/api/v1/chat/completions",
+            ),
+            (
+                "https://api.openai.com/v1",
+                "https://api.openai.com/v1/chat/completions",
+            ),
+            # Full endpoint -> returns as-is
+            (
+                "https://openrouter.ai/api/v1/chat/completions",
+                "https://openrouter.ai/api/v1/chat/completions",
+            ),
+        ],
+    )
+    def test_endpoint_normalization(self, base_url: str, expected_endpoint: str) -> None:
+        """LlamaCppProviderConfig.endpoint uses URL normalization."""
+        config = LlamaCppProviderConfig(base_url=base_url, model="test-model")
+        assert config.endpoint == expected_endpoint
+        assert "/v1/v1/" not in config.endpoint
+
+    def test_openrouter_endpoint_no_duplicate_v1(self) -> None:
+        """Regression: OpenRouter /v1 base URL produces correct endpoint."""
+        config = LlamaCppProviderConfig(
+            base_url="https://openrouter.ai/api/v1",
+            model="anthropic/claude-3.5-sonnet",
+        )
+        assert config.endpoint == "https://openrouter.ai/api/v1/chat/completions"
+        assert "/v1/v1/" not in config.endpoint
 
 
 class TestLlamaCppProviderConfigFromEnv:
