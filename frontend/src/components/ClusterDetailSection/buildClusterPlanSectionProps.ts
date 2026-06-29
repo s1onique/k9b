@@ -12,7 +12,7 @@ import type {
   RunPayload,
 } from "../../types";
 import { artifactUrl, relativeRecency } from "../../utils";
-import type { ClusterNextCheckPlanSectionProps } from "./ClusterNextCheckPlanSection";
+import type { ClusterNextCheckPlanSectionProps } from "../ClusterNextCheckPlanSection";
 
 export interface BuildClusterPlanSectionPropsArgs {
   clusterDetail: ClusterDetailPayload | null;
