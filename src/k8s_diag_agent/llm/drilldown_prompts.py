@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 from textwrap import dedent
+from typing import TYPE_CHECKING
 
-from ..health.drilldown import DrilldownArtifact
 from ..security import sanitize_prompt
 from ..security.anonymizer import MetadataAnonymizer
 from .prompt_boundaries import (
@@ -18,6 +18,9 @@ from .semantic_injection_detector import (
     build_security_note,
     detect_semantic_injection,
 )
+
+if TYPE_CHECKING:
+    from ..health.drilldown import DrilldownArtifact
 
 
 def _format_table(items: list[str], header: str) -> str:
