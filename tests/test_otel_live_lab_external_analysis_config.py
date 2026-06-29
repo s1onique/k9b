@@ -12,9 +12,10 @@ no available provider, causing review_enrichment to log:
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import yaml
@@ -64,9 +65,7 @@ def render_live_lab_manifest() -> dict[str, Any]:
         if doc.get("kind") == "ConfigMap" and "data" in doc:
             health_config_raw = doc["data"].get("health-config.json")
             if health_config_raw:
-                import json
-
-                return json.loads(health_config_raw)
+                return cast(dict[str, Any], json.loads(health_config_raw))
 
     raise RuntimeError("No health-config.json found in rendered ConfigMap")
 
@@ -78,7 +77,7 @@ class TestLiveLabExternalAnalysisConfig:
     def external_analysis(self) -> dict[str, Any]:
         """Load the external_analysis config from rendered live lab health config."""
         health_config = render_live_lab_manifest()
-        return health_config.get("external_analysis", {})
+        return cast(dict[str, Any], health_config.get("external_analysis", {}))
 
     def test_external_analysis_has_adapters(self, external_analysis: dict[str, Any]) -> None:
         """external_analysis must have an adapters array."""
