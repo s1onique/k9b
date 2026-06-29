@@ -41,7 +41,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("tests/fixtures/incident_report_fixtures.py", "[TEST] Fixture data - extract by test family"),
     ("tests/unit/test_ui_server_api_alertmanager_sources.py", "[TEST] Alertmanager sources - large fixtures"),
     ("tests/unit/test_health_loop_alertmanager_snapshot_collection.py", "[TEST] Snapshot tests - split by scenario"),
-    ("tests/unit/test_api_incident_report.py", "[TEST] Incident report tests - large fixtures"),
     ("tests/unit/test_health_ui.py", "[TEST] Health UI tests - complex fixtures"),
     ("tests/unit/test_ui_server_api.py", "[TEST] UI server API tests - complex fixtures"),
     ("tests/unit/test_alertmanager_discovery.py", "[TEST] Alertmanager discovery tests"),
