@@ -344,15 +344,15 @@ jobs:
           set -euo pipefail
           echo "=== Installing k9b baseline for OTel Demo Lab ==="
 
-          helm --kubeconfig "$KUBECONFIG" upgrade --install k9b ./charts/k9b \
+          .venv/bin/python scripts/ensure_k9b_lab_baseline.py \
+            --lab-name otel-demo \
+            --release-name k9b \
             --namespace k9b \
-            --create-namespace \
-            --wait \
-            --timeout 5m \
-            --values ./charts/k9b/values-live-lab.yaml
-
-          echo "=== Waiting for k9b-backend rollout ==="
-          kubectl --kubeconfig "$KUBECONFIG" -n k9b rollout status deployment/k9b-backend --timeout=180s
+            --chart-path ./charts/k9b \
+            --artifact-dir ./lab-artifacts/otel-demo \
+            --kubeconfig "$KUBECONFIG" \
+            --backend-deployment k9b-backend \
+            --timeout-seconds 240
 
           echo "=== k9b baseline installed ==="
           kubectl --kubeconfig "$KUBECONFIG" -n k9b get service k9b-backend
