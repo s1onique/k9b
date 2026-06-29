@@ -191,33 +191,151 @@ class TestLiveLabExternalAnalysisConfig:
 
 
 class TestLiveLabSchedulerEnvBackendConfig:
-    """Test that scheduler env still selects the concrete backend provider.
+    """Test that live-lab scheduler backend configuration is correctly wired.
 
-    The scheduler env K9B_EXTERNAL_ANALYSIS_PROVIDER selects the concrete
-    implementation/backend (e.g., openai_compatible), separate from the
-    healthConfig which uses adapter aliases (e.g., llamacpp).
+    The live-lab deployment uses:
+    - scheduler.env.K9B_EXTERNAL_ANALYSIS_PROVIDER: Backend provider type (openai_compatible)
+    - scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED: Enable review enrichment
+    - scheduler.smallProvider.provider: Small provider type for non-incident checks
+
+    This is separate from the healthConfig which uses adapter aliases (e.g., llamacpp).
+    The scheduler env vars wire the actual backend implementation, while healthConfig
+    defines which adapters are available.
     """
 
-    def test_workflow_sets_external_analysis_provider_to_openai_compatible(self) -> None:
-        """Workflow should set K9B_EXTERNAL_ANALYSIS_PROVIDER=openai_compatible."""
-        workflow_path = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
-        text = workflow_path.read_text()
-        assert "scheduler.env.K9B_EXTERNAL_ANALYSIS_PROVIDER=openai_compatible" in text, (
-            "Workflow should set K9B_EXTERNAL_ANALYSIS_PROVIDER to openai_compatible"
+    def test_live_lab_workflow_sets_external_analysis_provider(self) -> None:
+        """Live lab workflow should set K9B_EXTERNAL_ANALYSIS_PROVIDER=openai_compatible.
+
+        This wires the scheduler to use the openai_compatible backend.
+        """
+        workflow_path = (
+            Path(__file__).resolve().parents[1]
+            / ".github"
+            / "workflows"
+            / "k9b-otel-demo-live-lab.yml"
+        )
+        assert workflow_path.exists(), f"Live lab workflow not found: {workflow_path}"
+
+        workflow = cast(dict[str, Any], yaml.safe_load(workflow_path.read_text()))
+
+        # Find the helm --set overrides in the ensure k9b lab baseline step
+        found_provider_override = False
+        for job in workflow.get("jobs", {}).values():
+            for step in job.get("steps", []):
+                run_text = ""
+                if "run" in step:
+                    run_text = step["run"]
+                elif isinstance(step, dict):
+                    for key in ("run", "env"):
+                        if key in step:
+                            run_text += " " + str(step[key])
+
+                if "--set-string" in run_text and "scheduler.env.K9B_EXTERNAL_ANALYSIS_PROVIDER" in run_text:
+                    assert "openai_compatible" in run_text, (
+                        "scheduler.env.K9B_EXTERNAL_ANALYSIS_PROVIDER should be set to openai_compatible"
+                    )
+                    found_provider_override = True
+
+        assert found_provider_override, (
+            "Live lab workflow should set scheduler.env.K9B_EXTERNAL_ANALYSIS_PROVIDER=openai_compatible"
         )
 
-    def test_workflow_sets_review_enrichment_enabled(self) -> None:
-        """Workflow should enable K9B_REVIEW_ENRICHMENT_ENABLED=true."""
-        workflow_path = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
-        text = workflow_path.read_text()
-        assert "scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED=true" in text, (
-            "Workflow should set K9B_REVIEW_ENRICHMENT_ENABLED=true"
+    def test_live_lab_workflow_sets_review_enrichment_enabled(self) -> None:
+        """Live lab workflow should enable K9B_REVIEW_ENRICHMENT_ENABLED=true."""
+        workflow_path = (
+            Path(__file__).resolve().parents[1]
+            / ".github"
+            / "workflows"
+            / "k9b-otel-demo-live-lab.yml"
+        )
+        assert workflow_path.exists(), f"Live lab workflow not found: {workflow_path}"
+
+        workflow = cast(dict[str, Any], yaml.safe_load(workflow_path.read_text()))
+
+        # Find the helm --set overrides for review enrichment
+        found_review_enrichment = False
+        for job in workflow.get("jobs", {}).values():
+            for step in job.get("steps", []):
+                run_text = ""
+                if "run" in step:
+                    run_text = step["run"]
+                elif isinstance(step, dict):
+                    for key in ("run", "env"):
+                        if key in step:
+                            run_text += " " + str(step[key])
+
+                if "--set" in run_text and "scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED" in run_text:
+                    assert "true" in run_text.lower(), (
+                        "scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED should be set to true"
+                    )
+                    found_review_enrichment = True
+
+        assert found_review_enrichment, (
+            "Live lab workflow should set scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED=true"
         )
 
-    def test_workflow_wires_small_provider_with_openai_compatible(self) -> None:
-        """Workflow should wire scheduler.smallProvider.provider=openai_compatible."""
-        workflow_path = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
-        text = workflow_path.read_text()
-        assert "scheduler.smallProvider.provider=openai_compatible" in text, (
-            "Workflow should wire scheduler.smallProvider.provider=openai_compatible"
+    def test_live_lab_workflow_wires_small_provider(self) -> None:
+        """Live lab workflow should wire scheduler.smallProvider.provider=openai_compatible.
+
+        This wires the small provider (used for review enrichment, next-check planning,
+        and auto drilldown) to the openai_compatible backend.
+        """
+        workflow_path = (
+            Path(__file__).resolve().parents[1]
+            / ".github"
+            / "workflows"
+            / "k9b-otel-demo-live-lab.yml"
+        )
+        assert workflow_path.exists(), f"Live lab workflow not found: {workflow_path}"
+
+        workflow = cast(dict[str, Any], yaml.safe_load(workflow_path.read_text()))
+
+        # Find the helm --set overrides for smallProvider
+        found_small_provider = False
+        for job in workflow.get("jobs", {}).values():
+            for step in job.get("steps", []):
+                run_text = ""
+                if "run" in step:
+                    run_text = step["run"]
+                elif isinstance(step, dict):
+                    for key in ("run", "env"):
+                        if key in step:
+                            run_text += " " + str(step[key])
+
+                if "--set" in run_text and "scheduler.smallProvider.provider" in run_text:
+                    assert "openai_compatible" in run_text, (
+                        "scheduler.smallProvider.provider should be set to openai_compatible"
+                    )
+                    found_small_provider = True
+
+        assert found_small_provider, (
+            "Live lab workflow should set scheduler.smallProvider.provider=openai_compatible"
+        )
+
+    def test_rendered_manifest_has_review_enrichment_provider_in_adapters(
+        self,
+    ) -> None:
+        """Rendered manifest should have a provider for review_enrichment in adapters.
+
+        This is a regression test: review_enrichment needs a provider that points
+        to an enabled adapter. Without this, review_enrichment logs:
+          provider="unspecified" status="skipped" skip_reason="No review enrichment provider configured"
+        """
+        external_analysis = cast(
+            dict[str, Any],
+            render_live_lab_manifest().get("external_analysis", {}),
+        )
+
+        adapters_list = external_analysis.get("adapters", [])
+        adapters_by_name = {a["name"]: a for a in adapters_list}
+
+        review_enrichment = external_analysis.get("review_enrichment", {})
+        provider = review_enrichment.get("provider")
+
+        assert provider, "review_enrichment.provider must be set"
+        assert provider in adapters_by_name, (
+            f"review_enrichment.provider '{provider}' must be in adapters[]"
+        )
+        assert adapters_by_name[provider].get("enabled") is True, (
+            f"adapter '{provider}' referenced by review_enrichment.provider must be enabled"
         )
