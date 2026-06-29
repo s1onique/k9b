@@ -40,6 +40,13 @@ def main() -> None:
         dest="set_values",
         help="Set Helm values (can be repeated, e.g., --set image.backend.repository=foo)",
     )
+    parser.add_argument(
+        "--set-string",
+        action="append",
+        default=[],
+        dest="set_string_values",
+        help="Set Helm string values (can be repeated, e.g., --set-string diagnosisProvider.baseUrl=https://example.invalid/v1)",
+    )
 
     args = parser.parse_args()
 
@@ -54,6 +61,7 @@ def main() -> None:
         backend_deployment=args.backend_deployment,
         timeout_seconds=args.timeout_seconds,
         set_values=args.set_values if args.set_values else None,
+        set_string_values=args.set_string_values if args.set_string_values else None,
     )
 
     # Write result artifact

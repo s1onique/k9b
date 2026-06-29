@@ -329,22 +329,11 @@ class TestClassifyRolloutFailure:
     """Unit tests for rollout failure classification."""
 
     def test_progress_deadline_exceeded_condition(self) -> None:
-        """Kubernetes Deployment ProgressDeadlineExceeded condition structure.
-
-        The correct condition shape is:
-          type: "Progressing"
-          status: "False"
-          reason: "ProgressDeadlineExceeded"
-
-        NOT:
-          type: "ProgressDeadlineExceeded"
-        """
-        # Test that classify_rollout_failure handles the correct condition shape
+        """Kubernetes Deployment ProgressDeadlineExceeded condition structure."""
         from unittest.mock import MagicMock, patch
 
         from scripts.k9b_lab_rollout import classify_rollout_failure
 
-        # Simulate a Deployment with ProgressDeadlineExceeded condition
         deploy_json = {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
@@ -426,3 +415,4 @@ class TestClassifyRolloutFailure:
 
         assert failure_class == "deployment_replica_failure", \
             f"Expected deployment_replica_failure, got {failure_class}"
+

@@ -39,6 +39,7 @@ def ensure_k9b_baseline_ready(
     backend_deployment: str = "k9b-backend",
     timeout_seconds: int = 300,
     set_values: list[str] | None = None,
+    set_string_values: list[str] | None = None,
 ) -> dict[str, Any]:
     """Install k9b baseline and verify backend deployment is ready.
 
@@ -91,6 +92,7 @@ def ensure_k9b_baseline_ready(
         release_name=release_name,
         artifact_dir=helm_dir,
         set_values=set_values,
+        set_string_values=set_string_values,
     )
     results["artifacts"]["render_manifest"] = render_result
 
@@ -109,6 +111,7 @@ def ensure_k9b_baseline_ready(
         release_name=release_name,
         artifact_dir=helm_dir,
         set_values=set_values,
+        set_string_values=set_string_values,
     )
     results["artifacts"]["helm_install"] = install_result
 

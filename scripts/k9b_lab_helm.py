@@ -20,6 +20,7 @@ def render_manifest(
     release_name: str,
     artifact_dir: Path,
     set_values: list[str] | None = None,
+    set_string_values: list[str] | None = None,
 ) -> dict[str, Any]:
     """Render Helm manifest and collect evidence.
 
@@ -30,6 +31,7 @@ def render_manifest(
         release_name: Helm release name
         artifact_dir: Directory for evidence artifacts
         set_values: List of --set values (e.g., ["image.backend.repository=foo", "image.backend.tag=v1"])
+        set_string_values: List of --set-string values (e.g., ["diagnosisProvider.baseUrl=https://example.invalid"])
     """
     result: dict[str, Any] = {"success": False, "error": None, "manifest_path": None}
     cmd = ["helm", "template", release_name, chart_path]
@@ -40,6 +42,9 @@ def render_manifest(
     if set_values:
         for sv in set_values:
             cmd.extend(["--set", sv])
+    if set_string_values:
+        for sv in set_string_values:
+            cmd.extend(["--set-string", sv])
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         write_text_artifact(artifact_dir, "rendered-manifest-exit-code.txt", str(proc.returncode))
@@ -66,6 +71,7 @@ def install_helm(
     release_name: str,
     artifact_dir: Path,
     set_values: list[str] | None = None,
+    set_string_values: list[str] | None = None,
 ) -> dict[str, Any]:
     """Install/upgrade Helm release.
 
@@ -77,6 +83,7 @@ def install_helm(
         release_name: Helm release name
         artifact_dir: Directory for evidence artifacts
         set_values: List of --set values (e.g., ["image.backend.repository=foo", "image.backend.tag=v1"])
+        set_string_values: List of --set-string values (e.g., ["diagnosisProvider.baseUrl=https://example.invalid"])
     """
     result: dict[str, Any] = {"returncode": -1, "stdout": "", "stderr": ""}
     cmd = [
@@ -89,6 +96,9 @@ def install_helm(
     if set_values:
         for sv in set_values:
             cmd.extend(["--set", sv])
+    if set_string_values:
+        for sv in set_string_values:
+            cmd.extend(["--set-string", sv])
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         result["returncode"] = proc.returncode
