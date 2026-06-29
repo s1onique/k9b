@@ -169,12 +169,12 @@ class TestNamespaceSeparation:
         This is the behavior-level regression test for the bug where P2 was using
         K9B_NAMESPACE (k9b) for incident discovery instead of config.namespace (otel-demo).
         """
-        from types import SimpleNamespace
         from unittest.mock import MagicMock, patch
 
         from scripts.k9b_otel_demo_lab_provider_diagnosis import (
             phase_p2_incident_discovery_provider,
         )
+        from scripts.k9b_otel_demo_lab_types import LabConfig
 
         # run_incident_discovery is imported inside the function, so patch where it's defined
         mock_result = MagicMock()
@@ -187,7 +187,7 @@ class TestNamespaceSeparation:
             "scripts.incident_discovery_gate.run_incident_discovery",
             return_value=mock_result
         ) as run_gate:
-            config = SimpleNamespace(
+            config = LabConfig(
                 kubeconfig="/tmp/kubeconfig",
                 namespace="otel-demo",
             )
