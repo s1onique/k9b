@@ -56,8 +56,12 @@ from .k9b_otel_demo_lab_phases import (
     phase_p1_backend_health_gate,
     phase_p1b_scheduler_health_gate,
     phase_p2_incident_discovery_provider,
+    # K8s-native phases (P2b → P3c → P4c)
+    phase_p2b_inject_unschedulable_shipping_rollout,
     phase_p3_provider_smoke,
+    phase_p3c_verify_k8s_incident_discovery,
     phase_p4_persisted_diagnosis,
+    phase_p4c_verify_k8s_mult_pass_diagnosis,
 )
 from .k9b_otel_demo_lab_types import LabConfig, LabPhaseResult, LabResult
 
@@ -143,7 +147,61 @@ def run_lab(config: LabConfig) -> LabResult:
             return _finish_result(result, artifact_dir, start_time)
         
         # =====================================================================
-        # Original OTel Demo Phases
+        # K8s-native scenario (P2b → P3c → P4c)
+        # Runs when incident_scenario is "unschedulable-shipping"
+        # This is an explicit opt-in path for K8s-native incident handling.
+        # =====================================================================
+        if config.incident_scenario == "unschedulable-shipping":
+            log("=" * 60)
+            log("K8S-NATIVE SCENARIO: Running unschedulable-shipping path")
+            log("=" * 60)
+            
+            # P2b: Inject unschedulable shipping rollout
+            log("=" * 60)
+            log("P2b: Inject unschedulable shipping rollout")
+            log("=" * 60)
+            phase_p2b = phase_p2b_inject_unschedulable_shipping_rollout(config, artifact_dir)
+            result.phases.append(_phase_to_dict(phase_p2b))
+            if not phase_p2b.success:
+                log(f"K8S-NATIVE SCENARIO FAILED at P2b: {phase_p2b.message}")
+                result.failure_reason = f"P2b failed (K8s-native injection): {phase_p2b.message}"
+                return _finish_result(result, artifact_dir, start_time)
+            
+            # P3c: Verify K8s incident discovery
+            log("=" * 60)
+            log("P3c: Verify K8s incident discovery")
+            log("=" * 60)
+            phase_p3c = phase_p3c_verify_k8s_incident_discovery(config, artifact_dir)
+            result.phases.append(_phase_to_dict(phase_p3c))
+            if not phase_p3c.success:
+                log(f"K8S-NATIVE SCENARIO FAILED at P3c: {phase_p3c.message}")
+                result.failure_reason = f"P3c failed (K8s-native discovery): {phase_p3c.message}"
+                return _finish_result(result, artifact_dir, start_time)
+            
+            # P4c: Verify K8s multi-pass diagnosis
+            log("=" * 60)
+            log("P4c: Verify K8s multi-pass diagnosis")
+            log("=" * 60)
+            phase_p4c = phase_p4c_verify_k8s_mult_pass_diagnosis(config, artifact_dir)
+            result.phases.append(_phase_to_dict(phase_p4c))
+            if not phase_p4c.success:
+                log(f"K8S-NATIVE SCENARIO FAILED at P4c: {phase_p4c.message}")
+                result.failure_reason = f"P4c failed (K8s-native diagnosis): {phase_p4c.message}"
+                return _finish_result(result, artifact_dir, start_time)
+            
+            # K8s-native scenario succeeds
+            result.success = True
+            result.verification_passed = True
+            result.verification_details = {
+                "scenario": "unschedulable-shipping",
+                "p2b_success": phase_p2b.success,
+                "p3c_success": phase_p3c.success,
+                "p4c_success": phase_p4c.success,
+            }
+            return _finish_result(result, artifact_dir, start_time)
+        
+        # =====================================================================
+        # Original OTel Demo Phases (default path)
         # =====================================================================
         
         # Phase 2: Inject incident
@@ -366,6 +424,13 @@ def main() -> int:
         default=False,
         help="Enable provider smoke phases (fail-closed: any P1/P1b/P2/P3/P4 failure fails the lab)",
     )
+    # Incident scenario option (opt-in K8s-native path)
+    parser.add_argument(
+        "--incident-scenario",
+        choices=["recommendation-cache-failure", "recommendation-pod-stress", "unschedulable-shipping"],
+        default="recommendation-cache-failure",
+        help="Incident scenario: 'recommendation-cache-failure' (default), 'recommendation-pod-stress', or 'unschedulable-shipping' (P2b→P3c→P4c K8s-native path)",
+    )
     
     args = parser.parse_args()
     
@@ -379,6 +444,7 @@ def main() -> int:
         live_observation_wait_seconds=args.live_observation_wait,
         live_poll_interval_seconds=args.live_poll_interval,
         enable_provider_smoke=args.enable_provider_smoke,
+        incident_scenario=args.incident_scenario,
     )
     
     result = run_lab(config)

@@ -242,3 +242,27 @@ PHASE_INCIDENT_DISCOVERY = "incident-discovery"
 PHASE_PROVIDER_SMOKE = "incident-provider"
 PHASE_PERSISTED_DIAGNOSIS = "persisted-diagnosis"
 PHASE_PROVIDER_PREFLIGHT = "provider-preflight"
+
+# =============================================================================
+# K8s-native scenario artifact paths (P2b→P3c→P4c)
+# =============================================================================
+
+# P2b: K8s-native injection
+PHASE_K8S_INJECTION = "phase2-injected"
+PHASE_K8S_INJECTION_SUBDIR = "p2b-k8s-injection"
+K8S_INJECTION_ARTIFACT_FILENAME = "injection-evidence.json"
+
+# P3c: K8s-native discovery
+PHASE_K8S_DISCOVERY = "phase3-discovery"
+PHASE_K8S_DISCOVERY_SUBDIR = "p3c-k8s-discovery"
+K8S_DISCOVERY_ARTIFACT_FILENAME = "detection-evidence.json"
+
+# P4c: K8s-native multi-pass diagnosis
+PHASE_K8S_DIAGNOSIS = "phase4-diagnosis"
+PHASE_K8S_DIAGNOSIS_SUBDIR = "p4c-k8s-multipass-diagnosis"
+K8S_DIAGNOSIS_ARTIFACT_FILENAME = "diagnosis-evidence.json"
+
+# Environment variables for K8s-native scenario
+ENV_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED = "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"
+ENV_ALLOW_SIMULATED_DIAGNOSIS = "K9B_OTEL_LAB_ALLOW_SIMULATED_DIAGNOSIS"
+ENV_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED_TRUE = "true"

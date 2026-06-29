@@ -161,7 +161,7 @@ def main() -> int:
     parser.add_argument("--kubeconfig", required=True, help="Path to kubeconfig")
     parser.add_argument("--artifact-dir", required=True, help="Artifact directory")
     parser.add_argument("--scenario", default="recommendation-cache-failure",
-                       choices=["recommendation-cache-failure"], help="Incident scenario")
+                       choices=["recommendation-cache-failure", "recommendation-pod-stress"], help="Incident scenario")
     parser.add_argument("--enable", action="store_true", default=True, help="Enable the incident")
     parser.add_argument("--traffic-duration", type=int, default=30, help="Traffic duration in seconds")
     

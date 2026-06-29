@@ -23,6 +23,13 @@ LAB_MODE_SCAFFOLD = "scaffold"
 LAB_MODE_LIVE = "live"
 LAB_MODES = (LAB_MODE_SCAFFOLD, LAB_MODE_LIVE)
 
+# Incident scenario constants
+SCENARIO_RECOMMENDATION_CACHE_FAILURE = "recommendation-cache-failure"
+SCENARIO_RECOMMENDATION_POD_STRESS = "recommendation-pod-stress"
+SCENARIO_K8S_NATIVE_UNSCHEDULABLE = "unschedulable-shipping"
+SCENARIO_PROVIDER_SMOKE = "provider-smoke"
+INCIDENT_SCENARIOS = (SCENARIO_RECOMMENDATION_CACHE_FAILURE, SCENARIO_RECOMMENDATION_POD_STRESS, SCENARIO_K8S_NATIVE_UNSCHEDULABLE, SCENARIO_PROVIDER_SMOKE)
+
 
 @dataclass
 class LabConfig:
@@ -51,6 +58,15 @@ class LabConfig:
     
     # Provider smoke config (k9b API integration)
     enable_provider_smoke: bool = False
+    
+    # Incident scenario: which incident injection path to use
+    # - "recommendation-cache-failure": original OTel demo cache failure (default)
+    # - "unschedulable-shipping": K8s-native unschedulable shipping rollout (P2b→P3c→P4c)
+    # - "provider-smoke": provider smoke (no injection, uses existing incident)
+    incident_scenario: str = "recommendation-cache-failure"
+    
+    # K8s-native scenario specific config
+    enable_k8s_native_diagnosis: bool = False  # Set to true when using unschedulable-shipping scenario
 
 
 @dataclass

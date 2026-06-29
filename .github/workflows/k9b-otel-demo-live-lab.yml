@@ -1,0 +1,328 @@
+name: K3s OTel Demo Live Lab
+
+# Manual workflow for running the OTel Demo incident lab in a live K3s cluster.
+# This workflow builds k9b images and runs the full lab with selected incident scenario.
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_retention_days:
+        description: 'Artifact retention days'
+        required: false
+        default: '7'
+        type: string
+      incident_scenario:
+        description: 'Incident scenario'
+        required: false
+        default: 'recommendation-cache-failure'
+        type: choice
+        options:
+          - recommendation-cache-failure
+          - recommendation-pod-stress
+          - unschedulable-shipping
+      live_traffic_duration_seconds:
+        description: 'Live traffic generation duration (seconds)'
+        required: false
+        default: '600'
+        type: string
+      live_observation_wait_seconds:
+        description: 'Wait time for symptoms to manifest (seconds)'
+        required: false
+        default: '600'
+        type: string
+      live_poll_interval_seconds:
+        description: 'Poll interval between traffic requests (seconds)'
+        required: false
+        default: '30'
+        type: string
+
+env:
+  PYTHON_VERSION: '3.13'
+  HARBOR_REGISTRY: harbor-pve1.spbnix.local
+  HARBOR_PROJECT: k9b
+  BACKEND_IMAGE_NAME: k9b-backend
+
+jobs:
+  build-lab-images:
+    name: Build k9b Images for Live Lab
+    runs-on: spbnix-k8s-docker
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      backend_image_repository: ${{ steps.meta-backend.outputs.image_repository }}
+      backend_image_tag: ${{ steps.meta-backend.outputs.image_tag }}
+      backend_image_ref: ${{ steps.meta-backend.outputs.image_ref }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Docker preflight
+        run: |
+          set -eux
+          echo "runner=${RUNNER_NAME:-unknown}"
+          echo "os=${RUNNER_OS:-unknown}"
+          which docker
+          docker version
+          docker info
+
+      - name: Install SPbNIX Harbor CA
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+        run: .github/scripts/install-spbnix-harbor-ca.sh
+
+      - name: Configure BuildKit with Harbor CA
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/buildkit-certs"
+          mkdir -p "${RUNNER_TEMP}/buildkit"
+          cert_path="${RUNNER_TEMP}/buildkit-certs/harbor-pve1.spbnix.local.pem"
+          printf '%s\n' "${SPBNIX_CA_CERT_PEM}" > "${cert_path}"
+          cat > "${RUNNER_TEMP}/buildkit/buildkitd.toml" <<EOF
+          debug = true
+          [registry."harbor-pve1.spbnix.local"]
+            ca = ["${cert_path}"]
+          EOF
+
+      - name: Login to Harbor
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.HARBOR_REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          buildkitd-config: ${{ runner.temp }}/buildkit/buildkitd.toml
+
+      - name: Extract backend metadata
+        id: meta-backend
+        run: |
+          IMAGE_TAG="otel-live-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}"
+          echo "image_repository=${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}" >> $GITHUB_OUTPUT
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "image_ref=${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.python
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.meta-backend.outputs.image_ref }}
+          cache-from: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-backend:buildcache
+          cache-to: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-backend:buildcache,mode=max
+          build-args: |
+            KUBECTL_VERSION=v1.29.6
+            HELM_VERSION=3.20.1
+
+      - name: Summary
+        run: |
+          echo "=== k9b Image Build Summary ==="
+          echo "Tag: ${{ steps.meta-backend.outputs.image_tag }}"
+          echo "Backend image:"
+          echo "  Repository: ${{ steps.meta-backend.outputs.image_repository }}"
+          echo "  Tag: ${{ steps.meta-backend.outputs.image_tag }}"
+          echo "  Ref: ${{ steps.meta-backend.outputs.image_ref }}"
+
+  live-k3s-lab:
+    name: Live K3s Lab
+    runs-on: spbnix-k8s
+    timeout-minutes: 60
+    environment: k9b-live-lab-admin
+    needs: build-lab-images
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup lab toolchain
+        uses: ./.github/actions/k9b-live-lab-toolchain
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          kubectl-version: 'latest'
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install Python dependencies
+        run: |
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install pytest pyyaml
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+
+      - name: Configure kubectl
+        env:
+          KUBECONFIG_B64: ${{ secrets.K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${KUBECONFIG_B64:-}" ]]; then
+            echo "::error::secrets.K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 is empty"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/kubeconfig"
+          KUBECONFIG_PATH="$RUNNER_TEMP/kubeconfig/k9b-otel-demo"
+          printf '%s' "$KUBECONFIG_B64" | base64 -d > "$KUBECONFIG_PATH"
+          chmod 600 "$KUBECONFIG_PATH"
+          echo "KUBECONFIG=$KUBECONFIG_PATH" >> "$GITHUB_ENV"
+          echo "KUBECONFIG_PATH=$KUBECONFIG_PATH" >> "$GITHUB_ENV"
+          kubectl --kubeconfig "$KUBECONFIG_PATH" config current-context >/dev/null
+          SERVER="$(kubectl --kubeconfig "$KUBECONFIG_PATH" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+          if [[ -z "$SERVER" ]]; then
+            echo "::error title=Invalid kubeconfig::no cluster server URL"
+            exit 1
+          fi
+          case "$SERVER" in
+            *localhost*|*127.0.0.1*|*"[::1]"*)
+              echo "::error title=Invalid K3s kubeconfig server::kubeconfig points to local API server"
+              exit 1
+              ;;
+          esac
+          echo "::add-mask::$SERVER"
+          echo "Kubeconfig server configured"
+
+      - name: Verify live cluster connectivity
+        run: |
+          set -euo pipefail
+          kubectl --kubeconfig "$KUBECONFIG" cluster-info
+          kubectl --kubeconfig "$KUBECONFIG" get nodes -o wide
+
+      - name: Show live cluster baseline
+        run: |
+          set -euo pipefail
+          echo "=== Live Cluster Baseline Diagnostics ==="
+          kubectl --kubeconfig "$KUBECONFIG" config current-context || true
+          kubectl --kubeconfig "$KUBECONFIG" get nodes -o wide || true
+          kubectl --kubeconfig "$KUBECONFIG" get ns || true
+          kubectl --kubeconfig "$KUBECONFIG" get deploy,svc -A | grep -E 'k9b|backend' || true
+          helm --kubeconfig "$KUBECONFIG" list -A | grep -E 'k9b' || true
+
+      - name: Create artifact directory
+        run: mkdir -p ./lab-artifacts/otel-demo
+
+      - name: Create k9b diagnosis credentials
+        env:
+          K9B_DIAGNOSIS_API_KEY: ${{ secrets.K9B_DIAGNOSIS_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${K9B_DIAGNOSIS_API_KEY:-}" ]; then
+            echo "::error::K9B_DIAGNOSIS_API_KEY is required"
+            exit 1
+          fi
+          kubectl --kubeconfig "$KUBECONFIG" create namespace k9b --dry-run=client -o yaml | kubectl --kubeconfig "$KUBECONFIG" apply -f -
+          kubectl --kubeconfig "$KUBECONFIG" -n k9b create secret generic k9b-diagnosis-credentials \
+            --from-literal=K9B_DIAGNOSIS_API_KEY="${K9B_DIAGNOSIS_API_KEY}" \
+            --from-literal=K9B_EXTERNAL_ANALYSIS_API_KEY="${K9B_DIAGNOSIS_API_KEY}" \
+            --dry-run=client -o yaml | kubectl --kubeconfig "$KUBECONFIG" apply -f -
+
+      - name: Ensure k9b lab baseline
+        env:
+          K9B_DIAGNOSIS_BASE_URL: ${{ secrets.K9B_DIAGNOSIS_BASE_URL }}
+          K9B_DIAGNOSIS_MODEL: ${{ secrets.K9B_DIAGNOSIS_MODEL }}
+        run: |
+          set -euo pipefail
+          for required in K9B_DIAGNOSIS_BASE_URL K9B_DIAGNOSIS_MODEL; do
+            if [ -z "${!required:-}" ]; then
+              echo "::error::${required} is required"
+              exit 1
+            fi
+          done
+          echo "=== Ensuring k9b lab baseline ==="
+          .venv/bin/python -m scripts.ensure_k9b_lab_baseline \
+            --lab-name otel-demo \
+            --release-name k9b \
+            --namespace k9b \
+            --chart-path ./charts/k9b \
+            --values-path ./charts/k9b/values-live-lab.yaml \
+            --artifact-dir ./lab-artifacts/otel-demo \
+            --kubeconfig "$KUBECONFIG" \
+            --backend-deployment k9b-backend \
+            --timeout-seconds 600 \
+            --set "image.backend.repository=${{ needs.build-lab-images.outputs.backend_image_repository }}" \
+            --set "image.backend.tag=${{ needs.build-lab-images.outputs.backend_image_tag }}" \
+            --set "image.backend.pullPolicy=IfNotPresent" \
+            --set "diagnosisProvider.enabled=true" \
+            --set-string "diagnosisProvider.provider=openai_compatible" \
+            --set-string "diagnosisProvider.existingSecret=k9b-diagnosis-credentials" \
+            --set-string "diagnosisProvider.apiKeyKey=K9B_DIAGNOSIS_API_KEY" \
+            --set-string "diagnosisProvider.baseUrl=${K9B_DIAGNOSIS_BASE_URL}" \
+            --set-string "diagnosisProvider.model=${K9B_DIAGNOSIS_MODEL}" \
+            --set "diagnosisProvider.timeoutSeconds=120" \
+            --set "diagnosisProvider.maxOutputChars=8000" \
+            --set "scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED=true" \
+            --set "scheduler.env.K9B_EXTERNAL_ANALYSIS_BASE_URL=${K9B_DIAGNOSIS_BASE_URL}" \
+            --set "scheduler.env.K9B_EXTERNAL_ANALYSIS_MODEL=${K9B_DIAGNOSIS_MODEL}" \
+            --set "scheduler.env.K9B_AUTO_DRILLDOWN_ENABLED=true" \
+            --set "scheduler.env.K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true" \
+            --set "scheduler.env.K9B_DIAGNOSIS_PROVIDER_NAME=openai_compatible" \
+            --set-string "scheduler.env.K9B_DIAGNOSIS_BASE_URL=${K9B_DIAGNOSIS_BASE_URL}" \
+            --set-string "scheduler.env.K9B_DIAGNOSIS_MODEL=${K9B_DIAGNOSIS_MODEL}" \
+            --set-string "scheduler.env.K9B_DIAGNOSIS_TIMEOUT_SECONDS=120" \
+            --set-string "scheduler.env.K9B_DIAGNOSIS_MAX_OUTPUT_CHARS=8000" \
+            --set-string "scheduler.env.K9B_EXTERNAL_ANALYSIS_PROVIDER=openai_compatible" \
+            --set-string "scheduler.smallProvider.provider=openai_compatible" \
+            --set "scheduler.smallProvider.existingSecret=k9b-diagnosis-credentials" \
+            --set "scheduler.smallProvider.apiKeyKey=K9B_EXTERNAL_ANALYSIS_API_KEY"
+
+      - name: Run Live OTel Demo Lab
+        run: |
+          echo "=== Starting Live OTel Demo Lab ==="
+          echo "Incident scenario: ${{ inputs.incident_scenario }}"
+          LAB_CMD=(
+            .venv/bin/python -m scripts.k9b_otel_demo_lab
+            --kubeconfig "$KUBECONFIG"
+            --artifact-dir ./lab-artifacts/otel-demo
+            --mode live
+            --incident-scenario "${{ inputs.incident_scenario }}"
+            --live-traffic-duration "${{ inputs.live_traffic_duration_seconds || '600' }}"
+            --live-observation-wait "${{ inputs.live_observation_wait_seconds || '600' }}"
+            --live-poll-interval "${{ inputs.live_poll_interval_seconds || '30' }}"
+          )
+          if [[ "${{ inputs.incident_scenario }}" == "recommendation-cache-failure" ]]; then
+            echo "Adding --enable-provider-smoke"
+            LAB_CMD+=(--enable-provider-smoke)
+          else
+            echo "Non-cache scenario: provider smoke NOT added (P2b->P3c->P4c handles diagnosis)"
+          fi
+          "${LAB_CMD[@]}"
+
+      - name: Verify Live Lab
+        run: |
+          echo "=== Verifying Live Lab Results ==="
+          .venv/bin/python -m scripts.k9b_otel_demo_lab_verify \
+            --artifact-dir ./lab-artifacts/otel-demo \
+            --mode live \
+            --json
+          if [[ "${{ inputs.incident_scenario }}" == "unschedulable-shipping" ]]; then
+            echo "Running K8s-native bundle verification..."
+            .venv/bin/python -m scripts.k9b_otel_demo_lab_k8s_artifacts \
+              --artifact-dir ./lab-artifacts/otel-demo
+          fi
+
+      - name: Upload Live Lab Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k9b-otel-demo-live-lab-${{ github.run_id }}
+          path: |
+            ./lab-artifacts/otel-demo/**
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact_retention_days || '7' }}
+
+      - name: Summary
+        run: |
+          echo "=== Live K3s OTel Demo Lab Summary ==="
+          echo "Artifacts: ./lab-artifacts/otel-demo/"
