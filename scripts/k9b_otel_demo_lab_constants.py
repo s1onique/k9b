@@ -58,10 +58,12 @@ def get_configured_otel_demo_chart_version() -> str:
 FAILURE_HELM_CHART_VERSION_NOT_FOUND = "helm_chart_version_not_found"
 
 # k9b backend configuration (when k9b is deployed alongside OTel Demo)
+# These are the single source of truth for k9b backend provider-smoke target
 K9B_BACKEND_DEPLOYMENT = "k9b-backend"
 K9B_BACKEND_CONTAINER = "backend"
 K9B_BACKEND_PORT = 8080
 K9B_NAMESPACE = "k9b"
+K9B_BACKEND_SERVICE = "k9b-backend"  # Service name (may differ from deployment)
 
 
 # =============================================================================
@@ -160,6 +162,17 @@ FAILURE_API_DISCOVERY_FAILED = "api_discovery_failed"
 FAILURE_NAMESPACE_RBAC_DENIED = "namespace_rbac_denied"
 FAILURE_UNKNOWN_CLUSTER_CONNECTIVITY = "unknown_cluster_connectivity_failure"
 
+# k9b backend prerequisite failure classes (Phase 0 / early detection)
+# These indicate the k9b backend namespace/service/deployment is missing
+# before any HTTP health check is attempted.
+FAILURE_BACKEND_NAMESPACE_MISSING = "backend_namespace_missing"
+FAILURE_BACKEND_SERVICE_MISSING = "backend_service_missing"
+FAILURE_BACKEND_DEPLOYMENT_MISSING = "backend_deployment_missing"
+FAILURE_BACKEND_ROLLOUT_NOT_READY = "backend_rollout_not_ready"
+
+# Traffic target failure classes
+FAILURE_TRAFFIC_TARGET_SERVICE_MISSING = "traffic_target_service_missing"
+
 
 # =============================================================================
 # Expected components for diagnosis oracle
@@ -204,8 +217,8 @@ PHASE_DIAGNOSIS = "phase4-diagnosis"
 PHASE_VERIFICATION = "phase5-verification"
 
 # Provider smoke phase directories (under lab-artifacts/otel/provider-smoke/)
-PHASE_BACKEND_HEALTH = "provider-smoke/backend-health"
-PHASE_SCHEDULER_HEALTH = "provider-smoke/scheduler-health"
-PHASE_INCIDENT_DISCOVERY = "provider-smoke/incident-discovery"
-PHASE_PROVIDER_SMOKE = "provider-smoke/incident-provider"
-PHASE_PERSISTED_DIAGNOSIS = "provider-smoke/persisted-diagnosis"
+PHASE_BACKEND_HEALTH = "backend-health"
+PHASE_SCHEDULER_HEALTH = "scheduler-health"
+PHASE_INCIDENT_DISCOVERY = "incident-discovery"
+PHASE_PROVIDER_SMOKE = "incident-provider"
+PHASE_PERSISTED_DIAGNOSIS = "persisted-diagnosis"

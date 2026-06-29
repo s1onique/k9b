@@ -14,7 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from .k9b_lab_common_helpers import kubectl_json, log, write_json_artifact
-from .k9b_otel_demo_lab_constants import OTEL_DEMO_NAMESPACE
+from .k9b_otel_demo_lab_constants import (
+    FAILURE_TRAFFIC_TARGET_SERVICE_MISSING,
+    OTEL_DEMO_NAMESPACE,
+)
 
 
 def record_traffic_plan(
@@ -104,6 +107,39 @@ def generate_traffic(
     return record_traffic_plan(kubeconfig, artifact_dir, duration_seconds)
 
 
+def _build_frontend_proxy_fqdn(service_name: str, namespace: str) -> str:
+    """Build the FQDN for a service in a Kubernetes namespace.
+    
+    The FQDN format is: service-name.namespace.svc.cluster.local
+    
+    This ensures the traffic pod (which may run in a different namespace)
+    can reach the frontend-proxy service.
+    """
+    return f"{service_name}.{namespace}.svc.cluster.local"
+
+
+def _find_frontend_proxy_service(kubeconfig: str, namespace: str) -> str | None:
+    """Find the frontend-proxy service name."""
+    svc_result = kubectl_json(kubeconfig, "services", namespace)
+    if svc_result.success and svc_result.data:
+        for svc in svc_result.data.get("items", []):
+            svc_name: str = svc.get("metadata", {}).get("name", "") or ""
+            if svc_name == "frontend-proxy":
+                return svc_name
+    return None
+
+
+def _find_frontend_service(kubeconfig: str, namespace: str) -> str | None:
+    """Find the frontend service name."""
+    svc_result = kubectl_json(kubeconfig, "services", namespace)
+    if svc_result.success and svc_result.data:
+        for svc in svc_result.data.get("items", []):
+            svc_name: str = svc.get("metadata", {}).get("name", "") or ""
+            if svc_name == "frontend":
+                return svc_name
+    return None
+
+
 def generate_live_traffic(
     kubeconfig: str,
     artifact_dir: Path,
@@ -113,7 +149,7 @@ def generate_live_traffic(
 ) -> dict[str, Any]:
     """Generate real HTTP traffic to the frontend (live mode only).
     
-    Creates a temporary curl pod that hits the frontend service repeatedly.
+    Creates a temporary curl pod that hits the frontend-proxy service repeatedly.
     
     Args:
         kubeconfig: Path to kubeconfig
@@ -130,13 +166,14 @@ def generate_live_traffic(
     
     log(f"Starting live traffic generation for {duration_seconds}s...")
     
-    # Find frontend service
-    frontend_svc = _find_frontend_service(kubeconfig, namespace)
-    if not frontend_svc:
-        log("Error: Could not find frontend service")
+    # Find frontend-proxy service (preferred)
+    frontend_proxy = _find_frontend_proxy_service(kubeconfig, namespace)
+    if not frontend_proxy:
+        log("Warning: Could not find frontend-proxy service")
         result = {
             "mode": "live",
-            "error": "frontend service not found",
+            "error": "frontend-proxy service not found",
+            "failure_class": FAILURE_TRAFFIC_TARGET_SERVICE_MISSING,
             "success_count": 0,
             "failure_count": 0,
             "actual_attempts": 0,
@@ -146,12 +183,15 @@ def generate_live_traffic(
         write_json_artifact(traffic_dir, "traffic-live.json", result)
         return result
     
-    # Find frontend-proxy service (preferred) or use frontend
-    frontend_proxy = _find_frontend_proxy_service(kubeconfig, namespace)
-    target_service = frontend_proxy or frontend_svc
-    target_url = f"http://{target_service}/"
+    # Use FQDN to ensure traffic pod can reach the service regardless of namespace
+    target_service = frontend_proxy
+    target_fqdn = _build_frontend_proxy_fqdn(frontend_proxy, namespace)
+    target_url = f"http://{target_fqdn}/"
     
-    log(f"Target service: {target_service} -> {target_url}")
+    log(f"Target service: {target_service}")
+    log(f"Target FQDN: {target_fqdn}")
+    log(f"Target URL: {target_url}")
+    log(f"Traffic pod will run in namespace: {namespace}")
     
     # Create traffic pod manifest
     traffic_pod_name = f"k9b-traffic-generator-{int(time.time())}"
@@ -263,7 +303,9 @@ spec:
         "mode": "live",
         "traffic_pod_name": traffic_pod_name,
         "target_service": target_service,
+        "target_fqdn": target_fqdn,
         "target_url": target_url,
+        "namespace": namespace,
         "duration_seconds": duration_seconds,
         "interval_seconds": interval_seconds,
         "success_count": success_count,
@@ -282,28 +324,6 @@ spec:
     
     log(f"Live traffic complete: {success_count} success, {failure_count} failures, actual={actual_attempts}, estimated={estimated_attempts}")
     return result
-
-
-def _find_frontend_service(kubeconfig: str, namespace: str) -> str | None:
-    """Find the frontend service name."""
-    svc_result = kubectl_json(kubeconfig, "services", namespace)
-    if svc_result.success and svc_result.data:
-        for svc in svc_result.data.get("items", []):
-            svc_name: str = svc.get("metadata", {}).get("name", "") or ""
-            if svc_name == "frontend":
-                return svc_name
-    return None
-
-
-def _find_frontend_proxy_service(kubeconfig: str, namespace: str) -> str | None:
-    """Find the frontend-proxy service name."""
-    svc_result = kubectl_json(kubeconfig, "services", namespace)
-    if svc_result.success and svc_result.data:
-        for svc in svc_result.data.get("items", []):
-            svc_name: str = svc.get("metadata", {}).get("name", "") or ""
-            if svc_name == "frontend-proxy":
-                return svc_name
-    return None
 
 
 def kubectl_apply(kubeconfig: str, manifest: str, namespace: str) -> Any:

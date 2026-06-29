@@ -6,6 +6,17 @@ FAILURE_BACKEND_HEALTH_TIMEOUT = "backend_health_timeout"
 FAILURE_BACKEND_HEALTH_INVALID_RESPONSE = "backend_health_invalid_response"
 FAILURE_BACKEND_HEALTH_TRANSPORT_ERROR = "backend_health_transport_error"
 
+# Prerequisite failure class constants (Phase 0 / early detection)
+# These indicate the k9b backend namespace/service/deployment is missing
+# before any HTTP health check is attempted.
+FAILURE_BACKEND_NAMESPACE_MISSING = "backend_namespace_missing"
+FAILURE_BACKEND_SERVICE_MISSING = "backend_service_missing"
+FAILURE_BACKEND_DEPLOYMENT_MISSING = "backend_deployment_missing"
+FAILURE_BACKEND_ROLLOUT_NOT_READY = "backend_rollout_not_ready"
+
+# k9b backend service name constant (single source of truth)
+K9B_BACKEND_SERVICE = "k9b-backend"
+
 # Health dependency failure class constants
 # These map to specific internal dependency failures for self-diagnosis
 FAILURE_DEP_SCHEDULER_UNAVAILABLE = "dependency_scheduler_unavailable"

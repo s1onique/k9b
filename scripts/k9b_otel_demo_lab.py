@@ -50,6 +50,7 @@ from .k9b_otel_demo_lab_phases import (
     phase4_diagnosis,
     phase5_verification,
     # Provider smoke phases
+    phase_p0_k9b_backend_prerequisite,
     phase_p1_backend_health_gate,
     phase_p1b_scheduler_health_gate,
     phase_p2_incident_discovery_provider,
@@ -91,6 +92,18 @@ def run_lab(config: LabConfig) -> LabResult:
         result.phases.append(_phase_to_dict(phase0))
         if not phase0.success:
             result.failure_reason = f"Phase 0 failed: {phase0.message}"
+            return _finish_result(result, artifact_dir, start_time)
+        
+        # P0: k9b Backend Prerequisite Check (fail-fast before expensive OTel install)
+        # This verifies the k9b namespace/service/deployment exist before attempting
+        # OTel Demo install, injection, or traffic phases.
+        log("=" * 60)
+        log("P0: k9b Backend Prerequisite Check")
+        log("=" * 60)
+        phase_p0 = phase_p0_k9b_backend_prerequisite(config, artifact_dir)
+        result.phases.append(_phase_to_dict(phase_p0))
+        if not phase_p0.success:
+            result.failure_reason = f"P0 failed (k9b backend prerequisite): {phase_p0.message}"
             return _finish_result(result, artifact_dir, start_time)
         
         # Phase 1: Deploy OpenTelemetry Demo
