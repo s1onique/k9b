@@ -436,6 +436,8 @@ jobs:
             --set "scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED=true" \
             --set "scheduler.env.K9B_EXTERNAL_ANALYSIS_BASE_URL=${K9B_DIAGNOSIS_BASE_URL}" \
             --set "scheduler.env.K9B_EXTERNAL_ANALYSIS_MODEL=${K9B_DIAGNOSIS_MODEL}" \
+            --set "scheduler.env.K9B_AUTO_DRILLDOWN_ENABLED=true" \
+            --set "scheduler.env.K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true" \
             --set "scheduler.env.K9B_DIAGNOSIS_PROVIDER_NAME=openai_compatible" \
             --set-string "scheduler.env.K9B_DIAGNOSIS_BASE_URL=${K9B_DIAGNOSIS_BASE_URL}" \
             --set-string "scheduler.env.K9B_DIAGNOSIS_MODEL=${K9B_DIAGNOSIS_MODEL}" \

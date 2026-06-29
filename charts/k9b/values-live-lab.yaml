@@ -11,11 +11,15 @@
 #   helm install k9b ./charts/k9b --set scheduler.resources.requests.cpu=25m [other options]
 
 # =============================================================================
-# RBAC: Namespace-scoped (no cluster-RBAC permissions required)
+# RBAC: Cluster-scoped for OTel lab (scheduler needs nodes, monitoring CRDs)
+# NOTE: The OTel lab uses cluster-scoped RBAC because the scheduler needs:
+# - nodes (cluster-scoped resource for snapshot collection)
+# - monitoring.coreos.com CRDs (alertmanagers, prometheuses, etc.)
+# - operator.victoriametrics.com CRDs (vmalerts, vmrules, etc.)
 # =============================================================================
 rbac:
   create: true
-  clusterScoped: false
+  clusterScoped: true
 
 # =============================================================================
 # Resources: Smaller, honest values for lab environments
@@ -71,3 +75,13 @@ healthConfig:
         cluster_class: "lab"
         cluster_role: "primary"
         baseline_cohort: "fleet-lab"
+    # =============================================================================
+    # External Analysis: Enable auto-diagnosis loop and drilldown for live lab
+    # These settings control the automatic diagnosis loop behavior in the scheduler.
+    # The loop periodically runs diagnostic checks and can drill down into findings.
+    # =============================================================================
+    external_analysis:
+      auto_drilldown:
+        enabled: true
+      review_enrichment:
+        enabled: true

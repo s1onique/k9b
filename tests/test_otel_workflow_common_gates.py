@@ -168,3 +168,13 @@ class TestOtelWorkflowCommonGates:
         assert "OPENROUTER_API_KEY" not in text
         assert "openrouter_api_key" not in text
         assert "openrouter_model" not in text
+
+    def test_workflow_enables_automatic_diagnosis_loop(self) -> None:
+        """Workflow should enable K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true for scheduler."""
+        text = WORKFLOW.read_text()
+        assert "scheduler.env.K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true" in text
+
+    def test_workflow_enables_auto_drilldown(self) -> None:
+        """Workflow should enable K9B_AUTO_DRILLDOWN_ENABLED=true for scheduler."""
+        text = WORKFLOW.read_text()
+        assert "scheduler.env.K9B_AUTO_DRILLDOWN_ENABLED=true" in text
