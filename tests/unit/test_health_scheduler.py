@@ -595,13 +595,20 @@ class SchedulerImportSmokeTests(unittest.TestCase):
                     self.assertEqual(exc.code, 0)
 
     def test_health_run_config_imported_from_canonical_owner(self) -> None:
-        """Verify HealthRunConfig lives in loop.py, not loop_history.py."""
+        """Verify HealthRunConfig is importable from loop.py (backward compat) and lives in loop_run_config.py.
+
+        The split moved HealthRunConfig to loop_run_config.py, but loop.py re-exports it for backward
+        compatibility. The __module__ attribute now correctly points to loop_run_config.py.
+        """
         from k8s_diag_agent.health.loop import HealthRunConfig
 
-        # Direct module ownership check
+        # Verify it's importable from the public API (loop.py facade)
+        assert HealthRunConfig is not None
+
+        # Verify the actual module where it's defined (loop_run_config.py)
         self.assertEqual(
             HealthRunConfig.__module__,
-            "k8s_diag_agent.health.loop",
+            "k8s_diag_agent.health.loop_run_config",
         )
 
 
