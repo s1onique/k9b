@@ -38,6 +38,7 @@ def ensure_k9b_baseline_ready(
     values_path: Path | None = None,
     backend_deployment: str = "k9b-backend",
     timeout_seconds: int = 300,
+    set_values: list[str] | None = None,
 ) -> dict[str, Any]:
     """Install k9b baseline and verify backend deployment is ready.
 
@@ -54,6 +55,7 @@ def ensure_k9b_baseline_ready(
         values_path: Path to values file (default: chart_path/values-live-lab.yaml)
         backend_deployment: Name of the backend deployment to wait for
         timeout_seconds: Rollout timeout in seconds (default: 300)
+        set_values: List of --set values for Helm (e.g., ["image.backend.repository=foo", "image.backend.tag=v1"])
 
     Returns:
         Dictionary with:
@@ -88,6 +90,7 @@ def ensure_k9b_baseline_ready(
         namespace=namespace,
         release_name=release_name,
         artifact_dir=helm_dir,
+        set_values=set_values,
     )
     results["artifacts"]["render_manifest"] = render_result
 
@@ -105,6 +108,7 @@ def ensure_k9b_baseline_ready(
         namespace=namespace,
         release_name=release_name,
         artifact_dir=helm_dir,
+        set_values=set_values,
     )
     results["artifacts"]["helm_install"] = install_result
 

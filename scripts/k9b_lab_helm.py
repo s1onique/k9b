@@ -19,14 +19,27 @@ def render_manifest(
     namespace: str,
     release_name: str,
     artifact_dir: Path,
+    set_values: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Render Helm manifest and collect evidence."""
+    """Render Helm manifest and collect evidence.
+
+    Args:
+        chart_path: Path to Helm chart directory
+        values_path: Path to values file
+        namespace: Kubernetes namespace
+        release_name: Helm release name
+        artifact_dir: Directory for evidence artifacts
+        set_values: List of --set values (e.g., ["image.backend.repository=foo", "image.backend.tag=v1"])
+    """
     result: dict[str, Any] = {"success": False, "error": None, "manifest_path": None}
     cmd = ["helm", "template", release_name, chart_path]
     if namespace:
         cmd.extend(["--namespace", namespace])
     if values_path:
         cmd.extend(["--values", values_path])
+    if set_values:
+        for sv in set_values:
+            cmd.extend(["--set", sv])
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         write_text_artifact(artifact_dir, "rendered-manifest-exit-code.txt", str(proc.returncode))
@@ -52,8 +65,19 @@ def install_helm(
     namespace: str,
     release_name: str,
     artifact_dir: Path,
+    set_values: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Install/upgrade Helm release."""
+    """Install/upgrade Helm release.
+
+    Args:
+        kubeconfig: Path to kubeconfig file
+        chart_path: Path to Helm chart directory
+        values_path: Path to values file
+        namespace: Kubernetes namespace
+        release_name: Helm release name
+        artifact_dir: Directory for evidence artifacts
+        set_values: List of --set values (e.g., ["image.backend.repository=foo", "image.backend.tag=v1"])
+    """
     result: dict[str, Any] = {"returncode": -1, "stdout": "", "stderr": ""}
     cmd = [
         "helm", "upgrade", "--install", release_name, chart_path,
@@ -62,6 +86,9 @@ def install_helm(
     ]
     if values_path:
         cmd.extend(["--values", values_path])
+    if set_values:
+        for sv in set_values:
+            cmd.extend(["--set", sv])
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         result["returncode"] = proc.returncode

@@ -33,6 +33,13 @@ def main() -> None:
     parser.add_argument("--values-path", type=Path, help="Path to values file")
     parser.add_argument("--backend-deployment", default="k9b-backend", help="Backend deployment name")
     parser.add_argument("--timeout-seconds", type=int, default=300, help="Rollout timeout in seconds")
+    parser.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        dest="set_values",
+        help="Set Helm values (can be repeated, e.g., --set image.backend.repository=foo)",
+    )
 
     args = parser.parse_args()
 
@@ -46,6 +53,7 @@ def main() -> None:
         values_path=args.values_path,
         backend_deployment=args.backend_deployment,
         timeout_seconds=args.timeout_seconds,
+        set_values=args.set_values if args.set_values else None,
     )
 
     # Write result artifact

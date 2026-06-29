@@ -66,8 +66,97 @@ on:
 
 env:
   PYTHON_VERSION: '3.13'
+  # Harbor registry configuration for live lab image builds
+  HARBOR_REGISTRY: harbor-pve1.spbnix.local
+  HARBOR_PROJECT: k9b
+  BACKEND_IMAGE_NAME: k9b-backend
 
 jobs:
+  # ===========================================================================
+  # Build k9b Images for Live Lab
+  # Builds and pushes k9b-backend image to Harbor so it's available to K3s.
+  # This job runs on a Docker-capable runner (spbnix-k8s-docker).
+  # ===========================================================================
+  build-lab-images:
+    name: Build k9b Images for Live Lab
+    runs-on: spbnix-k8s-docker
+    timeout-minutes: 20
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_lab == true
+    permissions:
+      contents: read
+    outputs:
+      backend_image_repository: ${{ steps.meta-backend.outputs.image_repository }}
+      backend_image_tag: ${{ steps.meta-backend.outputs.image_tag }}
+      backend_image_ref: ${{ steps.meta-backend.outputs.image_ref }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Docker preflight
+      - name: Docker preflight
+        run: |
+          set -eux
+          echo "runner=${RUNNER_NAME:-unknown}"
+          echo "os=${RUNNER_OS:-unknown}"
+          which docker
+          docker version
+          docker info
+
+      # Install SPbNIX Harbor CA for push
+      - name: Install SPbNIX Harbor CA
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+        run: .github/scripts/install-spbnix-harbor-ca.sh
+
+      # Login to Harbor
+      - name: Login to Harbor
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.HARBOR_REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_TOKEN }}
+
+      # Setup QEMU and Buildx for multi-arch builds
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Extract backend metadata
+      - name: Extract backend metadata
+        id: meta-backend
+        run: |
+          IMAGE_TAG="otel-live-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}"
+          echo "image_repository=${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}" >> $GITHUB_OUTPUT
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "image_ref=${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}:${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
+      # Build and push backend image
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.python
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.meta-backend.outputs.image_ref }}
+          cache-from: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-backend:buildcache
+          cache-to: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-backend:buildcache,mode=max
+          build-args: |
+            KUBECTL_VERSION=v1.29.6
+            HELM_VERSION=3.20.1
+
+      - name: Summary
+        run: |
+          echo "=== k9b Image Build Summary ==="
+          echo "Tag: ${{ steps.meta-backend.outputs.image_tag }}"
+          echo "Backend image:"
+          echo "  Repository: ${{ steps.meta-backend.outputs.image_repository }}"
+          echo "  Tag: ${{ steps.meta-backend.outputs.image_tag }}"
+          echo "  Ref: ${{ steps.meta-backend.outputs.image_ref }}"
+
   # ===========================================================================
   # Build and Verify Job (always runs on ubuntu-latest)
   # ===========================================================================
@@ -194,6 +283,7 @@ jobs:
     timeout-minutes: 60
     if: github.event_name == 'workflow_dispatch' && inputs.run_live_lab == true
     environment: k9b-live-lab-admin
+    needs: build-lab-images
     permissions:
       contents: read
     steps:
@@ -346,6 +436,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== Ensuring k9b lab baseline ==="
+          echo "Using k9b-backend image: ${{ needs.build-lab-images.outputs.backend_image_ref }}"
+          
+          # Pass image overrides to baseline installer
           .venv/bin/python -m scripts.ensure_k9b_lab_baseline \
             --lab-name otel-demo \
             --release-name k9b \
@@ -355,7 +448,10 @@ jobs:
             --artifact-dir ./lab-artifacts/otel-demo \
             --kubeconfig "$KUBECONFIG" \
             --backend-deployment k9b-backend \
-            --timeout-seconds 600
+            --timeout-seconds 600 \
+            --set "image.backend.repository=${{ needs.build-lab-images.outputs.backend_image_repository }}" \
+            --set "image.backend.tag=${{ needs.build-lab-images.outputs.backend_image_tag }}" \
+            --set "image.backend.pullPolicy=IfNotPresent"
 
       - name: Run Live OTel Demo Lab
         run: |
