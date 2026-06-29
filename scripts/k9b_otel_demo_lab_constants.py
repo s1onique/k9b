@@ -173,6 +173,21 @@ FAILURE_BACKEND_ROLLOUT_NOT_READY = "backend_rollout_not_ready"
 # Traffic target failure classes
 FAILURE_TRAFFIC_TARGET_SERVICE_MISSING = "traffic_target_service_missing"
 
+# =============================================================================
+# K8s-native incident injection constants (P2b)
+# =============================================================================
+
+# Shipping deployment for unschedulable rollout
+SHIPPING_DEPLOYMENT = "shipping"
+
+# nodeSelector key for unschedulable incident
+K8S_INJECTION_NODE_SELECTOR_KEY = "k9b.dev/otel-lab-node"
+K8S_INJECTION_NODE_SELECTOR_VALUE = "missing"
+
+# Failure class for K8s injection failure
+FAILURE_K8S_INJECTION_FAILED = "k8s_injection_failed"
+FAILURE_K8S_INJECTION_NO_SYMPTOM = "k8s_injection_no_symptom"
+
 
 # =============================================================================
 # Expected components for diagnosis oracle

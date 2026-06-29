@@ -287,6 +287,75 @@ def kubectl_apply(
     return KubectlResult.from_subprocess(result)
 
 
+def kubectl_patch(
+    kubeconfig: str,
+    resource_type: str,
+    name: str,
+    namespace: str | None = None,
+    patch: dict[str, Any] | list[Any] | None = None,
+    patch_type: str = "strategic",
+) -> KubectlResult:
+    """Patch a Kubernetes resource with a JSON patch.
+    
+    Args:
+        kubeconfig: Path to kubeconfig
+        resource_type: Resource type (e.g., "deployment", "pod")
+        name: Resource name
+        namespace: Optional namespace
+        patch: Dictionary or list patch (will be JSON-serialized)
+        patch_type: Patch type ("strategic", "merge", "json")
+        
+    Returns:
+        KubectlResult with success/failure
+    """
+    import json
+    
+    cmd = ["kubectl", "--kubeconfig", kubeconfig, "patch", resource_type, name]
+    if namespace:
+        cmd.extend(["--namespace", namespace])
+    
+    cmd.extend(["--type", patch_type])
+    
+    if patch:
+        patch_json = json.dumps(patch)
+        cmd.extend(["-p", patch_json])
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    else:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    
+    return KubectlResult.from_subprocess(result)
+
+
+def kubectl_scale(
+    kubeconfig: str,
+    namespace: str,
+    deployment: str,
+    replicas: int,
+) -> KubectlResult:
+    """Scale a deployment to the specified replica count.
+    
+    Args:
+        kubeconfig: Path to kubeconfig
+        namespace: Namespace
+        deployment: Deployment name
+        replicas: Target replica count
+        
+    Returns:
+        KubectlResult with success/failure
+    """
+    cmd = [
+        "kubectl",
+        "--kubeconfig", kubeconfig,
+        "scale",
+        "--replicas", str(replicas),
+        "--namespace", namespace,
+        f"deployment/{deployment}",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return KubectlResult.from_subprocess(result)
+
+
 # =============================================================================
 # Re-exports for backward compatibility
 # =============================================================================
@@ -307,4 +376,6 @@ __all__ = [
     "kubectl_logs",
     "kubectl_describe",
     "kubectl_apply",
+    "kubectl_patch",
+    "kubectl_scale",
 ]
