@@ -3,6 +3,9 @@
 
 Contains phase 0 (cluster baseline), phase 1 (Helm deploy), and
 phase 1b (baseline readiness).
+
+Note: Backend health gate runs BEFORE this phase via provider_health module.
+See k9b_otel_demo_lab_provider_health.phase_p1_backend_health_gate.
 """
 
 from __future__ import annotations

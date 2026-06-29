@@ -11,6 +11,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .backend_health_gate import run_health_gate
 from .backend_health_gate.prerequisites import (
     _check_deployment_exists,
     _check_deployment_ready,
@@ -34,6 +35,9 @@ from .k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
 from .k9b_provider_preflight import (
     run_provider_preflight,
 )
+
+# BackendHealth: alias for run_health_gate to maintain contract with OTel workflow tests.
+run_backend_health = run_health_gate
 
 
 def phase_p0_k9b_backend_prerequisite(
