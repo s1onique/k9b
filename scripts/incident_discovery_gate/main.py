@@ -52,7 +52,8 @@ from .types import IncidentDiscoveryResult
 
 def run_incident_discovery(
     kubeconfig: str,
-    namespace: str,
+    backend_namespace: str,
+    incident_namespace: str,
     backend_deployment: str,
     backend_container: str,
     backend_port: int,
@@ -66,7 +67,8 @@ def run_incident_discovery(
 
     Args:
         kubeconfig: Path to kubeconfig file
-        namespace: Kubernetes namespace
+        backend_namespace: Kubernetes namespace where k9b backend runs (for API calls)
+        incident_namespace: Kubernetes namespace where incident fixture exists (for snapshot/discovery)
         backend_deployment: Backend deployment name
         backend_container: Backend container name
         backend_port: Backend port
@@ -81,7 +83,7 @@ def run_incident_discovery(
     """
     result = IncidentDiscoveryResult()
     result.fixture_name = fixture_name
-    result.fixture_namespace = namespace
+    result.fixture_namespace = incident_namespace
     result.diagnostics["timestamp"] = datetime.now(UTC).isoformat()
 
     start_time = time.time()
@@ -98,7 +100,7 @@ def run_incident_discovery(
     # ===================================================================
     print("Phase 2a: Verifying incident fixture...", flush=True)
 
-    pod_status = get_pod_status(kubeconfig, namespace, fixture_name)
+    pod_status = get_pod_status(kubeconfig, incident_namespace, fixture_name)
     result.fixture_exists = pod_status.get("found", False)
     result.fixture_phase = pod_status.get("phase", "")
     result.fixture_conditions = pod_status.get("conditions", [])
@@ -111,14 +113,14 @@ def run_incident_discovery(
 
     result.diagnostics["fixture"] = {
         "name": fixture_name,
-        "namespace": namespace,
+        "namespace": incident_namespace,
         "found": result.fixture_exists,
         "phase": result.fixture_phase,
         "all_ready": all_ready,
     }
 
     # Classify fixture status
-    fixture_failure = classify_fixture_failure(pod_status, fixture_name, namespace)
+    fixture_failure = classify_fixture_failure(pod_status, fixture_name, incident_namespace)
 
     if fixture_failure:
         result.passed = False
@@ -126,12 +128,12 @@ def run_incident_discovery(
         result.total_elapsed_seconds = time.time() - start_time
 
         # Collect events for diagnostics
-        events = get_namespace_events(kubeconfig, namespace)
+        events = get_namespace_events(kubeconfig, incident_namespace)
         result.diagnostics["events_count"] = len(events)
 
-        # Write artifacts and exit
-        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        # Write artifacts and exit (logs from backend namespace)
+        backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
         write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
         print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
@@ -146,7 +148,7 @@ def run_incident_discovery(
     # ===================================================================
     print("Phase 2b: Verifying candidate detection...", flush=True)
 
-    events = get_namespace_events(kubeconfig, namespace)
+    events = get_namespace_events(kubeconfig, incident_namespace)
     result.diagnostics["events_count"] = len(events)
 
     candidate_detected, candidate_type = classify_candidate_detection(pod_status, events)
@@ -163,12 +165,12 @@ def run_incident_discovery(
         result.failure_class = FAILURE_INCIDENT_CANDIDATE_NOT_DETECTED
         result.total_elapsed_seconds = time.time() - start_time
 
-        # Collect additional context
-        all_pods = list_pods_in_namespace(kubeconfig, namespace)
+        # Collect additional context from incident namespace
+        all_pods = list_pods_in_namespace(kubeconfig, incident_namespace)
         result.diagnostics["all_pods"] = all_pods
 
-        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
         write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
         print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
@@ -185,7 +187,7 @@ def run_incident_discovery(
 
     # Step 1: Select a single backend pod for identity consistency
     # Since IncidentStore is process-local, all API calls must go to the same pod
-    snapshot_pod_info = get_backend_pod_info(kubeconfig, namespace, backend_deployment)
+    snapshot_pod_info = get_backend_pod_info(kubeconfig, backend_namespace, backend_deployment)
     result.diagnostics["snapshot_pod_info"] = snapshot_pod_info
 
     if not snapshot_pod_info.get("found"):
@@ -200,8 +202,8 @@ def run_incident_discovery(
             result.diagnostics["attempted_selectors"] = attempted
             result.diagnostics["namespace_diagnostics"] = snapshot_pod_info.get("diagnostics", {})
 
-        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
         write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
         print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
@@ -219,14 +221,14 @@ def run_incident_discovery(
         print(f"  WARNING: Multiple backend replicas detected ({snapshot_pod_info.get('total_running_pods')}). Using oldest pod for consistency.", flush=True)
 
     # Step 2: Trigger snapshot capture
-    # Pass snapshot_pod_name to ensure we use the same pod for snapshot and incidents API calls
+    # Use backend_namespace for exec location, incident_namespace for snapshot target
     snapshot_response, snapshot_http_status, snapshot_actual_pod = call_backend_snapshot_api(
         kubeconfig=kubeconfig,
-        namespace=namespace,
+        namespace=backend_namespace,
         backend_deployment=backend_deployment,
         backend_container=backend_container,
         backend_port=backend_port,
-        snapshot_namespace=namespace,
+        snapshot_namespace=incident_namespace,
         backend_pod_name=snapshot_pod_name,
     )
 
@@ -239,8 +241,8 @@ def run_incident_discovery(
         result.diagnostics["expected_pod"] = snapshot_pod_name
         result.diagnostics["actual_pod"] = snapshot_actual_pod
 
-        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
         write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
         print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
@@ -249,7 +251,8 @@ def run_incident_discovery(
         return result
 
     result.diagnostics["snapshot_request"] = {
-        "namespace": namespace,
+        "backend_namespace": backend_namespace,
+        "incident_namespace": incident_namespace,
         "pod_name": snapshot_pod_name,
         "http_status": snapshot_http_status,
     }
@@ -262,8 +265,8 @@ def run_incident_discovery(
         result.total_elapsed_seconds = time.time() - start_time
         result.diagnostics["snapshot_error"] = f"HTTP {snapshot_http_status}"
 
-        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
         write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
         print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
@@ -276,8 +279,8 @@ def run_incident_discovery(
         result.total_elapsed_seconds = time.time() - start_time
         result.diagnostics["snapshot_error"] = snapshot_response.get("error", "Unknown error")
 
-        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
         write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
         print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
@@ -305,8 +308,8 @@ def run_incident_discovery(
         result.failure_class = FAILURE_SNAPSHOT_COMPLETED_NO_CANDIDATES
         result.total_elapsed_seconds = time.time() - start_time
 
-        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
         write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
         print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
@@ -319,8 +322,8 @@ def run_incident_discovery(
         result.failure_class = FAILURE_CANDIDATE_GENERATED_NOT_PROMOTED
         result.total_elapsed_seconds = time.time() - start_time
 
-        backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
         write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
         print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
@@ -334,9 +337,9 @@ def run_incident_discovery(
     incidents_pod_name: str | None = None
 
     for poll_num in range(1, max_retries + 1):
-        # Call incidents API targeting the SAME pod as snapshot
+        # Call incidents API targeting the SAME pod as snapshot (in backend_namespace)
         response_body, http_status = call_backend_incidents_api(
-            kubeconfig, namespace, backend_deployment, backend_container, backend_port,
+            kubeconfig, backend_namespace, backend_deployment, backend_container, backend_port,
             backend_pod_name=snapshot_pod_name,
         )
         # Track which pod was used for the first poll
@@ -371,8 +374,8 @@ def run_incident_discovery(
             result.failure_class = contract_failure
             result.total_elapsed_seconds = total_elapsed
 
-            backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-            scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+            backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+            scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
             write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
             print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
@@ -396,14 +399,14 @@ def run_incident_discovery(
 
             # Write initial success artifacts
             result.diagnostics["poll_results"] = poll_results
-            backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-            scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+            backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+            scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
             write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
             # Phase 2d/2e: Check LLM enrichment if expected
             if expect_llm_enrichment:
                 result = _check_llm_enrichment(
-                    result, kubeconfig, namespace, backend_deployment,
+                    result, kubeconfig, backend_namespace, backend_deployment,
                     backend_container, backend_port, incident_id, discovery_dir
                 )
                 # If enrichment failed, overall passed is False but discovery_status remains passed
@@ -446,11 +449,11 @@ def run_incident_discovery(
     result.diagnostics["poll_results"] = poll_results
 
     # Collect final diagnostics
-    all_pods = list_pods_in_namespace(kubeconfig, namespace)
+    all_pods = list_pods_in_namespace(kubeconfig, incident_namespace)
     result.diagnostics["all_pods"] = all_pods
 
-    backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
-    scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+    backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
+    scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
     write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
 
     print(f"INCIDENT DISCOVERY GATE FAILED: {result.failure_class}", flush=True)
@@ -465,7 +468,7 @@ def run_incident_discovery(
 def _check_llm_enrichment(
     result: IncidentDiscoveryResult,
     kubeconfig: str,
-    namespace: str,
+    backend_namespace: str,
     backend_deployment: str,
     backend_container: str,
     backend_port: int,
@@ -477,7 +480,7 @@ def _check_llm_enrichment(
     Args:
         result: Current result object
         kubeconfig: Path to kubeconfig
-        namespace: Kubernetes namespace
+        backend_namespace: Kubernetes namespace where k9b backend runs
         backend_deployment: Backend deployment name
         backend_container: Backend container name
         backend_port: Backend port
@@ -491,7 +494,7 @@ def _check_llm_enrichment(
     print("Phase 2d: Checking provider configuration...", flush=True)
 
     # Get provider configuration from backend
-    provider_config = get_provider_config_from_backend(kubeconfig, namespace, backend_deployment)
+    provider_config = get_provider_config_from_backend(kubeconfig, backend_namespace, backend_deployment)
 
     result.provider_enabled = provider_config.get("provider_enabled", False)
     result.provider_configured = provider_config.get("provider_configured", False)
@@ -517,7 +520,7 @@ def _check_llm_enrichment(
 
     # Check if incident has been enriched
     incident_enriched, incident_data = check_incident_enriched(
-        kubeconfig, namespace, backend_deployment, backend_container,
+        kubeconfig, backend_namespace, backend_deployment, backend_container,
         backend_port, incident_id
     )
 
@@ -531,7 +534,7 @@ def _check_llm_enrichment(
     result.provider_invocation_count = 0
 
     # Look for provider invocation evidence in logs
-    backend_logs = collect_backend_logs(kubeconfig, namespace, backend_deployment, backend_container)
+    backend_logs = collect_backend_logs(kubeconfig, backend_namespace, backend_deployment, backend_container)
     if backend_logs:
         # Check for common LLM provider call patterns in logs
         llm_indicators = [
@@ -572,7 +575,7 @@ def _check_llm_enrichment(
             print(f"LLM ENRICHMENT GATE FAILED: {enrichment_failure}", flush=True)
 
         # Write updated artifacts
-        scheduler_logs = collect_scheduler_logs(kubeconfig, namespace)
+        scheduler_logs = collect_scheduler_logs(kubeconfig, backend_namespace)
         write_all_artifacts(discovery_dir, result, backend_logs, scheduler_logs)
     else:
         result.enrichment_gate_status = "passed"

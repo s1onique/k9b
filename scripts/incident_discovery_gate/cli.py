@@ -33,10 +33,24 @@ def create_arg_parser() -> argparse.ArgumentParser:
     )
     
     parser.add_argument(
+        "--backend-namespace",
+        type=str,
+        default=os.environ.get("BACKEND_NAMESPACE", "k9b"),
+        help="Kubernetes namespace where k9b backend runs (default: from BACKEND_NAMESPACE env or 'k9b')",
+    )
+    
+    parser.add_argument(
         "--namespace",
         type=str,
         default=os.environ.get("NAMESPACE", "default"),
-        help="Kubernetes namespace (default: from NAMESPACE env or 'default')",
+        help="Kubernetes namespace for incident fixture (default: from NAMESPACE env or 'default')",
+    )
+    
+    parser.add_argument(
+        "--incident-namespace",
+        type=str,
+        default=None,
+        help="Kubernetes namespace where incident fixture exists. Defaults to --namespace value if not specified.",
     )
     
     parser.add_argument(
@@ -121,13 +135,16 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     
     kubeconfig = args.kubeconfig
-    namespace = args.namespace
+    backend_namespace = args.backend_namespace
+    # incident_namespace defaults to --namespace if not specified
+    incident_namespace = args.incident_namespace or args.namespace
     artifact_dir = Path(args.artifact_dir)
     
     # Run incident discovery
     result = run_incident_discovery(
         kubeconfig=kubeconfig,
-        namespace=namespace,
+        backend_namespace=backend_namespace,
+        incident_namespace=incident_namespace,
         backend_deployment=args.backend_deployment,
         backend_container=args.backend_container,
         backend_port=args.backend_port,

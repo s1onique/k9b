@@ -37,6 +37,13 @@ def phase_p2_incident_discovery_provider(
     
     After OTel failure injection, polls the backend API for incidents.
     This is fail-closed when enable_provider_smoke=true.
+    
+    Args:
+        config: Lab configuration containing kubeconfig and namespace
+        artifact_dir: Directory for phase artifacts
+    
+    Returns:
+        Tuple of (phase_result, incident_id or None)
     """
     from .incident_discovery_gate import run_incident_discovery
 
@@ -44,8 +51,18 @@ def phase_p2_incident_discovery_provider(
     phase_dir = artifact_dir / PHASE_INCIDENT_DISCOVERY
     phase_dir.mkdir(parents=True, exist_ok=True)
 
+    # Backend namespace (where k9b backend runs)
+    backend_namespace = K9B_NAMESPACE
+    
+    # Workload namespace (where OTel demo incidents are injected)
+    # This is where we should look for the failing fixture
+    incident_namespace = config.namespace  # OTEL_DEMO_NAMESPACE from config
+    
     log("=== Phase P2: Incident Discovery (k9b API) ===")
-    log(f"Polling k9b backend for incidents in namespace {K9B_NAMESPACE}")
+    log(f"Polling k9b backend for incidents:")
+    log(f"  backend_namespace={backend_namespace}")
+    log(f"  incident_namespace={incident_namespace}")
+    log(f"  expected_fixture={OTEL_INCIDENT_FIXTURE}")
 
     # The OTel demo scenario uses "recommendation" with feature flag failure (chart 0.40.9 naming)
     fixture_name = OTEL_INCIDENT_FIXTURE
@@ -53,7 +70,8 @@ def phase_p2_incident_discovery_provider(
     try:
         result = run_incident_discovery(
             kubeconfig=config.kubeconfig,
-            namespace=K9B_NAMESPACE,
+            backend_namespace=backend_namespace,
+            incident_namespace=incident_namespace,
             backend_deployment=K9B_BACKEND_DEPLOYMENT,
             backend_container=K9B_BACKEND_CONTAINER,
             backend_port=K9B_BACKEND_PORT,

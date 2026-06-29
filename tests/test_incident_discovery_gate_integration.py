@@ -7,6 +7,8 @@ Verifies:
 - Log sanitization for artifact writing
 """
 
+from pathlib import Path
+
 import pytest
 
 from scripts.incident_discovery_gate.render import sanitize_logs_for_artifacts
@@ -129,6 +131,128 @@ api_key=sk-1234567890abcdefghijklmnopqrstuvwxyz
         assert "sk-1234567890abcdefghijklmnopqrstuvwxyz" not in sanitized
         assert "Starting process" in sanitized
         assert "Request completed" in sanitized
+
+
+class TestNamespaceSeparation:
+    """Regression tests for namespace separation in incident discovery.
+
+    These tests verify that the incident discovery gate correctly separates:
+    - backend_namespace: where k9b backend runs (for API calls)
+    - incident_namespace: where OTel workload incidents are injected (for fixture discovery)
+    
+    This separation is critical for provider smoke tests where:
+    - k9b backend runs in namespace "k9b"
+    - OTel demo (with injected failures) runs in namespace "otel-demo"
+    """
+
+    def test_run_incident_discovery_accepts_backend_and_incident_namespace_params(self) -> None:
+        """Verify run_incident_discovery accepts backend_namespace and incident_namespace parameters."""
+        import inspect
+
+        from scripts.incident_discovery_gate.main import run_incident_discovery
+
+        sig = inspect.signature(run_incident_discovery)
+        param_names = list(sig.parameters.keys())
+
+        assert "backend_namespace" in param_names, (
+            "run_incident_discovery must accept backend_namespace parameter"
+        )
+        assert "incident_namespace" in param_names, (
+            "run_incident_discovery must accept incident_namespace parameter"
+        )
+
+    def test_phase_p2_passes_backend_and_incident_namespaces_to_gate(
+        self, tmp_path: Path
+    ) -> None:
+        """Verify phase_p2_incident_discovery_provider passes correct namespaces to the gate.
+        
+        This is the behavior-level regression test for the bug where P2 was using
+        K9B_NAMESPACE (k9b) for incident discovery instead of config.namespace (otel-demo).
+        """
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, patch
+
+        from scripts.k9b_otel_demo_lab_provider_diagnosis import (
+            phase_p2_incident_discovery_provider,
+        )
+
+        # run_incident_discovery is imported inside the function, so patch where it's defined
+        mock_result = MagicMock()
+        mock_result.passed = True
+        mock_result.incident_id = "test-incident-123"
+        mock_result.failure_class = ""
+        mock_result.to_dict.return_value = {}
+
+        with patch(
+            "scripts.incident_discovery_gate.run_incident_discovery",
+            return_value=mock_result
+        ) as run_gate:
+            config = SimpleNamespace(
+                kubeconfig="/tmp/kubeconfig",
+                namespace="otel-demo",
+            )
+
+            phase_p2_incident_discovery_provider(config, tmp_path)
+
+            run_gate.assert_called_once()
+            kwargs = run_gate.call_args.kwargs
+            assert kwargs["backend_namespace"] == "k9b", (
+                "backend_namespace should be k9b (K9B_NAMESPACE)"
+            )
+            assert kwargs["incident_namespace"] == "otel-demo", (
+                "incident_namespace should be otel-demo (config.namespace)"
+            )
+
+    def test_phase_p2_logs_both_namespaces_separately(self) -> None:
+        """Verify phase_p2 logs backend_namespace and incident_namespace separately.
+        
+        The log output should be unambiguous:
+            backend_namespace=k9b
+            incident_namespace=otel-demo
+            expected_fixture=recommendation
+        """
+        import inspect
+
+        from scripts.k9b_otel_demo_lab_provider_diagnosis import (
+            phase_p2_incident_discovery_provider,
+        )
+
+        source = inspect.getsource(phase_p2_incident_discovery_provider)
+
+        # Verify both namespaces are logged
+        assert "backend_namespace=" in source, (
+            "P2 should log backend_namespace"
+        )
+        assert "incident_namespace=" in source, (
+            "P2 should log incident_namespace separately from backend_namespace"
+        )
+
+    def test_cli_accepts_backend_namespace_and_incident_namespace_args(self) -> None:
+        """Verify CLI accepts --backend-namespace and --incident-namespace arguments."""
+        import inspect
+
+        from scripts.incident_discovery_gate.cli import create_arg_parser
+
+        source = inspect.getsource(create_arg_parser)
+
+        assert "--backend-namespace" in source, (
+            "CLI should accept --backend-namespace argument"
+        )
+        assert "--incident-namespace" in source, (
+            "CLI should accept --incident-namespace argument"
+        )
+
+    def test_cli_wrapper_accepts_backend_namespace_and_incident_namespace_args(self) -> None:
+        """Verify check_incident_discovery_gate.py accepts namespace arguments."""
+        with open("scripts/check_incident_discovery_gate.py", "r") as f:
+            source = f.read()
+
+        assert "--backend-namespace" in source, (
+            "CLI wrapper should accept --backend-namespace argument"
+        )
+        assert "--incident-namespace" in source, (
+            "CLI wrapper should accept --incident-namespace argument"
+        )
 
 
 if __name__ == "__main__":

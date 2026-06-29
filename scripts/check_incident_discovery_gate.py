@@ -46,8 +46,18 @@ def main() -> int:
         help="Path to kubeconfig"
     )
     parser.add_argument(
+        "--backend-namespace",
+        default="k9b",
+        help="Kubernetes namespace where k9b backend runs"
+    )
+    parser.add_argument(
         "--namespace", required=True,
-        help="Kubernetes namespace"
+        help="Kubernetes namespace for incident fixture"
+    )
+    parser.add_argument(
+        "--incident-namespace",
+        default=None,
+        help="Kubernetes namespace where incident fixture exists (defaults to --namespace if not specified)"
     )
     parser.add_argument(
         "--backend-deployment",
@@ -98,8 +108,12 @@ def main() -> int:
     artifact_dir = Path(args.artifact_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     
+    # incident_namespace defaults to --namespace if not specified
+    incident_namespace = args.incident_namespace or args.namespace
+    
     print("=== Incident Discovery Gate ===", flush=True)
-    print(f"Namespace: {args.namespace}", flush=True)
+    print(f"Backend namespace: {args.backend_namespace}", flush=True)
+    print(f"Incident namespace: {incident_namespace}", flush=True)
     print(f"Backend: {args.backend_deployment}:{args.backend_port}", flush=True)
     print(f"Fixture: {args.fixture_name}", flush=True)
     print(f"Max retries: {args.max_retries} x {args.retry_interval}s = {args.max_retries * args.retry_interval}s", flush=True)
@@ -112,7 +126,8 @@ def main() -> int:
     
     result = run_incident_discovery(
         kubeconfig=args.kubeconfig,
-        namespace=args.namespace,
+        backend_namespace=args.backend_namespace,
+        incident_namespace=incident_namespace,
         backend_deployment=args.backend_deployment,
         backend_container=args.backend_container,
         backend_port=args.backend_port,
