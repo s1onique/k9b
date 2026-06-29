@@ -81,12 +81,49 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      # Restore Python tool cache (for ephemeral K8s runners)
+      # Ephemeral pods lose the tool cache between jobs, so we restore from
+      # GitHub Actions cache and save back after setup-python.
+      # =======================================================================
+      - name: Restore Python tool cache
+        id: cache-python
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
+
+      # =======================================================================
+      # Setup Python environment
+      # =======================================================================
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
           cache: 'pip'
+
+      # =======================================================================
+      # Save Python tool cache (for ephemeral K8s runners)
+      # Saves cache immediately after setup-python (even if job fails later).
+      # Only saves when there was a cache miss (cache-hit != 'true').
+      # continue-on-error: true avoids failing if another parallel job saved first.
+      # =======================================================================
+      - name: Save Python tool cache
+        if: steps.cache-python.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
+
+      # =======================================================================
+      # Verify Python bootstrap (fail fast on tool-cache/runner drift)
+      # =======================================================================
+      - name: Verify Python bootstrap
+        run: |
+          echo "pythonLocation=${pythonLocation:-<unset>}"
+          command -v python
+          python --version
 
       - name: Create virtual environment
         run: python -m venv .venv
@@ -163,12 +200,63 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      # =======================================================================
+      # Restore Python tool cache (for ephemeral K8s runners)
+      # Ephemeral pods lose the tool cache between jobs, so we restore from
+      # GitHub Actions cache and save back after setup-python.
+      # =======================================================================
+      - name: Restore Python tool cache
+        id: cache-python
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
+
+      # =======================================================================
+      # Show Python tool cache before setup-python (diagnostic)
+      # =======================================================================
+      - name: Show Python tool cache before setup-python
+        run: |
+          echo "RUNNER_NAME=${RUNNER_NAME:-<unset>}"
+          echo "RUNNER_OS=${RUNNER_OS:-<unset>}"
+          echo "RUNNER_ARCH=${RUNNER_ARCH:-<unset>}"
+          echo "RUNNER_TOOL_CACHE=${RUNNER_TOOL_CACHE:-<unset>}"
+          echo "runner.tool_cache=${{ runner.tool_cache }}"
+          find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type d -print 2>/dev/null | sort || true
+          find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type f -name '*.complete' -print 2>/dev/null | sort || true
+
+      # =======================================================================
+      # Setup Python environment (needed for preflight scripts)
+      # =======================================================================
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
           cache: 'pip'
+
+      # =======================================================================
+      # Save Python tool cache (for ephemeral K8s runners)
+      # Saves cache immediately after setup-python (even if job fails later).
+      # Only saves when there was a cache miss (cache-hit != 'true').
+      # continue-on-error: true avoids failing if another parallel job saved first.
+      # =======================================================================
+      - name: Save Python tool cache
+        if: steps.cache-python.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ runner.tool_cache }}/Python
+          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
+
+      # =======================================================================
+      # Verify Python bootstrap (fail fast on tool-cache/runner drift)
+      # =======================================================================
+      - name: Verify Python bootstrap
+        run: |
+          echo "pythonLocation=${pythonLocation:-<unset>}"
+          command -v python
+          python --version
 
       - name: Create virtual environment
         run: python -m venv .venv
