@@ -387,17 +387,26 @@ class TestP0bBehavioralMockTest:
 
     def test_run_lab_does_not_call_phase1_when_p0b_fails_with_provider_smoke_enabled(self) -> None:
         """P0b failure must prevent Phase 1 from being called when provider-smoke enabled."""
-        from unittest.mock import MagicMock, patch
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
         from scripts.k9b_otel_demo_lab import run_lab
         from scripts.k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
-        from pathlib import Path
-        import tempfile
 
         # Create a temp artifact dir
         with tempfile.TemporaryDirectory() as tmp_dir:
             artifact_dir = Path(tmp_dir)
-            
-            # Create mock results
+
+            # Mock all phases that run before P0b gate
+            mock_phase0_result = LabPhaseResult(
+                phase="phase0-cluster-baseline",
+                success=True,
+                message="Cluster baseline verified",
+                artifacts={},
+                duration_seconds=0.1,
+            )
+
             mock_p0_result = LabPhaseResult(
                 phase="p0-k9b-backend-prerequisite",
                 success=True,
@@ -405,7 +414,7 @@ class TestP0bBehavioralMockTest:
                 artifacts={},
                 duration_seconds=0.1,
             )
-            
+
             mock_p0b_result = LabPhaseResult(
                 phase="p0b-provider-preflight",
                 success=False,
@@ -413,7 +422,7 @@ class TestP0bBehavioralMockTest:
                 artifacts={"provider_preflight_result": str(artifact_dir / "preflight-result.json")},
                 duration_seconds=0.5,
             )
-            
+
             # Config with provider smoke enabled
             config = LabConfig(
                 kubeconfig="/fake/kubeconfig",
@@ -421,44 +430,63 @@ class TestP0bBehavioralMockTest:
                 mode="live",
                 enable_provider_smoke=True,  # Critical: provider smoke enabled
             )
-            
-            with patch("scripts.k9b_otel_demo_lab.phase_p0_k9b_backend_prerequisite") as mock_p0, \
-                 patch("scripts.k9b_otel_demo_lab.phase_p0b_provider_preflight") as mock_p0b, \
-                 patch("scripts.k9b_otel_demo_lab.phase1_deploy_otel_demo") as mock_phase1, \
-                 patch("scripts.k9b_otel_demo_lab._finish_result") as mock_finish:
-                
+
+            with (
+                patch("scripts.k9b_otel_demo_lab.phase0_cluster_baseline") as mock_phase0,
+                patch("scripts.k9b_otel_demo_lab.phase_p0_k9b_backend_prerequisite") as mock_p0,
+                patch("scripts.k9b_otel_demo_lab.phase_p0b_provider_preflight") as mock_p0b,
+                patch("scripts.k9b_otel_demo_lab.phase1_deploy_otel_demo") as mock_phase1,
+                patch("scripts.k9b_otel_demo_lab._finish_result") as mock_finish,
+            ):
+                mock_phase0.return_value = mock_phase0_result
                 mock_p0.return_value = mock_p0_result
                 mock_p0b.return_value = mock_p0b_result
+                # Fail-fast guard: if Phase 1 is called, fail immediately instead of hanging
+                mock_phase1.side_effect = AssertionError(
+                    "Phase 1 must not run when P0b fails with provider-smoke enabled"
+                )
                 mock_finish.side_effect = lambda r, *args: r  # Pass through
-                
+
                 # Run the lab
                 result = run_lab(config)
-                
+
+                # Assert Phase 0 was called
+                assert mock_phase0.called, "Phase 0 should be called"
+
                 # Assert P0 was called
                 assert mock_p0.called, "P0 should be called"
-                
+
                 # Assert P0b was called
                 assert mock_p0b.called, "P0b should be called"
-                
+
                 # Assert Phase 1 was NOT called (this is the key behavioral test)
                 assert not mock_phase1.called, \
                     "Phase 1 should NOT be called when P0b fails with provider-smoke enabled"
-                
+
                 # Assert the failure reason mentions P0b
                 assert "P0b failed" in (result.failure_reason or ""), \
                     f"Failure reason should mention P0b, got: {result.failure_reason}"
 
     def test_run_lab_calls_phase1_when_p0b_passes_with_provider_smoke_enabled(self) -> None:
         """Phase 1 must be called when P0b passes even with provider-smoke enabled."""
-        from unittest.mock import MagicMock, patch
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
         from scripts.k9b_otel_demo_lab import run_lab
         from scripts.k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
-        from pathlib import Path
-        import tempfile
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             artifact_dir = Path(tmp_dir)
-            
+
+            mock_phase0_result = LabPhaseResult(
+                phase="phase0-cluster-baseline",
+                success=True,
+                message="Cluster baseline verified",
+                artifacts={},
+                duration_seconds=0.1,
+            )
+
             mock_p0_result = LabPhaseResult(
                 phase="p0-k9b-backend-prerequisite",
                 success=True,
@@ -466,7 +494,7 @@ class TestP0bBehavioralMockTest:
                 artifacts={},
                 duration_seconds=0.1,
             )
-            
+
             mock_p0b_result = LabPhaseResult(
                 phase="p0b-provider-preflight",
                 success=True,
@@ -474,7 +502,7 @@ class TestP0bBehavioralMockTest:
                 artifacts={"provider_preflight_result": str(artifact_dir / "preflight-result.json")},
                 duration_seconds=0.5,
             )
-            
+
             mock_phase1_result = LabPhaseResult(
                 phase="phase-1-deploy-otel-demo",
                 success=True,
@@ -482,26 +510,39 @@ class TestP0bBehavioralMockTest:
                 artifacts={},
                 duration_seconds=10.0,
             )
-            
+
+            mock_phase1b_result = LabPhaseResult(
+                phase="phase-1b-baseline-readiness",
+                success=False,  # Fail fast - we only care that Phase 1 was called
+                message="Baseline readiness failed - test stops here",
+                artifacts={},
+                duration_seconds=5.0,
+            )
+
             config = LabConfig(
                 kubeconfig="/fake/kubeconfig",
                 artifact_dir=str(artifact_dir),
                 mode="scaffold",
                 enable_provider_smoke=True,
             )
-            
-            with patch("scripts.k9b_otel_demo_lab.phase_p0_k9b_backend_prerequisite") as mock_p0, \
-                 patch("scripts.k9b_otel_demo_lab.phase_p0b_provider_preflight") as mock_p0b, \
-                 patch("scripts.k9b_otel_demo_lab.phase1_deploy_otel_demo") as mock_phase1, \
-                 patch("scripts.k9b_otel_demo_lab._finish_result") as mock_finish:
-                
+
+            with (
+                patch("scripts.k9b_otel_demo_lab.phase0_cluster_baseline") as mock_phase0,
+                patch("scripts.k9b_otel_demo_lab.phase_p0_k9b_backend_prerequisite") as mock_p0,
+                patch("scripts.k9b_otel_demo_lab.phase_p0b_provider_preflight") as mock_p0b,
+                patch("scripts.k9b_otel_demo_lab.phase1_deploy_otel_demo") as mock_phase1,
+                patch("scripts.k9b_otel_demo_lab.phase1b_baseline_readiness") as mock_phase1b,
+                patch("scripts.k9b_otel_demo_lab._finish_result") as mock_finish,
+            ):
+                mock_phase0.return_value = mock_phase0_result
                 mock_p0.return_value = mock_p0_result
                 mock_p0b.return_value = mock_p0b_result
                 mock_phase1.return_value = mock_phase1_result
+                mock_phase1b.return_value = mock_phase1b_result
                 mock_finish.side_effect = lambda r, *args: r
-                
-                result = run_lab(config)
-                
+
+                run_lab(config)
+
                 # Assert Phase 1 WAS called (P0b passed)
                 assert mock_phase1.called, \
                     "Phase 1 should be called when P0b passes"
