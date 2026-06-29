@@ -22,6 +22,7 @@ from .k9b_otel_demo_lab_constants import (
     K9B_BACKEND_DEPLOYMENT,
     K9B_BACKEND_PORT,
     K9B_NAMESPACE,
+    OTEL_INCIDENT_FIXTURE,
     PHASE_INCIDENT_DISCOVERY,
     PHASE_PERSISTED_DIAGNOSIS,
     PHASE_PROVIDER_SMOKE,
@@ -46,8 +47,8 @@ def phase_p2_incident_discovery_provider(
     log("=== Phase P2: Incident Discovery (k9b API) ===")
     log(f"Polling k9b backend for incidents in namespace {K9B_NAMESPACE}")
 
-    # The OTel demo scenario uses recommendationservice with feature flag failure
-    fixture_name = "recommendationservice"
+    # The OTel demo scenario uses "recommendation" with feature flag failure (chart 0.40.9 naming)
+    fixture_name = OTEL_INCIDENT_FIXTURE
 
     try:
         result = run_incident_discovery(

@@ -178,7 +178,11 @@ FAILURE_TRAFFIC_TARGET_SERVICE_MISSING = "traffic_target_service_missing"
 # Expected components for diagnosis oracle
 # =============================================================================
 
-EXPECTED_COMPONENT = "recommendationservice"
+# The incident fixture name for provider-smoke P2 (chart 0.40.9 uses "recommendation")
+OTEL_INCIDENT_FIXTURE = "recommendation"
+
+# Expected component in diagnosis oracle (chart 0.40.9 uses "recommendation")
+EXPECTED_COMPONENT = OTEL_INCIDENT_FIXTURE
 EXPECTED_NAMESPACE = "otel-demo"
 
 # Keywords that indicate correct diagnosis
