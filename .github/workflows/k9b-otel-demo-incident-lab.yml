@@ -425,7 +425,7 @@ jobs:
             --set "image.backend.repository=${{ needs.build-lab-images.outputs.backend_image_repository }}" \
             --set "image.backend.tag=${{ needs.build-lab-images.outputs.backend_image_tag }}" \
             --set "image.backend.pullPolicy=IfNotPresent" \
-            --set-string "diagnosisProvider.enabled=true" \
+            --set "diagnosisProvider.enabled=true" \
             --set-string "diagnosisProvider.provider=openai_compatible" \
             --set-string "diagnosisProvider.existingSecret=k9b-diagnosis-credentials" \
             --set-string "diagnosisProvider.apiKeyKey=K9B_DIAGNOSIS_API_KEY" \

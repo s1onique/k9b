@@ -2,7 +2,7 @@
 
 Purpose: compact task-facing project state for routine work.
 
-**Last Updated:** 2026-05-16
+**Last Updated:** 2026-06-29
 
 **See also:** `docs/agent-docs-audit.md` for documentation drift tracking.
 
@@ -41,6 +41,18 @@ k9b is a Kubernetes diagnostics and monitoring agent that is:
 - Frontend work is in polish and coverage phase.
 - GitHub Actions CI verification added (`.github/workflows/verify.yml`).
 - Coverage reporting integrated as non-blocking CI job.
+
+## Live lab architecture (2026-06-29)
+
+CNPG and OTel demo labs share common k9b platform gates via `scripts/lab_common/`:
+
+- `provider_status.py`: Canonical parser for `/api/health/details` provider status
+- `provider_preflight.py`: P0b provider preflight gate implementation
+- `constants.py`: Shared failure class constants
+
+Both labs import from `scripts.lab_common` instead of implementing their own
+health/provider parsing logic. See `scripts/k9b_provider_preflight.py` for
+backward-compatible wrapper.
 
 ## Current backlog themes
 
