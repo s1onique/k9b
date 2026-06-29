@@ -27,9 +27,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("docs/security/threat-model.md", "[DOC] Security reference"),
     ("docs/security-exception-audit.md", "[DOC] Audit document - historical record"),
 
-    # [EXTRACTION] Backend - extraction in progress
-    ("src/k8s_diag_agent/health/loop.py", "[EXTRACTION] Health loop - extract by concern"),
-
     # [CONTRACT] Review packet - bounded artifact writer with lookup functions
     ("src/k8s_diag_agent/collect/incident_diagnosis_review_packet.py", "[CONTRACT] Review packet - artifact writer with bounded output; all functions related"),
 
