@@ -24,11 +24,8 @@ from __future__ import annotations
 # Allowlist: (path, "[CATEGORY] reason")
 ALLOWLIST: list[tuple[str, str]] = [
     # [DOC] Documentation - single-purpose reference docs
-    ("docs/agent-run-review-template.md", "[DOC] Single-purpose template"),
-    ("docs/data-model.md", "[DOC] Data model reference"),
     ("docs/security/threat-model.md", "[DOC] Security reference"),
     ("docs/security-exception-audit.md", "[DOC] Audit document - historical record"),
-    ("docs/artifact-immutability-audit.md", "[DOC] Audit document - historical record"),
 
     # [EXTRACTION] Backend - extraction in progress
     ("src/k8s_diag_agent/health/loop.py", "[EXTRACTION] Health loop - extract by concern"),
@@ -97,7 +94,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("scripts/build_diagnostic_pack.py", "[SCRIPT] Build tool - single-purpose"),
     ("scripts/import_next_check_usefulness_feedback.py", "[SCRIPT] Import tool - single-purpose"),
     ("scripts/report_usefulness_learning.py", "[SCRIPT] Report tool - single-purpose"),
-    ("scripts/debug_recent_runs_execution_state.sh", "[SCRIPT] Debug script - single-purpose"),
 
     # [FRONTEND] Frontend components and tests
     ("frontend/src/App.tsx", "[FRONTEND] Main React app - requires UI architect review"),
@@ -131,7 +127,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("frontend/src/run-control/__tests__/boot-fetch-scheduling.test.tsx", "[FRONTEND TEST] Boot fetch tests"),
 
     # [STYLES] CSS files - large but coherent
-    ("frontend/src/index.css", "[STYLES] Main CSS - style collection"),
     ("frontend/src/themes.css", "[STYLES] Theme variables - coherent collection"),
     ("frontend/src/styles/components/next-check-plan.css", "[STYLES] Plan styles - complex selectors"),
     ("frontend/src/styles/components/next-check-queue.css", "[STYLES] Queue styles - complex selectors"),
@@ -192,13 +187,10 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("scripts/step_runner.sh", "[SCRIPT] Step runner - shared verification logic"),
 
     # [CONFIG] Checker configuration - baseline allowlist ledger
-    ("scripts/check_llm_friendly_files.py", "[CONFIG] LLM-friendly checker implementation"),
-    ("scripts/llm_friendly_allowlist.py", "[CONFIG] Baseline burn-down allowlist ledger"),
 
     # [VERIFIER] Registry hygiene verification scripts
     ("scripts/verify_helm_oci_login.sh", "[VERIFIER] Helm OCI login verification - comprehensive rules and self-tests"),
     ("scripts/verify_docker_workflow_hygiene.sh", "[VERIFIER] Docker workflow hygiene verification - comprehensive rules and self-tests"),
-    ("scripts/verify_dockerhub_base_images.sh", "[VERIFIER] DockerHub base image verification - comprehensive rules and self-tests"),
     ("scripts/verify_docker_build_locality.sh", "[VERIFIER] Docker build locality verification - comprehensive rules and self-tests"),
 
     # [VERIFIER] ACT-local verification - comprehensive test coverage
@@ -209,7 +201,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     (".github/workflows/k9b-cnpg-incident-lab-live.yml", "[CI WORKFLOW] Live lab workflow - comprehensive deployment steps"),
 
     # [SCRIPT] Live lab scripts - comprehensive but coherent
-    ("scripts/k9b_cnpg_live_lab_bootstrap.sh", "[SCRIPT] Live lab bootstrap - comprehensive credential handling"),
 
     # [TEST] Live lab tests - comprehensive but coherent
     ("tests/test_live_lab_config.py", "[TEST] Live lab config tests - comprehensive coverage"),
@@ -219,7 +210,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("tests/test_rollout_classifier_volume_binding.py", "[TEST] Rollout classifier VolumeBinding tests - comprehensive coverage"),
 
     # [SCRIPT] CNPG live lab evidence collection - comprehensive but coherent
-    ("scripts/k9b_cnpg_live_lab_helm_evidence.py", "[SCRIPT] Live lab Helm evidence - comprehensive collection logic"),
 
     # [SCRIPT] Incident discovery gate - Phase 2c snapshot trigger enhancement
     ("scripts/incident_discovery_gate/collect.py", "[SCRIPT] Incident gate collection - kubectl and API helpers"),
