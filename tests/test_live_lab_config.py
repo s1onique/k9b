@@ -923,6 +923,67 @@ class TestHelmDeployment:
             "Should use configmap driver for Helm"
 
 
+def _helm_upgrade_cmd_block() -> str:
+    """Extract the HELM_UPGRADE_CMD array block from the workflow."""
+    content = WORKFLOW_LIVE_FILE.read_text()
+    match = re.search(
+        r"HELM_UPGRADE_CMD=\(\n(?P<cmd>.*?\n)\s*\)",
+        content,
+        re.DOTALL,
+    )
+    assert match is not None, "Should define HELM_UPGRADE_CMD array"
+    return match.group("cmd")
+
+
+class TestHelmRateLimiterHardening:
+    """Test that live workflow uses hardened Helm rate limiter settings.
+    
+    Regression tests for transient client-side rate limiter deadline exceeded errors
+    on self-hosted k3s runners with variable API latency.
+    
+    The hardening increases Kubernetes client-side throttling headroom and
+    per-operation timeout for self-hosted k3s API variability (not Helm's
+    --wait readiness timeout, which remains --wait=false).
+    """
+
+    def test_helm_install_has_explicit_timeout(self) -> None:
+        """Helm upgrade should use explicit --timeout to bound per-operation latency."""
+        cmd = _helm_upgrade_cmd_block()
+        assert "--timeout 15m0s" in cmd, \
+            "Should use --timeout 15m0s for Kubernetes API call latency bound"
+
+    def test_helm_install_has_qps_setting(self) -> None:
+        """Helm upgrade should use --qps to increase Kubernetes client QPS headroom."""
+        cmd = _helm_upgrade_cmd_block()
+        assert "--qps 50" in cmd, \
+            "Should use --qps 50 to increase Kubernetes API client QPS headroom"
+
+    def test_helm_install_has_burst_limit_setting(self) -> None:
+        """Helm upgrade should use --burst-limit to increase Kubernetes client burst capacity."""
+        cmd = _helm_upgrade_cmd_block()
+        assert "--burst-limit 200" in cmd, \
+            "Should use --burst-limit 200 to increase Kubernetes API client burst capacity"
+
+    def test_helm_failure_collects_release_state(self) -> None:
+        """Helm failure path should collect release state artifacts for diagnostic triage."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        # Helm status: distinguishes client vs server failure
+        assert 'status k9b -n "$LAB_NAMESPACE"' in content
+        assert "helm-status-on-failure.txt" in content
+        # Helm history: shows revision timeline
+        assert 'history k9b -n "$LAB_NAMESPACE"' in content
+        assert "helm-history-on-failure.txt" in content
+        # Helm manifest: shows what was actually deployed
+        assert 'get manifest k9b -n "$LAB_NAMESPACE"' in content
+        assert "helm-manifest-on-failure.yaml" in content
+
+    def test_helm_failure_collects_describe_pods(self) -> None:
+        """Helm failure path should collect kubectl describe pods for diagnostic triage."""
+        content = WORKFLOW_LIVE_FILE.read_text()
+        assert 'describe pods -n "$LAB_NAMESPACE"' in content
+        assert "describe-pods-on-failure.txt" in content
+
+
 class TestImageAssertion:
     """Test that live workflow asserts k9b pod uses image-builder output."""
 

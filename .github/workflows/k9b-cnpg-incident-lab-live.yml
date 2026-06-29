@@ -940,12 +940,17 @@ jobs:
           
           # Deploy with --wait=false to avoid blocking using array
           set +e
+          # Harden against transient client-side rate limiter deadline exceeded errors
+          # on self-hosted k3s runners with variable API latency.
           HELM_UPGRADE_CMD=(
             helm upgrade --install k9b ./charts/k9b
             --kubeconfig="${KUBECONFIG}"
             --namespace "${LAB_NAMESPACE}"
             --create-namespace
             --wait=false
+            --timeout 15m0s
+            --qps 50
+            --burst-limit 200
             --values ./charts/k9b/values-live-lab.yaml
             --set "image.backend.repository=${BACKEND_REPO}"
             --set "image.backend.tag=${BACKEND_TAG}"
@@ -991,8 +996,8 @@ jobs:
             echo "Classifying error..."
             ARTIFACT_DIR="./lab-artifacts/live" scripts/k9b_cnpg_live_lab_bootstrap.sh classify-error < "${HELM_LOG}" || true
             
-            # Collect failure artifacts
-            echo "Collecting failure artifacts..."
+            # Collect failure artifacts for Helm rate limiter / deadline exceeded diagnostics
+            echo "Collecting failure artifacts for Helm rate limiter diagnostic..."
             kubectl --kubeconfig="${KUBECONFIG}" get events -n "$LAB_NAMESPACE" \
               --sort-by='.lastTimestamp' > ./lab-artifacts/live/namespace-events.txt 2>&1 || true
             kubectl --kubeconfig="${KUBECONFIG}" get pods -n "$LAB_NAMESPACE" \
@@ -1001,6 +1006,18 @@ jobs:
               > ./lab-artifacts/live/services.txt 2>&1 || true
             kubectl --kubeconfig="${KUBECONFIG}" get pvc -n "$LAB_NAMESPACE" \
               > ./lab-artifacts/live/pvc.txt 2>&1 || true
+            
+            # Helm release state diagnostics (helps distinguish client vs server failure)
+            helm --kubeconfig="${KUBECONFIG}" status k9b -n "$LAB_NAMESPACE" \
+              > ./lab-artifacts/live/helm-status-on-failure.txt 2>&1 || true
+            helm --kubeconfig="${KUBECONFIG}" history k9b -n "$LAB_NAMESPACE" \
+              > ./lab-artifacts/live/helm-history-on-failure.txt 2>&1 || true
+            helm --kubeconfig="${KUBECONFIG}" get manifest k9b -n "$LAB_NAMESPACE" \
+              > ./lab-artifacts/live/helm-manifest-on-failure.yaml 2>&1 || true
+            
+            # Detailed pod descriptions for diagnostic triage
+            kubectl --kubeconfig="${KUBECONFIG}" describe pods -n "$LAB_NAMESPACE" \
+              > ./lab-artifacts/live/describe-pods-on-failure.txt 2>&1 || true
             
             exit ${HELM_RC}
           fi
