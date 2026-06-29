@@ -10,6 +10,7 @@ This module provides reusable functions for:
 
 from __future__ import annotations
 
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,46 @@ from .k9b_lab_common_helpers import (
 # =============================================================================
 # Readiness helpers
 # =============================================================================
+
+def _classify_deployment_lookup_failure(kubeconfig: str, namespace: str, deployment: str) -> str:
+    """Classify why kubectl failed to get a deployment.
+
+    Returns a human-readable status string that distinguishes:
+    - missing (404): deployment doesn't exist
+    - api_forbidden (403): RBAC issues
+    - api_unauthorized (401): auth issues
+    - api_timeout: kubectl command timed out
+    - api_error:code: other API errors
+
+    This helps operators quickly identify whether a deployment name is wrong
+    (missing) vs. a real infrastructure problem (RBAC/auth issues).
+    """
+    cmd = ["kubectl", "--kubeconfig", kubeconfig, "get", "deployment", deployment, "-n", namespace]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15, check=False)
+    except subprocess.TimeoutExpired:
+        return "api_timeout"
+
+    if result.returncode == 0:
+        return "api_error"  # Unexpected success after initial failure
+
+    stderr_lower = result.stderr.lower()
+
+    # 404 = deployment doesn't exist (wrong name or not yet created)
+    if "not found" in stderr_lower or result.returncode == 404:
+        return "missing"
+
+    # 403 = RBAC issues
+    if "forbidden" in stderr_lower or result.returncode == 403:
+        return "api_forbidden"
+
+    # 401 = auth issues
+    if "unauthorized" in stderr_lower or result.returncode == 401:
+        return "api_unauthorized"
+
+    # Generic API error
+    return f"api_error:{result.returncode}"
+
 
 def wait_for_deployments_ready(
     kubeconfig: str,
@@ -58,7 +99,9 @@ def wait_for_deployments_ready(
             result = kubectl_json(kubeconfig, f"deployment/{deployment}", namespace)
             if not result.success or not result.data:
                 all_ready = False
-                not_ready_deployments.append(f"{deployment}(api_error)")
+                # Classify the failure to provide better diagnostics
+                failure_type = _classify_deployment_lookup_failure(kubeconfig, namespace, deployment)
+                not_ready_deployments.append(f"{deployment}({failure_type})")
                 continue
                 
             status = result.data.get("status", {})

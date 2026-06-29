@@ -69,16 +69,18 @@ K9B_NAMESPACE = "k9b"
 # =============================================================================
 
 # Core services that must be ready for baseline
+# These names match chart 0.40.9 deployment names (NOT the old *service naming)
+# See: https://github.com/open-telemetry/opentelemetry-helm-charts/blob/main/charts/opentelemetry-demo/examples/default/rendered/component.yaml
 REQUIRED_DEPLOYMENTS = [
     "frontend",
-    "recommendationservice",
-    "productcatalogservice",
-    "cartservice",
-    "checkoutservice",
-    "paymentservice",
-    "shippingservice",
-    "currencyservice",
-    "emailservice",
+    "recommendation",  # chart 0.40.9 uses "recommendation" (not "recommendationservice")
+    "product-catalog",  # chart 0.40.9 uses "product-catalog" (not "productcatalogservice")
+    "cart",  # chart 0.40.9 uses "cart" (not "cartservice")
+    "checkout",  # chart 0.40.9 uses "checkout" (not "checkoutservice")
+    "payment",  # chart 0.40.9 uses "payment" (not "paymentservice")
+    "shipping",  # chart 0.40.9 uses "shipping" (not "shippingservice")
+    "currency",  # chart 0.40.9 uses "currency" (not "currencyservice")
+    "email",  # chart 0.40.9 uses "email" (not "emailservice")
     "flagd",  # Feature flag service
 ]
 
