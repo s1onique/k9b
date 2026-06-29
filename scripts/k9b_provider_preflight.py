@@ -21,8 +21,41 @@ from scripts.lab_common.provider_preflight import (
     FAILURE_PROVIDER_UNAVAILABLE,
     ProviderPreflightResult,
     _evaluate_provider_state,
-    run_provider_preflight,
 )
+from scripts.lab_common.provider_preflight import (
+    run_provider_preflight as _run_provider_preflight,
+)
+
+
+def run_provider_preflight(
+    kubeconfig: str,
+    namespace: str,
+    service: str,
+    port: int,
+    artifact_dir: Path,
+    require_provider_configured: bool = True,
+    require_provider_invocation_possible: bool = True,
+    timeout_seconds: int = 30,
+    backend_deployment: str = "k9b-backend",
+    backend_container: str = "k9b-backend",
+) -> ProviderPreflightResult:
+    """Backward-compatible provider preflight wrapper.
+
+    Kept as an explicit function because existing workflow contract tests assert
+    that this compatibility module still defines `run_provider_preflight`.
+    """
+    return _run_provider_preflight(
+        kubeconfig=kubeconfig,
+        namespace=namespace,
+        service=service,
+        port=port,
+        artifact_dir=artifact_dir,
+        require_provider_configured=require_provider_configured,
+        require_provider_invocation_possible=require_provider_invocation_possible,
+        timeout_seconds=timeout_seconds,
+        backend_deployment=backend_deployment,
+        backend_container=backend_container,
+    )
 from scripts.lab_common.provider_status import (
     ProviderStatus,
     _find_dependency_by_name,
