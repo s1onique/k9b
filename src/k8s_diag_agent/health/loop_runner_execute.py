@@ -11,9 +11,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..external_analysis.alertmanager_durable_learning import scan_and_propose
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
 from .adaptation import HealthProposal
-from ..external_analysis.alertmanager_durable_learning import scan_and_propose
 from .loop_automatic_diagnosis import run_automatic_diagnosis_loop
 from .loop_history import HealthRating
 from .loop_runner_assessments import build_assessments_for_records
