@@ -143,7 +143,6 @@ docs/security/rbac-deployment-guide.md,llm_friendly_allowlist_py,[DOC] RBAC guid
 docs/security/security-audit-closeout.md,llm_friendly_allowlist_py,[DOC] Audit closeout - historical,security-team,grandfathered,Historical - review for cleanup
 docs/security/subprocess-security-audit.md,llm_friendly_allowlist_py,[DOC] Subprocess audit - historical,security-team,grandfathered,Historical - review for cleanup
 scripts/step_runner.sh,llm_friendly_allowlist_py,[SCRIPT] Step runner - shared verification logic,platform-team,planned_removal,Migrate to Python
-scripts/verify_all.sh,llm_friendly_allowlist_py,[SCRIPT] Verification gate - comprehensive gate,platform-team,grandfathered,Consider simplifying
 scripts/check_llm_friendly_files.py,llm_friendly_allowlist_py,[CONFIG] LLM-friendly checker implementation,platform-team,grandfathered,Keep as-is - essential tool
 scripts/llm_friendly_allowlist.py,llm_friendly_allowlist_py,[CONFIG] Baseline burn-down allowlist ledger,platform-team,grandfathered,Keep as-is - essential ledger
 scripts/verify_helm_oci_login.sh,llm_friendly_allowlist_py,[VERIFIER] Helm OCI login verification - comprehensive rules and self-tests,platform-team,planned_removal,Migrate to Python

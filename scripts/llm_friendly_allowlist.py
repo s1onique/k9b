@@ -190,7 +190,6 @@ ALLOWLIST: list[tuple[str, str]] = [
 
     # [SCRIPTS] Verification scripts - comprehensive but coherent
     ("scripts/step_runner.sh", "[SCRIPT] Step runner - shared verification logic"),
-    ("scripts/verify_all.sh", "[SCRIPT] Verification gate - comprehensive gate"),
 
     # [CONFIG] Checker configuration - baseline allowlist ledger
     ("scripts/check_llm_friendly_files.py", "[CONFIG] LLM-friendly checker implementation"),
