@@ -181,8 +181,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [SCRIPTS] Verification scripts - comprehensive but coherent
     ("scripts/step_runner.sh", "[SCRIPT] Step runner - shared verification logic"),
 
-    # [CONFIG] Checker configuration - baseline allowlist ledger
-
     # [VERIFIER] Registry hygiene verification scripts
     ("scripts/verify_helm_oci_login.sh", "[VERIFIER] Helm OCI login verification - comprehensive rules and self-tests"),
     ("scripts/verify_docker_workflow_hygiene.sh", "[VERIFIER] Docker workflow hygiene verification - comprehensive rules and self-tests"),
@@ -195,16 +193,12 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [CI WORKFLOW] GitHub Actions workflows - comprehensive but coherent
     (".github/workflows/k9b-cnpg-incident-lab-live.yml", "[CI WORKFLOW] Live lab workflow - comprehensive deployment steps"),
 
-    # [SCRIPT] Live lab scripts - comprehensive but coherent
-
     # [TEST] Live lab tests - comprehensive but coherent
     ("tests/test_live_lab_config.py", "[TEST] Live lab config tests - comprehensive coverage"),
     ("tests/test_live_lab_bootstrap_and_protected_kubeconfig.py", "[TEST] Bootstrap tests - comprehensive coverage"),
 
     # [TEST] CNPG live lab rollout classifier tests - comprehensive coverage for VolumeBinding conflict detection
     ("tests/test_rollout_classifier_volume_binding.py", "[TEST] Rollout classifier VolumeBinding tests - comprehensive coverage"),
-
-    # [SCRIPT] CNPG live lab evidence collection - comprehensive but coherent
 
     # [SCRIPT] Incident discovery gate - Phase 2c snapshot trigger enhancement
     ("scripts/incident_discovery_gate/collect.py", "[SCRIPT] Incident gate collection - kubectl and API helpers"),
