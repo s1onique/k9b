@@ -1192,3 +1192,126 @@ class TestOtelLiveLabRunnerContract:
             f"Both live labs should use same runner: CNPG={cnpg_runner}, OTel={otel_runner}"
         assert cnpg_runner == "spbnix-k8s", \
             f"Both live labs should use spbnix-k8s, got {cnpg_runner}"
+
+
+class TestOtelLiveLabK9bBaselineInstall:
+    """Regression tests for k9b baseline installation before P0 prerequisite check.
+
+    The OTel demo lab P0 phase checks for k9b backend prerequisites (namespace,
+    service, deployment). The workflow MUST install k9b baseline BEFORE running
+    the lab script, otherwise P0 fails with "namespace 'k9b' not found".
+    """
+
+    def test_otel_workflow_installs_k9b_before_lab(self) -> None:
+        """Live OTel lab workflow must install k9b baseline before running the lab.
+
+        This is a regression test: P0 prerequisite check fails if k9b namespace
+        doesn't exist. The workflow must run 'helm upgrade --install k9b' before
+        invoking the lab script.
+        """
+        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+        content = OTEL_WORKFLOW_FILE.read_text()
+
+        # Check that helm upgrade --install k9b is present (with or without kubeconfig prefix)
+        assert "upgrade --install k9b" in content, \
+            "Workflow must run 'helm upgrade --install k9b' to install k9b baseline"
+
+        # Check that namespace k9b is specified
+        assert "--namespace k9b" in content, \
+            "Workflow must use '--namespace k9b' for helm install"
+
+        # Check that --create-namespace is used
+        assert "--create-namespace" in content, \
+            "Workflow must use '--create-namespace' to create namespace if missing"
+
+        # Check that rollout status is verified
+        assert "rollout status deployment/k9b-backend" in content, \
+            "Workflow must wait for k9b-backend rollout before running lab"
+
+        # Check that values-live-lab.yaml is used
+        assert "values-live-lab.yaml" in content, \
+            "Workflow should use values-live-lab.yaml for live lab configuration"
+
+    def test_otel_workflow_install_before_lab_script(self) -> None:
+        """The k9b install step must appear BEFORE the lab script invocation.
+
+        This ensures the ordering: install k9b -> wait for rollout -> run lab.
+        """
+        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+        content = OTEL_WORKFLOW_FILE.read_text()
+
+        # Find positions of key steps
+        install_pos = content.find("Install k9b baseline")
+        lab_script_pos = content.find("Starting Live OTel Demo Lab")
+        rollout_pos = content.find("Waiting for k9b-backend rollout")
+
+        assert install_pos != -1, "Install k9b baseline step not found"
+        assert rollout_pos != -1, "Waiting for k9b-backend rollout step not found"
+        assert lab_script_pos != -1, "Starting Live OTel Demo Lab step not found"
+
+        # Verify correct ordering: install -> rollout -> lab
+        assert install_pos < rollout_pos < lab_script_pos, \
+            f"Step order wrong: install={install_pos}, rollout={rollout_pos}, lab={lab_script_pos}"
+
+    def test_otel_workflow_has_cluster_baseline_diagnostics(self) -> None:
+        """Live OTel lab workflow should show cluster baseline diagnostics.
+
+        This helps distinguish 'wrong cluster' from 'missing baseline' in failures.
+        """
+        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+        content = OTEL_WORKFLOW_FILE.read_text()
+
+        # Should show current context
+        assert "config current-context" in content, \
+            "Should show current kubeconfig context"
+
+        # Should show nodes
+        assert "get nodes -o wide" in content, \
+            "Should show cluster nodes"
+
+        # Should show namespaces
+        assert "get ns" in content or "get namespaces" in content, \
+            "Should show cluster namespaces"
+
+        # Should show k9b-related resources
+        assert "k9b|backend" in content or "k9b" in content, \
+            "Should show k9b-related resources"
+
+    def test_otel_workflow_has_mandatory_connectivity_check(self) -> None:
+        """Live OTel lab workflow must have mandatory connectivity check before install.
+
+        This ensures broken kubeconfig fails cleanly at connectivity check,
+        not later in Helm install.
+        """
+        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+        content = OTEL_WORKFLOW_FILE.read_text()
+
+        # Find the connectivity step
+        connectivity_pos = content.find("Verify live cluster connectivity")
+        assert connectivity_pos != -1, "Should have 'Verify live cluster connectivity' step"
+
+        # The step should have cluster-info and get nodes (fail-fast)
+        # Extract the step content with tighter regex (6 spaces before - name: for job steps)
+        step_match = re.search(
+            r"(?ms)^ {6}- name: Verify live cluster connectivity\n(?P<body>.*?)(?=^ {6}- name: |\Z)",
+            content,
+        )
+        assert step_match, "Could not extract connectivity step"
+        step_content = step_match.group("body")
+
+        # Should use set -euo pipefail for fail-fast
+        assert "set -euo pipefail" in step_content, \
+            "Connectivity check must use set -euo pipefail for fail-fast"
+
+        # Should call cluster-info and get nodes (not || true)
+        assert "cluster-info" in step_content, \
+            "Should call cluster-info"
+        assert "get nodes -o wide" in step_content, \
+            "Should call get nodes"
+        assert "|| true" not in step_content, \
+            "Connectivity check must not use || true (must fail fast)"
+
+        # Verify ordering: connectivity check comes BEFORE install
+        install_pos = content.find("Install k9b baseline")
+        assert connectivity_pos < install_pos, \
+            f"Connectivity check ({connectivity_pos}) must come before install ({install_pos})"

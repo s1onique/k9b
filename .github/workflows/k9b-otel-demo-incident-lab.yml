@@ -318,11 +318,45 @@ jobs:
           echo "::add-mask::$SERVER"
           echo "Kubeconfig server configured"
 
-      - name: Verify cluster connectivity
+      - name: Verify live cluster connectivity
         run: |
           set -euo pipefail
           kubectl --kubeconfig "$KUBECONFIG" cluster-info
           kubectl --kubeconfig "$KUBECONFIG" get nodes -o wide
+
+      - name: Show live cluster baseline before OTel lab
+        run: |
+          set -euo pipefail
+          echo "=== Live Cluster Baseline Diagnostics ==="
+          echo "--- Current context ---"
+          kubectl --kubeconfig "$KUBECONFIG" config current-context || true
+          echo "--- Nodes ---"
+          kubectl --kubeconfig "$KUBECONFIG" get nodes -o wide || true
+          echo "--- Namespaces ---"
+          kubectl --kubeconfig "$KUBECONFIG" get ns || true
+          echo "--- k9b-related resources ---"
+          kubectl --kubeconfig "$KUBECONFIG" get deploy,svc -A | grep -E 'k9b|backend' || true
+          echo "--- Helm releases ---"
+          helm --kubeconfig "$KUBECONFIG" list -A | grep -E 'k9b' || true
+
+      - name: Install k9b baseline
+        run: |
+          set -euo pipefail
+          echo "=== Installing k9b baseline for OTel Demo Lab ==="
+
+          helm --kubeconfig "$KUBECONFIG" upgrade --install k9b ./charts/k9b \
+            --namespace k9b \
+            --create-namespace \
+            --wait \
+            --timeout 5m \
+            --values ./charts/k9b/values-live-lab.yaml
+
+          echo "=== Waiting for k9b-backend rollout ==="
+          kubectl --kubeconfig "$KUBECONFIG" -n k9b rollout status deployment/k9b-backend --timeout=180s
+
+          echo "=== k9b baseline installed ==="
+          kubectl --kubeconfig "$KUBECONFIG" -n k9b get service k9b-backend
+          kubectl --kubeconfig "$KUBECONFIG" -n k9b get deployment k9b-backend
 
       - name: Create artifact directory
         run: mkdir -p ./lab-artifacts/otel-demo
