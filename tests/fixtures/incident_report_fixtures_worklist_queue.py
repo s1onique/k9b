@@ -15,7 +15,6 @@ from tests.fixtures.incident_report_fixtures_worklist_multisignal import (
     _fixture_multi_signal_warnings_pods_missing,
 )
 
-
 __all__ = [
     "_fixture_multi_signal_executed_with_pending",
     "_fixture_multi_signal_warnings_pods_missing",
