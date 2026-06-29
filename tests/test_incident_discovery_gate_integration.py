@@ -244,7 +244,7 @@ class TestNamespaceSeparation:
 
     def test_cli_wrapper_accepts_backend_namespace_and_incident_namespace_args(self) -> None:
         """Verify check_incident_discovery_gate.py accepts namespace arguments."""
-        with open("scripts/check_incident_discovery_gate.py", "r") as f:
+        with open("scripts/check_incident_discovery_gate.py") as f:
             source = f.read()
 
         assert "--backend-namespace" in source, (
