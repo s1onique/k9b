@@ -21,7 +21,8 @@ from ..security.kubectl_context import display_kube_cluster_label, is_internal_k
 from .ui_shared import _relative_path
 
 if TYPE_CHECKING:
-    from .loop import DrilldownArtifact, HealthAssessmentArtifact
+    from .drilldown_models import DrilldownArtifact
+    from .loop_history import HealthAssessmentArtifact
 
 
 # Workstream base scores for priority ranking
@@ -189,8 +190,10 @@ def _derive_deterministic_top_problem(
     if drilldown and drilldown.trigger_reasons:
         return drilldown.trigger_reasons[0]
     reason = cluster.get("top_trigger_reason")
-    if isinstance(reason, str) and reason.strip():
-        return reason.strip()
+    if isinstance(reason, str):
+        stripped = reason.strip()
+        if stripped:
+            return stripped
     return None
 
 

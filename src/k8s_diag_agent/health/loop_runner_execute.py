@@ -57,7 +57,7 @@ def execute_health_loop_run(
     Returns:
         Tuple of (assessments, triggers, drilldowns) from the run.
     """
-    history = load_runner_history(directories["history"])
+    history = load_runner_history(history_path=directories["history"])
     previous_history = {key: entry for key, entry in history.items()}
 
     # Run monitoring discovery and collection (Alertmanager, vmalert)

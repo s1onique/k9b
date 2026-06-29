@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .loop_alertmanager_discovery import run_alertmanager_discovery as _run_alertmanager_discovery_impl
 from .loop_alertmanager_port_forward import (
@@ -29,12 +29,24 @@ if TYPE_CHECKING:
     from ..external_analysis.vmalert_discovery import VmalertSourceInventory
 
 
+class LogEvent(Protocol):
+    """Protocol for logging event callbacks with keyword-only metadata."""
+
+    def __call__(
+        self,
+        component: str,
+        severity: str,
+        message: str,
+        **metadata: Any,
+    ) -> None: ...
+
+
 def run_monitoring_discovery_and_collection(
     records: list[Any],
     directories: dict[str, Path],
     run_id: str,
     run_label: str,
-    log_event_fn: Callable[[str, str, str, Any], None],
+    log_event_fn: LogEvent,
     start_port_forward_fn: Callable[..., tuple[subprocess.Popen[str], int]],
     stop_port_forward_fn: Callable[..., None],
     choose_free_local_port_fn: Callable[[], int],
@@ -100,7 +112,7 @@ def run_monitoring_discovery_and_collection(
 def run_alertmanager_discovery(
     records: list[Any],
     directories: dict[str, Path],
-    log_event: Callable[[str, str, str, Any], None],
+    log_event: LogEvent,
     run_id: str,
 ) -> AlertmanagerSourceInventory | None:
     """Run Alertmanager discovery for each cluster target.
@@ -119,7 +131,7 @@ def run_alertmanager_snapshot_collection(
     inventory: AlertmanagerSourceInventory | None,
     run_id: str,
     run_label: str,
-    log_event: Callable[[str, str, str, Any], None],
+    log_event: LogEvent,
     directories: dict[str, Path],
     start_port_forward: Callable[..., tuple[subprocess.Popen[str], int]],
     stop_port_forward: Callable[..., None],
@@ -142,7 +154,7 @@ def run_alertmanager_snapshot_collection(
 def run_vmalert_discovery(
     records: list[Any],
     directories: dict[str, Path],
-    log_event: Callable[[str, str, str, Any], None],
+    log_event: LogEvent,
     run_id: str,
 ) -> VmalertSourceInventory | None:
     """Run vmalert discovery for each cluster target.
