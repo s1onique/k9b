@@ -370,9 +370,44 @@ jobs:
       - name: Create artifact directory
         run: mkdir -p ./lab-artifacts/otel-demo
 
-      - name: Ensure k9b lab baseline
+      # =======================================================================
+      # Create diagnosis credentials secret (mirrors CNPG provider-smoke wiring)
+      # Creates k9b-diagnosis-credentials with OpenRouter API key for both
+      # backend (K9B_DIAGNOSIS_API_KEY) and scheduler (K9B_EXTERNAL_ANALYSIS_API_KEY).
+      # Must run before Helm deploy so Secret exists for secretKeyRef injection.
+      # =======================================================================
+      - name: Create k9b diagnosis credentials
+        env:
+          K9B_DIAGNOSIS_API_KEY: ${{ secrets.K9B_DIAGNOSIS_API_KEY }}
         run: |
           set -euo pipefail
+
+          if [ -z "${K9B_DIAGNOSIS_API_KEY:-}" ]; then
+            echo "::error::K9B_DIAGNOSIS_API_KEY is required when OTel provider smoke is enabled"
+            exit 1
+          fi
+
+          kubectl --kubeconfig "$KUBECONFIG" create namespace k9b --dry-run=client -o yaml | kubectl --kubeconfig "$KUBECONFIG" apply -f -
+
+          kubectl --kubeconfig "$KUBECONFIG" -n k9b create secret generic k9b-diagnosis-credentials \
+            --from-literal=K9B_DIAGNOSIS_API_KEY="${K9B_DIAGNOSIS_API_KEY}" \
+            --from-literal=K9B_EXTERNAL_ANALYSIS_API_KEY="${K9B_DIAGNOSIS_API_KEY}" \
+            --dry-run=client -o yaml | kubectl --kubeconfig "$KUBECONFIG" apply -f -
+
+      - name: Ensure k9b lab baseline
+        env:
+          K9B_DIAGNOSIS_BASE_URL: ${{ secrets.K9B_DIAGNOSIS_BASE_URL }}
+          K9B_DIAGNOSIS_MODEL: ${{ secrets.K9B_DIAGNOSIS_MODEL }}
+        run: |
+          set -euo pipefail
+
+          for required in K9B_DIAGNOSIS_BASE_URL K9B_DIAGNOSIS_MODEL; do
+            if [ -z "${!required:-}" ]; then
+              echo "::error::${required} is required when OTel provider smoke is enabled"
+              exit 1
+            fi
+          done
+
           echo "=== Ensuring k9b lab baseline ==="
           echo "Using k9b-backend image: ${{ needs.build-lab-images.outputs.backend_image_ref }}"
           
@@ -389,7 +424,16 @@ jobs:
             --timeout-seconds 600 \
             --set "image.backend.repository=${{ needs.build-lab-images.outputs.backend_image_repository }}" \
             --set "image.backend.tag=${{ needs.build-lab-images.outputs.backend_image_tag }}" \
-            --set "image.backend.pullPolicy=IfNotPresent"
+            --set "image.backend.pullPolicy=IfNotPresent" \
+            --set "diagnosisProvider.enabled=true" \
+            --set "diagnosisProvider.provider=openai_compatible" \
+            --set "diagnosisProvider.existingSecret=k9b-diagnosis-credentials" \
+            --set "diagnosisProvider.apiKeyKey=K9B_DIAGNOSIS_API_KEY" \
+            --set "scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED=true" \
+            --set "scheduler.env.K9B_EXTERNAL_ANALYSIS_BASE_URL=${K9B_DIAGNOSIS_BASE_URL}" \
+            --set "scheduler.env.K9B_EXTERNAL_ANALYSIS_MODEL=${K9B_DIAGNOSIS_MODEL}" \
+            --set "scheduler.smallProvider.existingSecret=k9b-diagnosis-credentials" \
+            --set "scheduler.smallProvider.apiKeyKey=K9B_EXTERNAL_ANALYSIS_API_KEY"
 
       - name: Run Live OTel Demo Lab
         run: |
