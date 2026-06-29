@@ -93,7 +93,6 @@ ALLOWLIST: list[tuple[str, str]] = [
 
     # [FRONTEND] Frontend components and tests
     ("frontend/src/App.tsx", "[FRONTEND] Main React app - requires UI architect review"),
-    ("frontend/src/components/ExecutionHistoryPanel.tsx", "[FRONTEND] Execution history - complex panel"),
     ("frontend/src/components/AlertmanagerPanel.tsx", "[FRONTEND] Alertmanager panel - complex UI"),
     ("frontend/src/components/QueuePanel.tsx", "[FRONTEND] Queue panel - complex UI"),
     ("frontend/src/components/RunsPanel.tsx", "[FRONTEND] Runs panel - complex UI"),
