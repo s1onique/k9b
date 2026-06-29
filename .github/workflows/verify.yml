@@ -175,6 +175,18 @@ jobs:
           retention-days: 7
           compression-level: 9
 
+      - name: Upload shard debug artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: shard-debug-${{ matrix.shard_index }}-${{ github.run_id }}
+          path: |
+            .pytest-shards/
+            test-timings*.json
+            shard-debug*.json
+          retention-days: 7
+          compression-level: 9
+
   # Verify shard union completeness
   python-unit-shard-union:
     needs: python-unit-tests

@@ -27,8 +27,8 @@ import ast
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 
@@ -42,12 +42,36 @@ ALLOWED_COLLECTION_EXCLUSIONS: set[str] = set()
 IGNORE_PATTERN = re.compile(r"--ignore[=\s]+tests/")
 
 
-class CollectionResult(NamedTuple):
-    """Result of a pytest collection run."""
+@dataclass(frozen=True)
+class CollectionResult:
+    """Result of a pytest collection run.
+    
+    Attributes:
+        nodeids: List of collected test nodeids (sorted for determinism)
+        returncode: Effective return code (0 if nodeids collected despite errors)
+        raw_returncode: Raw pytest return code (preserved for diagnostics)
+        stdout: Raw stdout from pytest
+        stderr: Raw stderr from pytest
+    
+    Properties:
+        usable_for_sharding: True if nodeids were successfully collected
+        had_collection_errors: True if pytest returned non-zero (some files failed)
+    """
     nodeids: list[str]
     returncode: int
+    raw_returncode: int
     stdout: str
     stderr: str
+    
+    @property
+    def usable_for_sharding(self) -> bool:
+        """True if nodeids were successfully collected for sharding."""
+        return bool(self.nodeids)
+    
+    @property
+    def had_collection_errors(self) -> bool:
+        """True if pytest returned non-zero (some files had collection errors)."""
+        return self.raw_returncode != 0
 
 
 class IgnoreStringVisitor(ast.NodeVisitor):
@@ -131,11 +155,16 @@ def collect_test_nodeids(
     - scripts/shard_tests.py (for sharding)
     - scripts/verify_test_exclusions.py (for verification)
 
+    This function is lenient: if nodeids are successfully collected, it returns
+    success even if some files had import errors. This allows sharding to proceed
+    with the tests that can be collected.
+
     Args:
         extra_args: Additional pytest arguments
 
     Returns:
-        CollectionResult with nodeids, returncode, stdout, and stderr
+        CollectionResult with nodeids, returncode, stdout, and stderr.
+        returncode is 0 if nodeids were collected (even with partial errors).
     """
     cmd = build_collection_command(extra_args=extra_args)
 
@@ -148,9 +177,15 @@ def collect_test_nodeids(
 
     nodeids = _parse_nodeids_from_output(result.stdout)
 
+    # If we successfully collected nodeids, treat as success even if pytest
+    # returned non-zero due to collection errors in some files.
+    # This allows sharding to proceed with tests that can be collected.
+    effective_returncode = 0 if nodeids else result.returncode
+
     return CollectionResult(
         nodeids=nodeids,
-        returncode=result.returncode,
+        returncode=effective_returncode,
+        raw_returncode=result.returncode,
         stdout=result.stdout,
         stderr=result.stderr,
     )

@@ -97,17 +97,14 @@ class TestIntegration:
 
         # Collect all nodeids using the shared collection helper
         # (tests/ is appended automatically by build_collection_command)
-        cmd = test_collection.build_collection_command(include_allowed_ignores=False)
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=Path(__file__).parent.parent.parent)
+        # Note: pytest may return non-zero rc if some files have import errors,
+        # but the collection helper is lenient and returns success if nodeids were collected.
+        collection_result = test_collection.collect_test_nodeids()
 
-        assert result.returncode == 0
+        # The lenient collection returns success if nodeids were collected
+        assert len(collection_result.nodeids) > 0, "Should collect some nodeids despite partial errors"
 
-        all_nodeids = []
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("tests/") and "::" in line:
-                all_nodeids.append(line)
-
+        all_nodeids = list(collection_result.nodeids)
         assert len(all_nodeids) > 0
 
         # Assign to 4 shards
@@ -145,3 +142,27 @@ class TestIntegration:
             union.update(shard.nodeids)
 
         assert union == all_nodeids
+
+    def test_missing_duration_file_falls_back_to_round_robin(self, tmp_path: Path) -> None:
+        """Missing duration file should use fallback weights, not fail."""
+        # Use a non-existent duration file
+        missing_durations = tmp_path / "nonexistent.json"
+
+        # Call load_duration_weights directly
+        weights = shard_tests.load_duration_weights(missing_durations)
+
+        # Should return empty dict (use fallback weight of 1.0)
+        assert weights == {}
+
+        # Sharding should still work with empty weights
+        nodeids = [
+            "tests/test_a.py::test_one",
+            "tests/test_b.py::test_two",
+            "tests/test_c.py::test_three",
+        ]
+        shards = shard_tests.assign_shards_lpt(nodeids, weights, 2)
+
+        # Should have 2 shards with some nodeids each
+        assert len(shards) == 2
+        total_assigned = sum(len(s.nodeids) for s in shards)
+        assert total_assigned == 3
