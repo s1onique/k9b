@@ -17,8 +17,11 @@ import type { IncidentSummaryPayload, IncidentDetailPayload } from "../api";
 import { listIncidents, getIncident } from "../api";
 import { IncidentDetailPanel } from "./IncidentDetailPanel";
 
-// Status values from IncidentStatus enum
-const INCIDENT_STATUSES = [
+// Incident status filter type - union of valid status values
+type IncidentStatusFilter = "" | "open" | "collecting_evidence" | "ready_for_review" | "investigating" | "suppressed" | "duplicate" | "resolved";
+
+// Status values from backend enum
+const INCIDENT_STATUSES: readonly { value: IncidentStatusFilter; label: string }[] = [
   { value: "", label: "All" },
   { value: "open", label: "Open" },
   { value: "collecting_evidence", label: "Collecting Evidence" },
@@ -27,7 +30,13 @@ const INCIDENT_STATUSES = [
   { value: "suppressed", label: "Suppressed" },
   { value: "duplicate", label: "Duplicate" },
   { value: "resolved", label: "Resolved" },
-] as const;
+];
+
+/**
+ * Type guard to validate incident status filter values.
+ */
+const isIncidentStatusFilter = (value: string): value is IncidentStatusFilter =>
+  INCIDENT_STATUSES.some((status) => status.value === value);
 
 /**
  * Maps backend status to display label.
@@ -234,7 +243,7 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
   const [incidents, setIncidents] = useState<IncidentSummaryPayload[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<IncidentStatusFilter>("");
 
   // Detail expansion state
   const [expandedIncidentId, setExpandedIncidentId] = useState<string | null>(null);
@@ -245,11 +254,11 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
   // Ref for stale-response protection
   const activeRequestRef = useRef<string | null>(null);
 
-  const loadIncidents = useCallback(async () => {
+  const loadIncidents = useCallback(async (status: IncidentStatusFilter) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await listIncidents(statusFilter || undefined);
+      const response = await listIncidents(status || undefined);
       setIncidents(response.incidents);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load incidents";
@@ -257,7 +266,7 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter]);
+  }, []);
 
   // Load incident details with stale-response protection
   const loadIncidentDetails = useCallback(async (incidentId: string) => {
@@ -308,8 +317,8 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
   }, [loadIncidentDetails]);
 
   useEffect(() => {
-    loadIncidents();
-  }, [loadIncidents]);
+    void loadIncidents(statusFilter);
+  }, [loadIncidents, statusFilter]);
 
   return (
     <section className="panel" id="incident-list">
@@ -326,7 +335,12 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
           Filter by status:
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (isIncidentStatusFilter(value)) {
+                setStatusFilter(value);
+              }
+            }}
             disabled={isLoading}
           >
             {INCIDENT_STATUSES.map(status => (
@@ -339,7 +353,7 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
         <button
           type="button"
           className="btn btn-ghost"
-          onClick={loadIncidents}
+          onClick={() => void loadIncidents(statusFilter)}
           disabled={isLoading}
           aria-label="Refresh incidents"
         >
