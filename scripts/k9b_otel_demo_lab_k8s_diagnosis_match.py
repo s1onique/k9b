@@ -195,6 +195,7 @@ def _extract_pass_run_ids(evidence: dict[str, Any]) -> list[str]:
     # Try to extract from loop summary
     loop_summary = evidence.get("loop_summary", {})
     if isinstance(loop_summary, dict):
-        return loop_summary.get("pass_run_ids", [])
+        result_ids: list[str] = loop_summary.get("pass_run_ids") or []
+        return result_ids
     
     return []

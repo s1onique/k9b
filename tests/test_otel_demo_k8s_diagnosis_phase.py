@@ -67,7 +67,7 @@ class TestPhaseMetadataPropagation:
             }
 
             with patch(
-                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase._run_diagnosis_loop",
+                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase.run_diagnosis_loop",
                 return_value=real_loop_result,
             ):
                 config = LabConfig(
@@ -141,7 +141,7 @@ class TestPhaseMetadataPropagation:
             }
 
             with patch(
-                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase._run_diagnosis_loop",
+                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase.run_diagnosis_loop",
                 return_value=sim_loop_result,
             ):
                 config = LabConfig(
@@ -214,7 +214,7 @@ class TestPhaseFailureCriteria:
             }
 
             with patch(
-                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase._run_diagnosis_loop",
+                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase.run_diagnosis_loop",
                 return_value=sim_loop_result,
             ):
                 config = LabConfig(
@@ -275,7 +275,7 @@ class TestPhaseFailureCriteria:
             }
 
             with patch(
-                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase._run_diagnosis_loop",
+                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase.run_diagnosis_loop",
                 return_value=loop_result,
             ):
                 config = LabConfig(
@@ -336,7 +336,7 @@ class TestPhaseFailureCriteria:
             }
 
             with patch(
-                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase._run_diagnosis_loop",
+                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase.run_diagnosis_loop",
                 return_value=loop_result,
             ):
                 config = LabConfig(
@@ -407,7 +407,7 @@ class TestPhasePassesVerifier:
             }
 
             with patch(
-                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase._run_diagnosis_loop",
+                "scripts.k9b_otel_demo_lab_k8s_diagnosis_phase.run_diagnosis_loop",
                 return_value=real_loop_result,
             ):
                 config = LabConfig(
