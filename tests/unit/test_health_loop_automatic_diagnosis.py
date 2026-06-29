@@ -332,9 +332,10 @@ class TestHealthLoopRunnerIntegration:
         )
 
         # Patch the automatic diagnosis function to capture call arguments
-        # Since the import is lazy (inside execute()), patch at the source module
+        # The runner method looks up run_automatic_diagnosis_loop from loop_runner.py's namespace,
+        # so we need to patch where it's imported (loop_runner), not where it's defined
         with patch(
-            "k8s_diag_agent.health.loop_automatic_diagnosis.run_automatic_diagnosis_loop"
+            "k8s_diag_agent.health.loop_runner.run_automatic_diagnosis_loop"
         ) as mock_auto_diag:
             mock_auto_diag.return_value = {
                 "automatic_diagnosis_enabled": False,

@@ -30,6 +30,7 @@ from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
 from .drilldown import DrilldownCollector
 from .image_pull_secret import ImagePullSecretInspector
+from .loop_automatic_diagnosis import run_automatic_diagnosis_loop
 from .loop_comparison_policy import BaselineRegistry
 from .loop_config_helpers import _parse_manual_external_analysis_requests, _parse_manual_triggers
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
@@ -487,6 +488,34 @@ class HealthLoopRunner:
             run_id=self.run_id,
         )
         return self._vmalert_inventory
+
+    def _run_automatic_diagnosis_loop(
+        self,
+        external_analysis_dir: Path,
+    ) -> dict[str, Any]:
+        """Run automatic diagnosis loop evidence collection.
+
+        This is a compatibility delegator that wraps run_automatic_diagnosis_loop
+        from loop_automatic_diagnosis, providing the instance-based interface
+        expected by existing tests and production call sites.
+
+        Args:
+            external_analysis_dir: Path to the external-analysis directory
+
+        Returns:
+            Bounded result summary dict with:
+            - automatic_diagnosis_enabled: bool
+            - collector_run_id: str | None
+            - incidents_processed: int
+            - incidents_eligible: int
+            - incidents_skipped: int
+            - incidents_with_errors: int
+            - total_review_packets_written: int
+        """
+        return run_automatic_diagnosis_loop(
+            external_analysis_dir=external_analysis_dir,
+            log_event_fn=self._log_event,
+        )
 
     @staticmethod
     def _failure_metadata_field(

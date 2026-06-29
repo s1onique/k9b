@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 from ..external_analysis.alertmanager_durable_learning import scan_and_propose
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
 from .adaptation import HealthProposal
-from .loop_automatic_diagnosis import run_automatic_diagnosis_loop
 from .loop_history import HealthRating
 from .loop_runner_assessments import build_assessments_for_records
 from .loop_runner_comparisons import evaluate_triggers_for_records
@@ -199,9 +198,8 @@ def execute_health_loop_run(
     runner._prune_external_analysis_history(directories["external_analysis"])
 
     # Run automatic diagnosis loop
-    run_automatic_diagnosis_loop(
+    runner._run_automatic_diagnosis_loop(
         external_analysis_dir=directories["external_analysis"],
-        log_event_fn=runner._log_event,
     )
 
     # Scan for durable Alertmanager proposals
