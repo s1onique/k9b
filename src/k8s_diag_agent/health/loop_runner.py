@@ -46,6 +46,8 @@ from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_r
 from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config import HealthRunConfig
+from .loop_failure_metadata import extract_failure_metadata_field
+from .loop_runner_drilldown_analysis import run_auto_drilldown_analysis as _run_auto_drilldown_analysis_impl
 from .loop_runner_execute import execute_health_loop_run
 from .loop_runner_monitoring import (
     run_alertmanager_discovery,
@@ -406,6 +408,98 @@ class HealthLoopRunner:
             choose_free_local_port=self._choose_free_local_port,
             wait_for_port_ready=self._wait_for_port_ready,
         )
+
+    def _run_auto_drilldown_analysis(
+        self,
+        drilldowns: list[DrilldownArtifact],
+        directories: dict[str, Path],
+    ) -> list[ExternalAnalysisArtifact]:
+        """Run LLM auto-drilldown analysis on drilldown artifacts.
+
+        This is a compatibility delegator that wraps run_auto_drilldown_analysis
+        from loop_runner_drilldown_analysis, providing the instance-based interface
+        expected by existing tests and production call sites.
+        """
+        provider_name = self.config.external_analysis.auto_drilldown.provider
+        if provider_name is None:
+            provider_name = "llamacpp"  # Default provider if not configured
+        return _run_auto_drilldown_analysis_impl(
+            drilldowns=drilldowns,
+            directories=directories,
+            run_id=self.run_id,
+            run_label=self.run_label,
+            auto_drilldown_policy=self.config.external_analysis.auto_drilldown,
+            provider_name=provider_name,
+            log_event_fn=self._log_event,
+        )
+
+    def _run_alertmanager_discovery(
+        self,
+        records: list[HealthSnapshotRecord],
+        directories: dict[str, Path],
+    ) -> AlertmanagerSourceInventory | None:
+        """Run Alertmanager discovery for each cluster target.
+
+        This is a compatibility delegator that wraps run_alertmanager_discovery
+        from loop_runner_monitoring.
+        """
+        self._alertmanager_inventory = run_alertmanager_discovery(
+            records=records,
+            directories=directories,
+            log_event=self._log_event,
+            run_id=self.run_id,
+        )
+        return self._alertmanager_inventory
+
+    def _run_alertmanager_snapshot_collection(
+        self,
+        directories: dict[str, Path],
+    ) -> None:
+        """Collect Alertmanager snapshot and compact artifacts for tracked sources.
+
+        This is a compatibility delegator that wraps run_alertmanager_snapshot_collection
+        from loop_runner_monitoring.
+        """
+        run_alertmanager_snapshot_collection(
+            inventory=self._alertmanager_inventory,
+            run_id=self.run_id,
+            run_label=self.run_label,
+            log_event=self._log_event,
+            directories=directories,
+            start_port_forward=self._start_alertmanager_port_forward,
+            stop_port_forward=self._stop_alertmanager_port_forward,
+        )
+
+    def _run_vmalert_discovery(
+        self,
+        records: list[HealthSnapshotRecord],
+        directories: dict[str, Path],
+    ) -> VmalertSourceInventory | None:
+        """Run vmalert discovery for each cluster target.
+
+        This is a compatibility delegator that wraps run_vmalert_discovery
+        from loop_runner_monitoring.
+        """
+        self._vmalert_inventory = run_vmalert_discovery(
+            records=records,
+            directories=directories,
+            log_event=self._log_event,
+            run_id=self.run_id,
+        )
+        return self._vmalert_inventory
+
+    @staticmethod
+    def _failure_metadata_field(
+        metadata: dict[str, object] | None,
+        field_name: str,
+    ) -> str | bool | None:
+        """Extract a field from failure metadata, checking top-level and nested prompt_diagnostics.
+
+        This static helper provides backward compatibility for code that references
+        HealthLoopRunner._failure_metadata_field. The actual implementation is in
+        loop_failure_metadata.extract_failure_metadata_field.
+        """
+        return extract_failure_metadata_field(metadata, field_name)
 
     def _stop_alertmanager_port_forward(
         self,
