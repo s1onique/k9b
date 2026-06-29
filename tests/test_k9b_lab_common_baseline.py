@@ -32,8 +32,10 @@ class TestOTelLabUsesCommonBaselineInstaller:
     def test_otel_workflow_uses_cli_wrapper(self) -> None:
         """OTel demo lab should use the CLI wrapper script via module invocation."""
         content = OTEL_WORKFLOW_FILE.read_text()
-        install_section_start = content.find("Install k9b baseline")
-        assert install_section_start != -1
+        install_section_start = content.find("Ensure k9b lab baseline")
+        if install_section_start == -1:
+            install_section_start = content.find("Install k9b baseline")
+        assert install_section_start != -1, "Should have 'Ensure k9b lab baseline' step"
 
         section = content[install_section_start:install_section_start + 3000]
 
@@ -59,12 +61,16 @@ class TestOTelLabUsesCommonBaselineInstaller:
         """
         content = OTEL_WORKFLOW_FILE.read_text()
 
-        # Find the k9b baseline install section
-        install_section_start = content.find("Install k9b baseline")
-        assert install_section_start != -1, "Should have 'Install k9b baseline' step"
+        # Find the k9b baseline install section (either "Ensure k9b lab baseline" or legacy "Install k9b baseline")
+        install_section_start = content.find("Ensure k9b lab baseline")
+        if install_section_start == -1:
+            install_section_start = content.find("Install k9b baseline")
+        assert install_section_start != -1, "Should have 'Ensure k9b lab baseline' step"
 
         # Extract the install section (look for next step)
-        next_section = content.find("Create artifact directory", install_section_start)
+        next_section = content.find("Run Live OTel Demo Lab", install_section_start)
+        if next_section == -1:
+            next_section = content.find("Create artifact directory", install_section_start)
         if next_section == -1:
             next_section = len(content)
 
@@ -237,8 +243,10 @@ class TestRegressionTests:
     def test_otel_workflow_uses_cli_wrapper_for_k9b_baseline(self) -> None:
         """Install k9b baseline should use CLI wrapper via module invocation, not file path."""
         content = OTEL_WORKFLOW_FILE.read_text()
-        install_section_start = content.find("Install k9b baseline")
-        assert install_section_start != -1
+        install_section_start = content.find("Ensure k9b lab baseline")
+        if install_section_start == -1:
+            install_section_start = content.find("Install k9b baseline")
+        assert install_section_start != -1, "Should have 'Ensure k9b lab baseline' step"
 
         section = content[install_section_start:install_section_start + 3000]
 

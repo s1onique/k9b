@@ -1261,58 +1261,92 @@ class TestOtelLiveLabK9bBaselineInstall:
     The OTel demo lab P0 phase checks for k9b backend prerequisites (namespace,
     service, deployment). The workflow MUST install k9b baseline BEFORE running
     the lab script, otherwise P0 fails with "namespace 'k9b' not found".
+
+    The baseline installation is delegated to the common baseline wrapper
+    (scripts.ensure_k9b_lab_baseline) which handles Helm install, rollout wait,
+    and evidence collection.
     """
 
-    def test_otel_workflow_installs_k9b_before_lab(self) -> None:
-        """Live OTel lab workflow must install k9b baseline before running the lab.
+    def test_otel_workflow_uses_common_baseline_wrapper(self) -> None:
+        """Live OTel lab workflow must use the common baseline wrapper.
 
-        This is a regression test: P0 prerequisite check fails if k9b namespace
-        doesn't exist. The workflow must run 'helm upgrade --install k9b' before
-        invoking the lab script.
+        This is a regression test: the common baseline wrapper handles Helm install,
+        rollout wait, and evidence collection consistently across all labs.
         """
         OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
         content = OTEL_WORKFLOW_FILE.read_text()
 
-        # Check that helm upgrade --install k9b is present (with or without kubeconfig prefix)
-        assert "upgrade --install k9b" in content, \
-            "Workflow must run 'helm upgrade --install k9b' to install k9b baseline"
+        # Find the k9b baseline install section
+        install_section_start = content.find("Ensure k9b lab baseline")
+        assert install_section_start != -1, "Should have 'Ensure k9b lab baseline' step"
 
-        # Check that namespace k9b is specified
-        assert "--namespace k9b" in content, \
-            "Workflow must use '--namespace k9b' for helm install"
+        section = content[install_section_start:install_section_start + 3000]
 
-        # Check that --create-namespace is used
-        assert "--create-namespace" in content, \
-            "Workflow must use '--create-namespace' to create namespace if missing"
+        # Must use module invocation from repo root for correct sys.path
+        assert "python -m scripts.ensure_k9b_lab_baseline" in section, \
+            "OTel workflow should use module invocation (python -m scripts.ensure_k9b_lab_baseline)"
 
-        # Check that rollout status is verified
-        assert "rollout status deployment/k9b-backend" in content, \
-            "Workflow must wait for k9b-backend rollout before running lab"
+        # Must pass required arguments
+        assert "--lab-name otel-demo" in section, \
+            "Should pass --lab-name otel-demo"
+        assert "--release-name k9b" in section, \
+            "Should pass --release-name k9b"
+        assert "--namespace k9b" in section, \
+            "Should pass --namespace k9b"
+        assert "--chart-path ./charts/k9b" in section, \
+            "Should pass --chart-path"
+        assert "--values-path" in section and "values-live-lab.yaml" in section, \
+            "Should pass --values-path with values-live-lab.yaml"
+        assert "--kubeconfig" in section, \
+            "Should pass --kubeconfig"
+        assert "--backend-deployment k9b-backend" in section, \
+            "Should pass --backend-deployment"
 
-        # Check that values-live-lab.yaml is used
-        assert "values-live-lab.yaml" in content, \
-            "Workflow should use values-live-lab.yaml for live lab configuration"
+    def test_otel_workflow_no_direct_helm_in_install_section(self) -> None:
+        """OTel k9b baseline step should NOT use direct helm upgrade --install.
+
+        The common baseline wrapper handles Helm installation internally.
+        """
+        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+        content = OTEL_WORKFLOW_FILE.read_text()
+
+        # Find the k9b baseline install section
+        install_section_start = content.find("Ensure k9b lab baseline")
+        assert install_section_start != -1, "Should have 'Ensure k9b lab baseline' step"
+
+        # Look for next section (Run Live OTel Demo Lab)
+        next_section = content.find("Run Live OTel Demo Lab", install_section_start)
+        if next_section == -1:
+            next_section = len(content)
+
+        install_section = content[install_section_start:next_section]
+
+        # Should NOT have direct helm upgrade --install in k9b baseline section
+        helm_install_lines = [
+            line for line in install_section.split('\n')
+            if 'helm' in line.lower() and 'upgrade' in line.lower() and '--install' in line
+        ]
+        assert len(helm_install_lines) == 0, \
+            f"OTel k9b baseline step should NOT use direct helm upgrade --install. Found: {helm_install_lines}"
 
     def test_otel_workflow_install_before_lab_script(self) -> None:
-        """The k9b install step must appear BEFORE the lab script invocation.
+        """The k9b baseline step must appear BEFORE the lab script invocation.
 
-        This ensures the ordering: install k9b -> wait for rollout -> run lab.
+        This ensures the ordering: install k9b -> run lab.
         """
         OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
         content = OTEL_WORKFLOW_FILE.read_text()
 
         # Find positions of key steps
-        install_pos = content.find("Install k9b baseline")
+        install_pos = content.find("Ensure k9b lab baseline")
         lab_script_pos = content.find("Starting Live OTel Demo Lab")
-        rollout_pos = content.find("Waiting for k9b-backend rollout")
 
-        assert install_pos != -1, "Install k9b baseline step not found"
-        assert rollout_pos != -1, "Waiting for k9b-backend rollout step not found"
+        assert install_pos != -1, "Ensure k9b lab baseline step not found"
         assert lab_script_pos != -1, "Starting Live OTel Demo Lab step not found"
 
-        # Verify correct ordering: install -> rollout -> lab
-        assert install_pos < rollout_pos < lab_script_pos, \
-            f"Step order wrong: install={install_pos}, rollout={rollout_pos}, lab={lab_script_pos}"
+        # Verify correct ordering: install -> lab
+        assert install_pos < lab_script_pos, \
+            f"Step order wrong: install={install_pos}, lab={lab_script_pos}"
 
     def test_otel_workflow_has_cluster_baseline_diagnostics(self) -> None:
         """Live OTel lab workflow should show cluster baseline diagnostics.
@@ -1373,6 +1407,6 @@ class TestOtelLiveLabK9bBaselineInstall:
             "Connectivity check must not use || true (must fail fast)"
 
         # Verify ordering: connectivity check comes BEFORE install
-        install_pos = content.find("Install k9b baseline")
+        install_pos = content.find("Ensure k9b lab baseline")
         assert connectivity_pos < install_pos, \
             f"Connectivity check ({connectivity_pos}) must come before install ({install_pos})"

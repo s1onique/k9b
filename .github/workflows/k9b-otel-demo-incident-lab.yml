@@ -342,24 +342,20 @@ jobs:
       - name: Create artifact directory
         run: mkdir -p ./lab-artifacts/otel-demo
 
-      - name: Install k9b baseline
+      - name: Ensure k9b lab baseline
         run: |
           set -euo pipefail
-
-          echo "=== Installing k9b baseline ==="
-
-          # Install k9b baseline via Helm (literal command for workflow contract test)
-          helm upgrade --install k9b ./charts/k9b \
+          echo "=== Ensuring k9b lab baseline ==="
+          .venv/bin/python -m scripts.ensure_k9b_lab_baseline \
+            --lab-name otel-demo \
+            --release-name k9b \
             --namespace k9b \
-            --create-namespace \
-            --values ./charts/k9b/values-live-lab.yaml \
-            --wait \
-            --timeout 10m
-
-          echo "=== Waiting for k9b-backend rollout ==="
-          kubectl --kubeconfig "$KUBECONFIG" rollout status deployment/k9b-backend -n k9b --timeout=5m
-
-          echo "=== k9b baseline installed ==="
+            --chart-path ./charts/k9b \
+            --values-path ./charts/k9b/values-live-lab.yaml \
+            --artifact-dir ./lab-artifacts/otel-demo \
+            --kubeconfig "$KUBECONFIG" \
+            --backend-deployment k9b-backend \
+            --timeout-seconds 600
 
       - name: Run Live OTel Demo Lab
         run: |
