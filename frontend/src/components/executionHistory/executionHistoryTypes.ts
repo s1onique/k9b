@@ -13,7 +13,7 @@ export type {
   UsefulnessReviewFilter,
   ExecutionHistoryFilterState,
   ExecutionHistoryFilterCounts,
-} from "./executionHistoryFilters";
+} from "./executionHistoryFiltersData";
 export {
   EXECUTION_OUTCOME_FILTER_OPTIONS,
   USEFULNESS_REVIEW_FILTER_OPTIONS,
@@ -28,7 +28,7 @@ export {
   extractClustersFromHistory,
   extractCommandFamiliesFromHistory,
   computeExecutionHistoryFilterCounts,
-} from "./executionHistoryFilters";
+} from "./executionHistoryFiltersData";
 
 // Types and functions from executionHistorySummary
 export type {
@@ -60,8 +60,8 @@ export interface ExecutionHistoryPanelProps {
     relevance: "relevant" | "not_relevant" | "noisy" | "unsure",
     summary: string | undefined
   ) => Promise<void>;
-  filter: import("./executionHistoryFilters").ExecutionHistoryFilterState;
-  onFilterChange: (filter: import("./executionHistoryFilters").ExecutionHistoryFilterState) => void;
+  filter: import("./executionHistoryFiltersData").ExecutionHistoryFilterState;
+  onFilterChange: (filter: import("./executionHistoryFiltersData").ExecutionHistoryFilterState) => void;
   runQueue?: NextCheckQueueItem[];
   onHighlightQueueCard?: (key: string) => void;
 }

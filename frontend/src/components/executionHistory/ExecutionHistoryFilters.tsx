@@ -11,7 +11,7 @@ import type {
   UsefulnessReviewFilter,
 } from "./executionHistoryTypes";
 
-export { EXECUTION_OUTCOME_FILTER_OPTIONS, USEFULNESS_REVIEW_FILTER_OPTIONS } from "./executionHistoryTypes";
+export { EXECUTION_OUTCOME_FILTER_OPTIONS, USEFULNESS_REVIEW_FILTER_OPTIONS } from "./executionHistoryFiltersData";
 export type { ExecutionOutcomeFilter, UsefulnessReviewFilter };
 
 interface ExecutionHistoryFiltersProps {
