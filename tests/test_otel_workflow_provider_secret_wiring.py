@@ -133,3 +133,33 @@ class TestOtelWorkflowNoStaleInputs:
 
         assert "OPENROUTER_API_KEY" not in text
         assert "openrouter_model" not in text
+
+
+class TestOtelWorkflowBackendProviderConfigParity:
+    """Test backend diagnosisProvider Helm values match CNPG live lab.
+
+    These tests prevent regression of the root cause of 503 errors in OTel live lab:
+    CNPG passes diagnosisProvider.baseUrl, diagnosisProvider.model, timeoutSeconds,
+    and maxOutputChars, but OTel was missing baseUrl and model, causing the backend
+    to receive empty env vars from chart defaults.
+    """
+
+    def test_workflow_passes_backend_diagnosis_provider_base_url(self) -> None:
+        """Workflow should pass diagnosisProvider.baseUrl to Helm (CNPG parity)."""
+        text = WORKFLOW.read_text()
+        assert "diagnosisProvider.baseUrl=${K9B_DIAGNOSIS_BASE_URL}" in text
+
+    def test_workflow_passes_backend_diagnosis_provider_model(self) -> None:
+        """Workflow should pass diagnosisProvider.model to Helm (CNPG parity)."""
+        text = WORKFLOW.read_text()
+        assert "diagnosisProvider.model=${K9B_DIAGNOSIS_MODEL}" in text
+
+    def test_workflow_sets_backend_diagnosis_provider_timeout_seconds(self) -> None:
+        """Workflow should set diagnosisProvider.timeoutSeconds=120 (CNPG parity)."""
+        text = WORKFLOW.read_text()
+        assert "diagnosisProvider.timeoutSeconds=120" in text
+
+    def test_workflow_sets_backend_diagnosis_provider_max_output_chars(self) -> None:
+        """Workflow should set diagnosisProvider.maxOutputChars=8000 (CNPG parity)."""
+        text = WORKFLOW.read_text()
+        assert "diagnosisProvider.maxOutputChars=8000" in text
