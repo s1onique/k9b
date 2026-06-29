@@ -79,9 +79,21 @@ healthConfig:
     # External Analysis: Enable auto-diagnosis loop and drilldown for live lab
     # These settings control the automatic diagnosis loop behavior in the scheduler.
     # The loop periodically runs diagnostic checks and can drill down into findings.
+    #
+    # IMPORTANT: Both auto_drilldown and review_enrichment require a provider that
+    # points to an enabled adapter. Without this, review enrichment logs:
+    #   provider="unspecified" status="skipped" skip_reason="No review enrichment provider configured"
     # =============================================================================
     external_analysis:
+      # Adapters: Define enabled providers for external analysis.
+      # The provider field in auto_drilldown/review_enrichment must reference an enabled adapter.
+      adapters:
+        - name: llamacpp
+          enabled: true
       auto_drilldown:
         enabled: true
+        provider: llamacpp
+        max_per_run: 1
       review_enrichment:
         enabled: true
+        provider: llamacpp
