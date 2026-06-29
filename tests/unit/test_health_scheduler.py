@@ -445,7 +445,8 @@ class HealthSchedulerTests(unittest.TestCase):
         }
         lock_path.write_text(json.dumps(payload), encoding="utf-8")
         scheduler._pending_run_id = run_id
-        with patch.object(scheduler, "_pid_is_alive", return_value=True):
+        with patch.object(scheduler, "_pid_is_alive", return_value=True), \
+             patch.object(scheduler, "_read_process_identity", return_value=None):
             evaluation = scheduler._evaluate_lock_state()
         self.assertFalse(evaluation.should_cleanup)
         self.assertEqual(evaluation.stale_decision, "provenance-match")
