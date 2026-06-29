@@ -33,6 +33,7 @@ from .image_pull_secret import ImagePullSecretInspector
 from .loop_comparison_policy import BaselineRegistry
 from .loop_config_helpers import _parse_manual_external_analysis_requests, _parse_manual_triggers
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
+from .loop_failure_metadata import extract_failure_metadata_field
 from .loop_history import (
     HealthAssessmentArtifact,
     HealthHistoryEntry,
@@ -46,7 +47,6 @@ from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_r
 from .loop_retention import prune_external_analysis_history
 from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config import HealthRunConfig
-from .loop_failure_metadata import extract_failure_metadata_field
 from .loop_runner_drilldown_analysis import run_auto_drilldown_analysis as _run_auto_drilldown_analysis_impl
 from .loop_runner_execute import execute_health_loop_run
 from .loop_runner_monitoring import (
