@@ -277,18 +277,15 @@ def phase1_deploy_otel_demo(config: LabConfig, artifact_dir: Path) -> LabPhaseRe
         "--values", "-",  # Use stdin for values
     ]
 
-    # Minimal values to enable feature flags
-    # Note: Chart 0.40.9 has additionalProperties:false at root, so flagd and
-    # recommendation must be nested under components (not at root level).
-    values = """
-components:
-  recommendation:
-    featureFlags:
-      - name: recommendationServiceCacheFailure
-        enabled: false
-  flagd:
-    enabled: true
-"""
+    # Phase 1 baseline install: explicit empty values.
+    # IMPORTANT: Do NOT put featureFlags under components.recommendation - the
+    # OTel Demo chart schema (0.40.9) has additionalProperties:false on
+    # Component and does not support featureFlags as a child key.
+    # Feature flags are managed by flagd post-install via UI/ConfigMap/API,
+    # not by Helm component values.
+    #
+    # See: https://github.com/open-telemetry/opentelemetry-helm-charts/blob/main/charts/opentelemetry-demo/values.yaml
+    values = "{}"
 
     log(f"Installing OTel Demo to namespace {config.namespace}")
     log(f"Command: {' '.join(install_cmd)}")
