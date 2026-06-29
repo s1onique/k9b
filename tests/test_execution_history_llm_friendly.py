@@ -6,6 +6,7 @@ Ensures the split execution history components remain LLM-friendly
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -85,3 +86,51 @@ class TestExecutionHistoryLLMFriendly:
             "ExecutionHistoryFilters.tsx on case-insensitive filesystems. Use "
             "executionHistoryFiltersData.ts instead."
         )
+
+    def test_execution_history_filters_component_imports_runtime_filter_options_from_data_module(
+        self,
+    ) -> None:
+        """ExecutionHistoryFilters.tsx must import filter options as runtime values.
+
+        This guards against a regression where filter option arrays are only
+        re-exported (not imported), causing ReferenceError at runtime:
+        'EXECUTION_OUTCOME_FILTER_OPTIONS is not defined'
+
+        The component uses these values in JSX (e.g., map over them to render
+        <option> elements), so they must be in the local module scope.
+
+        Note: Type-only imports (import type { ... } from "...") would also be wrong
+        because TypeScript erases import type from emitted JavaScript.
+        """
+        component = Path(
+            "frontend/src/components/executionHistory/ExecutionHistoryFilters.tsx"
+        ).read_text(encoding="utf-8")
+
+        # Must have an actual runtime import statement (not just re-export)
+        runtime_import = re.search(
+            r"import\s*\{(?P<body>[^}]+)\}\s*from\s*[\"']\.\/executionHistoryFiltersData[\"']",
+            component,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+
+        assert runtime_import is not None, (
+            "ExecutionHistoryFilters.tsx must import filter option arrays as runtime "
+            "values from executionHistoryFiltersData; re-export-only is not enough."
+        )
+
+        imported_names = runtime_import.group("body")
+
+        assert "EXECUTION_OUTCOME_FILTER_OPTIONS" in imported_names, (
+            "EXECUTION_OUTCOME_FILTER_OPTIONS must be in the runtime import statement"
+        )
+        assert "USEFULNESS_REVIEW_FILTER_OPTIONS" in imported_names, (
+            "USEFULNESS_REVIEW_FILTER_OPTIONS must be in the runtime import statement"
+        )
+
+        # Must NOT import from the old colliding names
+        assert (
+            'from "./executionHistoryFilters"' not in component
+        ), "Do not import from executionHistoryFilters (collides with ExecutionHistoryFilters.tsx)"
+        assert (
+            'from "./ExecutionHistoryFilters"' not in component
+        ), "ExecutionHistoryFilters.tsx cannot import from itself"

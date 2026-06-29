@@ -10,8 +10,12 @@ import type {
   ExecutionOutcomeFilter,
   UsefulnessReviewFilter,
 } from "./executionHistoryTypes";
+import {
+  EXECUTION_OUTCOME_FILTER_OPTIONS,
+  USEFULNESS_REVIEW_FILTER_OPTIONS,
+} from "./executionHistoryFiltersData";
 
-export { EXECUTION_OUTCOME_FILTER_OPTIONS, USEFULNESS_REVIEW_FILTER_OPTIONS } from "./executionHistoryFiltersData";
+export { EXECUTION_OUTCOME_FILTER_OPTIONS, USEFULNESS_REVIEW_FILTER_OPTIONS };
 export type { ExecutionOutcomeFilter, UsefulnessReviewFilter };
 
 interface ExecutionHistoryFiltersProps {
