@@ -25,6 +25,11 @@ from scripts.k9b_otel_demo_lab_k8s_detection import (
     phase_p3c_verify_k8s_incident_discovery,
     verify_unschedulable_shipping_incident_discovered,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis import (
+    # K8s multi-pass diagnosis verification (P4c)
+    phase_p4c_verify_k8s_mult_pass_diagnosis,
+    verify_unschedulable_shipping_mult_pass_diagnosis,
+)
 from scripts.k9b_otel_demo_lab_k8s_injection import (
     cleanup_unschedulable_shipping_rollout,
     # K8s-native incident injection (P2b)
@@ -77,4 +82,7 @@ __all__ = [
     # K8s incident discovery verification (P3c)
     "phase_p3c_verify_k8s_incident_discovery",
     "verify_unschedulable_shipping_incident_discovered",
+    # K8s multi-pass diagnosis verification (P4c)
+    "phase_p4c_verify_k8s_mult_pass_diagnosis",
+    "verify_unschedulable_shipping_mult_pass_diagnosis",
 ]
