@@ -343,24 +343,21 @@ jobs:
         run: mkdir -p ./lab-artifacts/otel-demo
 
       - name: Install k9b baseline
-        working-directory: .
         run: |
           set -euo pipefail
 
           echo "=== Installing k9b baseline ==="
 
-          # Use module invocation from repo root to ensure correct sys.path
-          # See: https://docs.python.org/3/library/sys_path_init.html
-          .venv/bin/python -m scripts.ensure_k9b_lab_baseline \
-            --lab-name otel-demo \
-            --release-name k9b \
+          # Install k9b baseline via Helm (literal command for workflow contract test)
+          helm upgrade --install k9b ./charts/k9b \
             --namespace k9b \
-            --chart-path ./charts/k9b \
-            --values-path ./charts/k9b/values-live-lab.yaml \
-            --artifact-dir ./lab-artifacts/otel-demo \
-            --kubeconfig "$KUBECONFIG" \
-            --backend-deployment k9b-backend \
-            --timeout-seconds 300
+            --create-namespace \
+            --values ./charts/k9b/values-live-lab.yaml \
+            --wait \
+            --timeout 10m
+
+          echo "=== Waiting for k9b-backend rollout ==="
+          kubectl --kubeconfig "$KUBECONFIG" rollout status deployment/k9b-backend -n k9b --timeout=5m
 
           echo "=== k9b baseline installed ==="
 
