@@ -31,6 +31,9 @@ from .k9b_otel_demo_lab_constants import (
     PHASE_SCHEDULER_HEALTH,
 )
 from .k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
+from .k9b_provider_preflight import (
+    run_provider_preflight,
+)
 
 
 def phase_p0_k9b_backend_prerequisite(
@@ -283,5 +286,66 @@ def phase_p1b_scheduler_health_gate(
             success=False,
             message=f"Scheduler health check error: {e}",
             artifacts={},
+            duration_seconds=duration,
+        )
+
+
+def phase_p0b_provider_preflight(
+    config: LabConfig, artifact_dir: Path
+) -> LabPhaseResult:
+    """Phase P0b: Provider Preflight Gate - verify k9b backend diagnosis provider.
+
+    This phase checks the k9b backend's diagnosis provider status BEFORE
+    expensive OTel Demo install/injection/traffic phases.
+
+    Distinguishes between:
+    - provider disabled and diagnosis optional -> skip
+    - provider disabled but diagnosis required -> fail early as provider_disabled_required
+    - provider configured but unavailable -> fail early as provider_unavailable
+    - provider not initialized -> fail early as provider_not_initialized
+    - provider healthy -> continue
+
+    This prevents the scenario where OTel Demo install succeeds but provider
+    smoke P1 fails because the k9b backend's diagnosis provider is not functional.
+    """
+    from .k9b_lab_common_helpers import log
+
+    start = time.time()
+    phase_dir = artifact_dir / "phase0-cluster" / "provider-preflight"
+    phase_dir.mkdir(parents=True, exist_ok=True)
+
+    log("=== Phase P0b: Provider Preflight Gate ===")
+    log("Checking k9b backend diagnosis provider status")
+
+    # Run provider preflight
+    result = run_provider_preflight(
+        kubeconfig=config.kubeconfig,
+        namespace=K9B_NAMESPACE,
+        service=K9B_BACKEND_SERVICE,
+        port=K9B_BACKEND_PORT,
+        artifact_dir=phase_dir,
+        require_provider_configured=True,
+        require_provider_invocation_possible=True,
+        timeout_seconds=30,
+    )
+
+    duration = time.time() - start
+
+    if result.passed:
+        log(f"Provider preflight PASSED: provider configured={result.provider_configured}")
+        return LabPhaseResult(
+            phase="p0b-provider-preflight",
+            success=True,
+            message=f"Provider preflight passed: {result.message}",
+            artifacts={"provider_preflight_result": str(phase_dir / "provider-preflight-result.json")},
+            duration_seconds=duration,
+        )
+    else:
+        log(f"Provider preflight FAILED: {result.failure_class} - {result.message}")
+        return LabPhaseResult(
+            phase="p0b-provider-preflight",
+            success=False,
+            message=f"Provider preflight failed: {result.failure_class} - {result.message}",
+            artifacts={"provider_preflight_result": str(phase_dir / "provider-preflight-result.json")},
             duration_seconds=duration,
         )

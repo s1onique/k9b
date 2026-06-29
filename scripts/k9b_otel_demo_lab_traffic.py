@@ -18,6 +18,7 @@ from .k9b_otel_demo_lab_constants import (
     FAILURE_TRAFFIC_TARGET_SERVICE_MISSING,
     OTEL_DEMO_NAMESPACE,
 )
+from .k9b_otel_frontend_smoke import resolve_service_http_url
 
 
 def record_traffic_plan(
@@ -166,13 +167,16 @@ def generate_live_traffic(
     
     log(f"Starting live traffic generation for {duration_seconds}s...")
     
-    # Find frontend-proxy service (preferred)
-    frontend_proxy = _find_frontend_proxy_service(kubeconfig, namespace)
-    if not frontend_proxy:
-        log("Warning: Could not find frontend-proxy service")
+    # Resolve frontend-proxy URL from Service (includes port)
+    # This ensures the URL includes the correct port (e.g., :8080)
+    target_url, target_port, resolve_error = resolve_service_http_url(
+        kubeconfig, namespace, "frontend-proxy"
+    )
+    if resolve_error or not target_url:
+        log(f"Warning: Could not resolve frontend-proxy: {resolve_error}")
         result = {
             "mode": "live",
-            "error": "frontend-proxy service not found",
+            "error": f"frontend-proxy service resolution failed: {resolve_error}",
             "failure_class": FAILURE_TRAFFIC_TARGET_SERVICE_MISSING,
             "success_count": 0,
             "failure_count": 0,
@@ -183,10 +187,9 @@ def generate_live_traffic(
         write_json_artifact(traffic_dir, "traffic-live.json", result)
         return result
     
-    # Use FQDN to ensure traffic pod can reach the service regardless of namespace
-    target_service = frontend_proxy
-    target_fqdn = _build_frontend_proxy_fqdn(frontend_proxy, namespace)
-    target_url = f"http://{target_fqdn}/"
+    # Use resolved URL (includes correct port from Service)
+    target_service = "frontend-proxy"
+    target_fqdn = _build_frontend_proxy_fqdn(target_service, namespace)
     
     log(f"Target service: {target_service}")
     log(f"Target FQDN: {target_fqdn}")
