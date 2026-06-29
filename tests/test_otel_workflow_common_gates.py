@@ -280,3 +280,228 @@ class TestOtelLabPhaseOrder:
             # Deployment should reference backend health
             assert "backend_health" in deploy_content.lower() or "phase_p0" in deploy_content.lower(), \
                 "Deployment should reference backend health gate or P0 phase"
+
+
+class TestP0bProviderPreflightIntegration:
+    """Regression tests for P0b provider preflight gate in OTel lab orchestrator.
+    
+    These tests verify that the P0b phase is called BEFORE any expensive OTel phases
+    (Helm install, traffic generation, symptom wait) when provider smoke is enabled.
+    """
+
+    def test_p0b_phase_is_called_in_orchestrator(self) -> None:
+        """P0b provider preflight must be called in the orchestrator."""
+        lab_main_path = Path("scripts/k9b_otel_demo_lab.py")
+        content = lab_main_path.read_text()
+        
+        # Must import the phase
+        assert "phase_p0b_provider_preflight" in content, \
+            "Orchestrator must import phase_p0b_provider_preflight"
+        
+        # Must call the phase (not just define it)
+        assert "phase_p0b = phase_p0b_provider_preflight" in content, \
+            "Orchestrator must call phase_p0b_provider_preflight"
+
+    def test_p0b_runs_before_helm_install(self) -> None:
+        """P0b must run BEFORE Helm install in the orchestrator flow."""
+        lab_main_path = Path("scripts/k9b_otel_demo_lab.py")
+        content = lab_main_path.read_text()
+        
+        # Find positions of P0b call and Phase 1 deployment
+        # The import is at top, but the actual call is: phase_p0b = phase_p0b_provider_preflight
+        p0b_call_pos = content.find("phase_p0b = phase_p0b_provider_preflight")
+        # The actual variable assignment for Phase 1
+        helm_install_pos = content.find("phase1 = phase1_deploy_otel_demo")
+        
+        assert p0b_call_pos != -1, "P0b must be called in orchestrator"
+        assert helm_install_pos != -1, "Helm install phase must be in orchestrator"
+        assert p0b_call_pos < helm_install_pos, \
+            "P0b must run BEFORE Helm install to fail fast"
+
+    def test_p0b_fails_before_helm_when_provider_smoke_enabled(self) -> None:
+        """P0b failure with provider-smoke enabled must fail BEFORE Helm install."""
+        lab_main_path = Path("scripts/k9b_otel_demo_lab.py")
+        content = lab_main_path.read_text()
+        
+        # Check that the gate checks enable_provider_smoke AND phase failure
+        assert "if config.enable_provider_smoke and not phase_p0b.success" in content, \
+            "P0b must check enable_provider_smoke AND phase failure before failing"
+
+    def test_p0b_failure_returns_before_phase1(self) -> None:
+        """P0b failure with provider-smoke must return BEFORE Phase 1."""
+        lab_main_path = Path("scripts/k9b_otel_demo_lab.py")
+        content = lab_main_path.read_text()
+        
+        # Find the P0b gate and check it returns before Phase 1
+        p0b_gate_pos = content.find("if config.enable_provider_smoke and not phase_p0b.success")
+        phase1_pos = content.find("PHASE 1: Deploy OpenTelemetry Demo")
+        
+        assert p0b_gate_pos != -1, "P0b gate must exist"
+        assert phase1_pos != -1, "Phase 1 must exist"
+        
+        # The gate must appear before Phase 1 header
+        assert p0b_gate_pos < phase1_pos, \
+            "P0b failure gate must appear before Phase 1 starts"
+
+    def test_p0b_writes_early_artifact(self) -> None:
+        """P0b must write artifacts even when it fails."""
+        # The phase function writes the artifacts, not the orchestrator
+        provider_health_path = Path("scripts/k9b_otel_demo_lab_provider_health.py")
+        content = provider_health_path.read_text()
+        
+        # Phase must return artifacts with provider_preflight_result key
+        assert "provider_preflight_result" in content, \
+            "P0b phase must record provider_preflight_result artifacts"
+        
+        # The orchestrator records the phase result
+        lab_main_path = Path("scripts/k9b_otel_demo_lab.py")
+        orchestrator_content = lab_main_path.read_text()
+        assert "result.phases.append(_phase_to_dict(phase_p0b))" in orchestrator_content, \
+            "P0b result must be recorded in orchestrator for diagnostics"
+
+    def test_p0b_uses_correct_phase_name(self) -> None:
+        """P0b phase must use the correct phase name in results."""
+        provider_health_path = Path("scripts/k9b_otel_demo_lab_provider_health.py")
+        content = provider_health_path.read_text()
+        
+        # Phase function should return phase="p0b-provider-preflight"
+        assert 'phase="p0b-provider-preflight"' in content, \
+            "P0b phase must return phase='p0b-provider-preflight'"
+
+    def test_p0b_skipped_when_provider_smoke_disabled(self) -> None:
+        """P0b failure should NOT block lab when provider-smoke is disabled."""
+        lab_main_path = Path("scripts/k9b_otel_demo_lab.py")
+        content = lab_main_path.read_text()
+        
+        # The gate should only fail when enable_provider_smoke is True
+        assert "if config.enable_provider_smoke and not phase_p0b.success" in content, \
+            "P0b gate must only fail when enable_provider_smoke is True"
+        
+        # When False, lab continues to Phase 1
+        assert "Phase 1" in content, \
+            "Phase 1 should still run when provider smoke is disabled"
+
+
+class TestP0bBehavioralMockTest:
+    """Behavioral test using mocks to verify P0b gate controls phase execution."""
+
+    def test_run_lab_does_not_call_phase1_when_p0b_fails_with_provider_smoke_enabled(self) -> None:
+        """P0b failure must prevent Phase 1 from being called when provider-smoke enabled."""
+        from unittest.mock import MagicMock, patch
+        from scripts.k9b_otel_demo_lab import run_lab
+        from scripts.k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
+        from pathlib import Path
+        import tempfile
+
+        # Create a temp artifact dir
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            artifact_dir = Path(tmp_dir)
+            
+            # Create mock results
+            mock_p0_result = LabPhaseResult(
+                phase="p0-k9b-backend-prerequisite",
+                success=True,
+                message="k9b backend prerequisites verified",
+                artifacts={},
+                duration_seconds=0.1,
+            )
+            
+            mock_p0b_result = LabPhaseResult(
+                phase="p0b-provider-preflight",
+                success=False,
+                message="Provider preflight failed: provider_unavailable - Diagnosis provider unavailable: dependency_provider_connection_failed",
+                artifacts={"provider_preflight_result": str(artifact_dir / "preflight-result.json")},
+                duration_seconds=0.5,
+            )
+            
+            # Config with provider smoke enabled
+            config = LabConfig(
+                kubeconfig="/fake/kubeconfig",
+                artifact_dir=str(artifact_dir),
+                mode="live",
+                enable_provider_smoke=True,  # Critical: provider smoke enabled
+            )
+            
+            with patch("scripts.k9b_otel_demo_lab.phase_p0_k9b_backend_prerequisite") as mock_p0, \
+                 patch("scripts.k9b_otel_demo_lab.phase_p0b_provider_preflight") as mock_p0b, \
+                 patch("scripts.k9b_otel_demo_lab.phase1_deploy_otel_demo") as mock_phase1, \
+                 patch("scripts.k9b_otel_demo_lab._finish_result") as mock_finish:
+                
+                mock_p0.return_value = mock_p0_result
+                mock_p0b.return_value = mock_p0b_result
+                mock_finish.side_effect = lambda r, *args: r  # Pass through
+                
+                # Run the lab
+                result = run_lab(config)
+                
+                # Assert P0 was called
+                assert mock_p0.called, "P0 should be called"
+                
+                # Assert P0b was called
+                assert mock_p0b.called, "P0b should be called"
+                
+                # Assert Phase 1 was NOT called (this is the key behavioral test)
+                assert not mock_phase1.called, \
+                    "Phase 1 should NOT be called when P0b fails with provider-smoke enabled"
+                
+                # Assert the failure reason mentions P0b
+                assert "P0b failed" in (result.failure_reason or ""), \
+                    f"Failure reason should mention P0b, got: {result.failure_reason}"
+
+    def test_run_lab_calls_phase1_when_p0b_passes_with_provider_smoke_enabled(self) -> None:
+        """Phase 1 must be called when P0b passes even with provider-smoke enabled."""
+        from unittest.mock import MagicMock, patch
+        from scripts.k9b_otel_demo_lab import run_lab
+        from scripts.k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            artifact_dir = Path(tmp_dir)
+            
+            mock_p0_result = LabPhaseResult(
+                phase="p0-k9b-backend-prerequisite",
+                success=True,
+                message="k9b backend prerequisites verified",
+                artifacts={},
+                duration_seconds=0.1,
+            )
+            
+            mock_p0b_result = LabPhaseResult(
+                phase="p0b-provider-preflight",
+                success=True,
+                message="Provider preflight passed",
+                artifacts={"provider_preflight_result": str(artifact_dir / "preflight-result.json")},
+                duration_seconds=0.5,
+            )
+            
+            mock_phase1_result = LabPhaseResult(
+                phase="phase-1-deploy-otel-demo",
+                success=True,
+                message="OTel Demo deployed successfully",
+                artifacts={},
+                duration_seconds=10.0,
+            )
+            
+            config = LabConfig(
+                kubeconfig="/fake/kubeconfig",
+                artifact_dir=str(artifact_dir),
+                mode="scaffold",
+                enable_provider_smoke=True,
+            )
+            
+            with patch("scripts.k9b_otel_demo_lab.phase_p0_k9b_backend_prerequisite") as mock_p0, \
+                 patch("scripts.k9b_otel_demo_lab.phase_p0b_provider_preflight") as mock_p0b, \
+                 patch("scripts.k9b_otel_demo_lab.phase1_deploy_otel_demo") as mock_phase1, \
+                 patch("scripts.k9b_otel_demo_lab._finish_result") as mock_finish:
+                
+                mock_p0.return_value = mock_p0_result
+                mock_p0b.return_value = mock_p0b_result
+                mock_phase1.return_value = mock_phase1_result
+                mock_finish.side_effect = lambda r, *args: r
+                
+                result = run_lab(config)
+                
+                # Assert Phase 1 WAS called (P0b passed)
+                assert mock_phase1.called, \
+                    "Phase 1 should be called when P0b passes"

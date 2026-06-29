@@ -3,14 +3,15 @@
 
 This module orchestrates the complete OTel Demo incident lab lifecycle:
 
-Original phases:
-1. Cluster + k9b baseline (Phase 0)
-2. Deploy OpenTelemetry Demo (Phase 1)
-3. Prove baseline readiness (Phase 1b)
-4. Inject recommendation-service cache failure (Phase 2)
-5. Run k9b incident discovery (Phase 3)
-6. Run diagnosis (Phase 4)
-7. Verify final diagnosis with oracle (Phase 5)
+Phase ordering:
+P0. k9b Backend Prerequisite Check - verify namespace/service/deployment exist
+P0b. Provider Preflight Gate - verify diagnosis provider is functional (fail-closed when provider-smoke enabled)
+Phase 1. Deploy OpenTelemetry Demo
+Phase 1b. Prove baseline readiness
+Phase 2. Inject recommendation-service cache failure
+Phase 3. Run k9b incident discovery
+Phase 4. Run diagnosis
+Phase 5. Verify final diagnosis with oracle
 
 Provider smoke phases (optional, for parity with CNPG):
 P1. Backend Health Gate - verify k9b backend is healthy
@@ -21,7 +22,7 @@ P4. Persisted Diagnosis Contract Verification - verify persisted diagnosis
 
 Provider smoke phases run AFTER the OTel failure injection (Phase 2) because
 they need an injected incident to discover. When --enable-provider-smoke is set,
-any P1/P1b/P2/P3/P4 failure fails the lab (fail-closed behavior).
+P0b and any P1/P1b/P2/P3/P4 failure fails the lab (fail-closed behavior).
 
 For LLM-friendly reading, see the companion modules:
 - k9b_otel_demo_lab_types.py - dataclasses and types
@@ -51,6 +52,7 @@ from .k9b_otel_demo_lab_phases import (
     phase5_verification,
     # Provider smoke phases
     phase_p0_k9b_backend_prerequisite,
+    phase_p0b_provider_preflight,
     phase_p1_backend_health_gate,
     phase_p1b_scheduler_health_gate,
     phase_p2_incident_discovery_provider,
@@ -104,6 +106,20 @@ def run_lab(config: LabConfig) -> LabResult:
         result.phases.append(_phase_to_dict(phase_p0))
         if not phase_p0.success:
             result.failure_reason = f"P0 failed (k9b backend prerequisite): {phase_p0.message}"
+            return _finish_result(result, artifact_dir, start_time)
+        
+        # P0b: Provider Preflight Gate (fail-fast before expensive OTel phases)
+        # This verifies the k9b backend's diagnosis provider is functional before
+        # expensive OTel Demo install, traffic generation, or symptom wait phases.
+        # When enable_provider_smoke is set, provider health is required.
+        log("=" * 60)
+        log("P0b: Provider Preflight Gate")
+        log("=" * 60)
+        phase_p0b = phase_p0b_provider_preflight(config, artifact_dir)
+        result.phases.append(_phase_to_dict(phase_p0b))
+        if config.enable_provider_smoke and not phase_p0b.success:
+            log(f"PROVIDER PREFLIGHT FAILED at P0b: {phase_p0b.message}")
+            result.failure_reason = f"P0b failed (provider preflight): {phase_p0b.message}"
             return _finish_result(result, artifact_dir, start_time)
         
         # Phase 1: Deploy OpenTelemetry Demo
