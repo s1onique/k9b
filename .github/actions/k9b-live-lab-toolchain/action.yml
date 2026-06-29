@@ -1,0 +1,55 @@
+name: k9b live lab toolchain
+description: Restore/install/cache Python and kubectl toolchains for k9b live labs
+
+inputs:
+  python-version:
+    required: true
+    description: Python version for actions/setup-python
+  kubectl-version:
+    required: true
+    description: kubectl version for azure/setup-kubectl
+
+runs:
+  using: composite
+  steps:
+    - name: Show tool cache before setup
+      shell: bash
+      run: |
+        echo "RUNNER_TOOL_CACHE=${RUNNER_TOOL_CACHE:-<unset>}"
+        echo "runner.tool_cache=${{ runner.tool_cache }}"
+        find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type d -print 2>/dev/null | sort || true
+        find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type f -name '*.complete' -print 2>/dev/null | sort || true
+
+    - name: Restore Python tool cache
+      id: cache-python
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.tool_cache }}/Python
+        key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.python-version }}-v1
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+        architecture: x64
+        cache: 'pip'
+
+    - name: Save Python tool cache
+      if: steps.cache-python.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      continue-on-error: true
+      with:
+        path: ${{ runner.tool_cache }}/Python
+        key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.python-version }}-v1
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v4
+      with:
+        version: ${{ inputs.kubectl-version }}
+
+    - name: Verify Python bootstrap
+      shell: bash
+      run: |
+        echo "pythonLocation=${pythonLocation:-<unset>}"
+        command -v python
+        python --version
