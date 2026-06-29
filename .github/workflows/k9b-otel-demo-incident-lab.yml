@@ -443,6 +443,8 @@ jobs:
             --set-string "scheduler.env.K9B_DIAGNOSIS_MODEL=${K9B_DIAGNOSIS_MODEL}" \
             --set-string "scheduler.env.K9B_DIAGNOSIS_TIMEOUT_SECONDS=120" \
             --set-string "scheduler.env.K9B_DIAGNOSIS_MAX_OUTPUT_CHARS=8000" \
+            --set-string "scheduler.env.K9B_EXTERNAL_ANALYSIS_PROVIDER=openai_compatible" \
+            --set-string "scheduler.smallProvider.provider=openai_compatible" \
             --set "scheduler.smallProvider.existingSecret=k9b-diagnosis-credentials" \
             --set "scheduler.smallProvider.apiKeyKey=K9B_EXTERNAL_ANALYSIS_API_KEY"
 
