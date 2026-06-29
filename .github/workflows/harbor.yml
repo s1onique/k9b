@@ -307,216 +307,37 @@ jobs:
 
   # =============================================================================
   # Build and push jobs - depend on all quality gates
+  # Extracted Docker setup/build logic to .github/workflows/harbor-build-image.yml
   # =============================================================================
 
   build-push:
-    # Harbor resolves to internal SPbNIX names during OCI pushes; publish jobs must run inside SPbNIX infrastructure.
-    # Docker-capable runner required for QEMU, Buildx, build, and push operations.
-    runs-on: spbnix-k8s-docker
     needs:
       - lint-policy
       - python-unit-shard-union
       - frontend-tests
       - helm-chart
-    permissions:
-      contents: read
+    uses: ./.github/workflows/harbor-build-image.yml
+    with:
+      registry: harbor-pve1.spbnix.local
+      harbor_project: k9b
+      image_name: k9b-backend
+      dockerfile: ./Dockerfile.python
+      build_args: |
+        KUBECTL_VERSION=v1.29.6
+        HELM_VERSION=3.20.1
+    secrets: inherit
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Docker preflight
-        run: |
-          set -eux
-          echo "runner=${RUNNER_NAME:-unknown}"
-          echo "os=${RUNNER_OS:-unknown}"
-          echo "arch=${RUNNER_ARCH:-unknown}"
-          which docker
-          docker version
-          docker info
-          docker buildx version
-          ls -l /var/run/docker.sock
-
-      # CA must be installed BEFORE QEMU/Buildx because they pull images from Harbor.
-      # The Docker daemon validates registry TLS, so the CA must be in daemon trust.
-      # SKIP_RUNNER_DOCKER_CERTS_D=1: DinD sidecar owns daemon CA trust, runner-side is diagnostic.
-      - name: Install SPbNIX Harbor CA
-        env:
-          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
-          SKIP_RUNNER_DOCKER_CERTS_D: "1"
-        run: .github/scripts/install-spbnix-harbor-ca.sh
-
-      # Proof step: docker pull exercises dockerd's trust path, not just CLI tools.
-      # If this fails with "unknown ca", the DinD sidecar needs the CA mounted.
-      - name: Verify Docker daemon trusts Harbor
-        run: |
-          set -euo pipefail
-          echo "Runner-side Docker cert path:"
-          ls -l /etc/docker/certs.d/harbor-pve1.spbnix.local/ca.crt 2>/dev/null || echo "NOT FOUND in runner"
-          echo ""
-          echo "Docker daemon probe (pulls from Harbor):"
-          docker pull harbor-pve1.spbnix.local/dockerhub-cache/library/busybox:latest || {
-            echo "ERROR: docker pull failed - Docker daemon does not trust Harbor CA"
-            echo "If runner:/etc/docker/certs.d exists but dind sidecar does not,"
-            echo "the ARC runner scale set pod template needs CA volume mount."
-            exit 1
-          }
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-          image: harbor-pve1.spbnix.local/dockerhub-cache/tonistiigi/binfmt:latest
-          # Use Harbor proxy cache instead of GitHub Actions cache for faster, local-first pulls
-          cache-image: false
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1
-
-      # Patch BuildKit containers after they are created by setup-buildx-action
-      - name: Patch BuildKit containers with Harbor CA
-        env:
-          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
-          BUILDX_BUILDER_NAME: ${{ steps.buildx.outputs.name }}
-          SKIP_RUNNER_DOCKER_CERTS_D: "1"
-        run: .github/scripts/install-spbnix-harbor-ca.sh
-
-      - name: Login to Harbor
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_TOKEN }}
-
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.BACKEND_IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=,format=short
-
-      - name: Build and push backend image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.python
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-backend:buildcache
-          cache-to: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-backend:buildcache,mode=max
-          build-args: |
-            KUBECTL_VERSION=v1.29.6
-            HELM_VERSION=3.20.1
-
-  # Frontend image build - depends on quality gates but can run in parallel with build-push
   frontend:
-    # Harbor resolves to internal SPbNIX names during OCI pushes; publish jobs must run inside SPbNIX infrastructure.
-    # Docker-capable runner required for QEMU, Buildx, build, and push operations.
-    runs-on: spbnix-k8s-docker
     needs:
       - lint-policy
       - python-unit-shard-union
       - frontend-tests
       - helm-chart
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Docker preflight
-        run: |
-          set -eux
-          echo "runner=${RUNNER_NAME:-unknown}"
-          echo "os=${RUNNER_OS:-unknown}"
-          echo "arch=${RUNNER_ARCH:-unknown}"
-          which docker
-          docker version
-          docker info
-          docker buildx version
-          ls -l /var/run/docker.sock
-
-      # CA must be installed BEFORE QEMU/Buildx because they pull images from Harbor.
-      # The Docker daemon validates registry TLS, so the CA must be in daemon trust.
-      # SKIP_RUNNER_DOCKER_CERTS_D=1: DinD sidecar owns daemon CA trust, runner-side is diagnostic.
-      - name: Install SPbNIX Harbor CA
-        env:
-          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
-          SKIP_RUNNER_DOCKER_CERTS_D: "1"
-        run: .github/scripts/install-spbnix-harbor-ca.sh
-
-      # Proof step: docker pull exercises dockerd's trust path, not just CLI tools.
-      # If this fails with "unknown ca", the DinD sidecar needs the CA mounted.
-      - name: Verify Docker daemon trusts Harbor
-        run: |
-          set -euo pipefail
-          echo "Runner-side Docker cert path:"
-          ls -l /etc/docker/certs.d/harbor-pve1.spbnix.local/ca.crt 2>/dev/null || echo "NOT FOUND in runner"
-          echo ""
-          echo "Docker daemon probe (pulls from Harbor):"
-          docker pull harbor-pve1.spbnix.local/dockerhub-cache/library/busybox:latest || {
-            echo "ERROR: docker pull failed - Docker daemon does not trust Harbor CA"
-            echo "If runner:/etc/docker/certs.d exists but dind sidecar does not,"
-            echo "the ARC runner scale set pod template needs CA volume mount."
-            exit 1
-          }
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-          image: harbor-pve1.spbnix.local/dockerhub-cache/tonistiigi/binfmt:latest
-          # Use Harbor proxy cache instead of GitHub Actions cache for faster, local-first pulls
-          cache-image: false
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1
-
-      # Patch BuildKit containers after they are created by setup-buildx-action
-      - name: Patch BuildKit containers with Harbor CA
-        env:
-          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
-          BUILDX_BUILDER_NAME: ${{ steps.buildx.outputs.name }}
-          SKIP_RUNNER_DOCKER_CERTS_D: "1"
-        run: .github/scripts/install-spbnix-harbor-ca.sh
-
-      - name: Login to Harbor
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_TOKEN }}
-
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.FRONTEND_IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=,format=short
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./frontend/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-frontend:buildcache
-          cache-to: type=registry,ref=harbor-pve1.spbnix.local/k9b/cache/k9b-frontend:buildcache,mode=max
+    uses: ./.github/workflows/harbor-build-image.yml
+    with:
+      registry: harbor-pve1.spbnix.local
+      harbor_project: k9b
+      image_name: k9b-frontend
+      dockerfile: ./frontend/Dockerfile
+      build_args: ""
+    secrets: inherit
