@@ -22,6 +22,7 @@ import {
   readStoredExecutionHistoryFilter,
   EXECUTION_HISTORY_FILTER_STORAGE_KEY,
   formatDuration,
+  buildExecutionEntryKey,
 } from "./executionHistory";
 
 import type {
@@ -44,6 +45,7 @@ export {
   readStoredExecutionHistoryFilter,
   EXECUTION_HISTORY_FILTER_STORAGE_KEY,
   formatDuration,
+  buildExecutionEntryKey,
 };
 
 export const ExecutionHistoryPanel = ({

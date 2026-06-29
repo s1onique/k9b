@@ -134,3 +134,45 @@ class TestExecutionHistoryLLMFriendly:
         assert (
             'from "./ExecutionHistoryFilters"' not in component
         ), "ExecutionHistoryFilters.tsx cannot import from itself"
+
+    def test_execution_history_panel_reexports_build_execution_entry_key(self) -> None:
+        """ExecutionHistoryPanel.tsx must re-export buildExecutionEntryKey.
+
+        This guards against a regression where the facade drops named exports
+        after splitting modules. The hook useAppNavigationHighlights.ts imports
+        this function from the facade, so it must remain available.
+        """
+        panel = Path("frontend/src/components/ExecutionHistoryPanel.tsx")
+        content = panel.read_text(encoding="utf-8")
+
+        # Must export the function (on its own line in the multi-line export block)
+        assert "buildExecutionEntryKey," in content and content.count("buildExecutionEntryKey") >= 2, (
+            "ExecutionHistoryPanel.tsx must both import and re-export buildExecutionEntryKey "
+            "for backward compatibility with useAppNavigationHighlights.ts"
+        )
+
+        # Must import from executionHistory submodule
+        assert "./executionHistory" in content, (
+            "buildExecutionEntryKey must come from the executionHistory module"
+        )
+
+    def test_app_navigation_highlight_import_contract_is_preserved(self) -> None:
+        """useAppNavigationHighlights.ts must be able to import buildExecutionEntryKey.
+
+        This is the consumer-side contract that must not break.
+        """
+        hook = Path("frontend/src/hooks/useAppNavigationHighlights.ts")
+        panel = Path("frontend/src/components/ExecutionHistoryPanel.tsx")
+
+        hook_content = hook.read_text(encoding="utf-8")
+        panel_content = panel.read_text(encoding="utf-8")
+
+        # The hook imports from the facade
+        assert 'from "../components/ExecutionHistoryPanel"' in hook_content, (
+            "useAppNavigationHighlights.ts should import from ExecutionHistoryPanel facade"
+        )
+
+        # The facade must export the function
+        assert "buildExecutionEntryKey" in panel_content, (
+            "buildExecutionEntryKey must be present in ExecutionHistoryPanel.tsx"
+        )
