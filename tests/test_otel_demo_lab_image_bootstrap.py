@@ -275,3 +275,142 @@ class TestImageTagImmutability:
         for tag in floating_tags:
             assert tag not in content, \
                 f"Workflow should not use floating tag '{tag}'"
+
+
+# Path to the reusable Harbor build workflow
+HARBOR_BUILD_IMAGE_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "harbor-build-image.yml"
+
+
+class TestBuildKitHarborCATrust:
+    """Tests that BuildKit is configured with Harbor CA trust for self-signed certs.
+
+    BuildKit runs in docker-container driver mode, which requires explicit registry
+    CA configuration via buildkitd.toml. Without this, BuildKit cannot resolve
+    Harbor images due to x509: certificate signed by unknown authority.
+    """
+
+    def test_otel_workflow_has_buildkitd_config_for_harbor(self) -> None:
+        """OTel workflow should configure BuildKit with Harbor CA trust."""
+        content = OTEL_WORKFLOW_FILE.read_text()
+
+        # Find the build-lab-images section
+        build_start = content.find("build-lab-images:")
+        assert build_start != -1, "build-lab-images section not found"
+
+        next_job = content.find("\n  # ======", build_start)
+        if next_job == -1:
+            next_job = len(content)
+
+        build_section = content[build_start:next_job]
+
+        # Verify BuildKit CA configuration exists
+        assert "Configure BuildKit with Harbor CA" in build_section, \
+            "Should have 'Configure BuildKit with Harbor CA' step"
+        assert 'buildkitd-config:' in build_section, \
+            "setup-buildx-action should have buildkitd-config"
+        assert 'buildkitd.toml' in build_section, \
+            "Should create buildkitd.toml for BuildKit registry CA config"
+
+    def test_otel_workflow_uses_runner_temp_cert_path(self) -> None:
+        """OTel workflow should use RUNNER_TEMP for CA cert, not /run/secrets/.
+        
+        The buildkitd.toml must reference a path that setup-buildx-action can read
+        when creating the BuildKit builder container.
+        """
+        content = OTEL_WORKFLOW_FILE.read_text()
+
+        # Verify the cert is written to RUNNER_TEMP
+        assert '${RUNNER_TEMP}/buildkit-certs/harbor-pve1.spbnix.local.pem' in content, \
+            "CA cert should be written to RUNNER_TEMP path"
+        
+        # Verify the TOML uses the cert_path variable (which resolves to RUNNER_TEMP)
+        assert 'ca = ["${cert_path}"]' in content, \
+            "TOML ca config should use ${cert_path} variable"
+        
+        # Verify we don't use /run/secrets/ which is not accessible from runner
+        assert "/run/secrets/buildkit-certs/" not in content, \
+            "Should NOT use /run/secrets/ path (not accessible from runner)"
+
+    def test_otel_workflow_uses_registry_toml_config(self) -> None:
+        """OTel workflow should use BuildKit registry TOML config format."""
+        content = OTEL_WORKFLOW_FILE.read_text()
+
+        # Verify the TOML registry config format
+        assert '[registry."harbor-pve1.spbnix.local"]' in content, \
+            'Should have TOML [registry."harbor-pve1.spbnix.local"] section'
+        assert 'ca = ["${cert_path}"]' in content, \
+            "Should configure CA path in TOML registry section"
+
+    def test_otel_workflow_has_harbor_ca_docker_certs_d(self) -> None:
+        """OTel workflow should install CA into /etc/docker/certs.d for Docker daemon."""
+        content = OTEL_WORKFLOW_FILE.read_text()
+
+        # The install-spbnix-harbor-ca.sh script handles this, but verify it's called
+        assert "Install SPbNIX Harbor CA" in content, \
+            "Should install Harbor CA into runner"
+        assert "install-spbnix-harbor-ca.sh" in content, \
+            "Should use the CA installation script"
+
+
+class TestReusableHarborBuildImageWorkflow:
+    """Tests that the reusable harbor-build-image.yml workflow has proper BuildKit CA config.
+    
+    The reusable workflow pulls BuildKit daemon image from Harbor, so it needs:
+    1. CA installed into runner system trust before setup-buildx
+    2. buildkitd.toml with registry CA configuration
+    3. buildkitd-config wired into setup-buildx-action
+    """
+
+    def test_harbor_workflow_file_exists(self) -> None:
+        """The Harbor build image workflow file should exist."""
+        assert HARBOR_BUILD_IMAGE_WORKFLOW_FILE.exists(), \
+            f"Harbor build workflow not found at {HARBOR_BUILD_IMAGE_WORKFLOW_FILE}"
+
+    def test_harbor_workflow_has_buildkitd_config_for_harbor(self) -> None:
+        """Reusable workflow should configure BuildKit with Harbor CA trust."""
+        content = HARBOR_BUILD_IMAGE_WORKFLOW_FILE.read_text()
+
+        assert "Configure BuildKit with Harbor CA" in content, \
+            "Should have 'Configure BuildKit with Harbor CA' step"
+        assert '${RUNNER_TEMP}/buildkit-certs/harbor-pve1.spbnix.local.pem' in content, \
+            "CA cert should be written to RUNNER_TEMP path"
+        assert '[registry."harbor-pve1.spbnix.local"]' in content, \
+            "Should have TOML registry config section"
+        assert 'ca = ["${cert_path}"]' in content, \
+            "TOML ca config should use ${cert_path} variable"
+        assert "buildkitd-config:" in content, \
+            "setup-buildx-action should have buildkitd-config"
+        assert "/run/secrets/buildkit-certs/" not in content, \
+            "Should NOT use /run/secrets/ path (not accessible from runner)"
+
+    def test_harbor_workflow_ca_install_before_buildx(self) -> None:
+        """CA install must happen before setup-buildx-action.
+        
+        The reusable workflow pulls BuildKit daemon image from Harbor. Docker daemon
+        needs the CA in system trust to pull the image, so Install SPbNIX Harbor CA
+        must come before Set up Docker Buildx.
+        """
+        content = HARBOR_BUILD_IMAGE_WORKFLOW_FILE.read_text()
+
+        install_pos = content.find("Install SPbNIX Harbor CA")
+        buildx_pos = content.find("Set up Docker Buildx")
+
+        assert install_pos != -1, "Should have 'Install SPbNIX Harbor CA' step"
+        assert buildx_pos != -1, "Should have 'Set up Docker Buildx' step"
+        assert install_pos < buildx_pos, \
+            "'Install SPbNIX Harbor CA' must come before 'Set up Docker Buildx'"
+
+    def test_harbor_workflow_configure_buildkit_before_buildx(self) -> None:
+        """Configure BuildKit step must happen before setup-buildx-action.
+        
+        The buildkitd.toml must be written before setup-buildx-action uses it.
+        """
+        content = HARBOR_BUILD_IMAGE_WORKFLOW_FILE.read_text()
+
+        configure_pos = content.find("Configure BuildKit with Harbor CA")
+        buildx_pos = content.find("Set up Docker Buildx")
+
+        assert configure_pos != -1, "Should have 'Configure BuildKit with Harbor CA' step"
+        assert buildx_pos != -1, "Should have 'Set up Docker Buildx' step"
+        assert configure_pos < buildx_pos, \
+            "'Configure BuildKit with Harbor CA' must come before 'Set up Docker Buildx'"
