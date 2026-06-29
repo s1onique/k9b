@@ -217,8 +217,8 @@ class TestCommonBaselineEvidenceContract:
     def test_preserves_helm_get_evidence(self) -> None:
         """Common baseline should write Helm get manifest and values evidence."""
         content = COMMON_BASELINE_MODULE.read_text()
-        assert "get-manifest.yaml" in content and "get-values.json" in content, \
-            "Should write helm get-manifest.yaml and get-values.json"
+        assert "get-manifest.yaml" in content and "get-values.yaml" in content, \
+            "Should write helm get-manifest.yaml and get-values.yaml"
 
     def test_preserves_install_log_evidence(self) -> None:
         """Common baseline should write install output logs."""
@@ -261,16 +261,18 @@ class TestRegressionTests:
         assert "ensure_k9b_baseline_ready(" not in section, \
             "Should NOT call ensure_k9b_baseline_ready directly"
 
-    def test_otel_workflow_no_raw_helm_in_install_section(self) -> None:
-        """Install k9b baseline section should not have raw helm commands."""
+    def test_otel_workflow_no_raw_helm_in_common_baseline_section(self) -> None:
+        """Ensure k9b baseline section should not have raw helm commands."""
         content = OTEL_WORKFLOW_FILE.read_text()
 
-        # Find the install k9b baseline section
-        install_section_start = content.find("Install k9b baseline")
+        # Find the k9b baseline section (check new "Ensure" wording first, then legacy)
+        install_section_start = content.find("Ensure k9b lab baseline")
+        if install_section_start == -1:
+            install_section_start = content.find("Install k9b baseline")
         if install_section_start == -1:
             install_section_start = content.find("Installing k9b baseline")
 
-        assert install_section_start != -1, "Should have k9b baseline install section"
+        assert install_section_start != -1, "Should have k9b baseline section"
 
         # Find next major section
         next_sections = [
