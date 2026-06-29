@@ -30,15 +30,19 @@ class TestOTelLabUsesCommonBaselineInstaller:
         assert OTEL_WORKFLOW_FILE.exists(), f"OTel workflow not found at {OTEL_WORKFLOW_FILE}"
 
     def test_otel_workflow_uses_cli_wrapper(self) -> None:
-        """OTel demo lab should use the CLI wrapper script."""
+        """OTel demo lab should use the CLI wrapper script via module invocation."""
         content = OTEL_WORKFLOW_FILE.read_text()
         install_section_start = content.find("Install k9b baseline")
         assert install_section_start != -1
 
         section = content[install_section_start:install_section_start + 3000]
 
-        assert "scripts/ensure_k9b_lab_baseline.py" in section, \
-            "OTel workflow should use CLI wrapper"
+        # Must use module invocation from repo root for correct sys.path
+        # See: https://docs.python.org/3/library/sys_path_init.html
+        assert "python -m scripts.ensure_k9b_lab_baseline" in section, \
+            "OTel workflow should use module invocation (python -m scripts.ensure_k9b_lab_baseline)"
+        assert "scripts/ensure_k9b_lab_baseline.py" not in section, \
+            "OTel workflow should NOT use direct file path (scripts/ensure_k9b_lab_baseline.py)"
         assert "python -c" not in section, \
             "OTel workflow should NOT use inline python -c"
         assert "ensure_k9b_baseline_ready(" not in section, \
@@ -231,15 +235,19 @@ class TestRegressionTests:
     """Regression tests to prevent OTel lab from drifting back to minimal Helm path."""
 
     def test_otel_workflow_uses_cli_wrapper_for_k9b_baseline(self) -> None:
-        """Install k9b baseline should use CLI wrapper, not inline python -c."""
+        """Install k9b baseline should use CLI wrapper via module invocation, not file path."""
         content = OTEL_WORKFLOW_FILE.read_text()
         install_section_start = content.find("Install k9b baseline")
         assert install_section_start != -1
 
         section = content[install_section_start:install_section_start + 3000]
 
-        assert "scripts/ensure_k9b_lab_baseline.py" in section, \
-            "Should use CLI wrapper script"
+        # Must use module invocation from repo root for correct sys.path
+        # See: https://docs.python.org/3/library/sys_path_init.html
+        assert "python -m scripts.ensure_k9b_lab_baseline" in section, \
+            "Should use module invocation (python -m scripts.ensure_k9b_lab_baseline)"
+        assert "scripts/ensure_k9b_lab_baseline.py" not in section, \
+            "Should NOT use direct file path (scripts/ensure_k9b_lab_baseline.py)"
         assert "python -c" not in section, \
             "Should NOT use inline python -c block"
         assert "ensure_k9b_baseline_ready(" not in section, \

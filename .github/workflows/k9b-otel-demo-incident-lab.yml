@@ -339,32 +339,30 @@ jobs:
           echo "--- Helm releases ---"
           helm --kubeconfig "$KUBECONFIG" list -A | grep -E 'k9b' || true
 
+      - name: Create artifact directory
+        run: mkdir -p ./lab-artifacts/otel-demo
+
       - name: Install k9b baseline
+        working-directory: .
         run: |
           set -euo pipefail
 
           echo "=== Installing k9b baseline ==="
 
-          # Install k9b using helm upgrade --install (idempotent: installs if not exists)
-          helm --kubeconfig "$KUBECONFIG" upgrade --install k9b ./charts/k9b \
+          # Use module invocation from repo root to ensure correct sys.path
+          # See: https://docs.python.org/3/library/sys_path_init.html
+          .venv/bin/python -m scripts.ensure_k9b_lab_baseline \
+            --lab-name otel-demo \
+            --release-name k9b \
             --namespace k9b \
-            --create-namespace \
-            --values ./charts/k9b/values-live-lab.yaml \
-            --wait \
-            --timeout 5m
-
-          echo "Waiting for k9b-backend rollout"
-          kubectl --kubeconfig "$KUBECONFIG" -n k9b rollout status deployment/k9b-backend --timeout=5m
-
-          echo "Waiting for k9b-scheduler rollout"
-          kubectl --kubeconfig "$KUBECONFIG" -n k9b rollout status deployment/k9b-scheduler --timeout=5m
+            --chart-path ./charts/k9b \
+            --values-path ./charts/k9b/values-live-lab.yaml \
+            --artifact-dir ./lab-artifacts/otel-demo \
+            --kubeconfig "$KUBECONFIG" \
+            --backend-deployment k9b-backend \
+            --timeout-seconds 300
 
           echo "=== k9b baseline installed ==="
-          kubectl --kubeconfig "$KUBECONFIG" -n k9b get service k9b-backend
-          kubectl --kubeconfig "$KUBECONFIG" -n k9b get deployment k9b-backend
-
-      - name: Create artifact directory
-        run: mkdir -p ./lab-artifacts/otel-demo
 
       - name: Run Live OTel Demo Lab
         run: |
