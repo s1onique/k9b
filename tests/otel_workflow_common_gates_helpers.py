@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OTEL_WORKFLOW = REPO_ROOT / ".github/workflows/k9b-otel-demo-incident-lab.yml"
 OTEL_ORCHESTRATOR = REPO_ROOT / "scripts/k9b_otel_demo_lab.py"

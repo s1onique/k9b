@@ -13,7 +13,6 @@ import yaml
 
 from tests.otel_workflow_common_gates_helpers import (
     DEPLOYMENT_PHASES,
-    OTEL_ORCHESTRATOR,
     OTEL_WORKFLOW,
     PROVIDER_HEALTH,
     read_text,
