@@ -424,6 +424,36 @@ class TestWorkflowIntegration:
         assert phases.index("incident_discovery") < phases.index("one_pass_diagnosis")
 
 
+class TestImportContract:
+    """Smoke tests to prevent contract drift in imports.
+
+    These tests verify that key modules can be imported without errors.
+    They catch ImportError early before runtime failures in the live lab.
+    """
+
+    def test_backend_health_gate_prerequisites_imports(self) -> None:
+        """prerequisites.py imports without K9B_BACKEND_DEPLOYMENT drift."""
+        import scripts.backend_health_gate.prerequisites  # noqa: F401
+
+    def test_backend_health_gate_constants_exports_deployment(self) -> None:
+        """constants.py exports K9B_BACKEND_DEPLOYMENT for prerequisites.py."""
+        from scripts.backend_health_gate.constants import K9B_BACKEND_DEPLOYMENT
+
+        assert K9B_BACKEND_DEPLOYMENT == "k9b-backend"
+
+    def test_backend_health_gate_constants_exports_namespace(self) -> None:
+        """constants.py exports K9B_NAMESPACE for prerequisites.py."""
+        from scripts.backend_health_gate.constants import K9B_NAMESPACE
+
+        assert K9B_NAMESPACE == "k9b"
+
+    def test_backend_health_gate_constants_exports_port(self) -> None:
+        """constants.py exports K9B_BACKEND_PORT for prerequisites.py."""
+        from scripts.backend_health_gate.constants import K9B_BACKEND_PORT
+
+        assert K9B_BACKEND_PORT == 8080
+
+
 class TestWrapperImportMode:
     """Regression tests for CLI wrapper import mode.
 

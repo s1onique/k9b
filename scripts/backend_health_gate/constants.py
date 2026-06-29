@@ -17,6 +17,11 @@ FAILURE_BACKEND_ROLLOUT_NOT_READY = "backend_rollout_not_ready"
 # k9b backend service name constant (single source of truth)
 K9B_BACKEND_SERVICE = "k9b-backend"
 
+# k9b backend deployment and namespace constants (for prerequisites.py)
+K9B_BACKEND_DEPLOYMENT = "k9b-backend"
+K9B_BACKEND_PORT = 8080
+K9B_NAMESPACE = "k9b"
+
 # Health dependency failure class constants
 # These map to specific internal dependency failures for self-diagnosis
 FAILURE_DEP_SCHEDULER_UNAVAILABLE = "dependency_scheduler_unavailable"
