@@ -3,14 +3,14 @@
   "kind": "DeploymentList",
   "items": [
     {"metadata": {"name": "frontend"}, "status": {"readyReplicas": 1, "replicas": 1}},
-    {"metadata": {"name": "recommendationservice"}, "status": {"readyReplicas": 1, "replicas": 1}},
-    {"metadata": {"name": "productcatalogservice"}, "status": {"readyReplicas": 1, "replicas": 1}},
-    {"metadata": {"name": "cartservice"}, "status": {"readyReplicas": 1, "replicas": 1}},
-    {"metadata": {"name": "checkoutservice"}, "status": {"readyReplicas": 1, "replicas": 1}},
-    {"metadata": {"name": "paymentservice"}, "status": {"readyReplicas": 1, "replicas": 1}},
-    {"metadata": {"name": "shippingservice"}, "status": {"readyReplicas": 1, "replicas": 1}},
-    {"metadata": {"name": "currencyservice"}, "status": {"readyReplicas": 1, "replicas": 1}},
-    {"metadata": {"name": "emailservice"}, "status": {"readyReplicas": 1, "replicas": 1}},
+    {"metadata": {"name": "recommendation"}, "status": {"readyReplicas": 1, "replicas": 1}},
+    {"metadata": {"name": "product-catalog"}, "status": {"readyReplicas": 1, "replicas": 1}},
+    {"metadata": {"name": "cart"}, "status": {"readyReplicas": 1, "replicas": 1}},
+    {"metadata": {"name": "checkout"}, "status": {"readyReplicas": 1, "replicas": 1}},
+    {"metadata": {"name": "payment"}, "status": {"readyReplicas": 1, "replicas": 1}},
+    {"metadata": {"name": "shipping"}, "status": {"readyReplicas": 1, "replicas": 1}},
+    {"metadata": {"name": "currency"}, "status": {"readyReplicas": 1, "replicas": 1}},
+    {"metadata": {"name": "email"}, "status": {"readyReplicas": 1, "replicas": 1}},
     {"metadata": {"name": "flagd"}, "status": {"readyReplicas": 1, "replicas": 1}}
   ]
 }
