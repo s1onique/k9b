@@ -13,9 +13,9 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from .k9b_lab_common_helpers import kubectl_json, log
+from .k9b_lab_common_helpers import kubectl_json as _default_kubectl_json, log
 
 # HTTP port name patterns for common services
 _HTTP_PORT_NAMES = {"http", "service", "frontend-proxy", "web", "http-web", "http1"}
@@ -61,7 +61,10 @@ FAILURE_FRONTEND_SMOKE_TOO_FEW_SUCCESS = "frontend_smoke_too_few_success"
 
 
 def resolve_service_http_url(
-    kubeconfig: str, namespace: str, service: str
+    kubeconfig: str,
+    namespace: str,
+    service: str,
+    kubectl_json_fn: Callable[..., Any] | None = None,
 ) -> tuple[str | None, int | None, str | None]:
     """Resolve HTTP URL from Kubernetes Service.
     
@@ -69,12 +72,15 @@ def resolve_service_http_url(
         kubeconfig: Path to kubeconfig
         namespace: Service namespace
         service: Service name
+        kubectl_json_fn: Optional kubectl_json function for testing injection.
+            Defaults to the module's default kubectl_json.
         
     Returns:
         Tuple of (url, port, error). url is None if resolution fails.
         port is the resolved HTTP port number.
         error is None on success, or an error message.
     """
+    kubectl_json = kubectl_json_fn or _default_kubectl_json
     svc_result = kubectl_json(kubeconfig, "services", namespace)
     
     if not svc_result.success or not svc_result.data:

@@ -169,8 +169,9 @@ def generate_live_traffic(
     
     # Resolve frontend-proxy URL from Service (includes port)
     # This ensures the URL includes the correct port (e.g., :8080)
+    # Pass traffic module's kubectl_json for consistent mock seam in tests
     target_url, target_port, resolve_error = resolve_service_http_url(
-        kubeconfig, namespace, "frontend-proxy"
+        kubeconfig, namespace, "frontend-proxy", kubectl_json_fn=kubectl_json
     )
     if resolve_error or not target_url:
         log(f"Warning: Could not resolve frontend-proxy: {resolve_error}")

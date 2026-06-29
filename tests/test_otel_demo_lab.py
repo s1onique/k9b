@@ -355,12 +355,12 @@ class TestTrafficTargetFQDN:
         finally:
             traffic.kubectl_json = original
 
-    def test_generate_live_traffic_succeeds_when_frontend_proxy_found(self, tmp_path: Path) -> None:
+    def test_generate_live_traffic_succeeds_when_frontend_proxy_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """generate_live_traffic must use FQDN when frontend-proxy service exists."""
-        # Mock kubectl_json to return frontend-proxy service
         import scripts.k9b_otel_demo_lab_traffic as traffic
         from scripts.k9b_otel_demo_lab_traffic import generate_live_traffic
-        original = traffic.kubectl_json
 
         def mock_kubectl_json(
             kubeconfig: str, resource: str, namespace: str | None, **kwargs: object
@@ -370,28 +370,28 @@ class TestTrafficTargetFQDN:
                     'success': True,
                     'data': {
                         'items': [
-                            {'metadata': {'name': 'frontend-proxy'}},
+                            {
+                                'metadata': {'name': 'frontend-proxy'},
+                                'spec': {'ports': [{'port': 8080, 'name': 'http'}]},
+                            },
                             {'metadata': {'name': 'frontend'}},
                         ]
                     }
                 })()
             return type('obj', (object,), {'success': False, 'data': None})()
 
-        traffic.kubectl_json = mock_kubectl_json  # type: ignore[assignment]
+        monkeypatch.setattr(traffic, "kubectl_json", mock_kubectl_json)
 
-        try:
-            result = generate_live_traffic(
-                kubeconfig="/fake/kubeconfig",
-                artifact_dir=tmp_path,
-                namespace="otel-demo",
-                duration_seconds=30,
-                interval_seconds=5,
-            )
+        result = generate_live_traffic(
+            kubeconfig="/fake/kubeconfig",
+            artifact_dir=tmp_path,
+            namespace="otel-demo",
+            duration_seconds=30,
+            interval_seconds=5,
+        )
 
-            # Should not have traffic_target_service_missing failure
-            assert result.get("failure_class") != "traffic_target_service_missing"
-            # Should attempt to create a traffic pod
-            assert result.get("mode") == "live"
-        finally:
-            traffic.kubectl_json = original
+        # Should not have traffic_target_service_missing failure
+        assert result.get("failure_class") != "traffic_target_service_missing"
+        # Should attempt to create a traffic pod
+        assert result.get("mode") == "live"
 
