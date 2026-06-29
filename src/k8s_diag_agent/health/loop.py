@@ -22,6 +22,9 @@ import subprocess  # noqa: F401 - re-exported for backward compatibility
 from pathlib import Path  # noqa: F401 - re-exported for backward compatibility
 from uuid import uuid4  # noqa: F401 - re-exported for backward compatibility
 
+# Re-export from drilldown (DrilldownArtifact)
+from .drilldown import DrilldownArtifact  # noqa: F401
+
 # Re-export from loop_comparison_policy
 from .loop_comparison_policy import (  # noqa: F401
     BaselineRegistry,
@@ -118,6 +121,8 @@ __all__ = [
     "HealthSnapshotRecord",
     "HealthTarget",
     "ManualExternalAnalysisRequest",
+    # From drilldown
+    "DrilldownArtifact",
     # From loop_comparison_policy
     "BaselineRegistry",
     "_policy_eligible_pair",

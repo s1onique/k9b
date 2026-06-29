@@ -8,7 +8,13 @@ Split from loop.py for LLM-friendly file sizes while preserving the public
 import contract through the loop.py facade.
 
 HealthRunConfig and build_health_assessment have been moved to loop_run_config.
-Helper methods have been moved to loop_runner_monitoring and loop_runner_execute.
+Helper methods have been moved to loop_runner_*.py modules:
+- loop_runner_compatibility.py: compatibility delegator methods
+- loop_runner_collection.py: snapshot collection helpers
+- loop_runner_review.py: review/proposals helpers
+- loop_runner_execute.py: execute() orchestration
+- loop_runner_monitoring.py: Alertmanager/vmalert discovery
+- loop_runner_drilldown_analysis.py: auto-drilldown analysis
 """
 
 from __future__ import annotations
@@ -30,32 +36,32 @@ from ..structured_logging import DEFAULT_HEALTH_LOG, emit_structured_log
 from . import loop_history
 from .drilldown import DrilldownCollector
 from .image_pull_secret import ImagePullSecretInspector
-from .loop_automatic_diagnosis import run_automatic_diagnosis_loop
+from .loop_automatic_diagnosis import run_automatic_diagnosis_loop  # noqa: F401 - re-exported as a stable patch seam for tests and compatibility wrappers
 from .loop_comparison_policy import BaselineRegistry
 from .loop_config_helpers import _parse_manual_external_analysis_requests, _parse_manual_triggers
 from .loop_drilldown_helpers import determine_drilldown_reasons as _determine_drilldown_reasons_impl
-from .loop_failure_metadata import extract_failure_metadata_field
 from .loop_history import (
     HealthAssessmentArtifact,
     HealthHistoryEntry,
     _build_runtime_run_id,
-    _format_snapshot_filename,
     _safe_label,
-    _write_json,
 )
 from .loop_models import ManualComparison
 from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
 from .loop_retention import prune_external_analysis_history
-from .loop_review_pipeline import write_review_and_proposals as _write_review_and_proposals_impl
 from .loop_run_config import HealthRunConfig
-from .loop_runner_drilldown_analysis import run_auto_drilldown_analysis as _run_auto_drilldown_analysis_impl
-from .loop_runner_execute import execute_health_loop_run
-from .loop_runner_monitoring import (
-    run_alertmanager_discovery,
-    run_alertmanager_snapshot_collection,
-    run_vmalert_discovery,
-    run_vmalert_rule_state_collection,
+from .loop_runner_collection import collect_snapshots_for_targets
+from .loop_runner_compatibility import (
+    failure_metadata_field_compat,
+    run_alertmanager_discovery_compat,
+    run_alertmanager_snapshot_collection_compat,
+    run_auto_drilldown_analysis_compat,
+    run_automatic_diagnosis_loop_compat,
+    run_vmalert_discovery_compat,
+    start_alertmanager_port_forward_compat,
+    stop_alertmanager_port_forward_compat,
 )
+from .loop_runner_review import write_review_artifact
 from .loop_types import HealthSnapshotRecord as _HealthSnapshotRecord
 from .loop_types import HealthTarget as _HealthTarget
 from .loop_types import ManualExternalAnalysisRequest
@@ -171,6 +177,8 @@ class HealthLoopRunner:
 
         This delegates to execute_health_loop_run() from loop_runner_execute.
         """
+        from .loop_runner_execute import execute_health_loop_run
+
         self._log_event("health-loop", "INFO", "Health run started", event="start")
         self._notification_records = []
         directories = self._ensure_directories()
@@ -211,54 +219,15 @@ class HealthLoopRunner:
 
     def _collect_snapshots(self, directory: Path) -> list[HealthSnapshotRecord]:
         """Collect snapshots from all target clusters."""
-        records: list[HealthSnapshotRecord] = []
-        for target in self.config.targets:
-            if target.context not in self.available_contexts:
-                self._log_event(
-                    "health-loop",
-                    "WARNING",
-                    "Context not available for snapshot collection",
-                    cluster_label=target.label,
-                    cluster_context=target.context,
-                    reason="context-unavailable",
-                )
-                continue
-            try:
-                snapshot = self.snapshot_collector(target.context)
-            except RuntimeError as exc:
-                self._log_event(
-                    "health-loop",
-                    "WARNING",
-                    "Snapshot collection failed",
-                    cluster_label=target.label,
-                    cluster_context=target.context,
-                    severity_reason=str(exc),
-                    reason="collection-error",
-                )
-                continue
-            filename = _format_snapshot_filename(self.run_id, target.label, snapshot.metadata.captured_at)
-            path = directory / filename
-            _write_json(snapshot.to_dict(), path)
-            self._log_event(
-                "health-loop",
-                "INFO",
-                "Snapshot collected",
-                cluster_label=target.label,
-                cluster_context=target.context,
-                artifact_path=str(path),
-                event="snapshot",
-            )
-            baseline_policy, baseline_path = self.config.baseline_for_target(target)
-            records.append(
-                HealthSnapshotRecord(
-                    target=target,
-                    snapshot=snapshot,
-                    path=path,
-                    baseline_policy=baseline_policy,
-                    baseline_policy_path=str(baseline_path) if baseline_path else None,
-                )
-            )
-        return records
+        return collect_snapshots_for_targets(
+            targets=list(self.config.targets),
+            available_contexts=self.available_contexts,
+            run_id=self.run_id,
+            snapshot_collector=self.snapshot_collector,
+            baseline_for_target_fn=self.config.baseline_for_target,
+            log_event_fn=self._log_event,
+            directory=directory,
+        )
 
     def _write_review_artifact(
         self,
@@ -267,51 +236,16 @@ class HealthLoopRunner:
         directories: dict[str, Path],
     ) -> tuple[Path | None, tuple[HealthProposal, ...]]:
         """Build health review and generate proposals from assessments and drilldowns."""
-        try:
-            review_path, proposals = _write_review_and_proposals_impl(
-                run_id=self.run_id,
-                run_label=self.run_label,
-                assessments=assessments,
-                drilldowns=drilldowns,
-                directories=directories,
-                warning_threshold=self.config.trigger_policy.warning_event_threshold,
-                baseline_policy=self.config.baseline_policy,
-            )
-        except (ValueError, TypeError, KeyError, AttributeError, OSError) as exc:
-            self._log_event(
-                "review-assessment",
-                "ERROR",
-                "Health review generation failed",
-                severity_reason=str(exc),
-                event="review-failed",
-            )
-            return None, ()
-
-        if review_path is None:
-            return None, ()
-
-        self._log_event(
-            "review-assessment",
-            "INFO",
-            "Health review written",
-            artifact_path=str(review_path),
-            assessment_count=len(assessments),
-            drilldown_count=len(drilldowns),
-            event="review-created",
+        return write_review_artifact(
+            run_id=self.run_id,
+            run_label=self.run_label,
+            assessments=assessments,
+            drilldowns=drilldowns,
+            directories=directories,
+            warning_threshold=self.config.trigger_policy.warning_event_threshold,
+            baseline_policy=self.config.baseline_policy,
+            log_event_fn=self._log_event,
         )
-
-        if proposals:
-            for proposal in proposals:
-                self._log_event(
-                    "proposal-promotion",
-                    "INFO",
-                    "Health proposal written",
-                    proposal_id=proposal.proposal_id,
-                    artifact_path=proposal.artifact_path,
-                    event="proposal-generated",
-                )
-
-        return review_path, proposals
 
     def _determine_drilldown_reasons(
         self,
@@ -336,7 +270,6 @@ class HealthLoopRunner:
         snapshots = [record.snapshot for record in records if record.snapshot is not None]
         if not snapshots:
             return None
-
         return derive_linkage_context_from_snapshots(snapshots, self.run_id)
 
     def _run_monitoring_discovery(
@@ -345,13 +278,19 @@ class HealthLoopRunner:
         directories: dict[str, Path],
     ) -> None:
         """Run Alertmanager and vmalert discovery and collection."""
+        from .loop_runner_monitoring import (
+            run_alertmanager_discovery,
+            run_alertmanager_snapshot_collection,
+            run_vmalert_discovery,
+            run_vmalert_rule_state_collection,
+        )
+
         self._alertmanager_inventory = run_alertmanager_discovery(
             records=records,
             directories=directories,
             log_event=self._log_event,
             run_id=self.run_id,
         )
-
         run_alertmanager_snapshot_collection(
             inventory=self._alertmanager_inventory,
             run_id=self.run_id,
@@ -361,14 +300,12 @@ class HealthLoopRunner:
             start_port_forward=self._start_alertmanager_port_forward,
             stop_port_forward=self._stop_alertmanager_port_forward,
         )
-
         self._vmalert_inventory = run_vmalert_discovery(
             records=records,
             directories=directories,
             log_event=self._log_event,
             run_id=self.run_id,
         )
-
         run_vmalert_rule_state_collection(
             inventory=self._vmalert_inventory,
             directories=directories,
@@ -397,17 +334,23 @@ class HealthLoopRunner:
         context: str | None,
     ) -> tuple:
         """Start kubectl port-forward to an Alertmanager service."""
-        from .loop_alertmanager_port_forward import start_alertmanager_port_forward as _start_pf
-
-        return _start_pf(
+        return start_alertmanager_port_forward_compat(
+            runner=self,
             namespace=namespace,
             service_name=service_name,
             context=context,
-            run_id=self.run_id,
-            run_label=self.run_label,
-            log_event=self._log_event,
-            choose_free_local_port=self._choose_free_local_port,
-            wait_for_port_ready=self._wait_for_port_ready,
+        )
+
+    def _stop_alertmanager_port_forward(
+        self,
+        process: subprocess.Popen[str],
+        local_port: int | None,
+    ) -> None:
+        """Stop the port-forward process and log the event."""
+        stop_alertmanager_port_forward_compat(
+            runner=self,
+            process=process,
+            local_port=local_port,
         )
 
     def _run_auto_drilldown_analysis(
@@ -421,18 +364,7 @@ class HealthLoopRunner:
         from loop_runner_drilldown_analysis, providing the instance-based interface
         expected by existing tests and production call sites.
         """
-        provider_name = self.config.external_analysis.auto_drilldown.provider
-        if provider_name is None:
-            provider_name = "llamacpp"  # Default provider if not configured
-        return _run_auto_drilldown_analysis_impl(
-            drilldowns=drilldowns,
-            directories=directories,
-            run_id=self.run_id,
-            run_label=self.run_label,
-            auto_drilldown_policy=self.config.external_analysis.auto_drilldown,
-            provider_name=provider_name,
-            log_event_fn=self._log_event,
-        )
+        return run_auto_drilldown_analysis_compat(self, drilldowns, directories)
 
     def _run_alertmanager_discovery(
         self,
@@ -444,13 +376,7 @@ class HealthLoopRunner:
         This is a compatibility delegator that wraps run_alertmanager_discovery
         from loop_runner_monitoring.
         """
-        self._alertmanager_inventory = run_alertmanager_discovery(
-            records=records,
-            directories=directories,
-            log_event=self._log_event,
-            run_id=self.run_id,
-        )
-        return self._alertmanager_inventory
+        return run_alertmanager_discovery_compat(self, records, directories)
 
     def _run_alertmanager_snapshot_collection(
         self,
@@ -461,15 +387,7 @@ class HealthLoopRunner:
         This is a compatibility delegator that wraps run_alertmanager_snapshot_collection
         from loop_runner_monitoring.
         """
-        run_alertmanager_snapshot_collection(
-            inventory=self._alertmanager_inventory,
-            run_id=self.run_id,
-            run_label=self.run_label,
-            log_event=self._log_event,
-            directories=directories,
-            start_port_forward=self._start_alertmanager_port_forward,
-            stop_port_forward=self._stop_alertmanager_port_forward,
-        )
+        run_alertmanager_snapshot_collection_compat(self, directories)
 
     def _run_vmalert_discovery(
         self,
@@ -481,13 +399,7 @@ class HealthLoopRunner:
         This is a compatibility delegator that wraps run_vmalert_discovery
         from loop_runner_monitoring.
         """
-        self._vmalert_inventory = run_vmalert_discovery(
-            records=records,
-            directories=directories,
-            log_event=self._log_event,
-            run_id=self.run_id,
-        )
-        return self._vmalert_inventory
+        return run_vmalert_discovery_compat(self, records, directories)
 
     def _run_automatic_diagnosis_loop(
         self,
@@ -499,23 +411,10 @@ class HealthLoopRunner:
         from loop_automatic_diagnosis, providing the instance-based interface
         expected by existing tests and production call sites.
 
-        Args:
-            external_analysis_dir: Path to the external-analysis directory
-
         Returns:
-            Bounded result summary dict with:
-            - automatic_diagnosis_enabled: bool
-            - collector_run_id: str | None
-            - incidents_processed: int
-            - incidents_eligible: int
-            - incidents_skipped: int
-            - incidents_with_errors: int
-            - total_review_packets_written: int
+            Bounded result summary dict.
         """
-        return run_automatic_diagnosis_loop(
-            external_analysis_dir=external_analysis_dir,
-            log_event_fn=self._log_event,
-        )
+        return run_automatic_diagnosis_loop_compat(self, external_analysis_dir)
 
     @staticmethod
     def _failure_metadata_field(
@@ -525,26 +424,9 @@ class HealthLoopRunner:
         """Extract a field from failure metadata, checking top-level and nested prompt_diagnostics.
 
         This static helper provides backward compatibility for code that references
-        HealthLoopRunner._failure_metadata_field. The actual implementation is in
-        loop_failure_metadata.extract_failure_metadata_field.
+        HealthLoopRunner._failure_metadata_field.
         """
-        return extract_failure_metadata_field(metadata, field_name)
-
-    def _stop_alertmanager_port_forward(
-        self,
-        process: subprocess.Popen[str],
-        local_port: int | None,
-    ) -> None:
-        """Stop the port-forward process and log the event."""
-        from .loop_alertmanager_port_forward import stop_alertmanager_port_forward as _stop_pf
-
-        _stop_pf(
-            process=process,
-            local_port=local_port,
-            run_id=self.run_id,
-            run_label=self.run_label,
-            log_event=self._log_event,
-        )
+        return failure_metadata_field_compat(metadata, field_name)
 
 
 def run_health_loop(
