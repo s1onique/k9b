@@ -23,7 +23,7 @@ class TestExecutionHistoryLLMFriendly:
             "frontend/src/components/ExecutionHistoryPanel.tsx",
             "frontend/src/components/executionHistory/index.ts",
             "frontend/src/components/executionHistory/executionHistoryTypes.ts",
-            "frontend/src/components/executionHistory/executionHistoryFilters.ts",
+            "frontend/src/components/executionHistory/executionHistoryFiltersData.ts",
             "frontend/src/components/executionHistory/executionHistorySummary.ts",
             "frontend/src/components/executionHistory/executionHistoryKeys.ts",
             "frontend/src/components/executionHistory/executionHistoryFormat.ts",
@@ -66,4 +66,22 @@ class TestExecutionHistoryLLMFriendly:
         assert len(lines) <= 200, (
             f"ExecutionHistoryPanel.tsx has {len(lines)} lines, which is too large for a thin container. "
             "Expected ~150 lines maximum."
+        )
+
+    def test_legacy_execution_history_filters_utility_file_does_not_exist(self) -> None:
+        """Guard against re-creation of executionHistoryFilters.ts.
+
+        On case-insensitive filesystems (macOS), executionHistoryFilters.ts collides
+        with ExecutionHistoryFilters.tsx, causing ambiguous resolution and circular
+        imports. The utility file was renamed to executionHistoryFiltersData.ts.
+        """
+        legacy_path = (
+            Path("frontend/src/components/executionHistory")
+            / "executionHistoryFilters.ts"
+        )
+
+        assert not legacy_path.exists(), (
+            "Do not recreate executionHistoryFilters.ts; it collides by name with "
+            "ExecutionHistoryFilters.tsx on case-insensitive filesystems. Use "
+            "executionHistoryFiltersData.ts instead."
         )
