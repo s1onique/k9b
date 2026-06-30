@@ -9,8 +9,8 @@ This module ensures that:
 from pathlib import Path
 from typing import Any
 
-# Path to the OTel demo workflow file
-OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+# Path to the OTel live-lab workflow file (not CI-only incident-lab)
+OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-live-lab.yml"
 
 # Path to the common baseline module
 COMMON_BASELINE_MODULE = Path(__file__).parent.parent / "scripts" / "k9b_lab_common_baseline.py"

@@ -637,7 +637,8 @@ class LlamaCppProviderTest(unittest.TestCase):
         with self.assertRaises(RuntimeError) as ctx:
             provider.assess("prompt", self._dummy_payload())
         message = str(ctx.exception)
-        self.assertIn("Endpoint https://example.com/v1/v1/chat/completions", message)
+        # Provider normalizes base_url to remove duplicate /v1, producing /v1/chat/completions
+        self.assertIn("Endpoint https://example.com/v1/chat/completions", message)
         self.assertIn("Base URL already includes '/v1'", message)
         self.assertIn("HTTP 404 Not Found", message)
         self.assertIn("Response snippet: error detail snippet", message)

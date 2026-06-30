@@ -139,7 +139,7 @@ class TestLLMResponseParseErrorProductionPath(unittest.TestCase):
         assert artifact.failure_metadata is not None  # type narrowing for mypy
 
         # Assert top-level failure metadata fields
-        self.assertEqual(artifact.failure_metadata["failure_class"], "llm_response_parse_error_length_capped")
+        self.assertEqual(artifact.failure_metadata["failure_class"], "llm_completion_truncated")
         self.assertEqual(artifact.failure_metadata["exception_type"], "LLMResponseParseError")
         self.assertEqual(artifact.failure_metadata["finish_reason"], "length")
         self.assertEqual(artifact.failure_metadata["completion_stopped_by_length"], True)
@@ -190,7 +190,7 @@ class TestLLMResponseParseErrorProductionPath(unittest.TestCase):
 
         self.assertEqual(log_metadata.get("llm_phase"), "result")
         self.assertEqual(log_metadata.get("status"), "failed")
-        self.assertEqual(log_metadata.get("failure_class"), "llm_response_parse_error_length_capped")
+        self.assertEqual(log_metadata.get("failure_class"), "llm_completion_truncated")
         self.assertEqual(log_metadata.get("exception_type"), "LLMResponseParseError")
         self.assertEqual(log_metadata.get("finish_reason"), "length")
         self.assertEqual(log_metadata.get("completion_stopped_by_length"), True)

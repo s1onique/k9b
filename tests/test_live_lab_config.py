@@ -1267,14 +1267,21 @@ class TestOtelLiveLabK9bBaselineInstall:
     and evidence collection.
     """
 
+    # Live-lab workflow path (not CI-only incident-lab)
+    OTEL_WORKFLOW_FILE = (
+        Path(__file__).parent.parent
+        / ".github"
+        / "workflows"
+        / "k9b-otel-demo-live-lab.yml"
+    )
+
     def test_otel_workflow_uses_common_baseline_wrapper(self) -> None:
         """Live OTel lab workflow must use the common baseline wrapper.
 
         This is a regression test: the common baseline wrapper handles Helm install,
         rollout wait, and evidence collection consistently across all labs.
         """
-        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
-        content = OTEL_WORKFLOW_FILE.read_text()
+        content = self.OTEL_WORKFLOW_FILE.read_text()
 
         # Find the k9b baseline install section
         install_section_start = content.find("Ensure k9b lab baseline")
@@ -1307,8 +1314,7 @@ class TestOtelLiveLabK9bBaselineInstall:
 
         The common baseline wrapper handles Helm installation internally.
         """
-        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
-        content = OTEL_WORKFLOW_FILE.read_text()
+        content = self.OTEL_WORKFLOW_FILE.read_text()
 
         # Find the k9b baseline install section
         install_section_start = content.find("Ensure k9b lab baseline")
@@ -1334,8 +1340,7 @@ class TestOtelLiveLabK9bBaselineInstall:
 
         This ensures the ordering: install k9b -> run lab.
         """
-        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
-        content = OTEL_WORKFLOW_FILE.read_text()
+        content = self.OTEL_WORKFLOW_FILE.read_text()
 
         # Find positions of key steps
         install_pos = content.find("Ensure k9b lab baseline")
@@ -1353,8 +1358,7 @@ class TestOtelLiveLabK9bBaselineInstall:
 
         This helps distinguish 'wrong cluster' from 'missing baseline' in failures.
         """
-        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
-        content = OTEL_WORKFLOW_FILE.read_text()
+        content = self.OTEL_WORKFLOW_FILE.read_text()
 
         # Should show current context
         assert "config current-context" in content, \
@@ -1378,8 +1382,7 @@ class TestOtelLiveLabK9bBaselineInstall:
         This ensures broken kubeconfig fails cleanly at connectivity check,
         not later in Helm install.
         """
-        OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
-        content = OTEL_WORKFLOW_FILE.read_text()
+        content = self.OTEL_WORKFLOW_FILE.read_text()
 
         # Find the connectivity step
         connectivity_pos = content.find("Verify live cluster connectivity")
