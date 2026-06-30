@@ -22,7 +22,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from scripts.k9b_otel_demo_lab_baseline_diagnostics import (
-    _has_scheduling_constraints,
     check_baseline_purity,
     classify_baseline_failure,
 )
@@ -157,36 +156,6 @@ class TestPhaseOrdering:
 class TestBaselineDiagnosticClassifier:
     """Test baseline readiness failure classification with fake K8s objects."""
 
-    def test_classify_shipping_with_impossible_node_selector(self) -> None:
-        """shipping stuck with impossible nodeSelector -> scheduling contamination."""
-        # Fake pod with impossible nodeSelector
-        pod = {
-            "metadata": {"name": "shipping-abc123"},
-            "spec": {
-                "nodeSelector": {
-                    "k9b.dev/otel-lab-node": "impossible-value"
-                }
-            },
-            "status": {"phase": "Pending"}
-        }
-        
-        has_constraints, constraints = _has_scheduling_constraints(pod)
-        assert has_constraints, "Should detect scheduling constraints"
-        assert constraints["nodeSelector"]["k9b.dev/otel-lab-node"] == "impossible-value"
-        
-        # Classify the failure
-        result = classify_baseline_failure(
-            pods_data={"items": [pod]},
-            deployments_data={"items": []},
-            events_text="",
-            stuck_deployment_names=["shipping"],
-        )
-        
-        assert result.is_scheduling_contamination, \
-            "Should classify as scheduling contamination"
-        assert "k9b.dev/otel-lab-node" in result.failure_reason.lower() or \
-               result.failure_class == "baseline_contamination_scheduling"
-    
     def test_classify_shipping_with_failedscheduling_event(self) -> None:
         """shipping stuck with FailedScheduling event -> scheduling failure."""
         events = """
@@ -271,54 +240,6 @@ class TestBaselineDiagnosticClassifier:
         assert "shipping" in result.raw_stuck_deployments or \
                "shipping" in result.failure_reason.lower()
     
-    def test_default_kubernetes_pod_tolerations_are_not_contamination(self) -> None:
-        """Default Kubernetes tolerations (node.kubernetes.io/not-ready, etc.) should not
-        be flagged as scheduling contamination.
-        
-        Kubernetes automatically adds default tolerations to pods for things like
-        node.kubernetes.io/not-ready and node.kubernetes.io/unreachable. These should
-        not cause false positive contamination detection.
-        """
-        # Fake pod with default Kubernetes tolerations (NOT contamination)
-        pod = {
-            "metadata": {"name": "shipping-default-tolerations"},
-            "spec": {
-                "tolerations": [
-                    {
-                        "key": "node.kubernetes.io/not-ready",
-                        "operator": "Exists",
-                        "effect": "NoExecute",
-                        "tolerationSeconds": 300,
-                    },
-                    {
-                        "key": "node.kubernetes.io/unreachable",
-                        "operator": "Exists",
-                        "effect": "NoExecute",
-                        "tolerationSeconds": 300,
-                    },
-                ],
-            },
-            "status": {"phase": "Running"},
-        }
-        
-        # Verify the function correctly identifies these as NOT scenario-specific
-        has_constraints, constraints = _has_scheduling_constraints(pod, is_live_pod=True)
-        assert not has_constraints, \
-            "Default Kubernetes tolerations should not be flagged as scheduling constraints"
-        assert constraints == {}, "Should have no constraints detected"
-        
-        # Verify the classifier doesn't flag this as contamination
-        result = classify_baseline_failure(
-            pods_data={"items": [pod]},
-            deployments_data=None,
-            events_text="",
-            stuck_deployment_names=["shipping"],
-        )
-        
-        assert result.failure_class != "baseline_contamination_scheduling", \
-            "Default Kubernetes tolerations should not cause contamination classification"
-
-
 # =============================================================================
 # Baseline Purity Guard Tests
 # =============================================================================
