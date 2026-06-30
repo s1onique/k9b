@@ -150,7 +150,9 @@ class TestP3cDiscoveryVerdict:
         verdict = validate_unschedulable_shipping_discovery(incident, namespace="otel-demo")
 
         assert verdict.success is False
-        assert "wrong_candidate_class" in verdict.reason
+        reason = verdict.reason
+        assert reason is not None
+        assert "wrong_candidate_class" in reason
 
 
 class TestP4cRootCauseVerdict:
