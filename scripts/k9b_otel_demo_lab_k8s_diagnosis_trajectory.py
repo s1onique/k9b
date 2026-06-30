@@ -14,17 +14,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
+    ACCEPTABLE_P4C_STOP_REASONS,
+    WARNING_GRADE_P4C_STOP_REASONS,
+    DiagnosisLoopPolicy,
+    evaluate_trajectory,
+)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import MIN_REQUIRED_PASSES
 from scripts.k9b_otel_demo_lab_trajectory_verdict import (
     TRAJECTORY_REASON_MISSING_PASS_ARTIFACTS,
     TRAJECTORY_REASON_UNSAFE_CHECKS_OCCURRED,
     TrajectoryVerdict,
-)
-from src.k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
-    ACCEPTABLE_P4C_STOP_REASONS,
-    WARNING_GRADE_P4C_STOP_REASONS,
-    DiagnosisLoopPolicy,
-    evaluate_trajectory,
 )
 
 
@@ -150,7 +150,7 @@ def extract_pass_artifacts_from_evidence(
 ) -> list[dict[str, Any]]:
     """Extract pass artifacts from diagnosis evidence."""
     for key in ("pass_artifacts", "diagnosis_loop_passes", "passes"):
-        artifacts = evidence.get(key, [])
+        artifacts: list[dict[str, Any]] = evidence.get(key, [])
         if artifacts:
             return artifacts
     return []

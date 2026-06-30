@@ -3,6 +3,7 @@
 This module provides deterministic check classification:
 - Read-only checks: kubectl get, describe, logs, top (allowed by default)
 - Mutating checks: kubectl apply, delete, patch, scale, exec (rejected by default)
+- Sensitive read checks: kubectl get/describe secret (denied by default)
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ MUTATING_ACTION_PATTERNS: tuple[str, ...] = (
     "apply_manifest",
 )
 
-# Read-only action patterns (allowed)
+# Read-only action patterns (allowed by default)
 READ_ONLY_ACTION_PATTERNS: tuple[str, ...] = (
     "kubectl get",
     "kubectl describe",
@@ -58,7 +59,6 @@ READ_ONLY_ACTION_PATTERNS: tuple[str, ...] = (
     "kubectl get services",
     "kubectl get nodes",
     "kubectl get configmaps",
-    "kubectl get secrets",
     "kubectl get namespaces",
     "kubectl get pvc",
     "kubectl get pv",
@@ -67,6 +67,13 @@ READ_ONLY_ACTION_PATTERNS: tuple[str, ...] = (
     "kubectl get endpoints",
     "kubectl get statefulset",
     "kubectl get daemonset",
+)
+
+# Sensitive read patterns (kubectl get/describe secret)
+# These are read-only but potentially expose sensitive data
+SENSITIVE_READ_PATTERNS: tuple[str, ...] = (
+    "kubectl get secret",
+    "kubectl describe secret",
 )
 
 
@@ -86,11 +93,34 @@ def is_mutating_check(check_text: str) -> bool:
     return False
 
 
-def is_read_only_check(check_text: str) -> bool:
+def is_sensitive_read_check(check_text: str) -> bool:
+    """Check if a check describes a sensitive read action.
+
+    Sensitive reads are read-only but may expose secrets or sensitive data.
+    Examples: kubectl get secret, kubectl describe secret
+
+    Args:
+        check_text: Check description or command string
+
+    Returns:
+        True if the check appears to be a sensitive read
+    """
+    normalized = check_text.lower()
+    for pattern in SENSITIVE_READ_PATTERNS:
+        if pattern.lower() in normalized:
+            return True
+    return False
+
+
+def is_read_only_check(
+    check_text: str,
+    allow_sensitive_reads: bool = False,
+) -> bool:
     """Check if a check describes a read-only action.
 
     Args:
         check_text: Check description or command string
+        allow_sensitive_reads: If True, allow sensitive reads (kubectl get/describe secret)
 
     Returns:
         True if the check appears to be read-only
@@ -99,6 +129,12 @@ def is_read_only_check(check_text: str) -> bool:
         return False
 
     normalized = check_text.lower()
+    
+    # Check if it's a sensitive read
+    if is_sensitive_read_check(check_text):
+        # Only allow if allow_sensitive_reads is True
+        return allow_sensitive_reads
+
     for pattern in READ_ONLY_ACTION_PATTERNS:
         if pattern.lower() in normalized:
             return True
@@ -118,6 +154,8 @@ def is_read_only_check(check_text: str) -> bool:
 __all__ = [
     "MUTATING_ACTION_PATTERNS",
     "READ_ONLY_ACTION_PATTERNS",
+    "SENSITIVE_READ_PATTERNS",
     "is_mutating_check",
+    "is_sensitive_read_check",
     "is_read_only_check",
 ]

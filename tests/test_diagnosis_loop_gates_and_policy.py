@@ -10,13 +10,15 @@ Tests cover:
 - No-new-evidence pass stops the loop
 - Read-only gate: kubectl get/describe/logs allowed
 - Read-only gate: kubectl apply/delete/patch/scale/exec rejected
+- Sensitive read gate: kubectl get/describe secret denied by default
+- Sensitive read gate: kubectl get/describe secret allowed only with allow_sensitive_reads=True
 """
 
 from __future__ import annotations
 
 import pytest
 
-from src.k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
+from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
     DiagnosisLoopPolicy,
     LoopStopReason,
     is_mutating_check,
@@ -96,12 +98,41 @@ class TestReadOnlyCheckGate:
         assert is_mutating_check("scale deployment mydeploy --replicas=5")
 
 
+class TestSensitiveReadGate:
+    """Tests for sensitive read gate (kubectl get/describe secret)."""
+
+    def test_get_secret_denied_by_default(self) -> None:
+        """kubectl get secret is denied by default."""
+        assert is_read_only_check("kubectl get secret mysecret") is False
+        assert is_read_only_check("kubectl get secret mysecret -n default") is False
+
+    def test_describe_secret_denied_by_default(self) -> None:
+        """kubectl describe secret is denied by default."""
+        assert is_read_only_check("kubectl describe secret mysecret") is False
+        assert is_read_only_check("kubectl describe secret mysecret -n default") is False
+
+    def test_get_secret_allowed_with_sensitive_read_policy(self) -> None:
+        """kubectl get secret is allowed with allow_sensitive_reads=True."""
+        assert is_read_only_check("kubectl get secret mysecret", allow_sensitive_reads=True) is True
+        assert is_read_only_check("kubectl get secret mysecret -n default", allow_sensitive_reads=True) is True
+
+    def test_describe_secret_allowed_with_sensitive_read_policy(self) -> None:
+        """kubectl describe secret is allowed with allow_sensitive_reads=True."""
+        assert is_read_only_check("kubectl describe secret mysecret", allow_sensitive_reads=True) is True
+        assert is_read_only_check("kubectl describe secret mysecret -n default", allow_sensitive_reads=True) is True
+
+    def test_mutating_check_always_denied(self) -> None:
+        """Mutating checks are always denied even with allow_sensitive_reads=True."""
+        assert is_read_only_check("kubectl delete pod mypod", allow_sensitive_reads=True) is False
+        assert is_read_only_check("kubectl apply -f manifest.yaml", allow_sensitive_reads=True) is False
+
+
 class TestLoopStopReasons:
     """Tests for typed loop stop reasons."""
 
     def test_acceptable_stop_reasons(self) -> None:
         """Acceptable stop reasons for clean trajectory."""
-        from src.k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
+        from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
             ACCEPTABLE_P4C_STOP_REASONS,
         )
         assert LoopStopReason.ROOT_CAUSE_CONFIRMED_BY_EVIDENCE in ACCEPTABLE_P4C_STOP_REASONS
@@ -109,7 +140,7 @@ class TestLoopStopReasons:
 
     def test_warning_grade_stop_reasons(self) -> None:
         """Warning-grade stop reasons require RCA valid."""
-        from src.k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
+        from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
             WARNING_GRADE_P4C_STOP_REASONS,
         )
         assert LoopStopReason.MAX_PASSES_REACHED in WARNING_GRADE_P4C_STOP_REASONS
@@ -136,12 +167,14 @@ class TestDiagnosisLoopPolicy:
         assert policy.stop_on_no_new_evidence is True
         assert policy.stop_on_repeated_plan is True
         assert policy.allow_mutating_checks is False
+        assert policy.allow_sensitive_reads is False
 
     def test_live_lab_default(self) -> None:
         """live_lab_default creates correct policy."""
         policy = DiagnosisLoopPolicy.live_lab_default()
         assert policy.max_passes == 2
         assert policy.max_checks_per_pass == 2
+        assert policy.allow_sensitive_reads is False
 
     def test_permissive_lab(self) -> None:
         """permissive_lab creates more lenient policy."""
@@ -222,6 +255,49 @@ class TestDiagnosisLoopPolicy:
         assert d["max_passes"] == 2
         assert d["max_checks_per_pass"] == 2
         assert d["schema_version"] == "2.0"
+        assert d["allow_sensitive_reads"] is False
+
+
+class TestPassArtifactSchemaValidation:
+    """Tests for pass artifact schema validation."""
+
+    def test_validate_pass_artifact_schema_valid(self) -> None:
+        """Valid pass artifact passes schema validation."""
+        from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
+            PASS_ARTIFACT_FIELDS,
+            validate_pass_artifact_schema,
+        )
+
+        artifact = {field: f"value_for_{field}" for field in PASS_ARTIFACT_FIELDS}
+        is_valid, missing = validate_pass_artifact_schema(artifact)
+        assert is_valid is True
+        assert missing == []
+
+    def test_validate_pass_artifact_schema_missing_fields(self) -> None:
+        """Missing fields fails schema validation."""
+        from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
+            validate_pass_artifact_schema,
+        )
+
+        artifact = {
+            "loop_run_id": "run-1",
+            "incident_id": "inc-1",
+        }
+        is_valid, missing = validate_pass_artifact_schema(artifact)
+        assert is_valid is False
+        assert "pass_index" in missing
+        assert "check_fingerprints" in missing
+
+    def test_validate_pass_artifact_schema_empty_artifact(self) -> None:
+        """Empty artifact fails schema validation."""
+        from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
+            validate_pass_artifact_schema,
+        )
+
+        artifact: dict = {}
+        is_valid, missing = validate_pass_artifact_schema(artifact)
+        assert is_valid is False
+        assert len(missing) > 0
 
 
 if __name__ == "__main__":

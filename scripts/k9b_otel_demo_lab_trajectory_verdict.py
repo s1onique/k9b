@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
+from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
     DiagnosisLoopPolicy,
     TrajectoryScore,
 )

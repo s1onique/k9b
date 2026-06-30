@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-# Import LoopStopReason from policy module for typed stop reasons
-from .incident_diagnosis_loop_policy import LoopStopReason as TypedLoopStopReason
+# Import LoopStopReason from stop_reasons module (source of truth)
+from .incident_diagnosis_loop_stop_reasons import LoopStopReason as TypedLoopStopReason
 
 # =============================================================================
 # Constants
