@@ -6,7 +6,8 @@ prefix so pytest does not collect it as a test file.
 """
 from __future__ import annotations
 
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
