@@ -315,8 +315,10 @@ jobs:
           fi
 
       - name: Verify Live Lab Contracts
+        if: ${{ inputs.incident_scenario == 'unschedulable-shipping' }}
         run: |
           echo "=== Verifying Live Lab Contracts ==="
+          echo "Scenario: ${{ inputs.incident_scenario }}"
           .venv/bin/python -m scripts.k9b_otel_demo_lab_contract_verify \
             --artifact-dir ./lab-artifacts/otel-demo \
             --scenario "${{ inputs.incident_scenario }}" \
@@ -324,6 +326,7 @@ jobs:
             --otel-traces auto \
             --json
         # This step fails the job if contracts fail (no if: condition)
+        # Only runs for unschedulable-shipping as that's the only deeply-verified scenario
 
       - name: Upload Live Lab Artifacts
         if: always()

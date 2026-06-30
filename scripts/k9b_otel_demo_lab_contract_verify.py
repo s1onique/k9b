@@ -54,35 +54,43 @@ P4C_REASON_DIAGNOSIS_MISSING_SHIPPING = "diagnosis_missing_shipping_identity"
 P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS = "diagnosis_missing_mult_pass_evidence"
 
 # Valid P3c reasons
-VALID_P3C_REASONS = frozenset([
-    P3C_REASON_INCIDENT_DISCOVERED,
-    P3C_REASON_INCIDENT_DISCOVERED_WITHOUT_RCA,
-    "p3c_discovery_valid",
-])
+VALID_P3C_REASONS = frozenset(
+    [
+        P3C_REASON_INCIDENT_DISCOVERED,
+        P3C_REASON_INCIDENT_DISCOVERED_WITHOUT_RCA,
+        "p3c_discovery_valid",
+    ]
+)
 
 # Valid P4c reasons
-VALID_P4C_REASONS = frozenset([
-    P4C_REASON_DIAGNOSIS_RCA_VALID,
-])
+VALID_P4C_REASONS = frozenset(
+    [
+        P4C_REASON_DIAGNOSIS_RCA_VALID,
+    ]
+)
 
 # Accepted P3c candidate classes
-ACCEPTED_P3C_CANDIDATE_CLASSES = frozenset([
-    "deployment_unavailable",
-    "pending_pod",
-    "warning_event_burst",
-])
+ACCEPTED_P3C_CANDIDATE_CLASSES = frozenset(
+    [
+        "deployment_unavailable",
+        "pending_pod",
+        "warning_event_burst",
+    ]
+)
 
 # Scheduling root-cause markers for P4c
-SCHEDULING_ROOT_CAUSE_MARKERS = frozenset([
-    "FailedScheduling",
-    "Unschedulable",
-    "nodeSelector",
-    "k9b.dev/otel-lab-node",
-    "k9b.dev/otel-lab-node=missing",
-    "missing node label",
-    "no matching node",
-    "0/8 nodes are available",
-])
+SCHEDULING_ROOT_CAUSE_MARKERS = frozenset(
+    [
+        "FailedScheduling",
+        "Unschedulable",
+        "nodeSelector",
+        "k9b.dev/otel-lab-node",
+        "k9b.dev/otel-lab-node=missing",
+        "missing node label",
+        "no matching node",
+        "0/8 nodes are available",
+    ]
+)
 
 # Live-lab default bounded-loop policy
 DEFAULT_MAX_PASSES = 2
@@ -90,39 +98,45 @@ DEFAULT_MAX_CHECKS_PER_PASS = 2
 DEFAULT_MAX_TOTAL_CHECKS = 4
 
 # Required pass artifact fields
-REQUIRED_PASS_ARTIFACT_FIELDS = frozenset([
-    "loop_run_id",
-    "incident_id",
-    "pass_index",
-    "case_file_hash",
-    "proposed_checks",
-    "accepted_checks",
-    "rejected_checks",
-    "check_fingerprints",
-    "new_evidence_hashes",
-    "duplicate_check_count",
-    "unsafe_check_count",
-    "root_cause_summary",
-    "confidence",
-    "should_continue",
-    "stop_reason",
-])
+REQUIRED_PASS_ARTIFACT_FIELDS = frozenset(
+    [
+        "loop_run_id",
+        "incident_id",
+        "pass_index",
+        "case_file_hash",
+        "proposed_checks",
+        "accepted_checks",
+        "rejected_checks",
+        "check_fingerprints",
+        "new_evidence_hashes",
+        "duplicate_check_count",
+        "unsafe_check_count",
+        "root_cause_summary",
+        "confidence",
+        "should_continue",
+        "stop_reason",
+    ]
+)
 
 # OTel trace span/event names
-EXPECTED_OTEL_SPANS = frozenset([
-    "k9b.diagnosis_loop.budget",
-    "k9b.diagnosis_loop.plan",
-    "k9b.diagnosis_loop.gate",
-    "k9b.diagnosis_loop.execute",
-    "k9b.diagnosis_loop.artifact",
-])
+EXPECTED_OTEL_SPANS = frozenset(
+    [
+        "k9b.diagnosis_loop.budget",
+        "k9b.diagnosis_loop.plan",
+        "k9b.diagnosis_loop.gate",
+        "k9b.diagnosis_loop.execute",
+        "k9b.diagnosis_loop.artifact",
+    ]
+)
 
-EXPECTED_OTEL_EVENTS = frozenset([
-    "k9b.diagnosis_loop.check_rejected",
-    "k9b.diagnosis_loop.checks_executed",
-    "k9b.diagnosis_loop.artifact_written",
-    "k9b.diagnosis_loop.stop",
-])
+EXPECTED_OTEL_EVENTS = frozenset(
+    [
+        "k9b.diagnosis_loop.check_rejected",
+        "k9b.diagnosis_loop.checks_executed",
+        "k9b.diagnosis_loop.artifact_written",
+        "k9b.diagnosis_loop.stop",
+    ]
+)
 
 # Forbidden sensitive payload patterns (hard fail)
 # Note: Patterns match keys in JSON serialization where field names are quoted
@@ -140,15 +154,18 @@ FORBIDDEN_SENSITIVE_PATTERNS = [
 ]
 
 # Allowed safe patterns (do NOT fail on these)
-ALLOWED_SAFE_PATTERNS = frozenset([
-    "sensitive_read_denied",
-    "kubectl_get_secrets",
-    "secret read rejected",
-])
+ALLOWED_SAFE_PATTERNS = frozenset(
+    [
+        "sensitive_read_denied",
+        "kubectl_get_secrets",
+        "secret read rejected",
+    ]
+)
 
 
 class OtelTracesMode(Enum):
     """OTel trace verification mode."""
+
     AUTO = "auto"
     REQUIRE = "require"
     SKIP = "skip"
@@ -157,6 +174,7 @@ class OtelTracesMode(Enum):
 @dataclass
 class ContractCheck:
     """Result of a single contract check."""
+
     name: str
     passed: bool
     phase: str
@@ -167,6 +185,7 @@ class ContractCheck:
 @dataclass
 class VerificationReport:
     """Complete verification report."""
+
     passed: bool
     checks: list[ContractCheck] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -189,6 +208,7 @@ class VerificationReport:
 # Lab Result Verification
 # =============================================================================
 
+
 def verify_lab_result(artifact_dir: Path, require_passed: bool, report: VerificationReport) -> bool:
     """Verify lab-result.json exists and indicates success."""
     lab_result_path = artifact_dir / "lab-result.json"
@@ -203,39 +223,42 @@ def verify_lab_result(artifact_dir: Path, require_passed: bool, report: Verifica
         report.add_error(f"lab-result.json is malformed JSON: {e}")
         return False
 
-    # Check for success field (tolerant about exact field names)
-    success_values = {"true", "passed", "success", "ok"}
-    success_field = lab_result.get("success") or lab_result.get("status") or lab_result.get("outcome")
-
-    if success_field is None:
-        report.add_error(
-            "lab-result.json missing success/status/outcome field"
-        )
+    # Check for success field using key-presence order (not `or`, which skips False)
+    # This ensures `{"success": false}` is detected as a failure, not as missing
+    if "success" in lab_result:
+        success_field = lab_result["success"]
+    elif "status" in lab_result:
+        success_field = lab_result["status"]
+    elif "outcome" in lab_result:
+        success_field = lab_result["outcome"]
+    else:
+        report.add_error("lab-result.json missing success/status/outcome field")
         return False
 
     # Normalize success value
+    success_values = {"true", "passed", "success", "ok"}
     is_success = str(success_field).lower() in success_values
 
     if require_passed and not is_success:
-        report.add_error(
-            f"lab-result.json indicates failure: success={lab_result.get('success')}, "
-            f"status={lab_result.get('status')}, outcome={lab_result.get('outcome')}"
-        )
+        report.add_error(f"lab-result.json indicates failure: success={lab_result.get('success')}, status={lab_result.get('status')}, outcome={lab_result.get('outcome')}")
         return False
 
-    report.add_check(ContractCheck(
-        name="lab_result",
-        passed=True,
-        phase="lab",
-        reason="lab_passed" if is_success else "lab_skipped",
-        details={"success_field": success_field},
-    ))
+    report.add_check(
+        ContractCheck(
+            name="lab_result",
+            passed=True,
+            phase="lab",
+            reason="lab_passed" if is_success else "lab_skipped",
+            details={"success_field": success_field},
+        )
+    )
     return True
 
 
 # =============================================================================
 # P3c Discovery Verification
 # =============================================================================
+
 
 def find_p3c_artifacts(artifact_dir: Path) -> list[Path]:
     """Find P3c detection/discovery artifacts."""
@@ -292,6 +315,49 @@ def _verify_p3c_from_evidence(path: Path, report: VerificationReport) -> bool:
     return _verify_p3c_from_evidence_dict(evidence, report, str(path))
 
 
+def _has_shipping_identity(evidence: dict[str, Any]) -> bool:
+    """Check if evidence contains shipping identity across normalized structured fields.
+
+    P3c is discovery-only and may not have root_cause_summary. Accept shipping
+    identity from any structured field that represents the target workload.
+    """
+    # Fields that can contain shipping identity
+    shipping_fields = [
+        "object_name",
+        "workload",
+        "workload_name",
+        "target_workload",
+        "deployment",
+        "deployment_name",
+        "pod_name",
+        "incident_id",
+        "root_cause_summary",  # fallback
+    ]
+
+    # Also check nested matched_incident structure
+    matched_incident = evidence.get("matched_incident", {})
+    if isinstance(matched_incident, dict):
+        for key in ["id", "object_name", "signals"]:
+            val = matched_incident.get(key)
+            if val is not None and "shipping" in str(val).lower():
+                return True
+
+    # Check all shipping fields
+    for shipping_field in shipping_fields:
+        value = evidence.get(shipping_field)
+        if value is not None and "shipping" in str(value).lower():
+            return True
+
+    # Also check signals array if present
+    signals = evidence.get("signals", [])
+    if isinstance(signals, list):
+        for signal in signals:
+            if "shipping" in str(signal).lower():
+                return True
+
+    return False
+
+
 def _verify_p3c_from_evidence_dict(evidence: dict[str, Any], report: VerificationReport, source: str) -> bool:
     """Verify P3c from evidence dict."""
     # Check discovery success
@@ -308,10 +374,7 @@ def _verify_p3c_from_evidence_dict(evidence: dict[str, Any], report: Verificatio
     # Check candidate class
     candidate_class = evidence.get("candidate_class", "")
     if candidate_class not in ACCEPTED_P3C_CANDIDATE_CLASSES:
-        report.add_error(
-            f"P3c candidate_class '{candidate_class}' not in accepted list: "
-            f"{ACCEPTED_P3C_CANDIDATE_CLASSES}"
-        )
+        report.add_error(f"P3c candidate_class '{candidate_class}' not in accepted list: {ACCEPTED_P3C_CANDIDATE_CLASSES}")
         return False
 
     # Check namespace
@@ -320,15 +383,15 @@ def _verify_p3c_from_evidence_dict(evidence: dict[str, Any], report: Verificatio
         report.add_error(f"P3c namespace '{target_namespace}' != 'otel-demo'")
         return False
 
-    # Check shipping reference - must be in root_cause_summary, not just any field
-    root_cause_summary = evidence.get("root_cause_summary", "")
-    has_shipping = "shipping" in root_cause_summary.lower()
+    # Check shipping reference - accept from any structured field
+    has_shipping = _has_shipping_identity(evidence)
 
     if not has_shipping:
         report.add_error("P3c evidence does not reference 'shipping'")
         return False
 
     # P3c must NOT require RCA markers (those belong to P4c)
+    root_cause_summary = evidence.get("root_cause_summary", "")
     rca_markers = ["FailedScheduling", "nodeSelector", "k9b.dev/otel-lab-node=missing"]
     rca_in_discovery = any(m in root_cause_summary for m in rca_markers)
 
@@ -339,25 +402,28 @@ def _verify_p3c_from_evidence_dict(evidence: dict[str, Any], report: Verificatio
     if not valid_reason:
         report.add_warning(f"P3c phase_result_reason '{phase_reason}' not in standard set")
 
-    report.add_check(ContractCheck(
-        name="p3c_discovery",
-        passed=True,
-        phase="p3c",
-        reason=phase_reason or P3C_REASON_INCIDENT_DISCOVERED_WITHOUT_RCA,
-        details={
-            "incident_id": incident_id,
-            "candidate_class": candidate_class,
-            "namespace": target_namespace,
-            "has_shipping": has_shipping,
-            "rca_in_discovery": rca_in_discovery,
-        },
-    ))
+    report.add_check(
+        ContractCheck(
+            name="p3c_discovery",
+            passed=True,
+            phase="p3c",
+            reason=phase_reason or P3C_REASON_INCIDENT_DISCOVERED_WITHOUT_RCA,
+            details={
+                "incident_id": incident_id,
+                "candidate_class": candidate_class,
+                "namespace": target_namespace,
+                "has_shipping": has_shipping,
+                "rca_in_discovery": rca_in_discovery,
+            },
+        )
+    )
     return True
 
 
 # =============================================================================
 # P4c Diagnosis Verification
 # =============================================================================
+
 
 def find_p4c_artifacts(artifact_dir: Path) -> list[Path]:
     """Find P4c diagnosis artifacts."""
@@ -400,16 +466,10 @@ def verify_p4c_diagnosis(artifact_dir: Path, report: VerificationReport) -> bool
         return False
 
     # Check scheduling root-cause markers
-    scheduling_markers_found = [
-        marker for marker in SCHEDULING_ROOT_CAUSE_MARKERS
-        if marker.lower() in root_cause_summary.lower()
-    ]
+    scheduling_markers_found = [marker for marker in SCHEDULING_ROOT_CAUSE_MARKERS if marker.lower() in root_cause_summary.lower()]
 
     if not scheduling_markers_found:
-        report.add_error(
-            f"P4c: No scheduling root-cause markers found in root_cause_summary. "
-            f"Expected one of: {SCHEDULING_ROOT_CAUSE_MARKERS}"
-        )
+        report.add_error(f"P4c: No scheduling root-cause markers found in root_cause_summary. Expected one of: {SCHEDULING_ROOT_CAUSE_MARKERS}")
         return False
 
     # Check pass count
@@ -421,10 +481,7 @@ def verify_p4c_diagnosis(artifact_dir: Path, report: VerificationReport) -> bool
     # Check read-only contract
     executed_checks = evidence.get("executed_checks", [])
     mutating_patterns = ["apply", "delete", "patch", "scale", "rollout", "edit", "replace", "create"]
-    has_mutating = any(
-        any(p in str(check).lower() for p in mutating_patterns)
-        for check in executed_checks
-    )
+    has_mutating = any(any(p in str(check).lower() for p in mutating_patterns) for check in executed_checks)
 
     if has_mutating:
         report.add_error(f"P4c: Mutating commands found in executed_checks: {executed_checks}")
@@ -435,24 +492,27 @@ def verify_p4c_diagnosis(artifact_dir: Path, report: VerificationReport) -> bool
     if not any(r in str(phase_reason).lower() for r in ["diagnosis_rca_valid", "rca_valid"]):
         report.add_warning(f"P4c phase_result_reason '{phase_reason}' not in standard set")
 
-    report.add_check(ContractCheck(
-        name="p4c_diagnosis",
-        passed=True,
-        phase="p4c",
-        reason=phase_reason or P4C_REASON_DIAGNOSIS_RCA_VALID,
-        details={
-            "incident_id": evidence.get("incident_id"),
-            "pass_count": pass_count,
-            "scheduling_markers_found": scheduling_markers_found,
-            "read_only": evidence.get("read_only", True),
-        },
-    ))
+    report.add_check(
+        ContractCheck(
+            name="p4c_diagnosis",
+            passed=True,
+            phase="p4c",
+            reason=phase_reason or P4C_REASON_DIAGNOSIS_RCA_VALID,
+            details={
+                "incident_id": evidence.get("incident_id"),
+                "pass_count": pass_count,
+                "scheduling_markers_found": scheduling_markers_found,
+                "read_only": evidence.get("read_only", True),
+            },
+        )
+    )
     return True
 
 
 # =============================================================================
 # Runtime Loop-Pass Verification
 # =============================================================================
+
 
 def find_loop_pass_artifacts(artifact_dir: Path) -> list[Path]:
     """Find loop pass artifacts."""
@@ -461,9 +521,7 @@ def find_loop_pass_artifacts(artifact_dir: Path) -> list[Path]:
         return list(loop_passes_dir.glob("*.json"))
 
     # Fall back to embedded in diagnosis-evidence
-    diagnosis_evidence_path = (
-        artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "diagnosis-evidence.json"
-    )
+    diagnosis_evidence_path = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "diagnosis-evidence.json"
     if diagnosis_evidence_path.exists():
         try:
             evidence = json.loads(diagnosis_evidence_path.read_text())
@@ -510,9 +568,7 @@ def verify_runtime_loop_passes(artifact_dir: Path, report: VerificationReport) -
 
     # Try embedded pass artifacts
     if not pass_artifacts:
-        diagnosis_evidence_path = (
-            artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "diagnosis-evidence.json"
-        )
+        diagnosis_evidence_path = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "diagnosis-evidence.json"
         if diagnosis_evidence_path.exists():
             try:
                 evidence = json.loads(diagnosis_evidence_path.read_text())
@@ -532,14 +588,8 @@ def verify_runtime_loop_passes(artifact_dir: Path, report: VerificationReport) -
 
     # Check aggregate safety
     total_unsafe = sum(a.get("unsafe_check_count", 0) for a in pass_artifacts)
-    total_mutating = sum(
-        a.get("safety_metadata", {}).get("mutating_checks_executed_count", 0)
-        for a in pass_artifacts
-    )
-    total_sensitive = sum(
-        a.get("safety_metadata", {}).get("sensitive_reads_executed_count", 0)
-        for a in pass_artifacts
-    )
+    total_mutating = sum(a.get("safety_metadata", {}).get("mutating_checks_executed_count", 0) for a in pass_artifacts)
+    total_sensitive = sum(a.get("safety_metadata", {}).get("sensitive_reads_executed_count", 0) for a in pass_artifacts)
 
     if total_mutating > 0:
         report.add_error(f"Runtime: mutating_checks_executed_count > 0: {total_mutating}")
@@ -559,19 +609,68 @@ def verify_runtime_loop_passes(artifact_dir: Path, report: VerificationReport) -
         report.add_error("Runtime: Bounded-loop policy violated")
         return False
 
-    report.add_check(ContractCheck(
-        name="runtime_loop_passes",
-        passed=True,
-        phase="runtime",
-        reason="passes_valid",
-        details={
-            "pass_count": len(pass_artifacts),
-            "total_unsafe": total_unsafe,
-            "total_mutating": total_mutating,
-            "total_sensitive": total_sensitive,
-        },
-    ))
+    report.add_check(
+        ContractCheck(
+            name="runtime_loop_passes",
+            passed=True,
+            phase="runtime",
+            reason="passes_valid",
+            details={
+                "pass_count": len(pass_artifacts),
+                "total_unsafe": total_unsafe,
+                "total_mutating": total_mutating,
+                "total_sensitive": total_sensitive,
+            },
+        )
+    )
     return True
+
+
+def _normalize_check_identity(check: Any) -> str:
+    """Normalize check identity for comparison.
+
+    When checks are dicts, stringification is brittle. Extract canonical
+    identity fields and normalize for reliable comparison.
+
+    Returns a normalized string suitable for set operations.
+    """
+    if isinstance(check, dict):
+        # Extract canonical identity fields
+        identity_parts = []
+
+        # Primary identifiers (in priority order)
+        for key in ["check_id", "id", "name"]:
+            val = check.get(key)
+            if val is not None:
+                identity_parts.append(str(val))
+
+        # Target/kind normalization for structured checks
+        target = check.get("target") or check.get("resource") or check.get("object")
+        if target:
+            identity_parts.append(f"target:{target}")
+
+        kind = check.get("kind") or check.get("type")
+        if kind:
+            identity_parts.append(f"kind:{kind}")
+
+        # If we have identity parts, join them
+        if identity_parts:
+            return "|".join(identity_parts)
+
+        # Fall back to sorted string representation
+        return json.dumps(check, sort_keys=True)
+
+    return str(check)
+
+
+def _find_overlap(rejected: list[Any], accepted: list[Any]) -> set[str]:
+    """Find rejected check IDs that appear in accepted checks.
+
+    Uses normalized check identity for reliable dict comparison.
+    """
+    rejected_ids = {_normalize_check_identity(c) for c in rejected}
+    accepted_ids = {_normalize_check_identity(c) for c in accepted}
+    return rejected_ids & accepted_ids
 
 
 def _verify_pass_artifact_schema(artifact: dict[str, Any], index: int, report: VerificationReport) -> bool:
@@ -601,16 +700,13 @@ def _verify_pass_artifact_schema(artifact: dict[str, Any], index: int, report: V
     check_fingerprints = artifact.get("check_fingerprints", [])
 
     if len(accepted_checks) != len(check_fingerprints):
-        report.add_error(
-            f"Pass artifact {index}: len(accepted_checks)={len(accepted_checks)} != "
-            f"len(check_fingerprints)={len(check_fingerprints)}"
-        )
+        report.add_error(f"Pass artifact {index}: len(accepted_checks)={len(accepted_checks)} != len(check_fingerprints)={len(check_fingerprints)}")
         return False
 
-    # Verify no rejected check in accepted
-    rejected_checks = set(str(c) for c in artifact.get("rejected_checks", []))
-    accepted_ids = set(str(c) for c in accepted_checks)
-    overlap = rejected_checks & accepted_ids
+    # Verify no rejected check in accepted (using normalized identity)
+    rejected_checks = artifact.get("rejected_checks", [])
+    accepted_ids = accepted_checks
+    overlap = _find_overlap(rejected_checks, accepted_ids)
 
     if overlap:
         report.add_error(f"Pass artifact {index}: rejected check ids in accepted_checks: {overlap}")
@@ -620,6 +716,13 @@ def _verify_pass_artifact_schema(artifact: dict[str, Any], index: int, report: V
     gate_summary = artifact.get("gate_summary", {})
     if "rejected_checks" not in gate_summary:
         report.add_error(f"Pass artifact {index}: gate_summary.rejected_checks missing")
+        return False
+
+    # Verify gate_summary.rejected_checks overlap with accepted_checks (normalized)
+    gate_rejected = gate_summary.get("rejected_checks", [])
+    gate_overlap = _find_overlap(gate_rejected, accepted_ids)
+    if gate_overlap:
+        report.add_error(f"Pass artifact {index}: gate_summary.rejected_checks in accepted_checks: {gate_overlap}")
         return False
 
     # Verify stop_reason on final pass
@@ -657,24 +760,18 @@ def _verify_bounded_loop_policy(pass_artifacts: list[dict[str, Any]], report: Ve
 
     # Verify pass count
     if len(pass_artifacts) > max_passes:
-        violations.append(
-            f"Bounded-loop: pass count {len(pass_artifacts)} > max_passes {max_passes}"
-        )
+        violations.append(f"Bounded-loop: pass count {len(pass_artifacts)} > max_passes {max_passes}")
 
     # Verify total checks
     total_accepted = sum(len(p.get("accepted_checks", [])) for p in pass_artifacts)
     if total_accepted > max_total_checks:
-        violations.append(
-            f"Bounded-loop: total accepted checks {total_accepted} > max_total_checks {max_total_checks}"
-        )
+        violations.append(f"Bounded-loop: total accepted checks {total_accepted} > max_total_checks {max_total_checks}")
 
     # Verify per-pass checks
     for i, pass_art in enumerate(pass_artifacts):
         accepted = len(pass_art.get("accepted_checks", []))
         if accepted > max_checks_per_pass:
-            violations.append(
-                f"Bounded-loop: pass {i} accepted {accepted} > max_checks_per_pass {max_checks_per_pass}"
-            )
+            violations.append(f"Bounded-loop: pass {i} accepted {accepted} > max_checks_per_pass {max_checks_per_pass}")
 
     for violation in violations:
         report.add_error(violation)
@@ -686,14 +783,44 @@ def _verify_bounded_loop_policy(pass_artifacts: list[dict[str, Any]], report: Ve
 # Sensitive Payload Scan
 # =============================================================================
 
+
+def _check_forbidden_pattern(artifact_str: str, pattern: re.Pattern[str]) -> tuple[bool, str | None]:
+    """Check for a single forbidden pattern, returning (has_forbidden, matched_text).
+
+    Safe patterns like 'sensitive_read_denied' do NOT exempt other forbidden
+    patterns in the same artifact. Each forbidden pattern is checked independently.
+    """
+    match = pattern.search(artifact_str)
+    if not match:
+        return False, None
+
+    # Check if the matched text is exactly a safe pattern (exact match exemption)
+    matched_text = match.group(0)
+    if matched_text in ALLOWED_SAFE_PATTERNS:
+        # This match IS the safe pattern - not forbidden
+        return False, None
+
+    # Also check for quoted safe patterns that might match
+    for safe in ALLOWED_SAFE_PATTERNS:
+        quoted_safe = f'"{safe}"'
+        if quoted_safe in artifact_str and matched_text == safe:
+            return False, None
+
+    # Forbidden pattern found that is not a safe pattern
+    return True, matched_text
+
+
 def scan_for_sensitive_payloads(artifact_dir: Path, report: VerificationReport) -> bool:
     """Scan JSON artifacts for forbidden sensitive payload patterns.
 
     Fail if artifacts contain likely raw secret/token material.
-    Do NOT fail on safe patterns like sensitive_read_denied.
+    Safe patterns (sensitive_read_denied, etc.) only prevent failure when
+    the forbidden match is EXACTLY that safe pattern, not when safe text
+    appears anywhere else in the artifact.
     """
     json_files = list(artifact_dir.glob("**/*.json"))
     sensitive_artifacts: list[str] = []
+    sensitive_details: dict[str, list[str]] = {}
 
     for json_path in json_files:
         try:
@@ -703,36 +830,42 @@ def scan_for_sensitive_payloads(artifact_dir: Path, report: VerificationReport) 
             # Convert to string for pattern matching
             artifact_str = json.dumps(artifact)
 
-            # Check for forbidden patterns
+            # Track forbidden patterns found (after safe-pattern exemptions)
+            forbidden_found: list[str] = []
+
             for pattern in FORBIDDEN_SENSITIVE_PATTERNS:
-                if pattern.search(artifact_str):
-                    # Check if it's actually a safe pattern
-                    if any(safe in artifact_str for safe in ALLOWED_SAFE_PATTERNS):
-                        continue
-                    sensitive_artifacts.append(str(json_path))
-                    break
+                has_forbidden, matched_text = _check_forbidden_pattern(artifact_str, pattern)
+                if has_forbidden and matched_text:
+                    # This forbidden pattern is present and not exempted by exact safe match
+                    forbidden_found.append(pattern.pattern)
+
+            if forbidden_found:
+                sensitive_artifacts.append(str(json_path))
+                sensitive_details[str(json_path)] = forbidden_found
 
         except (json.JSONDecodeError, OSError):
             continue
 
     if sensitive_artifacts:
-        report.add_error(
-            f"Sensitive payload scan: Forbidden patterns found in artifacts: {sensitive_artifacts}"
-        )
+        detail_lines = [f"{path}: {', '.join(patterns)}" for path, patterns in sensitive_details.items()]
+        report.add_error("Sensitive payload scan: Forbidden patterns found:\n  " + "\n  ".join(detail_lines))
         return False
 
-    report.add_check(ContractCheck(
-        name="sensitive_payload_scan",
-        passed=True,
-        phase="security",
-        reason="no_forbidden_payloads",
-    ))
+    report.add_check(
+        ContractCheck(
+            name="sensitive_payload_scan",
+            passed=True,
+            phase="security",
+            reason="no_forbidden_payloads",
+        )
+    )
     return True
 
 
 # =============================================================================
 # OTel Trace Verification
 # =============================================================================
+
 
 def find_otel_trace_artifacts(artifact_dir: Path) -> list[Path]:
     """Find OTel trace artifacts."""
@@ -752,18 +885,20 @@ def verify_otel_traces(artifact_dir: Path, mode: OtelTracesMode, report: Verific
 
     When mode is:
     - skip: Do not inspect traces
-    - auto: Inspect if present, skip if missing
-    - require: Fail if missing
+    - auto: Inspect if present, skip if missing; warn if no expected names
+    - require: Fail if missing OR if no expected k9b span/event names found
 
     If traces exist, verify expected span/event names.
     """
     if mode == OtelTracesMode.SKIP:
-        report.add_check(ContractCheck(
-            name="otel_traces",
-            passed=True,
-            phase="otel",
-            reason="skipped",
-        ))
+        report.add_check(
+            ContractCheck(
+                name="otel_traces",
+                passed=True,
+                phase="otel",
+                reason="skipped",
+            )
+        )
         return True
 
     trace_artifacts = find_otel_trace_artifacts(artifact_dir)
@@ -774,12 +909,14 @@ def verify_otel_traces(artifact_dir: Path, mode: OtelTracesMode, report: Verific
             return False
         else:
             # auto mode - traces optional
-            report.add_check(ContractCheck(
-                name="otel_traces",
-                passed=True,
-                phase="otel",
-                reason="skipped_missing",
-            ))
+            report.add_check(
+                ContractCheck(
+                    name="otel_traces",
+                    passed=True,
+                    phase="otel",
+                    reason="skipped_missing",
+                )
+            )
             return True
 
     # Verify traces contain expected spans/events
@@ -801,27 +938,31 @@ def verify_otel_traces(artifact_dir: Path, mode: OtelTracesMode, report: Verific
     expected_spans_found = spans_found & EXPECTED_OTEL_SPANS
     expected_events_found = events_found & EXPECTED_OTEL_EVENTS
 
-    # OTel traces are informational - warn but don't fail if expected names missing
-    # (API-only instrumentation may not export without SDK config)
     if not expected_spans_found and not expected_events_found:
-        report.add_warning(
-            f"OTel traces found but no expected span/event names. "
-            f"Spans: {spans_found}, Events: {events_found}"
-        )
+        error_msg = f"OTel traces found but no expected k9b span/event names. Spans found: {spans_found}, Events found: {events_found}. Expected spans: {EXPECTED_OTEL_SPANS}, Expected events: {EXPECTED_OTEL_EVENTS}"
+        if mode == OtelTracesMode.REQUIRE:
+            # require mode: fail if traces exist but have no expected names
+            report.add_error(error_msg)
+            return False
+        else:
+            # auto mode: warn but don't fail (API-only instrumentation may not export)
+            report.add_warning(error_msg)
 
-    report.add_check(ContractCheck(
-        name="otel_traces",
-        passed=True,
-        phase="otel",
-        reason="traces_present",
-        details={
-            "trace_files": [str(p) for p in trace_artifacts],
-            "spans_found": list(spans_found),
-            "events_found": list(events_found),
-            "expected_spans_found": list(expected_spans_found),
-            "expected_events_found": list(expected_events_found),
-        },
-    ))
+    report.add_check(
+        ContractCheck(
+            name="otel_traces",
+            passed=True,
+            phase="otel",
+            reason="traces_present",
+            details={
+                "trace_files": [str(p) for p in trace_artifacts],
+                "spans_found": list(spans_found),
+                "events_found": list(events_found),
+                "expected_spans_found": list(expected_spans_found),
+                "expected_events_found": list(expected_events_found),
+            },
+        )
+    )
     return True
 
 
@@ -851,6 +992,7 @@ def _extract_trace_names(data: Any, spans: set[str], events: set[str]) -> None:
 # =============================================================================
 # Main Verification
 # =============================================================================
+
 
 def verify_live_lab_contracts(
     artifact_dir: Path,
@@ -884,23 +1026,37 @@ def verify_live_lab_contracts(
 
 
 def format_report(report: VerificationReport, json_output: bool) -> str:
-    """Format verification report for output."""
+    """Format verification report for output.
+
+    When report fails, emits GitHub Actions error annotations to stderr
+    for CI visibility. JSON output remains unchanged.
+    """
+    # Emit GitHub Actions annotations on failure (for CI visibility)
+    if not report.passed:
+        for error in report.errors:
+            print(f"::error title=Live Lab Contract Failed::{error}", file=sys.stderr)
+        for warning in report.warnings:
+            print(f"::warning title=Live Lab Contract Warning::{warning}", file=sys.stderr)
+
     if json_output:
-        return json.dumps({
-            "passed": report.passed,
-            "checks": [
-                {
-                    "name": c.name,
-                    "passed": c.passed,
-                    "phase": c.phase,
-                    "reason": c.reason,
-                    "details": c.details,
-                }
-                for c in report.checks
-            ],
-            "errors": report.errors,
-            "warnings": report.warnings,
-        }, indent=2)
+        return json.dumps(
+            {
+                "passed": report.passed,
+                "checks": [
+                    {
+                        "name": c.name,
+                        "passed": c.passed,
+                        "phase": c.phase,
+                        "reason": c.reason,
+                        "details": c.details,
+                    }
+                    for c in report.checks
+                ],
+                "errors": report.errors,
+                "warnings": report.warnings,
+            },
+            indent=2,
+        )
 
     # Human-readable output
     lines: list[str] = []
@@ -933,9 +1089,7 @@ def format_report(report: VerificationReport, json_output: bool) -> str:
 
 def main() -> int:
     """CLI entry point."""
-    parser = argparse.ArgumentParser(
-        description="Verify live-lab contracts for unschedulable-shipping scenario"
-    )
+    parser = argparse.ArgumentParser(description="Verify live-lab contracts for unschedulable-shipping scenario")
     parser.add_argument(
         "--artifact-dir",
         required=True,

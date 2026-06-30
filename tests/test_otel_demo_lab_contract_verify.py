@@ -43,6 +43,396 @@ class TestP3cDiscoveryVerification:
             assert result is True
             assert report.passed is True
 
+
+class TestP3cShippingIdentityFromMultipleFields:
+    """Tests for P3c shipping identity detection from multiple fields."""
+
+    def test_p3c_accepts_shipping_from_object_name(self) -> None:
+        """P3c accepts shipping identity from object_name field."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            VerificationReport,
+            verify_p3c_discovery,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            detection_dir = artifact_dir / "phase3-discovery" / "p3c-k8s-discovery"
+            detection_dir.mkdir(parents=True)
+            evidence = {
+                "discovery_success": True,
+                "incident_id": "inc-shipping-001",
+                "candidate_class": "pending_pod",
+                "target_namespace": "otel-demo",
+                "object_name": "shipping-backend-5f8d9b7c6-x9m2k",  # shipping in object_name
+            }
+            (detection_dir / "detection-evidence.json").write_text(json.dumps(evidence))
+
+            report = VerificationReport(passed=True)
+            result = verify_p3c_discovery(artifact_dir, report)
+
+            assert result is True
+            assert report.passed is True
+
+    def test_p3c_accepts_shipping_from_incident_id(self) -> None:
+        """P3c accepts shipping identity from incident_id field."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            VerificationReport,
+            verify_p3c_discovery,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            detection_dir = artifact_dir / "phase3-discovery" / "p3c-k8s-discovery"
+            detection_dir.mkdir(parents=True)
+            evidence = {
+                "discovery_success": True,
+                "incident_id": "inc-shipping-unavailable-123",  # shipping in incident_id
+                "candidate_class": "deployment_unavailable",
+                "target_namespace": "otel-demo",
+            }
+            (detection_dir / "detection-evidence.json").write_text(json.dumps(evidence))
+
+            report = VerificationReport(passed=True)
+            result = verify_p3c_discovery(artifact_dir, report)
+
+            assert result is True
+            assert report.passed is True
+
+    def test_p3c_accepts_shipping_from_matched_incident(self) -> None:
+        """P3c accepts shipping identity from nested matched_incident structure."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            VerificationReport,
+            verify_p3c_discovery,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            detection_dir = artifact_dir / "phase3-discovery" / "p3c-k8s-discovery"
+            detection_dir.mkdir(parents=True)
+            evidence = {
+                "discovery_success": True,
+                "incident_id": "inc-123",
+                "candidate_class": "pending_pod",
+                "target_namespace": "otel-demo",
+                "matched_incident": {
+                    "id": "shipping-incident-456",
+                    "object_name": "shipping-deployment",
+                },
+            }
+            (detection_dir / "detection-evidence.json").write_text(json.dumps(evidence))
+
+            report = VerificationReport(passed=True)
+            result = verify_p3c_discovery(artifact_dir, report)
+
+            assert result is True
+            assert report.passed is True
+
+
+class TestLabResultSuccessParsing:
+    """Tests for lab-result success field parsing precision."""
+
+    def test_lab_result_success_false_without_status_is_failure_not_missing(self) -> None:
+        """Lab result with success=false (no status/outcome) should be detected as failure."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            VerificationReport,
+            verify_lab_result,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Only has success=false, no status or outcome
+            lab_result = {"success": False}
+            (artifact_dir / "lab-result.json").write_text(json.dumps(lab_result))
+
+            report = VerificationReport(passed=True)
+            # require_passed=True should fail on success:false
+            result = verify_lab_result(artifact_dir, True, report)
+
+            assert result is False
+            assert any("failure" in e.lower() for e in report.errors)
+
+    def test_lab_result_status_false_is_detected_as_failure(self) -> None:
+        """Lab result with status=false (no success field) should be detected as failure."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            VerificationReport,
+            verify_lab_result,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Only has status=false, no success field
+            lab_result = {"status": False, "outcome": None}
+            (artifact_dir / "lab-result.json").write_text(json.dumps(lab_result))
+
+            report = VerificationReport(passed=True)
+            result = verify_lab_result(artifact_dir, True, report)
+
+            assert result is False
+            assert any("failure" in e.lower() for e in report.errors)
+
+
+class TestSensitivePayloadScanHardening:
+    """Tests for sensitive payload scan hardening."""
+
+    def test_sensitive_payload_scan_rejects_bearer_token_even_with_sensitive_read_denied(self) -> None:
+        """Scan rejects Bearer token even when sensitive_read_denied is also present."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            VerificationReport,
+            scan_for_sensitive_payloads,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Contains both Bearer token AND sensitive_read_denied
+            artifact = {
+                "incident_id": "inc-123",
+                "checks": [
+                    {
+                        "check_id": "kubectl_get_secrets",
+                        "result": "sensitive_read_denied",
+                    },
+                    {
+                        "check_id": "kubectl_get_pods",
+                        "result": "Bearer eyJhbGciOiJSUzI1NiIs...",  # Real token!
+                    },
+                ],
+            }
+            (artifact_dir / "evidence.json").write_text(json.dumps(artifact))
+
+            report = VerificationReport(passed=True)
+            result = scan_for_sensitive_payloads(artifact_dir, report)
+
+            assert result is False
+            assert any("sensitive" in e.lower() or "forbidden" in e.lower() for e in report.errors)
+
+    def test_sensitive_payload_scan_allows_only_sensitive_read_denied(self) -> None:
+        """Scan allows artifact with only sensitive_read_denied and no real tokens."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            VerificationReport,
+            scan_for_sensitive_payloads,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Contains only safe pattern, no real forbidden tokens
+            artifact = {
+                "incident_id": "inc-123",
+                "checks": [
+                    {
+                        "check_id": "kubectl_get_secrets",
+                        "result": "sensitive_read_denied",
+                    },
+                    {
+                        "check_id": "kubectl_get_pods",
+                        "result": "No pods found in namespace",
+                    },
+                ],
+            }
+            (artifact_dir / "evidence.json").write_text(json.dumps(artifact))
+
+            report = VerificationReport(passed=True)
+            result = scan_for_sensitive_payloads(artifact_dir, report)
+
+            assert result is True
+            assert report.passed is True
+
+
+class TestRuntimeRejectedAcceptedOverlap:
+    """Tests for rejected/accepted check overlap with dict checks."""
+
+    def test_runtime_rejects_rejected_dict_check_id_in_accepted_dict_checks(self) -> None:
+        """Runtime rejects when rejected dict check id appears in accepted dict checks."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            VerificationReport,
+            verify_runtime_loop_passes,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            loop_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "loop-passes"
+            loop_dir.mkdir(parents=True)
+
+            # Same check appears in both rejected and accepted (as dicts)
+            artifact = {
+                "loop_run_id": "run-1",
+                "incident_id": "inc-123",
+                "pass_index": 1,
+                "case_file_hash": "abc123",
+                "proposed_checks": [],
+                "accepted_checks": [
+                    {"check_id": "kubectl_get_pods", "name": "Get Pods"},
+                ],
+                "rejected_checks": [
+                    {"check_id": "kubectl_get_pods", "name": "Get Pods"},
+                ],
+                "check_fingerprints": ["fp1"],
+                "new_evidence_hashes": [],
+                "duplicate_check_count": 0,
+                "unsafe_check_count": 0,
+                "root_cause_summary": "Test",
+                "confidence": "high",
+                "should_continue": True,
+                "stop_reason": None,
+                "safety_metadata": {
+                    "policy_enforced": True,
+                    "mutating_checks_executed_count": 0,
+                    "sensitive_reads_executed_count": 0,
+                },
+                "gate_summary": {
+                    "rejected_checks": [
+                        {"check_id": "kubectl_get_pods", "name": "Get Pods"},
+                    ]
+                },
+            }
+            (loop_dir / "pass-1.json").write_text(json.dumps(artifact))
+
+            report = VerificationReport(passed=True)
+            result = verify_runtime_loop_passes(artifact_dir, report)
+
+            assert result is False
+            assert any("rejected" in e.lower() and "accepted" in e.lower() for e in report.errors)
+
+    def test_runtime_rejects_gate_summary_rejected_check_id_in_accepted_checks(self) -> None:
+        """Runtime rejects when gate_summary rejected check overlaps accepted."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            VerificationReport,
+            verify_runtime_loop_passes,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            loop_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "loop-passes"
+            loop_dir.mkdir(parents=True)
+
+            artifact = {
+                "loop_run_id": "run-1",
+                "incident_id": "inc-123",
+                "pass_index": 1,
+                "case_file_hash": "abc123",
+                "proposed_checks": [],
+                "accepted_checks": ["kubectl_get_services"],
+                "rejected_checks": ["kubectl_get_nodes"],
+                "check_fingerprints": ["fp1"],
+                "new_evidence_hashes": [],
+                "duplicate_check_count": 0,
+                "unsafe_check_count": 0,
+                "root_cause_summary": "Test",
+                "confidence": "high",
+                "should_continue": True,
+                "stop_reason": None,
+                "safety_metadata": {
+                    "policy_enforced": True,
+                    "mutating_checks_executed_count": 0,
+                    "sensitive_reads_executed_count": 0,
+                },
+                # gate_summary.rejected_checks has kubectl_get_services (overlap!)
+                "gate_summary": {"rejected_checks": ["kubectl_get_services"]},
+            }
+            (loop_dir / "pass-1.json").write_text(json.dumps(artifact))
+
+            report = VerificationReport(passed=True)
+            result = verify_runtime_loop_passes(artifact_dir, report)
+
+            assert result is False
+            assert any("gate_summary" in e.lower() and "rejected" in e.lower() for e in report.errors)
+
+
+class TestOtelTraceRequireMode:
+    """Tests for OTel trace require mode hardening."""
+
+    def test_otel_trace_require_fails_when_trace_file_has_no_expected_spans(self) -> None:
+        """OTel traces in require mode fails when traces exist but have no expected spans."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            OtelTracesMode,
+            VerificationReport,
+            verify_otel_traces,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Trace file exists but contains unrelated spans
+            trace = {
+                "spans": [
+                    {"name": "http.request", "span_id": "1"},
+                    {"name": "database.query", "span_id": "2"},
+                ],
+                "events": [
+                    {"name": "error"},
+                ],
+            }
+            (artifact_dir / "traces.json").write_text(json.dumps(trace))
+
+            report = VerificationReport(passed=True)
+            result = verify_otel_traces(artifact_dir, OtelTracesMode.REQUIRE, report)
+
+            assert result is False
+            assert any("expected" in e.lower() and "k9b" in e.lower() for e in report.errors)
+
+    def test_otel_trace_require_passes_when_expected_spans_found(self) -> None:
+        """OTel traces in require mode passes when expected k9b spans are found."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            OtelTracesMode,
+            VerificationReport,
+            verify_otel_traces,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Trace file contains expected k9b spans
+            trace = {
+                "spans": [
+                    {"name": "k9b.diagnosis_loop.budget", "span_id": "1"},
+                    {"name": "k9b.diagnosis_loop.plan", "span_id": "2"},
+                ],
+                "events": [
+                    {"name": "k9b.diagnosis_loop.checks_executed"},
+                ],
+            }
+            (artifact_dir / "traces.json").write_text(json.dumps(trace))
+
+            report = VerificationReport(passed=True)
+            result = verify_otel_traces(artifact_dir, OtelTracesMode.REQUIRE, report)
+
+            assert result is True
+            assert report.passed is True
+
+    def test_otel_trace_auto_warns_when_no_expected_spans(self) -> None:
+        """OTel traces in auto mode warns but doesn't fail when no expected spans."""
+        from scripts.k9b_otel_demo_lab_contract_verify import (
+            OtelTracesMode,
+            VerificationReport,
+            verify_otel_traces,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Trace file exists but contains unrelated spans
+            trace = {
+                "spans": [
+                    {"name": "http.request", "span_id": "1"},
+                ],
+            }
+            (artifact_dir / "traces.json").write_text(json.dumps(trace))
+
+            report = VerificationReport(passed=True)
+            result = verify_otel_traces(artifact_dir, OtelTracesMode.AUTO, report)
+
+            # Should pass but warn
+            assert result is True
+            assert any("warning" in w.lower() or "expected" in w.lower() for w in report.warnings)
+
     def test_p3c_accepts_pending_pod_shipping(self) -> None:
         """P3c accepts pending_pod with shipping reference."""
         from scripts.k9b_otel_demo_lab_contract_verify import (
@@ -266,11 +656,7 @@ class TestP4cDiagnosisVerification:
                 "real_loop_invoked": True,
                 "incident_id": "inc-123",
                 "pass_count": 2,
-                "root_cause_summary": (
-                    "The shipping deployment has an impossible nodeSelector "
-                    "k9b.dev/otel-lab-node=missing. No node has this label, "
-                    "so the pod cannot be scheduled (FailedScheduling)."
-                ),
+                "root_cause_summary": ("The shipping deployment has an impossible nodeSelector k9b.dev/otel-lab-node=missing. No node has this label, so the pod cannot be scheduled (FailedScheduling)."),
                 "executed_checks": ["kubectl_get_deployment", "kubectl_get_pods"],
                 "read_only": True,
                 "phase_result_reason": "diagnosis_rca_valid",
@@ -299,9 +685,7 @@ class TestP4cDiagnosisVerification:
                 "real_loop_invoked": False,  # Simulation!
                 "incident_id": "inc-123",
                 "pass_count": 2,
-                "root_cause_summary": (
-                    "The shipping deployment has nodeSelector k9b.dev/otel-lab-node=missing"
-                ),
+                "root_cause_summary": ("The shipping deployment has nodeSelector k9b.dev/otel-lab-node=missing"),
                 "executed_checks": [],
                 "read_only": True,
                 "phase_result_reason": "diagnosis_rca_valid",
@@ -541,7 +925,7 @@ class TestBoundedLoopPolicy:
             # 3 passes (exceeds default max_passes=2)
             for i in range(3):
                 artifact = {
-                    "loop_run_id": f"run-{i+1}",
+                    "loop_run_id": f"run-{i + 1}",
                     "incident_id": "inc-123",
                     "pass_index": i + 1,
                     "case_file_hash": f"hash{i}",
@@ -563,7 +947,7 @@ class TestBoundedLoopPolicy:
                     },
                     "gate_summary": {"rejected_checks": []},
                 }
-                (loop_dir / f"pass-{i+1}.json").write_text(json.dumps(artifact))
+                (loop_dir / f"pass-{i + 1}.json").write_text(json.dumps(artifact))
 
             report = VerificationReport(passed=True)
             result = verify_runtime_loop_passes(artifact_dir, report)
@@ -812,66 +1196,79 @@ class TestMainVerification:
             artifact_dir = Path(tmpdir)
 
             # Create valid lab result
-            (artifact_dir / "lab-result.json").write_text(json.dumps({
-                "success": True,
-                "status": "passed",
-            }))
+            (artifact_dir / "lab-result.json").write_text(
+                json.dumps(
+                    {
+                        "success": True,
+                        "status": "passed",
+                    }
+                )
+            )
 
             # Create valid P3c evidence
             detection_dir = artifact_dir / "phase3-discovery" / "p3c-k8s-discovery"
             detection_dir.mkdir(parents=True)
-            (detection_dir / "detection-evidence.json").write_text(json.dumps({
-                "discovery_success": True,
-                "incident_id": "inc-123",
-                "candidate_class": "pending_pod",
-                "target_namespace": "otel-demo",
-                "root_cause_summary": "The shipping deployment has issues",
-                "shipping_reference_found": True,
-                "namespace_matches": True,
-            }))
+            (detection_dir / "detection-evidence.json").write_text(
+                json.dumps(
+                    {
+                        "discovery_success": True,
+                        "incident_id": "inc-123",
+                        "candidate_class": "pending_pod",
+                        "target_namespace": "otel-demo",
+                        "root_cause_summary": "The shipping deployment has issues",
+                        "shipping_reference_found": True,
+                        "namespace_matches": True,
+                    }
+                )
+            )
 
             # Create valid P4c evidence
             diagnosis_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis"
             diagnosis_dir.mkdir(parents=True)
-            (diagnosis_dir / "diagnosis-evidence.json").write_text(json.dumps({
-                "real_loop_invoked": True,
-                "incident_id": "inc-123",
-                "pass_count": 2,
-                "root_cause_summary": (
-                    "The shipping deployment has nodeSelector k9b.dev/otel-lab-node=missing. "
-                    "FailedScheduling event indicates pod cannot be scheduled."
-                ),
-                "executed_checks": ["kubectl_get_pods"],
-                "read_only": True,
-                "phase_result_reason": "diagnosis_rca_valid",
-            }))
+            (diagnosis_dir / "diagnosis-evidence.json").write_text(
+                json.dumps(
+                    {
+                        "real_loop_invoked": True,
+                        "incident_id": "inc-123",
+                        "pass_count": 2,
+                        "root_cause_summary": ("The shipping deployment has nodeSelector k9b.dev/otel-lab-node=missing. FailedScheduling event indicates pod cannot be scheduled."),
+                        "executed_checks": ["kubectl_get_pods"],
+                        "read_only": True,
+                        "phase_result_reason": "diagnosis_rca_valid",
+                    }
+                )
+            )
 
             # Create valid pass artifact
             loop_dir = diagnosis_dir / "loop-passes"
             loop_dir.mkdir(parents=True)
-            (loop_dir / "pass-1.json").write_text(json.dumps({
-                "loop_run_id": "run-1",
-                "incident_id": "inc-123",
-                "pass_index": 1,
-                "case_file_hash": "abc123",
-                "proposed_checks": [],
-                "accepted_checks": [],
-                "rejected_checks": [],
-                "check_fingerprints": [],
-                "new_evidence_hashes": [],
-                "duplicate_check_count": 0,
-                "unsafe_check_count": 0,
-                "root_cause_summary": "Test",
-                "confidence": "high",
-                "should_continue": True,
-                "stop_reason": None,
-                "safety_metadata": {
-                    "policy_enforced": True,
-                    "mutating_checks_executed_count": 0,
-                    "sensitive_reads_executed_count": 0,
-                },
-                "gate_summary": {"rejected_checks": []},
-            }))
+            (loop_dir / "pass-1.json").write_text(
+                json.dumps(
+                    {
+                        "loop_run_id": "run-1",
+                        "incident_id": "inc-123",
+                        "pass_index": 1,
+                        "case_file_hash": "abc123",
+                        "proposed_checks": [],
+                        "accepted_checks": [],
+                        "rejected_checks": [],
+                        "check_fingerprints": [],
+                        "new_evidence_hashes": [],
+                        "duplicate_check_count": 0,
+                        "unsafe_check_count": 0,
+                        "root_cause_summary": "Test",
+                        "confidence": "high",
+                        "should_continue": True,
+                        "stop_reason": None,
+                        "safety_metadata": {
+                            "policy_enforced": True,
+                            "mutating_checks_executed_count": 0,
+                            "sensitive_reads_executed_count": 0,
+                        },
+                        "gate_summary": {"rejected_checks": []},
+                    }
+                )
+            )
 
             report = verify_live_lab_contracts(
                 artifact_dir=artifact_dir,
