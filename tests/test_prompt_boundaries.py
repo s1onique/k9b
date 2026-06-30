@@ -413,11 +413,10 @@ class TestOpenAICompatibleAdapterPromptBoundaries:
         When request.cluster_label is an internal marker, display_kube_cluster_label()
         should return None, and the prompt header should not contain 'cluster_label=in-cluster'.
         """
+        from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
         from k8s_diag_agent.external_analysis.openai_compatible_adapter import (
             OpenAICompatibleAdapter,
         )
-
-        from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
         from k8s_diag_agent.external_analysis.review_input import (
             AlertmanagerContext,
             ReviewEnrichmentInput,
