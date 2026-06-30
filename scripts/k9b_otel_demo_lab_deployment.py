@@ -28,12 +28,17 @@ from .k9b_lab_common_readiness import (
     collect_namespace_snapshot,
     wait_for_deployments_ready,
 )
+from .k9b_otel_demo_lab_baseline_diagnostics import (
+    check_baseline_purity,
+    classify_baseline_failure,
+)
 from .k9b_otel_demo_lab_constants import (
     FAILURE_CLUSTER_API_TIMEOUT,
     FAILURE_HELM_CHART_VERSION_NOT_FOUND,
     PHASE_CLUSTER_BASELINE,
     PHASE_OTEL_BASELINE,
     REQUIRED_DEPLOYMENTS,
+    SHIPPING_DEPLOYMENT,
 )
 from .k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
 
@@ -271,12 +276,16 @@ def phase1_deploy_otel_demo(config: LabConfig, artifact_dir: Path) -> LabPhaseRe
     helm_log_path = phase_dir / "helm-install.log"
 
     # Install OTel Demo using chart reference
+    # IMPORTANT: Use --reset-values to prevent stale scenario state from previous releases.
+    # This ensures the baseline is always deployed from a clean slate, preventing
+    # contamination from previous unschedulable-shipping injections or other mutations.
     install_cmd = [
         "helm", "upgrade", "--install", config.helm_release,
         config.helm_chart,
         "--namespace", config.namespace,
         "--create-namespace",
         "--version", config.helm_chart_version,
+        "--reset-values",  # CRITICAL: Prevent stale scenario state contamination
         "--values", "-",  # Use stdin for values
     ]
 
@@ -345,7 +354,12 @@ def phase1_deploy_otel_demo(config: LabConfig, artifact_dir: Path) -> LabPhaseRe
 
 
 def phase1b_baseline_readiness(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
-    """Wait for OTel Demo baseline to be ready and collect artifacts."""
+    """Wait for OTel Demo baseline to be ready and collect artifacts.
+    
+    Enhanced with:
+    - Baseline purity guard for unschedulable-shipping scenario
+    - Failure classification for actionable diagnostics
+    """
     start = time.time()
     phase_dir = artifact_dir / PHASE_OTEL_BASELINE
     phase_dir.mkdir(parents=True, exist_ok=True)
@@ -371,17 +385,125 @@ def phase1b_baseline_readiness(config: LabConfig, artifact_dir: Path) -> LabPhas
             phase_dir,
             include_previous_logs=True,
         )
-
+        
+        # Classify the failure for actionable diagnostics
+        pods_data = None
+        deploys_data = None
+        events_text = None
+        
+        # Try to read collected artifacts for classification
+        pods_path = phase_dir / "namespace-snapshot" / "pods.json"
+        deploys_path = phase_dir / "namespace-snapshot" / "deployments.json"
+        events_path = phase_dir / "namespace-snapshot" / "events.txt"
+        
+        import json
+        if pods_path.exists():
+            try:
+                pods_data = json.loads(pods_path.read_text())
+            except Exception:
+                pass
+        
+        if deploys_path.exists():
+            try:
+                deploys_data = json.loads(deploys_path.read_text())
+            except Exception:
+                pass
+        
+        if events_path.exists():
+            try:
+                events_text = events_path.read_text()
+            except Exception:
+                pass
+        
+        # Extract stuck deployment names from status
+        stuck_deployments = []
+        if "shipping" in status.lower():
+            stuck_deployments.append(SHIPPING_DEPLOYMENT)
+        
+        # Classify the failure
+        classification = classify_baseline_failure(
+            pods_data=pods_data,
+            deployments_data=deploys_data,
+            events_text=events_text,
+            stuck_deployment_names=stuck_deployments,
+        )
+        
+        # Write failure classification artifact
+        classification_path = write_json_artifact(
+            phase_dir, 
+            "baseline-failure-classification.json", 
+            classification.to_dict()
+        )
+        artifacts["baseline_failure_classification"] = str(classification_path)
+        
+        # Log classification summary
+        log(f"Baseline failure classified as: {classification.failure_class}")
+        log(f"Reason: {classification.failure_reason}")
+        
+        if classification.is_scheduling_contamination:
+            log("WARNING: Scheduling contamination detected - possible leftover from previous run")
+        
         return LabPhaseResult(
             phase="phase1-baseline",
             success=False,
-            message=f"Readiness timeout: {status}",
+            message=f"Readiness timeout: {status}. Classification: {classification.failure_class}",
             artifacts=artifacts,
             duration_seconds=time.time() - start,
         )
 
     log("Baseline deployments are ready")
-
+    
+    # =====================================================================
+    # Baseline Purity Guard for unschedulable-shipping
+    # Check that shipping deployment has no scheduling constraints before
+    # the scenario injection phase. This prevents contamination from
+    # previous runs or stale release state.
+    # =====================================================================
+    if config.incident_scenario == "unschedulable-shipping":
+        log("Running baseline purity check for unschedulable-shipping scenario...")
+        
+        shipping_result = kubectl_json(
+            config.kubeconfig,
+            "deployment",
+            config.namespace,
+            extra_args=[SHIPPING_DEPLOYMENT, "-o", "json"],
+        )
+        
+        if shipping_result.success and shipping_result.data:
+            is_pure, purity_msg = check_baseline_purity(
+                shipping_result.data,
+                scenario=config.incident_scenario,
+            )
+            
+            if not is_pure:
+                log(f"BASELINE PURITY CHECK FAILED: {purity_msg}")
+                
+                # Write purity failure artifact
+                purity_failure = {
+                    "failure_class": "baseline_contamination_scheduling",
+                    "phase": "phase1-baseline-purity-check",
+                    "scenario": config.incident_scenario,
+                    "deployment": SHIPPING_DEPLOYMENT,
+                    "message": purity_msg,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+                purity_path = write_json_artifact(
+                    phase_dir,
+                    "baseline-purity-failure.json",
+                    purity_failure,
+                )
+                artifacts["baseline_purity_failure"] = str(purity_path)
+                
+                return LabPhaseResult(
+                    phase="phase1-baseline",
+                    success=False,
+                    message=f"Baseline contaminated before scenario injection: {purity_msg}",
+                    artifacts=artifacts,
+                    duration_seconds=time.time() - start,
+                )
+            
+            log("Baseline purity check PASSED: no scheduling constraints found")
+    
     # Collect baseline artifacts
     pods_result = kubectl_json(config.kubeconfig, "pods", config.namespace)
     if pods_result.success and pods_result.data:
