@@ -127,9 +127,16 @@ spec:
     command: ["/bin/sh", "-c"]
     args:
       - |
+        # Resolve target host first for better diagnostics
+        target_host=$(echo {target_url} | sed -e 's|http://||' -e 's|https://||' -e 's|/.*||')
+        echo "RESOLVING_HOST=$target_host"
+        nslookup "$target_host" 2>&1 || true
+        echo "---CURL_START---"
         code=$(curl -s -o /tmp/response.txt -w "%{{http_code}}" --max-time {timeout_seconds} {target_url})
+        curl_exit=$?
+        echo "CURL_EXIT=$curl_exit"
         echo "HTTP_CODE=$code"
-        cat /tmp/response.txt
+        cat /tmp/response.txt 2>/dev/null || echo "NO_RESPONSE_BODY"
 """
     try:
         # Apply pod
@@ -147,6 +154,7 @@ spec:
         # Wait for pod to complete
         max_wait = timeout_seconds + 30
         elapsed = 0
+        pod_phase = "Unknown"
         while elapsed < max_wait:
             phase_result = subprocess.run(
                 ["kubectl", "--kubeconfig", kubeconfig, "get", "pod", pod_name,
@@ -157,10 +165,10 @@ spec:
             )
             
             if phase_result.returncode == 0:
-                phase = phase_result.stdout.strip()
-                if phase == "Succeeded":
+                pod_phase = phase_result.stdout.strip()
+                if pod_phase == "Succeeded":
                     break
-                elif phase == "Failed":
+                elif pod_phase == "Failed":
                     break
             
             time.sleep(5)
@@ -174,8 +182,9 @@ spec:
             timeout=10,
         )
         
-        # Parse HTTP code and body from logs
+        # Parse diagnostics from logs
         http_code = 0
+        curl_exit = None
         body = logs_result.stdout
         
         for line in logs_result.stdout.split("\n"):
@@ -184,6 +193,29 @@ spec:
                     http_code = int(line.split("HTTP_CODE=")[1].strip())
                 except (ValueError, IndexError):
                     pass
+            if "CURL_EXIT=" in line:
+                try:
+                    curl_exit = int(line.split("CURL_EXIT=")[1].strip())
+                except (ValueError, IndexError):
+                    pass
+            if "RESOLVING_HOST=" in line:
+                # DNS resolution attempted
+                pass
+        
+        # Determine detailed failure reason
+        if pod_phase == "Unknown" and elapsed >= max_wait:
+            # Pod never reached terminal state
+            return False, f"Pod timeout: pod_phase={pod_phase} elapsed={elapsed}s max_wait={max_wait}s", 0
+        
+        if curl_exit is not None and curl_exit != 0:
+            if curl_exit == 6:  # Could not resolve host
+                return False, f"DNS resolution failed for target: curl_exit={curl_exit}", 0
+            elif curl_exit == 7:  # Failed to connect
+                return False, f"Connection failed: curl_exit={curl_exit}", 0
+            elif curl_exit == 28:  # Operation timed out
+                return False, f"Curl timeout after {timeout_seconds}s: curl_exit={curl_exit}", 0
+            else:
+                return False, f"Curl failed: curl_exit={curl_exit}", http_code
         
         return 200 <= http_code < 400, body, http_code
         
@@ -216,9 +248,8 @@ def _curl_exec_pod(
     exec_cmd = [
         "kubectl", "--kubeconfig", kubeconfig, "exec", "-n", namespace,
         f"deploy/{deployment}", "-c", container, "--",
-        "curl", "-sS", "-f",
-        target_url,
-        "--max-time", str(timeout_seconds),
+        "sh", "-c",
+        f"code=$(curl -sS -o /tmp/resp.txt -w '%{{http_code}}' --max-time {timeout_seconds} {target_url}); echo HTTP_CODE=$code; cat /tmp/resp.txt",
     ]
     
     exec_result = subprocess.run(
@@ -226,9 +257,30 @@ def _curl_exec_pod(
     )
     
     if exec_result.returncode == 0:
-        return True, exec_result.stdout, 200
+        # Parse HTTP code from output
+        http_code = 200
+        for line in exec_result.stdout.split("\n"):
+            if "HTTP_CODE=" in line:
+                try:
+                    http_code = int(line.split("HTTP_CODE=")[1].strip())
+                except (ValueError, IndexError):
+                    pass
+        return True, exec_result.stdout, http_code
     
-    return False, exec_result.stderr, 0
+    # Parse failure details from stderr/stdout
+    stderr = exec_result.stderr
+    stdout = exec_result.stdout
+    
+    # Check for specific error patterns
+    combined_output = stderr + stdout
+    if "could not resolve host" in combined_output.lower() or "name or service not known" in combined_output.lower():
+        return False, "DNS resolution failed inside pod", 0
+    if "connection refused" in combined_output.lower():
+        return False, "Connection refused inside pod", 0
+    if "connection timed out" in combined_output.lower() or "timeout" in combined_output.lower():
+        return False, f"Connection timed out after {timeout_seconds}s inside pod", 0
+    
+    return False, combined_output[:200] if combined_output else "Exec curl failed", 0
 
 
 # =============================================================================
