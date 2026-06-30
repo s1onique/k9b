@@ -20,10 +20,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
+
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
 from k8s_diag_agent.compare.two_cluster import ClusterComparison
 from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
-from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
 from k8s_diag_agent.external_analysis.review_input import (
     AlertmanagerContext,
     ReviewEnrichmentInput,

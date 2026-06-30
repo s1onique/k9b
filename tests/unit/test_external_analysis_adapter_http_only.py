@@ -13,9 +13,10 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
+
 from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
 from k8s_diag_agent.external_analysis.artifact import ExternalAnalysisStatus
-from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
 
 
 class TestOpenaiCompatibleHttpOnly:

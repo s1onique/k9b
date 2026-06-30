@@ -11,6 +11,7 @@ from __future__ import annotations
 from k8s_diag_agent.external_analysis.llamacpp_adapter_prompt import (
     compose_review_enrichment_prompt,
 )
+
 from k8s_diag_agent.llm.prompt_boundaries import (
     BEGIN_OUTPUT_SCHEMA,
     BEGIN_UNTRUSTED_CLUSTER_DATA,
