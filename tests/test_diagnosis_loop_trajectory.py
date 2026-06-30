@@ -23,6 +23,7 @@ from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
     validate_pass_artifact_schema,
 )
 
+
 def _make_complete_pass_artifact(
     pass_index: int,
     stop_reason: str | None,
