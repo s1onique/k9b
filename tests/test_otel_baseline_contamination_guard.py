@@ -20,12 +20,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from scripts.k9b_otel_demo_lab_baseline_diagnostics import (
-    BaselineFailure,
     _has_scheduling_constraints,
     check_baseline_purity,
     classify_baseline_failure,
 )
-
 
 # =============================================================================
 # Phase 1 Helm Values Tests
