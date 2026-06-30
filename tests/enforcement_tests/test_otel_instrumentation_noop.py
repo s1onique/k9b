@@ -49,21 +49,20 @@ class TestOTelGracefulDegradation:
         """set_span_ok calls set_status with Status object on Mock spans."""
         from unittest.mock import Mock
 
-        from opentelemetry.trace import StatusCode
-
         span = Mock()
 
         set_span_ok(span)
 
         span.set_status.assert_called_once()
         status = span.set_status.call_args.args[0]
-        assert status.status_code == StatusCode.OK
+        # Use duck-typed inspection - check for OK via .name or .value
+        status_code = getattr(status, "status_code", status)
+        status_name = getattr(status_code, "name", None) or getattr(status_code, "value", None) or str(status_code)
+        assert status_name == "OK", f"Expected status_name 'OK', got {status_name!r}"
 
     def test_set_span_error_uses_status_object_with_mock_span(self) -> None:
         """set_span_error calls set_status with Status object on Mock spans."""
         from unittest.mock import Mock
-
-        from opentelemetry.trace import StatusCode
 
         span = Mock()
 
@@ -71,7 +70,10 @@ class TestOTelGracefulDegradation:
 
         span.set_status.assert_called_once()
         status = span.set_status.call_args.args[0]
-        assert status.status_code == StatusCode.ERROR
+        # Use duck-typed inspection - check for ERROR via .name or .value
+        status_code = getattr(status, "status_code", status)
+        status_name = getattr(status_code, "name", None) or getattr(status_code, "value", None) or str(status_code)
+        assert status_name == "ERROR", f"Expected status_name 'ERROR', got {status_name!r}"
 
 
 class TestTelemetryFailureDoesNotBreakRuntime:

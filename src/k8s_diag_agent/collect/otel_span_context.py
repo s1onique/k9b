@@ -22,19 +22,76 @@ if TYPE_CHECKING:
 # OTel Import with Graceful Degradation
 # =============================================================================
 
-_Status: Any = None
-_StatusCode: Any = None
-_STATUS_CODES_AVAILABLE: bool = False
+# Import OTel types if available, with narrow ImportError guard
+_OTelStatus: Any = None
+_OTelStatusCode: Any = None
+_OTEL_AVAILABLE: bool = False
 
 try:
-    from opentelemetry.trace import Status, StatusCode
-
-    _Status = Status
-    _StatusCode = StatusCode
-    _STATUS_CODES_AVAILABLE = True
+    from opentelemetry.trace import Status as _OTelStatus
+    from opentelemetry.trace import StatusCode as _OTelStatusCode
+    _OTEL_AVAILABLE = True
 except ImportError:
-    # OTel not available - helpers will be no-ops
+    # OTel not available - use fallback status objects
     pass
+
+
+# =============================================================================
+# Fallback Status Objects (used when OTel is not installed)
+# =============================================================================
+
+
+class _FallbackStatusCode:
+    """Fallback enum-like status codes when OTel is unavailable."""
+    OK = "OK"
+    ERROR = "ERROR"
+
+
+@dataclass(frozen=True)
+class _FallbackStatus:
+    """Fallback Status object when OTel is unavailable.
+
+    Provides duck-compatible interface with `status_code` and `description` attributes.
+    """
+    status_code: Any
+    description: str | None = None
+
+
+def _status_code_ok() -> Any:
+    """Get the OK status code, using OTel or fallback."""
+    if _OTelStatusCode is not None:
+        return _OTelStatusCode.OK
+    return _FallbackStatusCode.OK
+
+
+def _status_code_error() -> Any:
+    """Get the ERROR status code, using OTel or fallback."""
+    if _OTelStatusCode is not None:
+        return _OTelStatusCode.ERROR
+    return _FallbackStatusCode.ERROR
+
+
+def _make_status(status_code: Any, description: str | None = None) -> Any:
+    """Create a Status object using OTel or fallback.
+
+    Args:
+        status_code: The status code (OK or ERROR)
+        description: Optional description for error status
+
+    Returns:
+        OTel Status object if available, otherwise _FallbackStatus
+    """
+    if _OTelStatus is not None:
+        if description is None:
+            return _OTelStatus(status_code)
+        return _OTelStatus(status_code, description=description)
+    return _FallbackStatus(status_code=status_code, description=description)
+
+
+# Aliases for backward compatibility
+_Status = _OTelStatus
+_StatusCode = _OTelStatusCode
+_STATUS_CODES_AVAILABLE = _OTEL_AVAILABLE
 
 
 # =============================================================================
@@ -54,7 +111,7 @@ def _span_is_recording(span: object) -> bool:
 
     try:
         return bool(is_recording())
-    except Exception:
+    except Exception:  # noqa: BLE001 - defensive: span.is_recording() may raise
         return True
 
 
@@ -68,7 +125,7 @@ def _set_span_status(
     Only requires that the span has a callable set_status method.
     Works with real OTel spans and test doubles (Mock/MagicMock).
     """
-    if span is None or _Status is None or status_code is None:
+    if span is None or status_code is None:
         return
 
     set_status = getattr(span, "set_status", None)
@@ -79,11 +136,9 @@ def _set_span_status(
         return
 
     try:
-        if description is None:
-            set_status(_Status(status_code))
-        else:
-            set_status(_Status(status_code, description))
-    except Exception:
+        status = _make_status(status_code, description)
+        set_status(status)
+    except Exception:  # noqa: BLE001 - defensive: span.set_status() may raise
         pass
 
 
@@ -165,7 +220,7 @@ class SpanContext:
         """
         _set_span_status(
             self.active_span,
-            _StatusCode.OK if _StatusCode else None,
+            _status_code_ok(),
         )
 
     def set_error(self, description: str | None = None) -> None:
@@ -179,7 +234,7 @@ class SpanContext:
         """
         _set_span_status(
             self.active_span,
-            _StatusCode.ERROR if _StatusCode else None,
+            _status_code_error(),
             description,
         )
 

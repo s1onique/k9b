@@ -158,3 +158,8 @@ collect/otel_events.py _add_event_to_span legacy event emission fallback - best-
 
 collect/incident_diagnosis_loop_runtime_single_pass.py plan_one_read_only_diagnosis_loop_pass runtime exception boundary - bounded failure artifact, sanitized error message
 collect/incident_diagnosis_loop_runtime_single_pass.py run_read_only_checks runtime check execution boundary - bounded failure artifact, sanitized error message
+
+# === OTel Span Instrumentation Boundaries ===
+collect/otel_span_context.py _span_is_recording defensive span.is_recording() exception boundary - OTel API defensive check, no credential exposure
+collect/otel_span_context.py _set_span_status defensive span.set_status() exception boundary - OTel API defensive check, no credential exposure
+

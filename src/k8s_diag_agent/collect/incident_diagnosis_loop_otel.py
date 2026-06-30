@@ -90,15 +90,19 @@ from .otel_helpers import (
     start_span,
 )
 
-# Re-export SpanContext
-# Import for legacy wrappers
+# Re-export SpanContext and helpers
 from .otel_span_context import (
-    _STATUS_CODES_AVAILABLE,
+    _OTEL_AVAILABLE,
     SpanContext,
     _set_span_status,
     _Status,
+    _status_code_error,
+    _status_code_ok,
     _StatusCode,
 )
+
+# Re-export for backward compatibility
+_STATUS_CODES_AVAILABLE = _OTEL_AVAILABLE
 
 # Re-export status codes for backward compatibility
 status_OK = _Status(_StatusCode.OK) if _Status and _StatusCode else None
@@ -270,10 +274,10 @@ def record_exception(span: Any, exc: Exception) -> None:
 
         _set_span_status(
             span,
-            _StatusCode.ERROR if _STATUS_CODES_AVAILABLE and _StatusCode else None,
+            _status_code_error(),
             f"{type(exc).__name__}: {exc}",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - defensive: span methods may raise
         pass
 
 
@@ -283,10 +287,7 @@ def set_span_ok(span: Any) -> None:
     Safe to call even if span is None or OTel is unavailable.
     Uses the canonical _set_span_status helper for status setting.
     """
-    _set_span_status(
-        span,
-        _StatusCode.OK if _STATUS_CODES_AVAILABLE and _StatusCode else None,
-    )
+    _set_span_status(span, _status_code_ok())
 
 
 def set_span_error(span: Any) -> None:
@@ -295,10 +296,7 @@ def set_span_error(span: Any) -> None:
     Safe to call even if span is None or OTel is unavailable.
     Uses the canonical _set_span_status helper for status setting.
     """
-    _set_span_status(
-        span,
-        _StatusCode.ERROR if _STATUS_CODES_AVAILABLE and _StatusCode else None,
-    )
+    _set_span_status(span, _status_code_error())
 
 
 __all__ = [
