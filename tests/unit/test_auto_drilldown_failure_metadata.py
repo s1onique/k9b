@@ -150,9 +150,9 @@ class TestPromptContainsRequiredSchemaFields(unittest.TestCase):
 class TestDefaultMaxTokens(unittest.TestCase):
     """Test max_tokens configuration for auto-drilldown."""
 
-    def test_default_max_tokens_is_768(self) -> None:
-        """Verify default max_tokens_auto_drilldown is 768."""
-        self.assertEqual(DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, 768)
+    def test_default_max_tokens_is_3072(self) -> None:
+        """Verify default max_tokens_auto_drilldown is 3072 for thinking models."""
+        self.assertEqual(DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, 3072)
 
 
 class TestLLMFailureMetadataStructure(unittest.TestCase):

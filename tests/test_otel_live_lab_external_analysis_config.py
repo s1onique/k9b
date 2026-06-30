@@ -95,9 +95,9 @@ class TestOtelLiveLabExternalAnalysisHelmRender:
         assert env.get("K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_AUTO_DRILLDOWN") == "3072"
 
     def test_scheduler_env_has_max_tokens_review_enrichment(self) -> None:
-        """Scheduler env should have K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT=4096."""
+        """Scheduler env should have K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT=8192."""
         env = _scheduler_env()
-        assert env.get("K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT") == "4096"
+        assert env.get("K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT") == "8192"
 
 
 class TestOtelLiveLabHealthConfigExternalAnalysis:

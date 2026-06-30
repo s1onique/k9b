@@ -56,9 +56,9 @@ class TestMaxTokensDefaults(unittest.TestCase):
         """Verify DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN is 3072 for thinking models."""
         self.assertEqual(DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, 3072)
 
-    def test_review_enrichment_default_is_4096(self) -> None:
-        """Verify DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT is 4096 for richer JSON output."""
-        self.assertEqual(DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT, 4096)
+    def test_review_enrichment_default_is_8192(self) -> None:
+        """Verify DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT is 8192 for richer JSON output."""
+        self.assertEqual(DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT, 8192)
 
 
 class TestLlamaCppProviderMaxTokens(unittest.TestCase):
@@ -112,7 +112,7 @@ class TestLlamaCppProviderMaxTokens(unittest.TestCase):
         self.assertEqual(session.last_payload["max_tokens"], 3072)
 
     def test_assess_review_enrichment_value(self) -> None:
-        """Test that review-enrichment calls use 4096 max_tokens for richer output."""
+        """Test that review-enrichment calls use 8192 max_tokens for richer output."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
         config = LlamaCppProviderConfig(
@@ -125,7 +125,7 @@ class TestLlamaCppProviderMaxTokens(unittest.TestCase):
         )
         provider.assess("prompt", _dummy_payload(), max_tokens=DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT, validate_schema=False)  # type: ignore[arg-type]
         self.assertEqual(session.last_payload["max_tokens"], DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
-        self.assertEqual(session.last_payload["max_tokens"], 4096)
+        self.assertEqual(session.last_payload["max_tokens"], 8192)
 
 
 class TestMaxTokensConfig(unittest.TestCase):
