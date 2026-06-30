@@ -10,10 +10,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from k8s_diag_agent.external_analysis.llamacpp_adapter_prompt import (
+from k8s_diag_agent.external_analysis.openai_compatible_adapter_prompt import (
     compose_review_enrichment_prompt,
 )
-
 from tests.semantic_injection_review_enrichment_support import (
     create_mock_review_enrichment_input,
 )

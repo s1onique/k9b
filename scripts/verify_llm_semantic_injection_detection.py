@@ -275,11 +275,24 @@ def main() -> int:
             repo_root / "src" / "k8s_diag_agent" / "llm" / "prompts.py",
             "build_assessment_prompt()",
         ),
-        (
-            repo_root / "src" / "k8s_diag_agent" / "external_analysis" / "llamacpp_adapter_prompt.py",
-            "compose_review_enrichment_prompt()",
-        ),
     ]
+
+    # Check for compose_review_enrichment_prompt with fallback to legacy location
+    REVIEW_ENRICHMENT_PROMPT_CANDIDATES = (
+        repo_root / "src" / "k8s_diag_agent" / "external_analysis" / "openai_compatible_adapter_prompt.py",
+        repo_root / "src" / "k8s_diag_agent" / "external_analysis" / "llamacpp_adapter_prompt.py",  # legacy compat only
+    )
+
+    review_prompt_path = next(
+        (path for path in REVIEW_ENRICHMENT_PROMPT_CANDIDATES if path.exists()),
+        None,
+    )
+
+    if review_prompt_path is None:
+        print(f"ERROR: Prompt builder not found. Checked: {REVIEW_ENRICHMENT_PROMPT_CANDIDATES}")
+        return 1
+
+    prompt_builders.append((review_prompt_path, "compose_review_enrichment_prompt()"))
 
     check_num = 2
     for prompt_file, builder_name in prompt_builders:

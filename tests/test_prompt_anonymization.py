@@ -20,11 +20,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
-
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot
 from k8s_diag_agent.compare.two_cluster import ClusterComparison
 from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
+from k8s_diag_agent.external_analysis.openai_compatible_adapter import OpenAICompatibleAdapter
 from k8s_diag_agent.external_analysis.review_input import (
     AlertmanagerContext,
     ReviewEnrichmentInput,
@@ -60,11 +59,11 @@ def _build_assessment_prompt_for_test(
 
 
 def _build_review_prompt_for_test(
-    adapter: LlamaCppAdapter,
+    adapter: OpenAICompatibleAdapter,
     request: MockRequest,
     context: ReviewEnrichmentInput,
 ) -> str:
-    """Wrapper that casts mock request to ExternalAnalysisRequest for _build_prompt."""
+    """Wrapper that casts mock request to ExternalAnalysisRequest for _build_prompt()."""
     # The cast() ensures runtime compatibility; mypy sees return as Any due to cast().
     # Use _ for unused alias_mapping (returned for caller use).
     prompt, _ = adapter._build_prompt(
@@ -219,9 +218,9 @@ def _create_review_context(
     cluster_id: str = "prod-us-east-1",
     namespace: str = "production",
     deployment_name: str = "api-gateway",
-) -> tuple[LlamaCppAdapter, MockRequest, ReviewEnrichmentInput]:
-    """Create a minimal LlamaCppAdapter with test review context."""
-    adapter = LlamaCppAdapter()
+) -> tuple[OpenAICompatibleAdapter, MockRequest, ReviewEnrichmentInput]:
+    """Create a minimal OpenAICompatibleAdapter with test review context."""
+    adapter = OpenAICompatibleAdapter()
     request = MockRequest(run_id="test-run", cluster_label="test-cluster")
 
     review = {
@@ -480,10 +479,10 @@ class TestDrilldownPromptAnonymization(unittest.TestCase):
 
 
 class TestReviewEnrichmentPromptAnonymization(unittest.TestCase):
-    """Tests for Path 3: llamacpp_adapter._build_prompt() anonymization."""
+    """Tests for Path 3: openai_compatible_adapter._build_prompt() anonymization."""
 
     def setUp(self) -> None:
-        self._adapter = LlamaCppAdapter()
+        self._adapter = OpenAICompatibleAdapter()
 
     def test_review_json_cluster_id_anonymized(self) -> None:
         """Verify cluster_id in review JSON is anonymized in prompt."""
