@@ -23,20 +23,68 @@ if TYPE_CHECKING:
 # =============================================================================
 
 _Status: Any = None
-_status_OK: Any = None
-_status_ERROR: Any = None
+_StatusCode: Any = None
 _STATUS_CODES_AVAILABLE: bool = False
 
 try:
     from opentelemetry.trace import Status, StatusCode
 
     _Status = Status
-    _status_OK = StatusCode.OK
-    _status_ERROR = StatusCode.ERROR
+    _StatusCode = StatusCode
     _STATUS_CODES_AVAILABLE = True
 except ImportError:
     # OTel not available - helpers will be no-ops
     pass
+
+
+# =============================================================================
+# Duck-Typed Span Helpers
+# =============================================================================
+
+
+def _span_is_recording(span: object) -> bool:
+    """Check if span is recording using duck-typed approach.
+
+    Returns True if we cannot determine recording status,
+    allowing status setting on test doubles.
+    """
+    is_recording = getattr(span, "is_recording", None)
+    if not callable(is_recording):
+        return True
+
+    try:
+        return bool(is_recording())
+    except Exception:
+        return True
+
+
+def _set_span_status(
+    span: object | None,
+    status_code: object | None,
+    description: str | None = None,
+) -> None:
+    """Set span status using duck-typed approach.
+
+    Only requires that the span has a callable set_status method.
+    Works with real OTel spans and test doubles (Mock/MagicMock).
+    """
+    if span is None or _Status is None or status_code is None:
+        return
+
+    set_status = getattr(span, "set_status", None)
+    if not callable(set_status):
+        return
+
+    if not _span_is_recording(span):
+        return
+
+    try:
+        if description is None:
+            set_status(_Status(status_code))
+        else:
+            set_status(_Status(status_code, description))
+    except Exception:
+        pass
 
 
 # =============================================================================
@@ -113,44 +161,48 @@ class SpanContext:
         """Set span status to OK.
 
         Safe to call even if span is None or OTel is unavailable.
+        Uses duck-typed approach to work with real spans and test doubles.
         """
-        if self.active_span is None or not hasattr(self.active_span, 'set_status'):
-            return
-        try:
-            if _Status is not None and _status_OK is not None:
-                self.active_span.set_status(_Status(_status_OK))
-        except Exception:
-            pass
+        _set_span_status(
+            self.active_span,
+            _StatusCode.OK if _StatusCode else None,
+        )
 
-    def set_error(self) -> None:
+    def set_error(self, description: str | None = None) -> None:
         """Set span status to ERROR.
 
         Safe to call even if span is None or OTel is unavailable.
+        Uses duck-typed approach to work with real spans and test doubles.
+
+        Args:
+            description: Optional description for the error status.
         """
-        if self.active_span is None or not hasattr(self.active_span, 'set_status'):
-            return
-        try:
-            if _Status is not None and _status_ERROR is not None:
-                self.active_span.set_status(_Status(_status_ERROR))
-        except Exception:
-            pass
+        _set_span_status(
+            self.active_span,
+            _StatusCode.ERROR if _StatusCode else None,
+            description,
+        )
 
     def record_exception(self, exc: Exception) -> None:
         """Record an exception on the span.
 
         Safe to call even if span is None or OTel is unavailable.
+        Uses duck-typed approach to work with real spans and test doubles.
 
         Args:
             exc: The exception to record
         """
-        if self.active_span is None or not hasattr(self.active_span, 'record_exception'):
+        if self.active_span is None:
             return
-        try:
-            self.active_span.record_exception(exc)
-            if _Status is not None and _status_ERROR is not None:
-                self.active_span.set_status(_Status(_status_ERROR))
-        except Exception:
-            pass
+
+        record_exception = getattr(self.active_span, "record_exception", None)
+        if callable(record_exception):
+            try:
+                record_exception(exc)
+            except Exception:
+                pass
+
+        self.set_error(f"{type(exc).__name__}: {exc}")
 
 
 __all__ = [

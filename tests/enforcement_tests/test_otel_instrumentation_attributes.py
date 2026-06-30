@@ -81,5 +81,37 @@ class TestSpanContext:
             mock_span.record_exception.assert_called_once_with(exc)
 
 
+    def test_span_context_set_ok_with_mock_span(self) -> None:
+        """SpanContext.set_ok calls set_status on Mock spans (duck-typed)."""
+        from unittest.mock import Mock
+
+        from opentelemetry.trace import StatusCode
+
+        span = Mock()
+        ctx = SpanContext(name="test", active_span=span)
+
+        ctx.set_ok()
+
+        span.set_status.assert_called_once()
+        status = span.set_status.call_args.args[0]
+        assert status.status_code == StatusCode.OK
+
+    def test_span_context_set_error_with_mock_span(self) -> None:
+        """SpanContext.set_error calls set_status on Mock spans with description."""
+        from unittest.mock import Mock
+
+        from opentelemetry.trace import StatusCode
+
+        span = Mock()
+        ctx = SpanContext(name="test", active_span=span)
+
+        ctx.set_error("boom")
+
+        span.set_status.assert_called_once()
+        status = span.set_status.call_args.args[0]
+        assert status.status_code == StatusCode.ERROR
+        assert status.description == "boom"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

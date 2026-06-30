@@ -223,8 +223,8 @@ def run_policy_enforced_loop_pass(
                 )
                 plan_span_ctx.set_ok()
             except Exception as exc:
+                # record_exception() already calls set_error() internally
                 plan_span_ctx.record_exception(exc)
-                plan_span_ctx.set_error()
                 raise
 
         # Extract loop update for gating decisions
@@ -324,8 +324,8 @@ def run_policy_enforced_loop_pass(
                     emit_checks_executed_event(execute_span_ctx, gate_summary.accepted)
                     execute_span_ctx.set_ok()
                 except Exception as exc:
+                    # record_exception() already calls set_error() internally
                     execute_span_ctx.record_exception(exc)
-                    execute_span_ctx.set_error()
                     raise
 
         # STEP 5: Build the pass artifact

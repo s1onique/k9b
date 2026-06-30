@@ -92,11 +92,17 @@ from .otel_helpers import (
 
 # Re-export SpanContext
 # Import for legacy wrappers
-from .otel_span_context import _STATUS_CODES_AVAILABLE, SpanContext, _status_ERROR, _status_OK
+from .otel_span_context import (
+    _STATUS_CODES_AVAILABLE,
+    SpanContext,
+    _set_span_status,
+    _Status,
+    _StatusCode,
+)
 
 # Re-export status codes for backward compatibility
-status_OK = _status_OK
-status_ERROR = _status_ERROR
+status_OK = _Status(_StatusCode.OK) if _Status and _StatusCode else None
+status_ERROR = _Status(_StatusCode.ERROR) if _Status and _StatusCode else None
 
 
 # =============================================================================
@@ -252,12 +258,21 @@ def record_exception(span: Any, exc: Exception) -> None:
     """Record an exception on a span.
 
     Safe to call even if span is None or OTel is unavailable.
+    Uses the canonical _set_span_status helper for status setting.
     """
-    if span is None or not hasattr(span, 'record_exception'):
+    if span is None:
         return
+
     try:
-        span.record_exception(exc)
-        span.set_status(_status_ERROR if _STATUS_CODES_AVAILABLE else None)
+        record_exception_func = getattr(span, "record_exception", None)
+        if callable(record_exception_func):
+            record_exception_func(exc)
+
+        _set_span_status(
+            span,
+            _StatusCode.ERROR if _STATUS_CODES_AVAILABLE and _StatusCode else None,
+            f"{type(exc).__name__}: {exc}",
+        )
     except Exception:
         pass
 
@@ -266,28 +281,24 @@ def set_span_ok(span: Any) -> None:
     """Set span status to OK.
 
     Safe to call even if span is None or OTel is unavailable.
+    Uses the canonical _set_span_status helper for status setting.
     """
-    if span is None or not hasattr(span, 'set_status'):
-        return
-    try:
-        if _status_OK is not None:
-            span.set_status(_status_OK)
-    except Exception:
-        pass
+    _set_span_status(
+        span,
+        _StatusCode.OK if _STATUS_CODES_AVAILABLE and _StatusCode else None,
+    )
 
 
 def set_span_error(span: Any) -> None:
     """Set span status to ERROR.
 
     Safe to call even if span is None or OTel is unavailable.
+    Uses the canonical _set_span_status helper for status setting.
     """
-    if span is None or not hasattr(span, 'set_status'):
-        return
-    try:
-        if _status_ERROR is not None:
-            span.set_status(_status_ERROR)
-    except Exception:
-        pass
+    _set_span_status(
+        span,
+        _StatusCode.ERROR if _STATUS_CODES_AVAILABLE and _StatusCode else None,
+    )
 
 
 __all__ = [
