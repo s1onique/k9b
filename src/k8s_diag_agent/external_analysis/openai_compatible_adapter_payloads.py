@@ -1,7 +1,7 @@
 """Payload and artifact builders for llamacpp adapter.
 
 This module extracts the payload construction and artifact building responsibilities
-from llamacpp_adapter.py, providing focused helpers for:
+from openai_compatible_adapter.py, providing focused helpers for:
 - Building LLMAssessmentInput payloads from review enrichment context
 - Constructing success and failure ExternalAnalysisArtifacts
 """

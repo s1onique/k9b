@@ -12,7 +12,7 @@ from k8s_diag_agent.external_analysis.alertmanager_snapshot import (
     normalize_alertmanager_payload,
     snapshot_to_compact,
 )
-from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
+from k8s_diag_agent.external_analysis.openai_compatible_adapter import OpenAICompatibleAdapter
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
@@ -31,7 +31,7 @@ def _make_alert(alertname: str, severity: str = "warning", **labels: str) -> dic
     }
 
 
-class TestLlamaCppAdapterAlertmanagerPrompt:
+class TestOpenAICompatibleAdapterAlertmanagerPrompt:
     """Tests for Alertmanager context in llamacpp_adapter prompt building."""
 
     def test_prompt_includes_alertmanager_when_available(self, tmp_path: Path) -> None:
@@ -55,7 +55,7 @@ class TestLlamaCppAdapterAlertmanagerPrompt:
         context = build_review_enrichment_input(review_path, run_id)
         
         # Build prompt
-        adapter = LlamaCppAdapter.__new__(LlamaCppAdapter)
+        adapter = OpenAICompatibleAdapter.__new__(OpenAICompatibleAdapter)
         adapter.name = "llamacpp"
         request = ExternalAnalysisRequest(
             run_id=run_id,
@@ -88,7 +88,7 @@ class TestLlamaCppAdapterAlertmanagerPrompt:
         context = build_review_enrichment_input(review_path, run_id)
         
         # Build prompt
-        adapter = LlamaCppAdapter.__new__(LlamaCppAdapter)
+        adapter = OpenAICompatibleAdapter.__new__(OpenAICompatibleAdapter)
         adapter.name = "llamacpp"
         request = ExternalAnalysisRequest(
             run_id=run_id,
@@ -123,7 +123,7 @@ class TestLlamaCppAdapterAlertmanagerPrompt:
         context = build_review_enrichment_input(review_path, run_id)
         
         # Build payload
-        adapter = LlamaCppAdapter.__new__(LlamaCppAdapter)
+        adapter = OpenAICompatibleAdapter.__new__(OpenAICompatibleAdapter)
         adapter.name = "llamacpp"
         request = ExternalAnalysisRequest(
             run_id=run_id,
@@ -156,7 +156,7 @@ class TestLlamaCppAdapterAlertmanagerPrompt:
         context = build_review_enrichment_input(review_path, run_id)
         
         # Build payload
-        adapter = LlamaCppAdapter.__new__(LlamaCppAdapter)
+        adapter = OpenAICompatibleAdapter.__new__(OpenAICompatibleAdapter)
         adapter.name = "llamacpp"
         request = ExternalAnalysisRequest(
             run_id=run_id,
@@ -188,7 +188,7 @@ class TestLlamaCppAdapterAlertmanagerPrompt:
         context = build_review_enrichment_input(review_path, run_id)
         
         # Build prompt - also reads from disk only
-        adapter = LlamaCppAdapter.__new__(LlamaCppAdapter)
+        adapter = OpenAICompatibleAdapter.__new__(OpenAICompatibleAdapter)
         adapter.name = "llamacpp"
         request = ExternalAnalysisRequest(
             run_id=run_id,

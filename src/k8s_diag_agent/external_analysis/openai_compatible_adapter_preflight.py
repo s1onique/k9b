@@ -1,6 +1,6 @@
 """Preflight helpers for llamacpp adapter.
 
-This module extracts preflight check message building from llamacpp_adapter.py,
+This module extracts preflight check message building from openai_compatible_adapter.py,
 providing focused helpers for building operator-grade diagnostic messages.
 """
 

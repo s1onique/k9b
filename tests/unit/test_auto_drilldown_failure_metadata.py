@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from k8s_diag_agent.health.drilldown import DrilldownArtifact
 from k8s_diag_agent.llm.drilldown_prompts import build_drilldown_prompt
-from k8s_diag_agent.llm.llamacpp_provider import DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, LLMFailureMetadata, LLMResponseParseError
+from k8s_diag_agent.llm.openai_compatible_provider import DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, LLMFailureMetadata, LLMResponseParseError
 
 
 def _make_drilldown() -> DrilldownArtifact:

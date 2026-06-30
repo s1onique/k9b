@@ -321,7 +321,7 @@ class TestLlamaCppFieldsDirectly(unittest.TestCase):
         _add_llamacpp_fields(metadata)
 
         self.assertTrue(metadata.get("llamacpp_enabled"))
-        # Should include defaults from LlamaCppProviderConfig
+        # Should include defaults from OpenAICompatibleProviderConfig
         self.assertEqual(metadata.get("llamacpp_timeout_seconds"), 120)  # DEFAULT_TIMEOUT_SECONDS
         self.assertEqual(metadata.get("llamacpp_max_tokens_auto_drilldown"), 3072)  # DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
         self.assertEqual(metadata.get("llamacpp_max_tokens_review_enrichment"), 8192)  # DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT

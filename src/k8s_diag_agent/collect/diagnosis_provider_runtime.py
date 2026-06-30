@@ -1,7 +1,7 @@
 """Production diagnosis provider using OpenAI-compatible API.
 
 This module provides an OpenAI-compatible diagnosis provider that wraps
-the existing LlamaCppProvider for the incident one-pass diagnosis service.
+the existing OpenAICompatibleProvider for the incident one-pass diagnosis service.
 
 Design constraints:
 - Implements DiagnosisProvider protocol (complete method)

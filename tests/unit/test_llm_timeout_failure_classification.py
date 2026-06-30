@@ -5,12 +5,12 @@ from typing import Any, cast
 
 import requests
 
-from k8s_diag_agent.llm.llamacpp_provider import (
+from k8s_diag_agent.llm.openai_compatible_provider import (
     DEFAULT_TIMEOUT_SECONDS,
-    LlamaCppProvider,
-    LlamaCppProviderConfig,
     LLMFailureClass,
     LLMFailureMetadata,
+    OpenAICompatibleProvider,
+    OpenAICompatibleProviderConfig,
     classify_llm_failure,
 )
 
@@ -64,8 +64,8 @@ class TestDefaultTimeoutValue(unittest.TestCase):
         self.assertEqual(DEFAULT_TIMEOUT_SECONDS, 120)
 
     def test_config_defaults_to_120(self) -> None:
-        """Test that LlamaCppProviderConfig defaults to 120s."""
-        config = LlamaCppProviderConfig(
+        """Test that OpenAICompatibleProviderConfig defaults to 120s."""
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -77,7 +77,7 @@ class TestDefaultTimeoutValue(unittest.TestCase):
             "LLAMA_CPP_BASE_URL": "http://example.com/api",
             "LLAMA_CPP_MODEL": "test-model",
         }
-        config = LlamaCppProviderConfig.from_env(env=env)
+        config = OpenAICompatibleProviderConfig.from_env(env=env)
         self.assertEqual(config.timeout_seconds, 120)
 
 
@@ -86,7 +86,7 @@ class TestExplicitTimeoutOverride(unittest.TestCase):
 
     def test_config_explicit_timeout(self) -> None:
         """Test explicit timeout_seconds in config."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             timeout_seconds=90,
@@ -100,19 +100,19 @@ class TestExplicitTimeoutOverride(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TIMEOUT_SECONDS": "45",
         }
-        config = LlamaCppProviderConfig.from_env(env=env)
+        config = OpenAICompatibleProviderConfig.from_env(env=env)
         self.assertEqual(config.timeout_seconds, 45)
 
     def test_provider_uses_configured_timeout(self) -> None:
         """Test that provider uses the configured timeout value."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _FakeSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             timeout_seconds=60,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -211,11 +211,11 @@ class TestTimeoutErrorMessageIncludesValue(unittest.TestCase):
         """Test that error message includes timeout=120s."""
         error = requests.Timeout("read timed out")
         session = _RaisingSession(error)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="llama-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -228,12 +228,12 @@ class TestTimeoutErrorMessageIncludesValue(unittest.TestCase):
         """Test that explicit timeout override is reflected in error message."""
         error = requests.Timeout("read timed out")
         session = _RaisingSession(error)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="llama-model",
             timeout_seconds=90,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )

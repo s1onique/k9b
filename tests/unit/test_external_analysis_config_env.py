@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 
 from k8s_diag_agent.external_analysis.config import parse_external_analysis_settings
-from k8s_diag_agent.llm.llamacpp_provider_config import (
+from k8s_diag_agent.llm.openai_compatible_provider_config import (
     _CANONICAL_ENV_API_KEY,
     _CANONICAL_ENV_BASE_URL,
     _CANONICAL_ENV_MODEL,
-    LlamaCppProviderConfig,
+    OpenAICompatibleProviderConfig,
 )
 from k8s_diag_agent.llm.openai_compatible_urls import build_chat_completions_url
 
@@ -95,8 +95,8 @@ class TestBuildChatCompletionsUrl:
         assert "/v1/v1/" not in url
 
 
-class TestLlamaCppProviderConfigEndpoint:
-    """Tests for LlamaCppProviderConfig.endpoint property URL normalization."""
+class TestOpenAICompatibleProviderConfigEndpoint:
+    """Tests for OpenAICompatibleProviderConfig.endpoint property URL normalization."""
 
     @pytest.mark.parametrize(
         ("base_url", "expected_endpoint"),
@@ -131,14 +131,14 @@ class TestLlamaCppProviderConfigEndpoint:
         ],
     )
     def test_endpoint_normalization(self, base_url: str, expected_endpoint: str) -> None:
-        """LlamaCppProviderConfig.endpoint uses URL normalization."""
-        config = LlamaCppProviderConfig(base_url=base_url, model="test-model")
+        """OpenAICompatibleProviderConfig.endpoint uses URL normalization."""
+        config = OpenAICompatibleProviderConfig(base_url=base_url, model="test-model")
         assert config.endpoint == expected_endpoint
         assert "/v1/v1/" not in config.endpoint
 
     def test_openrouter_endpoint_no_duplicate_v1(self) -> None:
         """Regression: OpenRouter /v1 base URL produces correct endpoint."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="https://openrouter.ai/api/v1",
             model="anthropic/claude-3.5-sonnet",
         )
@@ -146,15 +146,15 @@ class TestLlamaCppProviderConfigEndpoint:
         assert "/v1/v1/" not in config.endpoint
 
 
-class TestLlamaCppProviderConfigFromEnv:
-    """Tests for LlamaCppProviderConfig.from_env()."""
+class TestOpenAICompatibleProviderConfigFromEnv:
+    """Tests for OpenAICompatibleProviderConfig.from_env()."""
 
     def test_config_from_env_all_required_vars(self) -> None:
         env = {
             _CANONICAL_ENV_BASE_URL: "https://llm.example.com/v1",
             _CANONICAL_ENV_MODEL: "qwen/qwen2.5-7b-instruct",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         assert config is not None
         assert config.base_url == "https://llm.example.com/v1"
         assert config.model == "qwen/qwen2.5-7b-instruct"
@@ -165,20 +165,20 @@ class TestLlamaCppProviderConfigFromEnv:
             _CANONICAL_ENV_MODEL: "qwen/qwen2.5-7b-instruct",
             _CANONICAL_ENV_API_KEY: "sk-test-key-1234567890abcdefghij",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         assert config is not None
         assert config.api_key == "sk-test-key-1234567890abcdefghij"
 
     def test_config_from_env_missing_base_url_raises(self) -> None:
         env = {_CANONICAL_ENV_MODEL: "qwen/qwen2.5-7b-instruct"}
         with pytest.raises(RuntimeError) as exc_info:
-            LlamaCppProviderConfig.from_env(env)
+            OpenAICompatibleProviderConfig.from_env(env)
         assert "K9B_EXTERNAL_ANALYSIS_BASE_URL" in str(exc_info.value)
 
     def test_config_from_env_missing_model_raises(self) -> None:
         env = {_CANONICAL_ENV_BASE_URL: "https://llm.example.com/v1"}
         with pytest.raises(RuntimeError) as exc_info:
-            LlamaCppProviderConfig.from_env(env)
+            OpenAICompatibleProviderConfig.from_env(env)
         assert "K9B_EXTERNAL_ANALYSIS_MODEL" in str(exc_info.value)
 
 

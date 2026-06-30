@@ -1,10 +1,10 @@
-"""Response parsing for llama.cpp provider."""
+"""Response parsing for OpenAI-compatible provider."""
 from __future__ import annotations
 
 import json
 from typing import Any, NoReturn
 
-from .llamacpp_provider_errors import LLMResponseParseError
+from .openai_compatible_provider_errors import LLMResponseParseError
 
 # Non-standard content field names used by some OpenAI-compatible/reasoning servers
 _REASONING_CONTENT_KEYS = frozenset(("reasoning_content", "reasoning", "text"))
@@ -90,7 +90,7 @@ def _extract_response_diagnostics(data: Any, max_prefix_len: int = 200) -> dict[
 def _raise_shape_error(path: str, expected: str, value: Any, debug_ctx: str) -> NoReturn:
     """Raise a structured shape error."""
     raise ValueError(
-        f"llama.cpp response {path} expected {expected} but got {_type_name(value)}; {debug_ctx}"
+        f"OpenAI-compatible response {path} expected {expected} but got {_type_name(value)}; {debug_ctx}"
     )
 
 
@@ -196,7 +196,7 @@ def _extract_content_from_message(message: Any) -> str | None:
 
 
 def extract_assessment(data: Any, *, max_tokens: int | None = None) -> dict[str, Any]:
-    """Extract and parse assessment JSON from llama.cpp response.
+    """Extract and parse assessment JSON from OpenAI-compatible response.
 
     Args:
         data: The parsed JSON response from the LLM
@@ -211,7 +211,7 @@ def extract_assessment(data: Any, *, max_tokens: int | None = None) -> dict[str,
     payload_snippet = _payload_snippet(data)
     if not isinstance(data, dict):
         raise ValueError(
-            f"llama.cpp response expected an object but got {_type_name(data)}; "
+            f"OpenAI-compatible response expected an object but got {_type_name(data)}; "
             f"response snippet: {payload_snippet}"
         )
 
@@ -223,7 +223,7 @@ def extract_assessment(data: Any, *, max_tokens: int | None = None) -> dict[str,
         _raise_shape_error("'choices'", "a list", choices, debug_context())
     if not choices:
         raise ValueError(
-            f"llama.cpp response 'choices' expected a non-empty list; {debug_context()}"
+            f"OpenAI-compatible response 'choices' expected a non-empty list; {debug_context()}"
         )
     top_choice = choices[0]
     if not isinstance(top_choice, dict):
@@ -247,7 +247,7 @@ def extract_assessment(data: Any, *, max_tokens: int | None = None) -> dict[str,
         text_field = top_choice.get("text")
         if text_field is None:
             raise ValueError(
-                f"llama.cpp response choice lacks textual content; response snippet: {payload_snippet}"
+                f"OpenAI-compatible response choice lacks textual content; response snippet: {payload_snippet}"
             )
         if not isinstance(text_field, str):
             _raise_shape_error("'choices[0]['text']'", "a string", text_field, debug_context())
@@ -255,7 +255,7 @@ def extract_assessment(data: Any, *, max_tokens: int | None = None) -> dict[str,
 
     if not content:
         raise ValueError(
-            f"llama.cpp response content is empty; response snippet: {payload_snippet}"
+            f"OpenAI-compatible response content is empty; response snippet: {payload_snippet}"
         )
 
     try:
@@ -269,7 +269,7 @@ def extract_assessment(data: Any, *, max_tokens: int | None = None) -> dict[str,
         finish_reason = resp_diags.get("finish_reason")
         stopped_by_length = finish_reason == "length" if finish_reason else False
         raise LLMResponseParseError(
-            f"llama.cpp response text content is not valid JSON (first 500 chars: {excerpt_snippet}); "
+            f"OpenAI-compatible response text content is not valid JSON (first 500 chars: {excerpt_snippet}); "
             f"response snippet: {payload_snippet}",
             finish_reason=resp_diags.get("finish_reason"),
             response_content_chars=resp_diags.get("response_content_chars"),
@@ -292,7 +292,7 @@ def build_error_message(
     timeout_seconds: int,
 ) -> str:
     """Build a human-readable error message for request failures."""
-    context: list[str] = [f"Endpoint {endpoint} (LLAMA_CPP_BASE_URL={base_url})"]
+    context: list[str] = [f"Endpoint {endpoint} (K9B_EXTERNAL_ANALYSIS_BASE_URL={base_url})"]
     if _base_url_mutually_exclusive_v1(base_url):
         context.append(
             "Base URL already includes '/v1'; provider still appends '/v1/chat/completions'. "
@@ -308,7 +308,7 @@ def build_error_message(
     else:
         context.append(f"{exc.__class__.__name__}: {exc}")
     context.append(f"timeout={timeout_seconds}s")
-    return "llama.cpp request failed: " + "; ".join(context)
+    return "OpenAI-compatible request failed: " + "; ".join(context)
 
 
 __all__ = [

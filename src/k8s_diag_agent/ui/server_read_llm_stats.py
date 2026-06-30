@@ -107,7 +107,7 @@ def _find_review_enrichment(
         artifact_path = None
 
     # Get alias mapping from artifact and apply de-anonymization for operator-facing UI
-    # The alias_mapping is set by the llamacpp adapter when processing provider responses
+    # The alias_mapping is set by the openai_compatible adapter when processing provider responses
     alias_mapping = artifact_data.get("alias_mapping")
     if isinstance(alias_mapping, dict) and alias_mapping:
         # Build the de-anonymized payload using the mapping

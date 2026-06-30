@@ -19,7 +19,7 @@ from k8s_diag_agent.external_analysis.config import ExternalAnalysisSettings
 from k8s_diag_agent.health.baseline import BaselinePolicy
 from k8s_diag_agent.health.drilldown import DrilldownArtifact
 from k8s_diag_agent.health.loop import HealthLoopRunner, HealthRunConfig, HealthTarget, TriggerPolicy
-from k8s_diag_agent.llm.llamacpp_provider import LLMResponseParseError
+from k8s_diag_agent.llm.openai_compatible_provider import LLMResponseParseError
 
 
 def _make_drilldown(label: str = "test-cluster") -> DrilldownArtifact:
@@ -268,7 +268,7 @@ class TestDefaultMaxTokensAutoDrilldown(unittest.TestCase):
 
     def test_default_max_tokens_remains_3072(self) -> None:
         """Verify default max_tokens_auto_drilldown is 3072 per current contract."""
-        from k8s_diag_agent.llm.llamacpp_provider_config import DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
+        from k8s_diag_agent.llm.openai_compatible_provider_config import DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
 
         self.assertEqual(DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, 3072)
 

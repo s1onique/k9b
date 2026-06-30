@@ -12,11 +12,11 @@ from typing import Any, cast
 
 import requests
 
-from k8s_diag_agent.llm.llamacpp_provider import (
-    LlamaCppProvider,
-    LlamaCppProviderConfig,
+from k8s_diag_agent.llm.openai_compatible_provider import (
     LLMFailureMetadata,
     LLMResponseParseError,
+    OpenAICompatibleProvider,
+    OpenAICompatibleProviderConfig,
 )
 
 
@@ -62,11 +62,11 @@ class TestResponseFormatJsonPayload(unittest.TestCase):
         """Test that response_format is omitted by default."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -77,11 +77,11 @@ class TestResponseFormatJsonPayload(unittest.TestCase):
         """Test that response_format is included when response_format_json=True."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -97,11 +97,11 @@ class TestResponseFormatJsonPayload(unittest.TestCase):
         """Test that response_format is omitted when response_format_json=False."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -114,11 +114,11 @@ class TestResponseFormatJsonPayload(unittest.TestCase):
         """Test that both response_format and max_tokens can be used together."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -214,7 +214,7 @@ class TestExtractResponseDiagnostics(unittest.TestCase):
                 }
             ]
         }
-        diags = LlamaCppProvider._extract_response_diagnostics(data)
+        diags = OpenAICompatibleProvider._extract_response_diagnostics(data)
         self.assertEqual(diags["finish_reason"], "stop")
 
     def test_extract_finish_reason_length(self) -> None:
@@ -227,7 +227,7 @@ class TestExtractResponseDiagnostics(unittest.TestCase):
                 }
             ]
         }
-        diags = LlamaCppProvider._extract_response_diagnostics(data)
+        diags = OpenAICompatibleProvider._extract_response_diagnostics(data)
         self.assertEqual(diags["finish_reason"], "length")
 
     def test_extract_content_chars(self) -> None:
@@ -240,7 +240,7 @@ class TestExtractResponseDiagnostics(unittest.TestCase):
                 }
             ]
         }
-        diags = LlamaCppProvider._extract_response_diagnostics(data)
+        diags = OpenAICompatibleProvider._extract_response_diagnostics(data)
         self.assertEqual(diags["response_content_chars"], 10)
 
     def test_extract_content_prefix(self) -> None:
@@ -253,7 +253,7 @@ class TestExtractResponseDiagnostics(unittest.TestCase):
                 }
             ]
         }
-        diags = LlamaCppProvider._extract_response_diagnostics(data)
+        diags = OpenAICompatibleProvider._extract_response_diagnostics(data)
         self.assertIn("response_content_chars", diags)
         self.assertEqual(diags["response_content_chars"], len("ฉากฉากฉาก" * 100))
 
@@ -268,19 +268,19 @@ class TestExtractResponseDiagnostics(unittest.TestCase):
                 }
             ]
         }
-        diags = LlamaCppProvider._extract_response_diagnostics(data, max_prefix_len=50)
+        diags = OpenAICompatibleProvider._extract_response_diagnostics(data, max_prefix_len=50)
         self.assertEqual(len(diags.get("response_content_prefix", "")), 50)
 
     def test_missing_choices_handled_gracefully(self) -> None:
         """Test that missing choices doesn't raise."""
         data = {"model": "test"}
-        diags = LlamaCppProvider._extract_response_diagnostics(data)
+        diags = OpenAICompatibleProvider._extract_response_diagnostics(data)
         self.assertEqual(diags, {})
 
     def test_empty_choices_handled_gracefully(self) -> None:
         """Test that empty choices doesn't raise."""
         data: dict[str, object] = {"choices": []}
-        diags = LlamaCppProvider._extract_response_diagnostics(data)
+        diags = OpenAICompatibleProvider._extract_response_diagnostics(data)
         self.assertEqual(diags, {})
 
 
@@ -397,11 +397,11 @@ class TestEmptyContentHandling(unittest.TestCase):
         """Test that empty content in message raises ValueError, not LLMResponseParseError."""
         response = _FakeResponse({"choices": [{"message": {"content": ""}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -414,11 +414,11 @@ class TestEmptyContentHandling(unittest.TestCase):
         """Test that null content in message raises ValueError."""
         response = _FakeResponse({"choices": [{"message": {"content": None}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -431,11 +431,11 @@ class TestEmptyContentHandling(unittest.TestCase):
         """Test that whitespace-only content raises ValueError."""
         response = _FakeResponse({"choices": [{"message": {"content": "   \n\t  "}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -452,8 +452,8 @@ class TestEmptyContentHandling(unittest.TestCase):
         # Empty content - plain ValueError
         empty_response = _FakeResponse({"choices": [{"message": {"content": ""}}]})
         empty_session = _CapturingSession(empty_response)
-        empty_provider = LlamaCppProvider(
-            config=LlamaCppProviderConfig(base_url="http://example.com/api", model="test-model"),
+        empty_provider = OpenAICompatibleProvider(
+            config=OpenAICompatibleProviderConfig(base_url="http://example.com/api", model="test-model"),
             session_factory=lambda: cast(requests.Session, empty_session),
         )
         with self.assertRaises(ValueError) as empty_ctx:
@@ -464,8 +464,8 @@ class TestEmptyContentHandling(unittest.TestCase):
         # Invalid JSON - LLMResponseParseError
         invalid_json_response = _FakeResponse({"choices": [{"message": {"content": "not valid json {"}}]})
         invalid_session = _CapturingSession(invalid_json_response)
-        invalid_provider = LlamaCppProvider(
-            config=LlamaCppProviderConfig(base_url="http://example.com/api", model="test-model"),
+        invalid_provider = OpenAICompatibleProvider(
+            config=OpenAICompatibleProviderConfig(base_url="http://example.com/api", model="test-model"),
             session_factory=lambda: cast(requests.Session, invalid_session),
         )
         with self.assertRaises(LLMResponseParseError) as invalid_ctx:
@@ -479,13 +479,13 @@ class TestLLMEmptyResponseFailureClass(unittest.TestCase):
 
     def test_empty_response_failure_class_exists(self) -> None:
         """Test that LLM_EMPTY_RESPONSE failure class is defined."""
-        from k8s_diag_agent.llm.llamacpp_provider import LLMFailureClass
+        from k8s_diag_agent.llm.openai_compatible_provider import LLMFailureClass
         self.assertTrue(hasattr(LLMFailureClass, "LLM_EMPTY_RESPONSE"))
         self.assertEqual(LLMFailureClass.LLM_EMPTY_RESPONSE.value, "llm_empty_response")
 
     def test_empty_response_classified_correctly(self) -> None:
         """Test that ValueError from empty content is classified appropriately."""
-        from k8s_diag_agent.llm.llamacpp_provider import LLMFailureClass, classify_llm_failure
+        from k8s_diag_agent.llm.openai_compatible_provider import LLMFailureClass, classify_llm_failure
 
         # ValueError from empty content should be classified as LLM_RESPONSE_PARSE_ERROR
         # (since it's a ValueError subclass of parse error path)

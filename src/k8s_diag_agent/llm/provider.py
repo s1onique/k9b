@@ -17,7 +17,7 @@ from .assessor_schema import (
     AssessorSignal,
 )
 from .base import LLMAssessmentInput, LLMProvider
-from .llamacpp_provider import LlamaCppProvider
+from .openai_compatible_provider import OpenAICompatibleProvider
 
 # Canonical and legacy provider name constants
 OPENAI_COMPATIBLE_PROVIDER_NAME = "openai_compatible"
@@ -135,14 +135,14 @@ class DefaultLLMProvider(LLMProvider):
 
 
 # Build the provider registry
-_llama_cpp_provider = LlamaCppProvider()
+_openai_compatible_provider = OpenAICompatibleProvider()
 
 PROVIDERS: dict[str, LLMProvider] = {
     "default": DefaultLLMProvider(),
     # Canonical name
-    OPENAI_COMPATIBLE_PROVIDER_NAME: _llama_cpp_provider,
+    OPENAI_COMPATIBLE_PROVIDER_NAME: _openai_compatible_provider,
     # Legacy alias (temporary compatibility fallback during migration)
-    LEGACY_LLAMACPP_PROVIDER_NAME: _llama_cpp_provider,
+    LEGACY_LLAMACPP_PROVIDER_NAME: _openai_compatible_provider,
 }
 
 DEFAULT_PROVIDER_NAME = "default"

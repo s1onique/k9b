@@ -1,4 +1,4 @@
-"""llama.cpp provider that speaks the OpenAI-compatible API."""
+"""OpenAI-compatible provider that speaks the OpenAI API."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -8,21 +8,21 @@ import requests
 
 from .assessor_schema import AssessorAssessment
 from .base import LLMProvider
-from .llamacpp_provider_config import (
+from .openai_compatible_provider_config import (
     _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
     DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN,
     DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT,
     DEFAULT_TIMEOUT_SECONDS,
-    LlamaCppProviderConfig,
+    OpenAICompatibleProviderConfig,
 )
-from .llamacpp_provider_errors import (
+from .openai_compatible_provider_errors import (
     LLMFailureClass,
     LLMFailureMetadata,
     LLMResponseParseError,
     classify_llm_failure,
 )
-from .llamacpp_provider_payloads import build_payload, build_request_headers
-from .llamacpp_provider_response import (
+from .openai_compatible_provider_payloads import build_payload, build_request_headers
+from .openai_compatible_provider_response import (
     _extract_response_diagnostics,
     build_error_message,
     extract_assessment,
@@ -34,8 +34,8 @@ if TYPE_CHECKING:
 SessionFactory = Callable[[], requests.Session]
 
 
-class LlamaCppProvider(LLMProvider):
-    """Provider implementation that calls an OpenAI-compatible llama.cpp endpoint."""
+class OpenAICompatibleProvider(LLMProvider):
+    """Provider implementation that calls an OpenAI-compatible endpoint."""
 
     # Re-export internal helpers for backward compatibility
     _extract_assessment = staticmethod(extract_assessment)
@@ -43,7 +43,7 @@ class LlamaCppProvider(LLMProvider):
 
     def __init__(
         self,
-        config: LlamaCppProviderConfig | None = None,
+        config: OpenAICompatibleProviderConfig | None = None,
         session_factory: SessionFactory | None = None,
     ) -> None:
         self._config = config
@@ -51,9 +51,9 @@ class LlamaCppProvider(LLMProvider):
         self._session: requests.Session | None = None
         self._endpoint: str | None = None
 
-    def _ensure_ready(self) -> tuple[LlamaCppProviderConfig, requests.Session, str]:
+    def _ensure_ready(self) -> tuple[OpenAICompatibleProviderConfig, requests.Session, str]:
         if self._config is None:
-            self._config = LlamaCppProviderConfig.from_env()
+            self._config = OpenAICompatibleProviderConfig.from_env()
         if self._session is None:
             self._session = self._session_factory()
         if self._endpoint is None:
@@ -119,7 +119,7 @@ class LlamaCppProvider(LLMProvider):
             try:
                 validated = AssessorAssessment.from_dict(assessment)
             except ValueError as exc:
-                from .llamacpp_provider_response import _payload_snippet
+                from .openai_compatible_provider_response import _payload_snippet
                 snippet = _payload_snippet(assessment)
                 raise ValueError(
                     f"Assessor schema validation failed: {exc}; assessment snippet: {snippet}"
@@ -133,8 +133,8 @@ __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
     "DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN",
     "DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT",
-    "LlamaCppProvider",
-    "LlamaCppProviderConfig",
+    "OpenAICompatibleProvider",
+    "OpenAICompatibleProviderConfig",
     "LLMFailureClass",
     "LLMFailureMetadata",
     "LLMResponseParseError",

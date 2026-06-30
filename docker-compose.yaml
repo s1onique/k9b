@@ -39,14 +39,14 @@ services:
     platform: ${DOCKER_PLATFORM:-linux/arm64}
     restart: unless-stopped
     environment:
-      LLAMA_CPP_BASE_URL: http://192.168.99.134:32597
-      LLAMA_CPP_MODEL: "openai/qwen"
+      K9B_EXTERNAL_ANALYSIS_BASE_URL: http://192.168.99.134:32597
+      K9B_EXTERNAL_ANALYSIS_MODEL: "openai/qwen"
       HEALTH_CONFIG_PATH: /app/runs/health-config.local.json
       HEALTH_RUNS_DIR: /app/runs/health
       KUBECONFIG: /app/kubeconfig/config
       PYTHONPATH: /app/src
       HEALTH_BUILD_DIAGNOSTIC_PACK: 1
-      LLAMA_CPP_ENABLE_THINKING: false
+      K9B_EXTERNAL_ANALYSIS_ENABLE_THINKING: false
     volumes:
       - ./runs:/app/runs
       - ./podman/kubeconfig:/app/kubeconfig:Z

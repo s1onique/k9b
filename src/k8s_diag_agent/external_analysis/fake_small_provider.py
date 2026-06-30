@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from .adapter import ExternalAnalysisAdapter, ExternalAnalysisRequest, register_external_analysis_adapter
 from .artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
-from .llamacpp_adapter import ExternalAnalysisPreflightResult
+from .openai_compatible_adapter import ExternalAnalysisPreflightResult
 
 if TYPE_CHECKING:
     pass
@@ -66,10 +66,10 @@ class FakeSmallProviderAdapter(ExternalAnalysisAdapter):
         self._config = config
         self._settings = settings
         
-        # Read from same env-var config path as production llamacpp adapter
+        # Read from same env-var config path as production openai_compatible adapter
         try:
-            from ..llm.llamacpp_provider_config import LlamaCppProviderConfig
-            llm_config = LlamaCppProviderConfig.from_env()
+            from ..llm.openai_compatible_provider_config import OpenAICompatibleProviderConfig
+            llm_config = OpenAICompatibleProviderConfig.from_env()
             _state.configured = bool(llm_config.base_url and llm_config.model)
             _state.base_url_present = bool(llm_config.base_url)
             _state.model_present = bool(llm_config.model)

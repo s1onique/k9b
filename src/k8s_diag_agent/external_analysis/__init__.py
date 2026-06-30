@@ -6,7 +6,7 @@ from __future__ import annotations
 from . import (
     alertmanager_adapter,  # noqa: F401
     k8sgpt_adapter,  # noqa: F401
-    llamacpp_adapter,  # noqa: F401
+    openai_compatible_adapter,  # noqa: F401
 )
 from .adapter import (
     LEGACY_LLAMACPP_ADAPTER_NAME,

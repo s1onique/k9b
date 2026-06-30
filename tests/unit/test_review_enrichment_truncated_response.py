@@ -19,10 +19,10 @@ class TestReviewEnrichmentTruncatedResponse(unittest.TestCase):
 
     def test_truncated_response_artifact_has_completion_truncated_failure_class(self) -> None:
         """Verify truncated response produces artifact with llm_completion_truncated failure_class."""
-        from k8s_diag_agent.external_analysis.llamacpp_adapter_http import (
+        from k8s_diag_agent.external_analysis.openai_compatible_adapter_http import (
             build_llm_failure_metadata,
         )
-        from k8s_diag_agent.llm.llamacpp_provider_errors import (
+        from k8s_diag_agent.llm.openai_compatible_provider_errors import (
             LLMResponseParseError,
         )
 
@@ -58,10 +58,10 @@ class TestReviewEnrichmentTruncatedResponse(unittest.TestCase):
 
     def test_non_truncated_parse_error_has_invalid_json_failure_class(self) -> None:
         """Verify non-truncated parse errors get llm_response_invalid_json failure_class."""
-        from k8s_diag_agent.external_analysis.llamacpp_adapter_http import (
+        from k8s_diag_agent.external_analysis.openai_compatible_adapter_http import (
             build_llm_failure_metadata,
         )
-        from k8s_diag_agent.llm.llamacpp_provider_errors import (
+        from k8s_diag_agent.llm.openai_compatible_provider_errors import (
             LLMResponseParseError,
         )
 
@@ -92,10 +92,10 @@ class TestReviewEnrichmentTruncatedResponse(unittest.TestCase):
 
     def test_extract_assessment_raises_on_finish_reason_length(self) -> None:
         """Verify extract_assessment raises LLMResponseParseError when finish_reason is length."""
-        from k8s_diag_agent.llm.llamacpp_provider_errors import (
+        from k8s_diag_agent.llm.openai_compatible_provider_errors import (
             LLMResponseParseError,
         )
-        from k8s_diag_agent.llm.llamacpp_provider_response import (
+        from k8s_diag_agent.llm.openai_compatible_provider_response import (
             _check_truncation_before_parse,
         )
 
@@ -121,10 +121,10 @@ class TestReviewEnrichmentTruncatedResponse(unittest.TestCase):
 
     def test_extract_assessment_raises_when_content_is_truncated_json(self) -> None:
         """Verify extract_assessment raises LLMResponseParseError when JSON is truncated."""
-        from k8s_diag_agent.llm.llamacpp_provider_errors import (
+        from k8s_diag_agent.llm.openai_compatible_provider_errors import (
             LLMResponseParseError,
         )
-        from k8s_diag_agent.llm.llamacpp_provider_response import (
+        from k8s_diag_agent.llm.openai_compatible_provider_response import (
             extract_assessment,
         )
 
@@ -150,7 +150,7 @@ class TestReviewEnrichmentTruncatedResponse(unittest.TestCase):
 
     def test_reasoning_model_response_handling(self) -> None:
         """Verify reasoning model responses with reasoning_content are handled correctly."""
-        from k8s_diag_agent.llm.llamacpp_provider_response import (
+        from k8s_diag_agent.llm.openai_compatible_provider_response import (
             _extract_content_from_message,
         )
 
@@ -167,7 +167,7 @@ class TestReviewEnrichmentTruncatedResponse(unittest.TestCase):
 
     def test_reasoning_model_with_final_content(self) -> None:
         """Verify reasoning model with both reasoning and final content prefers final."""
-        from k8s_diag_agent.llm.llamacpp_provider_response import (
+        from k8s_diag_agent.llm.openai_compatible_provider_response import (
             _extract_content_from_message,
         )
 
@@ -193,10 +193,10 @@ class TestTruncatedResponseIntegration(unittest.TestCase):
         not an intentional skip. This matches the behavior in llamacpp_adapter_http.py.
         """
         from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
-        from k8s_diag_agent.external_analysis.llamacpp_adapter_payloads import (
+        from k8s_diag_agent.external_analysis.openai_compatible_adapter_payloads import (
             build_failure_artifact,
         )
-        from k8s_diag_agent.llm.llamacpp_provider_errors import (
+        from k8s_diag_agent.llm.openai_compatible_provider_errors import (
             LLMFailureMetadata,
         )
 

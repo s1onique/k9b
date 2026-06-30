@@ -1,6 +1,6 @@
 """HTTP execution helpers for llamacpp adapter.
 
-This module extracts the HTTP execution and failure handling from llamacpp_adapter.py,
+This module extracts the HTTP execution and failure handling from openai_compatible_adapter.py,
 providing focused helpers for:
 - Running HTTP-based LLM assessments
 - Building failure metadata with prompt diagnostics
@@ -13,7 +13,7 @@ import time
 from typing import Any
 
 from ..llm.call_labels import build_llm_call_id
-from ..llm.llamacpp_provider import (
+from ..llm.openai_compatible_provider import (
     _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
     DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT,
     DEFAULT_TIMEOUT_SECONDS,
@@ -27,7 +27,7 @@ from ..llm.prompt_diagnostics import (
 )
 from .adapter import ExternalAnalysisRequest
 from .artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
-from .llamacpp_adapter_payloads import build_failure_artifact, build_success_artifact
+from .openai_compatible_adapter_payloads import build_failure_artifact, build_success_artifact
 from .review_schema import ReviewEnrichmentPayload, ReviewEnrichmentPayloadError
 
 
@@ -40,6 +40,7 @@ def build_llm_failure_metadata(
     prompt: str,
     prompt_sections: list[Any] | None,
     review_enrichment_max_tokens: int,
+    adapter_name: str = "openai_compatible",
 ) -> dict[str, Any]:
     """Build failure metadata for LLM parse errors with diagnostics."""
     failure_class_value = (
@@ -59,7 +60,7 @@ def build_llm_failure_metadata(
     if prompt_sections:
         try:
             prompt_diags = build_prompt_diagnostics(
-                provider="llamacpp",
+                provider=adapter_name,
                 operation="review-enrichment",
                 sections=prompt_sections,
                 actual_prompt_chars=len(prompt) if prompt else 0,
@@ -83,6 +84,7 @@ def build_generic_failure_metadata(
     endpoint: str | None,
     prompt: str,
     prompt_sections: list[Any] | None,
+    adapter_name: str = "openai_compatible",
 ) -> dict[str, Any]:
     """Build failure metadata for generic exceptions."""
     failure_class, _ = classify_llm_failure(exc)
@@ -90,7 +92,7 @@ def build_generic_failure_metadata(
     if prompt_sections:
         try:
             prompt_diags = build_prompt_diagnostics(
-                provider="llamacpp",
+                provider=adapter_name,
                 operation="review-enrichment",
                 sections=prompt_sections,
                 actual_prompt_chars=actual_prompt_chars,
@@ -102,7 +104,7 @@ def build_generic_failure_metadata(
             )
         except (ValueError, TypeError, AttributeError, OSError):
             prompt_diags = build_full_prompt_diagnostics(
-                provider="llamacpp",
+                provider=adapter_name,
                 operation="review-enrichment",
                 actual_prompt=prompt if prompt else "",
                 timeout_seconds=timeout_value,
@@ -112,7 +114,7 @@ def build_generic_failure_metadata(
             )
     else:
         prompt_diags = build_full_prompt_diagnostics(
-            provider="llamacpp",
+            provider=adapter_name,
             operation="review-enrichment",
             actual_prompt=prompt if prompt else "",
             timeout_seconds=timeout_value,
@@ -131,7 +133,7 @@ def build_generic_failure_metadata(
     ).to_dict()
     metadata["llm_call"] = True
     metadata["llm_call_id"] = call_id
-    metadata["llm_provider"] = "llamacpp"
+    metadata["llm_provider"] = adapter_name
     metadata["llm_operation"] = "review-enrichment"
     metadata["prompt_diagnostics"] = prompt_diags.to_dict()
     return metadata
@@ -181,7 +183,7 @@ def run_http_assessment(
         metadata = build_llm_failure_metadata(
             exc, "LLMResponseParseError", duration_ms, timeout_value,
             config.endpoint if config else None, prompt, None,
-            review_enrichment_max_tokens,
+            review_enrichment_max_tokens, adapter_name,
         )
         # Truncation is a provider-output failure, not a skip
         # SKIPPED means "intentionally not attempted" - but we DID attempt and the provider truncated
@@ -209,7 +211,7 @@ def run_http_assessment(
         failure_class, exc_type = classify_llm_failure(exc)
         metadata = build_generic_failure_metadata(
             exc, exc_type, duration_ms, timeout_value,
-            config.endpoint if config else None, prompt, None,
+            config.endpoint if config else None, prompt, None, adapter_name,
         )
         # Add call_id now that we have run_id
         metadata["llm_call_id"] = build_llm_call_id(request.run_id, "review-enrichment", adapter_name)

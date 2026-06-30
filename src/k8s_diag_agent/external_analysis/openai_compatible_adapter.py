@@ -1,4 +1,4 @@
-"""llama.cpp adapter implementation."""
+"""OpenAI-compatible adapter implementation."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from ..llm.base import LLMAssessmentInput
-from ..llm.llamacpp_provider import (
-    LlamaCppProviderConfig,
+from ..llm.openai_compatible_provider import (
+    OpenAICompatibleProviderConfig,
 )
 from ..llm.prompt_diagnostics import (
     PromptSection,
@@ -25,23 +25,23 @@ from .adapter import (
 )
 from .artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
 from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisSettings
-from .llamacpp_adapter_config import (
+from .openai_compatible_adapter_config import (
     DEFAULT_COMMAND,
     init_http_provider,
 )
-from .llamacpp_adapter_diagnostics import (
+from .openai_compatible_adapter_diagnostics import (
     extract_prompt_sections,
 )
-from .llamacpp_adapter_http import run_http_assessment
+from .openai_compatible_adapter_http import run_http_assessment
 
 # Re-export payload/artifact builders extracted to sibling module
-from .llamacpp_adapter_payloads import (
+from .openai_compatible_adapter_payloads import (
     build_failure_artifact,
     build_payload_from_context,
     build_success_artifact,
     extract_status,
 )
-from .llamacpp_adapter_prompt import (
+from .openai_compatible_adapter_prompt import (
     compose_review_enrichment_prompt,
 )
 from .review_input import ReviewEnrichmentInput, build_review_enrichment_input
@@ -71,17 +71,25 @@ class ExternalAnalysisPreflightResult:
         return self.provider_normalized != self.provider_requested
 
 
-class LlamaCppAdapter(ExternalAnalysisAdapter):
-    name = "llamacpp"
+class OpenAICompatibleAdapter(ExternalAnalysisAdapter):
+    """OpenAI-compatible adapter for LLM-based review enrichment.
+    
+    This adapter communicates with any server exposing an OpenAI-compatible
+    chat completions API (HTTP POST to /v1/chat/completions).
+    
+    It does NOT require llama.cpp specifically; any compatible server
+    (vLLM, Ollama, LM Studio, etc.) works with this adapter.
+    """
+    name = "openai_compatible"
 
     def __init__(self, command: Sequence[str] | None = None, http_only: bool = False) -> None:
-        """Initialize the LlamaCpp adapter.
+        """Initialize the OpenAI-compatible adapter.
 
         Args:
             command: Explicit command to execute. If None, attempts HTTP provider config.
             http_only: When True, never fall back to CLI even if HTTP config is missing.
-                      This is set to True for the openai_compatible adapter to ensure
-                      HTTP-only behavior (no subprocess llamacpp binary execution).
+                      This is set to True for the canonical openai_compatible adapter to
+                      ensure HTTP-only behavior (no subprocess binary execution).
         """
         use_http, http_provider, config_error = init_http_provider(command, http_only)
         self._use_http = use_http
@@ -97,9 +105,9 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
     def preflight_check(self, provider_requested: str | None = None) -> ExternalAnalysisPreflightResult:
         """Check if the adapter is properly configured and ready for external analysis.
 
-        Delegates to _llamacpp_adapter_preflight.py for message construction.
+        Delegates to _openai_compatible_adapter_preflight.py for message construction.
         """
-        from . import llamacpp_adapter_preflight as preflight
+        from . import openai_compatible_adapter_preflight as preflight
 
         requested = provider_requested or self.name
         provider_normalized = normalize_adapter_name(requested)
@@ -152,7 +160,7 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
         # Case 5: try loading config
         if self._use_http:
             try:
-                config = LlamaCppProviderConfig.from_env()
+                config = OpenAICompatibleProviderConfig.from_env()
                 return ExternalAnalysisPreflightResult(
                     ok=True,
                     provider_requested=requested,
@@ -255,9 +263,9 @@ class LlamaCppAdapter(ExternalAnalysisAdapter):
             return self._build_failure_artifact(
                 request,
                 duration_ms,
-                "llama.cpp HTTP provider unavailable",
+                "OpenAI-compatible HTTP provider unavailable",
                 ExternalAnalysisStatus.FAILED,
-                error_summary="llama.cpp HTTP provider unavailable",
+                error_summary="OpenAI-compatible HTTP provider unavailable",
             )
         return run_http_assessment(
             self.name, request, self._http_provider, self._prepare_provider_request
@@ -339,11 +347,11 @@ def _build_openai_compatible_adapter(
     preflight check will fail with explicit missing_base_url/missing_model
     reason codes.
     """
-    return LlamaCppAdapter(command=config.command, http_only=True)
+    return OpenAICompatibleAdapter(command=config.command, http_only=True)
 
 
 @register_external_analysis_adapter("llamacpp")
-def _build_llamacpp_adapter(
+def _build_legacy_llamacpp_adapter(
     config: ExternalAnalysisAdapterConfig,
     settings: ExternalAnalysisSettings,
 ) -> ExternalAnalysisAdapter:
@@ -354,4 +362,4 @@ def _build_llamacpp_adapter(
     HTTP config is not available (for backward compatibility with existing
     deployments that have a local llamacpp binary).
     """
-    return LlamaCppAdapter(command=config.command)
+    return OpenAICompatibleAdapter(command=config.command)

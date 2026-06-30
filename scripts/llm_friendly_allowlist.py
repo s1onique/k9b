@@ -150,7 +150,7 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("tests/unit/test_batch_execution_state_consolidation.py", "[TEST] Batch execution tests"),
     ("tests/unit/test_execution_summary_derivation.py", "[TEST] Execution summary tests"),
     ("tests/unit/test_health_validators.py", "[TEST] Health validators tests"),
-    ("tests/unit/test_llamacpp_generation_settings.py", "[TEST] LlamaCPP settings tests"),
+    ("tests/unit/test_openai_compatible_generation_settings.py", "[TEST] OpenAI-compatible settings tests"),
     ("tests/unit/test_loop_vmalert_discovery.py", "[TEST] Loop vmalert discovery tests"),
     ("tests/unit/test_notification_artifact_readers.py", "[TEST] Notification readers tests"),
     ("tests/unit/test_proposal_lifecycle_events.py", "[TEST] Proposal lifecycle tests"),

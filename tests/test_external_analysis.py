@@ -5,7 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from k8s_diag_agent.external_analysis import llamacpp_adapter as llamacpp_module
+from k8s_diag_agent.external_analysis import openai_compatible_adapter as openai_compatible_module
 from k8s_diag_agent.external_analysis.adapter import (
     ExternalAnalysisRequest,
     build_external_analysis_adapters,
@@ -22,13 +22,13 @@ from k8s_diag_agent.external_analysis.config import (
     parse_external_analysis_settings,
 )
 from k8s_diag_agent.external_analysis.k8sgpt_adapter import K8sGptAdapter
-from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
+from k8s_diag_agent.external_analysis.openai_compatible_adapter import OpenAICompatibleAdapter
 from k8s_diag_agent.external_analysis.review_input import build_review_enrichment_input
 from k8s_diag_agent.external_analysis.review_schema import (
     ReviewEnrichmentPayload,
     ReviewEnrichmentPayloadError,
 )
-from k8s_diag_agent.llm.llamacpp_provider import LlamaCppProvider
+from k8s_diag_agent.llm.openai_compatible_provider import OpenAICompatibleProvider
 
 
 def test_artifact_roundtrip_and_file_io(tmp_path: Path) -> None:
@@ -295,7 +295,7 @@ def _configure_http_env(monkeypatch: Any) -> None:
     monkeypatch.setenv("LLAMA_CPP_MODEL", "test-model")
 
 
-def test_llamacpp_adapter_http_success(monkeypatch: Any, tmp_path: Path) -> None:
+def test_openai_compatible_adapter_http_success(monkeypatch: Any, tmp_path: Path) -> None:
     _configure_http_env(monkeypatch)
     # Use bounded review-enrichment payload (not assessment-shaped)
     fake_review_enrichment = {
@@ -308,7 +308,7 @@ def test_llamacpp_adapter_http_success(monkeypatch: Any, tmp_path: Path) -> None
     }
 
     def fake_assess(
-        self: LlamaCppProvider,
+        self: OpenAICompatibleProvider,
         prompt: str,
         payload: Any,
         *,
@@ -323,8 +323,8 @@ def test_llamacpp_adapter_http_success(monkeypatch: Any, tmp_path: Path) -> None
         # Verify validate_schema is False for review enrichment
         assert validate_schema is False
         return fake_review_enrichment
-    monkeypatch.setattr(LlamaCppProvider, "assess", fake_assess)
-    adapter = LlamaCppAdapter()
+    monkeypatch.setattr(OpenAICompatibleProvider, "assess", fake_assess)
+    adapter = OpenAICompatibleAdapter()
     review_path = tmp_path / "runs" / "health" / "reviews" / "r-review.json"
     _write_json(review_path, {"run_id": "r", "selected_drilldowns": []})
     req = ExternalAnalysisRequest(run_id="r", cluster_label="c", source_artifact=str(review_path))
@@ -338,12 +338,12 @@ def test_llamacpp_adapter_http_success(monkeypatch: Any, tmp_path: Path) -> None
     assert artifact.provider == "llamacpp"
 
 
-def test_llamacpp_adapter_http_failure(monkeypatch: Any, tmp_path: Path) -> None:
+def test_openai_compatible_adapter_http_failure(monkeypatch: Any, tmp_path: Path) -> None:
     _configure_http_env(monkeypatch)
     def fake_assess(*args: Any, **kwargs: Any) -> dict[str, Any]:
         raise RuntimeError("boom")
-    monkeypatch.setattr(LlamaCppProvider, "assess", fake_assess)
-    adapter = LlamaCppAdapter()
+    monkeypatch.setattr(OpenAICompatibleProvider, "assess", fake_assess)
+    adapter = OpenAICompatibleAdapter()
     review_path = tmp_path / "runs" / "health" / "reviews" / "r-review.json"
     _write_json(review_path, {"run_id": "r", "selected_drilldowns": []})
     artifact = adapter.run(
@@ -353,11 +353,11 @@ def test_llamacpp_adapter_http_failure(monkeypatch: Any, tmp_path: Path) -> None
     assert artifact.error_summary == "boom"
 
 
-def test_llamacpp_adapter_http_invalid_response(monkeypatch: Any, tmp_path: Path) -> None:
+def test_openai_compatible_adapter_http_invalid_response(monkeypatch: Any, tmp_path: Path) -> None:
     _configure_http_env(monkeypatch)
 
     def fake_assess(
-        self: LlamaCppProvider,
+        self: OpenAICompatibleProvider,
         prompt: str,
         payload: Any,
         *,
@@ -367,8 +367,8 @@ def test_llamacpp_adapter_http_invalid_response(monkeypatch: Any, tmp_path: Path
         response_format_json: bool | None = None,
     ) -> dict[str, Any]:
         raise ValueError("schema")
-    monkeypatch.setattr(LlamaCppProvider, "assess", fake_assess)
-    adapter = LlamaCppAdapter()
+    monkeypatch.setattr(OpenAICompatibleProvider, "assess", fake_assess)
+    adapter = OpenAICompatibleAdapter()
     review_path = tmp_path / "runs" / "health" / "reviews" / "r-review.json"
     _write_json(review_path, {"run_id": "r", "selected_drilldowns": []})
     artifact = adapter.run(
@@ -378,7 +378,7 @@ def test_llamacpp_adapter_http_invalid_response(monkeypatch: Any, tmp_path: Path
     assert artifact.skip_reason == "schema"
 
 
-def test_llamacpp_adapter_http_review_payload(monkeypatch: Any, tmp_path: Path) -> None:
+def test_openai_compatible_adapter_http_review_payload(monkeypatch: Any, tmp_path: Path) -> None:
     _configure_http_env(monkeypatch)
     fake_payload = {
         "summary": "Review insight",
@@ -390,7 +390,7 @@ def test_llamacpp_adapter_http_review_payload(monkeypatch: Any, tmp_path: Path) 
     }
 
     def fake_assess(
-        self: LlamaCppProvider,
+        self: OpenAICompatibleProvider,
         prompt: str,
         payload: Any,
         *,
@@ -402,8 +402,8 @@ def test_llamacpp_adapter_http_review_payload(monkeypatch: Any, tmp_path: Path) 
         assert validate_schema is False
         return fake_payload
 
-    monkeypatch.setattr(LlamaCppProvider, "assess", fake_assess)
-    adapter = LlamaCppAdapter()
+    monkeypatch.setattr(OpenAICompatibleProvider, "assess", fake_assess)
+    adapter = OpenAICompatibleAdapter()
     review_path = tmp_path / "runs" / "health" / "reviews" / "r-review.json"
     _write_json(review_path, {"run_id": "r", "selected_drilldowns": []})
     artifact = adapter.run(
@@ -416,11 +416,11 @@ def test_llamacpp_adapter_http_review_payload(monkeypatch: Any, tmp_path: Path) 
     assert artifact.suggested_next_checks == ("check ingress",)
 
 
-def test_llamacpp_adapter_http_review_payload_invalid(monkeypatch: Any, tmp_path: Path) -> None:
+def test_openai_compatible_adapter_http_review_payload_invalid(monkeypatch: Any, tmp_path: Path) -> None:
     _configure_http_env(monkeypatch)
 
     def fake_assess(
-        self: LlamaCppProvider,
+        self: OpenAICompatibleProvider,
         prompt: str,
         payload: Any,
         *,
@@ -431,8 +431,8 @@ def test_llamacpp_adapter_http_review_payload_invalid(monkeypatch: Any, tmp_path
     ) -> dict[str, Any]:
         return {"triageOrder": [""], "topConcerns": ["latency"], "nextChecks": ["check ingress"], "focusNotes": []}
 
-    monkeypatch.setattr(LlamaCppProvider, "assess", fake_assess)
-    adapter = LlamaCppAdapter()
+    monkeypatch.setattr(OpenAICompatibleProvider, "assess", fake_assess)
+    adapter = OpenAICompatibleAdapter()
     review_path = tmp_path / "runs" / "health" / "reviews" / "r-review.json"
     _write_json(review_path, {"run_id": "r", "selected_drilldowns": []})
     artifact = adapter.run(
@@ -443,23 +443,23 @@ def test_llamacpp_adapter_http_review_payload_invalid(monkeypatch: Any, tmp_path
     assert "triageOrder" in artifact.error_summary
 
 
-def test_llamacpp_adapter_command_precedence(monkeypatch: Any) -> None:
+def test_openai_compatible_adapter_command_precedence(monkeypatch: Any) -> None:
     _configure_http_env(monkeypatch)
-    adapter = LlamaCppAdapter(command=("echo", "analysis"))
+    adapter = OpenAICompatibleAdapter(command=("echo", "analysis"))
     captured: list[Sequence[str]] = []
     def fake_run(command: Sequence[str]) -> str:
         captured.append(command)
         return "ok"
-    monkeypatch.setattr(llamacpp_module, "_run_subprocess", fake_run)
+    monkeypatch.setattr(openai_compatible_module, "_run_subprocess", fake_run)
     artifact = adapter.run(ExternalAnalysisRequest(run_id="r", cluster_label="c", source_artifact=None))
     assert artifact.status == ExternalAnalysisStatus.SUCCESS
     assert captured
 
 
-def test_llamacpp_adapter_missing_config_skip(monkeypatch: Any) -> None:
+def test_openai_compatible_adapter_missing_config_skip(monkeypatch: Any) -> None:
     monkeypatch.delenv("LLAMA_CPP_BASE_URL", raising=False)
     monkeypatch.delenv("LLAMA_CPP_MODEL", raising=False)
-    adapter = LlamaCppAdapter(command=())
+    adapter = OpenAICompatibleAdapter(command=())
     artifact = adapter.run(ExternalAnalysisRequest(run_id="r", cluster_label="c", source_artifact=None))
     assert artifact.status == ExternalAnalysisStatus.SKIPPED
 

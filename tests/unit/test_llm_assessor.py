@@ -13,7 +13,7 @@ from k8s_diag_agent.cli import main
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot, ClusterSnapshotMetadata, CollectionStatus, CRDRecord, HelmReleaseRecord
 from k8s_diag_agent.compare.two_cluster import ComparisonIntentMetadata, compare_snapshots
 from k8s_diag_agent.llm.assessor_schema import AssessorAssessment
-from k8s_diag_agent.llm.llamacpp_provider import LlamaCppProvider, LlamaCppProviderConfig
+from k8s_diag_agent.llm.openai_compatible_provider import OpenAICompatibleProvider, OpenAICompatibleProviderConfig
 from k8s_diag_agent.llm.prompts import build_assessment_prompt
 from k8s_diag_agent.llm.provider import LLMAssessmentInput, LLMProvider
 
@@ -432,7 +432,7 @@ class PromptBuilderTest(unittest.TestCase):
         self.assertIn("({})".format(", ".join(metadata.unexpected_drift_categories)), prompt)
 
 
-class LlamaCppProviderTest(unittest.TestCase):
+class OpenAICompatibleProviderTest(unittest.TestCase):
     def _dummy_payload(self) -> LLMAssessmentInput:
         return LLMAssessmentInput(
             primary_snapshot={"foo": "bar"},
@@ -447,8 +447,8 @@ class LlamaCppProviderTest(unittest.TestCase):
         assessment[field] = ["bad string"]
         response = _FakeResponse({"choices": [{"message": {"content": json.dumps(assessment)}}]})
         session = _FakeSession(response)
-        provider = LlamaCppProvider(
-            config=LlamaCppProviderConfig(
+        provider = OpenAICompatibleProvider(
+            config=OpenAICompatibleProviderConfig(
                 base_url="http://example.com/api",
                 api_key="secret",
                 model="llama-model",
@@ -472,10 +472,10 @@ class LlamaCppProviderTest(unittest.TestCase):
             }
         )
         session = _FakeSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api", api_key="secret", model="llama-model"
         )
-        provider = LlamaCppProvider(config=config, session_factory=lambda: cast(requests.Session, session))
+        provider = OpenAICompatibleProvider(config=config, session_factory=lambda: cast(requests.Session, session))
         provider.assess("some prompt", self._dummy_payload())
         self.assertEqual(session.calls[0][0], "http://example.com/api/v1/chat/completions")
         payload = session.calls[0][1]
@@ -495,10 +495,10 @@ class LlamaCppProviderTest(unittest.TestCase):
             }
         )
         session = _FakeSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api", model="llama-model", api_key=""
         )
-        provider = LlamaCppProvider(config=config, session_factory=lambda: cast(requests.Session, session))
+        provider = OpenAICompatibleProvider(config=config, session_factory=lambda: cast(requests.Session, session))
         provider.assess("some prompt", self._dummy_payload())
         headers = session.calls[0][2]
         self.assertNotIn("Authorization", headers)
@@ -514,18 +514,18 @@ class LlamaCppProviderTest(unittest.TestCase):
             }
         )
         session = _FakeSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api", model="llama-model", timeout_seconds=120
         )
-        provider = LlamaCppProvider(config=config, session_factory=lambda: cast(requests.Session, session))
+        provider = OpenAICompatibleProvider(config=config, session_factory=lambda: cast(requests.Session, session))
         provider.assess("some prompt", self._dummy_payload())
         self.assertEqual(session.calls[0][3], 120)
 
     def test_timeout_error_includes_timeout_and_endpoint(self) -> None:
         error = requests.Timeout("read timed out")
         session = _RaisingSession(error)
-        config = LlamaCppProviderConfig(base_url="http://example.com/api", model="llama-model")
-        provider = LlamaCppProvider(config=config, session_factory=lambda: cast(requests.Session, session))
+        config = OpenAICompatibleProviderConfig(base_url="http://example.com/api", model="llama-model")
+        provider = OpenAICompatibleProvider(config=config, session_factory=lambda: cast(requests.Session, session))
         with self.assertRaises(RuntimeError) as ctx:
             provider.assess("prompt", self._dummy_payload())
         message = str(ctx.exception)
@@ -535,10 +535,10 @@ class LlamaCppProviderTest(unittest.TestCase):
     def test_validates_response_schema(self) -> None:
         response = _FakeResponse({"choices": [{"message": {"content": json.dumps({})}}]})
         session = _FakeSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api", api_key="secret", model="llama-model"
         )
-        provider = LlamaCppProvider(config=config, session_factory=lambda: cast(requests.Session, session))
+        provider = OpenAICompatibleProvider(config=config, session_factory=lambda: cast(requests.Session, session))
         with self.assertRaises(ValueError):
             provider.assess("prompt", self._dummy_payload())
 
@@ -555,8 +555,8 @@ class LlamaCppProviderTest(unittest.TestCase):
         assessment = _mock_assessment_payload()
         response = _FakeResponse({"choices": [{"message": json.dumps(assessment)}]})
         session = _FakeSession(response)
-        provider = LlamaCppProvider(
-            config=LlamaCppProviderConfig(
+        provider = OpenAICompatibleProvider(
+            config=OpenAICompatibleProviderConfig(
                 base_url="http://example.com/api", api_key="secret", model="llama-model"
             ),
             session_factory=lambda: cast(requests.Session, session),
@@ -568,8 +568,8 @@ class LlamaCppProviderTest(unittest.TestCase):
         assessment = _mock_assessment_payload()
         response = _FakeResponse({"choices": [{"text": json.dumps(assessment)}]})
         session = _FakeSession(response)
-        provider = LlamaCppProvider(
-            config=LlamaCppProviderConfig(
+        provider = OpenAICompatibleProvider(
+            config=OpenAICompatibleProviderConfig(
                 base_url="http://example.com/api", api_key="secret", model="llama-model"
             ),
             session_factory=lambda: cast(requests.Session, session),
@@ -581,8 +581,8 @@ class LlamaCppProviderTest(unittest.TestCase):
         payload = {"choices": ["broken"], "unexpected": True}
         response = _FakeResponse(payload)
         session = _FakeSession(response)
-        provider = LlamaCppProvider(
-            config=LlamaCppProviderConfig(
+        provider = OpenAICompatibleProvider(
+            config=OpenAICompatibleProviderConfig(
                 base_url="http://example.com/api", api_key="secret", model="llama-model"
             ),
             session_factory=lambda: cast(requests.Session, session),
@@ -596,8 +596,8 @@ class LlamaCppProviderTest(unittest.TestCase):
         self.assertIn(json.dumps(payload), message)
 
     def test_extract_assessment_rejects_top_level_string(self) -> None:
-        provider = LlamaCppProvider(
-            config=LlamaCppProviderConfig(
+        provider = OpenAICompatibleProvider(
+            config=OpenAICompatibleProviderConfig(
                 base_url="http://example.com/api", api_key="secret", model="llama-model"
             ),
             session_factory=lambda: cast(requests.Session, _FakeSession(_FakeResponse({}))),
@@ -611,8 +611,8 @@ class LlamaCppProviderTest(unittest.TestCase):
     def test_assess_reports_top_level_string(self) -> None:
         response = _FakeResponse("plain string response")
         session = _FakeSession(response)
-        provider = LlamaCppProvider(
-            config=LlamaCppProviderConfig(
+        provider = OpenAICompatibleProvider(
+            config=OpenAICompatibleProviderConfig(
                 base_url="http://example.com/api", api_key="secret", model="llama-model"
             ),
             session_factory=lambda: cast(requests.Session, session),
@@ -630,10 +630,10 @@ class LlamaCppProviderTest(unittest.TestCase):
             text="error detail snippet that reveals the issue",
         )
         session = _FakeSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="https://example.com/v1", api_key="secret", model="llama-model"
         )
-        provider = LlamaCppProvider(config=config, session_factory=lambda: cast(requests.Session, session))
+        provider = OpenAICompatibleProvider(config=config, session_factory=lambda: cast(requests.Session, session))
         with self.assertRaises(RuntimeError) as ctx:
             provider.assess("prompt", self._dummy_payload())
         message = str(ctx.exception)
@@ -646,8 +646,8 @@ class LlamaCppProviderTest(unittest.TestCase):
     def test_connection_error_includes_exception_details(self) -> None:
         error = requests.ConnectionError("failed to reach the llama.cpp service")
         session = _RaisingSession(error)
-        config = LlamaCppProviderConfig(base_url="http://example.com/api", model="llama-model")
-        provider = LlamaCppProvider(config=config, session_factory=lambda: cast(requests.Session, session))
+        config = OpenAICompatibleProviderConfig(base_url="http://example.com/api", model="llama-model")
+        provider = OpenAICompatibleProvider(config=config, session_factory=lambda: cast(requests.Session, session))
         with self.assertRaises(RuntimeError) as ctx:
             provider.assess("prompt", self._dummy_payload())
         message = str(ctx.exception)
@@ -655,13 +655,13 @@ class LlamaCppProviderTest(unittest.TestCase):
         self.assertIn("ConnectionError: failed to reach the llama.cpp service", message)
 
 
-class LlamaCppProviderConfigTest(unittest.TestCase):
+class OpenAICompatibleProviderConfigTest(unittest.TestCase):
     def test_from_env_allows_missing_api_key(self) -> None:
         env = {
             "LLAMA_CPP_BASE_URL": "https://example.com",
             "LLAMA_CPP_MODEL": "llama-model",
         }
-        config = LlamaCppProviderConfig.from_env(env=env)
+        config = OpenAICompatibleProviderConfig.from_env(env=env)
         self.assertEqual(config.base_url, "https://example.com")
         self.assertEqual(config.model, "llama-model")
         self.assertIsNone(config.api_key)
@@ -672,7 +672,7 @@ class LlamaCppProviderConfigTest(unittest.TestCase):
             "LLAMA_CPP_MODEL": "llama-model",
             "LLAMA_CPP_API_KEY": "   ",
         }
-        config = LlamaCppProviderConfig.from_env(env=env)
+        config = OpenAICompatibleProviderConfig.from_env(env=env)
         self.assertIsNone(config.api_key)
 
     def test_from_env_parses_timeout_seconds(self) -> None:
@@ -681,7 +681,7 @@ class LlamaCppProviderConfigTest(unittest.TestCase):
             "LLAMA_CPP_MODEL": "llama-model",
             "LLAMA_CPP_TIMEOUT_SECONDS": "120",
         }
-        config = LlamaCppProviderConfig.from_env(env=env)
+        config = OpenAICompatibleProviderConfig.from_env(env=env)
         self.assertEqual(config.timeout_seconds, 120)
 
     def test_from_env_rejects_invalid_timeout(self) -> None:
@@ -691,7 +691,7 @@ class LlamaCppProviderConfigTest(unittest.TestCase):
             "LLAMA_CPP_TIMEOUT_SECONDS": "fast",
         }
         with self.assertRaises(ValueError):
-            LlamaCppProviderConfig.from_env(env=env)
+            OpenAICompatibleProviderConfig.from_env(env=env)
 
 
 class RecordingProvider(LLMProvider):
@@ -747,15 +747,15 @@ class LLMCLIWiringTest(unittest.TestCase):
             )
             self.assertIsNotNone(provider.last_payload)
 
-    def test_assess_snapshots_uses_llamacpp_provider(self) -> None:
+    def test_assess_snapshots_uses_openai_compatible_provider(self) -> None:
         fixture_dir = Path(__file__).resolve().parents[1] / "fixtures"
         primary_path = fixture_dir / "snapshots" / "sanitized-alpha.json"
         secondary_data = json.loads(primary_path.read_text(encoding="utf-8"))
         valid_assessment = _mock_assessment_payload()
         response = _FakeResponse({"choices": [{"message": {"content": json.dumps(valid_assessment)}}]})
         session = _FakeSession(response)
-        provider = LlamaCppProvider(
-            config=LlamaCppProviderConfig(
+        provider = OpenAICompatibleProvider(
+            config=OpenAICompatibleProviderConfig(
                 base_url="http://localhost", api_key="api-key", model="llama-model"
             ),
             session_factory=lambda: cast(requests.Session, session),

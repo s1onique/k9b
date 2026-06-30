@@ -4,12 +4,12 @@ from typing import Any, cast
 
 import requests
 
-from k8s_diag_agent.llm.llamacpp_provider import (
+from k8s_diag_agent.llm.openai_compatible_provider import (
     DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN,
     DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT,
-    LlamaCppProvider,
-    LlamaCppProviderConfig,
     LLMFailureClass,
+    OpenAICompatibleProvider,
+    OpenAICompatibleProviderConfig,
     classify_llm_failure,
 )
 
@@ -61,18 +61,18 @@ class TestMaxTokensDefaults(unittest.TestCase):
         self.assertEqual(DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT, 8192)
 
 
-class TestLlamaCppProviderMaxTokens(unittest.TestCase):
-    """Test that LlamaCppProvider includes max_tokens in request payload."""
+class TestOpenAICompatibleProviderMaxTokens(unittest.TestCase):
+    """Test that OpenAICompatibleProvider includes max_tokens in request payload."""
 
     def test_assess_without_max_tokens(self) -> None:
         """Test that assess without max_tokens omits it from payload."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -83,11 +83,11 @@ class TestLlamaCppProviderMaxTokens(unittest.TestCase):
         """Test that assess with max_tokens includes it in payload."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -99,11 +99,11 @@ class TestLlamaCppProviderMaxTokens(unittest.TestCase):
         """Test that auto-drilldown calls use 3072 max_tokens for thinking models."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -115,11 +115,11 @@ class TestLlamaCppProviderMaxTokens(unittest.TestCase):
         """Test that review-enrichment calls use 8192 max_tokens for richer output."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -133,7 +133,7 @@ class TestMaxTokensConfig(unittest.TestCase):
 
     def test_config_defaults(self) -> None:
         """Test that config has correct defaults for max_tokens."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -148,7 +148,7 @@ class TestMaxTokensConfig(unittest.TestCase):
             "LLAMA_CPP_MAX_TOKENS_AUTO_DRILLDOWN": "512",
             "LLAMA_CPP_MAX_TOKENS_REVIEW_ENRICHMENT": "1000",
         }
-        config = LlamaCppProviderConfig.from_env(env=env)
+        config = OpenAICompatibleProviderConfig.from_env(env=env)
         self.assertEqual(config.max_tokens_auto_drilldown, 512)
         self.assertEqual(config.max_tokens_review_enrichment, 1000)
 
@@ -159,7 +159,7 @@ class TestMaxTokensConfig(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_MAX_TOKENS_AUTO_DRILLDOWN": "invalid",
         }
-        config = LlamaCppProviderConfig.from_env(env=env)
+        config = OpenAICompatibleProviderConfig.from_env(env=env)
         # Should fall back to default
         self.assertEqual(config.max_tokens_auto_drilldown, DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)
 
@@ -170,7 +170,7 @@ class TestMaxTokensConfig(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_MAX_TOKENS_REVIEW_ENRICHMENT": "-100",
         }
-        config = LlamaCppProviderConfig.from_env(env=env)
+        config = OpenAICompatibleProviderConfig.from_env(env=env)
         # Should fall back to default
         self.assertEqual(config.max_tokens_review_enrichment, DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT)
 
@@ -180,42 +180,42 @@ class TestMaxTokensForOperation(unittest.TestCase):
 
     def test_returns_auto_drilldown_value(self) -> None:
         """Test that max_tokens_for_operation returns auto-drilldown value."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             max_tokens_auto_drilldown=512,
         )
-        provider = LlamaCppProvider(config=config)
+        provider = OpenAICompatibleProvider(config=config)
         self.assertEqual(provider.max_tokens_for_operation("auto-drilldown"), 512)
 
     def test_returns_review_enrichment_value(self) -> None:
         """Test that max_tokens_for_operation returns review-enrichment value."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             max_tokens_review_enrichment=1000,
         )
-        provider = LlamaCppProvider(config=config)
+        provider = OpenAICompatibleProvider(config=config)
         self.assertEqual(provider.max_tokens_for_operation("review-enrichment"), 1000)
 
     def test_returns_none_for_unknown_operation(self) -> None:
         """Test that max_tokens_for_operation returns None for unknown operation."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(config=config)
+        provider = OpenAICompatibleProvider(config=config)
         self.assertIsNone(provider.max_tokens_for_operation("unknown"))
 
     def test_config_value_used_not_constant(self) -> None:
         """Test that config value is used, not hardcoded constant."""
         custom_value = 1024
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             max_tokens_auto_drilldown=custom_value,
         )
-        provider = LlamaCppProvider(config=config)
+        provider = OpenAICompatibleProvider(config=config)
         result = provider.max_tokens_for_operation("auto-drilldown")
         self.assertEqual(result, custom_value)
         self.assertNotEqual(result, DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN)

@@ -27,7 +27,7 @@ from ..external_analysis.artifact import (
 from ..external_analysis.config import AutoDrilldownPolicy
 from ..llm.call_labels import build_llm_call_id
 from ..llm.drilldown_prompts import build_drilldown_prompt
-from ..llm.llamacpp_provider import LLMResponseParseError, classify_llm_failure
+from ..llm.openai_compatible_provider import LLMResponseParseError, classify_llm_failure
 from .drilldown import DrilldownArtifact
 from .drilldown_assessor import assess_drilldown_artifact, build_drilldown_prompt_diagnostics, resolve_drilldown_max_tokens
 from .loop_failure_metadata import extract_failure_metadata_field

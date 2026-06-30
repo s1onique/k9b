@@ -1,4 +1,4 @@
-"""Configuration for llama.cpp provider."""
+"""Configuration for OpenAI-compatible provider."""
 from __future__ import annotations
 
 import logging
@@ -33,6 +33,7 @@ _CANONICAL_ENV_SEED = "K9B_EXTERNAL_ANALYSIS_SEED"
 _CANONICAL_ENV_STOP = "K9B_EXTERNAL_ANALYSIS_STOP"
 _CANONICAL_ENV_ENABLE_THINKING = "K9B_EXTERNAL_ANALYSIS_ENABLE_THINKING"
 
+# Legacy env var names (kept for backward compatibility with deprecation warnings)
 _LEGACY_ENV_BASE_URL = "LLAMA_CPP_BASE_URL"
 _LEGACY_ENV_MODEL = "LLAMA_CPP_MODEL"
 _LEGACY_ENV_API_KEY = "LLAMA_CPP_API_KEY"
@@ -93,7 +94,9 @@ _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS = (
 
 
 @dataclass(frozen=True)
-class LlamaCppProviderConfig:
+class OpenAICompatibleProviderConfig:
+    """Configuration for OpenAI-compatible provider."""
+
     base_url: str
     model: str
     api_key: str | None = None
@@ -143,7 +146,7 @@ class LlamaCppProviderConfig:
         return settings
 
     @classmethod
-    def from_env(cls, env: dict[str, str] | None = None) -> LlamaCppProviderConfig:
+    def from_env(cls, env: dict[str, str] | None = None) -> OpenAICompatibleProviderConfig:
         source: Mapping[str, str] = env if env is not None else os.environ
         missing: list[str] = []
         used_legacy: set[str] = set()
@@ -271,10 +274,10 @@ class LlamaCppProviderConfig:
             parsed = int(trimmed)
         except ValueError as exc:
             raise ValueError(
-                f"LLAMA_CPP_TIMEOUT_SECONDS must be an integer but got '{value}'"
+                f"Timeout must be a positive integer but got '{value}'"
             ) from exc
         if parsed <= 0:
-            raise ValueError("LLAMA_CPP_TIMEOUT_SECONDS must be a positive integer")
+            raise ValueError("Timeout must be a positive integer")
         return parsed
 
     @staticmethod
@@ -384,7 +387,7 @@ __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
     "DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN",
     "DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT",
-    "LlamaCppProviderConfig",
+    "OpenAICompatibleProviderConfig",
     "_SYSTEM_INSTRUCTIONS",
     "_REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS",
     "build_chat_completions_url",

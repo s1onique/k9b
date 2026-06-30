@@ -231,13 +231,13 @@ def _log_effective_scheduler_config(
 def _add_llamacpp_fields(metadata: dict[str, Any]) -> None:
     """Add llama.cpp configuration fields from environment if available.
 
-    Uses LlamaCppProviderConfig.from_env() to parse effective config including defaults.
+    Uses OpenAICompatibleProviderConfig.from_env() to parse effective config including defaults.
     This is pure parsing - no network sessions or provider initialization.
 
     Args:
         metadata: Dictionary to extend with llama.cpp fields
     """
-    from ..llm.llamacpp_provider import LlamaCppProviderConfig
+    from ..llm.openai_compatible_provider import OpenAICompatibleProviderConfig
 
     base_url = os.environ.get("LLAMA_CPP_BASE_URL")
     model = os.environ.get("LLAMA_CPP_MODEL")
@@ -249,7 +249,7 @@ def _add_llamacpp_fields(metadata: dict[str, Any]) -> None:
     try:
         # Use from_env to get effective config including defaults
         # This is pure parsing - no network calls
-        llamacpp_config = LlamaCppProviderConfig.from_env(dict(os.environ))
+        llamacpp_config = OpenAICompatibleProviderConfig.from_env(dict(os.environ))
     except RuntimeError:
         # Missing required env vars - skip logging
         return

@@ -240,7 +240,7 @@ class TestRunAutoDrilldownAnalysis:
         policy = AutoDrilldownPolicy(enabled=True, max_per_run=1)
 
         # Import the error type
-        from k8s_diag_agent.llm.llamacpp_provider import LLMResponseParseError
+        from k8s_diag_agent.llm.openai_compatible_provider import LLMResponseParseError
 
         parse_error = LLMResponseParseError("Failed to parse JSON response", finish_reason="length", response_content_chars=100)
 

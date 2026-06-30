@@ -9,11 +9,11 @@ These tests verify:
 
 import unittest
 
-from k8s_diag_agent.llm.llamacpp_provider_errors import (
+from k8s_diag_agent.llm.openai_compatible_provider_errors import (
     LLMFailureClass,
     LLMResponseParseError,
 )
-from k8s_diag_agent.llm.llamacpp_provider_response import (
+from k8s_diag_agent.llm.openai_compatible_provider_response import (
     _REASONING_CONTENT_KEYS,
     _check_truncation_before_parse,
     _extract_content_from_message,

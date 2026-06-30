@@ -1,4 +1,4 @@
-"""Error types and failure classification for llama.cpp provider."""
+"""Error types and failure classification for OpenAI-compatible provider."""
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -96,7 +96,7 @@ __all__ = [
 class IncidentDiagnosisLLM(Protocol):
     """Minimal protocol for LLM diagnosis provider.
 
-    Reuses existing project provider wiring (LlamaCppProvider or compatible).
+    Reuses existing project provider wiring (OpenAICompatibleProvider or compatible).
     Tests inject a fake provider with this same interface.
     """
 

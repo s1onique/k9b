@@ -1,7 +1,7 @@
-"""Configuration and CLI-mode run helpers for llamacpp adapter.
+"""Configuration and CLI-mode run helpers for OpenAI-compatible adapter.
 
 This module extracts config initialization and CLI-mode run logic from
-llamacpp_adapter.py.
+openai_compatible_adapter.py.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import time
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from ..llm.llamacpp_provider import LlamaCppProvider, LlamaCppProviderConfig
+from ..llm.openai_compatible_provider import OpenAICompatibleProvider, OpenAICompatibleProviderConfig
 from .adapter import ExternalAnalysisExecutionError, _run_subprocess
 from .artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
 
@@ -24,19 +24,19 @@ DEFAULT_COMMAND = ("llamacpp", "analysis")
 
 def init_http_provider(
     command: Sequence[str] | None, http_only: bool
-) -> tuple[bool, LlamaCppProvider | None, Exception | None]:
+) -> tuple[bool, OpenAICompatibleProvider | None, Exception | None]:
     """Initialize HTTP provider and track config state.
 
     Returns (use_http, http_provider, config_error) tuple.
     When command is None and http_only is True, always attempts HTTP config.
     """
-    http_config: LlamaCppProviderConfig | None = None
+    http_config: OpenAICompatibleProviderConfig | None = None
     http_intent = False
     config_error: Exception | None = None
 
     if http_only or command is None:
         try:
-            http_config = LlamaCppProviderConfig.from_env()
+            http_config = OpenAICompatibleProviderConfig.from_env()
             http_intent = True
         except RuntimeError as exc:
             config_error = exc
@@ -46,7 +46,7 @@ def init_http_provider(
             http_intent = True
 
         if http_intent:
-            provider = LlamaCppProvider(config=http_config) if http_config else None
+            provider = OpenAICompatibleProvider(config=http_config) if http_config else None
             return True, provider, config_error
 
     return False, None, None

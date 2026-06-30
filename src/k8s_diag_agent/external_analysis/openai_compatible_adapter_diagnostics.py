@@ -1,6 +1,6 @@
-"""Prompt diagnostic helpers for llamacpp adapter.
+"""Prompt diagnostic helpers for OpenAI-compatible adapter.
 
-This module extracts prompt section extraction from llamacpp_adapter.py,
+This module extracts prompt section extraction from openai_compatible_adapter.py,
 providing focused helpers for building named PromptSections used in
 prompt diagnostics and failure reporting.
 """

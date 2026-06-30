@@ -1,7 +1,7 @@
 """Tests for response_format_json configuration in llama.cpp provider.
 
 Tests cover:
-- LlamaCppProviderConfig defaults response_format_json=false
+- OpenAICompatibleProviderConfig defaults response_format_json=false
 - LLAMA_CPP_RESPONSE_FORMAT_JSON=true enables response_format in payload
 - Production assess() omits response_format by default
 - Explicit response_format_json=True still includes response_format for tests/manual use
@@ -12,9 +12,9 @@ from typing import Any, cast
 
 import requests
 
-from k8s_diag_agent.llm.llamacpp_provider import (
-    LlamaCppProvider,
-    LlamaCppProviderConfig,
+from k8s_diag_agent.llm.openai_compatible_provider import (
+    OpenAICompatibleProvider,
+    OpenAICompatibleProviderConfig,
 )
 
 
@@ -58,7 +58,7 @@ class TestResponseFormatJsonConfigDefault(unittest.TestCase):
 
     def test_config_default_is_false(self) -> None:
         """Test that response_format_json field defaults to False."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -70,7 +70,7 @@ class TestResponseFormatJsonConfigDefault(unittest.TestCase):
             "LLAMA_CPP_BASE_URL": "http://example.com/api",
             "LLAMA_CPP_MODEL": "test-model",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertFalse(config.response_format_json)
 
     def test_config_from_env_with_true(self) -> None:
@@ -80,7 +80,7 @@ class TestResponseFormatJsonConfigDefault(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_RESPONSE_FORMAT_JSON": "true",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertTrue(config.response_format_json)
 
     def test_config_from_env_with_1(self) -> None:
@@ -90,7 +90,7 @@ class TestResponseFormatJsonConfigDefault(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_RESPONSE_FORMAT_JSON": "1",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertTrue(config.response_format_json)
 
     def test_config_from_env_with_yes(self) -> None:
@@ -100,7 +100,7 @@ class TestResponseFormatJsonConfigDefault(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_RESPONSE_FORMAT_JSON": "yes",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertTrue(config.response_format_json)
 
     def test_config_from_env_with_false(self) -> None:
@@ -110,7 +110,7 @@ class TestResponseFormatJsonConfigDefault(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_RESPONSE_FORMAT_JSON": "false",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertFalse(config.response_format_json)
 
     def test_config_from_env_with_0(self) -> None:
@@ -120,7 +120,7 @@ class TestResponseFormatJsonConfigDefault(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_RESPONSE_FORMAT_JSON": "0",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertFalse(config.response_format_json)
 
     def test_config_from_env_with_empty(self) -> None:
@@ -130,7 +130,7 @@ class TestResponseFormatJsonConfigDefault(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_RESPONSE_FORMAT_JSON": "",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertFalse(config.response_format_json)
 
     def test_config_from_env_with_unknown_value_defaults_false(self) -> None:
@@ -140,7 +140,7 @@ class TestResponseFormatJsonConfigDefault(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_RESPONSE_FORMAT_JSON": "maybe",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertFalse(config.response_format_json)
 
 
@@ -151,12 +151,12 @@ class TestAssessOmitResponseFormatByDefault(unittest.TestCase):
         """Test that assess() omits response_format when config.response_format_json=False."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             response_format_json=False,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -168,12 +168,12 @@ class TestAssessOmitResponseFormatByDefault(unittest.TestCase):
         """Test that assess() uses config response_format_json when param is None."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             response_format_json=True,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -190,12 +190,12 @@ class TestAssessExplicitResponseFormatJson(unittest.TestCase):
         """Test that passing response_format_json=True includes response_format."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             response_format_json=False,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -213,12 +213,12 @@ class TestAssessExplicitResponseFormatJson(unittest.TestCase):
         """Test that passing response_format_json=False explicitly omits response_format."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             response_format_json=True,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -239,11 +239,11 @@ class TestResponseFormatJsonPayloadIntegration(unittest.TestCase):
         """Test that response_format is omitted by default."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -254,11 +254,11 @@ class TestResponseFormatJsonPayloadIntegration(unittest.TestCase):
         """Test that response_format is included when response_format_json=True."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -272,11 +272,11 @@ class TestResponseFormatJsonPayloadIntegration(unittest.TestCase):
         """Test that both response_format and max_tokens can be used together."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )

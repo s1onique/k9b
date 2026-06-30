@@ -184,7 +184,7 @@ class SystemInstructionsComplianceTests(unittest.TestCase):
 
     def test_instructions_list_exact_literals(self) -> None:
         """Test that _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS explicitly lists exact literals."""
-        from k8s_diag_agent.llm.llamacpp_provider import (
+        from k8s_diag_agent.llm.openai_compatible_provider import (
             _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
         )
 
@@ -199,7 +199,7 @@ class SystemInstructionsComplianceTests(unittest.TestCase):
 
     def test_instructions_warn_against_plurals(self) -> None:
         """Test that instructions explicitly warn against plural forms."""
-        from k8s_diag_agent.llm.llamacpp_provider import (
+        from k8s_diag_agent.llm.openai_compatible_provider import (
             _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
         )
 
@@ -213,7 +213,7 @@ class SystemInstructionsComplianceTests(unittest.TestCase):
 
     def test_instructions_warn_against_field_name_derivation(self) -> None:
         """Test that instructions warn against deriving usedFor from field names."""
-        from k8s_diag_agent.llm.llamacpp_provider import (
+        from k8s_diag_agent.llm.openai_compatible_provider import (
             _REVIEW_ENRICHMENT_SYSTEM_INSTRUCTIONS,
         )
 

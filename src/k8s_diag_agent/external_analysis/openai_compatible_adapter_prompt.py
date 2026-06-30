@@ -1,6 +1,6 @@
-"""Prompt construction helpers for llamacpp adapter.
+"""Prompt construction helpers for OpenAI-compatible adapter.
 
-This module extracts prompt building responsibilities from llamacpp_adapter.py,
+This module extracts prompt building responsibilities from openai_compatible_adapter.py,
 providing focused helpers for:
 - Building instruction headers with cluster label anonymization
 - Assembling untrusted data parts with anonymization
@@ -25,7 +25,7 @@ from ..security import sanitize_prompt
 from ..security.anonymizer import MetadataAnonymizer
 from ..security.deanonymization import flatten_alias_mappings
 from ..security.kubectl_context import display_kube_cluster_label
-from .llamacpp_adapter_diagnostics import OUTPUT_SCHEMA_TEMPLATE
+from .openai_compatible_adapter_diagnostics import OUTPUT_SCHEMA_TEMPLATE
 from .review_input import ReviewEnrichmentInput
 
 

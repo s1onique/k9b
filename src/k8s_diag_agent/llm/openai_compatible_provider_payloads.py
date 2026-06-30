@@ -1,23 +1,23 @@
-"""Payload construction for llama.cpp provider."""
+"""Payload construction for OpenAI-compatible provider."""
 from __future__ import annotations
 
 from typing import Any
 
-from .llamacpp_provider_config import (
+from .openai_compatible_provider_config import (
     _SYSTEM_INSTRUCTIONS,
-    LlamaCppProviderConfig,
+    OpenAICompatibleProviderConfig,
 )
 
 
 def build_payload(
     prompt: str,
-    config: LlamaCppProviderConfig,
+    config: OpenAICompatibleProviderConfig,
     *,
     system_instructions: str | None = None,
     max_tokens: int | None = None,
     response_format_json: bool = False,
 ) -> dict[str, Any]:
-    """Build request payload for llama.cpp chat completions API."""
+    """Build request payload for OpenAI-compatible chat completions API."""
     system = system_instructions if system_instructions is not None else _SYSTEM_INSTRUCTIONS
     payload: dict[str, Any] = {
         "model": config.model,
@@ -50,8 +50,8 @@ def build_payload(
     return payload
 
 
-def build_request_headers(config: LlamaCppProviderConfig) -> dict[str, str]:
-    """Build HTTP headers for llama.cpp request."""
+def build_request_headers(config: OpenAICompatibleProviderConfig) -> dict[str, str]:
+    """Build HTTP headers for OpenAI-compatible request."""
     headers: dict[str, str] = {
         "Content-Type": "application/json",
         "Accept": "application/json",

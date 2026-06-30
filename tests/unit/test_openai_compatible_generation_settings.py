@@ -1,7 +1,7 @@
 """Tests for llama.cpp generation settings configuration.
 
 Tests cover:
-- LlamaCppProviderConfig defaults for generation settings
+- OpenAICompatibleProviderConfig defaults for generation settings
 - LLAMA_CPP_TEMPERATURE parsing from environment
 - LLAMA_CPP_TOP_P parsing from environment
 - LLAMA_CPP_TOP_K parsing from environment
@@ -18,9 +18,9 @@ from typing import Any, cast
 import requests
 
 from k8s_diag_agent.llm.base import LLMAssessmentInput
-from k8s_diag_agent.llm.llamacpp_provider import (
-    LlamaCppProvider,
-    LlamaCppProviderConfig,
+from k8s_diag_agent.llm.openai_compatible_provider import (
+    OpenAICompatibleProvider,
+    OpenAICompatibleProviderConfig,
 )
 
 
@@ -65,7 +65,7 @@ class TestGenerationSettingsDefaults(unittest.TestCase):
 
     def test_temperature_default_is_zero(self) -> None:
         """Verify default temperature is 0.0 for deterministic structured output."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -73,7 +73,7 @@ class TestGenerationSettingsDefaults(unittest.TestCase):
 
     def test_top_p_default_is_none(self) -> None:
         """Verify default top_p is None."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -81,7 +81,7 @@ class TestGenerationSettingsDefaults(unittest.TestCase):
 
     def test_top_k_default_is_none(self) -> None:
         """Verify default top_k is None."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -89,7 +89,7 @@ class TestGenerationSettingsDefaults(unittest.TestCase):
 
     def test_repeat_penalty_default_is_none(self) -> None:
         """Verify default repeat_penalty is None."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -97,7 +97,7 @@ class TestGenerationSettingsDefaults(unittest.TestCase):
 
     def test_seed_default_is_none(self) -> None:
         """Verify default seed is None."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -105,7 +105,7 @@ class TestGenerationSettingsDefaults(unittest.TestCase):
 
     def test_stop_default_is_none(self) -> None:
         """Verify default stop is None."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -122,7 +122,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TEMPERATURE": "0.1",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.temperature, 0.1)
 
     def test_config_from_env_with_temperature_zero(self) -> None:
@@ -132,7 +132,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TEMPERATURE": "0",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.temperature, 0.0)
 
     def test_config_from_env_with_temperature_empty_defaults_zero(self) -> None:
@@ -142,7 +142,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TEMPERATURE": "",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.temperature, 0.0)
 
     def test_config_from_env_with_temperature_invalid_defaults_zero(self) -> None:
@@ -152,7 +152,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TEMPERATURE": "invalid",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.temperature, 0.0)
 
     def test_config_from_env_with_top_p(self) -> None:
@@ -162,7 +162,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TOP_P": "0.9",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.top_p, 0.9)
 
     def test_config_from_env_with_top_p_invalid_defaults_none(self) -> None:
@@ -172,7 +172,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TOP_P": "invalid",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertIsNone(config.top_p)
 
     def test_config_from_env_with_top_p_out_of_range_defaults_none(self) -> None:
@@ -182,7 +182,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TOP_P": "2.0",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertIsNone(config.top_p)
 
     def test_config_from_env_with_top_k(self) -> None:
@@ -192,7 +192,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TOP_K": "40",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.top_k, 40)
 
     def test_config_from_env_with_top_k_invalid_defaults_none(self) -> None:
@@ -202,7 +202,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TOP_K": "invalid",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertIsNone(config.top_k)
 
     def test_config_from_env_with_top_k_zero_defaults_none(self) -> None:
@@ -212,7 +212,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_TOP_K": "0",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertIsNone(config.top_k)
 
     def test_config_from_env_with_repeat_penalty(self) -> None:
@@ -222,7 +222,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_REPEAT_PENALTY": "1.1",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.repeat_penalty, 1.1)
 
     def test_config_from_env_with_seed(self) -> None:
@@ -232,7 +232,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_SEED": "42",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.seed, 42)
 
     def test_config_from_env_with_seed_invalid_defaults_none(self) -> None:
@@ -242,7 +242,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_SEED": "invalid",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertIsNone(config.seed)
 
     def test_config_from_env_with_stop_single(self) -> None:
@@ -252,7 +252,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_STOP": "TERMINATE",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.stop, ("TERMINATE",))
 
     def test_config_from_env_with_stop_multiple(self) -> None:
@@ -262,7 +262,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_STOP": "TERMINATE,END,STOP",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.stop, ("TERMINATE", "END", "STOP"))
 
     def test_config_from_env_with_stop_empty_defaults_none(self) -> None:
@@ -272,7 +272,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_STOP": "",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertIsNone(config.stop)
 
     def test_config_from_env_all_generation_settings(self) -> None:
@@ -287,7 +287,7 @@ class TestGenerationSettingsFromEnv(unittest.TestCase):
             "LLAMA_CPP_SEED": "12345",
             "LLAMA_CPP_STOP": "END,STOP",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertEqual(config.temperature, 0.05)
         self.assertEqual(config.top_p, 0.95)
         self.assertEqual(config.top_k, 20)
@@ -303,12 +303,12 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         """Test that assess includes temperature in payload."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             temperature=0.1,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -320,12 +320,12 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         """Test that assess includes top_p in payload when configured."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             top_p=0.9,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -337,12 +337,12 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         """Test that assess includes top_k in payload when configured."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             top_k=40,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -354,12 +354,12 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         """Test that assess includes repeat_penalty in payload when configured."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             repeat_penalty=1.1,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -371,12 +371,12 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         """Test that assess includes seed in payload when configured."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             seed=42,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -388,12 +388,12 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         """Test that assess includes stop in payload when configured."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             stop=("END", "STOP"),
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -406,11 +406,11 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         """Test that assess includes chat_template_kwargs.enable_thinking=false by default."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -422,12 +422,12 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         """Test that assess includes chat_template_kwargs.enable_thinking=true when configured."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             enable_thinking=True,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -439,12 +439,12 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         """Test that assess omits temperature when it's None (not default 0.0)."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             temperature=None,
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -456,7 +456,7 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
         """Test that assess includes all configured generation settings."""
         response = _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
         session = _CapturingSession(response)
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             temperature=0.05,
@@ -466,7 +466,7 @@ class TestPayloadIncludesGenerationSettings(unittest.TestCase):
             seed=12345,
             stop=("END",),
         )
-        provider = LlamaCppProvider(
+        provider = OpenAICompatibleProvider(
             config=config,
             session_factory=lambda: cast(requests.Session, session),
         )
@@ -484,7 +484,7 @@ class TestResponseFormatJsonStillDefaultsFalse(unittest.TestCase):
 
     def test_response_format_json_still_defaults_false(self) -> None:
         """Verify response_format_json still defaults to False."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -497,7 +497,7 @@ class TestResponseFormatJsonStillDefaultsFalse(unittest.TestCase):
             "LLAMA_CPP_MODEL": "test-model",
             "LLAMA_CPP_RESPONSE_FORMAT_JSON": "true",
         }
-        config = LlamaCppProviderConfig.from_env(env)
+        config = OpenAICompatibleProviderConfig.from_env(env)
         self.assertTrue(config.response_format_json)
 
 
@@ -506,7 +506,7 @@ class TestGenerationSettingsProperty(unittest.TestCase):
 
     def test_generation_settings_empty_when_all_none(self) -> None:
         """Test that generation_settings returns empty dict when all are None."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
         )
@@ -516,7 +516,7 @@ class TestGenerationSettingsProperty(unittest.TestCase):
 
     def test_generation_settings_includes_non_none_values(self) -> None:
         """Test that generation_settings includes all non-None values."""
-        config = LlamaCppProviderConfig(
+        config = OpenAICompatibleProviderConfig(
             base_url="http://example.com/api",
             model="test-model",
             temperature=0.05,

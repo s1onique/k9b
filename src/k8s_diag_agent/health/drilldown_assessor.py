@@ -31,7 +31,7 @@ def resolve_drilldown_max_tokens(
     """Resolve max_tokens for drilldown artifact assessment.
 
 
-    This helper avoids importing get_provider or LlamaCppProvider in health/loop.py
+    This helper avoids importing get_provider or OpenAICompatibleProvider in health/loop.py
     by encapsulating provider resolution logic here.
 
 
@@ -42,18 +42,18 @@ def resolve_drilldown_max_tokens(
 
     Returns:
         The explicit_max_tokens if provided, otherwise the provider-specific
-        default from LlamaCppProvider.max_tokens_for_operation("auto-drilldown"),
+        default from OpenAICompatibleProvider.max_tokens_for_operation("auto-drilldown"),
         or None if provider doesn't support auto-drilldown max_tokens.
     """
     if explicit_max_tokens is not None:
         return explicit_max_tokens
     if not _is_openai_compatible_provider(provider_name):
         return None
-    from ..llm.llamacpp_provider import LlamaCppProvider
+    from ..llm.openai_compatible_provider import OpenAICompatibleProvider
     from ..llm.provider import get_provider
 
     prov = get_provider(provider_name)
-    if isinstance(prov, LlamaCppProvider):
+    if isinstance(prov, OpenAICompatibleProvider):
         return prov.max_tokens_for_operation("auto-drilldown")
     return None
 
@@ -89,9 +89,9 @@ def assess_drilldown_artifact(
     # Use provider-specific max_tokens if not explicitly provided
     effective_max_tokens = max_tokens
     if effective_max_tokens is None and _is_openai_compatible_provider(provider_name):
-        from ..llm.llamacpp_provider import LlamaCppProvider
+        from ..llm.openai_compatible_provider import OpenAICompatibleProvider
 
-        if isinstance(provider, LlamaCppProvider):
+        if isinstance(provider, OpenAICompatibleProvider):
             effective_max_tokens = provider.max_tokens_for_operation("auto-drilldown")
     # Let provider config control response_format_json (defaults to False)
     raw_assessment = provider.assess(prompt, payload, max_tokens=effective_max_tokens)

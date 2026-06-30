@@ -153,7 +153,7 @@ The slow timer (default 10s) transitions `selectedRun.status` from `"loading"` t
 | `health/proposals.py` | Proposal generation from review |
 | `llm/base.py` | Abstract LLMProvider interface |
 | `llm/prompts.py` | LLM evaluation prompt templates |
-| `llm/llamacpp_provider.py` | llama.cpp adapter implementation |
+| `llm/openai_compatible_provider.py` | OpenAI-compatible provider implementation |
 | `external_analysis/adapter.py` | Provider invocation orchestration |
 | `external_analysis/alertmanager_adapter.py` | Alertmanager integration |
 | `external_analysis/next_check_planner.py` | Deterministic next-check planning |
