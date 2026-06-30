@@ -216,7 +216,8 @@ class TestAdapterRegistry(unittest.TestCase):
         adapters = build_external_analysis_adapters([config], settings)
 
         self.assertEqual(len(adapters), 1)
-        self.assertIn("test-adapter", adapters)  # ConcreteTestAdapter.name
+        # The key is the normalized config name, not the adapter class's name attribute
+        self.assertIn("enabled-adapter", adapters)
 
     def test_build_adapter_returns_none(self) -> None:
         """Test that builder returning None skips adapter."""
@@ -535,9 +536,13 @@ class TestAdapterPatternEdgeCases(unittest.TestCase):
         _ADAPTER_BUILDERS.clear()
         _ADAPTER_BUILDERS.update(self._original_builders)
 
-    def test_adapter_name_from_instance(self) -> None:
-        """Test that adapter name is taken from instance not config."""
-        custom_name = "custom-instance-name"
+    def test_adapter_key_uses_normalized_config_name(self) -> None:
+        """Test that adapter dict key is the normalized config name, not adapter instance name.
+
+        The adapter instance's name attribute can differ from the config name.
+        The dict key is determined by the normalized config name, not adapter.name.
+        """
+        custom_instance_name = "custom-instance-name"
 
         @register_external_analysis_adapter("config-name")
         def builder(
@@ -545,7 +550,7 @@ class TestAdapterPatternEdgeCases(unittest.TestCase):
             settings: ExternalAnalysisSettings,
         ) -> ExternalAnalysisAdapter | None:
             adapter = ConcreteTestAdapter()
-            adapter.name = custom_name  # Override name
+            adapter.name = custom_instance_name  # Override instance name
             return adapter
 
         config = ExternalAnalysisAdapterConfig(name="config-name", enabled=True)
@@ -553,36 +558,82 @@ class TestAdapterPatternEdgeCases(unittest.TestCase):
         adapters = build_external_analysis_adapters([config], None)
 
         self.assertEqual(len(adapters), 1)
-        self.assertIn(custom_name, adapters)
+        # The key is the normalized config name, not the adapter instance name
+        self.assertIn("config-name", adapters)
+        self.assertNotIn(custom_instance_name, adapters)
+        # Verify the adapter instance has the custom name
+        self.assertEqual(adapters["config-name"].name, custom_instance_name)
 
-    def test_multiple_adapters_same_name_lasts_one(self) -> None:
-        """Test that last adapter with same name wins."""
+    def test_multiple_adapters_same_normalized_name_lasts_one(self) -> None:
+        """Test that adapters with the same normalized config name collapse to one entry.
 
-        @register_external_analysis_adapter("same-name")
-        def builder1(
+        This verifies the legacy → canonical adapter name behavior (llamacpp → openai_compatible).
+        When two configs have names that normalize to the same key, only the last one wins.
+        """
+
+        @register_external_analysis_adapter("openai_compatible")
+        def builder(
             config: ExternalAnalysisAdapterConfig,
             settings: ExternalAnalysisSettings,
         ) -> ExternalAnalysisAdapter | None:
             adapter = ConcreteTestAdapter()
-            adapter.name = "duplicate-name"
+            # Track which config was used via the command field
+            adapter._test_config_name = config.name
             return adapter
 
-        @register_external_analysis_adapter("same-name-2")
-        def builder2(
-            config: ExternalAnalysisAdapterConfig,
-            settings: ExternalAnalysisSettings,
-        ) -> ExternalAnalysisAdapter | None:
-            adapter = ConcreteTestAdapter()
-            adapter.name = "duplicate-name"  # Same name!
-            return adapter
-
-        config1 = ExternalAnalysisAdapterConfig(name="same-name", enabled=True)
-        config2 = ExternalAnalysisAdapterConfig(name="same-name-2", enabled=True)
+        # First config uses legacy name "llamacpp" which normalizes to "openai_compatible"
+        config1 = ExternalAnalysisAdapterConfig(
+            name="llamacpp",
+            enabled=True,
+            command=("first",),
+        )
+        # Second config uses canonical name "openai_compatible"
+        config2 = ExternalAnalysisAdapterConfig(
+            name="openai_compatible",
+            enabled=True,
+            command=("second",),
+        )
 
         adapters = build_external_analysis_adapters([config1, config2], None)
 
-        # Only one entry for "duplicate-name"
-        self.assertEqual(len(adapters), 1)
+        # Both configs normalize to "openai_compatible", so only one entry remains (last wins)
+        self.assertEqual(1, len(adapters))
+        self.assertIn("openai_compatible", adapters)
+
+        # The second config (canonical name) should be the one that wins
+        adapter = adapters["openai_compatible"]
+        self.assertEqual("openai_compatible", adapter._test_config_name)
+
+    def test_different_normalized_names_keep_all_adapters(self) -> None:
+        """Test that adapters with different normalized config names are all kept."""
+
+        @register_external_analysis_adapter("adapter-a")
+        def builder_a(
+            config: ExternalAnalysisAdapterConfig,
+            settings: ExternalAnalysisSettings,
+        ) -> ExternalAnalysisAdapter | None:
+            adapter = ConcreteTestAdapter()
+            adapter.name = "adapter-a"
+            return adapter
+
+        @register_external_analysis_adapter("adapter-b")
+        def builder_b(
+            config: ExternalAnalysisAdapterConfig,
+            settings: ExternalAnalysisSettings,
+        ) -> ExternalAnalysisAdapter | None:
+            adapter = ConcreteTestAdapter()
+            adapter.name = "adapter-b"
+            return adapter
+
+        config_a = ExternalAnalysisAdapterConfig(name="adapter-a", enabled=True)
+        config_b = ExternalAnalysisAdapterConfig(name="adapter-b", enabled=True)
+
+        adapters = build_external_analysis_adapters([config_a, config_b], None)
+
+        # Both adapters with different normalized names should be kept
+        self.assertEqual(2, len(adapters))
+        self.assertIn("adapter-a", adapters)
+        self.assertIn("adapter-b", adapters)
 
 
 class TestRequestMetadataHandling(unittest.TestCase):
