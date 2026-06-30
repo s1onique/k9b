@@ -325,8 +325,7 @@ jobs:
             --require-lab-passed \
             --otel-traces auto \
             --json
-        # This step fails the job if contracts fail (no if: condition)
-        # Only runs for unschedulable-shipping as that's the only deeply-verified scenario
+        # This step fails the job for the unschedulable-shipping contract gate.
 
       - name: Upload Live Lab Artifacts
         if: always()
