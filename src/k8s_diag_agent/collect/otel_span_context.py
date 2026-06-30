@@ -19,25 +19,7 @@ if TYPE_CHECKING:
 
 
 # =============================================================================
-# OTel Import with Graceful Degradation
-# =============================================================================
-
-# Import OTel types if available, with narrow ImportError guard
-_OTelStatus: Any = None
-_OTelStatusCode: Any = None
-_OTEL_AVAILABLE: bool = False
-
-try:
-    from opentelemetry.trace import Status as _OTelStatus
-    from opentelemetry.trace import StatusCode as _OTelStatusCode
-    _OTEL_AVAILABLE = True
-except ImportError:
-    # OTel not available - use fallback status objects
-    pass
-
-
-# =============================================================================
-# Fallback Status Objects (used when OTel is not installed)
+# Fallback Status Objects (defined first to allow helper below)
 # =============================================================================
 
 
@@ -57,22 +39,41 @@ class _FallbackStatus:
     description: str | None = None
 
 
+# =============================================================================
+# OTel Import with Graceful Degradation
+# =============================================================================
+
+
+def _load_otel_status_types() -> tuple[Any, Any, bool]:
+    """Load OTel Status types if available, otherwise return fallbacks.
+
+    Returns:
+        tuple of (Status class, StatusCode class, availability flag)
+    """
+    try:
+        from opentelemetry.trace import Status, StatusCode
+
+        return Status, StatusCode, True
+    except ImportError:
+        # OTel not available - use fallback status objects
+        return _FallbackStatus, _FallbackStatusCode, False
+
+
+_OTelStatus, _OTelStatusCode, _OTEL_AVAILABLE = _load_otel_status_types()
+
+
 def _status_code_ok() -> Any:
-    """Get the OK status code, using OTel or fallback."""
-    if _OTelStatusCode is not None:
-        return _OTelStatusCode.OK
-    return _FallbackStatusCode.OK
+    """Get the OK status code (OTel or fallback)."""
+    return _OTelStatusCode.OK
 
 
 def _status_code_error() -> Any:
-    """Get the ERROR status code, using OTel or fallback."""
-    if _OTelStatusCode is not None:
-        return _OTelStatusCode.ERROR
-    return _FallbackStatusCode.ERROR
+    """Get the ERROR status code (OTel or fallback)."""
+    return _OTelStatusCode.ERROR
 
 
 def _make_status(status_code: Any, description: str | None = None) -> Any:
-    """Create a Status object using OTel or fallback.
+    """Create a Status object (OTel or fallback).
 
     Args:
         status_code: The status code (OK or ERROR)
@@ -81,11 +82,9 @@ def _make_status(status_code: Any, description: str | None = None) -> Any:
     Returns:
         OTel Status object if available, otherwise _FallbackStatus
     """
-    if _OTelStatus is not None:
-        if description is None:
-            return _OTelStatus(status_code)
-        return _OTelStatus(status_code, description=description)
-    return _FallbackStatus(status_code=status_code, description=description)
+    if description is None:
+        return _OTelStatus(status_code)
+    return _OTelStatus(status_code, description=description)
 
 
 # Aliases for backward compatibility
