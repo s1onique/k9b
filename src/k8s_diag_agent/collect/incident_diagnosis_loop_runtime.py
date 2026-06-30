@@ -26,11 +26,25 @@ from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
     LoopStopReason,
 )
 
-from .incident_diagnosis_loop_models import LoopDecision
 from .incident_diagnosis_loop_otel import (
     emit_check_gate_span,
     emit_loop_span,
     emit_pass_span,
+)
+
+# Re-export contract types for stable public API
+from .incident_diagnosis_loop_runtime_contract import (
+    PASS_ARTIFACT_FIELDS,
+)
+from .incident_diagnosis_loop_runtime_helpers import (
+    _build_budget_exceeded_result,
+    build_budget_exceeded_stop_artifact,
+    build_loop_stop_artifact,
+)
+from .incident_diagnosis_loop_runtime_rendering import (
+    render_gate_summary,
+    render_loop_summary,
+    render_runtime_summary,
 )
 from .incident_diagnosis_loop_runtime_utils import (
     compute_case_file_hash,
@@ -55,15 +69,28 @@ if TYPE_CHECKING:
     pass
 
 __all__ = [
+    # Core runtime functions
     "run_policy_enforced_loop_pass",
     "run_policy_enforced_loop",
+    # Gating
     "gate_checks",
-    "build_policy_enforced_pass_artifact",
-    "LoopRuntimeState",
     "GateSummary",
+    # Artifact building
+    "build_policy_enforced_pass_artifact",
+    # State
+    "LoopRuntimeState",
     "RUNTIME_SCHEMA_VERSION",
+    # Constants
     "P4C_DIAGNOSIS_SUBDIR",
     "P4C_LOOP_PASSES_SUBDIR",
+    # Contract types
+    "DiagnosisLoopPolicy",
+    "LoopStopReason",
+    "PASS_ARTIFACT_FIELDS",
+    # Rendering helpers
+    "render_runtime_summary",
+    "render_loop_summary",
+    "render_gate_summary",
 ]
 
 
@@ -141,48 +168,18 @@ def run_policy_enforced_loop_pass(
         resolved_policy, current_state, elapsed_seconds
     )
 
-    # If budget is already exceeded, do NOT plan - build stop artifact and return
+    # If budget is already exceeded, do NOT plan - use helper to build stop artifact
     if budget_exceeded:
-        decision = LoopDecision.STOP_BUDGET_EXHAUSTED.value
-        
-        # Build a minimal pass artifact for budget stop
-        # Use empty lists for checks since we didn't gate anything
-        gate_summary = GateSummary(
-            proposed=0,
-            accepted=0,
-            rejected_mutating=0,
-            rejected_sensitive=0,
-            rejected_duplicate=0,
-            accepted_checks=[],
-            rejected_checks=[],
-            accepted_fingerprints=[],
-            rejected_fingerprints=[],
-        )
-        
-        pass_artifact = build_policy_enforced_pass_artifact(
+        pass_artifact = build_budget_exceeded_stop_artifact(
             loop_run_id=current_state.loop_run_id,
             incident_id=incident_id,
             pass_index=current_state.pass_index,
             case_file=case_file,
             policy=resolved_policy,
-            gate_summary=gate_summary,
-            accepted_fingerprints=[],
-            runtime_state=current_state,
-            decision=decision,
-            root_cause_summary="",
-            confidence="unknown",
-            runner_result=None,
-            now=resolved_now,
-            budget_exceeded=True,
             budget_stop_reason=budget_stop_reason,
+            now=resolved_now,
             fake_handlers=fake_handlers,
         )
-        
-        # Validate pass artifact schema
-        from k8s_diag_agent.collect.incident_diagnosis_loop_policy import validate_pass_artifact_schema
-        is_valid, missing = validate_pass_artifact_schema(pass_artifact)
-        if not is_valid:
-            pass_artifact["_schema_error"] = f"Missing required fields: {missing}"
         
         # Write pass artifact to P4c path
         write_runtime_pass_artifact(
@@ -195,28 +192,13 @@ def run_policy_enforced_loop_pass(
         # Emit loop complete span for early stop
         emit_loop_span(current_state.loop_run_id, incident_id, resolved_policy, "completed")
         
-        # Build result
-        case_file_hash = compute_case_file_hash(case_file)
-        result: dict[str, object] = {
-            "policy_enforced": True,
-            "policy": resolved_policy.to_dict(),
-            "gate_summary": {
-                "proposed": 0,
-                "accepted": 0,
-                "rejected_mutating": 0,
-                "rejected_sensitive": 0,
-                "rejected_duplicate": 0,
-                "rejected_checks": [],
-            },
-            "pass_artifact": pass_artifact,
-            "p4c_artifact_path": None,
-            "case_file_hash": case_file_hash,
-            "budget_exceeded": True,
-            "budget_stop_reason": budget_stop_reason.value if budget_stop_reason else None,
-            "decision": decision,
-            "planner_called": False,
-        }
-        return result
+        # Build result using helper
+        return _build_budget_exceeded_result(
+            pass_artifact=pass_artifact,
+            resolved_policy=resolved_policy,
+            budget_stop_reason=budget_stop_reason,
+            case_file=case_file,
+        )
 
     # STEP 1: Plan WITHOUT executing checks (planner-only seam)
     # This returns loop_update with proposed_next_checks but NO runner_result
@@ -441,32 +423,15 @@ def run_policy_enforced_loop(
         )
         
         if budget_exceeded:
-            # Create stop artifact with ALL PASS_ARTIFACT_FIELDS
-            # Include the actual case_file_hash for traceability
-            case_file_hash = compute_case_file_hash(case_file)
-            stop_artifact = {
-                # PASS_ARTIFACT_FIELDS
-                "loop_run_id": loop_run_id,
-                "incident_id": incident_id,
-                "pass_index": runtime_state.pass_index,
-                "case_file_hash": case_file_hash,  # Include actual case file hash
-                "proposed_checks": [],
-                "accepted_checks": [],
-                "rejected_checks": [],
-                "check_fingerprints": [],
-                "new_evidence_hashes": [],
-                "duplicate_check_count": 0,
-                "unsafe_check_count": 0,
-                "root_cause_summary": "",
-                "confidence": "unknown",
-                "should_continue": False,
-                "stop_reason": budget_stop_reason.value if budget_stop_reason else LoopStopReason.MAX_CHECKS_REACHED.value,
-                # Additional fields
-                "decision": LoopDecision.STOP_BUDGET_EXHAUSTED.value,
-                "budget_exceeded": True,
-                "schema_version": RUNTIME_SCHEMA_VERSION,
-                "generated_at": resolved_now.isoformat(),
-            }
+            # Use helper to build stop artifact
+            stop_artifact = build_loop_stop_artifact(
+                loop_run_id=loop_run_id,
+                incident_id=incident_id,
+                pass_index=runtime_state.pass_index,
+                case_file=case_file,
+                budget_stop_reason=budget_stop_reason,
+                now=resolved_now,
+            )
             pass_results.append({
                 "stop_reason": budget_stop_reason.value if budget_stop_reason else LoopStopReason.MAX_CHECKS_REACHED.value,
                 "budget_exceeded": True,

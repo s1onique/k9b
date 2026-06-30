@@ -11,14 +11,40 @@ from .incident_diagnosis_loop_runtime import (
     run_policy_enforced_loop_pass,
 )
 
+# Re-export from new focused modules for compatibility
+from .incident_diagnosis_loop_runtime_contract import (
+    DiagnosisLoopPolicy,
+    LoopStopReason,
+    PASS_ARTIFACT_FIELDS,
+)
+
+from .incident_diagnosis_loop_runtime_rendering import (
+    render_runtime_summary,
+    render_loop_summary,
+    render_gate_summary,
+)
+
 __all__ = [
+    # Core runtime functions
     "run_policy_enforced_loop_pass",
     "run_policy_enforced_loop",
+    # Gating
     "gate_checks",
-    "build_policy_enforced_pass_artifact",
-    "LoopRuntimeState",
     "GateSummary",
+    # Artifact building
+    "build_policy_enforced_pass_artifact",
+    # State
+    "LoopRuntimeState",
     "RUNTIME_SCHEMA_VERSION",
+    # Constants
     "P4C_DIAGNOSIS_SUBDIR",
     "P4C_LOOP_PASSES_SUBDIR",
+    # Contract types
+    "DiagnosisLoopPolicy",
+    "LoopStopReason",
+    "PASS_ARTIFACT_FIELDS",
+    # Rendering helpers
+    "render_runtime_summary",
+    "render_loop_summary",
+    "render_gate_summary",
 ]
