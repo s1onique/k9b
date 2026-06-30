@@ -202,4 +202,11 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [SCRIPT] Incident discovery gate - Phase 2c snapshot trigger enhancement
     ("scripts/incident_discovery_gate/collect.py", "[SCRIPT] Incident gate collection - kubectl and API helpers"),
     ("scripts/incident_discovery_gate/main.py", "[SCRIPT] Incident gate orchestration - Phase 2a-2e orchestration"),
+
+    # [OTEL] OpenTelemetry instrumentation - comprehensive helpers and wiring
+    ("src/k8s_diag_agent/collect/incident_diagnosis_loop_otel.py", "[OTEL] OTel span helpers - comprehensive instrumentation API"),
+    ("src/k8s_diag_agent/collect/incident_diagnosis_loop_runtime.py", "[OTEL] Diagnosis loop runtime - comprehensive OTel wiring"),
+
+    # [TEST] OTel instrumentation tests - comprehensive coverage
+    ("tests/enforcement_tests/test_otel_instrumentation.py", "[TEST] OTel instrumentation tests - comprehensive coverage"),
 ]

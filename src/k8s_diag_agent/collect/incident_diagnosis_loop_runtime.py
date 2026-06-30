@@ -27,9 +27,25 @@ from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
 )
 
 from .incident_diagnosis_loop_otel import (
+    emit_artifact_written_event,
+    emit_budget_exceeded_event,
     emit_check_gate_span,
+    emit_check_rejected_event,
+    emit_checks_executed_event,
     emit_loop_span,
     emit_pass_span,
+    emit_stop_event,
+    record_exception,
+    set_span_error,
+    set_span_ok,
+    start_artifact_span,
+    start_budget_span,
+    start_execute_span,
+    start_gate_span,
+    start_loop_span,
+    start_pass_span,
+    start_plan_span,
+    SpanContext,
 )
 
 # Re-export contract types for stable public API
@@ -160,13 +176,30 @@ def run_policy_enforced_loop_pass(
     if current_state.pass_index == 1:
         emit_loop_span(current_state.loop_run_id, incident_id, resolved_policy, "started")
 
+    # Start pass span for OTel instrumentation
+    pass_span_ctx: SpanContext | None = None
+    pass_span: Any = None
+    
     # Check budgets BEFORE any planning
     elapsed_seconds = (resolved_now - datetime.fromisoformat(current_state.started_at)).total_seconds()
     elapsed_seconds = max(0, elapsed_seconds)
     
+    # Start budget span
+    budget_span_ctx = start_budget_span(
+        run_id=current_state.loop_run_id,
+        pass_index=current_state.pass_index,
+        budget_exceeded=False,  # Will be updated
+        stop_reason=None,
+    )
+    
     budget_exceeded, budget_stop_reason = enforce_budgets(
         resolved_policy, current_state, elapsed_seconds
     )
+    
+    # Update budget span with actual result
+    if budget_exceeded:
+        emit_budget_exceeded_event(budget_span_ctx.span, budget_stop_reason.value if budget_stop_reason else "unknown")
+        emit_loop_span(current_state.loop_run_id, incident_id, resolved_policy, "completed")
 
     # If budget is already exceeded, do NOT plan - use helper to build stop artifact
     if budget_exceeded:
@@ -182,15 +215,27 @@ def run_policy_enforced_loop_pass(
         )
         
         # Write pass artifact to P4c path
-        write_runtime_pass_artifact(
+        p4c_artifact_path = write_runtime_pass_artifact(
             external_analysis_dir=external_analysis_dir,
             loop_run_id=current_state.loop_run_id,
             pass_index=current_state.pass_index,
             artifact=pass_artifact,
         )
         
-        # Emit loop complete span for early stop
-        emit_loop_span(current_state.loop_run_id, incident_id, resolved_policy, "completed")
+        # Instrument artifact span
+        artifact_span_ctx = start_artifact_span(
+            run_id=current_state.loop_run_id,
+            pass_index=current_state.pass_index,
+            artifact_path=str(p4c_artifact_path) if p4c_artifact_path else None,
+            schema_valid=False,  # Budget exceeded artifact may be incomplete
+            missing_fields=0,
+            new_evidence_count=0,
+        )
+        emit_artifact_written_event(artifact_span_ctx.span, str(p4c_artifact_path) if p4c_artifact_path else "", False)
+        
+        # Emit stop event on budget span
+        emit_stop_event(budget_span_ctx.span, budget_stop_reason.value if budget_stop_reason else "unknown")
+        set_span_ok(budget_span_ctx.span)
         
         # Build result using helper
         return _build_budget_exceeded_result(
@@ -202,14 +247,25 @@ def run_policy_enforced_loop_pass(
 
     # STEP 1: Plan WITHOUT executing checks (planner-only seam)
     # This returns loop_update with proposed_next_checks but NO runner_result
-    planner_result = plan_one_read_only_diagnosis_loop_pass(
-        incident_id=incident_id,
-        case_file=case_file,
-        diagnosis_report=diagnosis_report,
-        run_id=run_id,
-        prior_loop_state=prior_loop_state,
-        now=resolved_now,
+    plan_span_ctx = start_plan_span(
+        run_id=current_state.loop_run_id,
+        pass_index=current_state.pass_index,
     )
+    
+    try:
+        planner_result = plan_one_read_only_diagnosis_loop_pass(
+            incident_id=incident_id,
+            case_file=case_file,
+            diagnosis_report=diagnosis_report,
+            run_id=run_id,
+            prior_loop_state=prior_loop_state,
+            now=resolved_now,
+        )
+        set_span_ok(plan_span_ctx.span)
+    except Exception as exc:
+        record_exception(plan_span_ctx.span, exc)
+        set_span_error(plan_span_ctx.span)
+        raise
 
     # Extract loop update for gating decisions
     loop_update = planner_result.get("loop_update", {})
@@ -222,13 +278,28 @@ def run_policy_enforced_loop_pass(
 
     # STEP 2: Gate checks BEFORE execution using persistent seen_fingerprints
     seen_fingerprints = set(current_state.seen_check_fingerprints)
+    
+    # Start gate span (will update counts after gating)
+    gate_span_ctx = start_gate_span(
+        run_id=current_state.loop_run_id,
+        pass_index=current_state.pass_index,
+        proposed=len(proposed_checks),
+        accepted=0,
+        rejected_mutating=0,
+        rejected_sensitive=0,
+        rejected_duplicate=0,
+        rejected_budget=0,
+    )
+    
     gate_summary, accepted_fingerprints = gate_checks(proposed_checks, resolved_policy, seen_fingerprints)
 
     # STEP 3: Enforce max_checks_per_pass after gating - explicitly reject overflow
+    rejected_budget_count = 0
     if gate_summary.accepted > resolved_policy.max_checks_per_pass:
         # Reject overflow - only execute up to the cap
         overflow_checks = gate_summary.accepted_checks[resolved_policy.max_checks_per_pass:]
         overflow_fingerprints = gate_summary.accepted_fingerprints[resolved_policy.max_checks_per_pass:]
+        rejected_budget_count = len(overflow_checks)
         
         # Add overflow to rejected checks with explicit reason
         for check, fp in zip(overflow_checks, overflow_fingerprints):
@@ -242,6 +313,17 @@ def run_policy_enforced_loop_pass(
         gate_summary.accepted_checks = gate_summary.accepted_checks[:resolved_policy.max_checks_per_pass]
         gate_summary.accepted_fingerprints = gate_summary.accepted_fingerprints[:resolved_policy.max_checks_per_pass]
         gate_summary.accepted = len(gate_summary.accepted_checks)
+    
+    # Emit rejection events for each rejected check
+    for check in gate_summary.rejected_checks:
+        rejection_reason = check.get("rejection_reason", "unknown")
+        emit_check_rejected_event(
+            gate_span_ctx.span,
+            check_id=str(check.get("check_id", "")),
+            rejection_reason=rejection_reason,
+            is_unsafe=(rejection_reason == "mutating_check_rejected"),
+            is_sensitive=(rejection_reason == "sensitive_read_denied"),
+        )
     
     # Use gate_summary.accepted_fingerprints for the artifact (it's the authoritative list after truncation)
     artifact_accepted_fingerprints = list(gate_summary.accepted_fingerprints)
@@ -268,14 +350,29 @@ def run_policy_enforced_loop_pass(
     # Note: Planner decision is informational; gate acceptance overrides planner's stop decision
     runner_result: dict[str, Any] | None = None
     if gate_summary.accepted > 0 and not budget_exceeded:
-        # Execute only the accepted checks - rejected checks never reach here
-        runner_result = run_read_only_checks(
-            incident_id=incident_id,
-            run_id=run_id,
-            accepted_checks=gate_summary.accepted_checks,
-            now=resolved_now,
-            fake_handlers=fake_handlers,
+        # Start execute span
+        execute_span_ctx = start_execute_span(
+            run_id=current_state.loop_run_id,
+            pass_index=current_state.pass_index,
+            checks_count=gate_summary.accepted,
+            runner_kind="read_only",
         )
+        
+        # Execute only the accepted checks - rejected checks never reach here
+        try:
+            runner_result = run_read_only_checks(
+                incident_id=incident_id,
+                run_id=run_id,
+                accepted_checks=gate_summary.accepted_checks,
+                now=resolved_now,
+                fake_handlers=fake_handlers,
+            )
+            emit_checks_executed_event(execute_span_ctx.span, gate_summary.accepted)
+            set_span_ok(execute_span_ctx.span)
+        except Exception as exc:
+            record_exception(execute_span_ctx.span, exc)
+            set_span_error(execute_span_ctx.span)
+            raise
 
     # STEP 5: Build the pass artifact with ONLY accepted fingerprints for this pass
     pass_artifact = build_policy_enforced_pass_artifact(
@@ -303,24 +400,6 @@ def run_policy_enforced_loop_pass(
     if not is_valid:
         pass_artifact["_schema_error"] = f"Missing required fields: {missing}"
 
-    # Emit pass span
-    stop_reason = pass_artifact.get("stop_reason")
-    emit_pass_span(
-        run_id=current_state.loop_run_id,
-        pass_index=current_state.pass_index,
-        decision=decision,
-        stop_reason=stop_reason,
-        checks_accepted=gate_summary.accepted,
-        checks_rejected=gate_summary.rejected_mutating + gate_summary.rejected_sensitive + gate_summary.rejected_duplicate,
-    )
-
-    # Emit check gate spans for each gated check (BEFORE execution)
-    for check in gate_summary.accepted_checks:
-        emit_check_gate_span(current_state.loop_run_id, current_state.pass_index, str(check.get("check_id", "")), True, None)
-
-    for check in gate_summary.rejected_checks:
-        emit_check_gate_span(current_state.loop_run_id, current_state.pass_index, str(check.get("check_id", "")), False, check.get("rejection_reason"))
-
     # Write pass artifact to P4c path
     p4c_artifact_path = write_runtime_pass_artifact(
         external_analysis_dir=external_analysis_dir,
@@ -329,8 +408,35 @@ def run_policy_enforced_loop_pass(
         artifact=pass_artifact,
     )
 
+    # Instrument artifact span
+    artifact_span_ctx = start_artifact_span(
+        run_id=current_state.loop_run_id,
+        pass_index=current_state.pass_index,
+        artifact_path=str(p4c_artifact_path) if p4c_artifact_path else None,
+        schema_valid=is_valid,
+        missing_fields=len(missing),
+        new_evidence_count=len(pass_artifact.get("new_evidence_hashes", [])),
+    )
+    emit_artifact_written_event(artifact_span_ctx.span, str(p4c_artifact_path) if p4c_artifact_path else "", is_valid)
+    set_span_ok(artifact_span_ctx.span)
+
+    # Emit pass span with summary
+    stop_reason = pass_artifact.get("stop_reason")
+    emit_pass_span(
+        run_id=current_state.loop_run_id,
+        pass_index=current_state.pass_index,
+        decision=decision,
+        stop_reason=stop_reason,
+        checks_accepted=gate_summary.accepted,
+        checks_rejected=gate_summary.rejected_mutating + gate_summary.rejected_sensitive + gate_summary.rejected_duplicate + rejected_budget_count,
+    )
+
     # Emit loop complete span (only on final pass)
     emit_loop_span(current_state.loop_run_id, incident_id, resolved_policy, "completed")
+
+    # Emit stop event
+    emit_stop_event(artifact_span_ctx.span, stop_reason if stop_reason else "unknown")
+    set_span_ok(budget_span_ctx.span)
 
     # Build augmented result
     case_file_hash = compute_case_file_hash(case_file)
