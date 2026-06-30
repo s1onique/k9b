@@ -11,7 +11,7 @@ from scripts.k9b_otel_demo_lab_constants import (
     OTEL_DEMO_CHART_VERSION,
     get_configured_otel_demo_chart_version,
 )
-from scripts.k9b_otel_demo_lab_deployment import _classify_helm_chart_version_error, _validate_chart_version
+from scripts.k9b_otel_demo_lab_deployment_helm import _classify_helm_chart_version_error, _validate_chart_version
 from scripts.k9b_otel_demo_lab_types import LabConfig
 
 
