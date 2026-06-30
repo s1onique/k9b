@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Any
 
 from .k9b_lab_common_helpers import log, write_json_artifact
+from .k9b_otel_demo_lab_contract import LabConfig, LabPhaseResult, LabResult
 from .k9b_otel_demo_lab_phases import (
     phase0_cluster_baseline,
     phase1_deploy_otel_demo,
@@ -63,7 +64,6 @@ from .k9b_otel_demo_lab_phases import (
     phase_p4_persisted_diagnosis,
     phase_p4c_verify_k8s_mult_pass_diagnosis,
 )
-from .k9b_otel_demo_lab_types import LabConfig, LabPhaseResult, LabResult
 
 
 def run_lab(config: LabConfig) -> LabResult:
@@ -465,84 +465,21 @@ def _result_to_dict(result: LabResult) -> dict[str, Any]:
     return data
 
 
-# CLI entry point
+# Backward-compatible CLI entry point
 def main() -> int:
-    """CLI entry point for OTel Demo Lab."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Run OTel Demo incident lab")
-    parser.add_argument("--kubeconfig", required=True, help="Path to kubeconfig")
-    parser.add_argument(
-        "--artifact-dir",
-        default="./lab-artifacts/otel-demo",
-        help="Artifact directory",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["scaffold", "live"],
-        default="scaffold",
-        help="Lab mode: scaffold (fixture-based) or live (real cluster traffic)",
-    )
-    # Live mode timing overrides
-    parser.add_argument(
-        "--live-traffic-duration",
-        type=int,
-        default=600,
-        help="Duration of live traffic generation in seconds (default: 600)",
-    )
-    parser.add_argument(
-        "--live-observation-wait",
-        type=int,
-        default=600,
-        help="Wait time for symptoms to manifest in seconds (default: 600)",
-    )
-    parser.add_argument(
-        "--live-poll-interval",
-        type=int,
-        default=30,
-        help="Poll interval for observation in seconds (default: 30)",
-    )
-    # Provider smoke option (runs AFTER incident injection, fail-closed)
-    parser.add_argument(
-        "--enable-provider-smoke",
-        action="store_true",
-        default=False,
-        help="Enable provider smoke phases (fail-closed: any P1/P1b/P2/P3/P4 failure fails the lab)",
-    )
-    # Incident scenario option (opt-in K8s-native path)
-    parser.add_argument(
-        "--incident-scenario",
-        choices=["recommendation-cache-failure", "recommendation-pod-stress", "unschedulable-shipping"],
-        default="recommendation-cache-failure",
-        help="Incident scenario: 'recommendation-cache-failure' (default), 'recommendation-pod-stress', or 'unschedulable-shipping' (P2b→P3c→P4c K8s-native path)",
-    )
-    
-    args = parser.parse_args()
-    
-    from .k9b_otel_demo_lab_types import LabConfig
-    
-    config = LabConfig(
-        kubeconfig=args.kubeconfig,
-        artifact_dir=args.artifact_dir,
-        mode=args.mode,
-        live_traffic_duration_seconds=args.live_traffic_duration,
-        live_observation_wait_seconds=args.live_observation_wait,
-        live_poll_interval_seconds=args.live_poll_interval,
-        enable_provider_smoke=args.enable_provider_smoke,
-        incident_scenario=args.incident_scenario,
-    )
-    
-    result = run_lab(config)
-    
-    print(f"LAB RESULT: {'SUCCESS' if result.success else 'FAILED'} (mode={args.mode})")
-    print(f"Provider smoke: {'PASSED' if result.provider_smoke_passed else 'SKIPPED/FAILED'}")
-    print(f"Elapsed: {result.elapsed_seconds:.1f}s")
-    
-    if not result.success:
-        print(f"Failure reason: {result.failure_reason}")
-    
-    return 0 if result.success else 1
+    """Backward-compatible CLI entry point.
+
+    Delegates to k9b_otel_demo_lab_cli.run_cli() for the actual CLI logic.
+    Use module invocation for reliable execution:
+        python -m scripts.k9b_otel_demo_lab --kubeconfig /path/to/kubeconfig [options]
+        python -m scripts.k9b_otel_demo_lab_cli --kubeconfig /path/to/kubeconfig [options]
+    """
+    from .k9b_otel_demo_lab_cli import run_cli
+
+    return run_cli()
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+

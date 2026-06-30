@@ -395,3 +395,56 @@ class TestTrafficTargetFQDN:
         # Should attempt to create a traffic pod
         assert result.get("mode") == "live"
 
+
+class TestLLMFriendlyCheck:
+    """Regression tests to ensure OTel demo lab modules remain LLM-friendly."""
+
+    # LLM-friendly size threshold (lines)
+    LLM_FRIENDLY_LINE_LIMIT = 500
+
+    def test_otel_demo_lab_script_is_within_llm_friendly_limit(self) -> None:
+        """Main orchestrator script should be under 500 lines to pass LLM-friendly gate."""
+        path = Path(__file__).parent.parent / "scripts" / "k9b_otel_demo_lab.py"
+        assert path.exists(), f"Main script not found: {path}"
+
+        line_count = len(path.read_text().splitlines())
+        assert line_count <= self.LLM_FRIENDLY_LINE_LIMIT, (
+            f"scripts/k9b_otel_demo_lab.py has {line_count} lines, "
+            f"exceeding the LLM-friendly limit of {self.LLM_FRIENDLY_LINE_LIMIT}. "
+            "Consider extracting more responsibilities."
+        )
+
+    def test_otel_demo_lab_contract_module_exists(self) -> None:
+        """Contract module should exist and be importable."""
+        path = Path(__file__).parent.parent / "scripts" / "k9b_otel_demo_lab_contract.py"
+        assert path.exists(), f"Contract module not found: {path}"
+
+        # Should be under 200 lines (focused contract definitions)
+        line_count = len(path.read_text().splitlines())
+        assert line_count <= 200, (
+            f"Contract module has {line_count} lines, should be focused (<=200)"
+        )
+
+    def test_otel_demo_lab_cli_module_exists(self) -> None:
+        """CLI module should exist for command-line interface."""
+        path = Path(__file__).parent.parent / "scripts" / "k9b_otel_demo_lab_cli.py"
+        assert path.exists(), f"CLI module not found: {path}"
+
+        # Should be under 150 lines (focused CLI)
+        line_count = len(path.read_text().splitlines())
+        assert line_count <= 150, (
+            f"CLI module has {line_count} lines, should be focused (<=150)"
+        )
+
+    def test_otel_demo_lab_module_exposes_backward_compatible_main(self) -> None:
+        """Original module should keep a CLI-compatible main entry point.
+
+        This preserves the executable contract:
+            python -m scripts.k9b_otel_demo_lab --kubeconfig /path/to/kubeconfig [options]
+        """
+        from scripts import k9b_otel_demo_lab
+
+        assert callable(k9b_otel_demo_lab.main), (
+            "k9b_otel_demo_lab.main should be callable for backward compatibility"
+        )
+
