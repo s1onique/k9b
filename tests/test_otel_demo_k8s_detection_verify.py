@@ -41,8 +41,13 @@ class TestK8sDetectionVerifier:
             assert result["verified"] is False
             assert result["reason"] == "no_incident_found"
 
-    def test_verifier_returns_false_when_validation_failed(self) -> None:
-        """Verifier returns False when validation_success is False."""
+    def test_verifier_passes_regardless_of_validation_success(self) -> None:
+        """Verifier passes when scope checks pass, regardless of validation_success.
+        
+        Note: The validation_success field is deprecated for P3c discovery validation.
+        P3c now only validates scope (namespace, shipping, candidate class).
+        Root-cause evidence validation is P4c's job, not P3c's.
+        """
         from scripts.k9b_otel_demo_lab_k8s_detection import verify_unschedulable_shipping_incident_discovered
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -52,7 +57,7 @@ class TestK8sDetectionVerifier:
 
             evidence = {
                 "discovery_success": True,
-                "validation_success": False,
+                "validation_success": False,  # This is now P4c's concern, not P3c's
                 "incident_id": "inc-123",
                 "candidate_class": "pending_pod",
                 "shipping_reference_found": True,
@@ -61,8 +66,9 @@ class TestK8sDetectionVerifier:
             (detection_dir / "detection-evidence.json").write_text(json.dumps(evidence))
 
             result = verify_unschedulable_shipping_incident_discovered(artifact_dir)
-            assert result["verified"] is False
-            assert result["reason"] == "validation_failed"
+            # P3c verifier passes when scope checks pass
+            assert result["verified"] is True
+            assert result["discovery_verdict"]["root_cause_final"] is False
 
     def test_verifier_returns_false_when_no_shipping_reference(self) -> None:
         """Verifier returns False when no shipping reference found."""

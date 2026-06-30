@@ -24,7 +24,6 @@ from scripts.k9b_otel_demo_lab_k8s_detection_constants import (
 )
 from scripts.k9b_otel_demo_lab_k8s_detection_match import (
     _extract_matching_signals,
-    _validate_discovery_evidence,
     _validate_namespace,
     _validate_shipping_reference,
 )
@@ -140,7 +139,8 @@ def phase_p3c_verify_k8s_incident_discovery(
         evidence["incident_id"] = incident_id
         evidence["candidate_class"] = candidate_class
         
-        # Validation checks
+        # Validation checks - P3c validates discovery scope ONLY
+        # Root-cause evidence is validated in P4c
         namespace_matches = _validate_namespace(incident, config.namespace)
         evidence["namespace_matches"] = namespace_matches
         
@@ -159,23 +159,26 @@ def phase_p3c_verify_k8s_incident_discovery(
         evidence["matching_signals"] = _extract_matching_signals(signals)
         evidence["matching_evidence"] = evidence["matching_signals"]
         
-        # Full validation
-        evidence_validation = _validate_discovery_evidence(incident, candidate_class, config.namespace)
-        evidence["evidence_validation"] = evidence_validation
-        evidence["validation_success"] = evidence_validation.get("valid", False)
-        
-        # Phase success requires ALL validations to pass
-        all_validations_passed = (
+        # Phase success requires scope validations to pass
+        discovery_validations_passed = (
             namespace_matches and
             shipping_match and
-            candidate_class_valid and
-            evidence_validation.get("valid", False)
+            candidate_class_valid
         )
         
-        evidence["discovery_success"] = all_validations_passed
+        # NOTE: We do NOT require full evidence validation at P3c.
+        # P3c is for incident DISCOVERY, not root-cause diagnosis.
+        # deployment_unavailable is a valid symptom-level incident.
+        # Root-cause evidence (FailedScheduling, nodeSelector, etc.) is
+        # validated in P4c, not P3c.
+        evidence["scope_validation_success"] = discovery_validations_passed
+        evidence["validation_success"] = discovery_validations_passed  # Legacy compatibility
+        evidence["root_cause_validation_deferred_to"] = "P4c"
+        evidence["discovery_success"] = discovery_validations_passed
         
-        if all_validations_passed:
-            log(f"Validation PASSED: incident {incident_id} is a valid shipping incident")
+        if discovery_validations_passed:
+            log(f"P3c discovery PASSED: {candidate_class} incident found for {SHIPPING_DEPLOYMENT}")
+            log("NOTE: Root-cause evidence will be validated in P4c")
         else:
             if not namespace_matches:
                 evidence["failure_reason"] = "namespace_mismatch"
@@ -183,12 +186,9 @@ def phase_p3c_verify_k8s_incident_discovery(
             elif not shipping_match:
                 evidence["failure_reason"] = "no_shipping_reference"
                 log("Validation FAILED: no shipping reference found")
-            elif not candidate_class_valid:
+            else:
                 evidence["failure_reason"] = f"candidate_class_rejected:{candidate_class}"
                 log(f"Validation FAILED: candidate class '{candidate_class}' not accepted")
-            else:
-                evidence["failure_reason"] = "evidence_validation_failed"
-                log("Validation FAILED: evidence validation failed")
         
     else:
         log("ERROR: No incident discovered within timeout - fail-closed")

@@ -78,6 +78,10 @@ class LabPhaseResult:
     message: str
     artifacts: dict[str, Any] = field(default_factory=dict)
     duration_seconds: float = 0.0
+    # Verdict fields for K8s-native phases (P3c, P4c)
+    # These distinguish symptom-level discovery from root-cause validation
+    p3c_verdict: dict[str, Any] | None = None  # IncidentDiscoveryVerdict as dict
+    p4c_verdict: dict[str, Any] | None = None  # RootCauseEvidenceVerdict as dict
 
 
 @dataclass
@@ -94,3 +98,6 @@ class LabResult:
     verification_passed: bool = False
     verification_details: dict[str, Any] = field(default_factory=dict)
     provider_smoke_passed: bool = False
+    # K8s-native verdict summary for unschedulable-shipping scenario
+    # Distinguishes discovery success from root-cause validation success
+    k8s_native_verdict: dict[str, Any] | None = None

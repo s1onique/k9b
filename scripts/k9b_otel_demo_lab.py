@@ -174,6 +174,15 @@ def run_lab(config: LabConfig) -> LabResult:
             phase_p3c = phase_p3c_verify_k8s_incident_discovery(config, artifact_dir)
             result.phases.append(_phase_to_dict(phase_p3c))
             if not phase_p3c.success:
+                # Populate verdict even on failure for debugging
+                result.k8s_native_verdict = _build_k8s_native_verdict(
+                    p3c_success=False,
+                    p3c_phase=phase_p3c,
+                    p4c_success=None,
+                    p4c_phase=None,
+                    final_success=False,
+                    reason=f"P3c failed: {phase_p3c.message}",
+                )
                 log(f"K8S-NATIVE SCENARIO FAILED at P3c: {phase_p3c.message}")
                 result.failure_reason = f"P3c failed (K8s-native discovery): {phase_p3c.message}"
                 return _finish_result(result, artifact_dir, start_time)
@@ -185,6 +194,15 @@ def run_lab(config: LabConfig) -> LabResult:
             phase_p4c = phase_p4c_verify_k8s_mult_pass_diagnosis(config, artifact_dir)
             result.phases.append(_phase_to_dict(phase_p4c))
             if not phase_p4c.success:
+                # Populate verdict even on failure for debugging
+                result.k8s_native_verdict = _build_k8s_native_verdict(
+                    p3c_success=True,
+                    p3c_phase=phase_p3c,
+                    p4c_success=False,
+                    p4c_phase=phase_p4c,
+                    final_success=False,
+                    reason=f"P4c failed: {phase_p4c.message}",
+                )
                 log(f"K8S-NATIVE SCENARIO FAILED at P4c: {phase_p4c.message}")
                 result.failure_reason = f"P4c failed (K8s-native diagnosis): {phase_p4c.message}"
                 return _finish_result(result, artifact_dir, start_time)
@@ -192,12 +210,25 @@ def run_lab(config: LabConfig) -> LabResult:
             # K8s-native scenario succeeds
             result.success = True
             result.verification_passed = True
+            
+            # Build verdict summary that distinguishes discovery from root-cause
             result.verification_details = {
                 "scenario": "unschedulable-shipping",
                 "p2b_success": phase_p2b.success,
                 "p3c_success": phase_p3c.success,
                 "p4c_success": phase_p4c.success,
             }
+            
+            # Add K8s-native verdict with phase distinction
+            result.k8s_native_verdict = _build_k8s_native_verdict(
+                p3c_success=True,
+                p3c_phase=phase_p3c,
+                p4c_success=True,
+                p4c_phase=phase_p4c,
+                final_success=True,
+                reason="all_phases_passed",
+            )
+            
             return _finish_result(result, artifact_dir, start_time)
         
         # =====================================================================
@@ -342,13 +373,63 @@ def run_lab(config: LabConfig) -> LabResult:
 
 def _phase_to_dict(phase: LabPhaseResult) -> dict[str, Any]:
     """Convert phase result to dict."""
-    return {
+    data = {
         "phase": phase.phase,
         "success": phase.success,
         "message": phase.message,
         "artifacts": phase.artifacts,
         "duration_seconds": phase.duration_seconds,
     }
+    # Include verdict fields for K8s-native phases
+    if phase.p3c_verdict is not None:
+        data["p3c_verdict"] = phase.p3c_verdict
+    if phase.p4c_verdict is not None:
+        data["p4c_verdict"] = phase.p4c_verdict
+    return data
+
+
+def _build_k8s_native_verdict(
+    p3c_success: bool,
+    p3c_phase: LabPhaseResult | None,
+    p4c_success: bool | None,
+    p4c_phase: LabPhaseResult | None,
+    final_success: bool,
+    reason: str,
+) -> dict[str, Any]:
+    """Build K8s-native verdict dict for lab-result.json.
+    
+    This function is used in both success and failure paths to ensure
+    the verdict is always populated with phase distinction.
+    """
+    verdict: dict[str, Any] = {
+        "final": {
+            "success": final_success,
+            "reason": reason,
+        },
+    }
+    
+    # P3c verdict
+    p3c_data: dict[str, Any] = {
+        "success": p3c_success,
+        "phase": "incident_discovery",
+    }
+    if p3c_phase is not None:
+        p3c_data["incident_id"] = p3c_phase.artifacts.get("incident_id")
+        p3c_data["candidate_class"] = p3c_phase.artifacts.get("candidate_class")
+        p3c_data["root_cause_final"] = False  # P3c is symptom-level only
+    verdict["p3c"] = p3c_data
+    
+    # P4c verdict
+    p4c_data: dict[str, Any] = {
+        "phase": "root_cause_validation",
+    }
+    if p4c_success is not None:
+        p4c_data["success"] = p4c_success
+    if p4c_phase is not None:
+        p4c_data["failure_reason"] = p4c_phase.artifacts.get("failure_reason")
+    verdict["p4c"] = p4c_data
+    
+    return verdict
 
 
 def _finish_result(result: LabResult, artifact_dir: Path, start_time: float) -> LabResult:
@@ -366,7 +447,7 @@ def _finish_result(result: LabResult, artifact_dir: Path, start_time: float) -> 
 
 def _result_to_dict(result: LabResult) -> dict[str, Any]:
     """Convert LabResult to dict for JSON serialization."""
-    return {
+    data = {
         "started_at": result.started_at,
         "finished_at": result.finished_at,
         "elapsed_seconds": result.elapsed_seconds,
@@ -378,6 +459,10 @@ def _result_to_dict(result: LabResult) -> dict[str, Any]:
         "config": result.config,
         "phases": result.phases,
     }
+    # Include K8s-native verdict if present (for unschedulable-shipping scenario)
+    if result.k8s_native_verdict is not None:
+        data["k8s_native_verdict"] = result.k8s_native_verdict
+    return data
 
 
 # CLI entry point

@@ -141,6 +141,28 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         evidence["failure_reason"] = "; ".join(failures)
         log_validation_result(False, evidence["failure_reason"])
     
+    # Step 6: P4c root-cause validation - check scheduling markers
+    # This is the key P4c validation that distinguishes symptom-level discovery (P3c)
+    # from root-cause diagnosis (P4c)
+    log_step(6, "Validating scheduling root-cause evidence (P4c)")
+    from scripts.k9b_otel_demo_lab_k8s_verdicts import (
+        SCHEDULING_ROOT_CAUSE_MARKERS,
+        validate_unschedulable_shipping_root_cause,
+    )
+    root_cause_verdict = validate_unschedulable_shipping_root_cause(evidence)
+    evidence["p4c_verdict"] = root_cause_verdict.to_dict()
+    
+    if root_cause_verdict.success:
+        _log(f"  P4c root-cause validation PASSED: scheduling markers found: {list(root_cause_verdict.matched_evidence)}")
+    else:
+        _log("  P4c root-cause validation FAILED: missing scheduling root-cause evidence")
+        _log(f"  Required markers: {list(SCHEDULING_ROOT_CAUSE_MARKERS)}")
+        if not evidence["failure_reason"]:
+            evidence["failure_reason"] = "missing_scheduling_root_cause_evidence"
+        else:
+            evidence["failure_reason"] = evidence["failure_reason"] + "; missing_scheduling_root_cause_evidence"
+        evidence["validation_success"] = False
+    
     write_diagnosis_evidence(diagnosis_dir, evidence)
     duration = time.time() - start
     log_diagnosis_result(evidence["validation_success"], evidence, term_checks)

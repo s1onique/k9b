@@ -4,6 +4,11 @@
 This module provides a verification function that can be called
 after the detection phase to verify that k9b discovered the
 shipping incident.
+
+P3c Discovery Validation Semantics:
+- Validates incident discovery (scope check only)
+- Accepts deployment_unavailable as a valid symptom-level incident
+- Does NOT validate root-cause evidence (that's P4c's job)
 """
 
 from __future__ import annotations
@@ -21,6 +26,10 @@ def verify_unschedulable_shipping_incident_discovered(
     """Verify that k9b discovered the shipping incident.
     
     This is a standalone verifier that can be called after detection phase.
+    
+    P3c validates ONLY discovery (scope check). It accepts deployment_unavailable
+    as a valid symptom-level incident and does NOT require root-cause evidence.
+    Root-cause validation is deferred to P4c.
     
     Args:
         artifact_dir: Directory containing detection artifacts
@@ -47,14 +56,6 @@ def verify_unschedulable_shipping_incident_discovered(
             "evidence": evidence,
         }
     
-    # Check validation success
-    if not evidence.get("validation_success"):
-        return {
-            "verified": False,
-            "reason": "validation_failed",
-            "evidence": evidence,
-        }
-    
     # Check incident ID
     if not evidence.get("incident_id"):
         return {
@@ -63,7 +64,8 @@ def verify_unschedulable_shipping_incident_discovered(
             "evidence": evidence,
         }
     
-    # Check candidate class
+    # Check candidate class - MUST be accepted
+    # deployment_unavailable is explicitly accepted as a valid symptom-level discovery
     candidate_class = evidence.get("candidate_class", "")
     if candidate_class not in ACCEPTED_CANDIDATE_CLASSES:
         return {
@@ -88,10 +90,23 @@ def verify_unschedulable_shipping_incident_discovered(
             "evidence": evidence,
         }
     
+    # NOTE: We do NOT check validation_success here anymore.
+    # P3c is for discovery only. The validation_success field previously
+    # checked for evidence/RCA details, but that's P4c's responsibility.
+    # deployment_unavailable is a valid P3c discovery result even without
+    # scheduling-specific evidence - that evidence is checked in P4c.
+    
     return {
         "verified": True,
         "incident_id": evidence.get("incident_id"),
         "candidate_class": candidate_class,
         "namespace": evidence.get("target_namespace"),
+        "discovery_verdict": {
+            "phase": "p3c-k8s-discovery",
+            "success": True,
+            "candidate_class": candidate_class,
+            "root_cause_final": False,  # P3c is symptom-level only
+            "root_cause_validation_deferred_to": "P4c",
+        },
         "evidence": evidence,
     }

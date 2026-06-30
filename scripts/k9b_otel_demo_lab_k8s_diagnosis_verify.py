@@ -4,6 +4,11 @@
 This module provides a verification function that can be called
 after the diagnosis phase to verify that k9b's automatic diagnosis
 loop performed multi-pass diagnosis and identified the root cause.
+
+P4c Root-Cause Validation Semantics:
+- Validates root-cause evidence (scheduling markers)
+- Requires scheduling-specific evidence (FailedScheduling, nodeSelector, etc.)
+- Separated from P3c discovery validation
 """
 
 from __future__ import annotations
@@ -23,6 +28,10 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_match import (
     check_missing_root_cause_terms,
     check_read_only_violations,
 )
+from scripts.k9b_otel_demo_lab_k8s_verdicts import (
+    SCHEDULING_ROOT_CAUSE_MARKERS,
+    validate_unschedulable_shipping_root_cause,
+)
 
 
 def verify_unschedulable_shipping_mult_pass_diagnosis(
@@ -31,6 +40,9 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     """Verify that k9b performed multi-pass diagnosis for the shipping incident.
     
     This is a standalone verifier that can be called after diagnosis phase.
+    
+    P4c validates root-cause evidence with scheduling-specific markers.
+    This is SEPARATE from P3c's discovery validation.
     
     Verifier passes only if ALL of:
     - P3c detection evidence exists and is valid
@@ -41,6 +53,7 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     - Final diagnosis mentions k9b.dev/otel-lab-node
     - Final diagnosis mentions missing/no matching node/unschedulable
     - Read-only contract is maintained (no mutating checks)
+    - Scheduling root-cause markers present (FailedScheduling, nodeSelector, etc.)
     
     Args:
         artifact_dir: Directory containing diagnosis artifacts
@@ -173,6 +186,21 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
             "root_cause_summary": diagnosis_evidence.get("root_cause_summary", ""),
         }
     
+    # P4c Root-Cause Validation: Check for scheduling-specific markers
+    # This is the key P4c validation that distinguishes symptom-level discovery (P3c)
+    # from root-cause diagnosis (P4c)
+    root_cause_verdict = validate_unschedulable_shipping_root_cause(diagnosis_evidence)
+    
+    if not root_cause_verdict.success:
+        return {
+            "verified": False,
+            "reason": "missing_scheduling_root_cause_evidence",
+            "p4c_verdict": root_cause_verdict.to_dict(),
+            "root_cause_summary": diagnosis_evidence.get("root_cause_summary", ""),
+            "required_markers": list(SCHEDULING_ROOT_CAUSE_MARKERS),
+            "diagnosis_evidence": diagnosis_evidence,
+        }
+    
     # All checks passed
     return {
         "verified": True,
@@ -184,5 +212,6 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
         "root_cause_matches": term_checks,
         "read_only": diagnosis_evidence.get("read_only", True),
         "root_cause_summary": diagnosis_evidence.get("root_cause_summary", ""),
+        "p4c_verdict": root_cause_verdict.to_dict(),
         "diagnosis_evidence": diagnosis_evidence,
     }
