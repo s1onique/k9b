@@ -422,4 +422,4 @@ class TestPhasePassesVerifier:
 
             # Verifier should also pass
             verify_result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
-            assert verify_result["verified"] is True
+            assert verify_result["verified"] is True, verify_result

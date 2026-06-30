@@ -437,7 +437,7 @@ class TestP4cVerifierSchedulingMarkers:
             (diagnosis_dir / "diagnosis-evidence.json").write_text(json.dumps(diagnosis_evidence))
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
-            assert result["verified"] is True
+            assert result["verified"] is True, result
             assert "p4c_verdict" in result
             assert result["p4c_verdict"]["success"] is True
 

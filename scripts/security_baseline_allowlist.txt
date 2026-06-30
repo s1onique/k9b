@@ -134,3 +134,27 @@ ui/api_health_details.py _get_api_status api status retrieval fallback - returns
 # === UI Server Runtime ===
 ui/server_runtime.py get_provider_config_status config status retrieval fallback - non-fatal, logs error, provider is optional
 ui/server_runtime.py run_diagnosis_provider_provider initialization fallback - non-fatal, logs error, provider is optional
+
+# === OTel Instrumentation (Best-Effort No-Op Fallback) ===
+# Telemetry failures must not fail read-only diagnosis execution and do not grant
+# access, bypass policy, mutate Kubernetes state, or expose raw secrets.
+collect/otel_span_context.py add_event OTel event emission fallback - best-effort instrumentation, no credential exposure
+collect/otel_span_context.py set_ok OTel span status setter fallback - best-effort instrumentation, no credential exposure
+collect/otel_span_context.py set_error OTel span status setter fallback - best-effort instrumentation, no credential exposure
+collect/otel_span_context.py record_exception OTel exception recording fallback - best-effort instrumentation, no credential exposure
+
+collect/incident_diagnosis_loop_otel.py _get_current_span OTel span retrieval fallback - best-effort instrumentation, no credential exposure
+collect/incident_diagnosis_loop_otel.py emit_loop_span legacy loop span emission fallback - best-effort instrumentation, no credential exposure
+collect/incident_diagnosis_loop_otel.py emit_pass_span legacy pass span emission fallback - best-effort instrumentation, no credential exposure
+collect/incident_diagnosis_loop_otel.py emit_check_gate_span legacy check gate span fallback - best-effort instrumentation, no credential exposure
+collect/incident_diagnosis_loop_otel.py record_exception legacy exception recording fallback - best-effort instrumentation, no credential exposure
+collect/incident_diagnosis_loop_otel.py set_span_ok legacy span OK setter fallback - best-effort instrumentation, no credential exposure
+collect/incident_diagnosis_loop_otel.py set_span_error legacy span error setter fallback - best-effort instrumentation, no credential exposure
+
+collect/otel_helpers.py _get_tracer OTel tracer retrieval fallback - best-effort instrumentation, no credential exposure
+collect/otel_helpers.py start_span OTel span creation fallback - best-effort instrumentation, no credential exposure
+
+collect/otel_events.py _add_event_to_span legacy event emission fallback - best-effort instrumentation, no credential exposure
+
+collect/incident_diagnosis_loop_runtime_single_pass.py plan_one_read_only_diagnosis_loop_pass runtime exception boundary - bounded failure artifact, sanitized error message
+collect/incident_diagnosis_loop_runtime_single_pass.py run_read_only_checks runtime check execution boundary - bounded failure artifact, sanitized error message

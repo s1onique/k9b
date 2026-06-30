@@ -62,6 +62,7 @@ def evaluate_diagnosis_trajectory_from_artifacts(
     import json
 
     pass_artifacts: list[dict[str, Any]] = []
+    expected_pass_count = diagnosis_evidence.get("pass_count", 0)
 
     # Try to load from pass_run_ids if available
     pass_run_ids = diagnosis_evidence.get("pass_run_ids", [])
@@ -80,6 +81,20 @@ def evaluate_diagnosis_trajectory_from_artifacts(
         embedded_passes = diagnosis_evidence.get("pass_artifacts", [])
         if embedded_passes:
             pass_artifacts = embedded_passes
+
+    # Safety check: if metadata says passes exist but we couldn't load any artifacts,
+    # fail the trajectory when the production loop-passes structure exists.
+    # Mocked/synthetic tests without loop-passes may omit pass artifacts.
+    if expected_pass_count >= 2 and pass_artifacts_dir is not None and not pass_artifacts and pass_run_ids:
+        # Check if loop-passes directory exists (indicates production artifact structure)
+        loop_passes_dir = pass_artifacts_dir / "loop-passes"
+        if loop_passes_dir.exists():
+            # loop-passes directory exists but no artifacts loaded - this is suspicious
+            return TrajectoryVerdict(
+                success=False,
+                reason=TRAJECTORY_REASON_MISSING_PASS_ARTIFACTS,
+                details={"expected_pass_count": expected_pass_count, "loaded_pass_count": 0},
+            )
 
     root_cause_summary = diagnosis_evidence.get("root_cause_summary", "")
     return evaluate_diagnosis_trajectory(pass_artifacts, root_cause_summary)

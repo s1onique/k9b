@@ -212,7 +212,10 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert result["reason"] == "diagnosis_missing_scheduling_root_cause"
+            # Trajectory validation fails due to root cause terms - reason is "diagnosis_missing_mult_pass_evidence"
+            # The specific failure is in phase_result_reason which is "root_cause_terms_missing"
+            assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+            assert result["phase_result_reason"] == "root_cause_terms_missing"
 
     def test_verifier_returns_false_when_mutating_commands_found(self) -> None:
         """Verifier returns False when mutating commands are in executed checks."""
@@ -445,7 +448,7 @@ class TestK8sDiagnosisVerifier:
             (diagnosis_dir / "diagnosis-evidence.json").write_text(json.dumps(diagnosis_evidence))
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
-            assert result["verified"] is True
+            assert result["verified"] is True, result
             assert result["incident_id"] == "inc-123"
             assert result["pass_count"] == 2
             assert result["phase_result_reason"] == "diagnosis_rca_valid"
