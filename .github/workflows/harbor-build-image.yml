@@ -139,6 +139,10 @@ jobs:
           tags: |
             type=sha,prefix=,format=short
 
+      - name: BuildKit cache ref
+        run: |
+          echo "BuildKit cache ref: ${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache"
+
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
