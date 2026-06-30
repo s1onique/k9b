@@ -335,7 +335,7 @@ def test_openai_compatible_adapter_http_success(monkeypatch: Any, tmp_path: Path
     assert artifact.findings == ("latency", "storage")
     assert artifact.suggested_next_checks == ("check ingress", "check storage")
     assert artifact.payload == fake_review_enrichment
-    assert artifact.provider == "llamacpp"
+    assert artifact.provider == "openai_compatible"
 
 
 def test_openai_compatible_adapter_http_failure(monkeypatch: Any, tmp_path: Path) -> None:
@@ -410,7 +410,7 @@ def test_openai_compatible_adapter_http_review_payload(monkeypatch: Any, tmp_pat
         ExternalAnalysisRequest(run_id="r", cluster_label="c", source_artifact=str(review_path))
     )
     assert artifact.status == ExternalAnalysisStatus.SUCCESS
-    assert artifact.provider == "llamacpp"
+    assert artifact.provider == "openai_compatible"
     assert artifact.summary == "Review insight"
     assert artifact.findings == ("latency",)
     assert artifact.suggested_next_checks == ("check ingress",)

@@ -70,6 +70,11 @@ cli_snapshot_assess_handlers.py handle_assess_snapshots CLI snapshot assessment 
 health/loop_vmalert_discovery.py run_vmalert_discovery vmalert verification failure boundary - graceful continue, non-fatal verification failures
 llm/llamacpp_provider_response.py _extract_response_diagnostics best-effort diagnostics extraction - graceful continue, no credential exposure
 
+# === External Analysis OpenAI-Compatible Adapter ===
+external_analysis/openai_compatible_adapter_http.py run_http_assessment LLM HTTP assessment catch-all boundary - comprehensive error handling for provider.assess(), no credential exposure
+external_analysis/openai_compatible_adapter_http.py build_generic_failure_metadata LLM failure metadata build catch-all - graceful failure reporting, no credential exposure
+llm/openai_compatible_provider_response.py _extract_response_diagnostics best-effort diagnostics extraction - graceful continue, no credential exposure
+
 # === Extracted UI Read Handlers ===
 ui/server_run_reads.py load_context_for_run graceful context loading fallback - graceful continue, no credential exposure
 ui/server_run_reads.py _get_llm_activity_from_index graceful LLM activity index loading - graceful continue, no credential exposure

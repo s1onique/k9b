@@ -605,7 +605,7 @@ class OpenAICompatibleProviderTest(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             provider._extract_assessment("plain string response")
         message = str(ctx.exception)
-        self.assertIn("llama.cpp response expected an object but got str", message)
+        self.assertIn("response expected an object but got str", message)
         self.assertIn('response snippet: "plain string response"', message)
 
     def test_assess_reports_top_level_string(self) -> None:
@@ -620,7 +620,7 @@ class OpenAICompatibleProviderTest(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             provider.assess("prompt", self._dummy_payload())
         message = str(ctx.exception)
-        self.assertIn("llama.cpp response expected an object but got str", message)
+        self.assertIn("response expected an object but got str", message)
         self.assertIn('response snippet: "plain string response"', message)
 
     def test_http_error_includes_status_body_and_endpoint(self) -> None:

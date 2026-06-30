@@ -122,11 +122,11 @@ class LogPromptDiagnosticsTest(unittest.TestCase):
 class ReviewEnrichmentFailureMetadataTest(unittest.TestCase):
     """Tests for review enrichment LLM call labeling and failure metadata."""
 
-    def test_llamacpp_adapter_adds_llm_fields_to_failure_metadata(self) -> None:
-        """LlamaCpp adapter includes llm_call and llm_call_id in failure metadata."""
+    def test_openai_compatible_adapter_adds_llm_fields_to_failure_metadata(self) -> None:
+        """OpenAICompatible adapter includes llm_call and llm_call_id in failure metadata."""
         import inspect
 
-        from k8s_diag_agent.external_analysis.llamacpp_adapter_http import build_generic_failure_metadata
+        from k8s_diag_agent.external_analysis.openai_compatible_adapter_http import build_generic_failure_metadata
 
         source = inspect.getsource(build_generic_failure_metadata)
 
@@ -134,11 +134,11 @@ class ReviewEnrichmentFailureMetadataTest(unittest.TestCase):
         self.assertIn("llm_call", source)
         self.assertIn("llm_call_id", source)
 
-    def test_llamacpp_adapter_uses_build_llm_call_id(self) -> None:
+    def test_openai_compatible_adapter_uses_build_llm_call_id(self) -> None:
         """run_http_assessment uses build_llm_call_id helper."""
         import inspect
 
-        from k8s_diag_agent.external_analysis.llamacpp_adapter_http import run_http_assessment
+        from k8s_diag_agent.external_analysis.openai_compatible_adapter_http import run_http_assessment
 
         source = inspect.getsource(run_http_assessment)
 

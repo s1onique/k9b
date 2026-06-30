@@ -192,11 +192,14 @@ class TestPhaseFailureCriteria:
             (p3c_dir / "detection-evidence.json").write_text(json.dumps(p3c_evidence))
 
             # Mock simulation result
+            # NOTE: real_loop_invoked=True is required to pass the early short-circuit check
+            # in the phase function (automatic_diagnosis_loop_disabled gate).
+            # Once past that gate, the phase tests the specific failure criteria.
             sim_loop_result = {
                 "diagnosis_source": DIAGNOSIS_SOURCE_SIMULATED,
                 "simulation_used": True,
                 "automatic_loop_enabled": False,
-                "real_loop_invoked": False,
+                "real_loop_invoked": True,
                 "real_pass_artifacts_found": False,
                 "pass_artifact_paths": [],
                 "provider_invocation_attempted": False,
@@ -228,8 +231,12 @@ class TestPhaseFailureCriteria:
             assert result.success is False
             assert "simulation_used_but_not_allowed" in result.message
 
-    def test_phase_fails_when_real_loop_not_invoked(self) -> None:
-        """Phase fails when real loop was not invoked."""
+    def test_phase_fails_when_automatic_diagnosis_loop_disabled(self) -> None:
+        """Phase fails when automatic diagnosis loop is disabled (real loop not invoked).
+
+        The phase short-circuits with 'automatic_diagnosis_loop_disabled' when
+        real_loop_invoked=False, before checking specific failure criteria.
+        """
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
             DIAGNOSIS_SOURCE_REAL,
         )
@@ -285,9 +292,9 @@ class TestPhaseFailureCriteria:
                 )
                 result = phase_p4c_verify_k8s_mult_pass_diagnosis(config, artifact_dir)
 
-            # Phase should fail
+            # Phase should fail with automatic_diagnosis_loop_disabled message
             assert result.success is False
-            assert "real_loop_not_invoked" in result.message
+            assert "automatic_diagnosis_loop_disabled" in result.message
 
     def test_phase_fails_when_read_only_contract_violated(self) -> None:
         """Phase fails when mutating commands are detected."""
