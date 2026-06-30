@@ -82,7 +82,7 @@ class TestLoopStateBasics(unittest.TestCase):
 
     def test_schema_version_is_defined(self) -> None:
         """LOOP_SCHEMA_VERSION is defined."""
-        self.assertEqual(LOOP_SCHEMA_VERSION, "1.0")
+        self.assertEqual(LOOP_SCHEMA_VERSION, "2.0")
         self.assertIsInstance(LOOP_SCHEMA_VERSION, str)
 
     def test_new_loop_state_includes_schema_version(self) -> None:

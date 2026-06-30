@@ -42,6 +42,7 @@ from .incident_next_check_policy import (
     DISALLOWED_ACTIONS,
     validate_next_check_proposal,
 )
+from .incident_next_check_policy_registry import READ_ONLY_CHECK_REGISTRY
 
 __all__ = [
     "RUNNER_SCHEMA_VERSION",
@@ -142,6 +143,41 @@ def _revalidate_check(check: Mapping[str, object]) -> tuple[bool, dict[str, Any]
         return False, None, result.rejection_reason
 
 
+def _sanitize_parameters(
+    check_id: str,
+    parameters: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """Sanitize parameters against registry allowlist.
+
+    This enforces parameter allowlisting even in testing mode where
+    revalidation is skipped.
+
+    Args:
+        check_id: The check ID to look up allowed parameters
+        parameters: The parameters to sanitize
+
+    Returns:
+        Sanitized parameters dict with only allowed keys
+    """
+    # Defensive: ensure parameters is a valid Mapping
+    if not isinstance(parameters, Mapping):
+        return {}
+
+    # Get allowed parameters from registry
+    if check_id not in READ_ONLY_CHECK_REGISTRY:
+        return {}
+
+    registry_entry = READ_ONLY_CHECK_REGISTRY[check_id]
+    allowed_params = registry_entry.get("allowed_parameters", frozenset())
+
+    # Filter to only allowed parameters
+    return {
+        key: value
+        for key, value in parameters.items()
+        if key in allowed_params
+    }
+
+
 # =============================================================================
 # Main Runner Function
 # =============================================================================
@@ -229,6 +265,15 @@ def run_read_only_checks(
         if skip_revalidation:
             validated_check: dict[str, Any] = dict(check)
             validated_check_id = str(check_id) if check_id else None
+
+            # Sanitize parameters even in testing mode for security
+            if validated_check_id:
+                raw_params = validated_check.get("parameters")
+                sanitized_params = _sanitize_parameters(validated_check_id, raw_params)
+                if sanitized_params:
+                    validated_check["parameters"] = sanitized_params
+                elif "parameters" in validated_check:
+                    del validated_check["parameters"]
         else:
             # Normal mode: revalidate checks against policy
             accepted, sanitized, rejection_reason = _revalidate_check(check)
