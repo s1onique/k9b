@@ -10,11 +10,20 @@ Regression tests for:
 
 import subprocess
 from pathlib import Path
+from typing import Any, cast
 
 import yaml
 
 
-def _rendered_scheduler_deployment() -> dict:
+def _load_yaml_mapping(content: str) -> dict[str, Any]:
+    """Parse YAML content and assert it is a mapping dict."""
+    loaded: object = yaml.safe_load(content)
+    if not isinstance(loaded, dict):
+        raise AssertionError("YAML content must parse to a mapping")
+    return cast(dict[str, Any], loaded)
+
+
+def _rendered_scheduler_deployment() -> dict[str, Any]:
     """Render the live-lab manifest and return the scheduler Deployment dict."""
     result = subprocess.run(
         [
@@ -28,7 +37,7 @@ def _rendered_scheduler_deployment() -> dict:
     )
     for doc in yaml.safe_load_all(result.stdout):
         if doc and doc.get("kind") == "Deployment" and doc["metadata"]["name"].endswith("scheduler"):
-            return doc
+            return cast(dict[str, Any], doc)
     raise AssertionError("scheduler Deployment not found in rendered manifest")
 
 
@@ -43,7 +52,7 @@ def _scheduler_env() -> dict[str, str]:
     return {e["name"]: e.get("value") for e in scheduler_container.get("env", [])}
 
 
-def _health_config_data() -> dict:
+def _health_config_data() -> dict[str, Any]:
     """Return the parsed health-config.json data from the rendered ConfigMap."""
     result = subprocess.run(
         [
@@ -58,7 +67,7 @@ def _health_config_data() -> dict:
     for doc in yaml.safe_load_all(result.stdout):
         if doc and doc.get("kind") == "ConfigMap" and doc["metadata"]["name"].endswith("health-config"):
             health_config_raw = doc["data"]["health-config.json"]
-            return yaml.safe_load(health_config_raw)
+            return _load_yaml_mapping(health_config_raw)
     raise AssertionError("health-config ConfigMap not found in rendered manifest")
 
 
