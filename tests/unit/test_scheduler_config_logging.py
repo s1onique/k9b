@@ -323,8 +323,8 @@ class TestLlamaCppFieldsDirectly(unittest.TestCase):
         self.assertTrue(metadata.get("llamacpp_enabled"))
         # Should include defaults from LlamaCppProviderConfig
         self.assertEqual(metadata.get("llamacpp_timeout_seconds"), 120)  # DEFAULT_TIMEOUT_SECONDS
-        self.assertEqual(metadata.get("llamacpp_max_tokens_auto_drilldown"), 768)  # DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
-        self.assertEqual(metadata.get("llamacpp_max_tokens_review_enrichment"), 1200)  # DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT
+        self.assertEqual(metadata.get("llamacpp_max_tokens_auto_drilldown"), 3072)  # DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
+        self.assertEqual(metadata.get("llamacpp_max_tokens_review_enrichment"), 4096)  # DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT
         self.assertFalse(metadata.get("llamacpp_response_format_json"))  # Default is False
 
     def test_llamacpp_response_format_json_true(self) -> None:

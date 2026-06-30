@@ -87,20 +87,14 @@ class TestLiveLabExternalAnalysisConfig:
         assert isinstance(external_analysis["adapters"], list), "adapters must be a list"
         assert len(external_analysis["adapters"]) > 0, "adapters[] must not be empty"
 
-    def test_adapters_contain_llamacpp_enabled(self, external_analysis: dict[str, Any]) -> None:
-        """adapters[] must contain an enabled llamacpp adapter."""
+    def test_adapters_contain_openai_compatible_enabled(self, external_analysis: dict[str, Any]) -> None:
+        """adapters[] must contain an enabled openai_compatible adapter."""
         adapters = external_analysis.get("adapters", [])
-        llamacpp_found = False
-        for adapter in adapters:
-            if adapter.get("name") == "llamacpp":
-                llamacpp_found = True
-                assert adapter.get("enabled") is True, (
-                    "llamacpp adapter must be enabled=true"
-                )
-                break
-        assert llamacpp_found, (
-            "adapters[] must contain an entry for name=llamacpp"
-        )
+        assert any(
+            adapter.get("name") == "openai_compatible"
+            and adapter.get("enabled") is True
+            for adapter in adapters
+        ), "adapters[] must contain an enabled entry for name=openai_compatible"
 
     def test_auto_drilldown_enabled(self, external_analysis: dict[str, Any]) -> None:
         """auto_drilldown must be enabled."""

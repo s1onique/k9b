@@ -266,11 +266,11 @@ class TestSchemaValidationValueErrorProductionPath(unittest.TestCase):
 class TestDefaultMaxTokensAutoDrilldown(unittest.TestCase):
     """Verify max_tokens constraints are maintained."""
 
-    def test_default_max_tokens_remains_768(self) -> None:
-        """Verify default max_tokens_auto_drilldown is still 768 per constraints."""
-        from k8s_diag_agent.llm.llamacpp_provider import DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
+    def test_default_max_tokens_remains_3072(self) -> None:
+        """Verify default max_tokens_auto_drilldown is 3072 per current contract."""
+        from k8s_diag_agent.llm.llamacpp_provider_config import DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN
 
-        self.assertEqual(DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, 768)
+        self.assertEqual(DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN, 3072)
 
 
 if __name__ == "__main__":
