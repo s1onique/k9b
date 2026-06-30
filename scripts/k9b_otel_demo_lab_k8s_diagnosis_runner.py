@@ -38,6 +38,8 @@ def run_diagnosis_loop(
     max_passes: int = DEFAULT_MAX_PASSES,
     max_checks_per_pass: int = DEFAULT_MAX_CHECKS_PER_PASS,
     allow_simulation: bool = False,
+    kubeconfig: str | None = None,
+    namespace: str = "k9b",
 ) -> dict[str, Any]:
     """Run the automatic diagnosis loop for an incident.
 
@@ -46,6 +48,11 @@ def run_diagnosis_loop(
     the real loop is unavailable. Simulation is only allowed when
     explicitly enabled via allow_simulation=True.
 
+    Architecture note:
+        The automatic diagnosis loop is a SCHEDULER feature. This function
+        checks the scheduler deployment's env vars via kubectl when kubeconfig
+        is provided, to verify the loop is enabled on the scheduler.
+
     Args:
         incident_id: The incident ID to diagnose
         external_analysis_dir: Directory for diagnosis artifacts
@@ -53,6 +60,8 @@ def run_diagnosis_loop(
         max_checks_per_pass: Maximum checks per pass
         allow_simulation: If True, allow simulation fallback for testing.
                           NEVER set this in production/live-lab.
+        kubeconfig: Optional path to kubeconfig for checking scheduler deployment
+        namespace: Namespace where k9b scheduler runs (default: "k9b")
 
     Returns:
         Dict with diagnosis loop results. On failure, includes
@@ -97,7 +106,16 @@ def run_diagnosis_loop(
         )
 
         result["diagnosis_loop_module"] = "k8s_diag_agent.collect.incident_diagnosis_auto_loop"
-        result["automatic_loop_enabled"] = is_automatic_diagnosis_loop_enabled()
+
+        # Check if automatic diagnosis is enabled on the SCHEDULER (not backend)
+        # This is the authoritative check for whether the loop will run.
+        # Use fail-closed behavior: if we can't read the scheduler deployment,
+        # return False instead of masking with local env.
+        result["automatic_loop_enabled"] = is_automatic_diagnosis_loop_enabled(
+            kubeconfig=kubeconfig,
+            namespace=namespace,
+            allow_env_fallback=False,
+        )
 
         # Check if automatic diagnosis is enabled - FAIL CLOSED
         if not result["automatic_loop_enabled"]:

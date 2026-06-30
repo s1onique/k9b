@@ -118,6 +118,8 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         external_analysis_dir=external_analysis_dir,
         max_passes=DEFAULT_MAX_PASSES,
         max_checks_per_pass=DEFAULT_MAX_CHECKS_PER_PASS,
+        kubeconfig=config.kubeconfig,
+        namespace=config.namespace,
     )
     
     evidence = _merge_diagnosis_result(evidence, diagnosis_result)
@@ -129,7 +131,7 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         failure_msg = (
             "automatic_diagnosis_loop_disabled: "
             "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED must be set to true "
-            "in the live-lab workflow and/or backend/scheduler deployment. "
+            "on the k9b-scheduler deployment (not backend). "
             f"Current failure_reason: {evidence.get('failure_reason', 'unknown')}"
         )
         evidence["failure_reason"] = failure_msg

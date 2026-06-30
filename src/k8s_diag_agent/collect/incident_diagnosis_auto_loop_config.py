@@ -5,11 +5,22 @@ This module provides:
 - EligibilityResult dataclass for eligibility checks
 - Status constants for active/terminal incident states
 - is_automatic_diagnosis_loop_enabled() gate function
+
+Architecture note:
+    The automatic diagnosis loop is a SCHEDULER feature, not a backend feature.
+    The scheduler deployment must have K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true
+    for the loop to run. The backend does NOT need this env var.
+
+    When running in a Kubernetes context (kubeconfig available), this function
+    checks the scheduler deployment's env vars via kubectl. When running in
+    a local/test context without cluster access, it falls back to os.environ.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -35,17 +46,115 @@ __all__ = [
 # =============================================================================
 
 _AUTOMATIC_LOOP_ENV_VAR = "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"
+_SCHEDULER_DEPLOYMENT = "k9b-scheduler"
+_SCHEDULER_CONTAINER = "scheduler"
 
 
-def is_automatic_diagnosis_loop_enabled() -> bool:
-    """Check if automatic diagnosis loop is enabled.
+def _get_deployment_env_value(
+    kubeconfig: str | None,
+    namespace: str,
+    deployment: str,
+    env_var: str,
+) -> str | None:
+    """Get environment variable value from a Kubernetes Deployment.
 
-    Default is False (disabled) for safety.
-    Must be explicitly enabled via environment variable.
+    This reads the deployment spec directly, not runtime container env.
+    Suitable for checking if the env var is CONFIGURED in the deployment.
+
+    Note: Only includes --kubeconfig flag when kubeconfig is non-empty.
+    When kubeconfig is None/empty, kubectl falls back to in-cluster config
+    or $HOME/.kube/config as per Kubernetes behavior.
+
+    Args:
+        kubeconfig: Path to kubeconfig file (None for in-cluster)
+        namespace: Namespace where the deployment lives
+        deployment: Name of the deployment
+        env_var: Environment variable name to retrieve
 
     Returns:
-        True if K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true
+        The env var value if found, None if not set or on error.
     """
+    cmd: list[str] = ["kubectl"]
+    if kubeconfig:
+        cmd.extend(["--kubeconfig", kubeconfig])
+    cmd.extend([
+        "-n", namespace,
+        "get", "deployment",
+        deployment,
+        "-o", "json",
+    ])
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        if result.returncode != 0:
+            return None
+
+        deployment_obj = json.loads(result.stdout)
+        containers = deployment_obj.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+
+        for container in containers:
+            env_list = container.get("env", [])
+            for env_entry in env_list:
+                if env_entry.get("name") == env_var:
+                    return str(env_entry.get("value")) if env_entry.get("value") is not None else None
+
+        return None
+
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
+        return None
+
+
+def is_automatic_diagnosis_loop_enabled(
+    kubeconfig: str | None = None,
+    namespace: str = "k9b",
+    *,
+    allow_env_fallback: bool = True,
+) -> bool:
+    """Check if automatic diagnosis loop is enabled on the scheduler.
+
+    Architecture: The automatic diagnosis loop belongs to the SCHEDULER,
+    not the backend. This function checks the scheduler deployment's
+    environment configuration.
+
+    When kubeconfig is provided and the cluster is accessible, it reads
+    the env var directly from the scheduler deployment spec. This is the
+    authoritative source for whether the loop is enabled.
+
+    Args:
+        kubeconfig: Optional path to kubeconfig. If None, uses in-cluster config.
+        namespace: Namespace where k9b scheduler runs (default: "k9b")
+        allow_env_fallback: If True (default), falls back to os.environ when
+            kubectl fails (useful for local dev). If False, returns False when
+            cluster is not accessible (fail-closed for live-lab verification).
+
+    Returns:
+        True if K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true on scheduler deployment
+    """
+    # First, try to read from scheduler deployment in cluster
+    # This is the authoritative source for the scheduler's configuration
+    scheduler_env_value = _get_deployment_env_value(
+        kubeconfig=kubeconfig,
+        namespace=namespace,
+        deployment=_SCHEDULER_DEPLOYMENT,
+        env_var=_AUTOMATIC_LOOP_ENV_VAR,
+    )
+
+    if scheduler_env_value is not None:
+        return scheduler_env_value.lower() == "true"
+
+    # Fail-closed for live-lab: when cluster is not accessible,
+    # return False instead of masking the real scheduler state
+    if not allow_env_fallback:
+        return False
+
+    # Fallback to local environment for local development/testing
+    # when cluster is not accessible
     return os.environ.get(_AUTOMATIC_LOOP_ENV_VAR, "false").lower() == "true"
 
 
