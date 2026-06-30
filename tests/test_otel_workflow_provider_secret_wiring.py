@@ -1,6 +1,6 @@
 """Tests for OTel workflow provider secret wiring (mirrors CNPG contract).
 
-These tests verify that the OTel demo incident lab workflow correctly wires
+These tests verify that the OTel live lab workflow correctly wires
 LLM diagnosis credentials using the same contract as CNPG live lab.
 
 Contract with CNPG live lab:
@@ -8,11 +8,15 @@ Contract with CNPG live lab:
 - Cluster secret:  k9b-diagnosis-credentials
 - Secret keys:     K9B_DIAGNOSIS_API_KEY, K9B_EXTERNAL_ANALYSIS_API_KEY
 - Provider:        openai_compatible
+
+NOTE: This file tests the OTel LIVE LAB workflow (k9b-otel-demo-live-lab.yml).
+CI-only workflow (k9b-otel-demo-incident-lab.yml) is scaffold-only.
 """
 
 from pathlib import Path
 
-WORKFLOW = Path(".github/workflows/k9b-otel-demo-incident-lab.yml")
+WORKFLOW = Path(".github/workflows/k9b-otel-demo-live-lab.yml")
+CI_ONLY_WORKFLOW = Path(".github/workflows/k9b-otel-demo-incident-lab.yml")
 
 
 class TestOtelWorkflowProviderSecretWiring:
@@ -338,3 +342,20 @@ class TestOtelWorkflowSchedulerRenderedManifest:
         # Check for the specific env var being set to openai_compatible
         assert 'name: K9B_EXTERNAL_ANALYSIS_PROVIDER' in manifest
         assert 'value: "openai_compatible"' in manifest
+
+
+class TestOtelCiWorkflowIsCiOnly:
+    """Test that CI-only workflow stays small and does NOT contain live-lab markers."""
+
+    def test_ci_workflow_is_ci_only(self) -> None:
+        """CI-only workflow should NOT contain live-lab markers."""
+        text = CI_ONLY_WORKFLOW.read_text()
+        # CI-only workflow should have CI markers
+        assert "K3s OTel Demo Incident Lab CI" in text
+        assert "build-and-verify" in text
+        # CI-only workflow should NOT have live-lab markers
+        assert "live-k3s-lab" not in text
+        assert "harbor-pve1.spbnix.local" not in text
+        assert "diagnosisProvider.existingSecret=k9b-diagnosis-credentials" not in text
+        assert "Ensure k9b lab baseline" not in text
+        assert "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true" not in text

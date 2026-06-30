@@ -14,6 +14,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OTEL_WORKFLOW = REPO_ROOT / ".github/workflows/k9b-otel-demo-incident-lab.yml"
+OTEL_LIVE_LAB_WORKFLOW = REPO_ROOT / ".github/workflows/k9b-otel-demo-live-lab.yml"
 OTEL_ORCHESTRATOR = REPO_ROOT / "scripts/k9b_otel_demo_lab.py"
 PROVIDER_HEALTH = REPO_ROOT / "scripts/k9b_otel_demo_lab_provider_health.py"
 DEPLOYMENT_PHASES = REPO_ROOT / "scripts/k9b_otel_demo_lab_deployment.py"

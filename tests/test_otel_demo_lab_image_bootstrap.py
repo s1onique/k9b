@@ -6,20 +6,25 @@ These tests ensure that:
 3. OTel does not use local-only k3s ctr images import as the primary path
 4. OTel does not use latest tag
 5. The common baseline helper accepts and forwards Helm image overrides
+
+NOTE: This file tests the OTel LIVE LAB workflow (k9b-otel-demo-live-lab.yml).
+CI-only workflow (k9b-otel-demo-incident-lab.yml) does not have image bootstrap.
 """
 
 import re
 from pathlib import Path
 
-# Path to the OTel demo workflow file
-OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
+# Path to the OTel demo live lab workflow file
+OTEL_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-live-lab.yml"
+# CI-only workflow for reference (should NOT have these features)
+OTEL_CI_WORKFLOW_FILE = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
 
 
 class TestOTelLiveLabImageBootstrap:
     """Test that OTel live lab uses Harbor-based image bootstrap."""
 
     def test_workflow_file_exists(self) -> None:
-        """The OTel demo workflow file should exist."""
+        """The OTel demo live lab workflow file should exist."""
         assert OTEL_WORKFLOW_FILE.exists(), f"OTel workflow not found at {OTEL_WORKFLOW_FILE}"
 
     def test_build_lab_images_job_exists(self) -> None:
@@ -236,20 +241,8 @@ class TestWorkflowDoesNotDrift:
         """Workflow should include k9b-image-builder.yml in path triggers."""
         content = OTEL_WORKFLOW_FILE.read_text()
 
-        # Find the path triggers section
-        path_section_start = content.find("paths:")
-        path_section_end = content.find(")", path_section_start)
-
-        if path_section_end == -1:
-            path_section_end = content.find("push:", path_section_start)
-
-        # path_section is intentionally extracted but not used in assertions
-        # (workflow name check below is the relevant assertion)
-        _ = content[path_section_start:path_section_end]
-
         # The workflow should be aware of image-related changes
-        # (Note: This is a policy test - the workflow triggers on specific files)
-        assert "k9b-otel-demo-incident-lab" in content, \
+        assert "k9b-otel-demo-live-lab" in content, \
             "Workflow should be in the triggers"
 
 
