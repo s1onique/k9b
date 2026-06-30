@@ -122,6 +122,25 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     
     evidence = _merge_diagnosis_result(evidence, diagnosis_result)
     
+    # Step 3b: Fail immediately if real loop was not invoked
+    # This is the most common P4c failure - the diagnosis loop never ran.
+    # Fail fast with a clear message instead of cascading through term checks.
+    if not evidence.get("real_loop_invoked", False):
+        failure_msg = (
+            "automatic_diagnosis_loop_disabled: "
+            "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED must be set to true "
+            "in the live-lab workflow and/or backend/scheduler deployment. "
+            f"Current failure_reason: {evidence.get('failure_reason', 'unknown')}"
+        )
+        evidence["failure_reason"] = failure_msg
+        evidence["validation_success"] = False
+        write_diagnosis_evidence(diagnosis_dir, evidence)
+        log_step(3, "Validating k9b automatic diagnosis loop invocation")
+        _log(f"  FATAL: {failure_msg}")
+        duration = time.time() - start
+        log_phase_footer(duration)
+        return _build_result(evidence, start, diagnosis_dir, success=False, term_checks={})
+    
     # Step 4: Check root-cause terms
     log_step(4, "Checking root-cause terms in diagnosis")
     term_checks = _check_root_cause_terms(evidence["root_cause_summary"])
