@@ -12,16 +12,43 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Show tool cache before setup
+    - name: Show tool cache diagnostics
       shell: bash
       run: |
         echo "RUNNER_TOOL_CACHE=${RUNNER_TOOL_CACHE:-<unset>}"
+        echo "AGENT_TOOLSDIRECTORY=${AGENT_TOOLSDIRECTORY:-<unset>}"
         echo "runner.tool_cache=${{ runner.tool_cache }}"
+        echo "=== Top-level tool cache contents ==="
+        ls -la "${{ runner.tool_cache }}" 2>/dev/null || echo "Tool cache root not accessible"
+        echo "=== Python tool cache contents ==="
         find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type d -print 2>/dev/null | sort || true
         find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type f -name '*.complete' -print 2>/dev/null | sort || true
 
-    - name: Restore Python tool cache
+    - name: Check local Python tool cache
+      id: local-python-tool-cache
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        tool_cache="${{ runner.tool_cache }}"
+        echo "Checking local Python tool cache at: ${tool_cache}/Python"
+
+        # Look for executable Python 3.13 under the tool cache
+        if find "${tool_cache}/Python" \
+          -type f \
+          -path "*/3.13.*/*/bin/python3*" \
+          -perm -111 \
+          2>/dev/null | grep -q .; then
+          echo "hit=true" >> "$GITHUB_OUTPUT"
+          echo "Local Python 3.13 tool cache hit"
+        else
+          echo "hit=false" >> "$GITHUB_OUTPUT"
+          echo "Local Python 3.13 tool cache miss"
+        fi
+
+    - name: Restore Python tool cache (remote fallback)
       id: cache-python
+      if: steps.local-python-tool-cache.outputs.hit != 'true'
       uses: actions/cache/restore@v6
       with:
         path: ${{ runner.tool_cache }}/Python
@@ -35,7 +62,7 @@ runs:
         cache: 'pip'
 
     - name: Save Python tool cache
-      if: steps.cache-python.outputs.cache-hit != 'true'
+      if: steps.local-python-tool-cache.outputs.hit != 'true' && steps.cache-python.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       continue-on-error: true
       with:
