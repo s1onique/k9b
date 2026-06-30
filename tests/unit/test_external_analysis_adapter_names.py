@@ -175,10 +175,10 @@ class TestBuildAdaptersWithCanonicalName(unittest.TestCase):
         )
         adapters = build_external_analysis_adapters([config])
 
-        # The adapter is registered under "openai_compatible" name
+        # The adapter is registered under canonical "openai_compatible" name
         self.assertEqual(len(adapters), 1)
-        # Adapter instance keys remain "llamacpp" until Phase 3 artifact/UI migration
-        self.assertIn("llamacpp", adapters)
+        self.assertIn("openai_compatible", adapters)
+        self.assertNotIn("llamacpp", adapters)
 
 
 class TestBuildAdaptersWithLegacyName(unittest.TestCase):
@@ -204,10 +204,9 @@ class TestBuildAdaptersWithLegacyName(unittest.TestCase):
         # Should not raise - legacy name should work
         adapters = build_external_analysis_adapters([config])
 
-        # The adapter is registered under "llamacpp" name
+        # The adapter is registered under the canonical name (normalized)
         self.assertEqual(len(adapters), 1)
-        # Adapter instance name is "llamacpp" (the class's name attribute)
-        self.assertIn("llamacpp", adapters)
+        self.assertIn("openai_compatible", adapters)
 
 
 class TestGetAvailableAdapterNames(unittest.TestCase):
