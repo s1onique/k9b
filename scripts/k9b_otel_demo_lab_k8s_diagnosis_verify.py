@@ -34,6 +34,9 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_match import (
     check_missing_root_cause_terms,
     check_read_only_violations,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_trajectory import (
+    validate_trajectory_for_p4c,
+)
 from scripts.k9b_otel_demo_lab_k8s_verdicts import (
     P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
     P4C_REASON_DIAGNOSIS_MISSING_SCHEDULING_RC,
@@ -204,6 +207,26 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
             "phase": "p4c-k8s-multipass-diagnosis",
         }
     
+    # NEW: Validate trajectory - check loop safety and quality
+    # Get pass artifacts directory
+    diagnosis_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis"
+    pass_artifacts_dir = diagnosis_dir / "loop-passes" if (diagnosis_dir / "loop-passes").exists() else diagnosis_dir
+    
+    trajectory_valid, trajectory_verdict = validate_trajectory_for_p4c(
+        diagnosis_evidence=diagnosis_evidence,
+        pass_artifacts_dir=pass_artifacts_dir,
+    )
+    
+    if not trajectory_valid:
+        return {
+            "verified": False,
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+            "phase_result_reason": trajectory_verdict.reason,
+            "trajectory_verdict": trajectory_verdict.to_dict(),
+            "trajectory_valid": False,
+            "phase": "p4c-k8s-multipass-diagnosis",
+        }
+    
     # Check root-cause terms with specific error reason
     all_terms_present, term_checks = check_missing_root_cause_terms(diagnosis_evidence)
     if not all_terms_present:
@@ -250,6 +273,8 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
         "read_only": diagnosis_evidence.get("read_only", True),
         "root_cause_summary": diagnosis_evidence.get("root_cause_summary", ""),
         "p4c_verdict": root_cause_verdict.to_dict(),
+        "trajectory_verdict": trajectory_verdict.to_dict(),
+        "trajectory_valid": trajectory_valid,
         "diagnosis_evidence": diagnosis_evidence,
         "phase": "p4c-k8s-multipass-diagnosis",
     }

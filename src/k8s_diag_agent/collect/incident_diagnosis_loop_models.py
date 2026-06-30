@@ -16,12 +16,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+# Import LoopStopReason from policy module for typed stop reasons
+from .incident_diagnosis_loop_policy import LoopStopReason as TypedLoopStopReason
+
 # =============================================================================
 # Constants
 # =============================================================================
 
 # Schema version for tracking structure evolution
-LOOP_SCHEMA_VERSION = "1.0"
+LOOP_SCHEMA_VERSION = "2.0"
 
 # Default bounds
 DEFAULT_MAX_PASSES = 3
@@ -61,15 +64,9 @@ class LoopDecision(StrEnum):
     STOP_NO_CHECKS_PROPOSED = "stop_no_checks_proposed"
 
 
-class StopReason(StrEnum):
-    """Why the loop stopped."""
-
-    ROOT_CAUSE_FOUND = "root_cause_found"
-    BUDGET_EXHAUSTED = "budget_exhausted"
-    NO_SAFE_CHECKS = "no_safe_checks"
-    LOW_CONFIDENCE_NO_PROGRESS = "low_confidence_no_progress"
-    SAFETY_BLOCKED = "safety_blocked"
-    NO_CHECKS_PROPOSED = "no_checks_proposed"
+# StopReason is now imported from incident_diagnosis_loop_policy as LoopStopReason
+# This alias provides backward compatibility for code still using StopReason
+StopReason = TypedLoopStopReason
 
 
 class Confidence(StrEnum):
