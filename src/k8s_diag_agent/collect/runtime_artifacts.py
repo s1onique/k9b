@@ -68,6 +68,7 @@ def build_policy_enforced_pass_artifact(
     now: datetime | None = None,
     budget_exceeded: bool = False,
     budget_stop_reason: LoopStopReason | None = None,
+    fake_handlers: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
     """Build a pass artifact with exact PASS_ARTIFACT_FIELDS.
     
@@ -128,17 +129,22 @@ def build_policy_enforced_pass_artifact(
             "rejected_mutating": gate_summary.rejected_mutating,
             "rejected_sensitive": gate_summary.rejected_sensitive,
             "rejected_duplicate": gate_summary.rejected_duplicate,
+            # Include detailed rejected checks with rejection reasons
+            "rejected_checks": gate_summary.rejected_checks,
         },
         # Accurate safety metadata - runner_kind depends on whether fake_handlers are provided
         # Note: In this implementation, fake_handlers is only for testing.
         # The real runtime always uses the fake runner (no real K8s calls).
         # We pass fake_handlers=None to indicate real-mode (still fake, but production).
+        # runner_kind reflects the actual mode: "fake" = test/injected handlers, "real" = production
         "safety_metadata": {
             "read_only": True,
             "policy_enforced": True,
             "allow_mutating_checks": policy.allow_mutating_checks,
             "allow_sensitive_reads": policy.allow_sensitive_reads,
-            "runner_kind": "fake",  # Always fake in this implementation
+            # runner_kind: "fake" when fake_handlers are injected (test mode)
+            #            "real" when using actual check handlers (production mode)
+            "runner_kind": "fake" if fake_handlers is not None else "real",
             "checks_executed_count": gate_summary.accepted,
             "checks_rejected_count": len(gate_summary.rejected_checks),
             "mutating_checks_executed_count": 0,

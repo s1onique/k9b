@@ -141,6 +141,83 @@ def run_policy_enforced_loop_pass(
         resolved_policy, current_state, elapsed_seconds
     )
 
+    # If budget is already exceeded, do NOT plan - build stop artifact and return
+    if budget_exceeded:
+        decision = LoopDecision.STOP_BUDGET_EXHAUSTED.value
+        
+        # Build a minimal pass artifact for budget stop
+        # Use empty lists for checks since we didn't gate anything
+        gate_summary = GateSummary(
+            proposed=0,
+            accepted=0,
+            rejected_mutating=0,
+            rejected_sensitive=0,
+            rejected_duplicate=0,
+            accepted_checks=[],
+            rejected_checks=[],
+            accepted_fingerprints=[],
+            rejected_fingerprints=[],
+        )
+        
+        pass_artifact = build_policy_enforced_pass_artifact(
+            loop_run_id=current_state.loop_run_id,
+            incident_id=incident_id,
+            pass_index=current_state.pass_index,
+            case_file=case_file,
+            policy=resolved_policy,
+            gate_summary=gate_summary,
+            accepted_fingerprints=[],
+            runtime_state=current_state,
+            decision=decision,
+            root_cause_summary="",
+            confidence="unknown",
+            runner_result=None,
+            now=resolved_now,
+            budget_exceeded=True,
+            budget_stop_reason=budget_stop_reason,
+            fake_handlers=fake_handlers,
+        )
+        
+        # Validate pass artifact schema
+        from k8s_diag_agent.collect.incident_diagnosis_loop_policy import validate_pass_artifact_schema
+        is_valid, missing = validate_pass_artifact_schema(pass_artifact)
+        if not is_valid:
+            pass_artifact["_schema_error"] = f"Missing required fields: {missing}"
+        
+        # Write pass artifact to P4c path
+        write_runtime_pass_artifact(
+            external_analysis_dir=external_analysis_dir,
+            loop_run_id=current_state.loop_run_id,
+            pass_index=current_state.pass_index,
+            artifact=pass_artifact,
+        )
+        
+        # Emit loop complete span for early stop
+        emit_loop_span(current_state.loop_run_id, incident_id, resolved_policy, "completed")
+        
+        # Build result
+        case_file_hash = compute_case_file_hash(case_file)
+        result: dict[str, object] = {
+            "policy_enforced": True,
+            "policy": resolved_policy.to_dict(),
+            "gate_summary": {
+                "proposed": 0,
+                "accepted": 0,
+                "rejected_mutating": 0,
+                "rejected_sensitive": 0,
+                "rejected_duplicate": 0,
+                "rejected_checks": [],
+            },
+            "pass_artifact": pass_artifact,
+            "p4c_artifact_path": None,
+            "case_file_hash": case_file_hash,
+            "budget_exceeded": True,
+            "budget_stop_reason": budget_stop_reason.value if budget_stop_reason else None,
+            "decision": decision,
+            "planner_called": False,
+        }
+        return result
+
     # STEP 1: Plan WITHOUT executing checks (planner-only seam)
     # This returns loop_update with proposed_next_checks but NO runner_result
     planner_result = plan_one_read_only_diagnosis_loop_pass(
@@ -165,17 +242,35 @@ def run_policy_enforced_loop_pass(
     seen_fingerprints = set(current_state.seen_check_fingerprints)
     gate_summary, accepted_fingerprints = gate_checks(proposed_checks, resolved_policy, seen_fingerprints)
 
-    # STEP 3: Enforce max_checks_per_pass after gating
+    # STEP 3: Enforce max_checks_per_pass after gating - explicitly reject overflow
     if gate_summary.accepted > resolved_policy.max_checks_per_pass:
         # Reject overflow - only execute up to the cap
-        # Slice accepted_checks to only the first max_checks_per_pass
+        overflow_checks = gate_summary.accepted_checks[resolved_policy.max_checks_per_pass:]
+        overflow_fingerprints = gate_summary.accepted_fingerprints[resolved_policy.max_checks_per_pass:]
+        
+        # Add overflow to rejected checks with explicit reason
+        for check, fp in zip(overflow_checks, overflow_fingerprints):
+            check_dict = dict(check)
+            check_dict["rejection_reason"] = "max_checks_per_pass_exceeded"
+            check_dict["rejected_fingerprint"] = fp
+            gate_summary.rejected_checks.append(check_dict)
+            gate_summary.rejected_fingerprints.append(fp)
+        
+        # Update accepted to only the first max_checks_per_pass
         gate_summary.accepted_checks = gate_summary.accepted_checks[:resolved_policy.max_checks_per_pass]
         gate_summary.accepted_fingerprints = gate_summary.accepted_fingerprints[:resolved_policy.max_checks_per_pass]
         gate_summary.accepted = len(gate_summary.accepted_checks)
-
-    # If budget is exceeded, DO NOT execute checks
-    if budget_exceeded:
-        decision = LoopDecision.STOP_BUDGET_EXHAUSTED.value
+    
+    # Use gate_summary.accepted_fingerprints for the artifact (it's the authoritative list after truncation)
+    artifact_accepted_fingerprints = list(gate_summary.accepted_fingerprints)
+    
+    # Update seen_fingerprints to include new accepted fingerprints for all_seen_fingerprints
+    updated_seen_fingerprints = seen_fingerprints | set(artifact_accepted_fingerprints)
+    
+    # Create updated runtime state for artifact
+    updated_runtime_state = current_state.with_updates(
+        seen_check_fingerprints=frozenset(updated_seen_fingerprints),
+    )
 
     # Extract root cause info from loop update
     root_cause_summary = ""
@@ -187,8 +282,10 @@ def run_policy_enforced_loop_pass(
         confidence = str(root_cause.get("confidence", "unknown"))
 
     # STEP 4: Execute ONLY accepted checks (AFTER gating)
+    # Execute if gate accepted any checks AND budget not exceeded
+    # Note: Planner decision is informational; gate acceptance overrides planner's stop decision
     runner_result: dict[str, Any] | None = None
-    if gate_summary.accepted > 0 and not budget_exceeded and decision == LoopDecision.RUN_ALLOWED_READ_ONLY_CHECKS.value:
+    if gate_summary.accepted > 0 and not budget_exceeded:
         # Execute only the accepted checks - rejected checks never reach here
         runner_result = run_read_only_checks(
             incident_id=incident_id,
@@ -206,8 +303,8 @@ def run_policy_enforced_loop_pass(
         case_file=case_file,
         policy=resolved_policy,
         gate_summary=gate_summary,
-        accepted_fingerprints=accepted_fingerprints,
-        runtime_state=current_state,
+        accepted_fingerprints=artifact_accepted_fingerprints,
+        runtime_state=updated_runtime_state,
         decision=decision,
         root_cause_summary=root_cause_summary,
         confidence=confidence,
@@ -215,6 +312,7 @@ def run_policy_enforced_loop_pass(
         now=resolved_now,
         budget_exceeded=budget_exceeded,
         budget_stop_reason=budget_stop_reason,
+        fake_handlers=fake_handlers,
     )
 
     # Validate pass artifact schema
@@ -344,12 +442,14 @@ def run_policy_enforced_loop(
         
         if budget_exceeded:
             # Create stop artifact with ALL PASS_ARTIFACT_FIELDS
+            # Include the actual case_file_hash for traceability
+            case_file_hash = compute_case_file_hash(case_file)
             stop_artifact = {
                 # PASS_ARTIFACT_FIELDS
                 "loop_run_id": loop_run_id,
                 "incident_id": incident_id,
                 "pass_index": runtime_state.pass_index,
-                "case_file_hash": "",  # No case file on budget stop
+                "case_file_hash": case_file_hash,  # Include actual case file hash
                 "proposed_checks": [],
                 "accepted_checks": [],
                 "rejected_checks": [],

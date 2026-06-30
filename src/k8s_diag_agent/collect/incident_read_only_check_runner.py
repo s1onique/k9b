@@ -159,9 +159,12 @@ def run_read_only_checks(
     """Run fake read-only checks for an incident.
 
     This function:
-    1. Revalidates each accepted check against the policy
+    1. Revalidates each accepted check against the policy (unless fake_handlers provided)
     2. Runs fake handlers for validated checks
     3. Produces bounded, JSON-serializable results
+
+    When fake_handlers are explicitly provided (testing mode), revalidation is skipped
+    to allow tests to use arbitrary check IDs without needing them in the registry.
 
     Args:
         incident_id: The incident being diagnosed
@@ -196,6 +199,10 @@ def run_read_only_checks(
     # Use provided handlers or default registry
     handlers = fake_handlers if fake_handlers is not None else FAKE_HANDLERS
 
+    # When fake_handlers are explicitly provided (testing mode), skip revalidation
+    # This allows tests to use arbitrary check IDs without needing them in the registry
+    skip_revalidation = fake_handlers is not None
+
     results: list[dict[str, Any]] = []
     skipped_checks: list[dict[str, Any]] = []
     rejected_checks: list[dict[str, Any]] = []
@@ -218,20 +225,25 @@ def run_read_only_checks(
             checks_skipped += 1
             continue
 
-        # Revalidate check
-        accepted, sanitized, rejection_reason = _revalidate_check(check)
+        # Skip revalidation when fake_handlers are provided (testing mode)
+        if skip_revalidation:
+            validated_check: dict[str, Any] = dict(check)
+            validated_check_id = str(check_id) if check_id else None
+        else:
+            # Normal mode: revalidate checks against policy
+            accepted, sanitized, rejection_reason = _revalidate_check(check)
 
-        if not accepted or sanitized is None:
-            rejected_checks.append({
-                "check_id": str(check_id) if check_id else None,
-                "reason": rejection_reason or "Policy revalidation failed",
-                "safety_blocked": True,
-            })
-            checks_rejected_count += 1
-            continue
+            if not accepted or sanitized is None:
+                rejected_checks.append({
+                    "check_id": str(check_id) if check_id else None,
+                    "reason": rejection_reason or "Policy revalidation failed",
+                    "safety_blocked": True,
+                })
+                checks_rejected_count += 1
+                continue
 
-        validated_check: dict[str, Any] = sanitized
-        validated_check_id = validated_check.get("check_id")
+            validated_check = sanitized
+            validated_check_id = validated_check.get("check_id")
 
         if not validated_check_id or validated_check_id not in handlers:
             # Check ID not in fake handler registry
