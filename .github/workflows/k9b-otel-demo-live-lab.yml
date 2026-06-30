@@ -314,6 +314,17 @@ jobs:
               --artifact-dir ./lab-artifacts/otel-demo
           fi
 
+      - name: Verify Live Lab Contracts
+        run: |
+          echo "=== Verifying Live Lab Contracts ==="
+          .venv/bin/python -m scripts.k9b_otel_demo_lab_contract_verify \
+            --artifact-dir ./lab-artifacts/otel-demo \
+            --scenario "${{ inputs.incident_scenario }}" \
+            --require-lab-passed \
+            --otel-traces auto \
+            --json
+        # This step fails the job if contracts fail (no if: condition)
+
       - name: Upload Live Lab Artifacts
         if: always()
         uses: actions/upload-artifact@v4
