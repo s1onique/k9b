@@ -18,6 +18,32 @@ _BACKEND_LABEL_SELECTORS = [
     "app.kubernetes.io/component=backend",
 ]
 
+# Scheduler deployment name
+_SCHEDULER_DEPLOYMENT = "k9b-scheduler"
+
+
+def get_scheduler_pod_selector(
+    kubeconfig: str,
+    namespace: str,
+) -> str | None:
+    """Derive scheduler pod selector from deployment/k9b-scheduler.
+
+    Kubernetes label selectors select resources by matching object labels,
+    and Deployments define pod ownership via selectors. This function
+    derives the pod selector from deployment/k9b-scheduler rather than
+    hard-coding a guessed label.
+
+    Args:
+        kubeconfig: Path to kubeconfig file
+        namespace: Namespace where k9b scheduler runs
+
+    Returns:
+        Label selector string like "app.kubernetes.io/component=scheduler,
+        app.kubernetes.io/name=k9b" or None if deployment not found
+    """
+    selector = _get_deployment_selector(kubeconfig, namespace, _SCHEDULER_DEPLOYMENT)
+    return selector
+
 
 def _all_containers_ready(container_statuses: list[dict[str, Any]]) -> bool:
     """Check if all containers are ready.
@@ -418,13 +444,18 @@ def collect_scheduler_logs(
     Returns:
         Scheduler logs (last tail_lines lines)
     """
-    # Get scheduler pods
+    # Get scheduler pod selector from deployment (not hard-coded)
+    scheduler_selector = get_scheduler_pod_selector(kubeconfig, namespace)
+    if not scheduler_selector:
+        return ""
+
+    # Get scheduler pods using derived selector
     pod_cmd = [
         "kubectl",
         "--kubeconfig", kubeconfig,
         "get", "pods",
         "-n", namespace,
-        "-l", "app.kubernetes.io/name=k9b-scheduler",
+        "-l", scheduler_selector,
         "-o", "json",
     ]
 

@@ -19,8 +19,15 @@ FAILURE_SCHEDULER_MISSING = "scheduler_missing"
 # Scheduler deployment name pattern
 SCHEDULER_DEPLOYMENT_NAME = "k9b-scheduler"
 
-# Fallback pod selector (used if derivation from deployment fails)
-SCHEDULER_POD_SELECTOR = "app.kubernetes.io/name=k9b-scheduler"
+# Deprecated: Fallback pod selector.
+# WARNING: Do NOT use this as the primary selector. The scheduler pod's actual
+# labels are app.kubernetes.io/name=k9b and app.kubernetes.io/component=scheduler.
+# Use get_scheduler_pod_selector() from incident_discovery_gate.collect instead.
+# This fallback is only used when deployment/k9b-scheduler cannot be read.
+SCHEDULER_POD_SELECTOR_FALLBACK = "app.kubernetes.io/name=k9b-scheduler"
+
+# Kept for backward compatibility - points to the fallback value
+SCHEDULER_POD_SELECTOR = SCHEDULER_POD_SELECTOR_FALLBACK
 
 
 # =============================================================================

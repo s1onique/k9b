@@ -257,12 +257,19 @@ def _collect_scheduler_diagnostics(
     diagnostics: dict[str, Any] = {
         "timestamp": datetime.now(UTC).isoformat(),
     }
-    
-    # Get scheduler pods
+
+    # Get scheduler pod selector from deployment (not hard-coded)
+    from scripts.incident_discovery_gate.collect import get_scheduler_pod_selector
+    scheduler_selector = get_scheduler_pod_selector(kubeconfig, namespace)
+    if not scheduler_selector:
+        diagnostics["error"] = "scheduler_selector_unavailable"
+        return diagnostics
+
+    # Get scheduler pods using derived selector
     cmd = [
         "kubectl", "--kubeconfig", kubeconfig,
         "get", "pods", "-n", namespace,
-        "-l", "app.kubernetes.io/name=k9b-scheduler",
+        "-l", scheduler_selector,
         "-o", "json",
     ]
     
@@ -357,13 +364,19 @@ def _collect_scheduler_logs(
     tail_lines: int = 50,
 ) -> str:
     """Collect recent scheduler logs (sanitized)."""
+    # Get scheduler pod selector from deployment (not hard-coded)
+    from scripts.incident_discovery_gate.collect import get_scheduler_pod_selector
+    scheduler_selector = get_scheduler_pod_selector(kubeconfig, namespace)
+    if not scheduler_selector:
+        return "<logs unavailable: scheduler_selector_unavailable>"
+
     cmd = [
         "kubectl", "--kubeconfig", kubeconfig,
         "logs", "-n", namespace,
-        "-l", "app.kubernetes.io/name=k9b-scheduler",
+        "-l", scheduler_selector,
         "--tail", str(tail_lines),
     ]
-    
+
     try:
         result = subprocess.run(
             cmd,
