@@ -95,17 +95,18 @@ def test_build_adapters_and_skip(monkeypatch: Any) -> None:
 
     # llamacpp adapter with empty command enters HTTP-only mode
     # Without HTTP config, it returns FAILED (not SKIPPED)
+    # Note: llamacpp normalizes to openai_compatible, so adapter is stored under that key
     cfgs = [ExternalAnalysisAdapterConfig(name="llamacpp", enabled=True, command=())]
     adapters = build_external_analysis_adapters(cfgs)
-    assert "llamacpp" in adapters
-    llama_adapter = adapters["llamacpp"]
+    assert "openai_compatible" in adapters
+    llama_adapter = adapters["openai_compatible"]
     artifact = llama_adapter.run(req)
     assert artifact.status == ExternalAnalysisStatus.FAILED
 
     # Test with canonical name 'openai_compatible'
     cfgs_canonical = [ExternalAnalysisAdapterConfig(name="openai_compatible", enabled=True, command=())]
     adapters_canonical = build_external_analysis_adapters(cfgs_canonical)
-    assert "llamacpp" in adapters_canonical  # Instance name is still "llamacpp"
+    assert "openai_compatible" in adapters_canonical
 
 
 def test_k8sgpt_adapter_success(monkeypatch: Any) -> None:

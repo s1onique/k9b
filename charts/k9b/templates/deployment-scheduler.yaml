@@ -70,6 +70,8 @@ spec:
           env:
             - name: K9B_REVIEW_ENRICHMENT_ENABLED
               value: {{ .Values.scheduler.env.K9B_REVIEW_ENRICHMENT_ENABLED | quote }}
+            - name: K9B_AUTO_DRILLDOWN_ENABLED
+              value: {{ .Values.scheduler.env.K9B_AUTO_DRILLDOWN_ENABLED | quote }}
             - name: K9B_EXTERNAL_ANALYSIS_PROVIDER
               value: {{ .Values.scheduler.env.K9B_EXTERNAL_ANALYSIS_PROVIDER | quote }}
             - name: K9B_EXTERNAL_ANALYSIS_BASE_URL
@@ -80,6 +82,8 @@ spec:
               value: {{ .Values.scheduler.env.K9B_EXTERNAL_ANALYSIS_TIMEOUT_SECONDS | quote }}
             - name: K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT
               value: {{ .Values.scheduler.env.K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT | quote }}
+            - name: K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_AUTO_DRILLDOWN
+              value: {{ .Values.scheduler.env.K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_AUTO_DRILLDOWN | quote }}
             - name: K9B_EXTERNAL_ANALYSIS_TEMPERATURE
               value: {{ .Values.scheduler.env.K9B_EXTERNAL_ANALYSIS_TEMPERATURE | quote }}
             - name: LLAMA_CPP_BASE_URL

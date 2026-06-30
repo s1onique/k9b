@@ -244,7 +244,10 @@ def build_external_analysis_adapters(
             continue
         adapter = builder(entry, settings)
         if adapter:
-            adapters[adapter.name] = adapter
+            # Store adapter under the config name (normalized) to match lookup expectations.
+            # For openai_compatible config, the adapter is stored as "openai_compatible",
+            # not "llamacpp" (the class's self.name attribute).
+            adapters[normalized_name] = adapter
     return adapters
 
 

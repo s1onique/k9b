@@ -36,6 +36,15 @@ backend:
       memory: 512Mi
 
 scheduler:
+  env:
+    # Enable review enrichment for live lab (auto-drilldown also enabled below).
+    K9B_REVIEW_ENRICHMENT_ENABLED: "true"
+    K9B_AUTO_DRILLDOWN_ENABLED: "true"
+    K9B_EXTERNAL_ANALYSIS_PROVIDER: "openai_compatible"
+    # Token budgets for external analysis operations.
+    # Base URL, model, and API key are supplied via workflow/secret plumbing.
+    K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_AUTO_DRILLDOWN: "3072"
+    K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT: "4096"
   resources:
     requests:
       cpu: 25m

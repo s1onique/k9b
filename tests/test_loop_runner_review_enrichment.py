@@ -455,6 +455,31 @@ class TestRunReviewEnrichment(unittest.TestCase):
         self.assertEqual(result.status, ExternalAnalysisStatus.SUCCESS)
         self.assertTrue(adapter.called)
 
+    def test_openai_compatible_provider_not_skipped_as_unregistered(self) -> None:
+        """openai_compatible provider should be found in adapters dict (not skipped as unregistered)."""
+        policy = ReviewEnrichmentPolicy(enabled=True, provider="openai_compatible")
+        review_path = self._write_review()
+        adapter = _StubAdapter(name="openai_compatible")
+
+        result = run_review_enrichment(
+            review_path=review_path,
+            directories=self.directories,
+            review_enrichment_policy=policy,
+            analysis_adapters={"openai_compatible": adapter},  # key matches normalized name
+            run_id="test-run",
+            run_label="test-label",
+            log_event_fn=self._log_event,
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        # Should succeed, NOT skip with "not registered for review enrichment"
+        self.assertEqual(result.status, ExternalAnalysisStatus.SUCCESS)
+        self.assertTrue(adapter.called)
+        # Verify no skip reason about adapter not being registered
+        if result.skip_reason:
+            self.assertNotIn("not registered for review enrichment", result.skip_reason)
+
 
 if __name__ == "__main__":
     unittest.main()
