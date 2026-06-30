@@ -22,13 +22,15 @@ if TYPE_CHECKING:
 # OTel Import with Graceful Degradation
 # =============================================================================
 
+_Status: Any = None
 _status_OK: Any = None
 _status_ERROR: Any = None
 _STATUS_CODES_AVAILABLE: bool = False
 
 try:
-    from opentelemetry.trace import StatusCode
+    from opentelemetry.trace import Status, StatusCode
 
+    _Status = Status
     _status_OK = StatusCode.OK
     _status_ERROR = StatusCode.ERROR
     _STATUS_CODES_AVAILABLE = True
@@ -115,8 +117,8 @@ class SpanContext:
         if self.active_span is None or not hasattr(self.active_span, 'set_status'):
             return
         try:
-            if _status_OK is not None:
-                self.active_span.set_status(_status_OK)
+            if _Status is not None and _status_OK is not None:
+                self.active_span.set_status(_Status(_status_OK))
         except Exception:
             pass
 
@@ -128,8 +130,8 @@ class SpanContext:
         if self.active_span is None or not hasattr(self.active_span, 'set_status'):
             return
         try:
-            if _status_ERROR is not None:
-                self.active_span.set_status(_status_ERROR)
+            if _Status is not None and _status_ERROR is not None:
+                self.active_span.set_status(_Status(_status_ERROR))
         except Exception:
             pass
 
@@ -145,7 +147,8 @@ class SpanContext:
             return
         try:
             self.active_span.record_exception(exc)
-            self.active_span.set_status(_status_ERROR if _STATUS_CODES_AVAILABLE else None)
+            if _Status is not None and _status_ERROR is not None:
+                self.active_span.set_status(_Status(_status_ERROR))
         except Exception:
             pass
 
