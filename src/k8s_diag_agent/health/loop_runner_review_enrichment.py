@@ -254,17 +254,36 @@ def run_review_enrichment(
     # Classify the payload shape for observability
     # If the artifact was skipped due to invalid JSON/parse error, use invalid-json classification
     # instead of unrecognized-payload to avoid misleading diagnostics
-    if artifact.status == ExternalAnalysisStatus.SKIPPED and artifact.failure_metadata:
+    # Truncation (completion_stopped_by_length) is classified as TRUNCATED_JSON
+    if artifact.status in (ExternalAnalysisStatus.SKIPPED, ExternalAnalysisStatus.FAILED) and artifact.failure_metadata:
         failure_meta = cast(dict[str, Any], artifact.failure_metadata)
         failure_class = str(failure_meta.get("failure_class", ""))
+        failure_class_normalized = failure_class.lower()
         exception_type = str(failure_meta.get("exception_type", ""))
-        if "llm_response_parse_error" in failure_class or "LLMResponseParseError" in exception_type:
-            # Create an INVALID_JSON classification with structured output diagnostics
+        completion_stopped = failure_meta.get("completion_stopped_by_length") is True
+        
+        if "llm_completion_truncated" in failure_class_normalized or completion_stopped:
+            # Truncation: provider output was cut off by max_tokens limit
+            from ..external_analysis.review_schema import ReviewEnrichmentShapeAnalysis, ReviewEnrichmentShapeClassification
+
+            shape_analysis = ReviewEnrichmentShapeAnalysis(
+                classification=ReviewEnrichmentShapeClassification.TRUNCATED_JSON,
+                reason=f"LLM response truncated (max tokens exceeded): finish_reason={failure_meta.get('finish_reason')}",
+                raw_payload_keys=(),
+                summary_present=False,
+                triage_order_count=0,
+                top_concerns_count=0,
+                evidence_gaps_count=0,
+                next_checks_count=0,
+                focus_notes_count=0,
+            )
+        elif "llm_response_parse_error" in failure_class_normalized or "llmresponseparseerror" in exception_type.lower():
+            # Non-truncated parse error: genuinely malformed JSON
             from ..external_analysis.review_schema import ReviewEnrichmentShapeAnalysis, ReviewEnrichmentShapeClassification
 
             shape_analysis = ReviewEnrichmentShapeAnalysis(
                 classification=ReviewEnrichmentShapeClassification.INVALID_JSON,
-                reason="LLM response parse error - invalid JSON or length capped",
+                reason="LLM response parse error - invalid JSON (not truncated)",
                 raw_payload_keys=(),
                 summary_present=False,
                 triage_order_count=0,

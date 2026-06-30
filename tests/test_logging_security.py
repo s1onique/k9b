@@ -171,7 +171,7 @@ class SchedulerLlamaCppConfigLoggingTest(unittest.TestCase):
                     "run_label": "scheduler-run",
                     "run_id": "run-789",
                     "llamacpp_max_tokens_auto_drilldown": 2048,
-                    "llamacpp_max_tokens_review_enrichment": 4096,
+                    "llamacpp_max_tokens_review_enrichment": 8192,
                 },
             )
         lines = [line for line in stream.getvalue().splitlines() if line]
@@ -179,7 +179,7 @@ class SchedulerLlamaCppConfigLoggingTest(unittest.TestCase):
         entry = json.loads(lines[0])
         # Verify token-count fields are present and not scrubbed
         self.assertEqual(entry["llamacpp_max_tokens_auto_drilldown"], 2048)
-        self.assertEqual(entry["llamacpp_max_tokens_review_enrichment"], 4096)
+        self.assertEqual(entry["llamacpp_max_tokens_review_enrichment"], 8192)
         self.assertIsInstance(entry["llamacpp_max_tokens_auto_drilldown"], int)
         self.assertIsInstance(entry["llamacpp_max_tokens_review_enrichment"], int)
         self.assertNotEqual(entry["llamacpp_max_tokens_auto_drilldown"], "<scrubbed>")

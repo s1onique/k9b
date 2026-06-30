@@ -274,7 +274,7 @@ jobs:
             --set-string "scheduler.env.K9B_DIAGNOSIS_MAX_OUTPUT_CHARS=8000" \
             --set-string "scheduler.env.K9B_EXTERNAL_ANALYSIS_PROVIDER=openai_compatible" \
             --set-string "scheduler.env.K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_AUTO_DRILLDOWN=3072" \
-            --set-string "scheduler.env.K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT=4096" \
+            --set-string "scheduler.env.K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT=8192" \
             --set-string "scheduler.smallProvider.provider=openai_compatible" \
             --set "scheduler.smallProvider.existingSecret=k9b-diagnosis-credentials" \
             --set "scheduler.smallProvider.apiKeyKey=K9B_EXTERNAL_ANALYSIS_API_KEY"

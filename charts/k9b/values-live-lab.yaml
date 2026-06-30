@@ -44,7 +44,7 @@ scheduler:
     # Token budgets for external analysis operations.
     # Base URL, model, and API key are supplied via workflow/secret plumbing.
     K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_AUTO_DRILLDOWN: "3072"
-    K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT: "4096"
+    K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT: "8192"
   resources:
     requests:
       cpu: 25m

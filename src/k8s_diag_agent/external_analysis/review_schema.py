@@ -78,6 +78,7 @@ class ReviewEnrichmentShapeClassification(StrEnum):
     EMPTY_BOUNDED_PAYLOAD = "empty-bounded-payload"
     UNRECOGNIZED_PAYLOAD = "unrecognized-payload"
     INVALID_JSON = "invalid-json"
+    TRUNCATED_JSON = "truncated-json"
     PARSE_ERROR = "parse-error"
 
 

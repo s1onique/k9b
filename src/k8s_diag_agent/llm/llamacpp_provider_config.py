@@ -13,9 +13,9 @@ _logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT_SECONDS = 120
 # Token budgets for thinking/reasoning models (Qwen-style):
 # - Auto-drilldown: 3072 tokens accommodates extended reasoning chains
-# - Review-enrichment: 4096 tokens for richer multi-field JSON output
+# - Review-enrichment: 8192 tokens for richer multi-field JSON output
 DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN = 3072
-DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT = 4096
+DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT = 8192
 
 # Canonical and legacy environment variable names for OpenAI-compatible provider
 _CANONICAL_ENV_BASE_URL = "K9B_EXTERNAL_ANALYSIS_BASE_URL"

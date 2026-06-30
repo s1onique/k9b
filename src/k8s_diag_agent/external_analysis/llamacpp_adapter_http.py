@@ -183,9 +183,19 @@ def run_http_assessment(
             config.endpoint if config else None, prompt, None,
             review_enrichment_max_tokens,
         )
+        # Truncation is a provider-output failure, not a skip
+        # SKIPPED means "intentionally not attempted" - but we DID attempt and the provider truncated
+        if exc.completion_stopped_by_length:
+            artifact_status = ExternalAnalysisStatus.FAILED
+            error_summary = str(exc)
+            skip_reason = None
+        else:
+            artifact_status = ExternalAnalysisStatus.SKIPPED
+            error_summary = None
+            skip_reason = str(exc)
         return build_failure_artifact(
             adapter_name, request, duration_ms, str(exc)[:240],
-            ExternalAnalysisStatus.SKIPPED, skip_reason=str(exc),
+            artifact_status, skip_reason=skip_reason, error_summary=error_summary,
             failure_metadata=metadata,
         )
     except ValueError as exc:

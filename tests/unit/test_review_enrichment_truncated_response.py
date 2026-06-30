@@ -3,7 +3,8 @@
 These tests verify that:
 - finish_reason="length" is detected and classified as llm_completion_truncated
 - The truncated failure class is propagated into the artifact failure_metadata
-- The artifact has SKIPPED status with proper diagnostics
+- Truncation produces FAILED status (not SKIPPED) - the provider DID attempt but truncated
+- The TRUNCATED_JSON shape classification is applied for observability
 """
 
 import unittest
@@ -185,8 +186,12 @@ class TestReviewEnrichmentTruncatedResponse(unittest.TestCase):
 class TestTruncatedResponseIntegration(unittest.TestCase):
     """Integration-style tests for truncated response artifact generation."""
 
-    def test_build_failure_artifact_includes_truncation_metadata(self) -> None:
-        """Verify build_failure_artifact includes all truncation metadata fields."""
+    def test_truncated_response_artifact_has_failed_status(self) -> None:
+        """Verify truncated response produces artifact with FAILED status, not SKIPPED.
+
+        Truncation is a provider-output failure (provider truncated the output),
+        not an intentional skip. This matches the behavior in llamacpp_adapter_http.py.
+        """
         from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
         from k8s_diag_agent.external_analysis.llamacpp_adapter_payloads import (
             build_failure_artifact,
@@ -212,19 +217,19 @@ class TestTruncatedResponseIntegration(unittest.TestCase):
             source_artifact="test-source.json",
         )
 
-        # Build the failure artifact
+        # Build the failure artifact - truncation should be FAILED, not SKIPPED
         artifact = build_failure_artifact(
             tool_name="llamacpp",
             request=request,
             duration_ms=500,
             summary="LLM response truncated",
-            status=ExternalAnalysisStatus.SKIPPED,
-            skip_reason="LLM response ended with finish_reason=length",
+            status=ExternalAnalysisStatus.FAILED,  # Truncation is FAILED, not SKIPPED
+            error_summary="LLM response ended with finish_reason=length before producing parseable JSON",
             failure_metadata=failure_metadata,
         )
 
-        # Verify artifact properties
-        self.assertEqual(artifact.status, ExternalAnalysisStatus.SKIPPED)
+        # Verify artifact has FAILED status (key requirement from task)
+        self.assertEqual(artifact.status, ExternalAnalysisStatus.FAILED)
         assert artifact.failure_metadata is not None
         self.assertEqual(
             artifact.failure_metadata["failure_class"], "llm_completion_truncated"
@@ -233,6 +238,9 @@ class TestTruncatedResponseIntegration(unittest.TestCase):
             artifact.failure_metadata["completion_stopped_by_length"], True
         )
         self.assertEqual(artifact.failure_metadata["finish_reason"], "length")
+        # Verify error_summary is set (not skip_reason for truncation)
+        self.assertEqual(artifact.error_summary, "LLM response ended with finish_reason=length before producing parseable JSON")
+        self.assertIsNone(artifact.skip_reason)
 
 
 if __name__ == "__main__":

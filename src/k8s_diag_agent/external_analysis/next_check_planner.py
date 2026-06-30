@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..external_analysis.artifact import ExternalAnalysisArtifact
+from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisStatus
 from .alertmanager_feedback import (
     build_feedback_from_execution_artifacts,
 )
@@ -92,6 +92,10 @@ class NextCheckPlan:
     enrichment_artifact_path: str | None
     candidates: tuple[NextCheckCandidate, ...]
     linkage_context: IncidentLinkageContext | None = None
+    # Upstream failure context when enrichment failed (e.g., truncation)
+    # Includes source_enrichment_status, source_failure_class, source_error_summary,
+    # source_finish_reason, and source_completion_stopped_by_length
+    upstream_failure_context: dict[str, object] | None = None
 
     def to_payload(self) -> dict[str, object | None]:
         # Build base payload
@@ -106,6 +110,10 @@ class NextCheckPlan:
             "enrichment_artifact_path": self.enrichment_artifact_path,
             "candidates": candidates_payload,
         }
+
+        # Include upstream failure context if enrichment failed
+        if self.upstream_failure_context is not None:
+            base_payload["upstream_failure_context"] = self.upstream_failure_context
 
         # Enrich with incident linkage fields if context is available
         if self.linkage_context is not None:
@@ -142,6 +150,10 @@ def plan_next_checks(
     
     If linkage_context is provided, the resulting plan will include
     incident linkage fields in its payload.
+    
+    If the enrichment artifact has FAILED status (e.g., due to truncation),
+    the plan will be returned with empty candidates but include upstream
+    failure context in the payload for observability.
     """
     # Build execution context digests from execution artifacts
     # These digests are passed explicitly to candidate building
@@ -158,6 +170,37 @@ def plan_next_checks(
         enrichment_artifact,
         execution_context=execution_digests,
     )
+    
+    # If enrichment failed (e.g., truncation), return plan with upstream failure context
+    if enrichment_artifact.status == ExternalAnalysisStatus.FAILED:
+        # Extract upstream failure context for observability
+        failure_meta = enrichment_artifact.failure_metadata or {}
+        # Normalize failure_class for matching (case-insensitive)
+        failure_class_raw = failure_meta.get("failure_class", "unknown")
+        failure_class_normalized = str(failure_class_raw).lower()
+        
+        upstream_failure_info: dict[str, object] = {
+            "source_enrichment_status": "failed",
+            "source_failure_class": failure_class_raw,  # Preserve original case
+            "source_failure_class_normalized": failure_class_normalized,
+            "source_status": "failed",
+            "source_error_summary": enrichment_artifact.error_summary or enrichment_artifact.skip_reason or "unknown",
+        }
+        # Include finish_reason if available for truncation diagnostics
+        if failure_meta.get("finish_reason"):
+            upstream_failure_info["source_finish_reason"] = failure_meta.get("finish_reason")
+        if failure_meta.get("completion_stopped_by_length"):
+            upstream_failure_info["source_completion_stopped_by_length"] = True
+        
+        # Return plan with empty candidates and upstream failure context attached
+        return NextCheckPlan(
+            run_id=run_id,
+            review_path=review_path,
+            enrichment_artifact_path=enrichment_artifact.artifact_path,
+            candidates=(),
+            linkage_context=linkage_context,
+            upstream_failure_context=upstream_failure_info,
+        )
     
     if not raw_candidates:
         return None
