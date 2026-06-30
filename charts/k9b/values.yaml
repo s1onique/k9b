@@ -99,6 +99,7 @@ scheduler:
   env:
     # K9B_EXTERNAL_ANALYSIS_*: Canonical env vars for OpenAI-compatible review enrichment.
     # Override via --set scheduler.env.K9B_EXTERNAL_ANALYSIS_BASE_URL=http://your-llm:8080
+    K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED: "false"
     K9B_REVIEW_ENRICHMENT_ENABLED: "false"
     K9B_AUTO_DRILLDOWN_ENABLED: "false"
     K9B_EXTERNAL_ANALYSIS_PROVIDER: ""

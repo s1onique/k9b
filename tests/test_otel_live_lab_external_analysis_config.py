@@ -74,6 +74,18 @@ def _health_config_data() -> dict[str, Any]:
 class TestOtelLiveLabExternalAnalysisHelmRender:
     """Test that values-live-lab.yaml renders correct scheduler env vars."""
 
+    def test_scheduler_env_has_automatic_diagnosis_loop_enabled(self) -> None:
+        """Scheduler env should have K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true.
+        
+        This env var is required for P4c live-lab verification to run the real
+        diagnosis loop. Without it, P4c fails with:
+        - K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED not set
+        - real_loop_not_invoked
+        - real_pass_artifacts_missing
+        """
+        env = _scheduler_env()
+        assert env.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED") == "true"
+
     def test_scheduler_env_has_review_enrichment_enabled(self) -> None:
         """Scheduler env should have K9B_REVIEW_ENRICHMENT_ENABLED=true."""
         env = _scheduler_env()

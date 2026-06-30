@@ -37,6 +37,10 @@ backend:
 
 scheduler:
   env:
+    # Enable automatic diagnosis loop for P4c live lab verification.
+    # This env var is required for the scheduler to run the diagnosis loop
+    # that P4c verifier checks (real_loop_not_invoked, real_pass_artifacts_missing).
+    K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED: "true"
     # Enable review enrichment for live lab (auto-drilldown also enabled below).
     K9B_REVIEW_ENRICHMENT_ENABLED: "true"
     K9B_AUTO_DRILLDOWN_ENABLED: "true"
