@@ -43,7 +43,7 @@ from .incident_diagnosis_auto_loop_models import (
     AutoLoopIncidentResult,
 )
 from .incident_diagnosis_loop_models import LoopDecision
-from .incident_diagnosis_loop_orchestrator import run_one_read_only_diagnosis_loop_pass
+from .incident_diagnosis_loop_runtime import run_policy_enforced_loop_pass
 from .incident_diagnosis_review_packet import (
     write_diagnosis_review_packet,
 )
@@ -275,9 +275,14 @@ def _process_incident(
     # Build minimal diagnosis report from suggested checks
     diagnosis_report = _build_minimal_diagnosis_report(case_file, config.max_checks_per_pass)
 
-    # Run one-pass orchestrator
+    # Run one-pass orchestrator with policy enforcement
+    # This wraps the orchestrator with:
+    # - Hard budget limits (max_passes, max_checks)
+    # - Safety gates (mutating, sensitive, duplicates)
+    # - Pass artifact with exact PASS_ARTIFACT_FIELDS
+    # - OTel span emission
     try:
-        orchestrator_result = run_one_read_only_diagnosis_loop_pass(
+        orchestrator_result = run_policy_enforced_loop_pass(
             incident_id=incident_id,
             external_analysis_dir=external_analysis_dir,
             case_file=case_file,
@@ -301,7 +306,7 @@ def _process_incident(
             error="Orchestrator error",
         )
 
-    # Extract results
+    # Extract results from policy-enforced result
     decision = str(orchestrator_result.get("decision", ""))
     runner_result = orchestrator_result.get("runner_result")
     artifact = orchestrator_result.get("artifact")
