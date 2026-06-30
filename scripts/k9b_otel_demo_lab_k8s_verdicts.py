@@ -4,12 +4,46 @@
 This module defines the split verdict types that distinguish:
 - IncidentDiscoveryVerdict: P3c - incident discovery validation (scope check only)
 - RootCauseEvidenceVerdict: P4c - root-cause evidence validation (scheduling markers)
+
+Phase Result Reasons:
+
+P3c (Discovery):
+- incident_discovered: Incident found with matching scope
+- incident_not_found: No incident discovered within timeout
+- wrong_incident_identity: Incident found but wrong namespace/object
+- wrong_candidate_class: Incident found but candidate class not accepted
+- stale_incident: Incident found but appears to be from previous run
+- incident_discovered_without_rca_evidence_yet: Discovery succeeded, RCA deferred to P4c
+
+P4c (Diagnosis):
+- diagnosis_rca_valid: Diagnosis contains scheduling root-cause evidence
+- diagnosis_missing_scheduling_root_cause: No scheduling markers found
+- diagnosis_missing_shipping_identity: Diagnosis doesn't reference shipping
+- diagnosis_missing_mult_pass_evidence: Fewer than 2 passes or evidence incomplete
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+
+# =============================================================================
+# Phase Result Reason Constants
+# =============================================================================
+
+# P3c Discovery result reasons
+P3C_REASON_INCIDENT_DISCOVERED = "incident_discovered"
+P3C_REASON_INCIDENT_NOT_FOUND = "incident_not_found"
+P3C_REASON_WRONG_INCIDENT_IDENTITY = "wrong_incident_identity"
+P3C_REASON_WRONG_CANDIDATE_CLASS = "wrong_candidate_class"
+P3C_REASON_STALE_INCIDENT = "stale_incident"
+P3C_REASON_INCIDENT_DISCOVERED_WITHOUT_RCA = "incident_discovered_without_rca_evidence_yet"
+
+# P4c Diagnosis result reasons
+P4C_REASON_DIAGNOSIS_RCA_VALID = "diagnosis_rca_valid"
+P4C_REASON_DIAGNOSIS_MISSING_SCHEDULING_RC = "diagnosis_missing_scheduling_root_cause"
+P4C_REASON_DIAGNOSIS_MISSING_SHIPPING = "diagnosis_missing_shipping_identity"
+P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS = "diagnosis_missing_mult_pass_evidence"
 
 # =============================================================================
 # Scheduling Root-Cause Markers
@@ -89,6 +123,8 @@ class IncidentDiscoveryVerdict:
             "shipping_scoped": self.shipping_scoped,
             "reason": self.reason,
             "phase": "p3c-k8s-discovery",
+            "rca_evidence_present": False,  # P3c doesn't validate RCA
+            "rca_validation_deferred_to": "P4c",
         }
 
 
@@ -130,13 +166,14 @@ class RootCauseEvidenceVerdict:
         if matched:
             return cls(
                 success=True,
+                reason=P4C_REASON_DIAGNOSIS_RCA_VALID,
                 matched_evidence=matched,
                 root_cause_summary=evidence.get("root_cause_summary", ""),
             )
         
         return cls(
             success=False,
-            reason="missing_scheduling_root_cause_evidence",
+            reason=P4C_REASON_DIAGNOSIS_MISSING_SCHEDULING_RC,
             matched_evidence=matched,
             root_cause_summary=evidence.get("root_cause_summary", ""),
         )
@@ -216,7 +253,7 @@ def validate_unschedulable_shipping_discovery(
             success=False,
             incident_id=incident.get("id") or incident.get("incident_id"),
             namespace=namespace,
-            reason="namespace_mismatch",
+            reason=P3C_REASON_WRONG_INCIDENT_IDENTITY,
         )
     
     # Check shipping scope
@@ -227,7 +264,7 @@ def validate_unschedulable_shipping_discovery(
             incident_id=incident.get("id") or incident.get("incident_id"),
             namespace=namespace,
             shipping_scoped=False,
-            reason="no_shipping_reference",
+            reason=P3C_REASON_WRONG_INCIDENT_IDENTITY,
         )
     
     # Check candidate class
@@ -239,16 +276,18 @@ def validate_unschedulable_shipping_discovery(
             candidate_class=candidate_class,
             namespace=namespace,
             shipping_scoped=True,
-            reason=f"candidate_class_rejected:{candidate_class}",
+            reason=f"{P3C_REASON_WRONG_CANDIDATE_CLASS}:{candidate_class}",
         )
     
     # Discovery validation passed
+    # NOTE: P3c does NOT require RCA evidence. That is P4c's job.
     return IncidentDiscoveryVerdict(
         success=True,
         incident_id=incident.get("id") or incident.get("incident_id"),
         candidate_class=candidate_class,
         namespace=namespace,
         shipping_scoped=True,
+        reason=P3C_REASON_INCIDENT_DISCOVERED_WITHOUT_RCA,  # For artifact clarity
     )
 
 
@@ -267,3 +306,32 @@ def validate_unschedulable_shipping_root_cause(
     """
     verdict = RootCauseEvidenceVerdict.from_diagnosis_evidence(payload)
     return verdict
+
+
+def check_stale_incident(
+    incident: dict[str, Any],
+    injection_timestamp: float | None = None,
+) -> tuple[bool, str | None]:
+    """Check if an incident is stale (from a previous run).
+    
+    Args:
+        incident: Incident dict
+        injection_timestamp: Unix timestamp of the injection
+        
+    Returns:
+        Tuple of (is_stale, reason)
+    """
+    if injection_timestamp is None:
+        return False, None  # Can't determine staleness without timestamp
+    
+    # Check if incident has a timestamp field
+    incident_time = incident.get("timestamp") or incident.get("created_at")
+    if incident_time is None:
+        return False, None  # Can't determine staleness without timestamp
+    
+    # If incident is older than injection, it's stale
+    if isinstance(incident_time, (int, float)):
+        if incident_time < injection_timestamp:
+            return True, P3C_REASON_STALE_INCIDENT
+    
+    return False, None

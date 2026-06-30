@@ -22,7 +22,10 @@ class TestK8sDiagnosisVerifier:
         artifact_dir = Path("/tmp/nonexistent")
         result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
         assert result["verified"] is False
-        assert result["reason"] == "p3c_evidence_not_found"
+        # reason is canonical phase result reason
+        assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+        # phase_result_reason has the detailed reason
+        assert result["phase_result_reason"] == "p3c_evidence_not_found"
 
     def test_verifier_returns_false_when_p3c_evidence_missing(self) -> None:
         """Verifier returns False when P3c evidence doesn't exist."""
@@ -45,7 +48,10 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert result["reason"] == "p3c_evidence_not_found"
+            # reason is canonical phase result reason
+            assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+            # phase_result_reason has the detailed reason
+            assert result["phase_result_reason"] == "p3c_evidence_not_found"
 
     def test_verifier_returns_false_when_p3c_discovery_failed(self) -> None:
         """Verifier returns False when P3c discovery success is False."""
@@ -67,7 +73,8 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert "p3c_validation_failed" in result["reason"]
+            assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+            assert "p3c_validation_failed" in result["phase_result_reason"]
 
     def test_verifier_returns_false_when_p3c_validation_failed(self) -> None:
         """Verifier returns False when P3c validation_success is False."""
@@ -90,7 +97,8 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert "p3c_validation_failed" in result["reason"]
+            assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+            assert "p3c_validation_failed" in result["phase_result_reason"]
 
     def test_verifier_returns_false_when_no_incident_id(self) -> None:
         """Verifier returns False when P3c has no incident_id."""
@@ -112,7 +120,8 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert "p3c_validation_failed" in result["reason"]
+            assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+            assert "p3c_validation_failed" in result["phase_result_reason"]
 
     def test_verifier_returns_false_when_pass_count_less_than_2(self) -> None:
         """Verifier returns False when diagnosis has less than 2 passes."""
@@ -156,7 +165,8 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert result["reason"] == "insufficient_passes"
+            assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+            assert result["phase_result_reason"] == "insufficient_passes"
             assert result["pass_count"] == 1
 
     def test_verifier_returns_false_when_root_cause_missing(self) -> None:
@@ -188,7 +198,8 @@ class TestK8sDiagnosisVerifier:
                 "target_namespace": "otel-demo",
                 "pass_count": 2,
                 "read_only": True,
-                "root_cause_summary": "Some generic error occurred",  # Missing key terms!
+                # Include "shipping" to pass shipping check, but no scheduling markers
+                "root_cause_summary": "The shipping deployment has an issue",  # Missing scheduling root cause!
                 "executed_checks": [],
                 # Required real loop metadata
                 "diagnosis_source": "k9b_automatic_diagnosis_loop",
@@ -201,7 +212,7 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert result["reason"] == "missing_root_cause_terms"
+            assert result["reason"] == "diagnosis_missing_scheduling_root_cause"
 
     def test_verifier_returns_false_when_mutating_commands_found(self) -> None:
         """Verifier returns False when mutating commands are in executed checks."""
@@ -245,7 +256,8 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert result["reason"] == "read_only_contract_violated"
+            assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+            assert result["phase_result_reason"] == "read_only_contract_violated"
 
     def test_verifier_returns_false_when_simulation_used(self) -> None:
         """Verifier returns False when simulation is used instead of real loop."""
@@ -292,7 +304,8 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert result["reason"] == "simulation_used_but_not_allowed"
+            assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+            assert result["phase_result_reason"] == "simulation_used_but_not_allowed"
 
     def test_verifier_returns_false_when_real_loop_not_invoked(self) -> None:
         """Verifier returns False when real loop was not invoked."""
@@ -339,7 +352,8 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert result["reason"] == "real_loop_not_invoked"
+            assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+            assert result["phase_result_reason"] == "real_loop_not_invoked"
 
     def test_verifier_returns_false_when_real_pass_artifacts_missing(self) -> None:
         """Verifier returns False when real pass artifacts are missing."""
@@ -382,7 +396,8 @@ class TestK8sDiagnosisVerifier:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            assert result["reason"] == "real_pass_artifacts_missing"
+            assert result["reason"] == "diagnosis_missing_mult_pass_evidence"
+            assert result["phase_result_reason"] == "real_pass_artifacts_missing"
 
     def test_verifier_passes_with_valid_diagnosis(self) -> None:
         """Verifier passes when all validations pass."""
@@ -433,3 +448,4 @@ class TestK8sDiagnosisVerifier:
             assert result["verified"] is True
             assert result["incident_id"] == "inc-123"
             assert result["pass_count"] == 2
+            assert result["phase_result_reason"] == "diagnosis_rca_valid"

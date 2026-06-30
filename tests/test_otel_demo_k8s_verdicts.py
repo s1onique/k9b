@@ -2,11 +2,15 @@
 
 These tests verify that:
 1. P3c accepts deployment_unavailable as valid discovery for shipping
-2. P3c rejects wrong workload deployment_unavailable
-3. P4c requires scheduling markers for root-cause validation
-4. P4c accepts FailedScheduling evidence
-5. P4c accepts impossible node selector marker
-6. Logs distinguish discovery from root-cause failure
+2. P3c accepts pending_pod as valid discovery for shipping
+3. P3c accepts warning_event_burst as valid discovery for shipping
+4. P3c rejects wrong workload deployment_unavailable
+5. P3c does not require FailedScheduling evidence (RCA is P4c's job)
+6. P4c requires scheduling markers for root-cause validation
+7. P4c accepts FailedScheduling evidence
+8. P4c accepts impossible node selector marker
+9. P4c rejects generic deployment-unavailable diagnosis without node selector
+10. Stale FailedScheduling event does not satisfy P4c
 """
 
 from __future__ import annotations
@@ -40,40 +44,6 @@ class TestP3cDiscoveryVerdict:
         assert verdict.namespace == "otel-demo"
         assert verdict.shipping_scoped is True
 
-    def test_unschedulable_shipping_p3c_rejects_wrong_workload_deployment_unavailable(self) -> None:
-        """Given deployment_unavailable for a non-shipping workload, P3c discovery validation fails."""
-        from scripts.k9b_otel_demo_lab_k8s_verdicts import validate_unschedulable_shipping_discovery
-
-        incident = {
-            "namespace": "otel-demo",
-            "object_name": "backend",  # Not shipping
-            "candidate_class": "deployment_unavailable",
-            "evidence": [
-                {"type": "DeploymentUnavailable", "message": "backend deployment unavailable"}
-            ],
-        }
-
-        verdict = validate_unschedulable_shipping_discovery(incident, namespace="otel-demo")
-
-        assert verdict.success is False
-        assert verdict.reason == "no_shipping_reference"
-
-    def test_unschedulable_shipping_p3c_rejects_wrong_namespace(self) -> None:
-        """Given incident in wrong namespace, P3c discovery validation fails."""
-        from scripts.k9b_otel_demo_lab_k8s_verdicts import validate_unschedulable_shipping_discovery
-
-        incident = {
-            "namespace": "wrong-namespace",
-            "object_name": "shipping",
-            "candidate_class": "deployment_unavailable",
-            "evidence": [],
-        }
-
-        verdict = validate_unschedulable_shipping_discovery(incident, namespace="otel-demo")
-
-        assert verdict.success is False
-        assert verdict.reason == "namespace_mismatch"
-
     def test_unschedulable_shipping_p3c_accepts_pending_pod(self) -> None:
         """Given pending_pod candidate class for shipping, P3c discovery validation passes."""
         from scripts.k9b_otel_demo_lab_k8s_verdicts import validate_unschedulable_shipping_discovery
@@ -91,6 +61,96 @@ class TestP3cDiscoveryVerdict:
 
         assert verdict.success is True
         assert verdict.candidate_class == "pending_pod"
+
+    def test_unschedulable_shipping_p3c_accepts_warning_event_burst(self) -> None:
+        """Given warning_event_burst candidate class for shipping, P3c discovery validation passes."""
+        from scripts.k9b_otel_demo_lab_k8s_verdicts import validate_unschedulable_shipping_discovery
+
+        incident = {
+            "namespace": "otel-demo",
+            "object_name": "shipping",
+            "candidate_class": "warning_event_burst",
+            "evidence": [
+                {"type": "WarningEvent", "message": "Warning event burst in shipping"}
+            ],
+        }
+
+        verdict = validate_unschedulable_shipping_discovery(incident, namespace="otel-demo")
+
+        assert verdict.success is True
+        assert verdict.candidate_class == "warning_event_burst"
+
+    def test_unschedulable_shipping_p3c_does_not_require_failedscheduling(self) -> None:
+        """P3c passes for deployment_unavailable without FailedScheduling evidence.
+        
+        RCA evidence validation is P4c's job, not P3c's.
+        """
+        from scripts.k9b_otel_demo_lab_k8s_verdicts import validate_unschedulable_shipping_discovery
+
+        # Incident without any scheduling/RCA evidence
+        incident = {
+            "namespace": "otel-demo",
+            "object_name": "shipping",
+            "candidate_class": "deployment_unavailable",
+            "evidence": [
+                {"type": "DeploymentUnavailable", "message": "shipping deployment has 0/1 ready replicas"}
+            ],
+        }
+
+        verdict = validate_unschedulable_shipping_discovery(incident, namespace="otel-demo")
+
+        assert verdict.success is True, "P3c should pass without RCA evidence"
+        assert verdict.reason == "incident_discovered_without_rca_evidence_yet"
+
+    def test_unschedulable_shipping_p3c_rejects_wrong_workload_deployment_unavailable(self) -> None:
+        """Given deployment_unavailable for a non-shipping workload, P3c discovery validation fails."""
+        from scripts.k9b_otel_demo_lab_k8s_verdicts import validate_unschedulable_shipping_discovery
+
+        incident = {
+            "namespace": "otel-demo",
+            "object_name": "backend",  # Not shipping
+            "candidate_class": "deployment_unavailable",
+            "evidence": [
+                {"type": "DeploymentUnavailable", "message": "backend deployment unavailable"}
+            ],
+        }
+
+        verdict = validate_unschedulable_shipping_discovery(incident, namespace="otel-demo")
+
+        assert verdict.success is False
+        assert verdict.reason == "wrong_incident_identity"
+
+    def test_unschedulable_shipping_p3c_rejects_wrong_namespace(self) -> None:
+        """Given incident in wrong namespace, P3c discovery validation fails."""
+        from scripts.k9b_otel_demo_lab_k8s_verdicts import validate_unschedulable_shipping_discovery
+
+        incident = {
+            "namespace": "wrong-namespace",
+            "object_name": "shipping",
+            "candidate_class": "deployment_unavailable",
+            "evidence": [],
+        }
+
+        verdict = validate_unschedulable_shipping_discovery(incident, namespace="otel-demo")
+
+        assert verdict.success is False
+        assert verdict.reason == "wrong_incident_identity"
+
+    def test_unschedulable_shipping_p3c_rejects_unaccepted_candidate_class(self) -> None:
+        """Given unaccepted candidate class, P3c discovery validation fails."""
+        from scripts.k9b_otel_demo_lab_k8s_verdicts import validate_unschedulable_shipping_discovery
+
+        incident = {
+            "namespace": "otel-demo",
+            "object_name": "shipping",
+            "candidate_class": "unknown_failure",
+            "evidence": [],
+        }
+
+        verdict = validate_unschedulable_shipping_discovery(incident, namespace="otel-demo")
+
+        assert verdict.success is False
+        assert "wrong_candidate_class" in verdict.reason
 
 
 class TestP4cRootCauseVerdict:
@@ -111,7 +171,7 @@ class TestP4cRootCauseVerdict:
         verdict = validate_unschedulable_shipping_root_cause(evidence)
 
         assert verdict.success is False
-        assert verdict.reason == "missing_scheduling_root_cause_evidence"
+        assert verdict.reason == "diagnosis_missing_scheduling_root_cause"
         assert len(verdict.matched_evidence) == 0
 
     def test_unschedulable_shipping_root_cause_accepts_failed_scheduling_event(self) -> None:
@@ -178,6 +238,23 @@ class TestP4cRootCauseVerdict:
         assert verdict.success is True
         assert "nodeSelector" in verdict.matched_evidence
 
+    def test_unschedulable_shipping_root_cause_rejects_generic_deployment_unavailable(self) -> None:
+        """P4c rejects generic deployment_unavailable diagnosis without node selector / scheduler cause."""
+        from scripts.k9b_otel_demo_lab_k8s_verdicts import validate_unschedulable_shipping_root_cause
+
+        evidence = {
+            "candidate_class": "deployment_unavailable",
+            "root_cause_summary": "The shipping deployment is unavailable. Some pods are not ready.",
+            "evidence": [
+                {"type": "DeploymentUnavailable", "message": "shipping deployment unavailable"}
+            ],
+        }
+
+        verdict = validate_unschedulable_shipping_root_cause(evidence)
+
+        assert verdict.success is False, "P4c should reject diagnosis without scheduling evidence"
+        assert verdict.reason == "diagnosis_missing_scheduling_root_cause"
+
 
 class TestP3cVerifierDistinction:
     """Tests for P3c verifier distinguishing discovery from root-cause."""
@@ -208,6 +285,65 @@ class TestP3cVerifierDistinction:
             assert "discovery_verdict" in result
             assert result["discovery_verdict"]["root_cause_final"] is False
 
+    def test_verifier_passes_without_rca_evidence(self) -> None:
+        """Verifier passes even without RCA evidence in the incident.
+        
+        RCA evidence is P4c's responsibility, not P3c's.
+        """
+        from scripts.k9b_otel_demo_lab_k8s_detection import verify_unschedulable_shipping_incident_discovered
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+            detection_dir = artifact_dir / "phase3-discovery" / "p3c-k8s-discovery"
+            detection_dir.mkdir(parents=True)
+
+            # No FailedScheduling, Unschedulable, or nodeSelector in evidence
+            evidence = {
+                "discovery_success": True,
+                "validation_success": True,
+                "incident_id": "inc-123",
+                "candidate_class": "deployment_unavailable",
+                "shipping_reference_found": True,
+                "namespace_matches": True,
+                "target_namespace": "otel-demo",
+                "signal_count": 1,
+                "evidence_count": 1,
+                "matching_signals": [
+                    {"type": "DeploymentUnavailable", "message": "shipping deployment unavailable"}
+                ],
+            }
+            (detection_dir / "detection-evidence.json").write_text(json.dumps(evidence))
+
+            result = verify_unschedulable_shipping_incident_discovered(artifact_dir)
+            assert result["verified"] is True
+            # RCA evidence is informational, not required
+            assert result["discovery_verdict"]["rca_evidence_present"] is False
+
+    def test_verifier_includes_phase_result_reason(self) -> None:
+        """Verifier includes explicit phase_result_reason in output."""
+        from scripts.k9b_otel_demo_lab_k8s_detection import verify_unschedulable_shipping_incident_discovered
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+            detection_dir = artifact_dir / "phase3-discovery" / "p3c-k8s-discovery"
+            detection_dir.mkdir(parents=True)
+
+            evidence = {
+                "discovery_success": True,
+                "validation_success": True,
+                "incident_id": "inc-123",
+                "candidate_class": "pending_pod",
+                "shipping_reference_found": True,
+                "namespace_matches": True,
+                "target_namespace": "otel-demo",
+            }
+            (detection_dir / "detection-evidence.json").write_text(json.dumps(evidence))
+
+            result = verify_unschedulable_shipping_incident_discovered(artifact_dir)
+            assert result["verified"] is True
+            assert "phase_result_reason" in result
+            assert result["phase_result_reason"] == "incident_discovered_without_rca_evidence_yet"
+
 
 class TestP4cVerifierSchedulingMarkers:
     """Tests for P4c verifier checking scheduling markers."""
@@ -231,7 +367,6 @@ class TestP4cVerifierSchedulingMarkers:
             (detection_dir / "detection-evidence.json").write_text(json.dumps(detection_evidence))
             
             # Create diagnosis evidence without scheduling markers
-            # Note: This will fail on check_missing_root_cause_terms before reaching P4c scheduling check
             diagnosis_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis"
             diagnosis_dir.mkdir(parents=True)
             diagnosis_evidence = {
@@ -256,7 +391,6 @@ class TestP4cVerifierSchedulingMarkers:
 
             result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
             assert result["verified"] is False
-            # The verifier fails on missing_root_cause_terms before reaching P4c scheduling check
             assert "missing" in result["reason"]
 
     def test_verifier_passes_with_failed_scheduling_marker(self) -> None:
@@ -278,7 +412,6 @@ class TestP4cVerifierSchedulingMarkers:
             (detection_dir / "detection-evidence.json").write_text(json.dumps(detection_evidence))
             
             # Create diagnosis evidence with scheduling markers
-            # Note: root_cause_summary must include text matching the regex pattern for mentions_no_matching_node
             diagnosis_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis"
             diagnosis_dir.mkdir(parents=True)
             diagnosis_evidence = {
@@ -305,3 +438,49 @@ class TestP4cVerifierSchedulingMarkers:
             assert result["verified"] is True
             assert "p4c_verdict" in result
             assert result["p4c_verdict"]["success"] is True
+
+    def test_verifier_includes_phase_result_reason(self) -> None:
+        """Verifier includes explicit phase_result_reason in output."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis import verify_unschedulable_shipping_mult_pass_diagnosis
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+            
+            # Create detection evidence
+            detection_dir = artifact_dir / "phase3-discovery" / "p3c-k8s-discovery"
+            detection_dir.mkdir(parents=True)
+            detection_evidence = {
+                "discovery_success": True,
+                "validation_success": True,
+                "incident_id": "inc-123",
+                "candidate_class": "deployment_unavailable",
+            }
+            (detection_dir / "detection-evidence.json").write_text(json.dumps(detection_evidence))
+            
+            # Create diagnosis evidence with scheduling markers
+            diagnosis_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis"
+            diagnosis_dir.mkdir(parents=True)
+            diagnosis_evidence = {
+                "phase": "p4c-k8s-multipass-diagnosis",
+                "incident_id": "inc-123",
+                "candidate_class": "deployment_unavailable",
+                "pass_count": 2,
+                "read_only": True,
+                "root_cause_summary": "The shipping pod has FailedScheduling due to nodeSelector k9b.dev/otel-lab-node=missing - no matching node found for the selector",
+                "real_loop_invoked": True,
+                "real_pass_artifacts_found": True,
+                "executed_checks": [],
+                "root_cause_matches": {
+                    "mentions_shipping": True,
+                    "mentions_node_selector": True,
+                    "mentions_selector_key": True,
+                    "mentions_selector_value": True,
+                    "mentions_no_matching_node": True,
+                },
+            }
+            (diagnosis_dir / "diagnosis-evidence.json").write_text(json.dumps(diagnosis_evidence))
+
+            result = verify_unschedulable_shipping_mult_pass_diagnosis(artifact_dir)
+            assert result["verified"] is True
+            assert "phase_result_reason" in result
+            assert result["phase_result_reason"] == "diagnosis_rca_valid"

@@ -9,6 +9,12 @@ P4c Root-Cause Validation Semantics:
 - Validates root-cause evidence (scheduling markers)
 - Requires scheduling-specific evidence (FailedScheduling, nodeSelector, etc.)
 - Separated from P3c discovery validation
+
+Phase Result Reasons:
+- diagnosis_rca_valid: Diagnosis contains scheduling root-cause evidence
+- diagnosis_missing_scheduling_root_cause: No scheduling markers found
+- diagnosis_missing_shipping_identity: Diagnosis doesn't reference shipping
+- diagnosis_missing_mult_pass_evidence: Fewer than 2 passes or evidence incomplete
 """
 
 from __future__ import annotations
@@ -29,6 +35,10 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_match import (
     check_read_only_violations,
 )
 from scripts.k9b_otel_demo_lab_k8s_verdicts import (
+    P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+    P4C_REASON_DIAGNOSIS_MISSING_SCHEDULING_RC,
+    P4C_REASON_DIAGNOSIS_MISSING_SHIPPING,
+    P4C_REASON_DIAGNOSIS_RCA_VALID,
     SCHEDULING_ROOT_CAUSE_MARKERS,
     validate_unschedulable_shipping_root_cause,
 )
@@ -69,8 +79,10 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if not detection_evidence_path.exists():
         return {
             "verified": False,
-            "reason": "p3c_evidence_not_found",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+            "phase_result_reason": "p3c_evidence_not_found",
             "path": str(detection_evidence_path),
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     detection_evidence = json.loads(detection_evidence_path.read_text())
@@ -80,8 +92,10 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if not is_valid_p3c:
         return {
             "verified": False,
-            "reason": f"p3c_validation_failed: {p3c_error}",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+            "phase_result_reason": f"p3c_validation_failed: {p3c_error}",
             "detection_evidence": detection_evidence,
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     # Check diagnosis evidence
@@ -92,8 +106,10 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if not diagnosis_evidence_path.exists():
         return {
             "verified": False,
-            "reason": "diagnosis_evidence_not_found",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+            "phase_result_reason": "diagnosis_evidence_not_found",
             "path": str(diagnosis_evidence_path),
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     diagnosis_evidence = json.loads(diagnosis_evidence_path.read_text())
@@ -105,9 +121,11 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if p3c_incident_id and diagnosis_incident_id and p3c_incident_id != diagnosis_incident_id:
         return {
             "verified": False,
-            "reason": "incident_id_mismatch",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_SHIPPING,
+            "phase_result_reason": "incident_id_mismatch",
             "p3c_incident_id": p3c_incident_id,
             "diagnosis_incident_id": diagnosis_incident_id,
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     # Validate diagnosis evidence structure
@@ -115,9 +133,11 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if not is_valid_diagnosis:
         return {
             "verified": False,
-            "reason": "diagnosis_validation_failed",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+            "phase_result_reason": "diagnosis_validation_failed",
             "failures": diagnosis_failures,
             "diagnosis_evidence": diagnosis_evidence,
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     # Check for simulation usage - REJECT simulation
@@ -127,10 +147,12 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if simulation_used or diagnosis_source == DIAGNOSIS_SOURCE_SIMULATED:
         return {
             "verified": False,
-            "reason": "simulation_used_but_not_allowed",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+            "phase_result_reason": "simulation_used_but_not_allowed",
             "diagnosis_source": diagnosis_source,
             "simulation_used": simulation_used,
             "failure_reason": "Simulation is not allowed in live-lab verification",
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     # Check real loop invocation
@@ -138,9 +160,11 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if not real_loop_invoked:
         return {
             "verified": False,
-            "reason": "real_loop_not_invoked",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+            "phase_result_reason": "real_loop_not_invoked",
             "real_loop_invoked": real_loop_invoked,
             "failure_reason": "Real k9b automatic diagnosis loop was not invoked",
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     # Check real pass artifacts
@@ -148,10 +172,12 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if not real_pass_artifacts_found:
         return {
             "verified": False,
-            "reason": "real_pass_artifacts_missing",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+            "phase_result_reason": "real_pass_artifacts_missing",
             "real_pass_artifacts_found": real_pass_artifacts_found,
             "pass_artifact_paths": diagnosis_evidence.get("pass_artifact_paths", []),
             "failure_reason": "Real pass artifacts from k9b diagnosis loop not found",
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     # Check pass count with specific error reason
@@ -159,9 +185,11 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if not has_min_passes:
         return {
             "verified": False,
-            "reason": "insufficient_passes",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+            "phase_result_reason": "insufficient_passes",
             "pass_count": actual_pass_count,
             "min_required": min_required,
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     # Check read-only contract with specific error reason
@@ -169,21 +197,27 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if not is_read_only:
         return {
             "verified": False,
-            "reason": "read_only_contract_violated",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_MULT_PASS,
+            "phase_result_reason": "read_only_contract_violated",
             "violations": read_only_violations,
             "executed_checks": diagnosis_evidence.get("executed_checks", []),
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     # Check root-cause terms with specific error reason
     all_terms_present, term_checks = check_missing_root_cause_terms(diagnosis_evidence)
     if not all_terms_present:
         missing_terms = [k for k, v in term_checks.items() if not v]
+        # Check if shipping is mentioned
+        shipping_mentioned = term_checks.get("mentions_shipping", False)
         return {
             "verified": False,
-            "reason": "missing_root_cause_terms",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_SHIPPING if not shipping_mentioned else P4C_REASON_DIAGNOSIS_MISSING_SCHEDULING_RC,
+            "phase_result_reason": "missing_root_cause_terms",
             "missing_terms": missing_terms,
             "term_checks": term_checks,
             "root_cause_summary": diagnosis_evidence.get("root_cause_summary", ""),
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
     # P4c Root-Cause Validation: Check for scheduling-specific markers
@@ -194,19 +228,22 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
     if not root_cause_verdict.success:
         return {
             "verified": False,
-            "reason": "missing_scheduling_root_cause_evidence",
+            "reason": P4C_REASON_DIAGNOSIS_MISSING_SCHEDULING_RC,
+            "phase_result_reason": root_cause_verdict.reason or P4C_REASON_DIAGNOSIS_MISSING_SCHEDULING_RC,
             "p4c_verdict": root_cause_verdict.to_dict(),
             "root_cause_summary": diagnosis_evidence.get("root_cause_summary", ""),
             "required_markers": list(SCHEDULING_ROOT_CAUSE_MARKERS),
             "diagnosis_evidence": diagnosis_evidence,
+            "phase": "p4c-k8s-multipass-diagnosis",
         }
     
-    # All checks passed
+    # All checks passed - P4c diagnosis root cause is valid
     return {
         "verified": True,
         "incident_id": diagnosis_incident_id,
         "candidate_class": diagnosis_evidence.get("candidate_class"),
         "namespace": diagnosis_evidence.get("target_namespace"),
+        "phase_result_reason": P4C_REASON_DIAGNOSIS_RCA_VALID,
         "pass_count": actual_pass_count,
         "pass_run_ids": diagnosis_evidence.get("pass_run_ids", []),
         "root_cause_matches": term_checks,
@@ -214,4 +251,5 @@ def verify_unschedulable_shipping_mult_pass_diagnosis(
         "root_cause_summary": diagnosis_evidence.get("root_cause_summary", ""),
         "p4c_verdict": root_cause_verdict.to_dict(),
         "diagnosis_evidence": diagnosis_evidence,
+        "phase": "p4c-k8s-multipass-diagnosis",
     }

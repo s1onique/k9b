@@ -20,7 +20,10 @@ class TestK8sDetectionVerifier:
         artifact_dir = Path("/tmp/nonexistent")
         result = verify_unschedulable_shipping_incident_discovered(artifact_dir)
         assert result["verified"] is False
-        assert result["reason"] == "detection_evidence_not_found"
+        # reason is canonical phase result reason
+        assert result["reason"] == "incident_not_found"
+        # phase_result_reason has the detailed reason
+        assert result["phase_result_reason"] == "detection_evidence_not_found"
 
     def test_verifier_returns_false_when_discovery_failed(self) -> None:
         """Verifier returns False when discovery success is False."""
@@ -91,7 +94,10 @@ class TestK8sDetectionVerifier:
 
             result = verify_unschedulable_shipping_incident_discovered(artifact_dir)
             assert result["verified"] is False
-            assert result["reason"] == "no_shipping_reference"
+            # reason is canonical phase result reason
+            assert result["reason"] == "wrong_incident_identity"
+            # phase_result_reason has the detailed reason
+            assert result["phase_result_reason"] == "no_shipping_reference"
 
     def test_verifier_passes_with_all_validations(self) -> None:
         """Verifier passes when all validations pass."""
