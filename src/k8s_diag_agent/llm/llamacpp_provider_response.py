@@ -6,6 +6,9 @@ from typing import Any, NoReturn
 
 from .llamacpp_provider_errors import LLMResponseParseError
 
+# Non-standard content field names used by some OpenAI-compatible/reasoning servers
+_REASONING_CONTENT_KEYS = frozenset(("reasoning_content", "reasoning", "text"))
+
 
 def _type_name(value: Any) -> str:
     """Get type name for error messages."""
@@ -101,6 +104,95 @@ def _extract_text_from_content(node: Any, path: str) -> str | None:
         nested_path = f"{path}['content']"
         return _extract_text_from_content(node.get("content"), nested_path)
     _raise_shape_error(path, "a string or nested 'content' object", node, "")
+
+
+def _check_truncation_before_parse(
+    data: Any,
+    content: str | None,
+    max_tokens: int | None,
+) -> None:
+    """Check if response was truncated and raise LLMResponseParseError early.
+
+    This function detects finish_reason="length" before attempting JSON parsing,
+    allowing for clearer error classification when the model runs out of
+    completion budget.
+
+    Args:
+        data: The full response dict for diagnostics extraction
+        content: The extracted content string (may be None or reasoning content)
+        max_tokens: The max_tokens limit used for the request
+
+    Raises:
+        LLMResponseParseError: If finish_reason is "length" (truncation detected)
+    """
+    resp_diags = _extract_response_diagnostics(data)
+    finish_reason = resp_diags.get("finish_reason")
+
+    if finish_reason == "length":
+        raise LLMResponseParseError(
+            "LLM response ended with finish_reason=length before producing parseable "
+            "JSON. Increase max output tokens or disable reasoning/thinking for "
+            "this provider.",
+            finish_reason=finish_reason,
+            response_content_chars=resp_diags.get("response_content_chars"),
+            response_content_prefix=resp_diags.get("response_content_prefix"),
+            completion_stopped_by_length=True,
+            max_tokens=max_tokens,
+        )
+
+
+def _extract_content_from_message(message: Any) -> str | None:
+    """Extract content from a message object, handling common variants.
+
+    This function handles:
+    - Standard OpenAI: message["content"]
+    - Reasoning/thinking models: message["reasoning_content"], message["reasoning"]
+    - Plain string messages
+    - OpenAI-style parts array with text content
+
+    Args:
+        message: The message object (dict or str)
+
+    Returns:
+        The extracted content string, or None if no usable content found
+    """
+    content: str | None = None
+
+    if isinstance(message, str):
+        return message if message.strip() else None
+
+    if not isinstance(message, dict):
+        return None
+
+    # Try standard OpenAI content field first
+    content = message.get("content")
+
+    # Handle string content
+    if isinstance(content, str) and content.strip():
+        return content
+
+    # Handle OpenAI-style parts array
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text)
+        joined = "".join(parts)
+        if joined.strip():
+            return joined
+        # No usable text in parts, fall through to reasoning fields
+
+    # Try reasoning/thinking content fields (common in reasoning models)
+    # Note: All successful standard content paths (string, parts array) have already returned,
+    # so this loop only executes when standard content was empty/unusable.
+    for key in _REASONING_CONTENT_KEYS:
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+
+    return None
 
 
 def extract_assessment(data: Any, *, max_tokens: int | None = None) -> dict[str, Any]:

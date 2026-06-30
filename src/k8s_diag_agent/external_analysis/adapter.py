@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
-import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -14,6 +14,8 @@ from ..security.subprocess_helpers import (
 )
 from .artifact import ExternalAnalysisArtifact
 from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisSettings
+
+_logger = logging.getLogger(__name__)
 
 
 class ExternalAnalysisExecutionError(RuntimeError):
@@ -85,11 +87,13 @@ def normalize_adapter_name(name: str) -> str:
     if normalized == LEGACY_LLAMACPP_ADAPTER_NAME:
         # Only warn once per adapter name to avoid noisy repeated warnings
         if normalized not in _DEPRECATION_WARNING_LOGGED:
-            warnings.warn(
-                f"Adapter name '{LEGACY_LLAMACPP_ADAPTER_NAME}' is deprecated. "
-                f"Use '{OPENAI_COMPATIBLE_ADAPTER_NAME}' instead.",
-                DeprecationWarning,
-                stacklevel=2,
+            _logger.warning(
+                "Deprecated LLM provider alias used",
+                extra={
+                    "event": "deprecated-provider-alias",
+                    "provider": LEGACY_LLAMACPP_ADAPTER_NAME,
+                    "replacement": OPENAI_COMPATIBLE_ADAPTER_NAME,
+                },
             )
             _DEPRECATION_WARNING_LOGGED.add(normalized)
         return OPENAI_COMPATIBLE_ADAPTER_NAME

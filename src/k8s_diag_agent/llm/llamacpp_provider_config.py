@@ -1,12 +1,14 @@
 """Configuration for llama.cpp provider."""
 from __future__ import annotations
 
+import logging
 import os
-import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 
 from .openai_compatible_urls import build_chat_completions_url
+
+_logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 120
 DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN = 768
@@ -169,10 +171,13 @@ class LlamaCppProviderConfig:
         assert model is not None
 
         if used_legacy and "env_deprecation" not in _DEPRECATION_WARNING_LOGGED:
-            warnings.warn(
-                "LLAMA_CPP_* environment variables are deprecated. Use K9B_EXTERNAL_ANALYSIS_* variables instead.",
-                DeprecationWarning,
-                stacklevel=2,
+            _logger.warning(
+                "Deprecated LLM provider environment variables used",
+                extra={
+                    "event": "deprecated-provider-env",
+                    "legacy_vars": sorted(used_legacy),
+                    "replacement": "K9B_EXTERNAL_ANALYSIS_*",
+                },
             )
             _DEPRECATION_WARNING_LOGGED.add("env_deprecation")
 

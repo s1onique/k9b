@@ -43,7 +43,7 @@ def build_llm_failure_metadata(
 ) -> dict[str, Any]:
     """Build failure metadata for LLM parse errors with diagnostics."""
     failure_class_value = (
-        "llm_response_parse_error_length_capped"
+        "llm_completion_truncated"
         if isinstance(exc, LLMResponseParseError) and exc.completion_stopped_by_length
         else "llm_response_invalid_json"
     )

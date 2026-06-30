@@ -21,6 +21,7 @@ class LLMFailureClass(StrEnum):
     LLM_RESPONSE_INVALID_JSON = "llm_response_invalid_json"
     LLM_RESPONSE_UNRECOGNIZED_PAYLOAD = "llm_response_unrecognized_payload"
     LLM_EMPTY_RESPONSE = "llm_empty_response"
+    LLM_COMPLETION_TRUNCATED = "llm_completion_truncated"
 
 
 def _classify_request_exception(exc: BaseException, exc_name: str) -> tuple[LLMFailureClass, str]:

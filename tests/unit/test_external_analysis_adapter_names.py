@@ -3,13 +3,14 @@
 These tests verify that:
 - 'openai_compatible' is the canonical adapter name
 - 'llamacpp' is a legacy alias that normalizes to 'openai_compatible'
-- Legacy name emits deprecation warning
+- Legacy name emits structured logging warning (not DeprecationWarning)
 - Both names resolve to the same adapter behavior
 - Error messages list sorted available names
 """
 
+import logging
+import logging.handlers
 import unittest
-import warnings
 
 from k8s_diag_agent.external_analysis.adapter import (
     _ADAPTER_BUILDERS,
@@ -73,64 +74,84 @@ class TestNormalizeAdapterName(unittest.TestCase):
         self.assertEqual(result, "unknown-adapter")
 
 
-class TestNormalizeAdapterNameEmitsWarning(unittest.TestCase):
-    """Test that normalize_adapter_name emits deprecation warning for llamacpp."""
+class TestNormalizeAdapterNameEmitsStructuredWarning(unittest.TestCase):
+    """Test that normalize_adapter_name emits structured logging warning for llamacpp."""
 
     def setUp(self) -> None:
         """Clear the deprecation warning tracker before each test."""
         # Import the module-level tracker and clear it
         from k8s_diag_agent.external_analysis import adapter as adapter_module
         adapter_module._DEPRECATION_WARNING_LOGGED.clear()
+        # Set up logging capture for the adapter module
+        self._logger = logging.getLogger("k8s_diag_agent.external_analysis.adapter")
+        self._handler = logging.handlers.MemoryHandler(capacity=100)
+        self._handler.setLevel(logging.WARNING)
+        self._logger.addHandler(self._handler)
+        self._original_level = self._logger.level
+        self._logger.setLevel(logging.WARNING)
 
-    def test_llamacpp_emits_deprecation_warning(self) -> None:
-        """Calling normalize_adapter_name with 'llamacpp' should emit a DeprecationWarning."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            normalize_adapter_name("llamacpp")
+    def tearDown(self) -> None:
+        """Restore logger state."""
+        self._logger.removeHandler(self._handler)
+        self._handler.close()
+        self._logger.setLevel(self._original_level)
 
-            # Check that a DeprecationWarning was issued
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            self.assertTrue(
-                len(deprecation_warnings) > 0,
-                "Expected at least one DeprecationWarning for 'llamacpp'"
-            )
-            # Verify the warning message mentions the deprecated and canonical names
-            warning_messages = [str(x.message) for x in deprecation_warnings]
-            found_warning = any(
-                "llamacpp" in msg and "openai_compatible" in msg for msg in warning_messages
-            )
-            self.assertTrue(
-                found_warning,
-                f"Expected warning to mention both 'llamacpp' and 'openai_compatible'. Got: {warning_messages}"
-            )
+    def test_llamacpp_emits_structured_warning(self) -> None:
+        """Calling normalize_adapter_name with 'llamacpp' should emit a structured warning."""
+        normalize_adapter_name("llamacpp")
+
+        # Check that a WARNING was logged
+        records = self._handler.buffer
+        warning_records = [r for r in records if r.levelno == logging.WARNING]
+        self.assertTrue(
+            len(warning_records) > 0,
+            f"Expected at least one WARNING log for 'llamacpp', got {len(records)} total records"
+        )
+        # Verify the structured extra dict contains expected keys
+        # Note: logging.Logger.warning(..., extra={...}) merges keys directly onto the record
+        found_warning = False
+        for record in warning_records:
+            if (
+                getattr(record, "event", None) == "deprecated-provider-alias"
+                and getattr(record, "provider", None) == "llamacpp"
+                and getattr(record, "replacement", None) == "openai_compatible"
+            ):
+                found_warning = True
+                break
+        self.assertTrue(
+            found_warning,
+            f"Expected structured warning with event='deprecated-provider-alias'. Records: {[r.__dict__ for r in warning_records]}"
+        )
 
     def test_openai_compatible_no_warning(self) -> None:
         """Calling normalize_adapter_name with 'openai_compatible' should NOT emit a warning."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            normalize_adapter_name("openai_compatible")
+        normalize_adapter_name("openai_compatible")
 
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            self.assertEqual(
-                len(deprecation_warnings), 0,
-                "Should not emit DeprecationWarning for 'openai_compatible'"
-            )
+        # Should not emit any warnings for canonical name
+        records = self._handler.buffer
+        warning_records = [r for r in records if r.levelno == logging.WARNING]
+        self.assertEqual(
+            len(warning_records), 0,
+            f"Should not emit WARNING for 'openai_compatible'. Got: {[r.__dict__ for r in warning_records]}"
+        )
 
     def test_warning_only_issued_once(self) -> None:
-        """Multiple calls with 'llamacpp' should only warn once."""
+        """Multiple calls with 'llamacpp' should only warn once (deduplicated by tracker)."""
         from k8s_diag_agent.external_analysis import adapter as adapter_module
         adapter_module._DEPRECATION_WARNING_LOGGED.clear()
+        self._handler.buffer.clear()
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            # Call multiple times
-            normalize_adapter_name("llamacpp")
-            normalize_adapter_name("llamacpp")
-            normalize_adapter_name("llamacpp")
+        # Call multiple times
+        normalize_adapter_name("llamacpp")
+        normalize_adapter_name("llamacpp")
+        normalize_adapter_name("llamacpp")
 
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            # Should only have 1 warning, not 3
-            self.assertEqual(len(deprecation_warnings), 1)
+        # Should only have 1 warning, not 3 (deduplication via _DEPRECATION_WARNING_LOGGED)
+        warning_records = [r for r in self._handler.buffer if r.levelno == logging.WARNING]
+        self.assertEqual(
+            len(warning_records), 1,
+            f"Expected 1 warning due to deduplication, got {len(warning_records)}: {[r.__dict__ for r in warning_records]}"
+        )
 
 
 class TestBuildAdaptersWithCanonicalName(unittest.TestCase):

@@ -166,7 +166,7 @@ def run_auto_drilldown_analysis(
 
                 # Determine failure class based on length cap
                 if exc.completion_stopped_by_length is True:
-                    failure_class_value = "llm_response_parse_error_length_capped"
+                    failure_class_value = "llm_completion_truncated"
                 else:
                     failure_class_value = "llm_response_parse_error"
 

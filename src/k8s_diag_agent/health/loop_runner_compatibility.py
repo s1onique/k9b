@@ -45,8 +45,7 @@ def run_auto_drilldown_analysis_compat(
     from .loop_runner_drilldown_analysis import run_auto_drilldown_analysis as impl
 
     provider_name = runner.config.external_analysis.auto_drilldown.provider
-    if provider_name is None:
-        provider_name = "llamacpp"  # Default provider if not configured
+    # No default fallback - let the impl decide if provider is not configured
     return impl(
         drilldowns=drilldowns,
         directories=directories,
