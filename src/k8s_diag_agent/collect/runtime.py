@@ -13,15 +13,14 @@ from .incident_diagnosis_loop_runtime import (
 
 # Re-export from new focused modules for compatibility
 from .incident_diagnosis_loop_runtime_contract import (
+    PASS_ARTIFACT_FIELDS,
     DiagnosisLoopPolicy,
     LoopStopReason,
-    PASS_ARTIFACT_FIELDS,
 )
-
 from .incident_diagnosis_loop_runtime_rendering import (
-    render_runtime_summary,
-    render_loop_summary,
     render_gate_summary,
+    render_loop_summary,
+    render_runtime_summary,
 )
 
 __all__ = [
