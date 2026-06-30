@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -327,7 +328,7 @@ class TestBaselinePurityGuard:
 
     def test_pure_baseline_no_constraints(self) -> None:
         """Baseline with no scheduling constraints should pass purity check."""
-        deployment = {
+        deployment: dict[str, Any] = {
             "spec": {
                 "template": {
                     "spec": {}
@@ -378,7 +379,7 @@ class TestBaselinePurityGuard:
     
     def test_contaminated_baseline_with_affinity(self) -> None:
         """Baseline with affinity should fail purity check."""
-        deployment = {
+        deployment: dict[str, Any] = {
             "spec": {
                 "template": {
                     "spec": {
