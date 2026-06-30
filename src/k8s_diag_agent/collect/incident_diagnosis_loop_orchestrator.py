@@ -35,7 +35,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .incident_case_file import build_incident_case_file
 from .incident_diagnosis_loop_models import LoopDecision
@@ -54,6 +54,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "run_one_read_only_diagnosis_loop_pass",
+    "plan_one_read_only_diagnosis_loop_pass",
     "ORCHESTRATOR_SCHEMA_VERSION",
 ]
 
@@ -332,6 +333,148 @@ def run_one_read_only_diagnosis_loop_pass(
         "rebuilt_case_file": rebuilt_case_file,
         "case_file_linked_artifact": case_file_linked_artifact,
         "loop_pass_artifact": loop_pass_artifact,
+        "safety_metadata": safety_metadata,
+    }
+
+    return result
+
+
+def plan_one_read_only_diagnosis_loop_pass(
+    *,
+    incident_id: str,
+    case_file: Mapping[str, object],
+    diagnosis_report: Mapping[str, object],
+    run_id: str,
+    prior_loop_state: Mapping[str, object] | None = None,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Plan one diagnosis loop pass WITHOUT executing checks.
+
+    This is the PLANNER-ONLY seam for pre-execution policy enforcement.
+    It returns the loop_update with proposed_next_checks WITHOUT running
+    any check handlers or the fake runner.
+
+    Use this when you need to:
+    - Gate checks BEFORE execution
+    - Enforce budgets before any execution
+    - Ensure rejected checks never reach handlers
+
+    The runtime MUST call this instead of run_one_read_only_diagnosis_loop_pass
+    when pre-execution enforcement is required.
+
+    Args:
+        incident_id: The incident ID being diagnosed
+        case_file: Current case-file packet from build_incident_case_file()
+        diagnosis_report: Diagnosis report from build_incident_diagnosis()
+        run_id: Unique identifier for this orchestrator run (must be safe)
+        prior_loop_state: Prior loop state from previous pass (if continuing)
+        now: Optional datetime for deterministic timestamps
+
+    Returns:
+        Planner-only result dict:
+        {
+            "schema_version": "1.0",
+            "incident_id": "...",
+            "run_id": "...",
+            "read_only": True,
+            "allowed_actions": [],
+            "decision": "run_allowed_read_only_checks" | stop_decision,
+            "loop_update": {
+                "decision": "...",
+                "stop_reason": "...",
+                "proposed_next_checks": [...],  # For gating
+                "accepted_checks": [...],  # Planner-validated (NOT runtime-gated)
+                "rejected_checks": [...],
+                "root_cause_candidate": {...},
+            },
+            # NO runner_result - checks are NOT executed
+            # NO artifact - no checks ran
+            # NO rebuilt_case_file - no checks ran
+            "safety_metadata": {
+                "read_only": True,
+                "planner_only": True,  # Explicit: no execution
+                "no_kubernetes_client": True,
+                "no_shell": True,
+                "no_subprocess": True,
+                "no_kubectl": True,
+                "no_mutation": True,
+                "no_execution": True,
+            },
+        }
+
+    Raises:
+        ValueError: If run_id is unsafe
+
+    Safety guarantees:
+    - Does not import kubernetes
+    - Does not import subprocess
+    - Does not call kubectl
+    - Does not mutate cluster
+    - Does NOT execute any check handlers
+    - Does NOT produce runner results
+    - Preserves read_only: True
+    - Preserves allowed_actions: []
+    """
+    # Validate run_id for safety
+    _validate_run_id(run_id)
+
+    # Resolve timestamp
+    resolved_now = now if now is not None else datetime.now(UTC)
+
+    # Step 1: Plan next diagnosis pass (NO execution)
+    loop_update = plan_next_diagnosis_pass(
+        incident_id=incident_id,
+        case_file=dict(case_file),
+        diagnosis_report=dict(diagnosis_report),
+        prior_loop_state=dict(prior_loop_state) if prior_loop_state is not None else None,
+        now=resolved_now,
+    )
+
+    # Extract decision
+    decision = loop_update.get("decision", "")
+
+    # Safety metadata - explicitly planner-only
+    safety_metadata = {
+        "read_only": True,
+        "allowed_actions": [],
+        "disallowed_actions": [
+            "execute",
+            "promote",
+            "apply",
+            "remediate",
+            "delete",
+            "mutate_cluster",
+            "mutate",
+            "scale",
+            "restart",
+            "rollout",
+        ],
+        "no_kubernetes_client": True,
+        "no_shell": True,
+        "no_subprocess": True,
+        "no_kubectl": True,
+        "no_mutation": True,
+        "planner_only": True,  # Explicit: no execution occurred
+        "no_execution": True,
+        "no_runner_result": True,
+    }
+
+    # Build planner-only result (NO execution)
+    # Extract disallowed_actions as a properly-typed list using cast
+    _disallowed_actions: list[str] = cast(list[str], safety_metadata["disallowed_actions"])
+    result: dict[str, object] = {
+        "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+        "incident_id": incident_id,
+        "run_id": run_id,
+        "read_only": True,
+        "allowed_actions": [],
+        "disallowed_actions": _disallowed_actions,
+        "decision": decision,
+        "loop_update": loop_update,
+        # NO runner_result - checks are NOT executed
+        # NO artifact - no checks ran
+        # NO rebuilt_case_file - no checks ran
+        # NO loop_pass_artifact - written only after gating + execution
         "safety_metadata": safety_metadata,
     }
 

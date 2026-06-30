@@ -83,6 +83,7 @@ def _build_loop_update(
         "stop_reason": stop_reason.value if stop_reason else None,
         "accepted_checks": accepted_checks,
         "rejected_checks": rejected_checks,
+        "proposed_next_checks": proposals,  # All proposals for runtime gating
         "rejection_summary": rejection_reasons,
         "passes_completed": len(loop_state.passes),
         "current_pass": loop_state.pass_budget["current_pass"],

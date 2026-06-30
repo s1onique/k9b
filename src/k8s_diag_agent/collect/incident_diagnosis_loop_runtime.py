@@ -16,23 +16,14 @@ Design constraints:
 """
 from __future__ import annotations
 
-import json
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from k8s_diag_agent.collect.incident_diagnosis_loop_gates import (
-    is_mutating_check as _is_mutating_check,
-)
-from k8s_diag_agent.collect.incident_diagnosis_loop_gates import (
-    is_sensitive_read_check as _is_sensitive_read_check,
-)
 from k8s_diag_agent.collect.incident_diagnosis_loop_policy import (
     DiagnosisLoopPolicy,
     LoopStopReason,
-    validate_pass_artifact_schema,
 )
 
 from .incident_diagnosis_loop_models import LoopDecision
@@ -43,11 +34,22 @@ from .incident_diagnosis_loop_otel import (
 )
 from .incident_diagnosis_loop_runtime_utils import (
     compute_case_file_hash,
-    compute_fingerprint,
-    extract_evidence_hashes,
     is_safe_run_id,
 )
-from .incident_read_only_check_runner import ReadOnlyCheckHandler
+from .incident_read_only_check_runner import (
+    ReadOnlyCheckHandler,
+    run_read_only_checks,
+)
+from .runtime_artifacts import (
+    P4C_DIAGNOSIS_SUBDIR,
+    P4C_LOOP_PASSES_SUBDIR,
+    RUNTIME_SCHEMA_VERSION,
+    build_policy_enforced_pass_artifact,
+    write_runtime_pass_artifact,
+)
+from .runtime_budgets import enforce_budgets
+from .runtime_gating import GateSummary, gate_checks
+from .runtime_state import LoopRuntimeState
 
 if TYPE_CHECKING:
     pass
@@ -60,455 +62,9 @@ __all__ = [
     "LoopRuntimeState",
     "GateSummary",
     "RUNTIME_SCHEMA_VERSION",
+    "P4C_DIAGNOSIS_SUBDIR",
+    "P4C_LOOP_PASSES_SUBDIR",
 ]
-
-# =============================================================================
-# Constants
-# =============================================================================
-
-RUNTIME_SCHEMA_VERSION = "1.0"
-
-# P4c artifact path components
-P4C_DIAGNOSIS_SUBDIR = "p4c-k8s-multipass-diagnosis"
-P4C_LOOP_PASSES_SUBDIR = "loop-passes"
-
-
-# =============================================================================
-# Persistent Runtime State
-# =============================================================================
-
-
-@dataclass(frozen=True)
-class LoopRuntimeState:
-    """Persistent state across multiple diagnosis loop passes.
-    
-    This state is maintained across passes to:
-    - Track seen check fingerprints for duplicate detection
-    - Maintain pass indices and counts
-    - Track model calls and evidence hashes
-    - Ensure budget limits are respected across the entire loop
-    
-    The state is immutable - each pass creates a new state with updates.
-    """
-
-    # Identifiers
-    loop_run_id: str
-    incident_id: str
-    
-    # Pass tracking
-    pass_index: int = 1
-    started_at: str = ""
-    
-    # Check fingerprint tracking (for duplicate detection across passes)
-    seen_check_fingerprints: frozenset[str] = frozenset()
-    
-    # Execution counters
-    total_checks_executed: int = 0
-    total_checks_proposed: int = 0
-    total_checks_rejected: int = 0
-    total_mutating_executed: int = 0
-    total_sensitive_executed: int = 0
-    total_model_calls: int = 0
-    
-    # Evidence tracking
-    evidence_hashes_seen: frozenset[str] = frozenset()
-    
-    # Case file tracking
-    last_case_file_hash: str = ""
-    
-    # Schema version for compatibility
-    schema_version: str = RUNTIME_SCHEMA_VERSION
-
-    def with_updates(
-        self,
-        *,
-        pass_index: int | None = None,
-        seen_check_fingerprints: frozenset[str] | None = None,
-        total_checks_executed: int | None = None,
-        total_checks_proposed: int | None = None,
-        total_checks_rejected: int | None = None,
-        total_mutating_executed: int | None = None,
-        total_sensitive_executed: int | None = None,
-        total_model_calls: int | None = None,
-        evidence_hashes_seen: frozenset[str] | None = None,
-        last_case_file_hash: str | None = None,
-    ) -> LoopRuntimeState:
-        """Create a new state with the specified updates applied."""
-        return LoopRuntimeState(
-            loop_run_id=self.loop_run_id,
-            incident_id=self.incident_id,
-            pass_index=pass_index if pass_index is not None else self.pass_index,
-            started_at=self.started_at,
-            seen_check_fingerprints=(
-                seen_check_fingerprints if seen_check_fingerprints is not None 
-                else self.seen_check_fingerprints
-            ),
-            total_checks_executed=(
-                total_checks_executed if total_checks_executed is not None 
-                else self.total_checks_executed
-            ),
-            total_checks_proposed=(
-                total_checks_proposed if total_checks_proposed is not None 
-                else self.total_checks_proposed
-            ),
-            total_checks_rejected=(
-                total_checks_rejected if total_checks_rejected is not None 
-                else self.total_checks_rejected
-            ),
-            total_mutating_executed=(
-                total_mutating_executed if total_mutating_executed is not None 
-                else self.total_mutating_executed
-            ),
-            total_sensitive_executed=(
-                total_sensitive_executed if total_sensitive_executed is not None 
-                else self.total_sensitive_executed
-            ),
-            total_model_calls=(
-                total_model_calls if total_model_calls is not None 
-                else self.total_model_calls
-            ),
-            evidence_hashes_seen=(
-                evidence_hashes_seen if evidence_hashes_seen is not None 
-                else self.evidence_hashes_seen
-            ),
-            last_case_file_hash=(
-                last_case_file_hash if last_case_file_hash is not None 
-                else self.last_case_file_hash
-            ),
-            schema_version=self.schema_version,
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dict for serialization."""
-        return {
-            "loop_run_id": self.loop_run_id,
-            "incident_id": self.incident_id,
-            "pass_index": self.pass_index,
-            "started_at": self.started_at,
-            "seen_check_fingerprints": list(self.seen_check_fingerprints),
-            "total_checks_executed": self.total_checks_executed,
-            "total_checks_proposed": self.total_checks_proposed,
-            "total_checks_rejected": self.total_checks_rejected,
-            "total_mutating_executed": self.total_mutating_executed,
-            "total_sensitive_executed": self.total_sensitive_executed,
-            "total_model_calls": self.total_model_calls,
-            "evidence_hashes_seen": list(self.evidence_hashes_seen),
-            "last_case_file_hash": self.last_case_file_hash,
-            "schema_version": self.schema_version,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> LoopRuntimeState:
-        """Create from dict."""
-        return cls(
-            loop_run_id=str(data.get("loop_run_id", "")),
-            incident_id=str(data.get("incident_id", "")),
-            pass_index=int(data.get("pass_index", 1)),
-            started_at=str(data.get("started_at", "")),
-            seen_check_fingerprints=frozenset(data.get("seen_check_fingerprints", [])),
-            total_checks_executed=int(data.get("total_checks_executed", 0)),
-            total_checks_proposed=int(data.get("total_checks_proposed", 0)),
-            total_checks_rejected=int(data.get("total_checks_rejected", 0)),
-            total_mutating_executed=int(data.get("total_mutating_executed", 0)),
-            total_sensitive_executed=int(data.get("total_sensitive_executed", 0)),
-            total_model_calls=int(data.get("total_model_calls", 0)),
-            evidence_hashes_seen=frozenset(data.get("evidence_hashes_seen", [])),
-            last_case_file_hash=str(data.get("last_case_file_hash", "")),
-            schema_version=str(data.get("schema_version", RUNTIME_SCHEMA_VERSION)),
-        )
-
-
-# =============================================================================
-# Check Gating
-# =============================================================================
-
-
-@dataclass
-class GateSummary:
-    """Summary of gating decisions for a pass.
-    
-    This summarizes what was proposed vs accepted/rejected in a single pass.
-    """
-
-    proposed: int
-    accepted: int
-    rejected_mutating: int
-    rejected_sensitive: int
-    rejected_duplicate: int
-    accepted_checks: list[dict[str, Any]]
-    rejected_checks: list[dict[str, Any]]
-    # Explicit fingerprint tracking for this pass
-    accepted_fingerprints: list[str] = field(default_factory=list)
-    rejected_fingerprints: list[str] = field(default_factory=list)
-
-
-def gate_checks(
-    proposed_checks: Sequence[Mapping[str, object]],
-    policy: DiagnosisLoopPolicy,
-    seen_fingerprints: set[str],
-) -> tuple[GateSummary, list[str]]:
-    """Gate proposed checks against policy.
-    
-    CRITICAL: This function enforces policy BEFORE execution.
-    Rejected checks are NEVER passed back for execution.
-
-    Applies in order:
-    1. Mutating check rejection (unless policy allows)
-    2. Sensitive read rejection (unless policy allows)  
-    3. Duplicate fingerprint rejection (checks against seen_fingerprints)
-
-    Args:
-        proposed_checks: Checks proposed by the planner
-        policy: The DiagnosisLoopPolicy to enforce
-        seen_fingerprints: Set of fingerprints already seen (mutated in place)
-            - DUPLICATE fingerprints are added to this set
-            - Accepted fingerprints are NOT added (handled by caller)
-
-    Returns:
-        Tuple of (GateSummary, list of accepted fingerprints for this pass)
-        The caller must add accepted_fingerprints to seen_fingerprints.
-    """
-    accepted_checks: list[dict[str, Any]] = []
-    rejected_checks: list[dict[str, Any]] = []
-    accepted_fingerprints: list[str] = []
-    rejected_fingerprints: list[str] = []
-    rejected_mutating = 0
-    rejected_sensitive = 0
-    rejected_duplicate = 0
-
-    for check in proposed_checks:
-        check_id = str(check.get("check_id", "unknown"))
-        check_dict = dict(check)
-
-        # Compute fingerprint upfront for all checks
-        fingerprint = compute_fingerprint(check)
-
-        # Check 1: Mutating? (normalize underscores to spaces for pattern matching)
-        normalized_check_id = check_id.replace("_", " ")
-        is_mutating = _is_mutating_check(normalized_check_id) or _is_mutating_check(check_id) or _is_mutating_check(json.dumps(check))
-        if is_mutating:
-            if not policy.allow_mutating_checks:
-                rejected_checks.append({**check_dict, "rejection_reason": "mutating_check_rejected", "is_unsafe": True})
-                rejected_fingerprints.append(fingerprint)
-                rejected_mutating += 1
-                continue
-
-        # Check 2: Sensitive read? (normalize underscores to spaces for pattern matching)
-        is_sensitive = _is_sensitive_read_check(normalized_check_id) or _is_sensitive_read_check(check_id) or _is_sensitive_read_check(json.dumps(check))
-        if is_sensitive:
-            if not policy.allow_sensitive_reads:
-                rejected_checks.append({**check_dict, "rejection_reason": "sensitive_read_denied", "is_sensitive": True})
-                rejected_fingerprints.append(fingerprint)
-                rejected_sensitive += 1
-                continue
-
-        # Check 3: Duplicate fingerprint?
-        if fingerprint in seen_fingerprints:
-            rejected_checks.append({**check_dict, "rejection_reason": "duplicate_check_fingerprint", "duplicate_fingerprint": fingerprint})
-            rejected_fingerprints.append(fingerprint)
-            rejected_duplicate += 1
-            continue
-
-        # ACCEPTED: Add fingerprint to seen set immediately
-        seen_fingerprints.add(fingerprint)
-        accepted_checks.append(check_dict)
-        accepted_fingerprints.append(fingerprint)
-
-    return (
-        GateSummary(
-            proposed=len(proposed_checks),
-            accepted=len(accepted_checks),
-            rejected_mutating=rejected_mutating,
-            rejected_sensitive=rejected_sensitive,
-            rejected_duplicate=rejected_duplicate,
-            accepted_checks=accepted_checks,
-            rejected_checks=rejected_checks,
-            accepted_fingerprints=accepted_fingerprints,
-            rejected_fingerprints=rejected_fingerprints,
-        ),
-        accepted_fingerprints,
-    )
-
-
-def enforce_budgets(
-    policy: DiagnosisLoopPolicy,
-    runtime_state: LoopRuntimeState,
-    elapsed_seconds: float,
-) -> tuple[bool, LoopStopReason | None]:
-    """Enforce hard budget limits BEFORE execution.
-    
-    Returns:
-        Tuple of (exceeded, stop_reason)
-        - If exceeded=True, NO checks should be executed
-        - stop_reason contains the reason if exceeded
-    """
-    # Check pass index against max_passes
-    if runtime_state.pass_index > policy.max_passes:
-        return True, LoopStopReason.MAX_PASSES_REACHED
-
-    # Check total checks against max_total_checks
-    if runtime_state.total_checks_executed >= policy.max_total_checks:
-        return True, LoopStopReason.MAX_CHECKS_REACHED
-
-    # Check checks proposed this pass against max_checks_per_pass
-    # (This is approximate since we don't know exact count until planning)
-    
-    # Check model calls against max_model_calls
-    if runtime_state.total_model_calls >= policy.max_model_calls:
-        return True, LoopStopReason.MAX_MODEL_CALLS_REACHED
-
-    # Check wall clock against max_wall_clock_seconds
-    if elapsed_seconds >= policy.max_wall_clock_seconds:
-        return True, LoopStopReason.MAX_WALL_CLOCK_REACHED
-
-    return False, None
-
-
-def map_decision_to_stop_reason(decision: str, loop_update: Any) -> LoopStopReason | None:
-    """Map loop decision to typed LoopStopReason."""
-    decision_to_reason: dict[str, LoopStopReason] = {
-        LoopDecision.STOP_ROOT_CAUSE_FOUND.value: LoopStopReason.ROOT_CAUSE_CONFIRMED_BY_EVIDENCE,
-        LoopDecision.STOP_NO_SAFE_CHECKS.value: LoopStopReason.NO_SAFE_CHECKS_PROPOSED,
-        LoopDecision.STOP_BUDGET_EXHAUSTED.value: LoopStopReason.MAX_CHECKS_REACHED,
-        LoopDecision.STOP_LOW_CONFIDENCE_NO_PROGRESS.value: LoopStopReason.NO_NEW_EVIDENCE,
-        LoopDecision.STOP_SAFETY_BLOCKED.value: LoopStopReason.CHECK_RUNNER_FAILED,
-        LoopDecision.STOP_NO_CHECKS_PROPOSED.value: LoopStopReason.NO_SAFE_CHECKS_PROPOSED,
-    }
-    return decision_to_reason.get(decision)
-
-
-# =============================================================================
-# Pass Artifact Construction
-# =============================================================================
-
-
-def build_policy_enforced_pass_artifact(
-    *,
-    loop_run_id: str,
-    incident_id: str,
-    pass_index: int,
-    case_file: Mapping[str, object],
-    policy: DiagnosisLoopPolicy,
-    gate_summary: GateSummary,
-    accepted_fingerprints: list[str],
-    runtime_state: LoopRuntimeState,
-    decision: str,
-    root_cause_summary: str,
-    confidence: str,
-    runner_result: dict[str, Any] | None,
-    now: datetime | None = None,
-    budget_exceeded: bool = False,
-    budget_stop_reason: LoopStopReason | None = None,
-) -> dict[str, Any]:
-    """Build a pass artifact with exact PASS_ARTIFACT_FIELDS.
-    
-    This artifact contains fingerprints for checks ACCEPTED/EXECUTED in THIS PASS,
-    not the cumulative seen set.
-    """
-    resolved_now = now if now is not None else datetime.now(UTC)
-
-    # Determine stop reason
-    stop_reason: str | None = None
-    if budget_exceeded and budget_stop_reason:
-        stop_reason = budget_stop_reason.value
-    elif decision.startswith("stop_"):
-        stop_reason = decision.replace("stop_", "").replace("_", " ")
-        # Map to typed reason
-        typed_reason = map_decision_to_stop_reason(decision, None)
-        if typed_reason:
-            stop_reason = typed_reason.value
-
-    # Determine if loop should continue
-    should_continue = decision == LoopDecision.RUN_ALLOWED_READ_ONLY_CHECKS.value and not budget_exceeded
-
-    # Build the complete artifact with all PASS_ARTIFACT_FIELDS
-    # CRITICAL: accepted_checks contains IDs for checks ACCEPTED this pass
-    # check_fingerprints contains fingerprints for checks ACCEPTED this pass
-    artifact: dict[str, Any] = {
-        # PASS_ARTIFACT_FIELDS
-        "loop_run_id": loop_run_id,
-        "incident_id": incident_id,
-        "pass_index": pass_index,
-        "case_file_hash": compute_case_file_hash(case_file),
-        # proposed_checks would be from loop_update.proposed_next_checks if we had it
-        "proposed_checks": [str(c.get("check_id", "")) for c in gate_summary.accepted_checks + gate_summary.rejected_checks],
-        # accepted_checks: checks that PASSED gate and were/will be executed
-        "accepted_checks": [str(c.get("check_id", "")) for c in gate_summary.accepted_checks],
-        # rejected_checks: checks that FAILED gate
-        "rejected_checks": [str(c.get("check_id", "")) for c in gate_summary.rejected_checks],
-        # CRITICAL: check_fingerprints contains fingerprints for this pass only
-        "check_fingerprints": accepted_fingerprints,
-        # Cumulative fingerprints from all passes (for trajectory evaluation)
-        "all_seen_fingerprints": list(runtime_state.seen_check_fingerprints),
-        "new_evidence_hashes": extract_evidence_hashes(runner_result),
-        "duplicate_check_count": gate_summary.rejected_duplicate,
-        "unsafe_check_count": gate_summary.rejected_mutating,
-        "root_cause_summary": root_cause_summary,
-        "confidence": confidence,
-        "should_continue": should_continue,
-        "stop_reason": stop_reason,
-        # Additional metadata
-        "schema_version": RUNTIME_SCHEMA_VERSION,
-        "generated_at": resolved_now.isoformat(),
-        "policy_version": policy.schema_version,
-        "decision": decision,
-        "budget_exceeded": budget_exceeded,
-        "gate_summary": {
-            "proposed": gate_summary.proposed,
-            "accepted": gate_summary.accepted,
-            "rejected_mutating": gate_summary.rejected_mutating,
-            "rejected_sensitive": gate_summary.rejected_sensitive,
-            "rejected_duplicate": gate_summary.rejected_duplicate,
-        },
-        # Accurate safety metadata
-        "safety_metadata": {
-            "read_only": True,
-            "policy_enforced": True,
-            "allow_mutating_checks": policy.allow_mutating_checks,
-            "allow_sensitive_reads": policy.allow_sensitive_reads,
-            "runner_kind": "fake",  # Current implementation uses fake runner
-            "checks_executed_count": gate_summary.accepted,
-            "checks_rejected_count": len(gate_summary.rejected_checks),
-            "mutating_checks_executed_count": 0,  # Would be non-zero if mutating allowed
-            "sensitive_reads_executed_count": 0,  # Would be non-zero if sensitive allowed
-        },
-    }
-
-    # Validate schema
-    is_valid, missing = validate_pass_artifact_schema(artifact)
-    if not is_valid:
-        artifact["_schema_validation_warning"] = f"Missing fields: {missing}"
-
-    return artifact
-
-
-def write_runtime_pass_artifact(
-    external_analysis_dir: Path,
-    loop_run_id: str,
-    pass_index: int,
-    artifact: dict[str, Any],
-) -> Path | None:
-    """Write pass artifact to the P4c-compatible path.
-    
-    Path: external_analysis_dir/phase4-diagnosis/p4c-k8s-multipass-diagnosis/loop-passes/<loop_run_id>-pass-<n>.json
-    """
-    try:
-        # Build P4c-compatible path
-        phase4_dir = external_analysis_dir / "phase4-diagnosis"
-        p4c_dir = phase4_dir / P4C_DIAGNOSIS_SUBDIR
-        loop_passes_dir = p4c_dir / P4C_LOOP_PASSES_SUBDIR
-        
-        loop_passes_dir.mkdir(parents=True, exist_ok=True)
-        
-        filename = f"{loop_run_id}-pass-{pass_index}.json"
-        artifact_path = loop_passes_dir / filename
-        
-        artifact_json = json.dumps(artifact, default=str, indent=2)
-        artifact_path.write_text(artifact_json, encoding="utf-8")
-        
-        return artifact_path
-    except (OSError, ValueError):
-        return None
 
 
 # =============================================================================
@@ -541,9 +97,17 @@ def run_policy_enforced_loop_pass(
     7. Return augmented result
 
     CRITICAL: Rejected checks are NEVER executed.
+    
+    Execution order is STRUCTURALLY enforced:
+    1. Plan (via plan_one_read_only_diagnosis_loop_pass - NO execution)
+    2. Enforce budgets
+    3. Gate proposed checks
+    4. Execute ONLY accepted checks (via run_read_only_checks)
+    5. Build pass artifact
+    6. Write P4c artifact
     """
     from .incident_diagnosis_loop_orchestrator import (
-        run_one_read_only_diagnosis_loop_pass,
+        plan_one_read_only_diagnosis_loop_pass,
     )
 
     # Validate run_id
@@ -569,7 +133,7 @@ def run_policy_enforced_loop_pass(
     if current_state.pass_index == 1:
         emit_loop_span(current_state.loop_run_id, incident_id, resolved_policy, "started")
 
-    # Check budgets BEFORE execution
+    # Check budgets BEFORE any planning
     elapsed_seconds = (resolved_now - datetime.fromisoformat(current_state.started_at)).total_seconds()
     elapsed_seconds = max(0, elapsed_seconds)
     
@@ -577,30 +141,37 @@ def run_policy_enforced_loop_pass(
         resolved_policy, current_state, elapsed_seconds
     )
 
-    # Run the orchestrator to get planned checks
-    orchestrator_result = run_one_read_only_diagnosis_loop_pass(
+    # STEP 1: Plan WITHOUT executing checks (planner-only seam)
+    # This returns loop_update with proposed_next_checks but NO runner_result
+    planner_result = plan_one_read_only_diagnosis_loop_pass(
         incident_id=incident_id,
-        external_analysis_dir=external_analysis_dir,
         case_file=case_file,
         diagnosis_report=diagnosis_report,
         run_id=run_id,
         prior_loop_state=prior_loop_state,
         now=resolved_now,
-        fake_handlers=fake_handlers,
     )
 
     # Extract loop update for gating decisions
-    loop_update = orchestrator_result.get("loop_update", {})
-    decision = str(orchestrator_result.get("decision", ""))
+    loop_update = planner_result.get("loop_update", {})
+    decision = str(planner_result.get("decision", ""))
 
     # Get proposed checks from loop update
     proposed_checks = loop_update.get("proposed_next_checks", [])
     if not isinstance(proposed_checks, list):
         proposed_checks = []
 
-    # CRITICAL: Gate checks BEFORE execution using persistent seen_fingerprints
+    # STEP 2: Gate checks BEFORE execution using persistent seen_fingerprints
     seen_fingerprints = set(current_state.seen_check_fingerprints)
     gate_summary, accepted_fingerprints = gate_checks(proposed_checks, resolved_policy, seen_fingerprints)
+
+    # STEP 3: Enforce max_checks_per_pass after gating
+    if gate_summary.accepted > resolved_policy.max_checks_per_pass:
+        # Reject overflow - only execute up to the cap
+        # Slice accepted_checks to only the first max_checks_per_pass
+        gate_summary.accepted_checks = gate_summary.accepted_checks[:resolved_policy.max_checks_per_pass]
+        gate_summary.accepted_fingerprints = gate_summary.accepted_fingerprints[:resolved_policy.max_checks_per_pass]
+        gate_summary.accepted = len(gate_summary.accepted_checks)
 
     # If budget is exceeded, DO NOT execute checks
     if budget_exceeded:
@@ -615,7 +186,19 @@ def run_policy_enforced_loop_pass(
     if isinstance(root_cause, dict):
         confidence = str(root_cause.get("confidence", "unknown"))
 
-    # Build the pass artifact with ONLY accepted fingerprints for this pass
+    # STEP 4: Execute ONLY accepted checks (AFTER gating)
+    runner_result: dict[str, Any] | None = None
+    if gate_summary.accepted > 0 and not budget_exceeded and decision == LoopDecision.RUN_ALLOWED_READ_ONLY_CHECKS.value:
+        # Execute only the accepted checks - rejected checks never reach here
+        runner_result = run_read_only_checks(
+            incident_id=incident_id,
+            run_id=run_id,
+            accepted_checks=gate_summary.accepted_checks,
+            now=resolved_now,
+            fake_handlers=fake_handlers,
+        )
+
+    # STEP 5: Build the pass artifact with ONLY accepted fingerprints for this pass
     pass_artifact = build_policy_enforced_pass_artifact(
         loop_run_id=current_state.loop_run_id,
         incident_id=incident_id,
@@ -628,13 +211,14 @@ def run_policy_enforced_loop_pass(
         decision=decision,
         root_cause_summary=root_cause_summary,
         confidence=confidence,
-        runner_result=None,  # No execution if budget exceeded
+        runner_result=runner_result,
         now=resolved_now,
         budget_exceeded=budget_exceeded,
         budget_stop_reason=budget_stop_reason,
     )
 
     # Validate pass artifact schema
+    from k8s_diag_agent.collect.incident_diagnosis_loop_policy import validate_pass_artifact_schema
     is_valid, missing = validate_pass_artifact_schema(pass_artifact)
     if not is_valid:
         pass_artifact["_schema_error"] = f"Missing required fields: {missing}"
@@ -670,7 +254,7 @@ def run_policy_enforced_loop_pass(
 
     # Build augmented result
     case_file_hash = compute_case_file_hash(case_file)
-    result = dict(orchestrator_result)
+    result = dict(planner_result)
     result["policy_enforced"] = True
     result["policy"] = resolved_policy.to_dict()
     result["gate_summary"] = {
@@ -759,14 +343,26 @@ def run_policy_enforced_loop(
         )
         
         if budget_exceeded:
-            # Create stop artifact
+            # Create stop artifact with ALL PASS_ARTIFACT_FIELDS
             stop_artifact = {
+                # PASS_ARTIFACT_FIELDS
                 "loop_run_id": loop_run_id,
                 "incident_id": incident_id,
                 "pass_index": runtime_state.pass_index,
-                "decision": LoopDecision.STOP_BUDGET_EXHAUSTED.value,
-                "stop_reason": budget_stop_reason.value if budget_stop_reason else LoopStopReason.MAX_CHECKS_REACHED.value,
+                "case_file_hash": "",  # No case file on budget stop
+                "proposed_checks": [],
+                "accepted_checks": [],
+                "rejected_checks": [],
+                "check_fingerprints": [],
+                "new_evidence_hashes": [],
+                "duplicate_check_count": 0,
+                "unsafe_check_count": 0,
+                "root_cause_summary": "",
+                "confidence": "unknown",
                 "should_continue": False,
+                "stop_reason": budget_stop_reason.value if budget_stop_reason else LoopStopReason.MAX_CHECKS_REACHED.value,
+                # Additional fields
+                "decision": LoopDecision.STOP_BUDGET_EXHAUSTED.value,
                 "budget_exceeded": True,
                 "schema_version": RUNTIME_SCHEMA_VERSION,
                 "generated_at": resolved_now.isoformat(),
