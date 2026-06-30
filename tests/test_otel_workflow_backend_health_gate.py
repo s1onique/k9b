@@ -12,8 +12,9 @@ CI-only workflow (k9b-otel-demo-incident-lab.yml) is scaffold-only.
 
 from __future__ import annotations
 
-import yaml
 from pathlib import Path
+
+import yaml
 
 from tests.otel_workflow_common_gates_helpers import (
     DEPLOYMENT_PHASES,
@@ -21,7 +22,6 @@ from tests.otel_workflow_common_gates_helpers import (
     PROVIDER_HEALTH,
     read_text,
 )
-
 
 # CI-only workflow for regression test (should NOT have live-lab features)
 OTEL_CI_WORKFLOW = Path(__file__).parent.parent / ".github" / "workflows" / "k9b-otel-demo-incident-lab.yml"
