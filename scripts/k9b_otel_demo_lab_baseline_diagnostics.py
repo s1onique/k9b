@@ -425,15 +425,19 @@ def classify_baseline_failure(
 def check_baseline_purity(
     deployment: dict[str, Any],
     scenario: str | None = None,
+    pods_data: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
     """Check if baseline deployment is pure (no scenario contamination).
     
-    This function inspects a deployment object to detect if scheduling
-    constraints are already present before scenario injection.
+    This function inspects a deployment object AND live pods to detect if
+    scheduling constraints are already present before scenario injection.
     
     Args:
         deployment: Deployment object from kubectl get deployment -o json
         scenario: Selected incident scenario (e.g., "unschedulable-shipping")
+        pods_data: Optional PodList JSON from kubectl get pods -o json
+            Used to detect contamination on live pods (e.g., shipping stuck Pending
+            with impossible nodeSelector from a previous run).
         
     Returns:
         Tuple of (is_pure, error_message). is_pure=True means no contamination.
@@ -442,35 +446,63 @@ def check_baseline_purity(
         # No purity check needed for other scenarios
         return True, ""
     
-    # Extract pod template
+    # Extract pod template from deployment
     pod_template = deployment.get("spec", {}).get("template", {})
     spec = pod_template.get("spec", {})
     
     errors: list[str] = []
     
-    # Check nodeSelector
+    # Check nodeSelector on deployment template
     node_selector = spec.get("nodeSelector")
     if node_selector:
         # Check if it contains the scenario-specific label
         if "k9b.dev/otel-lab-node" in node_selector:
             errors.append(
                 f"Baseline contaminated before unschedulable-shipping injection: "
-                f"shipping has pre-existing nodeSelector with k9b.dev/otel-lab-node={node_selector.get('k9b.dev/otel-lab-node')}"
+                f"shipping deployment template has pre-existing nodeSelector with "
+                f"k9b.dev/otel-lab-node={node_selector.get('k9b.dev/otel-lab-node')}"
             )
         else:
             errors.append(
-                f"Baseline has pre-existing nodeSelector: {node_selector}"
+                f"Baseline has pre-existing nodeSelector on deployment template: {node_selector}"
             )
     
-    # Check affinity
+    # Check affinity on deployment template
     affinity = spec.get("affinity")
     if affinity:
-        errors.append("Baseline has pre-existing affinity configuration")
+        errors.append("Baseline has pre-existing affinity configuration on deployment template")
     
-    # Check tolerations
+    # Check tolerations on deployment template (only non-default)
     tolerations = spec.get("tolerations")
     if tolerations:
-        errors.append(f"Baseline has pre-existing tolerations: {tolerations}")
+        scenario_tolerations = [
+            t for t in tolerations
+            if _is_scenario_specific_toleration(t)
+        ]
+        if scenario_tolerations:
+            errors.append(f"Baseline has scenario-specific tolerations: {scenario_tolerations}")
+    
+    # Check live pods for contamination
+    # This catches cases where shipping is already stuck Pending from a previous run
+    if pods_data and "items" in pods_data:
+        for pod in pods_data["items"]:
+            pod_name = pod.get("metadata", {}).get("name", "")
+            
+            # Only check shipping pods
+            if not pod_name.startswith("shipping"):
+                continue
+            
+            pod_spec = pod.get("spec", {})
+            pod_node_selector = pod_spec.get("nodeSelector")
+            
+            if pod_node_selector and "k9b.dev/otel-lab-node" in pod_node_selector:
+                phase = pod.get("status", {}).get("phase", "Unknown")
+                value = pod_node_selector.get("k9b.dev/otel-lab-node")
+                errors.append(
+                    f"Baseline contaminated: live shipping pod '{pod_name}' has "
+                    f"k9b.dev/otel-lab-node={value} (phase={phase}). "
+                    f"This may be contamination from a previous run that was not cleaned up."
+                )
     
     if errors:
         return False, "; ".join(errors)

@@ -11,6 +11,7 @@ Run with: python -m pytest tests/test_otel_baseline_contamination_guard.py -v
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -42,7 +43,6 @@ class TestPhase1HelmValues:
         # Phase 1 uses empty values "{}"
         values = "{}"
         
-        import json
         values_dict = json.loads(values)
         
         # Should be empty or have only unrelated keys
@@ -427,6 +427,111 @@ class TestHelmResetValues:
         # Should NOT use --reuse-values
         assert "--reuse-values" not in install_block, \
             "Phase 1 should NOT use --reuse-values"
+
+
+# =============================================================================
+# Phase 1b Orchestration Tests
+# =============================================================================
+
+class TestPhase1bOrchestration:
+    """Test phase1b_baseline_readiness() orchestration-level behavior."""
+
+    def test_phase1b_fails_when_pod_listing_fails_for_unschedulable_shipping(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """phase1b_baseline_readiness() should fail closed when pod listing fails for unschedulable-shipping."""
+        from scripts.k9b_lab_common_helpers import KubectlResult
+        from scripts.k9b_otel_demo_lab_deployment import phase1b_baseline_readiness
+        from scripts.k9b_otel_demo_lab_types import LabConfig
+
+        # Create config for unschedulable-shipping scenario
+        config = LabConfig(
+            kubeconfig="/fake/kubeconfig",
+            artifact_dir=str(tmp_path),
+            namespace="otel-demo",
+            incident_scenario="unschedulable-shipping",
+        )
+
+        # Track calls
+        call_log = []
+
+        def mock_kubectl_json(
+            kubeconfig: str,
+            resource: str,
+            namespace: str | None = None,
+            extra_args: list[str] | None = None,
+        ) -> KubectlResult:
+            call_log.append((resource, namespace))
+            if resource == "pods" and namespace == "otel-demo":
+                # Pod listing fails
+                return KubectlResult(
+                    success=False,
+                    stdout="",
+                    stderr="forbidden: cannot list pods",
+                    returncode=1,
+                    data=None,
+                )
+            elif resource == "deployment" and namespace == "otel-demo":
+                # Shipping deployment fetch succeeds
+                return KubectlResult(
+                    success=True,
+                    stdout="",
+                    stderr="",
+                    returncode=0,
+                    data={
+                        "metadata": {"name": "shipping"},
+                        "spec": {"template": {"spec": {}}},
+                    },
+                )
+            elif resource == "deployments" and namespace == "otel-demo":
+                return KubectlResult(success=True, stdout="", stderr="", returncode=0, data={"items": []})
+            elif resource == "services" and namespace == "otel-demo":
+                return KubectlResult(success=True, stdout="", stderr="", returncode=0, data={"items": []})
+            else:
+                return KubectlResult(success=True, stdout="", stderr="", returncode=0, data=None)
+
+        def mock_kubectl_events(
+            kubeconfig: str,
+            namespace: str,
+            sort_by: str = ".lastTimestamp",
+            extra_args: list[str] | None = None,
+        ) -> KubectlResult:
+            return KubectlResult(success=True, stdout="", stderr="", returncode=0)
+
+        def mock_wait_for_deployments_ready(
+            kubeconfig: str,
+            namespace: str,
+            deployments: list[str],
+            timeout_seconds: int = 300,
+            poll_interval: int = 10,
+        ) -> tuple[bool, str]:
+            return True, "All deployments ready"
+
+        monkeypatch.setattr("scripts.k9b_otel_demo_lab_deployment.kubectl_json", mock_kubectl_json)
+        monkeypatch.setattr("scripts.k9b_otel_demo_lab_deployment.kubectl_events", mock_kubectl_events)
+        monkeypatch.setattr("scripts.k9b_otel_demo_lab_deployment.wait_for_deployments_ready", mock_wait_for_deployments_ready)
+
+        result = phase1b_baseline_readiness(config, tmp_path)
+
+        # Verify fail-closed behavior
+        assert result.success is False, "Phase should fail when pod listing fails for unschedulable-shipping"
+        assert result.phase == "phase1-baseline", f"Phase should be phase1-baseline, got {result.phase}"
+        assert "cannot list pods" in result.message.lower(), f"Error should mention 'cannot list pods', got: {result.message}"
+        assert "baseline_purity_failure" in result.artifacts, "Artifacts should include baseline_purity_failure"
+
+        # Verify artifact contents
+        artifact_path = Path(result.artifacts["baseline_purity_failure"])
+        artifact = json.loads(artifact_path.read_text())
+        assert artifact["failure_class"] == "baseline_contamination_check_failed", f"Got: {artifact.get('failure_class')}"
+        assert artifact["scenario"] == "unschedulable-shipping", f"Got: {artifact.get('scenario')}"
+        assert artifact["deployment"] == "shipping", f"Got: {artifact.get('deployment')}"
+        assert "forbidden" in artifact["message"], "Error should include stderr context"
+
+        # Verify call sequence
+        assert ("deployment", "otel-demo") in call_log, "Should call deployment/shipping"
+        assert ("pods", "otel-demo") in call_log, "Should call pods"
 
 
 # =============================================================================

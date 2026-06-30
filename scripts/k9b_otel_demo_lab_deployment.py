@@ -381,9 +381,51 @@ def phase1b_baseline_readiness(config: LabConfig, artifact_dir: Path) -> LabPhas
         )
         
         if shipping_result.success and shipping_result.data:
+            # Get live pods for contamination check
+            pods_result = kubectl_json(
+                config.kubeconfig,
+                "pods",
+                config.namespace,
+            )
+            
+            # For unschedulable-shipping, fail closed if pod listing fails
+            # We need to check live pods to detect contamination from previous runs
+            if config.incident_scenario == "unschedulable-shipping" and not pods_result.success:
+                log("BASELINE PURITY CHECK FAILED: Cannot list pods for contamination check")
+                
+                # Write purity failure artifact
+                purity_failure = {
+                    "failure_class": "baseline_contamination_check_failed",
+                    "phase": "phase1-baseline-purity-check",
+                    "scenario": config.incident_scenario,
+                    "deployment": SHIPPING_DEPLOYMENT,
+                    "message": (
+                        "Failed to list pods for baseline contamination check: "
+                        f"{pods_result.stderr or pods_result.stdout}"
+                    ),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+                purity_path = write_json_artifact(
+                    phase_dir,
+                    "baseline-purity-failure.json",
+                    purity_failure,
+                )
+                artifacts["baseline_purity_failure"] = str(purity_path)
+                
+                return LabPhaseResult(
+                    phase="phase1-baseline",
+                    success=False,
+                    message=f"Baseline contamination check failed: cannot list pods: {pods_result.stderr or pods_result.stdout}",
+                    artifacts=artifacts,
+                    duration_seconds=time.time() - start,
+                )
+            
+            pods_data = pods_result.data if pods_result.success else None
+            
             is_pure, purity_msg = check_baseline_purity(
                 shipping_result.data,
                 scenario=config.incident_scenario,
+                pods_data=pods_data,
             )
             
             if not is_pure:

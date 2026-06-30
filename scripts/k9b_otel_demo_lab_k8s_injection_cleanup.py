@@ -67,6 +67,60 @@ def cleanup_unschedulable_shipping_rollout(
     return True
 
 
+def _is_json_patch_path_absent_error(stderr: str) -> bool:
+    """Check if stderr indicates a JSON Patch path is already absent.
+    
+    This function distinguishes between:
+    - JSON Patch "remove" path already absent (idempotent success case)
+    - Missing Kubernetes resource (real failure that should not be swallowed)
+    
+    Acceptable patterns for path-absent:
+    - Path references to nodeSelector path
+    - "missing path" or "doc is missing path" wording
+    - "remove operation does not apply" wording
+    
+    NOT acceptable (would hide real failures):
+    - Generic "not found" without path context
+    - Resource names like "shipping" or "deployment"
+    
+    Args:
+        stderr: The stderr output from kubectl patch
+        
+    Returns:
+        True if stderr indicates path-absent, False otherwise
+    """
+    if not stderr:
+        return False
+    
+    stderr_lower = stderr.lower()
+    
+    # Path-specific patterns that indicate the JSON Patch path is absent
+    path_indicators = [
+        "/spec/template/spec/nodeselector",  # The exact path we're removing
+        "spec.template.spec.nodeselector",  # Path without slashes
+        "missing path",  # JSON Patch standard message
+        "doc is missing path",  # Another form of missing path
+        "remove operation does not apply",  # JSON Patch spec message
+    ]
+    
+    for indicator in path_indicators:
+        if indicator in stderr_lower:
+            return True
+    
+    # Check for "doesn't exist" or "does not exist" ONLY when paired with path context
+    if "doesn't exist" in stderr_lower or "does not exist" in stderr_lower:
+        # Must have path context, not just resource name
+        # e.g., "/spec/template/spec/nodeSelector doesn't exist" - good
+        # e.g., "deployments.apps \"shipping\" not found" - bad
+        if any(p in stderr_lower for p in path_indicators):
+            return True
+        # Also accept "path doesn't exist" pattern
+        if "path" in stderr_lower and ("doesn't exist" in stderr_lower or "does not exist" in stderr_lower):
+            return True
+    
+    return False
+
+
 def _restore_node_selector(
     kubeconfig: str,
     namespace: str,
@@ -78,13 +132,22 @@ def _restore_node_selector(
     - If previous was None: remove /spec/template/spec/nodeSelector
     - If previous was present: replace /spec/template/spec/nodeSelector
     
+    This function is idempotent: if the nodeSelector path is already absent
+    (e.g., from a previous cleanup run), the operation succeeds.
+    
+    Fail-closed for:
+    - Missing deployment resource
+    - Missing namespace
+    - Network/auth errors
+    - Other kubectl failures
+    
     Args:
         kubeconfig: Path to kubeconfig
         namespace: Namespace
         previous_node_selector: Previous nodeSelector or None to remove
         
     Returns:
-        True if patch succeeded
+        True if patch succeeded (including idempotent success when path already absent)
     """
     if previous_node_selector is None:
         # No previous selector - remove it
@@ -107,10 +170,13 @@ def _restore_node_selector(
     )
     
     if not result.success:
-        # JSON Patch remove can fail if path already absent - treat as success if selector was already gone
-        if previous_node_selector is None and "not found" in result.stderr.lower():
-            log("NodeSelector already absent - cleanup considered successful")
+        # JSON Patch remove can fail when path is already absent
+        # This is expected when cleanup runs multiple times
+        # Treat as success (idempotent behavior) only for path-absent errors
+        if previous_node_selector is None and _is_json_patch_path_absent_error(result.stderr or ""):
+            log("NodeSelector path already absent - cleanup idempotent, considered successful")
             return True
+        # For replace operations or other errors, fail closed
         log(f"Failed to restore nodeSelector: {result.stderr}")
         return False
     
