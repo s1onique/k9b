@@ -88,12 +88,12 @@ healthConfig:
       # Adapters: Define enabled providers for external analysis.
       # The provider field in auto_drilldown/review_enrichment must reference an enabled adapter.
       adapters:
-        - name: llamacpp
+        - name: openai_compatible
           enabled: true
       auto_drilldown:
         enabled: true
-        provider: llamacpp
+        provider: openai_compatible
         max_per_run: 1
       review_enrichment:
         enabled: true
-        provider: llamacpp
+        provider: openai_compatible

@@ -11,8 +11,11 @@ from .openai_compatible_urls import build_chat_completions_url
 _logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 120
-DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN = 768
-DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT = 1200
+# Token budgets for thinking/reasoning models (Qwen-style):
+# - Auto-drilldown: 3072 tokens accommodates extended reasoning chains
+# - Review-enrichment: 4096 tokens for richer multi-field JSON output
+DEFAULT_MAX_TOKENS_AUTO_DRILLDOWN = 3072
+DEFAULT_MAX_TOKENS_REVIEW_ENRICHMENT = 4096
 
 # Canonical and legacy environment variable names for OpenAI-compatible provider
 _CANONICAL_ENV_BASE_URL = "K9B_EXTERNAL_ANALYSIS_BASE_URL"
