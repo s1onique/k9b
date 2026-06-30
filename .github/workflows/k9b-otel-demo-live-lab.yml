@@ -157,7 +157,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/pip install pytest pyyaml requests
+          .venv/bin/pip install pytest pyyaml requests ijson
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
