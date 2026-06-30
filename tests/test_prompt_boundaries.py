@@ -306,8 +306,8 @@ class TestDrilldownPromptBoundaries:
         )
 
 
-class TestLlamaCppAdapterPromptBoundaries:
-    """Tests for LlamaCppAdapter._build_prompt boundary markers."""
+class TestOpenAICompatibleAdapterPromptBoundaries:
+    """Tests for OpenAICompatibleAdapter._build_prompt boundary markers."""
 
     @staticmethod
     def _make_prompt() -> str:
@@ -362,32 +362,36 @@ class TestLlamaCppAdapterPromptBoundaries:
         request.source_artifact = "/tmp/test.json"
 
         # Create adapter instance and call _build_prompt directly
-        from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
-        adapter = LlamaCppAdapter.__new__(LlamaCppAdapter)
+        from k8s_diag_agent.external_analysis.openai_compatible_adapter import (
+            OpenAICompatibleAdapter,
+        )
+
+        adapter = OpenAICompatibleAdapter.__new__(OpenAICompatibleAdapter)
         adapter._use_http = False
         adapter._command = None
         adapter._http_provider = None
         adapter._http_config_error = None
+        adapter._http_only = False
 
         # Use _ for unused alias_mapping (returned for caller use).
         prompt, _ = adapter._build_prompt(request, context)
         return prompt
 
-    def test_llamacpp_adapter_prompt_boundary_structure(self) -> None:
-        """Verify LlamaCppAdapter prompt follows boundary convention exactly."""
+    def test_openai_compatible_adapter_prompt_boundary_structure(self) -> None:
+        """Verify OpenAICompatibleAdapter prompt follows boundary convention exactly."""
         prompt = self._make_prompt()
         errors = TestPromptBoundaryStructure.verify_boundary_structure(prompt)
         assert not errors, f"Boundary structure errors: {errors}"
 
-    def test_llamacpp_adapter_prompt_contains_both_boundary_pairs(self) -> None:
-        """Verify LlamaCppAdapter prompt contains all four boundary markers."""
+    def test_openai_compatible_adapter_prompt_contains_both_boundary_pairs(self) -> None:
+        """Verify OpenAICompatibleAdapter prompt contains all four boundary markers."""
         prompt = self._make_prompt()
         assert BEGIN_UNTRUSTED_CLUSTER_DATA in prompt
         assert END_UNTRUSTED_CLUSTER_DATA in prompt
         assert BEGIN_OUTPUT_SCHEMA in prompt
         assert END_OUTPUT_SCHEMA in prompt
 
-    def test_llamacpp_adapter_prompt_no_data_before_untrusted_boundary(self) -> None:
+    def test_openai_compatible_adapter_prompt_no_data_before_untrusted_boundary(self) -> None:
         """Verify no untrusted data appears before BEGIN_UNTRUSTED_CLUSTER_DATA."""
         prompt = self._make_prompt()
         sections = TestPromptBoundaryStructure.extract_boundary_sections(prompt)
@@ -402,14 +406,16 @@ class TestLlamaCppAdapterPromptBoundaries:
             "Untrusted data (review content) should not appear before BEGIN_UNTRUSTED_CLUSTER_DATA"
         )
 
-    def test_llamacpp_adapter_cluster_label_sanitization(self) -> None:
-        """LlamaCppAdapter instruction header must not contain 'cluster_label=in-cluster'.
+    def test_openai_compatible_adapter_cluster_label_sanitization(self) -> None:
+        """OpenAICompatibleAdapter instruction header must not contain 'cluster_label=in-cluster'.
 
         Regression test for in-cluster marker leak into LLM prompts.
         When request.cluster_label is an internal marker, display_kube_cluster_label()
         should return None, and the prompt header should not contain 'cluster_label=in-cluster'.
         """
-        from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
+        from k8s_diag_agent.external_analysis.openai_compatible_adapter import (
+            OpenAICompatibleAdapter,
+        )
 
         from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
         from k8s_diag_agent.external_analysis.review_input import (
@@ -440,11 +446,12 @@ class TestLlamaCppAdapterPromptBoundaries:
         request.cluster_label = "in-cluster"  # Internal marker - should be sanitized
         request.source_artifact = "/tmp/test.json"
 
-        adapter = LlamaCppAdapter.__new__(LlamaCppAdapter)
+        adapter = OpenAICompatibleAdapter.__new__(OpenAICompatibleAdapter)
         adapter._use_http = False
         adapter._command = None
         adapter._http_provider = None
         adapter._http_config_error = None
+        adapter._http_only = False
 
         prompt, _ = adapter._build_prompt(request, context)
 
