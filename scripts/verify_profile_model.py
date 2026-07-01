@@ -208,6 +208,13 @@ STEPS: dict[str, dict] = {
         "description": "No-force-push policy verification",
         "is_expensive": False,
     },
+    "openapi-contract": {
+        "command": ".venv/bin/python -m pytest tests/test_openapi_contract.py -v",
+        "lane": "python",
+        "category": StepCategory.POLICY,
+        "description": "OpenAPI contract completeness gate",
+        "is_expensive": False,
+    },
     "unit-tests": {
         "command": "bash scripts/run_unit_tests.sh",
         "lane": "python",

@@ -100,6 +100,19 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         _notifications_cache_lock,
     )
 
+    # OpenAPI routes - public, no auth required (must check before auth routes)
+    if route == "/api/openapi.json":
+        from .api_openapi import handle_openapi_json
+
+        handle_openapi_json(handler)
+        return
+
+    if route == "/api/docs":
+        from .api_openapi import handle_openapi_docs
+
+        handle_openapi_docs(handler)
+        return
+
     # AUTH routes - public, no auth required
     if route == "/api/auth/status":
         from .auth_routes import handle_status
