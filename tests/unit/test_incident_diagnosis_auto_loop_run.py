@@ -7,7 +7,7 @@ Tests cover:
 
 These tests do NOT:
 - Execute real Kubernetes collectors
-- Call kubectl/helm/subprocess/shell
+- Call kubectl/helm/subprocess/shell (properly mocked)
 - Perform remediation or mutation
 """
 
@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -54,12 +55,19 @@ class TestCollectorRun:
             if "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
                 del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
 
-            result = run_automatic_diagnosis_loop_evidence_collection(
-                external_analysis_dir=temp_external_dir,
-            )
-            assert result.enabled is False
-            assert result.incidents_processed == 0
-            assert len(result.incident_results) == 1
+            # Mock kubectl to fail so fallback to env happens
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = type(
+                    "MockResult",
+                    (),
+                    {"returncode": 1, "stderr": "connection refused"},
+                )()
+                result = run_automatic_diagnosis_loop_evidence_collection(
+                    external_analysis_dir=temp_external_dir,
+                )
+                assert result.enabled is False
+                assert result.incidents_processed == 0
+                assert len(result.incident_results) == 1
         finally:
             if env_backup is not None:
                 os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
@@ -68,11 +76,27 @@ class TestCollectorRun:
         self, temp_external_dir
     ):
         """Prove disabled collector does not run checks."""
-        result = run_automatic_diagnosis_loop_evidence_collection(
-            external_analysis_dir=temp_external_dir,
-        )
-        assert result.enabled is False
-        assert result.incidents_processed == 0
+        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
+        try:
+            # Ensure env is false or not set
+            if "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
+                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
+
+            # Mock kubectl to fail so fallback to env happens
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = type(
+                    "MockResult",
+                    (),
+                    {"returncode": 1, "stderr": "connection refused"},
+                )()
+                result = run_automatic_diagnosis_loop_evidence_collection(
+                    external_analysis_dir=temp_external_dir,
+                )
+                assert result.enabled is False
+                assert result.incidents_processed == 0
+        finally:
+            if env_backup is not None:
+                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
 
     def test_disabled_collector_does_not_write_packets(
         self, temp_external_dir
@@ -157,12 +181,19 @@ class TestCollectAutomaticDiagnosisEvidence:
             if "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
                 del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
 
-            result = collect_automatic_diagnosis_evidence(
-                incident_id="test-incident",
-                external_analysis_dir=temp_external_dir,
-            )
-            assert result.skipped is True
-            assert "not set to true" in result.skip_reason or "disabled" in result.skip_reason
+            # Mock kubectl to fail so fallback to env happens
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = type(
+                    "MockResult",
+                    (),
+                    {"returncode": 1, "stderr": "connection refused"},
+                )()
+                result = collect_automatic_diagnosis_evidence(
+                    incident_id="test-incident",
+                    external_analysis_dir=temp_external_dir,
+                )
+                assert result.skipped is True
+                assert "not set to true" in result.skip_reason or "disabled" in result.skip_reason
         finally:
             if env_backup is not None:
                 os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup

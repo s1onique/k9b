@@ -82,7 +82,7 @@ class DeploymentReadError(Exception):
         return any(p.lower() in self.stderr.lower() for p in not_found_patterns)
 
 
-def _get_deployment_env_value(
+def _read_deployment_env_value(
     kubeconfig: str | None,
     namespace: str,
     deployment: str,
@@ -167,6 +167,35 @@ def _get_deployment_env_value(
         return None, error
 
 
+def _get_deployment_env_value(
+    kubeconfig: str | None,
+    namespace: str,
+    deployment: str,
+    env_var: str,
+) -> str | None:
+    """Get environment variable value from a Kubernetes Deployment.
+
+    This is the public-facing helper that returns just the value (or None).
+    For detailed error handling, use _read_deployment_env_value() instead.
+
+    Args:
+        kubeconfig: Path to kubeconfig file (None for in-cluster)
+        namespace: Namespace where the deployment lives
+        deployment: Name of the deployment
+        env_var: Environment variable name to retrieve
+
+    Returns:
+        The env var value as a string, or None if not set or on error.
+    """
+    value, _error = _read_deployment_env_value(
+        kubeconfig=kubeconfig,
+        namespace=namespace,
+        deployment=deployment,
+        env_var=env_var,
+    )
+    return value
+
+
 def is_automatic_diagnosis_loop_enabled(
     kubeconfig: str | None = None,
     namespace: str = "k9b",
@@ -224,7 +253,7 @@ def get_automatic_loop_enabled_with_reason(
     """
     # First, try to read from scheduler deployment in cluster
     # This is the authoritative source for the scheduler's configuration
-    scheduler_env_value, read_error = _get_deployment_env_value(
+    scheduler_env_value, read_error = _read_deployment_env_value(
         kubeconfig=kubeconfig,
         namespace=namespace,
         deployment=_SCHEDULER_DEPLOYMENT,
@@ -249,25 +278,34 @@ def get_automatic_loop_enabled_with_reason(
                 reason="automatic_loop_env_rbac_denied",
                 error_message=str(read_error),
             )
-        else:
-            # Other read failures (network, timeout, not found)
+        elif not allow_env_fallback:
+            # Other read failures (network, timeout, not found) - fail-closed if no fallback
             return False, LoopEnabledCheckResult(
                 enabled=False,
                 source="error",
                 reason="automatic_loop_env_read_failed",
                 error_message=str(read_error),
             )
+        # For other errors with allow_env_fallback=True, fall through to env check
 
-    # No env var found in deployment - fail-closed if no fallback allowed
-    if not allow_env_fallback:
-        return False, LoopEnabledCheckResult(
-            enabled=False,
-            source="deployment",
-            reason="env_var_not_set",
-        )
-
+    # No env var found in deployment, or cluster read failed but fallback allowed
     # Fallback to local environment for local development/testing
     enabled = os.environ.get(_AUTOMATIC_LOOP_ENV_VAR, "false").lower() == "true"
+    if scheduler_env_value is None and read_error is not None:
+        # Cluster read failed but we fell back to env
+        return enabled, LoopEnabledCheckResult(
+            enabled=enabled,
+            source="environment",
+            reason="env_var_from_fallback" if enabled else "env_var_not_set",
+        )
+    elif scheduler_env_value is None:
+        # No env var found in deployment spec
+        return enabled, LoopEnabledCheckResult(
+            enabled=enabled,
+            source="environment",
+            reason="env_var_from_fallback" if enabled else "env_var_not_set",
+        )
+    # This branch won't be reached due to earlier return, but kept for completeness
     return enabled, LoopEnabledCheckResult(
         enabled=enabled,
         source="environment",

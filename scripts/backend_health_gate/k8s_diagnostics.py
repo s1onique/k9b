@@ -26,6 +26,13 @@ _PRIVATE_URL_PATTERNS_REDACT = [
     r"https?://[^\s]*\.(internal|private|local)[^\s]*",  # Internal/private URLs
 ]
 
+# Default scheduler selectors as fallback when deployment selector is unavailable
+_DEFAULT_SCHEDULER_SELECTORS = (
+    "app.kubernetes.io/name=k9b-scheduler",
+    "app.kubernetes.io/component=scheduler",
+    "app=k9b-scheduler",
+)
+
 
 def _sanitize_message_snippet(message: str | None, max_len: int = 100) -> str:
     """Sanitize a message snippet by redacting secrets and truncating.
@@ -261,71 +268,87 @@ def _collect_scheduler_diagnostics(
     # Get scheduler pod selector from deployment (not hard-coded)
     from scripts.incident_discovery_gate.collect import get_scheduler_pod_selector
     scheduler_selector = get_scheduler_pod_selector(kubeconfig, namespace)
-    if not scheduler_selector:
+
+    # Build list of selectors to try (deployment selector first, then fallbacks)
+    selectors_to_try: list[str] = []
+    if scheduler_selector:
+        selectors_to_try.append(scheduler_selector)
+    selectors_to_try.extend(_DEFAULT_SCHEDULER_SELECTORS)
+
+    # Try each selector until we find pods
+    pods_data: dict[str, Any] | None = None
+    used_selector: str | None = None
+    for selector in selectors_to_try:
+        cmd = [
+            "kubectl", "--kubeconfig", kubeconfig,
+            "get", "pods", "-n", namespace,
+            "-l", selector,
+            "-o", "json",
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                if data.get("items"):
+                    pods_data = data
+                    used_selector = selector
+                    break
+        except Exception:
+            continue
+
+    if pods_data is None or not used_selector:
         diagnostics["error"] = "scheduler_selector_unavailable"
         return diagnostics
 
-    # Get scheduler pods using derived selector
-    cmd = [
-        "kubectl", "--kubeconfig", kubeconfig,
-        "get", "pods", "-n", namespace,
-        "-l", scheduler_selector,
-        "-o", "json",
-    ]
-    
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0:
-            pods_data = json.loads(result.stdout)
-            
-            for pod in pods_data.get("items", []):
-                pod_name = pod.get("metadata", {}).get("name", "unknown")
-                
-                pod_info: dict[str, Any] = {
-                    "name": pod_name,
-                    "phase": pod.get("status", {}).get("phase", "Unknown"),
-                }
-                
-                # Restart count
-                restart_count = 0
-                for cs in pod.get("status", {}).get("containerStatuses", []):
-                    restart_count += cs.get("restartCount", 0)
-                pod_info["restart_count"] = restart_count
-                
-                # Container states
-                container_states = []
-                for cs in pod.get("status", {}).get("containerStatuses", []):
-                    container_name = cs.get("name", "unknown")
-                    state = cs.get("state", {})
-                    
-                    cs_info: dict[str, Any] = {"name": container_name}
-                    
-                    if "waiting" in state:
-                        waiting = state["waiting"]
-                        cs_info["state"] = "waiting"
-                        cs_info["reason"] = waiting.get("reason", "")
-                        cs_info["message_snippet"] = _sanitize_message_snippet(waiting.get("message", ""), max_len=200)
-                    elif "running" in state:
-                        cs_info["state"] = "running"
-                    elif "terminated" in state:
-                        terminated = state["terminated"]
-                        cs_info["state"] = "terminated"
-                        cs_info["exit_code"] = terminated.get("exitCode", 0)
-                    else:
-                        cs_info["state"] = "unknown"
-                    
-                    container_states.append(cs_info)
-                
-                pod_info["containers"] = container_states
-                diagnostics[f"pod_{pod_name}"] = pod_info
-    except Exception:
-        pass
-    
+    # Record which selector was used for debugging
+    diagnostics["selector_used"] = used_selector
+
+    for pod in pods_data.get("items", []):
+        pod_name = pod.get("metadata", {}).get("name", "unknown")
+
+        pod_info: dict[str, Any] = {
+            "name": pod_name,
+            "phase": pod.get("status", {}).get("phase", "Unknown"),
+        }
+
+        # Restart count
+        restart_count = 0
+        for cs in pod.get("status", {}).get("containerStatuses", []):
+            restart_count += cs.get("restartCount", 0)
+        pod_info["restart_count"] = restart_count
+
+        # Container states
+        container_states = []
+        for cs in pod.get("status", {}).get("containerStatuses", []):
+            container_name = cs.get("name", "unknown")
+            state = cs.get("state", {})
+
+            cs_info: dict[str, Any] = {"name": container_name}
+
+            if "waiting" in state:
+                waiting = state["waiting"]
+                cs_info["state"] = "waiting"
+                cs_info["reason"] = waiting.get("reason", "")
+                cs_info["message_snippet"] = _sanitize_message_snippet(waiting.get("message", ""), max_len=200)
+            elif "running" in state:
+                cs_info["state"] = "running"
+            elif "terminated" in state:
+                terminated = state["terminated"]
+                cs_info["state"] = "terminated"
+                cs_info["exit_code"] = terminated.get("exitCode", 0)
+            else:
+                cs_info["state"] = "unknown"
+
+            container_states.append(cs_info)
+
+        pod_info["containers"] = container_states
+        diagnostics[f"pod_{pod_name}"] = pod_info
+
     return diagnostics
 
 
@@ -367,24 +390,51 @@ def _collect_scheduler_logs(
     # Get scheduler pod selector from deployment (not hard-coded)
     from scripts.incident_discovery_gate.collect import get_scheduler_pod_selector
     scheduler_selector = get_scheduler_pod_selector(kubeconfig, namespace)
-    if not scheduler_selector:
-        return "<logs unavailable: scheduler_selector_unavailable>"
 
-    cmd = [
-        "kubectl", "--kubeconfig", kubeconfig,
-        "logs", "-n", namespace,
-        "-l", scheduler_selector,
-        "--tail", str(tail_lines),
-    ]
+    # Build list of selectors to try (deployment selector first, then fallbacks)
+    selectors_to_try: list[str] = []
+    if scheduler_selector:
+        selectors_to_try.append(scheduler_selector)
+    selectors_to_try.extend(_DEFAULT_SCHEDULER_SELECTORS)
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        lines = result.stdout.strip().split("\n")
-        return "\n".join(lines[-tail_lines:])
-    except Exception as e:
-        return f"<logs unavailable: {e}>"
+    # Try each selector until we find pods and get logs
+    for selector in selectors_to_try:
+        # First find a pod with this selector
+        pod_cmd = [
+            "kubectl", "--kubeconfig", kubeconfig,
+            "get", "pods", "-n", namespace,
+            "-l", selector,
+            "-o", "json",
+        ]
+        try:
+            pod_result = subprocess.run(
+                pod_cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if pod_result.returncode == 0:
+                pods_data = json.loads(pod_result.stdout)
+                items = pods_data.get("items", [])
+                if items:
+                    # Get logs from first pod
+                    pod_name = items[0].get("metadata", {}).get("name", "")
+                    log_cmd = [
+                        "kubectl", "--kubeconfig", kubeconfig,
+                        "logs", "-n", namespace,
+                        f"pod/{pod_name}",
+                        "--tail", str(tail_lines),
+                    ]
+                    log_result = subprocess.run(
+                        log_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    if log_result.returncode == 0:
+                        lines = log_result.stdout.strip().split("\n")
+                        return "\n".join(lines[-tail_lines:])
+        except Exception:
+            continue
+
+    return "<logs unavailable: scheduler_selector_unavailable>"
