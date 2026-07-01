@@ -412,3 +412,4 @@ class TestArchitectureDocumentation:
             call_args = mock_run.call_args
             cmd_str = str(call_args)
             assert "k9b-backend" not in cmd_str
+
