@@ -398,10 +398,20 @@ def _evaluate_health_response(
     """Evaluate a successful health response and determine provider state."""
     try:
         health_details = json.loads(curl_result.body)
-    except json.JSONDecodeError:
-        failure_class, failure_message = _classify_curl_failure(curl_result)
-        result.failure_class = failure_class
-        result.message = f"Invalid JSON response from /api/health/details (HTTP {curl_result.http_code})"
+    except json.JSONDecodeError as exc:
+        # Enhanced diagnostics: include body prefix and JSON parse error
+        # This helps distinguish HTML/SPA fallback from malformed JSON
+        body_prefix = curl_result.body[:500] if curl_result.body else ""
+        json_error_msg = f"line {exc.lineno}, col {exc.colno}: {exc.msg}" if hasattr(exc, 'lineno') else str(exc)
+        
+        # Classify as INVALID_JSON for 2xx responses with invalid JSON
+        # This is distinct from transport/connection errors
+        result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
+        result.message = (
+            f"Invalid JSON response from /api/health/details (HTTP {curl_result.http_code}). "
+            f"JSON parse error: {json_error_msg}. "
+            f"Body prefix (first 200 chars): {body_prefix[:200]!r}"
+        )
         result.duration_seconds = time.time() - start
         _write_result(result, artifact_dir)
         return result

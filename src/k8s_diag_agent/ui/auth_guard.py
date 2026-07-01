@@ -187,12 +187,16 @@ def check_route_auth(handler: HealthUIRequestHandler) -> bool:
     This is called at the start of request handling to enforce auth
     on protected routes while allowing public routes through.
 
+    IMPORTANT: When returning False, require_auth() has already sent a JSON 401
+    response to prevent API routes from falling through to SPA/static fallback.
+    Do NOT send another response - that would cause a double-send error.
+
     Args:
         handler: The HTTP request handler
 
     Returns:
         True if request should proceed, False if rejected.
-        If False, the handler has already sent an error response.
+        If False, require_auth() has already sent a JSON 401 error response.
     """
     route = handler.path.partition("?")[0]
 
@@ -201,6 +205,8 @@ def check_route_auth(handler: HealthUIRequestHandler) -> bool:
         return True
 
     # For protected routes, require authentication
+    # NOTE: require_auth() sends JSON 401 response directly when auth fails,
+    # so we only need to check if it returned None (auth failed)
     principal = require_auth(handler)
     return principal is not None
 

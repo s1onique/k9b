@@ -53,13 +53,15 @@ def handle_get_request(handler: HealthUIRequestHandler) -> None:
         # Note: /artifact requires auth as it may expose sensitive cluster data
         # Auth routes (/api/auth/*) are always public
         # Protected routes: /api/* (except auth routes) and /artifact/*
+        # NOTE: require_auth(), via check_route_auth(), has already sent JSON 401 on auth failure.
+        # We only need to log completion and return.
         is_protected_api = route.startswith("/api/") and not _is_auth_route(route)
         is_protected_artifact = route == "/artifact" or route.startswith("/artifact/")
         if is_protected_api or is_protected_artifact:
             from .auth_guard import check_route_auth
 
             if not check_route_auth(handler):
-                handler._status_code = 401
+                # Auth failed - require_auth() already sent JSON 401 response
                 handler._log_access_completion()
                 return
 
@@ -102,11 +104,13 @@ def handle_post_request(handler: HealthUIRequestHandler) -> None:
     handler._is_static = False
 
     # AUTH-06: Check authentication for protected routes (includes POST mutations)
+    # NOTE: require_auth(), via check_route_auth(), has already sent JSON 401 on auth failure.
+    # We only need to log completion and return.
     if not _is_auth_route(route):
         from .auth_guard import check_route_auth
 
         if not check_route_auth(handler):
-            handler._status_code = 401
+            # Auth failed - require_auth() already sent JSON 401 response
             handler._log_access_completion()
             return
 
