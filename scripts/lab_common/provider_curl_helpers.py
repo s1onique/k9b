@@ -233,6 +233,10 @@ def _curl_exec_pod(
 ) -> CurlResult:
     """Curl a URL from inside a pod via exec.
     
+    Uses marker-based parsing (like _curl_service_pod) to separate
+    metadata from body content. This prevents curl write-out metadata
+    or URL content from being incorrectly parsed as metadata.
+    
     Returns:
         CurlResult with detailed diagnostics
     """
@@ -240,17 +244,19 @@ def _curl_exec_pod(
         "kubectl", "--kubeconfig", kubeconfig, "exec", "-n", namespace,
         f"deploy/{deployment}", "-c", container, "--",
         "sh", "-c",
-        # Always capture curl_rc first, then output HTTP code and body
-        # Use exit 0 at end so kubectl exec return code doesn't mask curl failure
+        # Use marker-based output like _curl_service_pod to prevent
+        # curl metadata or URL content from being parsed as metadata
         f"""
+echo "---CURL_START---"
 code=$(curl -sS -o /tmp/resp.txt -w '%{{http_code}}' \
     --connect-timeout {PREFLIGHT_RETRY_CONNECT_TIMEOUT} \
     --max-time {PREFLIGHT_RETRY_MAX_TIME} \
-    {target_url})
+    "{target_url}")
 curl_rc=$?
-echo CURL_EXIT=$curl_rc
-echo HTTP_CODE=$code
-cat /tmp/resp.txt 2>/dev/null || true
+echo "CURL_EXIT=$curl_rc"
+echo "HTTP_CODE=$code"
+cat /tmp/resp.txt 2>/dev/null || echo "NO_RESPONSE_BODY"
+echo "STDERR_BLOCK"
 exit 0
 """,
     ]
@@ -259,27 +265,51 @@ exit 0
         exec_cmd, capture_output=True, text=True, timeout=timeout_seconds + 5
     )
     
-    # Parse HTTP code and curl_rc from output
+    # Parse using marker-based approach (consistent with _curl_service_pod)
     http_code = 0
     curl_rc: int | None = None
     body_parts: list[str] = []
+    stderr_parts: list[str] = []
+    seen_curl_start = False
+    in_stderr_block = False
     
     for line in exec_result.stdout.split("\n"):
-        if "CURL_EXIT=" in line:
+        stripped = line.strip()
+        
+        if stripped == "---CURL_START---":
+            seen_curl_start = True
+            continue
+        
+        if stripped == "STDERR_BLOCK":
+            in_stderr_block = True
+            continue
+        
+        if in_stderr_block:
+            # Collect stderr lines (shouldn't happen via exec, but handle gracefully)
+            stderr_parts.append(line)
+            continue
+        
+        if stripped.startswith("CURL_EXIT="):
             try:
-                curl_rc = int(line.split("CURL_EXIT=")[1].strip())
+                curl_rc = int(stripped.split("=", 1)[1])
             except (ValueError, IndexError):
                 pass
-        elif "HTTP_CODE=" in line:
+            continue
+        elif stripped.startswith("HTTP_CODE="):
             try:
-                http_code = int(line.split("HTTP_CODE=")[1].strip())
+                http_code = int(stripped.split("=", 1)[1])
             except (ValueError, IndexError):
                 pass
-        else:
+            continue
+        elif stripped == "NO_RESPONSE_BODY":
+            continue
+        
+        # Capture body lines after ---CURL_START--- and before STDERR_BLOCK
+        if seen_curl_start:
             body_parts.append(line)
     
     body = "\n".join(body_parts)
-    stderr = exec_result.stderr
+    stderr = "\n".join(stderr_parts) if stderr_parts else exec_result.stderr
     
     # Always check curl_rc, even if kubectl exec succeeded
     if curl_rc == 0:

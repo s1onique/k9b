@@ -20,6 +20,7 @@ For the actual implementation, see:
 - k9b_otel_demo_lab_k8s_diagnosis_backend_http: HTTP helpers
 - k9b_otel_demo_lab_k8s_diagnosis_backend_artifacts: artifact helpers
 - k9b_otel_demo_lab_k8s_diagnosis_backend_poll: polling helpers
+- k9b_otel_demo_lab_k8s_diagnosis_budget_reset: budget reset for live-lab
 """
 
 from __future__ import annotations
@@ -43,7 +44,9 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     FAILURE_TARGETED_INVOCATION_HTTP_ERROR,
     FAILURE_TARGETED_INVOCATION_INVALID_JSON,
     FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
+    FAILURE_TARGETED_LOOP_BACKEND_EMPTY_REPLY,
     FAILURE_TARGETED_LOOP_NOT_COMPLETED,
+    FAILURE_TARGETED_LOOP_NOT_ELIGIBLE,
     FAILURE_TARGETED_NO_PASS_ARTIFACTS,
     FAILURE_TARGETED_REVIEW_PACKET_MISSING,
     BackendIncidentDetail,
@@ -70,6 +73,12 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry import (
     fetch_backend_incident_detail_with_retry,
 )
 
+# Re-export budget reset helpers
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
+    get_budget_status,
+    reset_diagnosis_loop_budget,
+)
+
 __all__ = [
     # Constants - DNS and endpoint failures
     "FAILURE_BACKEND_DNS_RESOLUTION_FAILED",
@@ -85,7 +94,9 @@ __all__ = [
     "FAILURE_TARGETED_INVOCATION_HTTP_ERROR",
     "FAILURE_TARGETED_INVOCATION_INVALID_JSON",
     "FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR",
+    "FAILURE_TARGETED_LOOP_BACKEND_EMPTY_REPLY",
     "FAILURE_TARGETED_LOOP_NOT_COMPLETED",
+    "FAILURE_TARGETED_LOOP_NOT_ELIGIBLE",
     "FAILURE_TARGETED_NO_PASS_ARTIFACTS",
     "FAILURE_TARGETED_REVIEW_PACKET_MISSING",
     "FAILURE_TARGETED_INSUFFICIENT_PASSES",
@@ -102,4 +113,7 @@ __all__ = [
     "invoke_targeted_automatic_diagnosis_loop",
     "poll_backend_diagnosis_state",
     "check_pass_artifacts_in_backend",
+    # Budget reset helpers
+    "reset_diagnosis_loop_budget",
+    "get_budget_status",
 ]

@@ -16,6 +16,10 @@ from pathlib import Path
 from typing import Any
 
 from scripts.k9b_lab_common_helpers import log
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
+    get_budget_status,
+    reset_diagnosis_loop_budget,
+)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
     DEFAULT_MAX_PASSES,
     DIAGNOSIS_SOURCE_SIMULATED,
@@ -82,8 +86,20 @@ def run_backend_targeted_diagnosis(
     total_pass_count = 0
     all_pass_run_ids: list[str] = []
 
-    # Step 2: Loop targeted one-pass endpoint until pass_count >= MIN_REQUIRED_PASSES
-    log(f"  Step 2: Looping targeted diagnosis until pass_count >= {MIN_REQUIRED_PASSES}...")
+    # Step 2: Reset budget state for deterministic P4c isolation
+    # This ensures budget_exhausted from previous lab attempts doesn't affect current run
+    log(f"  Step 2: Checking and resetting budget state for incident {incident_id}...")
+    budget_before = get_budget_status(external_analysis_dir, incident_id)
+    log(f"    Budget before reset: {budget_before.get('review_packet_count', 0)} review packets")
+
+    reset_count = reset_diagnosis_loop_budget(external_analysis_dir, incident_id)
+    log(f"    Reset {reset_count} budget files")
+
+    budget_after = get_budget_status(external_analysis_dir, incident_id)
+    log(f"    Budget after reset: {budget_after.get('review_packet_count', 0)} review packets")
+
+    # Step 3: Loop targeted one-pass endpoint until pass_count >= MIN_REQUIRED_PASSES
+    log(f"  Step 3: Looping targeted diagnosis until pass_count >= {MIN_REQUIRED_PASSES}...")
 
     for pass_attempt in range(1, max_passes + 1):
         success, pass_count, pass_run_ids = phase2_invoke_and_poll_pass(
@@ -119,7 +135,7 @@ def run_backend_targeted_diagnosis(
         else:
             log(f"    [pass {pass_attempt}/{max_passes}] Reached max_passes limit ({max_passes})")
 
-    # Step 3: Final validation
+    # Step 4: Final validation
     result = phase3_validate_artifacts(
         total_pass_count=total_pass_count,
         all_pass_run_ids=all_pass_run_ids,

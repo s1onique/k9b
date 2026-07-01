@@ -32,9 +32,18 @@ FAILURE_BACKEND_INCIDENT_FETCH_INVALID_JSON = "backend_incident_fetch_invalid_js
 FAILURE_BACKEND_INCIDENT_FETCH_CONTRACT_ERROR = "backend_incident_fetch_contract_error"
 FAILURE_BACKEND_INCIDENT_FETCH_FAILED = "backend_incident_fetch_failed"
 
+# Targeted invocation failures (P4c)
+# Transport-level failures
 FAILURE_TARGETED_INVOCATION_HTTP_ERROR = "targeted_automatic_diagnosis_invocation_http_error"
 FAILURE_TARGETED_INVOCATION_INVALID_JSON = "targeted_automatic_diagnosis_invocation_invalid_json"
 FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR = "targeted_automatic_diagnosis_invocation_transport_error"
+FAILURE_TARGETED_LOOP_BACKEND_EMPTY_REPLY = "targeted_automatic_diagnosis_backend_empty_reply"
+
+# Runtime state failures (not transport errors)
+# Budget exhaustion / not eligible - distinct from transport/HTTP errors
+FAILURE_TARGETED_LOOP_NOT_ELIGIBLE = "targeted_automatic_diagnosis_loop_not_eligible"
+
+# Post-invocation failures
 FAILURE_TARGETED_LOOP_NOT_COMPLETED = "targeted_automatic_diagnosis_loop_not_completed"
 FAILURE_TARGETED_NO_PASS_ARTIFACTS = "targeted_automatic_diagnosis_no_pass_artifacts"
 FAILURE_TARGETED_REVIEW_PACKET_MISSING = "targeted_automatic_diagnosis_review_packet_missing"
@@ -89,7 +98,19 @@ class BackendIncidentDetail:
 
 @dataclass
 class TargetedDiagnosisInvocationResult:
-    """Result of invoking the targeted diagnosis-loop one-pass endpoint."""
+    """Result of invoking the targeted diagnosis-loop one-pass endpoint.
+
+    This dataclass captures the outcome of a POST to
+    /api/incidents/{incident_id}/automatic-diagnosis-loop/one-pass.
+
+    Failure classification semantics:
+    - success=True: HTTP 2xx received, JSON parsed, loop invocation processed
+    - success=False: Transport/HTTP/JSON failure that blocked invocation
+
+    Note: HTTP 200 with skipped=True (budget_exhausted) is NOT a failure.
+    It returns success=True with error_class=FAILURE_TARGETED_LOOP_NOT_ELIGIBLE
+    to distinguish runtime state from transport errors.
+    """
 
     success: bool
     http_status: int
@@ -111,6 +132,21 @@ class TargetedDiagnosisInvocationResult:
             "error_detail": self.error_detail,
             "curl_rc": self.curl_rc,
         }
+
+    def is_transport_error(self) -> bool:
+        """Check if this is a transport-level failure (not runtime state)."""
+        if self.error_class in (
+            FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
+            FAILURE_TARGETED_LOOP_BACKEND_EMPTY_REPLY,
+        ):
+            return True
+        return False
+
+    def is_runtime_state(self) -> bool:
+        """Check if this is a runtime state (budget_exhausted, not eligible)."""
+        if self.error_class == FAILURE_TARGETED_LOOP_NOT_ELIGIBLE:
+            return True
+        return False
 
 
 @dataclass

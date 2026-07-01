@@ -21,6 +21,10 @@ import re
 from typing import TYPE_CHECKING
 
 from ..collect.incident_diagnosis_auto_loop import collect_automatic_diagnosis_evidence
+from ..collect.incident_diagnosis_auto_loop_models import (
+    AutoLoopCollectorResult,
+    AutoLoopIncidentResult,
+)
 from .server_response import send_json_response
 
 if TYPE_CHECKING:
@@ -33,6 +37,45 @@ _logger = logging.getLogger(__name__)
 _AUTOMATIC_DIAGNOSIS_LOOP_PATTERN = re.compile(
     r"^/api/incidents/([^/]+)/automatic-diagnosis-loop/one-pass$"
 )
+
+
+def _extract_incident_result_from_collector(
+    result: AutoLoopCollectorResult | AutoLoopIncidentResult,
+    incident_id: str,
+) -> AutoLoopIncidentResult | None:
+    """Extract incident result from collector result or return as-is if already an incident result.
+
+    The targeted one-pass endpoint calls collect_automatic_diagnosis_evidence() which
+    returns AutoLoopIncidentResult directly (not AutoLoopCollectorResult).
+    This helper safely handles both cases to prevent AttributeError when accessing
+    result.incident_results on an AutoLoopIncidentResult object.
+
+    Note:
+        AutoLoopIncidentResult does NOT have an incident_results attribute.
+        Only AutoLoopCollectorResult has incident_results (a list of dicts).
+        The collector's run_automatic_diagnosis_loop_evidence_collection() returns
+        AutoLoopCollectorResult, but the convenience wrapper collect_automatic_diagnosis_evidence()
+        extracts the single incident result from the list and returns AutoLoopIncidentResult.
+
+    Args:
+        result: Either AutoLoopCollectorResult or AutoLoopIncidentResult
+        incident_id: The incident ID to look up (unused since result is already the target)
+
+    Returns:
+        AutoLoopIncidentResult if found, None otherwise
+    """
+    # AutoLoopIncidentResult is the direct return type from collect_automatic_diagnosis_evidence
+    if hasattr(result, "incident_results"):
+        # This is AutoLoopCollectorResult - extract from list
+        incident_results = getattr(result, "incident_results", [])
+        for item in incident_results:
+            if isinstance(item, dict) and item.get("incident_id") == incident_id:
+                # Reconstruct AutoLoopIncidentResult from dict
+                return AutoLoopIncidentResult(**item)
+        return None
+    else:
+        # This is already AutoLoopIncidentResult
+        return result
 
 
 def handle_incident_automatic_diagnosis_loop_one_pass_api(
@@ -98,6 +141,8 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
     external_analysis_dir = handler._health_root / "external-analysis"
 
     # Step 3: Invoke the automatic diagnosis loop collector
+    # NOTE: collect_automatic_diagnosis_evidence() returns AutoLoopIncidentResult directly,
+    # NOT AutoLoopCollectorResult. The handler must not assume result.incident_results exists.
     try:
         result = collect_automatic_diagnosis_evidence(
             incident_id=incident_id,
@@ -110,6 +155,7 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
             incident_id,
             error_class,
         )
+        # Return structured JSON error, not empty response
         send_json_response(
             handler,
             _make_error_response(
@@ -122,6 +168,7 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
         return
 
     # Step 4: Build response based on result
+    # collect_automatic_diagnosis_evidence returns AutoLoopIncidentResult directly
     if result.skipped:
         response = {
             "schema_version": "1.0",
@@ -135,7 +182,8 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
         return
 
     # Success or error with partial results
-    incident_result = result.incident_results.get(incident_id)
+    # Use safe extraction helper since result is AutoLoopIncidentResult
+    incident_result = result
 
     if incident_result is None:
         send_json_response(
@@ -151,7 +199,7 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
             "incident_id": incident_id,
             "eligible": incident_result.eligible,
             "run_id": incident_result.run_id,
-            "collector_run_id": result.collector_run_id,
+            "collector_run_id": None,  # Not available from single-incident result
             "error": incident_result.error,
             "error_class": "collector_incident_error",
             "read_only": True,
@@ -162,8 +210,8 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
 
     # Success
     review_packet_name = None
-    if incident_result.review_packet_path:
-        review_packet_name = incident_result.review_packet_path.name
+    if incident_result.review_packet_name:
+        review_packet_name = incident_result.review_packet_name
 
     response = {
         "schema_version": "1.0",
@@ -171,13 +219,13 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
         "eligible": incident_result.eligible,
         "eligibility_reason": incident_result.eligibility_reason,
         "run_id": incident_result.run_id,
-        "collector_run_id": result.collector_run_id,
+        "collector_run_id": None,  # Not available from single-incident result
         "checks_run": incident_result.checks_run,
         "checks_skipped": incident_result.checks_skipped,
         "checks_rejected": incident_result.checks_rejected,
         "review_packet_name": review_packet_name,
         "loop_summary_status": "completed" if incident_result.run_id else "not_run",
-        "automatic_diagnosis_review_available": incident_result.review_packet_path is not None,
+        "automatic_diagnosis_review_available": incident_result.review_packet_name is not None,
         "no_remediation_attempted": True,
         "read_only": True,
     }
