@@ -111,6 +111,30 @@ jobs:
           .venv/bin/python scripts/verify_production_readiness_disclaimer.py
           .venv/bin/python scripts/verify_docs_claim_candidate_dispositions.py
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22.12.0'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Check duplicated code
+        run: make check-duplicates
+
+      - name: Upload duplicate-code report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jscpd-report-${{ github.run_id }}
+          path: |
+            artifacts/jscpd
+          retention-days: 7
+          compression-level: 9
+
   # Python unit-test shards in parallel matrix
   python-unit-tests:
     needs: lint
@@ -282,7 +306,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22.12.0'
           cache: 'npm'
           cache-dependency-path: 'frontend/package-lock.json'
 
@@ -395,7 +419,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22.12.0'
           cache: 'npm'
           cache-dependency-path: 'frontend/package-lock.json'
 

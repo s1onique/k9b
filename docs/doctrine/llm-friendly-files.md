@@ -166,3 +166,10 @@ Files above warning threshold (>300 lines) that need attention:
 - `docs/data-model.md` — for API contract structure
 - `AGENTS.md` — for repository guidance
 - `.kilocode/rules/20-architecture-doctrine.md` — for architectural principles
+- `docs/quality-gates.md` — for duplicate-code gate and overall gate overview
+
+## Duplicate-Code Doctrine
+
+The file-size gate prevents modules from becoming too large to reason about. The duplicate-code gate prevents extracted modules from becoming copy/paste islands. A split is not complete if it merely moves duplicated logic into smaller files.
+
+The duplicate-code gate uses [jscpd](https://github.com/kucherenko/jscpd) for language-agnostic detection across Python, TypeScript, Shell, and other supported languages. See `docs/quality-gates.md` for configuration and policy.

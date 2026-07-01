@@ -86,6 +86,15 @@ lab-lint:
 	cd $(LAB_CMD) && $(GOVET) ./...
 	cd internal/lab/cnpg && $(GOVET) ./...
 
+# Duplicate code detection
+# Scans: src/, scripts/, tests/, frontend/src/
+# Excludes: node_modules, coverage, .venv, etc. (via .jscpd.json)
+.PHONY: check-duplicates
+check-duplicates:
+	@echo "Running duplicate code detection..."
+	mkdir -p artifacts/jscpd
+	cd frontend && npx jscpd --config ../.jscpd.json ../src ../scripts ../tests ./src
+
 # Local check - verify lab can build (without running)
 .PHONY: lab-check
 lab-check:
