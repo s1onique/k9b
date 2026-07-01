@@ -357,7 +357,6 @@ class TestPhaseFailureCriteria:
             assert result.success is False
             assert "read_only_contract_violated" in result.message
 
-
 class TestPhasePassesVerifier:
     """Test that phase artifacts pass the standalone verifier."""
 

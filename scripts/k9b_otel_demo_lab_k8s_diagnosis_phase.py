@@ -56,6 +56,9 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_render import (
     log_validation_result,
 )
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner import run_diagnosis_loop
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_config import (
+    DEFAULT_K9B_NAMESPACE,
+)
 from scripts.k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
 
 __all__ = [
@@ -119,13 +122,16 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     external_analysis_dir = artifact_dir / "external-analysis"
     external_analysis_dir.mkdir(parents=True, exist_ok=True)
     
+    # Use k9b backend namespace for backend-targeted diagnosis, not the incident namespace.
+    # The backend runs in k9b namespace, but incidents may be in otel-demo namespace.
+    # kubectl exec against deploy/k9b-backend must use -n k9b to find the deployment.
     diagnosis_result = run_diagnosis_loop(
         incident_id=incident_id,
         external_analysis_dir=external_analysis_dir,
         max_passes=DEFAULT_MAX_PASSES,
         max_checks_per_pass=DEFAULT_MAX_CHECKS_PER_PASS,
         kubeconfig=config.kubeconfig,
-        namespace=config.namespace,
+        namespace=DEFAULT_K9B_NAMESPACE,
     )
     
     evidence = _merge_diagnosis_result(evidence, diagnosis_result)
