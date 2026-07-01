@@ -13,6 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
+    AutoLoopIncidentResult,
+)
 from k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop import (
     handle_incident_automatic_diagnosis_loop_one_pass_api,
     match_automatic_diagnosis_loop_route,
@@ -67,22 +70,17 @@ class TestHandlerCallsCollector:
         mock_collect: MagicMock,
     ) -> None:
         """Prove the handler calls the REAL collector, not fake-runner."""
-        # Setup mock to return a valid JSON-safe result
-        mock_result = MagicMock()
-        mock_result.skipped = False
-        mock_result.collector_run_id = "collector-123"
-        mock_result.incident_results = {
-            "incident-123": MagicMock(
-                eligible=True,
-                eligibility_reason="incident_eligible",
-                run_id="run-123",
-                checks_run=3,
-                checks_skipped=0,
-                checks_rejected=0,
-                review_packet_path=Path("/tmp/review.json"),  # Real Path object for JSON serialization
-                error=None,
-            )
-        }
+        # collect_automatic_diagnosis_evidence returns AutoLoopIncidentResult directly
+        mock_result = AutoLoopIncidentResult(
+            incident_id="incident-123",
+            eligible=True,
+            eligibility_reason="incident_eligible",
+            run_id="run-123",
+            checks_run=3,
+            checks_skipped=0,
+            checks_rejected=0,
+            review_packet_name="incident-123-diagnosis-review-packet.json",
+        )
         mock_collect.return_value = mock_result
 
         # Create mock handler
@@ -110,21 +108,17 @@ class TestHandlerCallsCollector:
         mock_collect: MagicMock,
     ) -> None:
         """Test successful response structure."""
-        mock_result = MagicMock()
-        mock_result.skipped = False
-        mock_result.collector_run_id = "collector-456"
-        mock_result.incident_results = {
-            "incident-123": MagicMock(
-                eligible=True,
-                eligibility_reason="incident_eligible",
-                run_id="run-456",
-                checks_run=5,
-                checks_skipped=1,
-                checks_rejected=0,
-                review_packet_path=Path("/tmp/review.json"),
-                error=None,
-            )
-        }
+        # collect_automatic_diagnosis_evidence returns AutoLoopIncidentResult directly
+        mock_result = AutoLoopIncidentResult(
+            incident_id="incident-123",
+            eligible=True,
+            eligibility_reason="incident_eligible",
+            run_id="run-456",
+            checks_run=5,
+            checks_skipped=1,
+            checks_rejected=0,
+            review_packet_name="incident-123-diagnosis-review-packet.json",
+        )
         mock_collect.return_value = mock_result
 
         mock_handler = MagicMock()
@@ -145,8 +139,10 @@ class TestHandlerCallsCollector:
             response = args[1]
             assert response["incident_id"] == "incident-123"
             assert response["eligible"] is True
+            assert response["eligibility_reason"] == "incident_eligible"
             assert response["run_id"] == "run-456"
-            assert response["collector_run_id"] == "collector-456"
+            # collector_run_id is None for single-incident results
+            assert response["collector_run_id"] is None
             assert response["checks_run"] == 5
             assert response["automatic_diagnosis_review_available"] is True
             assert response["read_only"] is True
@@ -279,20 +275,17 @@ class TestEndpointDistinction:
         mock_collect: MagicMock,
     ) -> None:
         """Verify response doesn't contain fake_runner artifacts."""
-        mock_result = MagicMock()
-        mock_result.skipped = False
-        mock_result.collector_run_id = "real-collector"
-        mock_result.incident_results = {
-            "incident-123": MagicMock(
-                eligible=True,
-                run_id="real-run",
-                checks_run=3,
-                checks_skipped=0,
-                checks_rejected=0,
-                review_packet_path=Path("/tmp/review.json"),
-                error=None,
-            )
-        }
+        # collect_automatic_diagnosis_evidence returns AutoLoopIncidentResult directly
+        mock_result = AutoLoopIncidentResult(
+            incident_id="incident-123",
+            eligible=True,
+            eligibility_reason="incident_eligible",
+            run_id="real-run",
+            checks_run=3,
+            checks_skipped=0,
+            checks_rejected=0,
+            review_packet_name="incident-123-diagnosis-review-packet.json",
+        )
         mock_collect.return_value = mock_result
 
         mock_handler = MagicMock()
@@ -311,4 +304,4 @@ class TestEndpointDistinction:
             response = args[1]
             # Verify no fake_runner indicators
             assert "fake_runner" not in str(response)
-            assert response.get("run_id", "").startswith("auto-") or response.get("run_id", "") != "fake"
+            assert response.get("run_id", "") == "real-run"

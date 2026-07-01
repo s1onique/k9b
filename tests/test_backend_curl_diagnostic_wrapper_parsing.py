@@ -316,9 +316,13 @@ class TestCurlExecPodDiagnosticWrapper:
         """_curl_exec_pod should parse body from CURL_EXIT/HTTP_CODE markers."""
         from scripts.lab_common.provider_curl_helpers import _curl_exec_pod
 
-        raw_output = """CURL_EXIT=0
+        # The _curl_exec_pod shell command outputs ---CURL_START--- first,
+        # then CURL_EXIT, HTTP_CODE, body, and STDERR_BLOCK
+        raw_output = """---CURL_START---
+CURL_EXIT=0
 HTTP_CODE=200
 {"healthy":true,"version":"1.0.0"}
+STDERR_BLOCK
 """
 
         def run_side_effect(*args: tuple, **kwargs: dict) -> MagicMock:
@@ -341,3 +345,4 @@ HTTP_CODE=200
         # Body should be valid JSON
         parsed = json.loads(result.body)
         assert parsed["healthy"] is True
+        assert parsed["version"] == "1.0.0"
