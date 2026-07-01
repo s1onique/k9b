@@ -168,3 +168,7 @@ collect/incident_diagnosis_loop_runtime_single_pass.py run_read_only_checks runt
 collect/otel_span_context.py _span_is_recording defensive span.is_recording() exception boundary - OTel API defensive check, no credential exposure
 collect/otel_span_context.py _set_span_status defensive span.set_status() exception boundary - OTel API defensive check, no credential exposure
 
+# === Automatic Diagnosis Loop API Handler ===
+ui/server_incident_automatic_diagnosis_loop.py handle_incident_automatic_diagnosis_loop_one_pass_api automatic diagnosis loop boundary - bounded error response prevents traceback leakage
+ui/api_dispatch.py dispatch_api_operation top-level API dispatch safety net - prevents internal exceptions from leaking to clients, sanitized error handling
+

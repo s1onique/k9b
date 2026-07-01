@@ -67,18 +67,19 @@ class TestHandlerCallsCollector:
         mock_collect: MagicMock,
     ) -> None:
         """Prove the handler calls the REAL collector, not fake-runner."""
-        # Setup mock to return a valid result
+        # Setup mock to return a valid JSON-safe result
         mock_result = MagicMock()
         mock_result.skipped = False
         mock_result.collector_run_id = "collector-123"
         mock_result.incident_results = {
             "incident-123": MagicMock(
                 eligible=True,
+                eligibility_reason="incident_eligible",
                 run_id="run-123",
                 checks_run=3,
                 checks_skipped=0,
                 checks_rejected=0,
-                review_packet_path=Path("/tmp/review.json"),
+                review_packet_path=Path("/tmp/review.json"),  # Real Path object for JSON serialization
                 error=None,
             )
         }
