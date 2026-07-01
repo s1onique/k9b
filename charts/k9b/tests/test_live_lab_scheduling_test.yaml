@@ -361,7 +361,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: "--unsafe-bind"
 
-  - it: backend using values-live-lab.yaml should render HEALTH_UI_HOST=0.0.0.0
+  - it: backend using values-live-lab.yaml should render K9B_UI_HOST=0.0.0.0
     # Backend must bind to 0.0.0.0 for cluster-wide access via Kubernetes Service
     template: deployment.yaml
     values:
@@ -370,5 +370,5 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: HEALTH_UI_HOST
+            name: K9B_UI_HOST
             value: "0.0.0.0"

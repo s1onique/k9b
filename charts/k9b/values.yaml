@@ -64,11 +64,11 @@ backend:
   env:
     # HEALTH_SKIP_REFRESH: Set to "0" to enable auto-refresh, "1" to skip.
     HEALTH_SKIP_REFRESH: "1"
-    # HEALTH_UI_HOST: Bind address for the UI/API server.
+    # K9B_UI_HOST: Bind address for the UI/API server.
     # Set to 0.0.0.0 for cluster-wide access via Kubernetes Service.
     # Requires backend.unsafeBind=true.
-    HEALTH_UI_HOST: "0.0.0.0"
-    HEALTH_UI_PORT: "8080"
+    K9B_UI_HOST: "0.0.0.0"
+    K9B_UI_PORT: "8080"
     # HEALTH_CONFIG_PATH: Path to health config inside the container.
     HEALTH_CONFIG_PATH: "/app/runs/health-config.json"
     # HEALTH_RUNS_DIR: Directory for health run artifacts.

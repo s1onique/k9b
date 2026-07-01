@@ -116,18 +116,18 @@ tests:
           path: spec.template.spec.containers[0].args
           pattern: "--unsafe-bind"
 
-  - it: backend should render HEALTH_UI_HOST=0.0.0.0 by default
+  - it: backend should render K9B_UI_HOST=0.0.0.0 by default
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].env
-          pattern: "name: HEALTH_UI_HOST"
+          pattern: "name: K9B_UI_HOST"
           value: "0.0.0.0"
 
-  - it: backend should render HEALTH_UI_PORT=8080
+  - it: backend should render K9B_UI_PORT=8080
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].env
-          pattern: "name: HEALTH_UI_PORT"
+          pattern: "name: K9B_UI_PORT"
           value: "8080"
 
   - it: backend container should expose port 8080
@@ -150,14 +150,14 @@ tests:
           path: spec.template.spec.containers[0].args
           pattern: "--unsafe-bind"
 
-  - it: backend should render localhost HEALTH_UI_HOST when unsafeBind is false
+  - it: backend should render localhost K9B_UI_HOST when unsafeBind is false
     set:
       backend.unsafeBind: false
-      backend.env.HEALTH_UI_HOST: "127.0.0.1"
+      backend.env.K9B_UI_HOST: "127.0.0.1"
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].env
-          pattern: "name: HEALTH_UI_HOST"
+          pattern: "name: K9B_UI_HOST"
           value: "127.0.0.1"
 
   # ===== K9B_ENABLE_DEBUG_ENDPOINTS =====

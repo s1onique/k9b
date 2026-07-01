@@ -166,9 +166,13 @@ def handle_health_summary(args: argparse.Namespace) -> int:
 
 
 def handle_health_ui(args: argparse.Namespace) -> int:
-    # Read token from CLI arg or environment variable
+    # Read host from env var (Kubernetes) or CLI arg (local dev)
+    # Env var takes precedence to allow Helm chart to override defaults
+    # K9B_UI_HOST/K9B_UI_PORT follow the existing K9B_UI_TOKEN naming pattern
+    host = os.environ.get("K9B_UI_HOST") or args.host
+    port = int(os.environ.get("K9B_UI_PORT") or args.port)
     auth_token = args.auth_token or os.environ.get("K9B_UI_TOKEN")
-    start_ui_server(runs_dir=args.runs_dir, host=args.host, port=args.port, unsafe_bind=args.unsafe_bind, auth_token=auth_token)
+    start_ui_server(runs_dir=args.runs_dir, host=host, port=port, unsafe_bind=args.unsafe_bind, auth_token=auth_token)
     return 0
 
 

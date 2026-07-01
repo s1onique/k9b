@@ -57,10 +57,10 @@ spec:
           env:
             - name: HEALTH_SKIP_REFRESH
               value: {{ .Values.backend.env.HEALTH_SKIP_REFRESH | quote }}
-            - name: HEALTH_UI_HOST
-              value: {{ .Values.backend.env.HEALTH_UI_HOST | quote }}
-            - name: HEALTH_UI_PORT
-              value: {{ .Values.backend.env.HEALTH_UI_PORT | quote }}
+            - name: K9B_UI_HOST
+              value: {{ .Values.backend.env.K9B_UI_HOST | quote }}
+            - name: K9B_UI_PORT
+              value: {{ .Values.backend.env.K9B_UI_PORT | quote }}
             - name: HEALTH_CONFIG_PATH
               value: {{ .Values.backend.env.HEALTH_CONFIG_PATH | quote }}
             - name: HEALTH_RUNS_DIR
