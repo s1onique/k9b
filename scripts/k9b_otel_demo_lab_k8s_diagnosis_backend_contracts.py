@@ -49,6 +49,142 @@ FAILURE_TARGETED_LOOP_NOT_STARTED = "targeted_automatic_diagnosis_loop_not_start
 FAILURE_TARGETED_NO_PASS_ARTIFACTS = "targeted_automatic_diagnosis_no_pass_artifacts"
 FAILURE_TARGETED_REVIEW_PACKET_MISSING = "targeted_automatic_diagnosis_review_packet_missing"
 FAILURE_TARGETED_INSUFFICIENT_PASSES = "targeted_automatic_diagnosis_insufficient_passes"
+FAILURE_TARGETED_BUDGET_EXHAUSTED_BEFORE_REQUIRED_PASSES = (
+    "targeted_automatic_diagnosis_budget_exhausted_before_required_passes"
+)
+FAILURE_TARGETED_BUDGET_LIMIT_TOO_LOW = "targeted_automatic_diagnosis_budget_limit_too_low"
+FAILURE_TARGETED_COMPLETED_WITHOUT_OBSERVABLE_PASS = (
+    "targeted_automatic_diagnosis_completed_without_observable_pass_artifacts"
+)
+FAILURE_TARGETED_TERMINAL_NO_CHECKS = "targeted_automatic_diagnosis_terminal_no_checks"
+
+
+# =============================================================================
+# Pass Counting Helper
+# =============================================================================
+
+
+def count_observable_targeted_diagnosis_passes(detail: dict[str, Any]) -> int:
+    """Count observable targeted diagnosis passes from incident detail.
+
+    Counting order (most preferred first):
+    1. Explicit loop_summary.pass_count when present and an integer
+    2. Length of loop_summary.diagnosis_loop_pass_run_ids or pass_run_ids when present
+    3. 1 pass when automatic_diagnosis_review is available with a diagnosis-loop
+       review-packet artifact and a run_id
+    4. 0 otherwise
+
+    This function handles the split-brain state where:
+    - automatic_diagnosis_review is available (has review-packet artifact)
+    - loop_summary may be null or missing pass info
+
+    Also tolerates both field naming conventions:
+    - automatic_diagnosis_loop_summary (newer API)
+    - loop_summary (live lab payload)
+
+    Args:
+        detail: Incident detail dict from backend API
+
+    Returns:
+        Number of observable passes (0 or more)
+    """
+    # 1. Check loop_summary for explicit pass_count
+    # Support both field naming conventions
+    loop_summary = detail.get("automatic_diagnosis_loop_summary")
+    if not isinstance(loop_summary, dict):
+        loop_summary = detail.get("loop_summary")
+    if isinstance(loop_summary, dict):
+        pass_count = loop_summary.get("pass_count")
+        if isinstance(pass_count, int) and pass_count > 0:
+            return pass_count
+
+        # 2. Check pass_run_ids in loop_summary (support both field names)
+        pass_run_ids = (
+            loop_summary.get("pass_run_ids")
+            or loop_summary.get("diagnosis_loop_pass_run_ids")
+        )
+        if isinstance(pass_run_ids, (list, tuple)) and len(pass_run_ids) > 0:
+            return len(pass_run_ids)
+
+    # 3. Check for diagnosis-loop review-packet in automatic_diagnosis_review
+    review = detail.get("automatic_diagnosis_review")
+    if isinstance(review, dict):
+        available = review.get("available")
+        if available is True:
+            artifact_type = review.get("artifact_type")
+            if artifact_type == "diagnosis-loop-review-packet":
+                run_id = review.get("run_id")
+                if isinstance(run_id, str) and run_id:
+                    return 1
+
+    # 4. Fallback: no observable passes
+    return 0
+
+
+def is_terminal_no_checks_decision(detail: dict[str, Any]) -> bool:
+    """Check if the incident detail shows a terminal no-checks decision.
+
+    A terminal no-checks decision occurs when:
+    - automatic_diagnosis_review.available == True
+    - automatic_diagnosis_review.artifact_type == "diagnosis-loop-review-packet"
+    - automatic_diagnosis_review.decision == "stop_no_checks_proposed"
+    - automatic_diagnosis_review.checks_requested == 0
+    - automatic_diagnosis_review.checks_run == 0
+
+    Args:
+        detail: Incident detail dict from backend API
+
+    Returns:
+        True if this is a terminal no-checks decision
+    """
+    review = detail.get("automatic_diagnosis_review")
+    if not isinstance(review, dict):
+        return False
+
+    if review.get("available") is not True:
+        return False
+
+    if review.get("artifact_type") != "diagnosis-loop-review-packet":
+        return False
+
+    if review.get("decision") != "stop_no_checks_proposed":
+        return False
+
+    checks_requested = review.get("checks_requested")
+    checks_run = review.get("checks_run")
+
+    # Treat None as 0 for comparison purposes
+    if (checks_requested or 0) != 0:
+        return False
+
+    if (checks_run or 0) != 0:
+        return False
+
+    return True
+
+
+def is_read_only_terminal_decision(detail: dict[str, Any]) -> bool:
+    """Check if the terminal decision satisfies read-only constraints.
+
+    A valid read-only terminal decision:
+    - Has automatic_diagnosis_review
+    - Has review_required_before_any_action == True
+    - Has no_remediation_attempted == True
+
+    Args:
+        detail: Incident detail dict from backend API
+
+    Returns:
+        True if the terminal decision is read-only
+    """
+    review = detail.get("automatic_diagnosis_review")
+    if not isinstance(review, dict):
+        return False
+
+    return (
+        review.get("review_required_before_any_action") is True
+        and review.get("no_remediation_attempted") is True
+    )
 
 
 # =============================================================================

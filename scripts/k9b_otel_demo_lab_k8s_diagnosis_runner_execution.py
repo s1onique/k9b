@@ -140,10 +140,14 @@ def run_backend_targeted_diagnosis(
         return result
 
     # Step 3: Loop targeted one-pass endpoint until pass_count >= MIN_REQUIRED_PASSES
+    # OR a terminal no-checks decision is reached (valid single-pass success)
     log(f"  Step 3: Looping targeted diagnosis until pass_count >= {MIN_REQUIRED_PASSES}...")
 
+    terminal_no_checks_reached = False
+    invocation_count = 0
+
     for pass_attempt in range(1, max_passes + 1):
-        success, pass_count, pass_run_ids = phase2_invoke_and_poll_pass(
+        success, pass_count, pass_run_ids, post_attempted = phase2_invoke_and_poll_pass(
             kubeconfig=kubeconfig,
             namespace=namespace,
             incident_id=incident_id,
@@ -151,6 +155,9 @@ def run_backend_targeted_diagnosis(
             max_passes=max_passes,
             result=result,
         )
+        # Track actual POST attempts, not just phase invocations
+        if post_attempted:
+            invocation_count += 1
 
         if not success:
             if pass_attempt == 1:
@@ -167,7 +174,14 @@ def run_backend_targeted_diagnosis(
         total_pass_count = pass_count
         all_pass_run_ids = pass_run_ids
 
-        # Check if we have enough passes
+        # Check for terminal no-checks decision BEFORE checking pass count
+        # If terminal no-checks was reached in this pass, accept it as valid single-pass success
+        if result.get("terminal_no_checks_accepted"):
+            terminal_no_checks_reached = True
+            log(f"    [pass {pass_attempt}/{max_passes}] Terminal no-checks decision accepted: stopping loop")
+            break
+
+        # Standard pass count check
         if total_pass_count >= MIN_REQUIRED_PASSES:
             log(f"    [pass {pass_attempt}/{max_passes}] SUCCESS: Required passes met ({total_pass_count} >= {MIN_REQUIRED_PASSES})")
             break
@@ -176,12 +190,18 @@ def run_backend_targeted_diagnosis(
         else:
             log(f"    [pass {pass_attempt}/{max_passes}] Reached max_passes limit ({max_passes})")
 
+    # Store invocation metadata for failure diagnostics
+    result["targeted_invocation_count"] = invocation_count
+    result["targeted_invocation_attempted"] = invocation_count > 0
+
     # Step 4: Final validation
+    # Pass terminal_no_checks flag to validation
     result = phase3_validate_artifacts(
         total_pass_count=total_pass_count,
         all_pass_run_ids=all_pass_run_ids,
         external_analysis_dir=external_analysis_dir,
         result=result,
+        terminal_no_checks=terminal_no_checks_reached,
     )
 
     return result

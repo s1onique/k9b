@@ -15,6 +15,9 @@ from typing import Any
 from scripts.k9b_lab_common_helpers import log
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     FAILURE_TARGETED_INSUFFICIENT_PASSES,
+    count_observable_targeted_diagnosis_passes,
+    is_read_only_terminal_decision,
+    is_terminal_no_checks_decision,
 )
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_helpers import (
     FAILURE_BACKEND_INCIDENT_FETCH_FAILED,
@@ -94,7 +97,7 @@ def phase2_invoke_and_poll_pass(
     pass_attempt: int,
     max_passes: int,
     result: dict[str, Any],
-) -> tuple[bool, int, list[str]]:
+) -> tuple[bool, int, list[str], bool]:
     """Phase 2: Invoke one-pass diagnosis and poll for completion.
 
     Args:
@@ -106,7 +109,9 @@ def phase2_invoke_and_poll_pass(
         result: Result dict to populate
 
     Returns:
-        Tuple of (success, total_pass_count, all_pass_run_ids).
+        Tuple of (success, total_pass_count, all_pass_run_ids, post_attempted).
+        The post_attempted flag indicates whether the POST was actually made,
+        regardless of whether it succeeded or failed.
     """
     current_pass_in_label = f"pass {pass_attempt}/{max_passes}"
     log(f"    [{current_pass_in_label}] Invoking targeted diagnosis-loop one-pass...")
@@ -124,7 +129,7 @@ def phase2_invoke_and_poll_pass(
     if not invocation_result.success:
         log(f"    [{current_pass_in_label}] ERROR: Targeted invocation failed: {invocation_result.error_class}")
         log(f"    [{current_pass_in_label}] Detail: {invocation_result.error_detail}")
-        return False, 0, []
+        return False, 0, [], True  # POST was attempted even though it failed
 
     # Check for budget exhaustion BEFORE polling - fail fast
     # The invocation returned HTTP 200 but the incident is not eligible (budget exhausted)
@@ -152,7 +157,7 @@ def phase2_invoke_and_poll_pass(
             result["failure_reason"] = f"{invocation_result.error_class}: {invocation_result.error_detail}"
         else:
             result["failure_reason"] = invocation_result.error_class
-        return False, 0, []
+        return False, 0, [], True  # POST was attempted but loop was not eligible
 
     log(f"    [{current_pass_in_label}] Invocation succeeded (HTTP {invocation_result.http_status})")
     result["real_loop_invoked"] = True
@@ -179,7 +184,7 @@ def phase2_invoke_and_poll_pass(
     if not poll_result.success:
         log(f"    [{current_pass_in_label}] ERROR: Diagnosis did not complete: {poll_result.failure_reason}")
         log(f"    [{current_pass_in_label}] Final status: {poll_result.final_status}")
-        return False, 0, []
+        return False, 0, [], True  # POST succeeded, polling failed
 
     # Check if loop actually ran a pass or if it was skipped/not_run
     # even though the invocation returned HTTP 200
@@ -188,7 +193,7 @@ def phase2_invoke_and_poll_pass(
         log(f"    [{current_pass_in_label}] Invocation returned HTTP 200 but no pass was recorded")
         result["real_loop_invoked"] = False
         result["failure_reason"] = poll_result.failure_reason
-        return False, 0, []
+        return False, 0, [], True  # POST succeeded, but loop didn't run
 
     log(f"    [{current_pass_in_label}] Diagnosis completed: loop_summary.status={poll_result.loop_summary_status}")
 
@@ -201,22 +206,25 @@ def phase2_invoke_and_poll_pass(
 
     total_pass_count = 0
     all_pass_run_ids: list[str] = []
+    terminal_decision_reached = False
 
     if current_detail:
         result["backend_incident_detail"] = current_detail.to_compact_log()
         result["status"] = current_detail.status
 
-        # Extract pass information from the response
+        # Use the new helper to count observable passes
+        # This handles the split-brain state where automatic_diagnosis_review is available
+        # but loop_summary may be null or missing pass info
+        total_pass_count = count_observable_targeted_diagnosis_passes(current_detail.raw)
+        
+        # Extract pass run IDs from loop_summary if available
         loop_summary = current_detail.raw.get("automatic_diagnosis_loop_summary", {}) or {}
         if "pass_run_ids" in loop_summary:
             current_pass_run_ids = loop_summary["pass_run_ids"] or []
             # Track new passes (those not already in our list)
             new_pass_run_ids = [rid for rid in current_pass_run_ids if rid not in all_pass_run_ids]
             all_pass_run_ids.extend(new_pass_run_ids)
-            total_pass_count = len(all_pass_run_ids)
-        elif "pass_count" in loop_summary:
-            total_pass_count = loop_summary["pass_count"] or 0
-
+        
         # Check for review packet
         result["review_packet_found"] = current_detail.review_available
 
@@ -224,8 +232,27 @@ def phase2_invoke_and_poll_pass(
         if "root_cause_summary" in loop_summary:
             result["root_cause_summary"] = loop_summary["root_cause_summary"]
 
+        # Check for terminal no-checks decision
+        if is_terminal_no_checks_decision(current_detail.raw):
+            terminal_decision_reached = True
+            review = current_detail.raw.get("automatic_diagnosis_review", {})
+            artifact_name = review.get("artifact_name", "unknown")
+            log(f"    [{current_pass_in_label}] Diagnosis review artifact available: {review.get('artifact_type', 'unknown')}")
+            log(f"    [{current_pass_in_label}] Terminal diagnosis decision: stop_no_checks_proposed")
+            log(f"    [{current_pass_in_label}] Observable passes so far: {total_pass_count}")
+            log(f"    [{current_pass_in_label}] Review artifact: {artifact_name}")
+            
+            # Check if read-only constraints are satisfied
+            if is_read_only_terminal_decision(current_detail.raw):
+                log(f"    [{current_pass_in_label}] Read-only constraints satisfied: review_required_before_any_action=True, no_remediation_attempted=True")
+                result["terminal_no_checks_accepted"] = True
+                result["terminal_decision_reached"] = True
+            else:
+                log(f"    [{current_pass_in_label}] WARNING: Read-only constraints not fully satisfied")
+
+    result["terminal_decision_reached"] = terminal_decision_reached
     log(f"    [{current_pass_in_label}] Total passes so far: {total_pass_count}/{MIN_REQUIRED_PASSES}")
-    return True, total_pass_count, all_pass_run_ids
+    return True, total_pass_count, all_pass_run_ids, True  # POST succeeded, loop completed
 
 
 def phase3_validate_artifacts(
@@ -233,6 +260,7 @@ def phase3_validate_artifacts(
     all_pass_run_ids: list[str],
     external_analysis_dir: Path,
     result: dict[str, Any],
+    terminal_no_checks: bool = False,
 ) -> dict[str, Any]:
     """Phase 3: Validate pass artifacts.
 
@@ -241,6 +269,7 @@ def phase3_validate_artifacts(
         all_pass_run_ids: List of pass run IDs
         external_analysis_dir: Directory for diagnosis artifacts
         result: Result dict to populate
+        terminal_no_checks: Whether a terminal no-checks decision was reached
 
     Returns:
         Updated result dict.
@@ -249,6 +278,15 @@ def phase3_validate_artifacts(
     result["pass_count"] = total_pass_count
     result["pass_run_ids"] = all_pass_run_ids
 
+    # Terminal no-checks decision is a valid single-pass success
+    if terminal_no_checks and total_pass_count >= 1:
+        result["failure_reason"] = None
+        result["real_pass_artifacts_found"] = True
+        log(f"  Backend-targeted diagnosis completed: terminal no-checks single-pass ({total_pass_count} observable passes)")
+        log("  P4c diagnosis PASSED (terminal single-pass outcome)")
+        return result
+
+    # Standard multi-pass validation
     if result["pass_count"] < MIN_REQUIRED_PASSES:
         result["failure_reason"] = FAILURE_TARGETED_INSUFFICIENT_PASSES
         result["real_pass_artifacts_found"] = False
