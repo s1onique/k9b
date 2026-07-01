@@ -1,4 +1,4 @@
-"""Test helpers for API contract testing."""
+"""Shared test helper package."""
 
 from tests.helpers.api_contract_handler import (
     MockApiHandler,
