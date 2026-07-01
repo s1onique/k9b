@@ -1,11 +1,11 @@
-# Copyright (c) 2025 Artem Chistyakov
-# SPDX-License-Identifier: MIT
-
 """Behavioral regression tests for provider preflight.
 
-These tests mock the _curl_service_pod function to test the behavioral contract
-of run_provider_preflight() without duplicating the parsing logic. This ensures
-the preflight behavior can evolve independently of the underlying parser.
+These tests mock the _curl_service_pod_with_retry and _curl_exec_pod_with_retry
+functions to test the behavioral contract of run_provider_preflight() without
+duplicating the parsing logic. This ensures the preflight behavior can evolve
+independently of the underlying parser.
+
+Retry behavior is tested separately in test_provider_preflight_retry.py.
 """
 
 from __future__ import annotations
@@ -14,9 +14,13 @@ import json
 from collections.abc import Iterator
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from scripts.lab_common.provider_preflight import CurlResult
 
 
 class TestProviderPreflightBehavior:
@@ -28,9 +32,16 @@ class TestProviderPreflightBehavior:
         with TemporaryDirectory() as tmpdir:
             yield Path(tmpdir)
 
-    def _mock_curl_success(self, healthy_provider_response: dict) -> tuple[bool, str, int]:
-        """Return a successful health response with provider available."""
-        return True, json.dumps(healthy_provider_response), 200
+    def _mock_curl_success(self, healthy_provider_response: dict) -> CurlResult:
+        """Return a successful CurlResult with provider available."""
+        from scripts.lab_common.provider_preflight import CurlResult
+        return CurlResult(
+            success=True,
+            body=json.dumps(healthy_provider_response),
+            http_code=200,
+            curl_rc=0,
+            stderr="",
+        )
 
     def test_passes_when_provider_available(self, temp_artifact_dir: Path) -> None:
         """Should pass when provider dependency shows 'available' status."""
@@ -49,7 +60,7 @@ class TestProviderPreflightBehavior:
         }
 
         with patch(
-            "scripts.lab_common.provider_preflight._curl_service_pod",
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
             return_value=self._mock_curl_success(health_response),
         ):
             result = run_provider_preflight(
@@ -76,7 +87,7 @@ class TestProviderPreflightBehavior:
         }
 
         with patch(
-            "scripts.lab_common.provider_preflight._curl_service_pod",
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
             return_value=self._mock_curl_success(health_response),
         ):
             result = run_provider_preflight(
@@ -107,7 +118,7 @@ class TestProviderPreflightBehavior:
         }
 
         with patch(
-            "scripts.lab_common.provider_preflight._curl_service_pod",
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
             return_value=self._mock_curl_success(health_response),
         ):
             result = run_provider_preflight(
@@ -140,7 +151,7 @@ class TestProviderPreflightBehavior:
         }
 
         with patch(
-            "scripts.lab_common.provider_preflight._curl_service_pod",
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
             return_value=self._mock_curl_success(health_response),
         ):
             result = run_provider_preflight(
@@ -171,7 +182,7 @@ class TestProviderPreflightBehavior:
         }
 
         with patch(
-            "scripts.lab_common.provider_preflight._curl_service_pod",
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
             return_value=self._mock_curl_success(health_response),
         ):
             result = run_provider_preflight(
@@ -191,9 +202,15 @@ class TestProviderPreflightBehavior:
 
     def test_connection_failure_falls_back_to_exec_local(self, temp_artifact_dir: Path) -> None:
         """Should fall back to exec-local when service curl fails."""
-        from scripts.lab_common.provider_preflight import run_provider_preflight
+        from scripts.lab_common.provider_preflight import CurlResult, run_provider_preflight
 
-        service_failure = (False, "connection refused", 0)
+        service_failure = CurlResult(
+            success=False,
+            body="connection refused",
+            http_code=0,
+            curl_rc=7,
+            stderr="Connection refused",
+        )
         exec_success_response = {
             "healthy": True,
             "primary_failure_class": "",
@@ -205,13 +222,19 @@ class TestProviderPreflightBehavior:
                 },
             ],
         }
-        exec_success = (True, json.dumps(exec_success_response), 200)
+        exec_success = CurlResult(
+            success=True,
+            body=json.dumps(exec_success_response),
+            http_code=200,
+            curl_rc=0,
+            stderr="",
+        )
 
         with patch(
-            "scripts.lab_common.provider_preflight._curl_service_pod",
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
             return_value=service_failure,
         ), patch(
-            "scripts.lab_common.provider_preflight._curl_exec_pod",
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
             return_value=exec_success,
         ):
             result = run_provider_preflight(
