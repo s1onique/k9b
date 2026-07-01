@@ -225,6 +225,10 @@ def get_budget_status(
             "other_budget_artifact_count": 0,
             "total_auto_artifact_count": 0,
             "budget_exhausted": False,
+            # Top-level access for convenience (mirrors artifacts sub-keys)
+            "review_packets": [],
+            "loop_passes": [],
+            "other_auto": [],
             "artifacts": {
                 "review_packets": [],
                 "loop_passes": [],
@@ -272,6 +276,10 @@ def get_budget_status(
         "other_budget_artifact_count": len(other_auto),
         "total_auto_artifact_count": total_count,
         "budget_exhausted": total_count > 0,
+        # Top-level access for convenience (mirrors artifacts sub-keys)
+        "review_packets": review_packets,
+        "loop_passes": loop_passes,
+        "other_auto": other_auto,
         "artifacts": {
             "review_packets": review_packets,
             "loop_passes": loop_passes,
