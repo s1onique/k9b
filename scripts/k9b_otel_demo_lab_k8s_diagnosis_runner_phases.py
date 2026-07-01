@@ -126,6 +126,19 @@ def phase2_invoke_and_poll_pass(
         log(f"    [{current_pass_in_label}] Detail: {invocation_result.error_detail}")
         return False, 0, []
 
+    # Check for budget exhaustion BEFORE polling - fail fast
+    # The invocation returned HTTP 200 but the incident is not eligible (budget exhausted)
+    if invocation_result.is_runtime_state():
+        log(f"    [{current_pass_in_label}] ERROR: Loop not eligible: {invocation_result.error_detail}")
+        log(f"    [{current_pass_in_label}] Budget exhausted - cannot run diagnosis")
+        result["real_loop_invoked"] = False
+        # Preserve actionable detail: "budget_exhausted" not just "not_eligible"
+        if invocation_result.error_detail:
+            result["failure_reason"] = f"{invocation_result.error_class}: {invocation_result.error_detail}"
+        else:
+            result["failure_reason"] = invocation_result.error_class
+        return False, 0, []
+
     log(f"    [{current_pass_in_label}] Invocation succeeded (HTTP {invocation_result.http_status})")
     result["real_loop_invoked"] = True
     result["provider_invocation_attempted"] = True
@@ -151,6 +164,15 @@ def phase2_invoke_and_poll_pass(
     if not poll_result.success:
         log(f"    [{current_pass_in_label}] ERROR: Diagnosis did not complete: {poll_result.failure_reason}")
         log(f"    [{current_pass_in_label}] Final status: {poll_result.final_status}")
+        return False, 0, []
+
+    # Check if loop actually ran a pass or if it was skipped/not_run
+    # even though the invocation returned HTTP 200
+    if poll_result.loop_summary_status == "not_run" or poll_result.loop_summary_status is None:
+        log(f"    [{current_pass_in_label}] ERROR: Loop never started (loop_summary.status=not_run)")
+        log(f"    [{current_pass_in_label}] Invocation returned HTTP 200 but no pass was recorded")
+        result["real_loop_invoked"] = False
+        result["failure_reason"] = poll_result.failure_reason
         return False, 0, []
 
     log(f"    [{current_pass_in_label}] Diagnosis completed: loop_summary.status={poll_result.loop_summary_status}")

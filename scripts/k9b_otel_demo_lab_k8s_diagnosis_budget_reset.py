@@ -82,7 +82,9 @@ def reset_diagnosis_loop_budget(
     removed_files: list[str] = []
 
     try:
-        for path in external_analysis_dir.iterdir():
+        # Use rglob to find artifacts in nested paths (e.g., health/external-analysis/phase4-diagnosis/)
+        # This ensures we match the backend's artifact discovery pattern
+        for path in external_analysis_dir.rglob("*"):  # noqa: PTH207
             if not path.is_file():
                 continue
 
@@ -92,12 +94,12 @@ def reset_diagnosis_loop_budget(
                 try:
                     path.unlink()
                     removed_count += 1
-                    removed_files.append(name)
-                    _logger.debug("Removed budget artifact: %s", name)
+                    removed_files.append(str(path.relative_to(external_analysis_dir)))
+                    _logger.debug("Removed budget artifact: %s", path)
                 except OSError as e:
                     _logger.warning(
                         "Failed to remove budget artifact %s: %s",
-                        name,
+                        path,
                         e,
                     )
     except OSError as e:
@@ -153,12 +155,14 @@ def get_budget_status(
     review_packets: list[str] = []
 
     try:
-        for path in external_analysis_dir.iterdir():
+        # Use rglob to find artifacts in nested paths (e.g., health/external-analysis/phase4-diagnosis/)
+        # This ensures we match the backend's artifact discovery pattern
+        for path in external_analysis_dir.rglob("*"):  # noqa: PTH207
             if not path.is_file():
                 continue
             name = path.name
             if name.startswith(prefix) and name.endswith(suffix):
-                review_packets.append(name)
+                review_packets.append(str(path.relative_to(external_analysis_dir)))
     except OSError:
         pass
 

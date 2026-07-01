@@ -45,6 +45,7 @@ FAILURE_TARGETED_LOOP_NOT_ELIGIBLE = "targeted_automatic_diagnosis_loop_not_elig
 
 # Post-invocation failures
 FAILURE_TARGETED_LOOP_NOT_COMPLETED = "targeted_automatic_diagnosis_loop_not_completed"
+FAILURE_TARGETED_LOOP_NOT_STARTED = "targeted_automatic_diagnosis_loop_not_started"
 FAILURE_TARGETED_NO_PASS_ARTIFACTS = "targeted_automatic_diagnosis_no_pass_artifacts"
 FAILURE_TARGETED_REVIEW_PACKET_MISSING = "targeted_automatic_diagnosis_review_packet_missing"
 FAILURE_TARGETED_INSUFFICIENT_PASSES = "targeted_automatic_diagnosis_insufficient_passes"
