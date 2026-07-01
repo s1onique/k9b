@@ -71,7 +71,7 @@ class TestBudgetExhaustedFailFast:
         mock_invoke.return_value = budget_exhausted_result
 
         result: dict[str, object] = {}
-        success, pass_count, pass_run_ids = phase2_invoke_and_poll_pass(
+        success, pass_count, pass_run_ids, post_attempted = phase2_invoke_and_poll_pass(
             kubeconfig="/path/to/kubeconfig",
             namespace="k9b",
             incident_id="test-incident",
@@ -84,6 +84,10 @@ class TestBudgetExhaustedFailFast:
         assert success is False, "Should fail on budget_exhausted"
         assert pass_count == 0
         assert pass_run_ids == []
+        # POST was made (got HTTP 200 + budget_exhausted response), but loop was not eligible
+        assert post_attempted is True, (
+            "post_attempted should be True for budget_exhausted (POST was made, got response)"
+        )
 
         # Should NOT poll - real_loop_invoked should be False
         assert result.get("real_loop_invoked") is False, (
