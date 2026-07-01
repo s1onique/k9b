@@ -17,8 +17,9 @@ from typing import Any
 
 from scripts.k9b_lab_common_helpers import log
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-    get_budget_status,
-    reset_diagnosis_loop_budget,
+    BudgetResetResult,
+    get_budget_status_in_backend,
+    reset_diagnosis_loop_budget_in_backend,
 )
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
     DEFAULT_MAX_PASSES,
@@ -87,16 +88,56 @@ def run_backend_targeted_diagnosis(
     all_pass_run_ids: list[str] = []
 
     # Step 2: Reset budget state for deterministic P4c isolation
-    # This ensures budget_exhausted from previous lab attempts doesn't affect current run
+    # CRITICAL: Must reset budget in the BACKEND's artifact root (runs/health/external-analysis/)
+    # NOT in the lab's lab-artifacts/ directory. The backend's eligibility check looks at
+    # its own artifact root, not the lab output directory.
     log(f"  Step 2: Checking and resetting budget state for incident {incident_id}...")
-    budget_before = get_budget_status(external_analysis_dir, incident_id)
-    log(f"    Budget before reset: {budget_before.get('review_packet_count', 0)} review packets")
+    
+    # Get budget status from backend container
+    budget_before = get_budget_status_in_backend(
+        kubeconfig=kubeconfig,
+        namespace=namespace,
+        incident_id=incident_id,
+    )
+    log(f"    Budget before reset: {budget_before.get('review_packet_count', 0)} review packets (in backend container)")
 
-    reset_count = reset_diagnosis_loop_budget(external_analysis_dir, incident_id)
-    log(f"    Reset {reset_count} budget files")
+    # Reset budget in backend container
+    reset_result: BudgetResetResult = reset_diagnosis_loop_budget_in_backend(
+        kubeconfig=kubeconfig,
+        namespace=namespace,
+        incident_id=incident_id,
+    )
+    log(f"    Reset {reset_result.reset_file_count} budget files (context: {reset_result.execution_context})")
 
-    budget_after = get_budget_status(external_analysis_dir, incident_id)
+    # Verify budget was reset
+    budget_after = get_budget_status_in_backend(
+        kubeconfig=kubeconfig,
+        namespace=namespace,
+        incident_id=incident_id,
+    )
     log(f"    Budget after reset: {budget_after.get('review_packet_count', 0)} review packets")
+
+    # Step 2b: Fail-fast if reset failed
+    # Enforce the invariant: after reset, total_auto_artifact_count == 0
+    # This prevents confusing downstream budget_exhausted errors
+    if reset_result.error is not None:
+        result["failure_reason"] = f"budget_reset_backend_error:{reset_result.error}"
+        result["status"] = "budget_reset_failed"
+        result["real_loop_invoked"] = False
+        return result
+
+    if budget_after.get("error"):
+        result["failure_reason"] = f"budget_status_backend_error:{budget_after['error']}"
+        result["status"] = "budget_status_failed"
+        result["real_loop_invoked"] = False
+        return result
+
+    remaining = int(budget_after.get("total_auto_artifact_count", 0))
+    if remaining > 0:
+        result["failure_reason"] = f"budget_reset_failed_artifacts_remain:{remaining}"
+        result["status"] = "budget_reset_incomplete"
+        result["real_loop_invoked"] = False
+        return result
 
     # Step 3: Loop targeted one-pass endpoint until pass_count >= MIN_REQUIRED_PASSES
     log(f"  Step 3: Looping targeted diagnosis until pass_count >= {MIN_REQUIRED_PASSES}...")
