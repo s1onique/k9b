@@ -20,15 +20,20 @@ if TYPE_CHECKING:
 
 # Re-export for backwards compatibility
 from .notifications_loaders import (
-    _load_notification_records_optimized,
-    _matches_search,
+    _load_notification_records_optimized as _load_notification_records_optimized,
+)
+from .notifications_loaders import (
+    _matches_search as _matches_search,
+)
+from .notifications_loaders import (
     _normalize_filter_value,
 )
 from .notifications_payloads import (
     _build_notification_entry,
-    _notification_sort_key,
 )
-
+from .notifications_payloads import (
+    _notification_sort_key as _notification_sort_key,
+)
 
 DEFAULT_NOTIFICATION_LIMIT = 50
 
