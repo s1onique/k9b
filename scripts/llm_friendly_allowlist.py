@@ -201,4 +201,10 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("scripts/incident_discovery_gate/collect.py", "[SCRIPT] Incident gate collection - kubectl and API helpers"),
     ("scripts/incident_discovery_gate/main.py", "[SCRIPT] Incident gate orchestration - Phase 2a-2e orchestration"),
 
+    # [GENERATED] Generated TypeScript API client
+    # These files are auto-generated from OpenAPI schema and must not be edited manually.
+    # Excluded from LLM-friendly hand-authored file-size gate.
+    ("frontend/src/generated/k9b-api/apis/IncidentsApi.ts", "[GENERATED] Auto-generated Incidents API - large due to many incident endpoints"),
+    ("frontend/src/generated/k9b-api/docs/IncidentsApi.md", "[GENERATED] Auto-generated Incidents API docs - large due to many endpoints"),
+
 ]

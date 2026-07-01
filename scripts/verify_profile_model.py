@@ -341,6 +341,13 @@ STEPS: dict[str, dict] = {
         "description": "Helm OCI dual-login workaround verification",
         "is_expensive": False,
     },
+    "frontend-api-client": {
+        "command": "bash scripts/generate_frontend_api_client.sh && git diff --exit-code build/openapi frontend/src/generated/k9b-api",
+        "lane": "frontend",
+        "category": StepCategory.POLICY,
+        "description": "Generated frontend API client freshness gate",
+        "is_expensive": False,
+    },
 }
 
 

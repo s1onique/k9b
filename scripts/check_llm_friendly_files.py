@@ -164,20 +164,44 @@ def is_excluded(path: Path, root: Path) -> bool:
 
 
 def is_allowlisted(path: Path, root: Path, allowlist: list[tuple[str, str]]) -> tuple[bool, str | None]:
-    """Check if path is in allowlist. Returns (is_allowed, reason)."""
+    """Check if path is in allowlist. Returns (is_allowed, reason).
+    
+    Supports both exact file matching and directory prefix matching.
+    If the allowlist entry ends with '/', it's treated as a directory prefix
+    and any file under that directory will match.
+    """
     for allowed_path, reason in allowlist:
+        # Check for trailing slash to enable directory prefix matching
+        # Note: Path() normalizes paths and removes trailing slashes, so we check the original string
+        is_directory_pattern = allowed_path.endswith("/") or allowed_path.endswith("\\")
+        
+        allowed = Path(allowed_path)
+        
         # Normalize to absolute path for comparison
-        if Path(allowed_path).resolve() == path.resolve():
+        if allowed.resolve() == path.resolve():
             return True, reason
 
-    # Check relative to root
-    try:
-        rel_path = str(path.relative_to(root))
-        for allowed_path, reason in allowlist:
-            if Path(allowed_path) == path or Path(allowed_path) == Path(rel_path):
+        # Check relative to root
+        try:
+            rel_path = str(path.relative_to(root))
+            rel_allowed = str(allowed.relative_to(root))
+            
+            # Exact match
+            if allowed == path or Path(rel_allowed) == path or Path(rel_allowed) == Path(rel_path):
                 return True, reason
-    except ValueError:
-        pass
+            
+            # Directory prefix match (if original path_str had trailing slash)
+            if is_directory_pattern:
+                # Check if the relative path starts with the allowlist directory path
+                # Ensure we match the full directory name (with trailing separator check)
+                if rel_path.startswith(rel_allowed + "/") or rel_path.startswith(rel_allowed + "\\"):
+                    return True, reason
+                # Also check absolute path prefix
+                allowed_abs = allowed.resolve()
+                if str(path).startswith(str(allowed_abs) + "/"):
+                    return True, reason
+        except ValueError:
+            pass
 
     return False, None
 
@@ -205,11 +229,15 @@ def validate_allowlist(root: Path, allowlist: list[tuple[str, str]]) -> list[str
         if not reason or len(reason.strip()) < 10:
             errors.append(f"Allowlist entry '{path_str}' has insufficient reason")
 
-        # Check file exists
+        # Check file exists (file or directory)
         file_path = Path(path_str)
         if not file_path.is_absolute():
             file_path = root / path_str
 
+        # Allow directories in allowlist (for prefix matching)
+        if file_path.exists() and file_path.is_dir():
+            continue  # Valid directory entry
+        
         if not file_path.exists():
             errors.append(f"Allowlist entry '{path_str}' - file does not exist (stale)")
             continue

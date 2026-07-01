@@ -253,6 +253,27 @@ class TestOpenAPISchemaValidity:
         assert len(schema["paths"]) > 0
 
 
+class TestOpenAPIOperationNaming:
+    """Tests for operation ID naming conventions."""
+
+    def test_operation_ids_are_client_safe(self) -> None:
+        """Operation IDs must be client-safe (snake_case, lowercase, no special chars)."""
+        from k8s_diag_agent.ui.api_routes_registry import API_ROUTES
+
+        issues: list[tuple[str, str, str]] = []
+
+        for op in API_ROUTES:
+            op_id = op.operation_id
+            if not op_id:
+                issues.append((op.method, op.path, "<empty>"))
+                continue
+            # Client-safe: lowercase, alphanumeric + underscore, starts with letter
+            if not re.fullmatch(r"[a-z][a-z0-9_]*", op_id):
+                issues.append((op.method, op.path, op_id))
+
+        assert not issues, f"Operation IDs are not client-safe: {issues}"
+
+
 class TestOpenAPIOperationMetadata:
     """Tests that all operations have required metadata."""
 
