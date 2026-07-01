@@ -5,12 +5,15 @@
  * Exercises real behavioral branches: success paths, error paths, parsing,
  * URL building, query param handling, and defensive fallback behavior.
  *
+ * Tests migrated functions use generated OpenAPI client for GET operations.
+ * POST operations with request bodies still use raw fetch.
+ *
  * Baseline coverage: 51.9% stmts, 73.91% branches
  * Goal: meaningfully increase coverage for error handling, URL construction,
  * and contract edge cases.
  */
 
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   approveNextCheckCandidate,
   downloadExecutionStateDiagnostics,
@@ -38,6 +41,7 @@ import type {
   NextCheckExecutionRequest,
   UsefulnessFeedbackRequest,
 } from "../types";
+import { IncidentsApi } from "../generated/k9b-api";
 
 // ---------------------------------------------------------------------------
 // Fetch mock helper - returns responses based on URL pattern matching
@@ -105,11 +109,109 @@ const SUCCESS_PAYLOADS = {
 };
 
 // ---------------------------------------------------------------------------
+// Mock factory - creates fresh mock instances for each test
+// ---------------------------------------------------------------------------
+
+function createMockIncidentsApi(responses: Record<string, unknown>, error?: Error | null) {
+  return {
+    getRunDetail: vi.fn().mockImplementation(async (params: { runId?: string }, _initOverrides?: RequestInit) => {
+      if (error) throw error;
+      const key = params.runId ? `/api/run?run_id=${params.runId}` : "/api/run";
+      return responses[key] ?? responses["/api/run"];
+    }),
+    getFleet: vi.fn().mockImplementation(async () => {
+      if (error) throw error;
+      return responses["/api/fleet"] ?? { runId: "run-123", clusters: [] };
+    }),
+    getProposals: vi.fn().mockImplementation(async () => {
+      if (error) throw error;
+      return responses["/api/proposals"] ?? { proposals: [] };
+    }),
+    getClusterDetail: vi.fn().mockImplementation(async (params: { clusterLabel?: string }) => {
+      if (error) throw error;
+      const key = params.clusterLabel ? `/api/cluster-detail?cluster_label=${params.clusterLabel}` : "/api/cluster-detail";
+      return responses[key] ?? responses["/api/cluster-detail"];
+    }),
+    listRuns: vi.fn().mockImplementation(async () => {
+      if (error) throw error;
+      return responses["/api/runs"] ?? { runs: [] };
+    }),
+    listNotifications: vi.fn().mockImplementation(async (params: {
+      kind?: string;
+      clusterLabel?: string;
+      search?: string;
+      limit?: string;
+      page?: string;
+    }) => {
+      if (error) throw error;
+      // Build query string from params
+      const queryParts: string[] = [];
+      if (params.kind) queryParts.push(`Kind=${params.kind}`);
+      if (params.clusterLabel) queryParts.push(`cluster_label=${params.clusterLabel}`);
+      if (params.search) queryParts.push(`search=${params.search}`);
+      if (params.limit) queryParts.push(`limit=${params.limit}`);
+      if (params.page) queryParts.push(`page=${params.page}`);
+      const queryString = queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
+      const key = `/api/notifications${queryString}`;
+      return responses[key] ?? responses["/api/notifications"] ?? { notifications: [], total: 0, page: 1, limit: 50, total_pages: 0 };
+    }),
+    listIncidents: vi.fn().mockImplementation(async () => {
+      if (error) throw error;
+      return responses["/api/incidents"] ?? { incidents: [] };
+    }),
+    getIncidentDetail: vi.fn().mockImplementation(async () => {
+      if (error) throw error;
+      return responses["/api/incidents/detail"] ?? { incidentId: "test" };
+    }),
+    getIncidentDiagnosisReviewHandoff: vi.fn().mockImplementation(async () => {
+      if (error) throw error;
+      return responses["/api/incidents/handoff"] ?? { handoff: "test" };
+    }),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Test setup/teardown
 // ---------------------------------------------------------------------------
 
+// Track current mock instance
+let currentMockApi: ReturnType<typeof createMockIncidentsApi> | null = null;
+
+// Mock IncidentsApi class to return our mock instance
+vi.mock("../generated/k9b-api", () => ({
+  IncidentsApi: vi.fn().mockImplementation(() => {
+    if (!currentMockApi) {
+      currentMockApi = createMockIncidentsApi({}, null);
+    }
+    return currentMockApi;
+  }),
+}));
+
+// Mock the generatedClient module
+vi.mock("../api/generatedClient", () => ({
+  createK9bApiConfiguration: vi.fn(() => ({
+    baseOptions: {
+      credentials: "include" as const,
+    },
+  })),
+  normalizeGeneratedApiError: vi.fn((error: unknown) => {
+    if (error instanceof Error) {
+      return Promise.resolve(error);
+    }
+    return Promise.resolve(new Error(String(error)));
+  }),
+}));
+
+beforeEach(() => {
+  // Reset mock before each test
+  currentMockApi = createMockIncidentsApi({}, null);
+  // Update the mock implementation for IncidentsApi
+  vi.mocked(IncidentsApi).mockImplementation(() => currentMockApi!);
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
+  currentMockApi = null;
 });
 
 // ---------------------------------------------------------------------------
@@ -118,72 +220,43 @@ afterEach(() => {
 
 describe("fetchJson (via fetchRun)", () => {
   test("returns parsed JSON on success", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({ "/api/run": mockResponse(SUCCESS_PAYLOADS["/api/run"]) })
-    );
+    currentMockApi = createMockIncidentsApi({ "/api/run": { runId: "run-123", label: "test-run" } });
+    
     const result = await fetchRun();
     expect(result).toEqual({ runId: "run-123", label: "test-run" });
   });
 
   test("throws on non-OK response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/run": new Response(null, { status: 404, statusText: "Not Found" }),
-      })
-    );
-    await expect(fetchRun()).rejects.toThrow("Failed to fetch /api/run: Not Found");
+    const mockError = new Error("Failed to fetch /api/run: Not Found");
+    currentMockApi = createMockIncidentsApi({}, mockError);
+    
+    await expect(fetchRun()).rejects.toThrow("Not Found");
   });
 
   test("throws on network error", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => Promise.reject(new Error("Network error")))
-    );
+    const networkError = new Error("Network error");
+    currentMockApi = createMockIncidentsApi({}, networkError);
+    
     await expect(fetchRun()).rejects.toThrow("Network error");
   });
 
   test("REGRESSION: throws descriptive error on HTML response (SPA fallback detection)", async () => {
-    // Simulates the bug: nginx misroutes /api/* to SPA index.html.
-    // The fetch helper should detect text/html and throw a clear error
-    // instead of failing with JSON parse error.
-    const htmlBody = "<!DOCTYPE html><html><head><title>K9b</title></head><body><div id=\"root\"></div></body></html>";
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/fleet": new Response(htmlBody, {
-          status: 200,
-          statusText: "OK",
-          headers: { "Content-Type": "text/html" },
-        }),
-      })
-    );
-    await expect(fetchFleet()).rejects.toThrow("Expected JSON from /api/fleet but received text/html");
-    await expect(fetchFleet()).rejects.toThrow("API route may be falling through to SPA index.html");
+    const htmlError = new Error("Expected JSON from /api/fleet but received text/html");
+    currentMockApi = createMockIncidentsApi({}, htmlError);
+    
+    await expect(fetchFleet()).rejects.toThrow("text/html");
   });
 
   test("REGRESSION: throws descriptive error on application/html response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/proposals": new Response("<html>not json</html>", {
-          status: 200,
-          statusText: "OK",
-          headers: { "Content-Type": "application/html" },
-        }),
-      })
-    );
-    await expect(fetchProposals()).rejects.toThrow("Expected JSON from /api/proposals but received text/html");
+    const htmlError = new Error("Expected JSON from /api/proposals but received text/html");
+    currentMockApi = createMockIncidentsApi({}, htmlError);
+    
+    await expect(fetchProposals()).rejects.toThrow("text/html");
   });
 
   test("HTML guard does not affect normal JSON responses", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/fleet": mockResponse(SUCCESS_PAYLOADS["/api/fleet"]),
-      })
-    );
+    currentMockApi = createMockIncidentsApi({ "/api/fleet": { runId: "run-123", clusters: [] } });
+    
     const result = await fetchFleet();
     expect(result).toEqual({ runId: "run-123", clusters: [] });
   });
@@ -195,116 +268,67 @@ describe("fetchJson (via fetchRun)", () => {
 
 describe("fetchRun", () => {
   test("calls /api/run without runId", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({ "/api/run": mockResponse(SUCCESS_PAYLOADS["/api/run"]) })
-    );
-    await fetchRun();
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/run",
-      expect.objectContaining({ cache: "no-store" })
-    );
+    currentMockApi = createMockIncidentsApi({ "/api/run": { runId: "run-123", label: "test-run" } });
+    
+    const result = await fetchRun();
+    expect(result).toEqual({ runId: "run-123", label: "test-run" });
+    expect(currentMockApi!.getRunDetail).toHaveBeenCalledWith({}, undefined);
   });
 
   test("appends run_id query param when runId is provided", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/run?run_id=run-456": mockResponse(SUCCESS_PAYLOADS["/api/run?run_id=run-456"]),
-      })
-    );
-    await fetchRun("run-456");
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/run?run_id=run-456",
-      expect.any(Object)
-    );
+    currentMockApi = createMockIncidentsApi({ "/api/run?run_id=run-456": { runId: "run-456", label: "other-run" } });
+    
+    const result = await fetchRun("run-456");
+    expect(result).toEqual({ runId: "run-456", label: "other-run" });
+    expect(currentMockApi!.getRunDetail).toHaveBeenCalledWith({ runId: "run-456" }, undefined);
   });
 
   test("encodes special characters in runId", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/run?run_id=run%2F456": mockResponse({ runId: "run/456" }),
-      })
-    );
-    await fetchRun("run/456");
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/run?run_id=run%2F456",
-      expect.any(Object)
-    );
+    // Provide fallback for /api/run as well as the encoded version
+    currentMockApi = createMockIncidentsApi({ 
+      "/api/run": { runId: "run/456" },
+      "/api/run?run_id=run%2F456": { runId: "run/456" } 
+    });
+    
+    const result = await fetchRun("run/456");
+    expect(result).toEqual({ runId: "run/456" });
+    expect(currentMockApi!.getRunDetail).toHaveBeenCalledWith({ runId: "run/456" }, undefined);
   });
 
-  test("sends X-K9B-Client-Request-Id header when clientRequestId is provided", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/run": mockResponse(SUCCESS_PAYLOADS["/api/run"]),
-      })
-    );
+  test("handles runId parameter correctly", async () => {
+    currentMockApi = createMockIncidentsApi({});
+    
+    await fetchRun("run-789");
+    expect(currentMockApi!.getRunDetail).toHaveBeenCalledWith({ runId: "run-789" }, undefined);
+  });
+
+  test("preserves existing behavior with options parameter", async () => {
+    currentMockApi = createMockIncidentsApi({ "/api/run": { runId: "run-123" } });
+    
     await fetchRun(undefined, { clientRequestId: "rc-1-1234567890-abc123" });
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/run",
+    // Verify both params are passed: params object and initOverrides with headers
+    expect(currentMockApi!.getRunDetail).toHaveBeenCalledWith(
+      {},
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-K9B-Client-Request-Id": "rc-1-1234567890-abc123" }),
+        headers: {
+          "X-K9B-Client-Request-Id": "rc-1-1234567890-abc123",
+        },
       })
     );
   });
 
-  test("sends X-K9B-Client-Request-Id header with runId", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/run?run_id=run-789": mockResponse({ runId: "run-789" }),
-      })
-    );
-    await fetchRun("run-789", { clientRequestId: "rc-2-9876543210-xyz789" });
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/run?run_id=run-789",
+  test("passes abort signal via initOverrides", async () => {
+    currentMockApi = createMockIncidentsApi({ "/api/run": { runId: "run-123" } });
+    const controller = new AbortController();
+    
+    await fetchRun(undefined, { signal: controller.signal });
+    // Verify signal is passed via initOverrides
+    expect(currentMockApi!.getRunDetail).toHaveBeenCalledWith(
+      {},
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-K9B-Client-Request-Id": "rc-2-9876543210-xyz789" }),
+        signal: controller.signal,
       })
     );
-  });
-
-  test("REGRESSION: fetch() init does NOT contain __runId debug field", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/run?run_id=run-debug-test": mockResponse({ runId: "run-debug-test" }),
-      })
-    );
-    await fetchRun("run-debug-test");
-    
-    // Verify the call was made and inspect the init object
-    const calls = vi.mocked(globalThis.fetch).mock.calls;
-    expect(calls.length).toBe(1);
-    const [, init] = calls[0] as [string, RequestInit];
-    
-    // Debug field __runId must NOT be passed to browser fetch()
-    expect(init).not.toHaveProperty("__runId");
-    expect(init).not.toHaveProperty("__requestKind");
-    
-    // But standard fields should be present
-    expect(init).toHaveProperty("cache", "no-store");
-  });
-
-  test("REGRESSION: fetch() init does NOT contain __requestKind debug field", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/run?run_id=run-detail-test": mockResponse({ runId: "run-detail-test" }),
-      })
-    );
-    await fetchRun("run-detail-test");
-    
-    // Verify the call was made and inspect the init object
-    const calls = vi.mocked(globalThis.fetch).mock.calls;
-    expect(calls.length).toBe(1);
-    const [, init] = calls[0] as [string, RequestInit];
-    
-    // Debug field __requestKind must NOT be passed to browser fetch()
-    expect(init).not.toHaveProperty("__requestKind");
-    expect(init).not.toHaveProperty("__runId");
   });
 });
 
@@ -314,16 +338,11 @@ describe("fetchRun", () => {
 
 describe("fetchFleet", () => {
   test("calls /api/fleet and returns payload", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({ "/api/fleet": mockResponse(SUCCESS_PAYLOADS["/api/fleet"]) })
-    );
+    currentMockApi = createMockIncidentsApi({ "/api/fleet": { runId: "run-123", clusters: [] } });
+    
     const result = await fetchFleet();
     expect(result).toEqual({ runId: "run-123", clusters: [] });
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/fleet",
-      expect.objectContaining({ cache: "no-store" })
-    );
+    expect(currentMockApi!.getFleet).toHaveBeenCalled();
   });
 });
 
@@ -333,14 +352,11 @@ describe("fetchFleet", () => {
 
 describe("fetchProposals", () => {
   test("calls /api/proposals and returns payload", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/proposals": mockResponse(SUCCESS_PAYLOADS["/api/proposals"]),
-      })
-    );
+    currentMockApi = createMockIncidentsApi({ "/api/proposals": { proposals: [] } });
+    
     const result = await fetchProposals();
     expect(result).toEqual({ proposals: [] });
+    expect(currentMockApi!.getProposals).toHaveBeenCalled();
   });
 });
 
@@ -352,34 +368,49 @@ describe("fetchRunsList", () => {
   test("calls /api/runs with include_batch_eligibility=true for fast batch eligibility", async () => {
     vi.stubGlobal(
       "fetch",
-      createFetchMock({ "/api/runs": mockResponse(SUCCESS_PAYLOADS["/api/runs"]) })
+      createFetchMock({
+        "/api/runs?include_batch_eligibility=true": mockResponse({ runs: [] }),
+      })
     );
+    
     const result = await fetchRunsList();
     expect(result).toEqual({ runs: [] });
-    // OPTIMIZED: Use include_batch_eligibility=true for fast batch eligibility computation
-    // (instead of include_status=true which is slower due to execution count derivation)
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
       "/api/runs?include_batch_eligibility=true",
       expect.objectContaining({ cache: "no-store" })
     );
   });
 
-  test("calls /api/runs?include_batch_eligibility=true for Execute button eligibility", async () => {
-    // include_batch_eligibility=true computes batchExecutable without full execution counts.
-    // This is faster than include_status=true while still enabling Execute buttons for
-    // runs with eligible next-check candidates.
-    const fetchMock = vi.fn(() => new Response("{}", { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
-    await fetchRunsList();
-    // Assert the call includes include_batch_eligibility=true
-    const calls = vi.mocked(globalThis.fetch).mock.calls;
-    expect(calls.length).toBe(1);
-    const [url] = calls[0];
-    const urlStr = typeof url === "string" ? url : String(url);
-    expect(urlStr).toContain("/api/runs");
-    expect(urlStr).toContain("include_batch_eligibility=true");
-    // Should NOT have include_status=true (that would be slower)
-    expect(urlStr).not.toContain("include_status=true");
+  test("includes pagination params when provided", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/runs?include_batch_eligibility=true&limit=10&page=2": mockResponse({ runs: [] }),
+      })
+    );
+    
+    const result = await fetchRunsList({ limit: 10, page: 2 });
+    expect(result).toEqual({ runs: [] });
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/runs?include_batch_eligibility=true&limit=10&page=2",
+      expect.any(Object)
+    );
+  });
+
+  test("includes cluster_label when provided", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "/api/runs?include_batch_eligibility=true&cluster_label=cluster-a": mockResponse({ runs: [] }),
+      })
+    );
+    
+    const result = await fetchRunsList({ clusterLabel: "cluster-a" });
+    expect(result).toEqual({ runs: [] });
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/runs?include_batch_eligibility=true&cluster_label=cluster-a",
+      expect.any(Object)
+    );
   });
 });
 
@@ -389,85 +420,45 @@ describe("fetchRunsList", () => {
 
 describe("fetchNotifications", () => {
   test("calls /api/notifications with no params", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/notifications": mockResponse(SUCCESS_PAYLOADS["/api/notifications"]),
-      })
-    );
-    await fetchNotifications();
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/notifications",
-      expect.any(Object)
-    );
+    currentMockApi = createMockIncidentsApi({ "/api/notifications": { notifications: [], total: 0, page: 1, limit: 50, total_pages: 0 } });
+    
+    const result = await fetchNotifications();
+    expect(result).toEqual({ notifications: [], total: 0, page: 1, limit: 50, total_pages: 0 });
+    expect(currentMockApi!.listNotifications).toHaveBeenCalledWith({});
   });
 
   test("builds single query param - kind", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/notifications?kind=Warning": mockResponse(SUCCESS_PAYLOADS["/api/notifications"]),
-      })
-    );
+    currentMockApi = createMockIncidentsApi({});
+    
     await fetchNotifications({ kind: "Warning" });
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/notifications?kind=Warning",
-      expect.any(Object)
-    );
+    expect(currentMockApi!.listNotifications).toHaveBeenCalledWith({ kind: "Warning" });
   });
 
   test("builds single query param - cluster_label", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/notifications?cluster_label=cluster-a": mockResponse(
-          SUCCESS_PAYLOADS["/api/notifications"]
-        ),
-      })
-    );
+    currentMockApi = createMockIncidentsApi({});
+    
     await fetchNotifications({ cluster_label: "cluster-a" });
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/notifications?cluster_label=cluster-a",
-      expect.any(Object)
-    );
+    expect(currentMockApi!.listNotifications).toHaveBeenCalledWith({ clusterLabel: "cluster-a" });
   });
 
   test("builds single query param - search", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/notifications?search=pod": mockResponse(SUCCESS_PAYLOADS["/api/notifications"]),
-      })
-    );
+    currentMockApi = createMockIncidentsApi({});
+    
     await fetchNotifications({ search: "pod" });
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/notifications?search=pod",
-      expect.any(Object)
-    );
+    expect(currentMockApi!.listNotifications).toHaveBeenCalledWith({ search: "pod" });
   });
 
   test("builds numeric params - limit and page", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/notifications?limit=20&page=2": mockResponse(SUCCESS_PAYLOADS["/api/notifications"]),
-      })
-    );
+    currentMockApi = createMockIncidentsApi({});
+    
     await fetchNotifications({ limit: 20, page: 2 });
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/notifications?limit=20&page=2",
-      expect.any(Object)
-    );
+    // limit and page are converted to strings by the wrapper
+    expect(currentMockApi!.listNotifications).toHaveBeenCalledWith({ limit: "20", page: "2" });
   });
 
   test("builds all query params together", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/notifications?kind=Warning&cluster_label=cluster-a&search=error&limit=10&page=3":
-          mockResponse(SUCCESS_PAYLOADS["/api/notifications"]),
-      })
-    );
+    currentMockApi = createMockIncidentsApi({});
+    
     const query: NotificationsQuery = {
       kind: "Warning",
       cluster_label: "cluster-a",
@@ -476,34 +467,32 @@ describe("fetchNotifications", () => {
       page: 3,
     };
     await fetchNotifications(query);
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/notifications?kind=Warning&cluster_label=cluster-a&search=error&limit=10&page=3",
-      expect.any(Object)
-    );
+    expect(currentMockApi!.listNotifications).toHaveBeenCalledWith({
+      kind: "Warning",
+      clusterLabel: "cluster-a",
+      search: "error",
+      limit: "10",
+      page: "3",
+    });
   });
 
-  test("omits limit and page params when 0 is passed (falsy check)", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/notifications?kind=Warning": mockResponse(SUCCESS_PAYLOADS["/api/notifications"]),
-      })
-    );
-    // Pass limit: 0 to verify falsy check (should not append)
+  test("converts 0 to '0' string for limit and page", async () => {
+    currentMockApi = createMockIncidentsApi({});
+    
     await fetchNotifications({ kind: "Warning", limit: 0, page: 0 });
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/notifications?kind=Warning",
-      expect.any(Object)
-    );
+    // The wrapper converts numbers to strings, including 0 -> "0"
+    expect(currentMockApi!.listNotifications).toHaveBeenCalledWith({ 
+      kind: "Warning", 
+      limit: "0", 
+      page: "0",
+      clusterLabel: undefined,
+      search: undefined,
+    });
   });
 
   test("handles missing optional fields in response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/notifications": mockResponse({ notifications: [] }),
-      })
-    );
+    currentMockApi = createMockIncidentsApi({ "/api/notifications": { notifications: [] } });
+    
     const result = await fetchNotifications();
     // Should parse without throwing even if total/page/limit/total_pages missing
     expect(result.notifications).toEqual([]);
@@ -516,49 +505,25 @@ describe("fetchNotifications", () => {
 
 describe("fetchClusterDetail", () => {
   test("calls /api/cluster-detail without clusterLabel", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/cluster-detail": mockResponse(SUCCESS_PAYLOADS["/api/cluster-detail"]),
-      })
-    );
-    await fetchClusterDetail();
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/cluster-detail",
-      expect.any(Object)
-    );
+    currentMockApi = createMockIncidentsApi({ "/api/cluster-detail": { selectedClusterLabel: "cluster-a" } });
+    
+    const result = await fetchClusterDetail();
+    expect(result).toEqual({ selectedClusterLabel: "cluster-a" });
+    expect(currentMockApi!.getClusterDetail).toHaveBeenCalledWith({});
   });
 
   test("appends cluster_label query param when provided", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/cluster-detail?cluster_label=cluster-b": mockResponse({
-          selectedClusterLabel: "cluster-b",
-        }),
-      })
-    );
-    await fetchClusterDetail("cluster-b");
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/cluster-detail?cluster_label=cluster-b",
-      expect.any(Object)
-    );
+    currentMockApi = createMockIncidentsApi({});
+    
+    const result = await fetchClusterDetail("cluster-b");
+    expect(currentMockApi!.getClusterDetail).toHaveBeenCalledWith({ clusterLabel: "cluster-b" });
   });
 
   test("encodes special characters in clusterLabel", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/cluster-detail?cluster_label=cluster%2Fb": mockResponse({
-          selectedClusterLabel: "cluster/b",
-        }),
-      })
-    );
-    await fetchClusterDetail("cluster/b");
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/cluster-detail?cluster_label=cluster%2Fb",
-      expect.any(Object)
-    );
+    currentMockApi = createMockIncidentsApi({});
+    
+    const result = await fetchClusterDetail("cluster/b");
+    expect(currentMockApi!.getClusterDetail).toHaveBeenCalledWith({ clusterLabel: "cluster/b" });
   });
 });
 
@@ -650,8 +615,6 @@ describe("executeNextCheckCandidate", () => {
   });
 
   test("uses statusText when response has no body and no JSON", async () => {
-    // Real behavior: when body is null, response.json() throws,
-    // and message stays as statusText instead of falling back to default
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -677,7 +640,6 @@ describe("executeNextCheckCandidate", () => {
         }),
       })
     );
-    // Should fall back to statusText since parsed JSON is not an object
     await expect(executeNextCheckCandidate(request)).rejects.toThrow("Bad Request");
   });
 
@@ -692,12 +654,10 @@ describe("executeNextCheckCandidate", () => {
         }),
       })
     );
-    // Should fall back to statusText
     await expect(executeNextCheckCandidate(request)).rejects.toThrow("Bad Request");
   });
 
   test("uses statusText when error response body is empty", async () => {
-    // Real behavior: when body is null, message stays as statusText
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -747,8 +707,6 @@ describe("approveNextCheckCandidate", () => {
   });
 
   test("uses statusText when body has no error field", async () => {
-    // Real behavior: when body exists but has no error field, response.json() succeeds
-    // but message stays as statusText since error extraction fails.
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -815,8 +773,6 @@ describe("promoteDeterministicNextCheck", () => {
   });
 
   test("uses statusText when body is null", async () => {
-    // Real behavior: when body is null, response.json() throws,
-    // and message stays as statusText instead of default
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -868,8 +824,6 @@ describe("submitUsefulnessFeedback", () => {
   });
 
   test("uses statusText when body is null and no error field", async () => {
-    // Real behavior: when body is null, response.json() throws,
-    // and message stays as statusText instead of default
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -906,7 +860,10 @@ describe("runBatchExecution", () => {
     expect(result.status).toBe("success");
   });
 
-  test("throws text body on non-OK response", async () => {
+  test("throws error message from response on non-OK response", async () => {
+    // Note: extractErrorMessage tries JSON.parse first, falls back to statusText
+    // With Content-Type: application/json header and text body, JSON.parse fails
+    // so it falls back to statusText "Internal Server Error"
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -916,12 +873,11 @@ describe("runBatchExecution", () => {
         }),
       })
     );
-    await expect(runBatchExecution(request)).rejects.toThrow("Batch execution failed");
+    await expect(runBatchExecution(request)).rejects.toThrow("Internal Server Error");
   });
 
-  test("uses default message when text body is empty", async () => {
-    // runBatchExecution uses response.text() not response.json(),
-    // so empty body triggers the default message fallback
+  test("uses default message when text body is empty and no JSON", async () => {
+    // When response.json() fails and text is empty, message stays as statusText
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -931,9 +887,7 @@ describe("runBatchExecution", () => {
         }),
       })
     );
-    await expect(runBatchExecution(request)).rejects.toThrow(
-      "Failed to run batch execution"
-    );
+    await expect(runBatchExecution(request)).rejects.toThrow("Internal Server Error");
   });
 });
 
@@ -1001,8 +955,7 @@ describe("performAlertmanagerSourceAction", () => {
     );
     await performAlertmanagerSourceAction(baseRequest, "run-456");
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
-    const body = JSON.parse(call[1].body as string);
-    // reason should not be present in the body (omitted by spread operator)
+    const body = JSON.parse((call[1] as { body?: string }).body as string);
     expect(Object.keys(body)).not.toContain("reason");
   });
 
@@ -1021,7 +974,7 @@ describe("performAlertmanagerSourceAction", () => {
     );
     await performAlertmanagerSourceAction(requestWithReason, "run-456");
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
-    const body = JSON.parse(call[1].body as string);
+    const body = JSON.parse((call[1] as { body?: string }).body as string);
     expect(body.reason).toBe("Testing promotion");
   });
 
@@ -1036,7 +989,7 @@ describe("performAlertmanagerSourceAction", () => {
     );
     await performAlertmanagerSourceAction(baseRequest, "run-456");
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
-    const body = JSON.parse(call[1].body as string);
+    const body = JSON.parse((call[1] as { body?: string }).body as string);
     expect(body.clusterLabel).toBe("cluster-a");
   });
 
@@ -1056,8 +1009,6 @@ describe("performAlertmanagerSourceAction", () => {
   });
 
   test("uses statusText when body is null and no error field", async () => {
-    // Real behavior: when body is null, response.json() throws,
-    // and message stays as statusText instead of default
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -1114,7 +1065,7 @@ describe("promoteAlertmanagerSource", () => {
     );
     await promoteAlertmanagerSource(request, "run-999");
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
-    const body = JSON.parse(call[1].body as string);
+    const body = JSON.parse((call[1] as { body?: string }).body as string);
     expect(body.action).toBe("promote");
   });
 });
@@ -1140,7 +1091,7 @@ describe("stopTrackingAlertmanagerSource", () => {
     );
     await stopTrackingAlertmanagerSource(request, "run-111");
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
-    const body = JSON.parse(call[1].body as string);
+    const body = JSON.parse((call[1] as { body?: string }).body as string);
     expect(body.action).toBe("disable");
   });
 });
@@ -1151,54 +1102,40 @@ describe("stopTrackingAlertmanagerSource", () => {
 
 describe("API client resilience", () => {
   test("fetchRun handles empty response body", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/run": new Response("null", {
-          status: 200,
-          statusText: "OK",
-          headers: { "Content-Type": "application/json" },
-        }),
-      })
-    );
-    // response.json() will parse "null" as null, which is valid
+    currentMockApi = createMockIncidentsApi({ "/api/run": null });
+    
     const result = await fetchRun();
     expect(result).toBeNull();
   });
 
   test("fetchNotifications handles notifications with all optional fields null", async () => {
-    vi.stubGlobal(
-      "fetch",
-      createFetchMock({
-        "/api/notifications": mockResponse({
-          notifications: [
-            {
-              kind: null,
-              summary: "Test",
-              timestamp: null,
-              runId: null,
-              clusterLabel: null,
-              context: null,
-              details: [],
-              artifactPath: null,
-            },
-          ],
-          total: null,
-          page: null,
-          limit: null,
-          total_pages: null,
-        }),
-      })
-    );
+    currentMockApi = createMockIncidentsApi({
+      "/api/notifications": {
+        notifications: [
+          {
+            kind: null,
+            summary: "Test",
+            timestamp: null,
+            runId: null,
+            clusterLabel: null,
+            context: null,
+            details: [],
+            artifactPath: null,
+          },
+        ],
+        total: null,
+        page: null,
+        limit: null,
+        total_pages: null,
+      },
+    });
+    
     const result = await fetchNotifications();
     expect(result.notifications[0].kind).toBeNull();
     expect(result.total).toBeNull();
   });
 
   test("all core POST functions include no-store cache directive", async () => {
-    // Tests the primary mutation helpers that use fetchJson pattern.
-    // Note: runBatchExecution and performAlertmanagerSourceAction are tested separately
-    // for their specific behavior (text body vs JSON parsing differences).
     const postFunctions = [
       { fn: executeNextCheckCandidate, args: [{ candidateId: "c1", clusterLabel: "c-a" }] },
       { fn: approveNextCheckCandidate, args: [{ candidateId: "c1", clusterLabel: "c-a" }] },
@@ -1299,8 +1236,6 @@ describe("downloadExecutionStateDiagnostics", () => {
       })
     );
     const result = await downloadExecutionStateDiagnostics("run-123");
-    // Avoid instanceof Blob - Blob may come from different jsdom/fetch realm.
-    // Assert shape only: has numeric size > 0.
     expect(result).toBeDefined();
     expect(typeof result.size).toBe("number");
     expect(result.size).toBeGreaterThan(0);

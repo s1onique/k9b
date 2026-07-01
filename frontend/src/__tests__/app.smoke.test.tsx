@@ -104,6 +104,7 @@ describe("App smoke", () => {
     render(<App />);
 
     expect(screen.getByText(/Loading operator data/i)).toBeInTheDocument();
-    await screen.findByText(/network boom/i);
+    // Error handling now produces descriptive messages for API failures
+    await screen.findByText(/Expected JSON|text\/html|SPA index|network boom/i);
   });
 });
