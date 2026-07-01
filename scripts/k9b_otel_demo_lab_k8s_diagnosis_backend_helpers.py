@@ -8,6 +8,13 @@ Architecture:
 - Does NOT rely on scheduler periodic automatic diagnosis loop
 - Targets POST /api/incidents/{incident_id}/automatic-diagnosis-loop/one-pass
 
+Retry behavior:
+- fetch_backend_incident_detail_with_retry() adds exponential backoff for
+  transient DNS/endpoint/HTTP failures that occur with single-replica backends
+- Bounded retry for up to 60s with exponential backoff (0.25s, 0.5s, 1.0s, 2.0s, 4.0s...)
+- Retries: HTTP 0, connection failures, invalid JSON
+- After retries exhausted, classifies based on curl_rc
+
 For the actual implementation, see:
 - k9b_otel_demo_lab_k8s_diagnosis_backend_contracts: dataclasses/constants
 - k9b_otel_demo_lab_k8s_diagnosis_backend_http: HTTP helpers
@@ -24,6 +31,8 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_artifacts import (
 
 # Re-export contracts (dataclasses and constants)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+    FAILURE_BACKEND_DNS_RESOLUTION_FAILED,
+    FAILURE_BACKEND_ENDPOINT_NOT_READY,
     FAILURE_BACKEND_INCIDENT_FETCH_CONTRACT_ERROR,
     FAILURE_BACKEND_INCIDENT_FETCH_FAILED,
     FAILURE_BACKEND_INCIDENT_FETCH_HTTP_ERROR,
@@ -56,7 +65,15 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_poll import (
     poll_backend_diagnosis_state,
 )
 
+# Re-export retry helpers
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry import (
+    fetch_backend_incident_detail_with_retry,
+)
+
 __all__ = [
+    # Constants - DNS and endpoint failures
+    "FAILURE_BACKEND_DNS_RESOLUTION_FAILED",
+    "FAILURE_BACKEND_ENDPOINT_NOT_READY",
     # Constants - incident fetch
     "FAILURE_BACKEND_INCIDENT_FETCH_CONTRACT_ERROR",
     "FAILURE_BACKEND_INCIDENT_FETCH_FAILED",
@@ -81,6 +98,7 @@ __all__ = [
     "curl_backend_exec",
     "fetch_backend_incident_detail",
     "fetch_backend_incident_detail_result",
+    "fetch_backend_incident_detail_with_retry",
     "invoke_targeted_automatic_diagnosis_loop",
     "poll_backend_diagnosis_state",
     "check_pass_artifacts_in_backend",

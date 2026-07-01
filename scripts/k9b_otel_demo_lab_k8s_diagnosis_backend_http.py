@@ -416,3 +416,4 @@ def invoke_targeted_automatic_diagnosis_loop(
             curl_rc=curl_result.curl_rc,
             stderr_prefix=curl_result.stderr[:100],
         )
+

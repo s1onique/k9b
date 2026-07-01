@@ -45,6 +45,8 @@ def _curl_service_pod(
     """
     pod_name = f"k9b-provider-preflight-{int(time.time())}"
     
+    # Extract host only from URL (strip http://, https://, and :port)
+    # This is critical: nslookup must receive host-only, not host:port
     pod_manifest = f"""apiVersion: v1
 kind: Pod
 metadata:
@@ -60,15 +62,21 @@ spec:
     command: ["/bin/sh", "-c"]
     args:
       - |
-        # Resolve target host first for better diagnostics
-        target_host=$(echo {target_url} | sed -e 's|http://||' -e 's|https://||' -e 's|/.*||')
+        # Extract host-only for DNS resolution (strip http://, https://, :port, and path)
+        full_url="{target_url}"
+        # Remove scheme
+        host_port=$(echo "$full_url" | sed -e 's|http://||' -e 's|https://||')
+        # Remove path
+        host_port=$(echo "$host_port" | cut -d'/' -f1)
+        # Remove port if present
+        target_host=$(echo "$host_port" | sed 's/:.*//')
         echo "RESOLVING_HOST=$target_host"
         nslookup "$target_host" 2>&1 || true
         echo "---CURL_START---"
         code=$(curl -s -o /tmp/response.txt -w "%{{http_code}}" \
             --connect-timeout {PREFLIGHT_RETRY_CONNECT_TIMEOUT} \
             --max-time {PREFLIGHT_RETRY_MAX_TIME} \
-            {target_url})
+            "{target_url}")
         curl_exit=$?
         echo "CURL_EXIT=$curl_exit"
         echo "HTTP_CODE=$code"

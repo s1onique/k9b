@@ -18,6 +18,13 @@ from typing import Any
 # Failure Reason Constants
 # =============================================================================
 
+# DNS resolution failures
+FAILURE_BACKEND_DNS_RESOLUTION_FAILED = "backend_dns_resolution_failed"
+
+# Endpoint readiness failures
+FAILURE_BACKEND_ENDPOINT_NOT_READY = "backend_endpoint_not_ready"
+
+# Incident fetch failures
 FAILURE_BACKEND_INCIDENT_FETCH_TRANSPORT_ERROR = "backend_incident_fetch_transport_error"
 FAILURE_BACKEND_INCIDENT_FETCH_HTTP_ERROR = "backend_incident_fetch_http_error"
 FAILURE_BACKEND_INCIDENT_FETCH_NOT_FOUND = "backend_incident_fetch_not_found"
