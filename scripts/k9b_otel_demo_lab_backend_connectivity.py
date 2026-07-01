@@ -41,6 +41,7 @@ class BackendConnectivityResult:
     incidents_found: list[dict[str, Any]] = field(default_factory=list)
     check_method: str = ""  # "scheduler-exec" or "service-pod"
     duration_seconds: float = 0.0
+    attempt_count: int = 0  # Number of attempts made
     
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -53,6 +54,7 @@ class BackendConnectivityResult:
             "incidents_found": self.incidents_found,
             "check_method": self.check_method,
             "duration_seconds": self.duration_seconds,
+            "attempt_count": self.attempt_count,
         }
 
 
@@ -228,8 +230,14 @@ except Exception as e:
                             f"Backend reachable via Service: HTTP {result.incidents_endpoint_status}, "
                             f"{result.incidents_total} incident(s) found"
                         )
-                    elif is_reachable and not is_healthy:
+                        result.duration_seconds = time.time() - start
+                        result.attempt_count = attempt
+                        _write_result(result, artifact_dir)
+                        return result
+                    
+                    if is_reachable and not is_healthy:
                         # Reachable but unhealthy (HTTP error or bad payload shape)
+                        # This is probably a real contract/config failure, not Service warm-up.
                         result.passed = False
                         result.failure_class = check_result.get(
                             "failure_class",
@@ -237,16 +245,17 @@ except Exception as e:
                         )
                         error_msg = check_result.get("error", "Unknown error")
                         result.message = f"Backend /api/incidents unhealthy: {error_msg}"
-                    else:
-                        # Not reachable (connection error)
-                        result.passed = False
-                        result.failure_class = FAILURE_BACKEND_SERVICE_UNREACHABLE
-                        error_msg = check_result.get("error", "Unknown error")
-                        result.message = f"Backend unreachable from scheduler: {error_msg}"
+                        result.duration_seconds = time.time() - start
+                        result.attempt_count = attempt
+                        _write_result(result, artifact_dir)
+                        return result
                     
-                    result.duration_seconds = time.time() - start
-                    _write_result(result, artifact_dir)
-                    return result
+                    # Not reachable: retry transient scheduler -> backend Service connectivity failures.
+                    # Do not return here. Let the loop sleep with exponential backoff and retry.
+                    result.passed = False
+                    result.failure_class = FAILURE_BACKEND_SERVICE_UNREACHABLE
+                    error_msg = check_result.get("error", "Unknown error")
+                    result.message = f"Backend unreachable from scheduler: {error_msg}"
                     
                 except json.JSONDecodeError:
                     # Retry on parse errors
@@ -271,6 +280,7 @@ except Exception as e:
     result.failure_class = FAILURE_BACKEND_SERVICE_UNREACHABLE
     result.message = f"Backend connectivity check failed after {attempt} attempts"
     result.duration_seconds = time.time() - start
+    result.attempt_count = attempt
     _write_result(result, artifact_dir)
     return result
 
