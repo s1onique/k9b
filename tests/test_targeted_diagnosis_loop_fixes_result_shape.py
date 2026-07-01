@@ -53,7 +53,7 @@ class TestTargetedDiagnosisResultShape:
         # The bug would crash here with: AttributeError: 'AutoLoopIncidentResult' has no 'incident_results'
         # The fix handles this gracefully via hasattr() check
         extracted = _extract_incident_result_from_collector(
-            result=incident_result,  # type: ignore[arg-type]  # intentional: testing both types
+            result=incident_result,  # intentional: testing both types
             incident_id="test-incident-789",
         )
 

@@ -90,7 +90,9 @@ class TestBudgetExhaustedFailFast:
             "real_loop_invoked should be False for budget_exhausted"
         )
         # Verify actionable detail is preserved (budget_exhausted not just not_eligible)
-        assert "budget_exhausted" in result.get("failure_reason", ""), (
+        failure_reason = result.get("failure_reason", "")
+        assert isinstance(failure_reason, str)
+        assert "budget_exhausted" in failure_reason, (
             f"failure_reason should include 'budget_exhausted' detail, got: {result.get('failure_reason')}"
         )
 
