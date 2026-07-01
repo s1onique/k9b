@@ -99,11 +99,8 @@ def count_observable_targeted_diagnosis_passes(detail: dict[str, Any]) -> int:
             return pass_count
 
         # 2. Check pass_run_ids in loop_summary (support both field names)
-        pass_run_ids = (
-            loop_summary.get("pass_run_ids")
-            or loop_summary.get("diagnosis_loop_pass_run_ids")
-        )
-        if isinstance(pass_run_ids, (list, tuple)) and len(pass_run_ids) > 0:
+        pass_run_ids = extract_pass_run_ids(loop_summary)
+        if pass_run_ids:
             return len(pass_run_ids)
 
     # 3. Check for diagnosis-loop review-packet in automatic_diagnosis_review
@@ -119,6 +116,28 @@ def count_observable_targeted_diagnosis_passes(detail: dict[str, Any]) -> int:
 
     # 4. Fallback: no observable passes
     return 0
+
+
+def extract_pass_run_ids(loop_summary: dict[str, Any]) -> list[str]:
+    """Extract pass run IDs from loop summary, supporting both field naming conventions.
+
+    This helper handles the split-brain state where:
+    - automatic_diagnosis_loop_summary uses pass_run_ids
+    - loop_summary (live lab payload) may use diagnosis_loop_pass_run_ids
+
+    Args:
+        loop_summary: The loop summary dict from incident detail
+
+    Returns:
+        List of pass run IDs (empty if not found or invalid)
+    """
+    # Support both field naming conventions
+    for key in ("pass_run_ids", "diagnosis_loop_pass_run_ids"):
+        value = loop_summary.get(key)
+        if isinstance(value, (list, tuple)) and value:
+            # Filter to valid non-empty strings
+            return [item for item in value if isinstance(item, str) and item]
+    return []
 
 
 def is_terminal_no_checks_decision(detail: dict[str, Any]) -> bool:

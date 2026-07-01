@@ -16,6 +16,7 @@ from scripts.k9b_lab_common_helpers import log
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     FAILURE_TARGETED_INSUFFICIENT_PASSES,
     count_observable_targeted_diagnosis_passes,
+    extract_pass_run_ids,
     is_read_only_terminal_decision,
     is_terminal_no_checks_decision,
 )
@@ -218,12 +219,16 @@ def phase2_invoke_and_poll_pass(
         total_pass_count = count_observable_targeted_diagnosis_passes(current_detail.raw)
         
         # Extract pass run IDs from loop_summary if available
+        # Support both field naming conventions
         loop_summary = current_detail.raw.get("automatic_diagnosis_loop_summary", {}) or {}
-        if "pass_run_ids" in loop_summary:
-            current_pass_run_ids = loop_summary["pass_run_ids"] or []
-            # Track new passes (those not already in our list)
-            new_pass_run_ids = [rid for rid in current_pass_run_ids if rid not in all_pass_run_ids]
-            all_pass_run_ids.extend(new_pass_run_ids)
+        current_pass_run_ids = extract_pass_run_ids(loop_summary)
+        # Also check legacy loop_summary field if present
+        if not current_pass_run_ids and "loop_summary" in current_detail.raw:
+            legacy_summary = current_detail.raw.get("loop_summary", {}) or {}
+            current_pass_run_ids = extract_pass_run_ids(legacy_summary)
+        # Track new passes (those not already in our list)
+        new_pass_run_ids = [rid for rid in current_pass_run_ids if rid not in all_pass_run_ids]
+        all_pass_run_ids.extend(new_pass_run_ids)
         
         # Check for review packet
         result["review_packet_found"] = current_detail.review_available

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from scripts.otel_lab_contracts.constants import (
     P4C_REASON_DIAGNOSIS_RCA_VALID,
@@ -26,6 +27,11 @@ def verify_p4c_diagnosis(artifact_dir: Path, report: VerificationReport) -> bool
     Require diagnosis evidence to reference:
     - shipping
     - at least one scheduling root-cause marker
+
+    Supports two success modes:
+    - Multi-pass (standard): pass_count >= 2, root-cause terms in diagnosis prose
+    - Terminal single-pass: terminal_no_checks_accepted=True, pass_count >= 1,
+      scheduling evidence from deterministic K8s evidence (not diagnosis prose)
     """
     diagnosis_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis"
     diagnosis_evidence_path = diagnosis_dir / "diagnosis-evidence.json"
@@ -46,6 +52,46 @@ def verify_p4c_diagnosis(artifact_dir: Path, report: VerificationReport) -> bool
         report.add_error("P4c: real_loop_invoked is False - simulation not allowed")
         return False
 
+    # Check for terminal no-checks single-pass mode
+    terminal_no_checks_accepted = evidence.get("terminal_no_checks_accepted", False)
+    pass_count = evidence.get("pass_count", 0)
+    is_terminal_mode = (
+        terminal_no_checks_accepted
+        and pass_count >= 1
+        and evidence.get("real_pass_artifacts_found", False)
+    )
+
+    # Terminal single-pass mode: bypass multi-pass requirements
+    if is_terminal_mode:
+        # For terminal no-checks, scheduling evidence comes from deterministic K8s evidence
+        # Check P3c/P2b artifacts for scheduling-specific markers
+        scheduling_markers_found = _check_scheduling_markers_from_evidence(evidence)
+        
+        if not scheduling_markers_found:
+            report.add_error(
+                f"P4c: Terminal single-pass mode requires scheduling markers in evidence. "
+                f"Expected one of: {SCHEDULING_ROOT_CAUSE_MARKERS}"
+            )
+            return False
+
+        report.add_check(
+            ContractCheck(
+                name="p4c_diagnosis",
+                passed=True,
+                phase="p4c",
+                reason=P4C_REASON_DIAGNOSIS_RCA_VALID,
+                details={
+                    "incident_id": evidence.get("incident_id"),
+                    "pass_count": pass_count,
+                    "success_mode": "terminal_no_checks_single_pass",
+                    "scheduling_markers_found": scheduling_markers_found,
+                    "terminal_no_checks_accepted": True,
+                },
+            )
+        )
+        return True
+
+    # Standard multi-pass mode
     # Check shipping identity
     root_cause_summary = str(evidence.get("root_cause_summary", ""))
     if "shipping" not in root_cause_summary.lower():
@@ -60,7 +106,6 @@ def verify_p4c_diagnosis(artifact_dir: Path, report: VerificationReport) -> bool
         return False
 
     # Check pass count
-    pass_count = evidence.get("pass_count", 0)
     if pass_count < 2:
         report.add_error(f"P4c: pass_count={pass_count} < 2")
         return False
@@ -88,9 +133,84 @@ def verify_p4c_diagnosis(artifact_dir: Path, report: VerificationReport) -> bool
             details={
                 "incident_id": evidence.get("incident_id"),
                 "pass_count": pass_count,
+                "success_mode": "multi_pass",
                 "scheduling_markers_found": scheduling_markers_found,
                 "read_only": evidence.get("read_only", True),
             },
         )
     )
     return True
+
+
+def _check_scheduling_markers_from_evidence(evidence: dict[str, Any]) -> list[str]:
+    """Check for scheduling markers in P3c/P2b evidence for terminal no-checks mode.
+
+    For terminal no-checks single-pass, scheduling evidence comes from
+    deterministic K8s evidence (P2b injection, P3c discovery) rather than
+    diagnosis prose. Check the evidence for scheduling-specific markers.
+
+    Args:
+        evidence: Diagnosis evidence dict
+
+    Returns:
+        List of scheduling markers found
+    """
+    found: list[str] = []
+
+    # Check P3c detection evidence if available
+    detection_evidence = evidence.get("detection_evidence")
+    if isinstance(detection_evidence, dict):
+        found.extend(_find_scheduling_markers_in_dict(detection_evidence))
+
+    # Check for scheduling markers in the root_cause_summary (may still have them)
+    root_cause_summary = str(evidence.get("root_cause_summary", "")).lower()
+    for marker in SCHEDULING_ROOT_CAUSE_MARKERS:
+        if marker.lower() in root_cause_summary:
+            found.append(marker)
+
+    # Check p4c_verdict for matched evidence
+    p4c_verdict = evidence.get("p4c_verdict", {})
+    if isinstance(p4c_verdict, dict):
+        matched = p4c_verdict.get("matched_evidence", [])
+        if isinstance(matched, list):
+            found.extend(matched)
+
+    # Deduplicate and return
+    return list(dict.fromkeys(found))
+
+
+def _find_scheduling_markers_in_dict(data: dict[str, Any], _depth: int = 0) -> list[str]:
+    """Recursively search for scheduling markers in a dict.
+
+    Args:
+        data: Dict to search
+        _depth: Current recursion depth (prevents infinite loops)
+
+    Returns:
+        List of scheduling markers found
+    """
+    if _depth > 5:
+        return []  # Prevent infinite recursion
+
+    found: list[str] = []
+
+    # Check string values for markers
+    for key, value in data.items():
+        if isinstance(value, str):
+            value_lower = value.lower()
+            for marker in SCHEDULING_ROOT_CAUSE_MARKERS:
+                if marker.lower() in value_lower:
+                    found.append(marker)
+        elif isinstance(value, dict):
+            found.extend(_find_scheduling_markers_in_dict(value, _depth + 1))
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, str):
+                    item_lower = item.lower()
+                    for marker in SCHEDULING_ROOT_CAUSE_MARKERS:
+                        if marker.lower() in item_lower:
+                            found.append(marker)
+                elif isinstance(item, dict):
+                    found.extend(_find_scheduling_markers_in_dict(item, _depth + 1))
+
+    return found

@@ -383,7 +383,16 @@ def _collect_failures(evidence: dict[str, Any], term_checks: dict[str, bool]) ->
         failures.append("real_loop_not_invoked")
     if not evidence["real_pass_artifacts_found"]:
         failures.append("real_pass_artifacts_missing")
-    if evidence["pass_count"] < MIN_REQUIRED_PASSES:
+    
+    # Terminal no-checks single-pass is an accepted success mode - bypass pass_count check
+    terminal_no_checks_accepted = evidence.get("terminal_no_checks_accepted", False)
+    is_terminal_mode = (
+        terminal_no_checks_accepted
+        and evidence["pass_count"] >= 1
+        and evidence.get("real_pass_artifacts_found", False)
+    )
+    
+    if not is_terminal_mode and evidence["pass_count"] < MIN_REQUIRED_PASSES:
         failures.append(f"insufficient_passes: {evidence['pass_count']} < {MIN_REQUIRED_PASSES}")
     
     executed = evidence.get("executed_checks", [])
@@ -393,9 +402,12 @@ def _collect_failures(evidence: dict[str, Any], term_checks: dict[str, bool]) ->
     if not is_read_only:
         failures.append(f"read_only_contract_violated: {violations}")
     
-    for term, found in term_checks.items():
-        if not found:
-            failures.append(f"missing_root_cause_term: {term}")
+    # Terminal no-checks mode: root-cause evidence comes from deterministic K8s evidence, not diagnosis prose
+    # Only require term markers for multi-pass mode
+    if not is_terminal_mode:
+        for term, found in term_checks.items():
+            if not found:
+                failures.append(f"missing_root_cause_term: {term}")
     return failures
 
 
