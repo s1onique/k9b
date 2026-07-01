@@ -13,13 +13,10 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop import (
     handle_incident_automatic_diagnosis_loop_one_pass_api,
     match_automatic_diagnosis_loop_route,
 )
-
 
 # =============================================================================
 # Route Matching Tests
