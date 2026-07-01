@@ -209,10 +209,10 @@ STEPS: dict[str, dict] = {
         "is_expensive": False,
     },
     "openapi-contract": {
-        "command": ".venv/bin/python -m pytest tests/test_openapi_contract.py -v",
+        "command": ".venv/bin/python -m pytest tests/test_openapi_contract.py tests/test_api_registry_dispatch.py -v",
         "lane": "python",
         "category": StepCategory.POLICY,
-        "description": "OpenAPI contract completeness gate",
+        "description": "OpenAPI registry, dispatch, and contract completeness gate",
         "is_expensive": False,
     },
     "unit-tests": {

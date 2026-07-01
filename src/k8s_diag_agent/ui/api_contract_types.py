@@ -46,3 +46,6 @@ class APIOperation:
     responses: tuple[APIResponse, ...] = ()
     path_params: tuple[str, ...] = ()  # Param names in path
     query_params: tuple[str, ...] = ()  # Param names in query string
+    # Dispatch metadata - use string import paths to avoid circular imports
+    handler: str = ""  # Lazy import path, e.g., "k8s_diag_agent.ui.api_openapi:handle_openapi_json"
+    match: str = "exact"  # "exact" or "template"

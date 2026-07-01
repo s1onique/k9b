@@ -160,6 +160,9 @@ def _handle_api_get(handler: HealthUIRequestHandler, route: str, query: str) -> 
 def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
     """Dispatch POST request to appropriate route handler.
 
+    This function first tries the registry dispatcher, then falls back to
+    the existing pattern-based dispatch for routes not yet in the registry.
+
     Args:
         handler: The HTTP request handler instance
         route: The request path
@@ -167,6 +170,14 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
     Raises:
         Sets handler._status_code = 404 if no route matches.
     """
+    # Import dispatcher here to avoid circular imports at module level
+    from .api_dispatch import dispatch_api_operation
+
+    # Try registry dispatcher first
+    if dispatch_api_operation(handler, "POST", route, ""):
+        return
+
+    # Fall back to pattern-based dispatch for routes not yet in registry
     # Import handlers here to avoid circular imports at module level
     from .server_alertmanager import handle_alertmanager_source_action
     from .server_batch_execution import handle_run_batch_next_check_execution

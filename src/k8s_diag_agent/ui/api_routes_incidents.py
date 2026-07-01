@@ -19,6 +19,7 @@ INCIDENT_ROUTES: tuple[APIOperation, ...] = (
         description="List all incidents with optional status filter.",
         tags=("incidents",),
         operation_id="list_incidents",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_incidents_list_dispatch",
         query_params=("status", "limit", "page"),
         responses=(
             APIResponse(
@@ -41,6 +42,8 @@ INCIDENT_ROUTES: tuple[APIOperation, ...] = (
         description="Get details for a specific incident by ID.",
         tags=("incidents",),
         operation_id="get_incident_detail",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_incident_detail_dispatch",
+        match="template",
         path_params=("incident_id",),
         responses=(
             APIResponse(
@@ -61,6 +64,8 @@ INCIDENT_ROUTES: tuple[APIOperation, ...] = (
         description="Get the handoff artifact for automatic diagnosis review.",
         tags=("incidents", "diagnosis"),
         operation_id="get_incident_diagnosis_review_handoff",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_incident_handoff_dispatch",
+        match="template",
         path_params=("incident_id",),
         responses=(
             APIResponse(
@@ -78,6 +83,7 @@ INCIDENT_ROUTES: tuple[APIOperation, ...] = (
         description="Capture a cluster snapshot for the current state.",
         tags=("incidents",),
         operation_id="capture_incident_snapshot",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_incident_snapshot_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -99,6 +105,7 @@ INCIDENT_ROUTES: tuple[APIOperation, ...] = (
         description="Generate a diagnostic review packet for an incident.",
         tags=("incidents",),
         operation_id="create_incident_review_packet",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_incident_review_packet_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -120,6 +127,8 @@ INCIDENT_ROUTES: tuple[APIOperation, ...] = (
         description="Execute a single pass of the diagnosis loop for an incident.",
         tags=("incidents", "diagnosis"),
         operation_id="run_incident_diagnosis_loop",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_incident_diagnosis_loop_dispatch",
+        match="template",
         path_params=("incident_id",),
         responses=(
             APIResponse(
@@ -136,6 +145,8 @@ INCIDENT_ROUTES: tuple[APIOperation, ...] = (
         description="Execute one-pass diagnosis using the diagnosis service.",
         tags=("incidents", "diagnosis"),
         operation_id="run_incident_one_pass_diagnosis",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_incident_one_pass_diagnosis_dispatch",
+        match="template",
         path_params=("incident_id",),
         responses=(
             APIResponse(
@@ -152,6 +163,8 @@ INCIDENT_ROUTES: tuple[APIOperation, ...] = (
         description="Execute automatic diagnosis loop one-pass using the real collector.",
         tags=("incidents", "diagnosis"),
         operation_id="run_incident_automatic_diagnosis_loop",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_incident_automatic_diagnosis_loop_dispatch",
+        match="template",
         path_params=("incident_id",),
         responses=(
             APIResponse(
@@ -176,6 +189,7 @@ RUN_ROUTES: tuple[APIOperation, ...] = (
         description="List all diagnostic runs with pagination.",
         tags=("incidents",),
         operation_id="list_runs",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_runs_list_dispatch",
         query_params=("limit", "page", "cluster_label"),
         responses=(
             APIResponse(
@@ -198,6 +212,7 @@ RUN_ROUTES: tuple[APIOperation, ...] = (
         description="Get details for the selected run.",
         tags=("incidents",),
         operation_id="get_run_detail",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_run_detail_dispatch",
         query_params=("run_id",),
         responses=(
             APIResponse(
@@ -214,6 +229,7 @@ RUN_ROUTES: tuple[APIOperation, ...] = (
         description="Get overview of all clusters in the fleet.",
         tags=("incidents",),
         operation_id="get_fleet",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_fleet_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -229,6 +245,7 @@ RUN_ROUTES: tuple[APIOperation, ...] = (
         description="Get diagnostic proposals for the current run.",
         tags=("incidents",),
         operation_id="get_proposals",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_proposals_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -244,6 +261,7 @@ RUN_ROUTES: tuple[APIOperation, ...] = (
         description="Get detailed information for a specific cluster.",
         tags=("incidents",),
         operation_id="get_cluster_detail",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_cluster_detail_dispatch",
         query_params=("cluster_label",),
         responses=(
             APIResponse(
@@ -260,6 +278,7 @@ RUN_ROUTES: tuple[APIOperation, ...] = (
         description="List notifications with optional filters.",
         tags=("incidents",),
         operation_id="list_notifications",
+        handler="k8s_diag_agent.ui.api_notifications_dispatch:handle_notifications_dispatch",
         query_params=("kind", "cluster_label", "search", "limit", "page"),
         responses=(
             APIResponse(
@@ -290,6 +309,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         description="Promote a deterministic next-check candidate.",
         tags=("incidents",),
         operation_id="promote_deterministic_next_check",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_deterministic_promotion_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -305,6 +325,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         description="Execute a next-check with manual input.",
         tags=("incidents",),
         operation_id="execute_next_check",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_next_check_execution_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -320,6 +341,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         description="Approve a next-check for execution.",
         tags=("incidents",),
         operation_id="approve_next_check",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_next_check_approval_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -335,6 +357,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         description="Record operator feedback on next-check usefulness.",
         tags=("incidents",),
         operation_id="record_next_check_usefulness",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_usefulness_feedback_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -350,6 +373,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         description="Record operator feedback on AlertManager source relevance.",
         tags=("incidents",),
         operation_id="record_alertmanager_relevance_feedback",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_alertmanager_relevance_feedback_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -365,6 +389,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         description="Execute multiple next-checks in batch.",
         tags=("incidents",),
         operation_id="run_batch_next_check_execution",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_batch_next_check_execution_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -380,6 +405,8 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         description="Perform an action (promote/disable) on an AlertManager source.",
         tags=("incidents",),
         operation_id="perform_alertmanager_source_action",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_alertmanager_source_action_dispatch",
+        match="template",
         path_params=("run_id", "source_id"),
         responses=(
             APIResponse(

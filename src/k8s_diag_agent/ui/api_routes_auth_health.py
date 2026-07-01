@@ -20,6 +20,7 @@ AUTH_ROUTES: tuple[APIOperation, ...] = (
         tags=("auth",),
         operation_id="get_auth_status",
         requires_auth=False,
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_status_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -43,6 +44,7 @@ AUTH_ROUTES: tuple[APIOperation, ...] = (
         tags=("auth",),
         operation_id="get_auth_me",
         requires_auth=False,
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_me_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -66,6 +68,7 @@ AUTH_ROUTES: tuple[APIOperation, ...] = (
         tags=("auth",),
         operation_id="post_auth_login",
         requires_auth=False,
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_login_dispatch",
         request_schema=APISchema(
             type="object",
             description="Login credentials",
@@ -95,6 +98,7 @@ AUTH_ROUTES: tuple[APIOperation, ...] = (
         tags=("auth",),
         operation_id="post_auth_logout",
         requires_auth=False,
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_logout_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -122,6 +126,7 @@ HEALTH_ROUTES: tuple[APIOperation, ...] = (
         tags=("health",),
         operation_id="get_health",
         requires_auth=False,
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_health_route_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -142,6 +147,7 @@ HEALTH_ROUTES: tuple[APIOperation, ...] = (
         tags=("health",),
         operation_id="get_health_details",
         requires_auth=False,
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_health_details_dispatch",
         responses=(
             APIResponse(
                 status_code=200,
@@ -173,6 +179,7 @@ RUNTIME_ROUTES: tuple[APIOperation, ...] = (
         description="Get current runtime status and diagnostics information.",
         tags=("runtime",),
         operation_id="get_runtime_status",
+        handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_runtime_status_dispatch",
         responses=(
             APIResponse(
                 status_code=200,

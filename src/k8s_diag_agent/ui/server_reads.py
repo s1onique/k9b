@@ -20,8 +20,6 @@ with existing callers.
 from __future__ import annotations
 
 import logging
-import math
-import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -80,378 +78,62 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     All cache/single-flight logic is preserved inline here since it needs access
     to handler state.
 
+    Routes that need context loading (fleet, proposals, cluster-detail) are handled
+    specially. All other routes are dispatched through the registry dispatcher.
+
     Args:
         handler: The HealthUIRequestHandler instance
         route: The request path without query string
         query: The query string
     """
-    # Import here to avoid circular import at module level
-    from ..structured_logging import emit_structured_log
-    from .api import build_cluster_detail_payload, build_fleet_payload, build_proposals_payload
-    from .notifications import query_notifications
-    from .server import (
-        _single_flight_acquire,
-        _single_flight_release,
-        _single_flight_wait,
-    )
-    from .server_incident_reads import handle_incident_routes
-    from .server_singleflight import (
-        _notifications_cache,
-        _notifications_cache_lock,
-    )
+    # Import dispatcher here to avoid circular imports at module level
+    from .api_dispatch import dispatch_api_operation
 
-    # OpenAPI routes - public, no auth required (must check before auth routes)
-    if route == "/api/openapi.json":
-        from .api_openapi import handle_openapi_json
-
-        handle_openapi_json(handler)
+    # Try dispatching through the registry first
+    if dispatch_api_operation(handler, "GET", route, query):
         return
 
-    if route == "/api/docs":
-        from .api_openapi import handle_openapi_docs
+    # Routes that need context loading - handled specially below
+    # These cannot be dispatched through the registry because they need
+    # the UI context to be loaded first
+    context_routes = {
+        "/api/fleet",
+        "/api/proposals",
+        "/api/cluster-detail",
+        "/api/run",
+    }
 
-        handle_openapi_docs(handler)
-        return
-
-    # AUTH routes - public, no auth required
-    if route == "/api/auth/status":
-        from .auth_routes import handle_status
-
-        handle_status(handler)
-        return
-
-    if route == "/api/auth/me":
-        from .auth_routes import handle_me
-
-        handle_me(handler)
-        return
-
-    if route == "/api/runs":
-        # Delegate to extraction module for artifact-read isolation
-        handle_runs_list_route(handler, query)
-        return
-
-    if route == "/api/runtime-status":
-        # Runtime status does not need run context - handles its own route
-        handle_runtime_status_route(handler)
-        return
-
-    if route == "/api/health":
-        # Backend health check for Kubernetes liveness/readiness probes
-        # Uses shared evaluator for consistency with /api/health/details
-        # This is a public endpoint (no auth required) for health gate
-        from .api_health import handle_health_route
-
-        handle_health_route(handler)
-        return
-
-    if route == "/api/health/details":
-        # Health details for self-diagnosis - available even when /api/health returns 500
-        # This is a public endpoint (no auth required) for health gate diagnostics
-        handle_health_details_route(handler)
-        return
-
-    if route == "/api/notifications":
+    if route in context_routes:
+        # Import here to avoid circular import at module level
         from urllib.parse import parse_qs
 
+        from .api import build_cluster_detail_payload, build_fleet_payload, build_proposals_payload
+
         params = parse_qs(query)
-        notifications_dir = handler.runs_dir / "health" / "notifications"
+        selected_run_id = params.get("run_id", [None])[0]
 
-        kind_filter = params.get("kind", [None])[0] or ""
-        cluster_filter = params.get("cluster_label", [None])[0] or ""
-        search_filter = params.get("search", [None])[0] or ""
-        limit_value = handler._parse_limit(params.get("limit", [None])[0])
-        page_value = handler._parse_page(params.get("page", [None])[0])
-
-        # Normalize limit/page for cache key
-        limit_str = str(limit_value if limit_value is not None else 50)
-        page_str = str(page_value if page_value is not None else 1)
-
-        cache_mtime = 0.0
-        index_mtime = 0.0
-        if notifications_dir.exists():
-            try:
-                cache_mtime = notifications_dir.stat().st_mtime
-            except OSError:
-                pass
-        ui_index_path = handler.runs_dir / "health" / "ui-index.json"
-        if ui_index_path.exists():
-            try:
-                index_mtime = ui_index_path.stat().st_mtime
-            except OSError:
-                pass
-
-        notifications_cache_key = f"{cache_mtime}:{index_mtime}:{kind_filter}:{cluster_filter}:{search_filter}:{limit_str}:{page_str}"
-        sf_key = f"/api/notifications:{notifications_cache_key}"
-        should_build, sf_result, sf_wait_start = _single_flight_acquire(sf_key)
-
-        if not should_build and sf_result is not None:
-            result, wait_ms = _single_flight_wait(sf_result, sf_wait_start)
-            if result is not None:
-                emit_structured_log(
-                    component="ui-notifications",
-                    message="/api/notifications payload served from single-flight waiter",
-                    run_id="",
-                    run_label="",
-                    severity="DEBUG",
-                    metadata={
-                        "path": "/api/notifications",
-                        "cache_hit": True,
-                        "single_flight_acquire": "waiter",
-                        "single_flight_result": "waited",
-                        "single_flight_key": sf_key[:100],
-                        "single_flight_wait_ms": round(wait_ms, 2),
-                        "cache_key": notifications_cache_key[:50],
-                    },
-                )
-                handler._send_json(result)
-                return
-
-        with _notifications_cache_lock:
-            notifications_cached = _notifications_cache.get(notifications_cache_key)
-            if notifications_cached is not None:
-                notifications_payload, notifications_mtime = notifications_cached
-                if notifications_mtime == cache_mtime:
-                    if should_build:
-                        _single_flight_release(sf_key, notifications_payload, success=True, result_type="cached")
-                    emit_structured_log(
-                        component="ui-notifications",
-                        message="/api/notifications payload served from cache",
-                        run_id="",
-                        run_label="",
-                        severity="DEBUG",
-                        metadata={
-                            "path": "/api/notifications",
-                            "request_outcome": "cache_hit",
-                            "single_flight_acquire": "builder",
-                            "single_flight_result": "cache_hit",
-                            "cache_key": notifications_cache_key[:50],
-                        },
-                    )
-                    handler._send_json(notifications_payload)
-                    return
-
-        # Try index path first for default request shape
-        # Default shape: no filters, page=1, limit=50
-        is_default_request = not kind_filter and not cluster_filter and not search_filter
-        effective_limit = limit_value if limit_value is not None else 50
-        effective_page = page_value if page_value is not None else 1
-        effective_offset = (effective_page - 1) * effective_limit
-
-        path_strategy = "unknown"
-        fallback_reason: str | None = None
-        notification_files_considered = 0
-        notification_files_fully_parsed = 0
-        index_notification_count = 0
-        rows_returned = 0
-        total_duration_ms = 0.0
-
-        payload_start = time.perf_counter()
-
-        # Check if we can use the index path
-        if is_default_request:
-            ui_index_path = handler.runs_dir / "health" / "ui-index.json"
-            if ui_index_path.exists():
-                try:
-                    index = _load_ui_index_file(handler.runs_dir / "health")
-                    notif_index = index.get("notification_index")
-                    if notif_index is not None:
-                        # Use index path - no file parsing needed
-                        path_strategy = "index_notifications_path"
-                        index_notifications = notif_index.get("notifications", [])
-                        index_total_count = notif_index.get("total_count", len(index_notifications))
-                        index_notification_count = len(index_notifications)
-
-                        # Apply pagination
-                        sliced = index_notifications[effective_offset : effective_offset + effective_limit]
-                        rows_returned = len(sliced)
-
-                        total_pages = max(1, math.ceil(index_total_count / effective_limit)) if index_total_count else 1
-
-                        payload = {
-                            "notifications": sliced,
-                            "total": index_total_count,
-                            "limit": effective_limit,
-                            "page": effective_page,
-                            "total_pages": total_pages,
-                            "path_strategy": path_strategy,
-                            "fallback_reason": None,
-                            "notification_files_considered": 0,
-                            "notification_files_fully_parsed": 0,
-                            "index_notification_count": index_notification_count,
-                            "rows_returned": rows_returned,
-                        }
-                        total_duration_ms = (time.perf_counter() - payload_start) * 1000
-
-                        emit_structured_log(
-                            component="ui-notifications",
-                            message="/api/notifications served from index",
-                            run_id="",
-                            run_label="",
-                            severity="DEBUG",
-                            metadata={
-                                "path": "/api/notifications",
-                                "path_strategy": path_strategy,
-                                "notification_files_considered": 0,
-                                "notification_files_fully_parsed": 0,
-                                "index_notification_count": index_notification_count,
-                                "rows_returned": rows_returned,
-                                "total_duration_ms": round(total_duration_ms, 2),
-                                "limit": effective_limit,
-                                "page": effective_page,
-                            },
-                        )
-
-                        with _notifications_cache_lock:
-                            if len(_notifications_cache) >= 10:
-                                oldest_key = next(iter(_notifications_cache))
-                                del _notifications_cache[oldest_key]
-                            _notifications_cache[notifications_cache_key] = (payload, cache_mtime)
-
-                        if should_build:
-                            _single_flight_release(sf_key, payload, success=True, result_type="built")
-
-                        handler._send_json(payload)
-                        return
-                    else:
-                        # Index exists but no notification_index field
-                        path_strategy = "notification_file_fallback_path"
-                        fallback_reason = "missing_notification_index"
-                except Exception as exc:
-                    # Malformed index
-                    path_strategy = "notification_file_fallback_path"
-                    fallback_reason = "malformed_index"
-                    logger.debug(
-                        "Failed to load ui-index for notifications, falling back to file scan",
-                        extra={"error": str(exc)},
-                    )
-            else:
-                # No ui-index.json
-                path_strategy = "notification_file_fallback_path"
-                fallback_reason = "missing_index"
-        else:
-            # Filtered request - cannot use index path yet
-            path_strategy = "notification_file_fallback_path"
-            fallback_reason = "unsupported_filter:" + ":".join(
-                filter(
-                    None,
-                    [
-                        "kind" if kind_filter else None,
-                        "cluster_label" if cluster_filter else None,
-                        "search" if search_filter else None,
-                    ],
-                )
-            )
-
-        # Fallback: use file scan
-        if notifications_dir.exists():
-            notification_files_considered = len(list(notifications_dir.glob("*.json")))
-
-        try:
-            file_payload = query_notifications(
-                handler.runs_dir / "health",
-                kind=kind_filter if kind_filter else None,
-                cluster_label=cluster_filter if cluster_filter else None,
-                search=search_filter if search_filter else None,
-                limit=limit_value,
-                page=page_value,
-            )
-            notification_files_fully_parsed = file_payload.get("notification_files_fully_parsed", 0)
-
-            # Add strategy/timing fields
-            file_payload["path_strategy"] = path_strategy
-            file_payload["fallback_reason"] = fallback_reason
-            file_payload["notification_files_considered"] = notification_files_considered
-            file_payload["notification_files_fully_parsed"] = notification_files_fully_parsed
-            file_payload["index_notification_count"] = 0  # Not used in fallback
-            file_payload["rows_returned"] = len(file_payload.get("notifications", []))
-
-            payload = file_payload
-        except Exception as exc:
-            from ..security import sanitize_exception_message
-
-            logger.warning("Failed to build notifications payload", extra={"error": str(exc)})
-            payload = {
-                "notifications": [],
-                "error": sanitize_exception_message(exc),
-                "path_strategy": path_strategy,
-                "fallback_reason": fallback_reason or "exception",
-                "notification_files_considered": notification_files_considered,
-                "notification_files_fully_parsed": 0,
-                "index_notification_count": 0,
-                "rows_returned": 0,
-            }
-
-        total_duration_ms = (time.perf_counter() - payload_start) * 1000
-        payload["total_duration_ms"] = round(total_duration_ms, 2)
-
-        emit_structured_log(
-            component="ui-notifications",
-            message="/api/notifications payload built with timing",
-            run_id="",
-            run_label="",
-            severity="DEBUG",
-            metadata={
-                "path": "/api/notifications",
-                "path_strategy": path_strategy,
-                "fallback_reason": fallback_reason,
-                "notification_files_considered": notification_files_considered,
-                "notification_files_fully_parsed": notification_files_fully_parsed,
-                "index_notification_count": 0,
-                "rows_returned": len(payload.get("notifications", [])),
-                "total_duration_ms": round(total_duration_ms, 2),
-            },
-        )
-
-        with _notifications_cache_lock:
-            if len(_notifications_cache) >= 10:
-                oldest_key = next(iter(_notifications_cache))
-                del _notifications_cache[oldest_key]
-            _notifications_cache[notifications_cache_key] = (payload, cache_mtime)
-
-        if should_build:
-            _single_flight_release(sf_key, payload, success=True, result_type="built")
-
-        handler._send_json(payload)
-        return
-
-    # Incident read routes (no context required) - dispatch before context loading
-    if route.startswith("/api/incidents"):
-        if handle_incident_routes(handler, route, query):
+        context = handler._load_context(requested_run_id=selected_run_id)
+        if context is None:
             return
 
-    # All other endpoints need the context from the current (possibly selected) run
-    from urllib.parse import parse_qs
+        if route == "/api/run":
+            from .server_run_detail_reads import handle_run_detail_route
+            handle_run_detail_route(handler, query)
+            return
 
-    params = parse_qs(query)
-    selected_run_id = params.get("run_id", [None])[0]
+        if route == "/api/fleet":
+            handler._send_json(build_fleet_payload(context))
+            return
 
-    context = handler._load_context(requested_run_id=selected_run_id)
-    if context is None:
-        return
+        if route == "/api/proposals":
+            handler._send_json(build_proposals_payload(context))
+            return
 
-    if route == "/api/run":
-        # Delegate to extraction module for selected-run detail isolation
-        from .server_run_detail_reads import handle_run_detail_route
-
-        handle_run_detail_route(handler, query)
-        return
-
-    if route == "/api/fleet":
-        handler._send_json(build_fleet_payload(context))
-        return
-
-    if route == "/api/proposals":
-        handler._send_json(build_proposals_payload(context))
-        return
-
-    if route == "/api/cluster-detail":
-        from urllib.parse import parse_qs
-
-        params = parse_qs(query)
-        label = params.get("cluster_label", [None])[0]
-        handler._send_json(build_cluster_detail_payload(context, cluster_label=label))
-        return
+        if route == "/api/cluster-detail":
+            params = parse_qs(query)
+            label = params.get("cluster_label", [None])[0]
+            handler._send_json(build_cluster_detail_payload(context, cluster_label=label))
+            return
 
     # Debug routes: delegate to extraction module
     if _handle_debug_routes(handler, route):
