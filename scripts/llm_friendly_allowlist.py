@@ -130,7 +130,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("scripts/select_review_candidate_runs.py", "[SCRIPT] Selection tool - single-purpose"),
 
     # [FRONTEND] Additional frontend files
-    ("frontend/src/api.ts", "[FRONTEND] API client - large but coherent"),
     # NOTE: frontend/src/hooks/useQueueState.ts removed — extracted into queueState/
     ("frontend/src/__tests__/alertmanager-snapshot-panel.test.tsx", "[FRONTEND TEST] Snapshot panel tests"),
     ("frontend/src/__tests__/alertmanager-sources-panel.test.tsx", "[FRONTEND TEST] Sources panel tests"),
