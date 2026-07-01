@@ -30,6 +30,10 @@ _INCIDENT_DIAGNOSIS_LOOP_PATTERN = re.compile(
 _INCIDENT_ONE_PASS_DIAGNOSIS_SERVICE_PATTERN = re.compile(
     r"^/api/incidents/([^/]+)/one-pass-diagnosis$"
 )
+# NEW: Incident automatic diagnosis loop one-pass (uses real collector, not fake-runner)
+_INCIDENT_AUTOMATIC_DIAGNOSIS_LOOP_PATTERN = re.compile(
+    r"^/api/incidents/([^/]+)/automatic-diagnosis-loop/one-pass$"
+)
 
 
 def handle_get_request(handler: HealthUIRequestHandler) -> None:
@@ -247,5 +251,19 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
         source_id = unquote(runs_am_source_match.group(2))
         handle_alertmanager_source_action(handler, run_id, source_id)
         return
+
+    # NEW: Incident automatic diagnosis loop one-pass
+    # POST /api/incidents/{incident_id}/automatic-diagnosis-loop/one-pass
+    # Wraps collect_automatic_diagnosis_evidence() - uses REAL automatic loop collector
+    incident_auto_dl_match = _INCIDENT_AUTOMATIC_DIAGNOSIS_LOOP_PATTERN.match(route)
+    if incident_auto_dl_match:
+        from .server_incident_automatic_diagnosis_loop import (
+            handle_incident_automatic_diagnosis_loop_one_pass_api,
+        )
+
+        incident_id = incident_auto_dl_match.group(1)
+        handle_incident_automatic_diagnosis_loop_one_pass_api(handler, incident_id)
+        return
+
     handler._status_code = 404
     handler._send_text(404, "Not Found")

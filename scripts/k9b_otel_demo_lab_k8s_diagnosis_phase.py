@@ -25,6 +25,12 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_artifacts import (
     get_p3c_evidence_path,
     write_diagnosis_evidence,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_helpers import (
+    FAILURE_TARGETED_INVOCATION_HTTP_ERROR,
+    FAILURE_TARGETED_INVOCATION_INVALID_JSON,
+    FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
+    FAILURE_TARGETED_LOOP_NOT_COMPLETED,
+)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
     DEFAULT_MAX_CHECKS_PER_PASS,
     DEFAULT_MAX_PASSES,
@@ -128,12 +134,62 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     # This is the most common P4c failure - the diagnosis loop never ran.
     # Fail fast with a clear message instead of cascading through term checks.
     if not evidence.get("real_loop_invoked", False):
-        # Default to automatic_diagnosis_loop_disabled when no specific reason is set
         failure_reason = evidence.get("failure_reason") or "automatic_diagnosis_loop_disabled"
-        loop_check_reason = evidence.get("loop_enabled_check_reason", "")
+        
+        # Build enhanced diagnostic message for backend-targeted diagnosis failures
+        invocation_result = evidence.get("targeted_invocation_result") or {}
+        poll_result = evidence.get("targeted_poll_result") or {}
+        backend_detail = evidence.get("backend_incident_detail") or ""
         
         # Provide specific guidance based on the failure reason
-        if failure_reason == "automatic_loop_env_rbac_denied":
+        if failure_reason == FAILURE_TARGETED_INVOCATION_HTTP_ERROR:
+            failure_msg = (
+                f"{FAILURE_TARGETED_INVOCATION_HTTP_ERROR}: "
+                f"Backend targeted endpoint returned non-2xx. "
+                f"HTTP status: {invocation_result.get('http_status', 'unknown')}. "
+                f"Body preview: {invocation_result.get('body', '')[:200]}. "
+                f"incident_id={incident_id}"
+            )
+        elif failure_reason == FAILURE_TARGETED_INVOCATION_INVALID_JSON:
+            failure_msg = (
+                f"{FAILURE_TARGETED_INVOCATION_INVALID_JSON}: "
+                f"Backend targeted endpoint returned invalid JSON. "
+                f"HTTP status: {invocation_result.get('http_status', 'unknown')}. "
+                f"Body preview: {invocation_result.get('body', '')[:200]}. "
+                f"incident_id={incident_id}"
+            )
+        elif failure_reason == FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR:
+            failure_msg = (
+                f"{FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR}: "
+                f"Backend targeted endpoint unreachable. "
+                f"curl_rc: {invocation_result.get('curl_rc', 'unknown')}. "
+                f"HTTP status: {invocation_result.get('http_status', 'unknown')}. "
+                f"incident_id={incident_id}"
+            )
+        elif failure_reason == FAILURE_TARGETED_LOOP_NOT_COMPLETED:
+            failure_msg = (
+                f"{FAILURE_TARGETED_LOOP_NOT_COMPLETED}: "
+                f"Diagnosis did not complete within poll timeout. "
+                f"Attempts: {poll_result.get('attempts', 'unknown')}/{poll_result.get('max_attempts', 'unknown')}. "
+                f"Final status: {poll_result.get('final_status', 'unknown')}. "
+                f"Loop summary: {poll_result.get('loop_summary_status', 'unknown')}. "
+                f"Review available: {poll_result.get('review_available', False)}. "
+                f"incident_id={incident_id}"
+            )
+        elif failure_reason == "backend_incident_fetch_failed":
+            failure_msg = (
+                f"backend_incident_fetch_failed: "
+                f"Could not fetch incident from backend. "
+                f"Check backend health and incident existence. "
+                f"incident_id={incident_id}"
+            )
+        elif failure_reason == "kubeconfig_required":
+            failure_msg = (
+                f"kubeconfig_required: "
+                f"kubeconfig is required for backend-targeted diagnosis. "
+                f"incident_id={incident_id}"
+            )
+        elif failure_reason == "automatic_loop_env_rbac_denied":
             failure_msg = (
                 "automatic_loop_env_rbac_denied: "
                 "Cannot read k9b-scheduler deployment to verify loop config. "
@@ -157,8 +213,9 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         else:
             failure_msg = (
                 f"{failure_reason}: "
-                "Automatic diagnosis loop was not invoked. "
-                f"Check reason: {loop_check_reason or failure_reason}"
+                f"Automatic diagnosis loop was not invoked. "
+                f"incident_id={incident_id}. "
+                f"backend_detail={backend_detail}"
             )
         
         evidence["failure_reason"] = failure_msg
@@ -289,6 +346,16 @@ def _merge_diagnosis_result(evidence: dict[str, Any], result: dict[str, Any]) ->
         evidence["loop_enabled_check_reason"] = result.get("loop_enabled_check_reason")
     if result.get("loop_enabled_check_error"):
         evidence["loop_enabled_check_error"] = result.get("loop_enabled_check_error")
+    
+    # Include backend-targeted diagnosis metadata
+    if result.get("backend_targeted_invocation") is not None:
+        evidence["backend_targeted_invocation"] = result.get("backend_targeted_invocation")
+    if result.get("targeted_invocation_result"):
+        evidence["targeted_invocation_result"] = result.get("targeted_invocation_result")
+    if result.get("targeted_poll_result"):
+        evidence["targeted_poll_result"] = result.get("targeted_poll_result")
+    if result.get("backend_incident_detail"):
+        evidence["backend_incident_detail"] = result.get("backend_incident_detail")
     
     if result.get("failure_reason"):
         evidence["failure_reason"] = result.get("failure_reason")
