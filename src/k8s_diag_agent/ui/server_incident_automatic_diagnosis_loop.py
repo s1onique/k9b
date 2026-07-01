@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING
+from dataclasses import asdict, is_dataclass
+from typing import TYPE_CHECKING, Any
 
 from ..collect.incident_diagnosis_auto_loop import collect_automatic_diagnosis_evidence
 from ..collect.incident_diagnosis_auto_loop_models import (
@@ -26,6 +27,39 @@ from ..collect.incident_diagnosis_auto_loop_models import (
     AutoLoopIncidentResult,
 )
 from .server_response import send_json_response
+
+
+def _serialize_value(value: object) -> Any:
+    """Serialize a value to a JSON-compatible dict or primitive.
+
+    Handles dict, object with .to_dict(), dataclass, and primitive types.
+    Recursively processes dicts to handle nested dataclasses/lists/tuples.
+    This prevents AttributeError when backend returns dict instead of
+    expected dataclass instances.
+    """
+    if isinstance(value, dict):
+        # Recursively serialize dict values to handle nested dataclasses/lists
+        return {str(key): _serialize_value(item) for key, item in value.items()}
+    if isinstance(value, (str, int, float, bool, type(None))):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_serialize_value(item) for item in value]
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        # Always recurse so .to_dict() results follow the same rules as everything else
+        return _serialize_value(to_dict())
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(value)
+    return value
+
+
+def _serialize_diagnostic_list(diagnostics: object) -> list[Any]:
+    """Serialize a list of diagnostics, handling both dict and dataclass items."""
+    if not diagnostics:
+        return []
+    if isinstance(diagnostics, (list, tuple)):
+        return [_serialize_value(item) for item in diagnostics]
+    return [_serialize_value(diagnostics)]
 
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
@@ -179,8 +213,8 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
             "skip_reason": result.skip_reason,
         }
         # Include budget diagnostics when available for budget_exhausted cases
-        if result.budget_diagnostics:
-            response["budget_diagnostics"] = [d.to_dict() for d in result.budget_diagnostics]
+        # Use safe serialization to handle both dict and dataclass items
+        response["budget_diagnostics"] = _serialize_diagnostic_list(result.budget_diagnostics)
         send_json_response(handler, response, code=200)
         return
 

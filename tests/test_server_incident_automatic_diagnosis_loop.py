@@ -305,3 +305,219 @@ class TestEndpointDistinction:
             # Verify no fake_runner indicators
             assert "fake_runner" not in str(response)
             assert response.get("run_id", "") == "real-run"
+
+
+class TestBudgetDiagnosticsSerialization:
+    """Tests for budget diagnostics serialization edge cases.
+
+    Regression tests for bug where budget_diagnostics contained dict items
+    instead of DiagnosisBudgetDiagnostic dataclass instances, causing
+    AttributeError: 'dict' object has no attribute 'to_dict'.
+    """
+
+    @patch(
+        "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.collect_automatic_diagnosis_evidence"
+    )
+    def test_skipped_with_dict_budget_diagnostics(self, mock_collect: MagicMock) -> None:
+        """Regression: budget_diagnostics with dict items should not crash handler.
+
+        This reproduces the bug where result.budget_diagnostics contained
+        plain dicts instead of DiagnosisBudgetDiagnostic instances, causing:
+        AttributeError: 'dict' object has no attribute 'to_dict'
+        """
+        # Simulate the bug: budget_diagnostics contains dicts (not dataclasses)
+        mock_result = MagicMock()
+        mock_result.skipped = True
+        mock_result.eligible = False
+        mock_result.eligibility_reason = "budget_exhausted"
+        mock_result.skip_reason = "budget_exhausted"
+        # This is the bug: budget_diagnostics should be DiagnosisBudgetDiagnostic
+        # instances but sometimes contains plain dicts
+        mock_result.budget_diagnostics = [
+            {
+                "name": "review_packet_budget",
+                "limit": 10,
+                "remaining": 0,
+                "exhausted": True,
+                "auto_pass_count": 10,
+            },
+            {
+                "name": "api_call_budget",
+                "limit": 100,
+                "remaining": 50,
+                "exhausted": False,
+                "auto_pass_count": 50,
+            },
+        ]
+        mock_collect.return_value = mock_result
+
+        mock_handler = MagicMock()
+        mock_handler.command = "POST"
+        mock_handler._health_root = Path("/tmp/health")
+
+        with patch(
+            "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.send_json_response"
+        ) as mock_send:
+            # Should NOT raise AttributeError
+            handle_incident_automatic_diagnosis_loop_one_pass_api(
+                mock_handler,
+                "incident-123",
+            )
+
+            args, kwargs = mock_send.call_args
+            assert kwargs["code"] == 200
+            response = args[1]
+            assert response["skipped"] is True
+            # Verify budget_diagnostics were serialized correctly
+            assert "budget_diagnostics" in response
+            assert len(response["budget_diagnostics"]) == 2
+            assert response["budget_diagnostics"][0]["name"] == "review_packet_budget"
+            assert response["budget_diagnostics"][0]["exhausted"] is True
+
+    @patch(
+        "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.collect_automatic_diagnosis_evidence"
+    )
+    def test_skipped_with_dataclass_budget_diagnostics(
+        self, mock_collect: MagicMock
+    ) -> None:
+        """Regression: budget_diagnostics with dataclass items should still work.
+
+        Normal case where budget_diagnostics contains DiagnosisBudgetDiagnostic
+        instances with proper to_dict() method.
+        """
+        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
+            DiagnosisBudgetDiagnostic,
+        )
+
+        mock_result = MagicMock()
+        mock_result.skipped = True
+        mock_result.eligible = False
+        mock_result.eligibility_reason = "budget_exhausted"
+        mock_result.skip_reason = "budget_exhausted"
+        # Normal case: budget_diagnostics with DiagnosisBudgetDiagnostic instances
+        mock_result.budget_diagnostics = (
+            DiagnosisBudgetDiagnostic(
+                name="review_packet_budget",
+                used=10,
+                limit=10,
+                remaining=0,
+                exhausted=True,
+                source="review_packet_artifacts",
+                resettable=True,
+            ),
+        )
+        mock_collect.return_value = mock_result
+
+        mock_handler = MagicMock()
+        mock_handler.command = "POST"
+        mock_handler._health_root = Path("/tmp/health")
+
+        with patch(
+            "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.send_json_response"
+        ) as mock_send:
+            handle_incident_automatic_diagnosis_loop_one_pass_api(
+                mock_handler,
+                "incident-123",
+            )
+
+            args, kwargs = mock_send.call_args
+            assert kwargs["code"] == 200
+            response = args[1]
+            assert response["skipped"] is True
+            assert "budget_diagnostics" in response
+            assert len(response["budget_diagnostics"]) == 1
+            assert response["budget_diagnostics"][0]["name"] == "review_packet_budget"
+
+    @patch(
+        "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.collect_automatic_diagnosis_evidence"
+    )
+    def test_skipped_with_empty_budget_diagnostics(
+        self, mock_collect: MagicMock
+    ) -> None:
+        """Regression: empty budget_diagnostics should not cause errors."""
+        mock_result = MagicMock()
+        mock_result.skipped = True
+        mock_result.eligible = False
+        mock_result.eligibility_reason = "incident_closed"
+        mock_result.skip_reason = "incident_closed"
+        mock_result.budget_diagnostics = ()
+        mock_collect.return_value = mock_result
+
+        mock_handler = MagicMock()
+        mock_handler.command = "POST"
+        mock_handler._health_root = Path("/tmp/health")
+
+        with patch(
+            "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.send_json_response"
+        ) as mock_send:
+            handle_incident_automatic_diagnosis_loop_one_pass_api(
+                mock_handler,
+                "incident-123",
+            )
+
+            args, kwargs = mock_send.call_args
+            assert kwargs["code"] == 200
+            response = args[1]
+            assert response["skipped"] is True
+            # budget_diagnostics key should not be present when empty
+            assert "budget_diagnostics" not in response or response["budget_diagnostics"] == []
+
+    @patch(
+        "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.collect_automatic_diagnosis_evidence"
+    )
+    def test_skipped_with_nested_dataclass_inside_dict_budget_diagnostics(
+        self, mock_collect: MagicMock
+    ) -> None:
+        """Regression: dict containing nested dataclass should be recursively serialized.
+
+        This protects the serializer contract when a dict contains a dataclass
+        nested inside it (not at the top level of the list item).
+        """
+        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
+            DiagnosisBudgetDiagnostic,
+        )
+
+        mock_result = MagicMock()
+        mock_result.skipped = True
+        mock_result.eligible = False
+        mock_result.eligibility_reason = "budget_exhausted"
+        mock_result.skip_reason = "budget_exhausted"
+        # Nested dataclass inside a dict - tests recursive serialization
+        mock_result.budget_diagnostics = [
+            {
+                "name": "review_packet_budget",
+                "nested": DiagnosisBudgetDiagnostic(
+                    name="inner",
+                    used=1,
+                    limit=1,
+                    remaining=0,
+                    exhausted=True,
+                    source="test",
+                    resettable=True,
+                ),
+            }
+        ]
+        mock_collect.return_value = mock_result
+
+        mock_handler = MagicMock()
+        mock_handler.command = "POST"
+        mock_handler._health_root = Path("/tmp/health")
+
+        with patch(
+            "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.send_json_response"
+        ) as mock_send:
+            handle_incident_automatic_diagnosis_loop_one_pass_api(
+                mock_handler,
+                "incident-123",
+            )
+
+            args, kwargs = mock_send.call_args
+            assert kwargs["code"] == 200
+            response = args[1]
+            assert response["skipped"] is True
+            assert "budget_diagnostics" in response
+            assert response["budget_diagnostics"][0]["name"] == "review_packet_budget"
+            # Verify nested dataclass was recursively serialized to dict
+            assert response["budget_diagnostics"][0]["nested"]["name"] == "inner"
+            assert response["budget_diagnostics"][0]["nested"]["used"] == 1
+            assert response["budget_diagnostics"][0]["nested"]["exhausted"] is True
