@@ -252,14 +252,19 @@ def check_incident_eligibility(
     has_suggested_checks = len(suggested_checks) > 0
 
     # Check automatic loop budget by counting existing review packets
+    # CRITICAL: Use rglob to match artifacts in NESTED paths (e.g., phase4-diagnosis/).
+    # This ensures parity with lab reset helper which also uses rglob.
+    # Bug fix: Previously used iterdir() which only checked top-level,
+    # causing backend to miss nested review packets written by P4c.
     auto_pass_count = 0
     if external_analysis_dir is not None and external_analysis_dir.exists():
         # Count existing automatic review packets for this incident
         # Pattern: auto-{incident_id}-*-diagnosis-review-packet.json
+        # Use rglob to find in nested dirs (e.g., phase4-diagnosis/p4c-.../)
         prefix = f"auto-{incident_id}-"
         suffix = "-diagnosis-review-packet.json"
         try:
-            for path in external_analysis_dir.iterdir():
+            for path in external_analysis_dir.rglob("*"):
                 if path.is_file() and path.name.startswith(prefix) and path.name.endswith(suffix):
                     auto_pass_count += 1
         except OSError:
