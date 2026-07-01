@@ -22,33 +22,42 @@ class TestBudgetResetNestedPaths:
     """Tests for budget reset nested path discovery."""
 
     def test_reset_discovers_artifacts_in_nested_paths(self) -> None:
-        """Test that reset_diagnosis_loop_budget finds artifacts in nested directories."""
+        """Test that reset_diagnosis_loop_budget_local finds artifacts in nested directories.
+
+        This tests that reset uses rglob-style recursive discovery from the
+        canonical runs_dir/health/external-analysis root, finding artifacts
+        in subdirectories like phase4-diagnosis/ as well as top-level.
+        """
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-            reset_diagnosis_loop_budget,
+            reset_diagnosis_loop_budget_local,
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            runs_dir = Path(tmpdir)
             incident_id = "otel-demo-deployment-shipping-deployment_unavailable"
 
             # Create nested directory structure like the backend creates
-            nested_dir = external_analysis_dir / "health" / "external-analysis"
-            nested_dir.mkdir(parents=True, exist_ok=True)
+            # The function expects runs_dir and adds health/external-analysis
+            health_dir = runs_dir / "health"
+            external_analysis_dir = health_dir / "external-analysis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
 
-            # Create artifact in nested path (matches real backend behavior)
+            # Create artifact in a nested subdirectory (e.g., phase4-diagnosis/)
+            nested_dir = external_analysis_dir / "phase4-diagnosis"
+            nested_dir.mkdir(parents=True, exist_ok=True)
             artifact_name = f"auto-{incident_id}-20260107-123456-abc123-diagnosis-review-packet.json"
             (nested_dir / artifact_name).write_text('{"test": true}')
 
-            # Also create a top-level artifact for comparison
+            # Also create a top-level artifact at external-analysis root
             top_level_artifact = f"auto-{incident_id}-20260107-654321-def456-diagnosis-review-packet.json"
             (external_analysis_dir / top_level_artifact).write_text('{"test": true}')
 
-            # Reset should find BOTH artifacts
-            removed = reset_diagnosis_loop_budget(external_analysis_dir, incident_id)
+            # Reset should find BOTH artifacts (nested in phase4-diagnosis + top-level)
+            result = reset_diagnosis_loop_budget_local(runs_dir, incident_id)
 
-            assert removed == 2, (
-                f"Expected 2 artifacts removed (nested + top-level), got {removed}. "
-                "Budget reset must use rglob to discover nested artifacts."
+            assert result.reset_file_count == 2, (
+                f"Expected 2 artifacts removed (nested in phase4-diagnosis/ + top-level), got {result.reset_file_count}. "
+                "Budget reset must use rglob to discover artifacts in all nested subdirectories."
             )
 
             # Verify both files were removed
@@ -60,55 +69,55 @@ class TestBudgetResetNestedPaths:
     def test_reset_only_removes_matching_incident_id(self) -> None:
         """Test that reset only removes artifacts for the target incident ID."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-            reset_diagnosis_loop_budget,
+            reset_diagnosis_loop_budget_local,
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            runs_dir = Path(tmpdir)
             target_incident_id = "otel-demo-deployment-shipping-deployment_unavailable"
             other_incident_id = "other-incident-123"
 
             # Create artifacts for both incidents
-            nested_dir = external_analysis_dir / "health" / "external-analysis"
-            nested_dir.mkdir(parents=True, exist_ok=True)
+            external_analysis_dir = runs_dir / "health" / "external-analysis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
 
             # Target incident artifact
             target_artifact = f"auto-{target_incident_id}-20260107-123456-diagnosis-review-packet.json"
-            (nested_dir / target_artifact).write_text('{"test": true}')
+            (external_analysis_dir / target_artifact).write_text('{"test": true}')
 
             # Other incident artifact (should NOT be removed)
             other_artifact = f"auto-{other_incident_id}-20260107-654321-diagnosis-review-packet.json"
-            (nested_dir / other_artifact).write_text('{"test": true}')
+            (external_analysis_dir / other_artifact).write_text('{"test": true}')
 
             # Reset only target incident
-            removed = reset_diagnosis_loop_budget(external_analysis_dir, target_incident_id)
+            result = reset_diagnosis_loop_budget_local(runs_dir, target_incident_id)
 
-            assert removed == 1, f"Expected 1 artifact removed, got {removed}"
-            assert not (nested_dir / target_artifact).exists(), "Target artifact should be removed"
-            assert (nested_dir / other_artifact).exists(), "Other incident artifact should remain"
+            assert result.reset_file_count == 1, f"Expected 1 artifact removed, got {result.reset_file_count}"
+            assert not (external_analysis_dir / target_artifact).exists(), "Target artifact should be removed"
+            assert (external_analysis_dir / other_artifact).exists(), "Other incident artifact should remain"
 
     def test_get_budget_status_discovers_nested_artifacts(self) -> None:
-        """Test that get_budget_status finds artifacts in nested directories."""
+        """Test that get_budget_status_local finds artifacts in nested directories."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-            get_budget_status,
+            get_budget_status_local,
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            runs_dir = Path(tmpdir)
             incident_id = "otel-demo-deployment-shipping-deployment_unavailable"
 
             # Create nested artifact
-            nested_dir = external_analysis_dir / "health" / "external-analysis" / "phase4-diagnosis"
-            nested_dir.mkdir(parents=True, exist_ok=True)
+            external_analysis_dir = runs_dir / "health" / "external-analysis" / "phase4-diagnosis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
             artifact_name = f"auto-{incident_id}-20260107-123456-diagnosis-review-packet.json"
-            (nested_dir / artifact_name).write_text('{"test": true}')
+            (external_analysis_dir / artifact_name).write_text('{"test": true}')
 
-            # Check budget status
-            status = get_budget_status(external_analysis_dir, incident_id)
+            # Check budget status (pass runs_dir, function adds health/external-analysis)
+            status = get_budget_status_local(runs_dir, incident_id)
 
             assert status["review_packet_count"] == 1, (
                 f"Expected 1 review packet in nested path, got {status['review_packet_count']}. "
-                "get_budget_status must use rglob to discover nested artifacts."
+                "get_budget_status_local must use rglob to discover nested artifacts."
             )
             assert status["budget_exhausted"] is True
             assert artifact_name in status["review_packets"][0]
@@ -116,13 +125,13 @@ class TestBudgetResetNestedPaths:
     def test_reset_handles_empty_directory(self) -> None:
         """Test that reset handles empty or non-existent directories gracefully."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-            reset_diagnosis_loop_budget,
+            reset_diagnosis_loop_budget_local,
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            runs_dir = Path(tmpdir)
 
             # No artifacts exist
-            removed = reset_diagnosis_loop_budget(external_analysis_dir, "any-incident")
+            result = reset_diagnosis_loop_budget_local(runs_dir, "any-incident")
 
-            assert removed == 0, "Should return 0 when no artifacts exist"
+            assert result.reset_file_count == 0, "Should return 0 when no artifacts exist"

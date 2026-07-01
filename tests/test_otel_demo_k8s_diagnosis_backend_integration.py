@@ -14,9 +14,39 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     TargetedDiagnosisInvocationResult,
     TargetedDiagnosisPollResult,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import BudgetResetResult
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution import (
     run_backend_targeted_diagnosis,
 )
+
+# =============================================================================
+# Mock helpers for backend budget reset
+# =============================================================================
+
+
+def mock_budget_reset_result(incident_id: str = "test-incident") -> BudgetResetResult:
+    """Return a successful budget reset result."""
+    return BudgetResetResult(
+        incident_id=incident_id,
+        reset_file_count=0,
+        reset_paths=(),
+        execution_context="k8s_backend_container",
+        error=None,  # CRITICAL: must be None, not MagicMock
+    )
+
+
+def mock_budget_status_success(incident_id: str = "test-incident") -> dict:
+    """Return a successful budget status result (budget is clean)."""
+    return {
+        "incident_id": incident_id,
+        "budget_clean": True,
+        "review_packet_count": 0,
+        "loop_pass_count": 0,
+        "other_auto_count": 0,
+        "total_auto_artifact_count": 0,
+        "budget_exhausted": False,
+        "error": None,  # CRITICAL: must be None, not MagicMock
+    }
 
 # =============================================================================
 # Test P4c Uses Backend-Targeted Diagnosis
@@ -26,6 +56,8 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution import (
 class TestP4cUsesBackendTargetedDiagnosis:
     """Integration tests verifying P4c uses backend-targeted diagnosis."""
 
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.get_budget_status_in_backend")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.reset_diagnosis_loop_budget_in_backend")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
@@ -38,6 +70,8 @@ class TestP4cUsesBackendTargetedDiagnosis:
         mock_invoke: MagicMock,
         mock_fetch: MagicMock,
         mock_fetch_result: MagicMock,
+        mock_reset: MagicMock,
+        mock_status: MagicMock,
     ) -> None:
         """Test P4c invokes backend targeted diagnosis endpoint.
 
@@ -48,6 +82,10 @@ class TestP4cUsesBackendTargetedDiagnosis:
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
             BackendIncidentFetchResult,
         )
+
+        # Configure budget reset mocks to return successful results
+        mock_reset.return_value = mock_budget_reset_result("inc-otel-demo")
+        mock_status.return_value = mock_budget_status_success("inc-otel-demo")
 
         # Setup: incident exists, invocation succeeds, diagnosis completes
         # fetch_backend_incident_detail_result returns BackendIncidentFetchResult
@@ -109,6 +147,8 @@ class TestP4cUsesBackendTargetedDiagnosis:
         invoke_call_kwargs = mock_invoke.call_args[1]
         assert invoke_call_kwargs["incident_id"] == "inc-otel-demo"
 
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.get_budget_status_in_backend")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.reset_diagnosis_loop_budget_in_backend")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
@@ -121,11 +161,17 @@ class TestP4cUsesBackendTargetedDiagnosis:
         mock_invoke: MagicMock,
         mock_fetch: MagicMock,
         mock_fetch_result: MagicMock,
+        mock_reset: MagicMock,
+        mock_status: MagicMock,
     ) -> None:
         """Test P4c validates pass artifacts after diagnosis."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
             BackendIncidentFetchResult,
         )
+
+        # Configure budget reset mocks to return successful results
+        mock_reset.return_value = mock_budget_reset_result("inc-otel-demo")
+        mock_status.return_value = mock_budget_status_success("inc-otel-demo")
 
         # fetch_backend_incident_detail_result returns BackendIncidentFetchResult
         mock_fetch_result.return_value = BackendIncidentFetchResult(
@@ -202,17 +248,25 @@ class TestP4cUsesBackendTargetedDiagnosis:
 class TestP4cFailsOnEndpointErrors:
     """Tests verifying P4c fails appropriately on endpoint errors."""
 
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.get_budget_status_in_backend")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.reset_diagnosis_loop_budget_in_backend")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
     def test_fails_on_transport_error(
         self,
         mock_invoke: MagicMock,
         mock_fetch_result: MagicMock,
+        mock_reset: MagicMock,
+        mock_status: MagicMock,
     ) -> None:
         """Test P4c fails with structured error on transport error."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
             BackendIncidentFetchResult,
         )
+
+        # Configure budget reset mocks to return successful results
+        mock_reset.return_value = mock_budget_reset_result("inc-otel-demo")
+        mock_status.return_value = mock_budget_status_success("inc-otel-demo")
 
         # fetch_backend_incident_detail_result returns BackendIncidentFetchResult
         mock_fetch_result.return_value = BackendIncidentFetchResult(
@@ -251,17 +305,25 @@ class TestP4cFailsOnEndpointErrors:
         assert result["failure_reason"] == FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR
         assert result["status"] == "invocation_failed"
 
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.get_budget_status_in_backend")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.reset_diagnosis_loop_budget_in_backend")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
     def test_fails_on_http_error(
         self,
         mock_invoke: MagicMock,
         mock_fetch_result: MagicMock,
+        mock_reset: MagicMock,
+        mock_status: MagicMock,
     ) -> None:
         """Test P4c fails with structured error on HTTP error."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
             BackendIncidentFetchResult,
         )
+
+        # Configure budget reset mocks to return successful results
+        mock_reset.return_value = mock_budget_reset_result("inc-otel-demo")
+        mock_status.return_value = mock_budget_status_success("inc-otel-demo")
 
         # fetch_backend_incident_detail_result returns BackendIncidentFetchResult
         mock_fetch_result.return_value = BackendIncidentFetchResult(
@@ -343,6 +405,8 @@ class TestRegressionSchedulerPeriodicLoopBug:
         assert detail.status == "collecting_evidence"
         assert detail.evidence_count == 3
 
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.get_budget_status_in_backend")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.reset_diagnosis_loop_budget_in_backend")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
@@ -355,6 +419,8 @@ class TestRegressionSchedulerPeriodicLoopBug:
         mock_invoke: MagicMock,
         mock_fetch: MagicMock,
         mock_fetch_result: MagicMock,
+        mock_reset: MagicMock,
+        mock_status: MagicMock,
     ) -> None:
         """Test backend-targeted diagnosis bypasses scheduler view.
 
@@ -365,6 +431,10 @@ class TestRegressionSchedulerPeriodicLoopBug:
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
             BackendIncidentFetchResult,
         )
+
+        # Configure budget reset mocks to return successful results
+        mock_reset.return_value = mock_budget_reset_result("inc-otel-demo")
+        mock_status.return_value = mock_budget_status_success("inc-otel-demo")
 
         # Setup: incident visible in backend (include raw for pass_count extraction)
         mock_fetch_result.return_value = BackendIncidentFetchResult(

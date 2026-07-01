@@ -1,6 +1,6 @@
 """Regression tests for budget-state isolation via incident ID determinism.
 
-Tests that reset_diagnosis_loop_budget and get_budget_status correctly handle
+Tests that reset_diagnosis_loop_budget_local and get_budget_status_local correctly handle
 budget files for specific incidents without affecting others.
 """
 
@@ -39,14 +39,17 @@ class TestBudgetStateIsolation:
     """Tests for budget-state isolation via incident ID determinism."""
 
     def test_budget_reset_clears_review_packets(self) -> None:
-        """reset_diagnosis_loop_budget removes auto-{incident_id}-*-review-packet.json files."""
+        """reset_diagnosis_loop_budget_local removes auto-{incident_id}-*-review-packet.json files."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-            get_budget_status,
-            reset_diagnosis_loop_budget,
+            get_budget_status_local,
+            reset_diagnosis_loop_budget_local,
         )
 
         with TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            # Functions expect runs_dir and add health/external-analysis internally
+            runs_dir = Path(tmpdir)
+            external_analysis_dir = runs_dir / "health" / "external-analysis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
 
             # Create mock budget files with deterministic incident ID
             incident_id = "test-incident-123"
@@ -58,16 +61,16 @@ class TestBudgetStateIsolation:
             (external_analysis_dir / "other-artifact.json").write_text('{}')
 
             # Verify files exist
-            status_before = get_budget_status(external_analysis_dir, incident_id)
+            status_before = get_budget_status_local(runs_dir, incident_id)
             assert status_before["review_packet_count"] == 3
             assert status_before["budget_exhausted"] is True
 
-            # Reset budget
-            removed = reset_diagnosis_loop_budget(external_analysis_dir, incident_id)
-            assert removed == 3
+            # Reset budget - returns BudgetResetResult, not int
+            result = reset_diagnosis_loop_budget_local(runs_dir, incident_id)
+            assert result.reset_file_count == 3
 
             # Verify budget files removed
-            status_after = get_budget_status(external_analysis_dir, incident_id)
+            status_after = get_budget_status_local(runs_dir, incident_id)
             assert status_after["review_packet_count"] == 0
             assert status_after["budget_clean"] is True
 
@@ -75,15 +78,17 @@ class TestBudgetStateIsolation:
             assert (external_analysis_dir / "other-artifact.json").exists()
 
     def test_budget_status_counts_review_packets(self) -> None:
-        """get_budget_status correctly counts auto-{incident_id}-*-review-packet.json files."""
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import get_budget_status
+        """get_budget_status_local correctly counts auto-{incident_id}-*-review-packet.json files."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import get_budget_status_local
 
         with TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            runs_dir = Path(tmpdir)
+            external_analysis_dir = runs_dir / "health" / "external-analysis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
             incident_id = "test-incident-456"
 
             # No files
-            status = get_budget_status(external_analysis_dir, incident_id)
+            status = get_budget_status_local(runs_dir, incident_id)
             assert status["review_packet_count"] == 0
             assert status["budget_clean"] is True
             assert status["budget_exhausted"] is False
@@ -92,7 +97,7 @@ class TestBudgetStateIsolation:
             (external_analysis_dir / f"auto-{incident_id}-0-diagnosis-review-packet.json").write_text('{"findings":[]}')
             (external_analysis_dir / f"auto-{incident_id}-1-diagnosis-review-packet.json").write_text('{"findings":[]}')
 
-            status = get_budget_status(external_analysis_dir, incident_id)
+            status = get_budget_status_local(runs_dir, incident_id)
             assert status["review_packet_count"] == 2
             assert status["budget_clean"] is False
             assert status["budget_exhausted"] is True
@@ -107,12 +112,14 @@ class TestBudgetStateIsolation:
         - Backend eligibility should then pass (not budget_exhausted)
         """
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-            get_budget_status,
-            reset_diagnosis_loop_budget,
+            get_budget_status_local,
+            reset_diagnosis_loop_budget_local,
         )
 
         with TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            runs_dir = Path(tmpdir)
+            external_analysis_dir = runs_dir / "health" / "external-analysis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
             incident_id = "stale-loop-pass-incident"
 
             # Create only loop pass artifacts (no review packets)
@@ -125,18 +132,18 @@ class TestBudgetStateIsolation:
             )
 
             # Verify initial state - budget should be exhausted by loop pass artifacts
-            status_before = get_budget_status(external_analysis_dir, incident_id)
+            status_before = get_budget_status_local(runs_dir, incident_id)
             assert status_before["review_packet_count"] == 0, "No review packets should exist"
             assert status_before["loop_pass_count"] == 2, "Should find 2 loop pass artifacts"
             assert status_before["total_auto_artifact_count"] == 2
             assert status_before["budget_exhausted"] is True, "Budget should be exhausted"
 
-            # Reset budget
-            removed = reset_diagnosis_loop_budget(external_analysis_dir, incident_id)
-            assert removed == 2, "Should remove 2 loop pass artifacts"
+            # Reset budget - returns BudgetResetResult
+            result = reset_diagnosis_loop_budget_local(runs_dir, incident_id)
+            assert result.reset_file_count == 2, "Should remove 2 loop pass artifacts"
 
             # Verify reset worked
-            status_after = get_budget_status(external_analysis_dir, incident_id)
+            status_after = get_budget_status_local(runs_dir, incident_id)
             assert status_after["review_packet_count"] == 0
             assert status_after["loop_pass_count"] == 0
             assert status_after["total_auto_artifact_count"] == 0
@@ -146,12 +153,14 @@ class TestBudgetStateIsolation:
     def test_budget_reset_clears_mixed_artifacts(self) -> None:
         """Test that reset clears both review packets and loop pass artifacts."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-            get_budget_status,
-            reset_diagnosis_loop_budget,
+            get_budget_status_local,
+            reset_diagnosis_loop_budget_local,
         )
 
         with TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            runs_dir = Path(tmpdir)
+            external_analysis_dir = runs_dir / "health" / "external-analysis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
             incident_id = "mixed-artifact-incident"
 
             # Create both review packets and loop pass artifacts
@@ -163,34 +172,36 @@ class TestBudgetStateIsolation:
             (external_analysis_dir / f"auto-{incident_id}-1-read-only-check-result.json").write_text('{"check": "result"}')
 
             # Verify initial state
-            status_before = get_budget_status(external_analysis_dir, incident_id)
+            status_before = get_budget_status_local(runs_dir, incident_id)
             assert status_before["review_packet_count"] == 2
             assert status_before["loop_pass_count"] == 2
             assert status_before["other_auto_count"] == 1
             assert status_before["total_auto_artifact_count"] == 5
             assert status_before["budget_exhausted"] is True
 
-            # Reset budget
-            removed = reset_diagnosis_loop_budget(external_analysis_dir, incident_id)
-            assert removed == 5, "Should remove all 5 artifacts"
+            # Reset budget - returns BudgetResetResult
+            result = reset_diagnosis_loop_budget_local(runs_dir, incident_id)
+            assert result.reset_file_count == 5, "Should remove all 5 artifacts"
 
             # Verify everything was cleared
-            status_after = get_budget_status(external_analysis_dir, incident_id)
+            status_after = get_budget_status_local(runs_dir, incident_id)
             assert status_after["total_auto_artifact_count"] == 0
             assert status_after["budget_clean"] is True
             assert status_after["budget_exhausted"] is False
 
     def test_budget_status_reports_all_artifact_types(self) -> None:
-        """Test that get_budget_status correctly categorizes all artifact types.
+        """Test that get_budget_status_local correctly categorizes all artifact types.
         
         Note: Snapshots (auto-{incident_id}-snapshot.json) are NOT matched by
         _matches_diagnosis_artifact because they are not in BUDGET_RESETTABLE_SUFFIXES.
         Only known budget-affecting suffixes are matched.
         """
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import get_budget_status
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import get_budget_status_local
 
         with TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            runs_dir = Path(tmpdir)
+            external_analysis_dir = runs_dir / "health" / "external-analysis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
             incident_id = "comprehensive-artifact-test"
 
             # Create various artifact types
@@ -198,25 +209,27 @@ class TestBudgetStateIsolation:
             (external_analysis_dir / f"auto-{incident_id}-1-diagnosis-loop-pass.json").write_text('{}')
             (external_analysis_dir / f"auto-{incident_id}-1-read-only-check-result.json").write_text('{}')
 
-            status = get_budget_status(external_analysis_dir, incident_id)
+            status = get_budget_status_local(runs_dir, incident_id)
 
-            # Verify categorization
-            assert "review_packets" in status["artifacts"]
-            assert "loop_passes" in status["artifacts"]
-            assert "other_auto" in status["artifacts"]
-            assert len(status["artifacts"]["review_packets"]) == 1
-            assert len(status["artifacts"]["loop_passes"]) == 1
-            assert len(status["artifacts"]["other_auto"]) == 1  # read-only-check-result.json
+            # Verify categorization (get_budget_status_local returns these keys)
+            assert "review_packets" in status
+            assert "loop_passes" in status
+            assert "other_auto" in status
+            assert len(status["review_packets"]) == 1
+            assert len(status["loop_passes"]) == 1
+            assert len(status["other_auto"]) == 1  # read-only-check-result.json
 
     def test_budget_reset_does_not_affect_other_incidents(self) -> None:
         """Test that reset only clears artifacts for the target incident ID."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-            get_budget_status,
-            reset_diagnosis_loop_budget,
+            get_budget_status_local,
+            reset_diagnosis_loop_budget_local,
         )
 
         with TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            runs_dir = Path(tmpdir)
+            external_analysis_dir = runs_dir / "health" / "external-analysis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
 
             # Create artifacts for two different incidents
             incident_a = "incident-a"
@@ -225,17 +238,17 @@ class TestBudgetStateIsolation:
             (external_analysis_dir / f"auto-{incident_a}-1-diagnosis-review-packet.json").write_text('{}')
             (external_analysis_dir / f"auto-{incident_b}-1-diagnosis-review-packet.json").write_text('{}')
 
-            # Reset only incident A
-            removed = reset_diagnosis_loop_budget(external_analysis_dir, incident_a)
-            assert removed == 1
+            # Reset only incident A - returns BudgetResetResult
+            result = reset_diagnosis_loop_budget_local(runs_dir, incident_a)
+            assert result.reset_file_count == 1
 
             # Verify incident B's artifacts still exist
-            status_b = get_budget_status(external_analysis_dir, incident_b)
+            status_b = get_budget_status_local(runs_dir, incident_b)
             assert status_b["review_packet_count"] == 1
             assert status_b["budget_exhausted"] is True
 
             # Verify incident A is clean
-            status_a = get_budget_status(external_analysis_dir, incident_a)
+            status_a = get_budget_status_local(runs_dir, incident_a)
             assert status_a["review_packet_count"] == 0
             assert status_a["budget_clean"] is True
 
@@ -246,12 +259,14 @@ class TestBudgetStateIsolation:
         not arbitrary auto-generated files like snapshots.
         """
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-            get_budget_status,
-            reset_diagnosis_loop_budget,
+            get_budget_status_local,
+            reset_diagnosis_loop_budget_local,
         )
 
         with TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
+            runs_dir = Path(tmpdir)
+            external_analysis_dir = runs_dir / "health" / "external-analysis"
+            external_analysis_dir.mkdir(parents=True, exist_ok=True)
             incident_id = "snapshot-preserve-incident"
 
             # Create a snapshot artifact (should NOT be removed)
@@ -266,16 +281,16 @@ class TestBudgetStateIsolation:
             assert snapshot.exists(), "Snapshot should exist before reset"
             assert review.exists(), "Review packet should exist before reset"
 
-            # Reset budget
-            removed = reset_diagnosis_loop_budget(external_analysis_dir, incident_id)
-            assert removed == 1, "Should remove only 1 artifact (review packet, not snapshot)"
+            # Reset budget - returns BudgetResetResult
+            result = reset_diagnosis_loop_budget_local(runs_dir, incident_id)
+            assert result.reset_file_count == 1, "Should remove only 1 artifact (review packet, not snapshot)"
 
             # Verify snapshot is preserved but review packet is removed
             assert snapshot.exists(), "Snapshot should be preserved after reset"
             assert not review.exists(), "Review packet should be removed"
 
             # Verify budget status reflects only review packet was counted/removed
-            status_after = get_budget_status(external_analysis_dir, incident_id)
+            status_after = get_budget_status_local(runs_dir, incident_id)
             assert status_after["review_packet_count"] == 0
             assert status_after["total_auto_artifact_count"] == 0
             assert status_after["budget_clean"] is True
