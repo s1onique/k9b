@@ -128,12 +128,38 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     # This is the most common P4c failure - the diagnosis loop never ran.
     # Fail fast with a clear message instead of cascading through term checks.
     if not evidence.get("real_loop_invoked", False):
-        failure_msg = (
-            "automatic_diagnosis_loop_disabled: "
-            "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED must be set to true "
-            "on the k9b-scheduler deployment (not backend). "
-            f"Current failure_reason: {evidence.get('failure_reason', 'unknown')}"
-        )
+        failure_reason = evidence.get("failure_reason", "unknown")
+        loop_check_reason = evidence.get("loop_enabled_check_reason", "")
+        
+        # Provide specific guidance based on the failure reason
+        if failure_reason == "automatic_loop_env_rbac_denied":
+            failure_msg = (
+                "automatic_loop_env_rbac_denied: "
+                "Cannot read k9b-scheduler deployment to verify loop config. "
+                "The GitHub runner identity lacks 'get' permission on deployments.apps in namespace k9b. "
+                f"Check error: {evidence.get('loop_enabled_check_error', 'N/A')}"
+            )
+        elif failure_reason == "automatic_loop_env_read_failed":
+            failure_msg = (
+                "automatic_loop_env_read_failed: "
+                "Cannot read k9b-scheduler deployment (network/timeout/not found). "
+                "Verify the k9b namespace and scheduler deployment exist. "
+                f"Check error: {evidence.get('loop_enabled_check_error', 'N/A')}"
+            )
+        elif failure_reason == "automatic_diagnosis_loop_disabled":
+            failure_msg = (
+                "automatic_diagnosis_loop_disabled: "
+                "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED must be set to true "
+                "on the k9b-scheduler deployment (not backend). "
+                "Ensure scheduler deployment has this env var configured."
+            )
+        else:
+            failure_msg = (
+                f"{failure_reason}: "
+                "Automatic diagnosis loop was not invoked. "
+                f"Check reason: {loop_check_reason or failure_reason}"
+            )
+        
         evidence["failure_reason"] = failure_msg
         evidence["validation_success"] = False
         write_diagnosis_evidence(diagnosis_dir, evidence)
@@ -256,6 +282,13 @@ def _merge_diagnosis_result(evidence: dict[str, Any], result: dict[str, Any]) ->
     evidence["root_cause_summary"] = result.get("root_cause_summary", "")
     evidence["raw_diagnosis_artifact_path"] = result.get("artifact_path")
     evidence["review_packet_path"] = result.get("review_packet_path")
+    
+    # Include detailed loop enabled check results for diagnostics
+    if result.get("loop_enabled_check_reason"):
+        evidence["loop_enabled_check_reason"] = result.get("loop_enabled_check_reason")
+    if result.get("loop_enabled_check_error"):
+        evidence["loop_enabled_check_error"] = result.get("loop_enabled_check_error")
+    
     if result.get("failure_reason"):
         evidence["failure_reason"] = result.get("failure_reason")
     return evidence

@@ -115,6 +115,11 @@ FAILURE_REASON_LOOP_ERROR = "automatic_diagnosis_loop_error"
 FAILURE_REASON_PASS_ARTIFACTS_MISSING = "diagnosis_pass_artifacts_missing"
 FAILURE_REASON_SIMULATION_USED = "simulation_used_but_not_allowed"
 
+# Failure reasons for deployment env read failures (RBAC/network errors)
+# These distinguish between "loop is disabled" vs "can't verify loop config"
+FAILURE_REASON_LOOP_ENV_RBAC_DENIED = "automatic_loop_env_rbac_denied"
+FAILURE_REASON_LOOP_ENV_READ_FAILED = "automatic_loop_env_read_failed"
+
 # =============================================================================
 # Schema field names (for diagnosis-evidence.json)
 # =============================================================================

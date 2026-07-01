@@ -204,6 +204,24 @@ jobs:
           kubectl --kubeconfig "$KUBECONFIG" cluster-info
           kubectl --kubeconfig "$KUBECONFIG" get nodes -o wide
 
+      - name: RBAC diagnostics for P4c execution
+        run: |
+          set -euo pipefail
+          echo "=== P4c RBAC Pre-flight Diagnostics ==="
+          
+          # Show current identity
+          echo "--- Runner Identity ---"
+          kubectl --kubeconfig "$KUBECONFIG" auth whoami 2>&1 || true
+          
+          # Show current context
+          echo "--- Current Context ---"
+          kubectl --kubeconfig "$KUBECONFIG" config current-context 2>&1 || true
+          
+          # Check RBAC for reading k9b-scheduler deployment (required for P4c env check)
+          # Note: Only get is needed - the helper reads a named Deployment, not a list
+          echo "--- RBAC Check: Read k9b-scheduler deployment ---"
+          kubectl --kubeconfig "$KUBECONFIG" auth can-i get deployment/k9b-scheduler -n k9b 2>&1 || true
+
       - name: Show live cluster baseline
         run: |
           set -euo pipefail

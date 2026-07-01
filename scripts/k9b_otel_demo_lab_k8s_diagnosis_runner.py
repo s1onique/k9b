@@ -25,11 +25,19 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
     DIAGNOSIS_SOURCE_REAL,
     DIAGNOSIS_SOURCE_SIMULATED,
     FAILURE_REASON_LOOP_DISABLED,
+    FAILURE_REASON_LOOP_ENV_RBAC_DENIED,
+    FAILURE_REASON_LOOP_ENV_READ_FAILED,
     FAILURE_REASON_LOOP_ERROR,
     FAILURE_REASON_LOOP_IMPORT_FAILED,
     FAILURE_REASON_PASS_ARTIFACTS_MISSING,
     SIMULATION_ENV_VAR,
 )
+
+# Mapping from loop check reason codes to failure reason constants
+_LOOP_CHECK_REASON_TO_FAILURE: dict[str, str] = {
+    "automatic_loop_env_rbac_denied": FAILURE_REASON_LOOP_ENV_RBAC_DENIED,
+    "automatic_loop_env_read_failed": FAILURE_REASON_LOOP_ENV_READ_FAILED,
+}
 
 
 def run_diagnosis_loop(
@@ -102,25 +110,40 @@ def run_diagnosis_loop(
         # Use lazy import to avoid circular dependencies
         from k8s_diag_agent.collect.incident_diagnosis_auto_loop import (
             collect_automatic_diagnosis_evidence,
-            is_automatic_diagnosis_loop_enabled,
         )
 
         result["diagnosis_loop_module"] = "k8s_diag_agent.collect.incident_diagnosis_auto_loop"
+
+        # Import the new function that provides detailed reasons
+        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
+            get_automatic_loop_enabled_with_reason,
+        )
 
         # Check if automatic diagnosis is enabled on the SCHEDULER (not backend)
         # This is the authoritative check for whether the loop will run.
         # Use fail-closed behavior: if we can't read the scheduler deployment,
         # return False instead of masking with local env.
-        result["automatic_loop_enabled"] = is_automatic_diagnosis_loop_enabled(
+        enabled, check_result = get_automatic_loop_enabled_with_reason(
             kubeconfig=kubeconfig,
             namespace=namespace,
             allow_env_fallback=False,
         )
+        result["automatic_loop_enabled"] = enabled
+        result["loop_enabled_check_reason"] = check_result.reason
+        if check_result.error_message:
+            result["loop_enabled_check_error"] = check_result.error_message
 
         # Check if automatic diagnosis is enabled - FAIL CLOSED
-        if not result["automatic_loop_enabled"]:
-            log("  ERROR: K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED not set")
-            result["failure_reason"] = FAILURE_REASON_LOOP_DISABLED
+        if not enabled:
+            # Use the specific failure reason from the check result
+            failure_reason = _LOOP_CHECK_REASON_TO_FAILURE.get(
+                check_result.reason,
+                FAILURE_REASON_LOOP_DISABLED,
+            )
+            log(f"  ERROR: Automatic loop check failed: {check_result.reason}")
+            if check_result.error_message:
+                log(f"  Error: {check_result.error_message}")
+            result["failure_reason"] = failure_reason
             result["status"] = "disabled"
 
             # Only use simulation if explicitly allowed (test-only)
