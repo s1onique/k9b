@@ -13,6 +13,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
+    get_default_k9b_namespace,
+)
 from scripts.k9b_lab_common_helpers import log
 from scripts.k9b_otel_demo_lab_constants import (
     K8S_INJECTION_NODE_SELECTOR_KEY,
@@ -119,17 +122,23 @@ def run_diagnosis_loop(
             get_automatic_loop_enabled_with_reason,
         )
 
+        # NOTE: We check the k9b SCHEDULER namespace, NOT the incident namespace.
+        # The scheduler runs in k9b namespace and controls whether automatic
+        # diagnosis is enabled for ALL incidents.
+        k9b_namespace = get_default_k9b_namespace()
+
         # Check if automatic diagnosis is enabled on the SCHEDULER (not backend)
         # This is the authoritative check for whether the loop will run.
         # Use fail-closed behavior: if we can't read the scheduler deployment,
         # return False instead of masking with local env.
         enabled, check_result = get_automatic_loop_enabled_with_reason(
             kubeconfig=kubeconfig,
-            namespace=namespace,
+            namespace=k9b_namespace,
             allow_env_fallback=False,
         )
         result["automatic_loop_enabled"] = enabled
         result["loop_enabled_check_reason"] = check_result.reason
+        result["scheduler_namespace_checked"] = k9b_namespace
         if check_result.error_message:
             result["loop_enabled_check_error"] = check_result.error_message
 
@@ -142,7 +151,12 @@ def run_diagnosis_loop(
             )
             log(f"  ERROR: Automatic loop check failed: {check_result.reason}")
             if check_result.error_message:
-                log(f"  Error: {check_result.error_message}")
+                log(
+                    f"  Error: Cannot read k9b-scheduler deployment "
+                    f"in k9b control namespace {k9b_namespace!r}; "
+                    f"incident namespace was {namespace!r}. "
+                    f"Check error: {check_result.error_message}"
+                )
             result["failure_reason"] = failure_reason
             result["status"] = "disabled"
 
