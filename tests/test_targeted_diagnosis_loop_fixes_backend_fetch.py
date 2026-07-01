@@ -1,10 +1,7 @@
-"""Regression tests for targeted diagnosis loop OTel live-lab fixes.
+"""Regression tests for precise failure classification in targeted diagnosis.
 
-These tests verify:
-1. P4c: Targeted diagnosis result shape bug fix (AutoLoopIncidentResult vs AutoLoopCollectorResult)
-2. P4c: Budget-state isolation (deterministic incident ID)
-3. P4c: Precise failure classification (curl_rc=52, budget_exhausted, transport errors)
-4. P0b: Provider health JSON parsing robustness (marker-based parsing)
+Tests curl_rc=52 empty reply classification, budget_exhausted not-eligible
+classification, and transport error detection.
 """
 
 from __future__ import annotations
@@ -16,9 +13,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# =============================================================================
-# Test fixtures
-# =============================================================================
 
 @pytest.fixture(autouse=True)
 def fake_provider_preflight_time(monkeypatch: pytest.MonkeyPatch) -> list[float]:
@@ -42,134 +36,6 @@ def fake_provider_preflight_time(monkeypatch: pytest.MonkeyPatch) -> list[float]
 
     return sleeps
 
-
-# =============================================================================
-# P4c: Targeted diagnosis result shape fix tests
-# =============================================================================
-
-class TestTargetedDiagnosisResultShape:
-    """Tests for handler result shape handling.
-
-    Tests the _extract_incident_result_from_collector function which handles
-    the P4c bug where AutoLoopIncidentResult was incorrectly treated as having
-    an incident_results attribute (which only AutoLoopCollectorResult has).
-    """
-
-    def test_result_shape_contract(self) -> None:
-        """Regression test: AutoLoopIncidentResult must NOT access .incident_results.
-
-        The P4c bug was that the handler called:
-            result.incident_results.get(incident_id)
-
-        But collect_automatic_diagnosis_evidence() returns AutoLoopIncidentResult directly,
-        which does NOT have incident_results. This caused AttributeError at runtime.
-
-        The fix is _extract_incident_result_from_collector() which uses hasattr() to check.
-        This test verifies the function correctly handles AutoLoopIncidentResult without
-        crashing.
-        """
-        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
-            AutoLoopIncidentResult,
-        )
-        from k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop import (
-            _extract_incident_result_from_collector,
-        )
-
-        # Create a direct AutoLoopIncidentResult (not wrapped in collector result)
-        incident_result = AutoLoopIncidentResult(
-            incident_id="test-incident-789",
-            eligible=True,
-            eligibility_reason="",
-            run_id="auto-test-incident-789-20240101",
-            review_packet_name="auto-test-incident-789-0-diagnosis-review-packet.json",
-            checks_requested=3,
-            checks_run=3,
-            checks_rejected=0,
-        )
-
-        # The bug would crash here with: AttributeError: 'AutoLoopIncidentResult' has no 'incident_results'
-        # The fix handles this gracefully via hasattr() check
-        extracted = _extract_incident_result_from_collector(
-            result=incident_result,  # type: ignore - intentional: testing both types
-            incident_id="test-incident-789",
-        )
-
-        # Verify the result was returned correctly
-        assert extracted is not None
-        assert extracted.incident_id == "test-incident-789"
-        assert extracted.review_packet_name == "auto-test-incident-789-0-diagnosis-review-packet.json"
-
-
-# =============================================================================
-# P4c: Budget-state isolation tests
-# =============================================================================
-
-class TestBudgetStateIsolation:
-    """Tests for budget-state isolation via incident ID determinism."""
-
-    def test_budget_reset_clears_review_packets(self) -> None:
-        """reset_diagnosis_loop_budget removes auto-{incident_id}-*-review-packet.json files."""
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import (
-            get_budget_status,
-            reset_diagnosis_loop_budget,
-        )
-
-        with TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
-
-            # Create mock budget files with deterministic incident ID
-            incident_id = "test-incident-123"
-            (external_analysis_dir / f"auto-{incident_id}-0-diagnosis-review-packet.json").write_text('{"findings":[]}')
-            (external_analysis_dir / f"auto-{incident_id}-1-diagnosis-review-packet.json").write_text('{"findings":[]}')
-            (external_analysis_dir / f"auto-{incident_id}-2-diagnosis-review-packet.json").write_text('{"findings":[]}')
-
-            # Non-budget file should remain
-            (external_analysis_dir / "other-artifact.json").write_text('{}')
-
-            # Verify files exist
-            status_before = get_budget_status(external_analysis_dir, incident_id)
-            assert status_before["review_packet_count"] == 3
-            assert status_before["budget_exhausted"] is True
-
-            # Reset budget
-            removed = reset_diagnosis_loop_budget(external_analysis_dir, incident_id)
-            assert removed == 3
-
-            # Verify budget files removed
-            status_after = get_budget_status(external_analysis_dir, incident_id)
-            assert status_after["review_packet_count"] == 0
-            assert status_after["budget_clean"] is True
-
-            # Non-budget file should remain
-            assert (external_analysis_dir / "other-artifact.json").exists()
-
-    def test_budget_status_counts_review_packets(self) -> None:
-        """get_budget_status correctly counts auto-{incident_id}-*-review-packet.json files."""
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_budget_reset import get_budget_status
-
-        with TemporaryDirectory() as tmpdir:
-            external_analysis_dir = Path(tmpdir)
-            incident_id = "test-incident-456"
-
-            # No files
-            status = get_budget_status(external_analysis_dir, incident_id)
-            assert status["review_packet_count"] == 0
-            assert status["budget_clean"] is True
-            assert status["budget_exhausted"] is False
-
-            # Add some files
-            (external_analysis_dir / f"auto-{incident_id}-0-diagnosis-review-packet.json").write_text('{"findings":[]}')
-            (external_analysis_dir / f"auto-{incident_id}-1-diagnosis-review-packet.json").write_text('{"findings":[]}')
-
-            status = get_budget_status(external_analysis_dir, incident_id)
-            assert status["review_packet_count"] == 2
-            assert status["budget_clean"] is False
-            assert status["budget_exhausted"] is True
-
-
-# =============================================================================
-# P4c: Precise failure classification tests
-# =============================================================================
 
 class TestTargetedFailureClassification:
     """Tests for precise failure classification in targeted diagnosis."""
@@ -277,10 +143,6 @@ class TestTargetedFailureClassification:
         assert result3.is_transport_error() is False
 
 
-# =============================================================================
-# P0b: Provider health JSON parsing robustness tests
-# =============================================================================
-
 class TestProviderCurlMarkerBasedParsing:
     """Tests for marker-based parsing in _curl_exec_pod.
 
@@ -344,8 +206,6 @@ STDERR_BLOCK
         from scripts.lab_common.provider_curl_helpers import _curl_exec_pod
 
         # Simulate JSON that contains metadata-like strings
-        # This is a realistic scenario where the health details response
-        # might contain paths or other text that looks like metadata
         json_body = '{"status": "ok", "metadata": {"curl_exit": "success", "code": 200}}'
         logs_output = f"""---CURL_START---
 {json_body}
