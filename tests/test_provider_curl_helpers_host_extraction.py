@@ -148,6 +148,8 @@ class TestDiagnosticOutputIsolation:
         target_url = "http://k9b-backend.k9b.svc.cluster.local:8080/api/health"
         
         # Mock pod logs with diagnostic markers
+        # Parser captures all non-marker lines after ---CURL_START--- as body,
+        # regardless of whether metadata appears before or after the response body.
         logs_output = """
 RESOLVING_HOST=k9b-backend.k9b.svc.cluster.local
 Server:  10.96.0.10
@@ -156,9 +158,9 @@ Address: 10.96.0.10#53
 Name: k9b-backend.k9b.svc.cluster.local
 Address: 10.43.0.100
 ---CURL_START---
+{"status": "healthy", "version": "1.0.0"}
 CURL_EXIT=0
 HTTP_CODE=200
-{"status": "healthy", "version": "1.0.0"}
 """
         
         with patch("subprocess.run") as mock_run:

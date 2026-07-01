@@ -134,28 +134,60 @@ spec:
         )
         
         # Parse diagnostics from logs
+        # Extract body after ---CURL_START--- marker
+        # Handle both formats: metadata before body AND metadata after body
+        # (shell script outputs: CURL_EXIT, HTTP_CODE, then cat response)
+        # Stop capturing body after STDERR_BLOCK to prevent stderr content from
+        # being appended to the response body.
         http_code = 0
         curl_exit: int | None = None
-        body = logs_result.stdout
+        body_parts: list[str] = []
         stderr_parts: list[str] = []
+        seen_curl_start = False
+        in_stderr_block = False
         
         for line in logs_result.stdout.split("\n"):
-            if "HTTP_CODE=" in line:
+            stripped = line.strip()
+            if stripped == "---CURL_START---":
+                # Start capturing lines after this marker
+                seen_curl_start = True
+                continue
+            
+            if stripped == "STDERR_BLOCK":
+                # Stop capturing body, start capturing stderr
+                in_stderr_block = True
+                continue
+            
+            if in_stderr_block:
+                # Collect stderr lines after STDERR_BLOCK marker
+                stderr_parts.append(line)
+                continue
+            
+            if stripped.startswith("CURL_EXIT="):
                 try:
-                    http_code = int(line.split("HTTP_CODE=")[1].strip())
+                    curl_exit = int(stripped.split("=", 1)[1])
                 except (ValueError, IndexError):
                     pass
-            elif "CURL_EXIT=" in line:
+                continue
+            elif stripped.startswith("HTTP_CODE="):
                 try:
-                    curl_exit = int(line.split("CURL_EXIT=")[1].strip())
+                    http_code = int(stripped.split("=", 1)[1])
                 except (ValueError, IndexError):
                     pass
-            elif "RESOLVING_HOST=" in line or "---CURL_START---" in line or "NO_RESPONSE_BODY" in line or "STDERR_BLOCK" in line:
+                continue
+            elif stripped.startswith("RESOLVING_HOST=") or stripped == "NO_RESPONSE_BODY":
                 # Skip diagnostic markers
-                pass
-            elif line.startswith("server ") or line.startswith("Address ") or ":" in line:
+                continue
+            elif line.startswith("server ") or line.startswith("Address "):
                 # nslookup output, include for diagnostics
                 stderr_parts.append(line)
+                continue
+            
+            # Capture body lines after ---CURL_START--- and before STDERR_BLOCK
+            if seen_curl_start:
+                body_parts.append(line)
+        
+        body = "\n".join(body_parts)
         
         # Determine success/failure
         if pod_phase == "Unknown" and elapsed >= max_wait:
