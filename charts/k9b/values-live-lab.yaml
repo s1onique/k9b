@@ -22,11 +22,18 @@ rbac:
   clusterScoped: true
 
 # =============================================================================
-# Resources: Smaller, honest values for lab environments
-# Lab clusters often have limited resources or shared nodes.
-# Keep requests non-zero so the scheduler respects actual resource needs.
+# Backend: Enable cluster-wide binding for Service-based access
+# The backend must bind to 0.0.0.0 (not 127.0.0.1) for the scheduler to reach
+# it via Kubernetes Service. Without --unsafe-bind, the backend only listens on
+# loopback and other pods cannot connect.
+#
+# This is safe for live-lab because:
+# - Cluster is isolated (no external exposure)
+# - Lab environment has no sensitive production data
+# - Auth is disabled for convenience (no token required)
 # =============================================================================
 backend:
+  unsafeBind: true
   resources:
     requests:
       cpu: 25m

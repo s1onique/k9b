@@ -354,3 +354,56 @@ def phase_p0b_provider_preflight(
             artifacts={"provider_preflight_result": str(phase_dir / "provider-preflight-result.json")},
             duration_seconds=duration,
         )
+
+
+def phase_p0c_backend_connectivity_preflight(
+    config: LabConfig, artifact_dir: Path
+) -> LabPhaseResult:
+    """Phase P0c: Backend Connectivity Preflight Gate - verify scheduler can reach backend.
+
+    This phase checks if the k9b scheduler can reach the backend's /api/incidents
+    endpoint via the Kubernetes Service BEFORE expensive OTel Demo install phases.
+
+    This catches the --unsafe-bind misconfiguration (backend binding only to 127.0.0.1)
+    before P4c collapses into real_pass_artifacts_missing.
+
+    The failure reason will be: backend_service_unreachable_from_scheduler
+    """
+    from .k9b_lab_common_helpers import log
+    from .k9b_otel_demo_lab_backend_connectivity import run_backend_connectivity_preflight
+
+    start = time.time()
+    phase_dir = artifact_dir / "phase0-cluster" / "backend-connectivity-preflight"
+    phase_dir.mkdir(parents=True, exist_ok=True)
+
+    log("=== Phase P0c: Backend Connectivity Preflight Gate ===")
+    log("Checking if scheduler can reach backend via Service")
+
+    # Run backend connectivity preflight
+    result = run_backend_connectivity_preflight(
+        kubeconfig=config.kubeconfig,
+        namespace=K9B_NAMESPACE,
+        artifact_dir=phase_dir,
+        timeout_seconds=30,
+    )
+
+    duration = time.time() - start
+
+    if result.passed:
+        log(f"Backend connectivity preflight PASSED: {result.message}")
+        return LabPhaseResult(
+            phase="p0c-backend-connectivity-preflight",
+            success=True,
+            message=f"Backend connectivity preflight passed: {result.message}",
+            artifacts={"backend_connectivity_result": str(phase_dir / "backend-connectivity-result.json")},
+            duration_seconds=duration,
+        )
+    else:
+        log(f"Backend connectivity preflight FAILED: {result.failure_class} - {result.message}")
+        return LabPhaseResult(
+            phase="p0c-backend-connectivity-preflight",
+            success=False,
+            message=f"Backend connectivity preflight failed: {result.failure_class} - {result.message}",
+            artifacts={"backend_connectivity_result": str(phase_dir / "backend-connectivity-result.json")},
+            duration_seconds=duration,
+        )

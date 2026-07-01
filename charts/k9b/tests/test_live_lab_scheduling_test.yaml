@@ -339,3 +339,36 @@ tests:
       - notMatchRegex:
           path: data["health-config.json"]
           pattern: '"label":'
+
+  # =============================================================================
+  # BACKEND BIND: --unsafe-bind required for cluster-wide Service access
+  # Regression test for Phase P0c: backend must bind to 0.0.0.0 (not 127.0.0.1)
+  # for the scheduler to reach it via Kubernetes Service.
+  # Without --unsafe-bind, backend only listens on loopback and other pods cannot connect.
+  # =============================================================================
+
+  - it: backend using values-live-lab.yaml should render --unsafe-bind flag
+    # values-live-lab.yaml sets backend.unsafeBind: true for cluster-wide access
+    template: deployment.yaml
+    values:
+      - ../values-live-lab.yaml
+    set:
+      backend.auth.enabled: false
+      kubernetes.auth.mode: inCluster
+      serviceAccount.automountServiceAccountToken: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--unsafe-bind"
+
+  - it: backend using values-live-lab.yaml should render HEALTH_UI_HOST=0.0.0.0
+    # Backend must bind to 0.0.0.0 for cluster-wide access via Kubernetes Service
+    template: deployment.yaml
+    values:
+      - ../values-live-lab.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HEALTH_UI_HOST
+            value: "0.0.0.0"

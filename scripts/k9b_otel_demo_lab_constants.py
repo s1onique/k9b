@@ -170,6 +170,17 @@ FAILURE_BACKEND_SERVICE_MISSING = "backend_service_missing"
 FAILURE_BACKEND_DEPLOYMENT_MISSING = "backend_deployment_missing"
 FAILURE_BACKEND_ROLLOUT_NOT_READY = "backend_rollout_not_ready"
 
+# Backend bind failure class: scheduler cannot reach backend via Service
+# This catches the --unsafe-bind misconfiguration before P4c collapses into
+# real_pass_artifacts_missing.
+FAILURE_BACKEND_SERVICE_UNREACHABLE = "backend_service_unreachable_from_scheduler"
+
+# Backend /api/incidents endpoint unhealthy (HTTP error, not 200)
+FAILURE_BACKEND_INCIDENTS_ENDPOINT_UNHEALTHY = "backend_incidents_endpoint_unhealthy"
+
+# Backend /api/incidents endpoint returned unexpected payload shape
+FAILURE_BACKEND_INCIDENTS_ENDPOINT_UNEXPECTED_SHAPE = "backend_incidents_endpoint_unexpected_shape"
+
 # Traffic target failure classes
 FAILURE_TRAFFIC_TARGET_SERVICE_MISSING = "traffic_target_service_missing"
 

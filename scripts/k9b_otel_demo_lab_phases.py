@@ -49,9 +49,10 @@ from scripts.k9b_otel_demo_lab_provider_diagnosis import (
     phase_p4_persisted_diagnosis,
 )
 from scripts.k9b_otel_demo_lab_provider_health import (
-    # Provider smoke phases (P0, P0b, P1, P1b)
+    # Provider smoke phases (P0, P0b, P0c, P1, P1b)
     phase_p0_k9b_backend_prerequisite,
     phase_p0b_provider_preflight,
+    phase_p0c_backend_connectivity_preflight,
     phase_p1_backend_health_gate,
     phase_p1b_scheduler_health_gate,
 )
@@ -69,6 +70,8 @@ __all__ = [
     "phase_p0_k9b_backend_prerequisite",
     # Provider smoke phases (P0b - provider preflight before OTel install)
     "phase_p0b_provider_preflight",
+    # Provider smoke phases (P0c - backend connectivity preflight)
+    "phase_p0c_backend_connectivity_preflight",
     # Provider smoke phases (P1, P1b - health gates)
     "phase_p1_backend_health_gate",
     "phase_p1b_scheduler_health_gate",
