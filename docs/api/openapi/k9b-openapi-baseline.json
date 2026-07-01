@@ -1,0 +1,1030 @@
+{
+  "info": {
+    "description": "Machine-readable API contract for k9b incidents, snapshots, diagnosis loop, auth, runtime status, and diagnostics endpoints.",
+    "summary": "k9b backend API",
+    "title": "k9b API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/alertmanager-relevance-feedback": {
+      "post": {
+        "description": "Record operator feedback on AlertManager source relevance.",
+        "operationId": "record_alertmanager_relevance_feedback",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Feedback recorded"
+          }
+        },
+        "summary": "Record AlertManager relevance feedback",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "description": "Authenticate with username and password to create a session.",
+        "operationId": "post_auth_login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Login credentials",
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Login successful"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          }
+        },
+        "security": [],
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "description": "Terminate the current session.",
+        "operationId": "post_auth_logout",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Logout successful"
+          }
+        },
+        "security": [],
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "description": "Get information about the currently authenticated user.",
+        "operationId": "get_auth_me",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "User info",
+                  "properties": {
+                    "authenticated": {
+                      "type": "boolean"
+                    },
+                    "username": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Current user info"
+          }
+        },
+        "security": [],
+        "summary": "Get current user info",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/status": {
+      "get": {
+        "description": "Check if the current session is authenticated and get session info.",
+        "operationId": "get_auth_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Session status",
+                  "properties": {
+                    "authenticated": {
+                      "type": "boolean"
+                    },
+                    "username": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication status"
+          }
+        },
+        "security": [],
+        "summary": "Get authentication status",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/cluster-detail": {
+      "get": {
+        "description": "Get detailed information for a specific cluster.",
+        "operationId": "get_cluster_detail",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cluster_label",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Cluster detail"
+          }
+        },
+        "summary": "Get cluster detail",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/deterministic-next-check/promote": {
+      "post": {
+        "description": "Promote a deterministic next-check candidate.",
+        "operationId": "promote_deterministic_next_check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Promotion successful"
+          }
+        },
+        "summary": "Promote deterministic next-check",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/docs": {
+      "get": {
+        "description": "Returns an API reference HTML page that loads /api/openapi.json.",
+        "operationId": "get_api_docs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "HTML document",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "API reference HTML page"
+          }
+        },
+        "security": [],
+        "summary": "API documentation browser",
+        "tags": [
+          "openapi"
+        ]
+      }
+    },
+    "/api/fleet": {
+      "get": {
+        "description": "Get overview of all clusters in the fleet.",
+        "operationId": "get_fleet",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Fleet overview"
+          }
+        },
+        "summary": "Get fleet overview",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "description": "Kubernetes liveness/readiness probe endpoint. Returns 200 if backend is healthy.",
+        "operationId": "get_health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Backend is healthy"
+          },
+          "500": {
+            "description": "Backend is unhealthy"
+          }
+        },
+        "security": [],
+        "summary": "Backend health check",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/health/details": {
+      "get": {
+        "description": "Self-diagnosis endpoint available even when /api/health returns 500.",
+        "operationId": "get_health_details",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Detailed health info",
+                  "properties": {
+                    "checks": {
+                      "type": "object"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Health details"
+          }
+        },
+        "security": [],
+        "summary": "Detailed health diagnostics",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/incidents": {
+      "get": {
+        "description": "List all incidents with optional status filter.",
+        "operationId": "list_incidents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "incidents": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "List of incidents"
+          }
+        },
+        "summary": "List incidents",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/incidents/review-packet": {
+      "post": {
+        "description": "Generate a diagnostic review packet for an incident.",
+        "operationId": "create_incident_review_packet",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "incident_id": {
+                      "type": "string"
+                    },
+                    "review_packet_id": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Review packet generated"
+          }
+        },
+        "summary": "Generate incident review packet",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/incidents/snapshot": {
+      "post": {
+        "description": "Capture a cluster snapshot for the current state.",
+        "operationId": "capture_incident_snapshot",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "incident_id": {
+                      "type": "string"
+                    },
+                    "snapshot_id": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Snapshot captured"
+          }
+        },
+        "summary": "Capture incident snapshot",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/incidents/{incident_id}": {
+      "get": {
+        "description": "Get details for a specific incident by ID.",
+        "operationId": "get_incident_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Incident object",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Incident details"
+          },
+          "404": {
+            "description": "Incident not found"
+          }
+        },
+        "summary": "Get incident detail",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/incidents/{incident_id}/automatic-diagnosis-loop/one-pass": {
+      "post": {
+        "description": "Execute automatic diagnosis loop one-pass using the real collector.",
+        "operationId": "run_incident_automatic_diagnosis_loop",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Automatic diagnosis completed"
+          }
+        },
+        "summary": "Run automatic diagnosis loop one-pass",
+        "tags": [
+          "incidents",
+          "diagnosis"
+        ]
+      }
+    },
+    "/api/incidents/{incident_id}/automatic-diagnosis-review/handoff": {
+      "get": {
+        "description": "Get the handoff artifact for automatic diagnosis review.",
+        "operationId": "get_incident_diagnosis_review_handoff",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Diagnosis review handoff"
+          },
+          "404": {
+            "description": "Incident or handoff not found"
+          }
+        },
+        "summary": "Get automatic diagnosis review handoff",
+        "tags": [
+          "incidents",
+          "diagnosis"
+        ]
+      }
+    },
+    "/api/incidents/{incident_id}/diagnosis-loop/one-pass": {
+      "post": {
+        "description": "Execute a single pass of the diagnosis loop for an incident.",
+        "operationId": "run_incident_diagnosis_loop",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Diagnosis loop completed"
+          }
+        },
+        "summary": "Run one-pass diagnosis loop",
+        "tags": [
+          "incidents",
+          "diagnosis"
+        ]
+      }
+    },
+    "/api/incidents/{incident_id}/one-pass-diagnosis": {
+      "post": {
+        "description": "Execute one-pass diagnosis using the diagnosis service.",
+        "operationId": "run_incident_one_pass_diagnosis",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Diagnosis completed"
+          }
+        },
+        "summary": "Run one-pass diagnosis service",
+        "tags": [
+          "incidents",
+          "diagnosis"
+        ]
+      }
+    },
+    "/api/next-check-approval": {
+      "post": {
+        "description": "Approve a next-check for execution.",
+        "operationId": "approve_next_check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Approval recorded"
+          }
+        },
+        "summary": "Approve next-check",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/next-check-execution": {
+      "post": {
+        "description": "Execute a next-check with manual input.",
+        "operationId": "execute_next_check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Execution completed"
+          }
+        },
+        "summary": "Execute next-check",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/next-check-execution-usefulness": {
+      "post": {
+        "description": "Record operator feedback on next-check usefulness.",
+        "operationId": "record_next_check_usefulness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Feedback recorded"
+          }
+        },
+        "summary": "Record next-check usefulness feedback",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "description": "List notifications with optional filters.",
+        "operationId": "list_notifications",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cluster_label",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "notifications": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Notifications list"
+          }
+        },
+        "summary": "List notifications",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/openapi.json": {
+      "get": {
+        "description": "Returns the OpenAPI 3.1 schema as JSON for API introspection.",
+        "operationId": "get_openapi_schema",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "OpenAPI 3.1 schema document",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OpenAPI 3.1 schema"
+          }
+        },
+        "security": [],
+        "summary": "Get OpenAPI schema",
+        "tags": [
+          "openapi"
+        ]
+      }
+    },
+    "/api/proposals": {
+      "get": {
+        "description": "Get diagnostic proposals for the current run.",
+        "operationId": "get_proposals",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Proposals list"
+          }
+        },
+        "summary": "Get proposals",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/run": {
+      "get": {
+        "description": "Get details for the selected run.",
+        "operationId": "get_run_detail",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Run details"
+          }
+        },
+        "summary": "Get selected run detail",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/run-batch-next-check-execution": {
+      "post": {
+        "description": "Execute multiple next-checks in batch.",
+        "operationId": "run_batch_next_check_execution",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Batch execution completed"
+          }
+        },
+        "summary": "Batch execute next-checks",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/runs": {
+      "get": {
+        "description": "List all diagnostic runs with pagination.",
+        "operationId": "list_runs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cluster_label",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "runs": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "List of runs"
+          }
+        },
+        "summary": "List runs",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/runs/{run_id}/alertmanager-sources/{source_id}/action": {
+      "post": {
+        "description": "Perform an action (promote/disable) on an AlertManager source.",
+        "operationId": "perform_alertmanager_source_action",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Action performed"
+          }
+        },
+        "summary": "Perform AlertManager source action",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/runtime-status": {
+      "get": {
+        "description": "Get current runtime status and diagnostics information.",
+        "operationId": "get_runtime_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Runtime status"
+          }
+        },
+        "summary": "Get runtime status",
+        "tags": [
+          "runtime"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Admin authentication/session endpoints.",
+      "name": "auth"
+    },
+    {
+      "description": "Backend health check and diagnostics.",
+      "name": "health"
+    },
+    {
+      "description": "Incident listing, detail, snapshots, and review packets.",
+      "name": "incidents"
+    },
+    {
+      "description": "Read-only automatic/manual diagnosis loop endpoints.",
+      "name": "diagnosis"
+    },
+    {
+      "description": "Runtime status and diagnostics endpoints.",
+      "name": "runtime"
+    }
+  ]
+}

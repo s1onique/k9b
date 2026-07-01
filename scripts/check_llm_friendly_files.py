@@ -70,6 +70,9 @@ EXCLUDED_PATTERNS = {
     "Pipfile.lock",
     "requirements.txt",
     ".DS_Store",
+    # OpenAPI baseline files are generated/snapshot files, not human-authored
+    "k9b-openapi-baseline.json",
+    "operation-ids-baseline.txt",
 }
 
 # Allowed file extensions (empty means all)

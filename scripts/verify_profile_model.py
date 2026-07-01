@@ -348,6 +348,13 @@ STEPS: dict[str, dict] = {
         "description": "Generated frontend API client freshness gate",
         "is_expensive": False,
     },
+    "openapi-breaking-change": {
+        "command": ".venv/bin/python scripts/verify_openapi_breaking_changes.py",
+        "lane": "python",
+        "category": StepCategory.POLICY,
+        "description": "OpenAPI breaking-change snapshot gate",
+        "is_expensive": False,
+    },
 }
 
 

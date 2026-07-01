@@ -1,0 +1,35 @@
+# Operation ID baseline snapshot
+# Format: METHOD /path operation_id
+# This file is committed to track API contract stability.
+# Generated from k9b API_ROUTES registry.
+# To update: .venv/bin/python scripts/verify_openapi_breaking_changes.py --update-baseline
+POST /api/alertmanager-relevance-feedback record_alertmanager_relevance_feedback
+POST /api/auth/login post_auth_login
+POST /api/auth/logout post_auth_logout
+GET /api/auth/me get_auth_me
+GET /api/auth/status get_auth_status
+GET /api/cluster-detail get_cluster_detail
+POST /api/deterministic-next-check/promote promote_deterministic_next_check
+GET /api/docs get_api_docs
+GET /api/fleet get_fleet
+GET /api/health get_health
+GET /api/health/details get_health_details
+GET /api/incidents list_incidents
+POST /api/incidents/review-packet create_incident_review_packet
+POST /api/incidents/snapshot capture_incident_snapshot
+GET /api/incidents/{incident_id} get_incident_detail
+POST /api/incidents/{incident_id}/automatic-diagnosis-loop/one-pass run_incident_automatic_diagnosis_loop
+GET /api/incidents/{incident_id}/automatic-diagnosis-review/handoff get_incident_diagnosis_review_handoff
+POST /api/incidents/{incident_id}/diagnosis-loop/one-pass run_incident_diagnosis_loop
+POST /api/incidents/{incident_id}/one-pass-diagnosis run_incident_one_pass_diagnosis
+POST /api/next-check-approval approve_next_check
+POST /api/next-check-execution execute_next_check
+POST /api/next-check-execution-usefulness record_next_check_usefulness
+GET /api/notifications list_notifications
+GET /api/openapi.json get_openapi_schema
+GET /api/proposals get_proposals
+GET /api/run get_run_detail
+POST /api/run-batch-next-check-execution run_batch_next_check_execution
+GET /api/runs list_runs
+POST /api/runs/{run_id}/alertmanager-sources/{source_id}/action perform_alertmanager_source_action
+GET /api/runtime-status get_runtime_status
