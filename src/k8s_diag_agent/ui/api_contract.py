@@ -18,9 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .api_contract_types import APISchema, APIOperation, APIResponse
+from .api_contract_types import APIOperation, APISchema
 from .api_routes_registry import API_ROUTES
-
 
 # =============================================================================
 # Helpers

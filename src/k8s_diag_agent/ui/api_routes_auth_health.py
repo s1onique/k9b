@@ -5,8 +5,7 @@ Split from api_routes_registry.py to keep file sizes below LLM-friendly threshol
 
 from __future__ import annotations
 
-from .api_contract_types import APISchema, APIOperation, APIResponse
-
+from .api_contract_types import APIOperation, APIResponse, APISchema
 
 # =============================================================================
 # Auth endpoints (public - no auth required)
