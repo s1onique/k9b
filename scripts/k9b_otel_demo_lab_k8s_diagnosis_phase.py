@@ -177,11 +177,17 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
                 f"incident_id={incident_id}"
             )
         elif failure_reason == "backend_incident_fetch_failed":
+            # Enhanced: Extract backend fetch result for actionable diagnostics
+            fetch_result = evidence.get("backend_incident_fetch_result") or {}
             failure_msg = (
                 f"backend_incident_fetch_failed: "
                 f"Could not fetch incident from backend. "
                 f"Check backend health and incident existence. "
-                f"incident_id={incident_id}"
+                f"incident_id={incident_id}. "
+                f"backend_url={fetch_result.get('url', 'N/A')}. "
+                f"http_code={fetch_result.get('http_status', 'N/A')}. "
+                f"curl_rc={fetch_result.get('curl_rc', 'N/A')}. "
+                f"stderr={fetch_result.get('stderr_prefix', 'N/A')[:100]}"
             )
         elif failure_reason == "kubeconfig_required":
             failure_msg = (

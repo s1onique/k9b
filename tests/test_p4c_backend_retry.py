@@ -8,9 +8,14 @@ These tests verify:
   - curl_rc=7  -> backend_endpoint_not_ready
   - curl_rc=28 -> backend_incident_fetch_transport_error
   - http=000   -> backend_endpoint_not_ready
+- curl_rc is never None when curl actually executed
 - 404 not found is NOT retried
 - HTTP errors are NOT retried
 - Contract errors are NOT retried
+
+Split into modules:
+- test_p4c_backend_retry_constants.py: Constants tests
+- test_p4c_backend_retry_curl_rc.py: curl_rc preservation tests
 """
 
 from __future__ import annotations
@@ -67,7 +72,7 @@ class TestBackendRetryBehavior:
         fail_result.success = False
         fail_result.error_class = "backend_incident_fetch_transport_error"
         fail_result.http_status = 0
-        fail_result.curl_rc = None
+        fail_result.curl_rc = 7  # Connection refused
 
         success_result = MagicMock()
         success_result.success = True
@@ -146,118 +151,6 @@ class TestBackendRetryBehavior:
         assert result.error_class == FAILURE_BACKEND_INCIDENT_FETCH_HTTP_ERROR
         mock_sleep.assert_not_called()  # No retry
 
-    def test_classify_dns_failure_after_retries(self) -> None:
-        """After retries exhausted, DNS failure (curl_rc=6) should be classified as dns_resolution_failed."""
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
-            FAILURE_BACKEND_DNS_RESOLUTION_FAILED,
-        )
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry import (
-            fetch_backend_incident_detail_with_retry,
-        )
-
-        # All attempts fail with DNS resolution error
-        dns_fail_result = MagicMock()
-        dns_fail_result.success = False
-        dns_fail_result.error_class = "backend_incident_fetch_transport_error"
-        dns_fail_result.http_status = 0
-        dns_fail_result.curl_rc = 6  # DNS resolution failed
-        dns_fail_result.url = "http://localhost:8080/api/incidents/test"
-        dns_fail_result.api_path = "/api/incidents/test"
-        dns_fail_result.encoded_incident_id = "test"
-        dns_fail_result.body_prefix = ""
-        dns_fail_result.stderr_prefix = "Could not resolve host"
-
-        # Reduce deadline for faster test
-        with patch(
-            "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.fetch_backend_incident_detail_result",
-            return_value=dns_fail_result,
-        ), patch(
-            "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.P4C_BACKEND_RETRY_DEADLINE_SECONDS",
-            1,  # 1 second deadline for faster test
-        ):
-            result = fetch_backend_incident_detail_with_retry(
-                kubeconfig="/fake/kubeconfig",
-                namespace="k9b",
-                incident_id="test-123",
-            )
-
-        assert result.success is False
-        assert result.error_class == FAILURE_BACKEND_DNS_RESOLUTION_FAILED
-
-    def test_classify_endpoint_not_ready_after_retries(self) -> None:
-        """After retries exhausted, connection refused (curl_rc=7) should be classified as endpoint_not_ready."""
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
-            FAILURE_BACKEND_ENDPOINT_NOT_READY,
-        )
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry import (
-            fetch_backend_incident_detail_with_retry,
-        )
-
-        # All attempts fail with connection refused
-        conn_fail_result = MagicMock()
-        conn_fail_result.success = False
-        conn_fail_result.error_class = "backend_incident_fetch_transport_error"
-        conn_fail_result.http_status = 0
-        conn_fail_result.curl_rc = 7  # Connection refused
-        conn_fail_result.url = "http://localhost:8080/api/incidents/test"
-        conn_fail_result.api_path = "/api/incidents/test"
-        conn_fail_result.encoded_incident_id = "test"
-        conn_fail_result.body_prefix = "Connection refused"
-        conn_fail_result.stderr_prefix = "Connection refused"
-
-        with patch(
-            "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.fetch_backend_incident_detail_result",
-            return_value=conn_fail_result,
-        ), patch(
-            "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.P4C_BACKEND_RETRY_DEADLINE_SECONDS",
-            1,
-        ):
-            result = fetch_backend_incident_detail_with_retry(
-                kubeconfig="/fake/kubeconfig",
-                namespace="k9b",
-                incident_id="test-123",
-            )
-
-        assert result.success is False
-        assert result.error_class == FAILURE_BACKEND_ENDPOINT_NOT_READY
-
-    def test_classify_http_0_as_endpoint_not_ready(self) -> None:
-        """HTTP 0 (no response) should be classified as endpoint_not_ready after retries."""
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
-            FAILURE_BACKEND_ENDPOINT_NOT_READY,
-        )
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry import (
-            fetch_backend_incident_detail_with_retry,
-        )
-
-        # HTTP 0 indicates service not reachable
-        http_0_result = MagicMock()
-        http_0_result.success = False
-        http_0_result.error_class = "backend_incident_fetch_transport_error"
-        http_0_result.http_status = 0
-        http_0_result.curl_rc = None  # No curl error, just no HTTP response
-        http_0_result.url = "http://localhost:8080/api/incidents/test"
-        http_0_result.api_path = "/api/incidents/test"
-        http_0_result.encoded_incident_id = "test"
-        http_0_result.body_prefix = ""
-        http_0_result.stderr_prefix = ""
-
-        with patch(
-            "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.fetch_backend_incident_detail_result",
-            return_value=http_0_result,
-        ), patch(
-            "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.P4C_BACKEND_RETRY_DEADLINE_SECONDS",
-            1,
-        ):
-            result = fetch_backend_incident_detail_with_retry(
-                kubeconfig="/fake/kubeconfig",
-                namespace="k9b",
-                incident_id="test-123",
-            )
-
-        assert result.success is False
-        assert result.error_class == FAILURE_BACKEND_ENDPOINT_NOT_READY
-
     def test_retry_on_invalid_json(self) -> None:
         """Invalid JSON should be retried (service may not be fully ready)."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry import (
@@ -290,58 +183,102 @@ class TestBackendRetryBehavior:
         mock_sleep.assert_called()  # Should have retried
 
 
-class TestBackendRetryConstants:
-    """Tests for P4c backend retry constants."""
+class TestNamespaceQualifiedURLs:
+    """Tests for namespace-qualified backend URL construction.
 
-    def test_retry_constants_exist(self) -> None:
-        """P4c backend retry constants should be defined."""
-        from scripts.lab_common.constants import (
-            P4C_BACKEND_RETRY_DEADLINE_SECONDS,
-            P4C_BACKEND_RETRY_INITIAL_SLEEP_SECONDS,
-            P4C_BACKEND_RETRY_MAX_SLEEP_SECONDS,
+    Ensures P4c uses namespace-qualified Kubernetes Service DNS,
+    consistent with P0c backend connectivity preflight.
+    """
+
+    def test_build_backend_url_uses_namespace_qualified_service(self) -> None:
+        """Backend URL should use namespace-qualified Kubernetes Service DNS."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http import (
+            _build_backend_url,
         )
 
-        assert P4C_BACKEND_RETRY_DEADLINE_SECONDS == 60
-        assert P4C_BACKEND_RETRY_INITIAL_SLEEP_SECONDS == 0.25
-        assert P4C_BACKEND_RETRY_MAX_SLEEP_SECONDS == 8
-
-    def test_exponential_backoff_sequence(self) -> None:
-        """Verify exponential backoff sequence matches requirements."""
-        from scripts.lab_common.constants import (
-            P4C_BACKEND_RETRY_INITIAL_SLEEP_SECONDS,
-            P4C_BACKEND_RETRY_MAX_SLEEP_SECONDS,
+        url, api_path, encoded_id = _build_backend_url(
+            namespace="k9b",
+            incident_id="test-incident-123",
+            backend_port=8080,
         )
 
-        # Expected backoff sequence: 0.25, 0.5, 1.0, 2.0, 4.0, 8.0
-        backoff_sequence = []
-        current = float(P4C_BACKEND_RETRY_INITIAL_SLEEP_SECONDS)
-        max_sleep = float(P4C_BACKEND_RETRY_MAX_SLEEP_SECONDS)
+        # Should use namespace-qualified Service DNS
+        assert "k9b-backend.k9b.svc.cluster.local" in url
+        assert ":8080" in url
+        assert api_path == "/api/incidents/test-incident-123"
+        assert encoded_id == "test-incident-123"
 
-        while current <= max_sleep * 2:  # Generate a few iterations
-            backoff_sequence.append(current)
-            current = min(current * 2, max_sleep)
-            if current >= max_sleep:
-                break
-
-        expected_sequence = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
-        assert backoff_sequence == expected_sequence[:len(backoff_sequence)]
-
-
-class TestBackendFailureConstants:
-    """Tests for backend failure constants."""
-
-    def test_dns_resolution_failed_constant(self) -> None:
-        """FAILURE_BACKEND_DNS_RESOLUTION_FAILED should be defined."""
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
-            FAILURE_BACKEND_DNS_RESOLUTION_FAILED,
+    def test_build_backend_url_with_different_namespace(self) -> None:
+        """Backend URL should work with different namespaces."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http import (
+            _build_backend_url,
         )
 
-        assert FAILURE_BACKEND_DNS_RESOLUTION_FAILED == "backend_dns_resolution_failed"
-
-    def test_endpoint_not_ready_constant(self) -> None:
-        """FAILURE_BACKEND_ENDPOINT_NOT_READY should be defined."""
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
-            FAILURE_BACKEND_ENDPOINT_NOT_READY,
+        url, _, _ = _build_backend_url(
+            namespace="custom-namespace",
+            incident_id="incident-456",
+            backend_port=9090,
         )
 
-        assert FAILURE_BACKEND_ENDPOINT_NOT_READY == "backend_endpoint_not_ready"
+        assert "k9b-backend.custom-namespace.svc.cluster.local:9090" in url
+
+    def test_build_backend_url_encodes_special_chars(self) -> None:
+        """Backend URL should URL-encode incident IDs with special characters."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http import (
+            _build_backend_url,
+        )
+
+        url, api_path, encoded_id = _build_backend_url(
+            namespace="k9b",
+            incident_id="incident/with/slashes",
+            backend_port=8080,
+        )
+
+        # Slashes should be encoded
+        assert "%2F" in encoded_id or "/" not in encoded_id
+        assert "incident%2Fwith%2Fslashes" in url or encoded_id == "incident%2Fwith%2Fslashes"
+
+    def test_build_targeted_diagnosis_url(self) -> None:
+        """Targeted diagnosis URL should use namespace-qualified Service DNS."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http import (
+            _build_targeted_diagnosis_url,
+        )
+
+        url, api_path = _build_targeted_diagnosis_url(
+            namespace="k9b",
+            incident_id="diag-incident-789",
+            backend_port=8080,
+        )
+
+        assert "k9b-backend.k9b.svc.cluster.local" in url
+        assert "/automatic-diagnosis-loop/one-pass" in api_path
+        assert "diag-incident-789" in api_path or "diag-incident-789" in url
+
+    def test_p4c_and_p0c_use_same_namespace_qualified_service(self) -> None:
+        """P4c and P0c should use the same namespace-qualified Service DNS pattern."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http import (
+            _build_backend_url,
+        )
+
+        # P0c pattern from k9b_otel_demo_lab_backend_connectivity.py:
+        # backend_url = f"http://{backend_service}.{namespace}.svc.cluster.local:{backend_port}/api/incidents"
+        # Where backend_service = K9B_BACKEND_SERVICE = "k9b-backend"
+
+        namespace = "k9b"
+        backend_port = 8080
+        service = "k9b-backend"
+
+        # P0c expected pattern
+        p0c_expected = f"http://{service}.{namespace}.svc.cluster.local:{backend_port}/api/incidents"
+
+        # P4c actual pattern
+        url, _, _ = _build_backend_url(namespace, "test-id", backend_port)
+
+        # Extract the host:port portion
+        p4c_host_port = url.replace("http://", "").split("/")[0]
+        p0c_host_port = p0c_expected.replace("http://", "").split("/")[0]
+
+        assert p4c_host_port == p0c_host_port, (
+            f"P4c and P0c should use same namespace-qualified Service DNS: "
+            f"P4c={p4c_host_port}, P0c={p0c_host_port}"
+        )

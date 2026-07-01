@@ -17,7 +17,6 @@ import json
 import shlex
 import subprocess
 import time
-import urllib.parse
 
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     FAILURE_BACKEND_INCIDENT_FETCH_CONTRACT_ERROR,
@@ -31,6 +30,10 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     BackendIncidentDetail,
     BackendIncidentFetchResult,
     TargetedDiagnosisInvocationResult,
+)
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_urls import (
+    _build_backend_url,
+    _build_targeted_diagnosis_url,
 )
 from scripts.lab_common.constants import (
     DEFAULT_K9B_BACKEND_CONTAINER,
@@ -68,7 +71,10 @@ def curl_backend_exec(
         body: Request body for POST requests
 
     Returns:
-        CurlResult with detailed diagnostics
+        CurlResult with detailed diagnostics. curl_rc is always an integer
+        (not None) when curl was executed, even on failure. curl_rc=None
+        is reserved for the distinct case where curl was not executed
+        (e.g., due to subprocess.TimeoutExpired exception).
     """
     headers = headers or {}
 
@@ -113,12 +119,13 @@ exit 0
             exec_cmd, capture_output=True, text=True, timeout=timeout_seconds + 5
         )
     except subprocess.TimeoutExpired:
+        # curl was NOT executed due to exception - this is the ONLY case where curl_rc=None
         return CurlResult(
             success=False,
             body="Exec timeout",
             http_code=0,
-            curl_rc=None,
-            stderr="Timeout expired",
+            curl_rc=None,  # curl was not executed
+            stderr="Timeout expired during kubectl exec",
         )
 
     # Parse output
@@ -131,6 +138,8 @@ exit 0
             try:
                 curl_rc = int(line.split("CURL_EXIT=")[1].strip())
             except (ValueError, IndexError):
+                # Failed to parse curl_rc - this shouldn't happen if curl ran
+                # but we handle it gracefully
                 pass
         elif "HTTP_CODE=" in line:
             try:
@@ -142,6 +151,17 @@ exit 0
 
     body = "\n".join(body_parts)
     stderr = exec_result.stderr[:200] if exec_result.stderr else ""
+
+    # If curl_rc is still None after parsing, curl was not executed properly
+    # This is distinct from curl_rc=0 (success) or curl_rc!=0 (curl error)
+    if curl_rc is None:
+        return CurlResult(
+            success=False,
+            body=body,
+            http_code=http_code,
+            curl_rc=None,  # curl was not executed properly
+            stderr=f"{stderr}; parse error: CURL_EXIT marker not found".strip(),
+        )
 
     success = curl_rc == 0 and 200 <= http_code < 400
 
@@ -191,6 +211,9 @@ def fetch_backend_incident_detail_result(
     This function provides richer diagnostics than fetch_backend_incident_detail()
     by returning a BackendIncidentFetchResult with precise error classification.
 
+    Uses namespace-qualified Kubernetes Service DNS to ensure the backend
+    is reachable from any namespace.
+
     Args:
         kubeconfig: Path to kubeconfig
         namespace: k9b namespace
@@ -200,9 +223,7 @@ def fetch_backend_incident_detail_result(
     Returns:
         BackendIncidentFetchResult with detailed diagnostics and error classification.
     """
-    encoded_id = urllib.parse.quote(incident_id, safe="")
-    api_path = f"/api/incidents/{encoded_id}"
-    url = f"http://localhost:{backend_port}{api_path}"
+    url, api_path, encoded_id = _build_backend_url(namespace, incident_id, backend_port)
 
     curl_result = curl_backend_exec(
         kubeconfig=kubeconfig,
@@ -215,12 +236,38 @@ def fetch_backend_incident_detail_result(
     body_prefix = curl_result.body[:200] if curl_result.body else ""
     stderr_prefix = curl_result.stderr[:200] if curl_result.stderr else ""
 
-    # Step 1: Transport error (http_code=0 or nonzero curl_rc)
-    if curl_result.http_code == 0 or curl_result.curl_rc is not None and curl_result.curl_rc != 0:
+    # Step 0: Check if curl was executed (curl_rc should not be None if curl ran)
+    # If curl_rc is None, it means curl_backend_exec hit an exception
+    if curl_result.curl_rc is None:
         return BackendIncidentFetchResult(
             success=False,
             error_class=FAILURE_BACKEND_INCIDENT_FETCH_TRANSPORT_ERROR,
-            error_detail=f"Transport error: curl_rc={curl_result.curl_rc}, http_code={curl_result.http_code}",
+            error_detail=f"Transport error: curl not executed, exec timeout or exception. stderr={curl_result.stderr[:100]!r}",
+            http_status=curl_result.http_code,
+            curl_rc=None,  # Intentionally None - curl was not executed
+            url=url,
+            api_path=api_path,
+            encoded_incident_id=encoded_id,
+            body_prefix=body_prefix,
+            stderr_prefix=stderr_prefix,
+        )
+
+    # Step 1: Transport error (http_code=0 or nonzero curl_rc)
+    if curl_result.http_code == 0 or curl_result.curl_rc != 0:
+        # Classify specific curl_rc values for better diagnostics
+        if curl_result.curl_rc == 6:
+            error_detail = f"Transport error: backend DNS resolution failure (curl_rc=6), http_code={curl_result.http_code}"
+        elif curl_result.curl_rc == 7:
+            error_detail = f"Transport error: backend endpoint/connect failure (curl_rc=7), http_code={curl_result.http_code}"
+        elif curl_result.curl_rc == 28:
+            error_detail = f"Transport error: backend timeout (curl_rc=28), http_code={curl_result.http_code}"
+        else:
+            error_detail = f"Transport error: curl_rc={curl_result.curl_rc}, http_code={curl_result.http_code}"
+
+        return BackendIncidentFetchResult(
+            success=False,
+            error_class=FAILURE_BACKEND_INCIDENT_FETCH_TRANSPORT_ERROR,
+            error_detail=error_detail,
             http_status=curl_result.http_code,
             curl_rc=curl_result.curl_rc,
             url=url,
@@ -335,6 +382,9 @@ def invoke_targeted_automatic_diagnosis_loop(
     REAL automatic diagnosis loop collector. Do NOT use /diagnosis-loop/one-pass;
     it is not the automatic collector path.
 
+    Uses namespace-qualified Kubernetes Service DNS to ensure the backend
+    is reachable from any namespace.
+
     Args:
         kubeconfig: Path to kubeconfig
         namespace: k9b namespace
@@ -344,8 +394,7 @@ def invoke_targeted_automatic_diagnosis_loop(
     Returns:
         TargetedDiagnosisInvocationResult with invocation details
     """
-    encoded_id = urllib.parse.quote(incident_id, safe="")
-    url = f"http://localhost:{backend_port}/api/incidents/{encoded_id}/automatic-diagnosis-loop/one-pass"
+    url, api_path = _build_targeted_diagnosis_url(namespace, incident_id, backend_port)
 
     headers = {"Content-Type": "application/json"}
 
@@ -369,15 +418,37 @@ def invoke_targeted_automatic_diagnosis_loop(
         body=request_body,
     )
 
-    # Classify failure
-    if curl_result.http_code == 0 or (curl_result.curl_rc is not None and curl_result.curl_rc != 0):
+    # Check if curl was executed (curl_rc should not be None if curl ran)
+    if curl_result.curl_rc is None:
         return TargetedDiagnosisInvocationResult(
             success=False,
             http_status=curl_result.http_code,
             body=curl_result.body[:500],
             json_parsed=False,
             error_class=FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
-            error_detail=f"Transport error: curl_rc={curl_result.curl_rc}, http_code={curl_result.http_code}",
+            error_detail=f"Transport error: curl not executed, exec timeout or exception. stderr={curl_result.stderr[:100]!r}",
+            curl_rc=None,
+            stderr_prefix=curl_result.stderr[:100],
+        )
+
+    # Classify transport failure with specific curl_rc details
+    if curl_result.http_code == 0 or curl_result.curl_rc != 0:
+        if curl_result.curl_rc == 6:
+            error_detail = f"Transport error: backend DNS resolution failure (curl_rc=6), http_code={curl_result.http_code}"
+        elif curl_result.curl_rc == 7:
+            error_detail = f"Transport error: backend endpoint/connect failure (curl_rc=7), http_code={curl_result.http_code}"
+        elif curl_result.curl_rc == 28:
+            error_detail = f"Transport error: backend timeout (curl_rc=28), http_code={curl_result.http_code}"
+        else:
+            error_detail = f"Transport error: curl_rc={curl_result.curl_rc}, http_code={curl_result.http_code}"
+
+        return TargetedDiagnosisInvocationResult(
+            success=False,
+            http_status=curl_result.http_code,
+            body=curl_result.body[:500],
+            json_parsed=False,
+            error_class=FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
+            error_detail=error_detail,
             curl_rc=curl_result.curl_rc,
             stderr_prefix=curl_result.stderr[:100],
         )
@@ -416,4 +487,3 @@ def invoke_targeted_automatic_diagnosis_loop(
             curl_rc=curl_result.curl_rc,
             stderr_prefix=curl_result.stderr[:100],
         )
-
