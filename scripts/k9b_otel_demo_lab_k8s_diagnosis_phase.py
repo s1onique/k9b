@@ -128,7 +128,8 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     # This is the most common P4c failure - the diagnosis loop never ran.
     # Fail fast with a clear message instead of cascading through term checks.
     if not evidence.get("real_loop_invoked", False):
-        failure_reason = evidence.get("failure_reason", "unknown")
+        # Default to automatic_diagnosis_loop_disabled when no specific reason is set
+        failure_reason = evidence.get("failure_reason") or "automatic_diagnosis_loop_disabled"
         loop_check_reason = evidence.get("loop_enabled_check_reason", "")
         
         # Provide specific guidance based on the failure reason

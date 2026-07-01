@@ -318,26 +318,20 @@ def get_automatic_loop_enabled_with_reason(
             )
         # For other errors with allow_env_fallback=True, fall through to env check
 
-    # No env var found in deployment, or cluster read failed but fallback allowed
-    # Fallback to local environment for local development/testing
-    enabled = os.environ.get(_AUTOMATIC_LOOP_ENV_VAR, "false").lower() == "true"
-    if scheduler_env_value is None and read_error is not None:
-        # Cluster read failed but we fell back to env
-        return enabled, LoopEnabledCheckResult(
-            enabled=enabled,
+    # Deployment was read successfully but env var not found in spec
+    # Check if os.environ fallback is enabled
+    fallback_enabled = os.environ.get(_AUTOMATIC_LOOP_ENV_VAR, "false").lower() == "true"
+    if fallback_enabled:
+        # Using fallback from os.environ
+        return True, LoopEnabledCheckResult(
+            enabled=True,
             source="environment",
-            reason="env_var_from_fallback" if enabled else "env_var_not_set",
+            reason="env_var_from_fallback",
         )
-    elif scheduler_env_value is None:
-        # No env var found in deployment spec
-        return enabled, LoopEnabledCheckResult(
-            enabled=enabled,
-            source="environment",
-            reason="env_var_from_fallback" if enabled else "env_var_not_set",
-        )
-    # This branch won't be reached due to earlier return, but kept for completeness
-    return enabled, LoopEnabledCheckResult(
-        enabled=enabled,
-        source="environment",
-        reason="env_var_from_fallback" if enabled else "env_var_not_set",
+
+    # Deployment read succeeded but env var not set, no fallback enabled
+    return False, LoopEnabledCheckResult(
+        enabled=False,
+        source="deployment",
+        reason="env_var_not_set",
     )

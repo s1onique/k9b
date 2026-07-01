@@ -103,7 +103,7 @@ class TestLoopEnabledCheckResultReasonCodes:
     ) -> None:
         """Env var found and enabled in deployment returns correct reason."""
 
-        def fake_get_deployment(
+        def fake_read_deployment(
             kubeconfig: str | None,
             namespace: str,
             deployment: str,
@@ -113,8 +113,8 @@ class TestLoopEnabledCheckResultReasonCodes:
             return "true", None
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_config._get_deployment_env_value",
-            fake_get_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
+            fake_read_deployment,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -132,7 +132,7 @@ class TestLoopEnabledCheckResultReasonCodes:
     ) -> None:
         """Env var found but set to false returns correct reason."""
 
-        def fake_get_deployment(
+        def fake_read_deployment(
             kubeconfig: str | None,
             namespace: str,
             deployment: str,
@@ -142,8 +142,8 @@ class TestLoopEnabledCheckResultReasonCodes:
             return "false", None
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_config._get_deployment_env_value",
-            fake_get_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
+            fake_read_deployment,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -161,7 +161,7 @@ class TestLoopEnabledCheckResultReasonCodes:
     ) -> None:
         """Env var not in deployment returns correct reason."""
 
-        def fake_get_deployment(
+        def fake_read_deployment(
             kubeconfig: str | None,
             namespace: str,
             deployment: str,
@@ -171,8 +171,8 @@ class TestLoopEnabledCheckResultReasonCodes:
             return None, None
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_config._get_deployment_env_value",
-            fake_get_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
+            fake_read_deployment,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -190,7 +190,7 @@ class TestLoopEnabledCheckResultReasonCodes:
     ) -> None:
         """RBAC denied returns 'automatic_loop_env_rbac_denied' reason."""
 
-        def fake_get_deployment(
+        def fake_read_deployment(
             kubeconfig: str | None,
             namespace: str,
             deployment: str,
@@ -204,8 +204,8 @@ class TestLoopEnabledCheckResultReasonCodes:
             )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_config._get_deployment_env_value",
-            fake_get_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
+            fake_read_deployment,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -225,7 +225,7 @@ class TestLoopEnabledCheckResultReasonCodes:
     ) -> None:
         """Network/timeout error returns 'automatic_loop_env_read_failed' reason."""
 
-        def fake_get_deployment(
+        def fake_read_deployment(
             kubeconfig: str | None,
             namespace: str,
             deployment: str,
@@ -239,8 +239,8 @@ class TestLoopEnabledCheckResultReasonCodes:
             )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_config._get_deployment_env_value",
-            fake_get_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
+            fake_read_deployment,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -259,7 +259,7 @@ class TestLoopEnabledCheckResultReasonCodes:
     ) -> None:
         """Not found error returns 'automatic_loop_env_read_failed' reason."""
 
-        def fake_get_deployment(
+        def fake_read_deployment(
             kubeconfig: str | None,
             namespace: str,
             deployment: str,
@@ -273,8 +273,8 @@ class TestLoopEnabledCheckResultReasonCodes:
             )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_config._get_deployment_env_value",
-            fake_get_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
+            fake_read_deployment,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -293,7 +293,7 @@ class TestLoopEnabledCheckResultReasonCodes:
     ) -> None:
         """Env var not set with allow_env_fallback=True uses os.environ."""
 
-        def fake_get_deployment(
+        def fake_read_deployment(
             kubeconfig: str | None,
             namespace: str,
             deployment: str,
@@ -303,8 +303,8 @@ class TestLoopEnabledCheckResultReasonCodes:
             return None, None
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_config._get_deployment_env_value",
-            fake_get_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
+            fake_read_deployment,
         )
         monkeypatch.setenv("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED", "true")
 
