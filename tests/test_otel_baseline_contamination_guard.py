@@ -91,8 +91,12 @@ class TestPhaseOrdering:
     def test_unschedulable_shipping_injection_after_baseline(self) -> None:
         """unschedulable-shipping injection (P2b) must happen after baseline readiness (Phase 1b).
         
-        This test verifies the phase ordering by checking the run_lab function
-        does NOT call phase_p2b before phase1b completes.
+        This test verifies the phase ordering by checking that:
+        1. Phase 1b baseline readiness is called BEFORE P2b injection
+        2. P2b injection is called INSIDE the scenario block (after baseline is ready)
+        
+        The key fix: search for scenario block AFTER Phase 1b to find the actual
+        execution block, not the p0c_required condition earlier in the file.
         """
         lab_file = Path(__file__).parent.parent / "scripts" / "k9b_otel_demo_lab.py"
         content = lab_file.read_text()
@@ -101,27 +105,25 @@ class TestPhaseOrdering:
         run_lab_start = content.find("def run_lab(")
         assert run_lab_start != -1, "run_lab function should exist"
         
-        # Find Phase 1b baseline readiness
-        phase1b_pos = content.find("phase1b_baseline_readiness", run_lab_start)
+        # Find Phase 1b baseline readiness (the actual call, not definition/import)
+        phase1b_pos = content.find("phase1b_baseline_readiness(config, artifact_dir)", run_lab_start)
         assert phase1b_pos != -1, "phase1b_baseline_readiness should be called"
         
-        # Find the unschedulable-shipping scenario block
-        unschedulable_pos = content.find('incident_scenario == "unschedulable-shipping"', run_lab_start)
+        # Find the unschedulable-shipping scenario block - search AFTER Phase 1b
+        # to avoid matching the p0c_required condition at line ~133
+        unschedulable_pos = content.find('if config.incident_scenario == "unschedulable-shipping":', phase1b_pos)
         assert unschedulable_pos != -1, "unschedulable-shipping scenario block should exist"
         
-        # Find P2b injection call
-        p2b_pos = content.find("phase_p2b_inject_unschedulable_shipping_rollout", run_lab_start)
-        assert p2b_pos != -1, "P2b injection should be called"
+        # Find P2b injection call - search AFTER the scenario block starts
+        p2b_pos = content.find("phase_p2b_inject_unschedulable_shipping_rollout(config, artifact_dir)", unschedulable_pos)
+        assert p2b_pos != -1, "P2b injection should be called inside scenario block"
         
-        # Verify ordering: Phase 1b must come before P2b
-        assert phase1b_pos < p2b_pos, \
-            f"Phase 1b ({phase1b_pos}) must come before P2b ({p2b_pos})"
-        
-        # Verify that P2b is inside the unschedulable-shipping block
-        # P2b should be between unschedulable_pos and unschedulable_pos + some distance
-        # This ensures P2b is not called for other scenarios
-        assert phase1b_pos < unschedulable_pos < p2b_pos, \
-            "Phase ordering: Phase 1b < scenario block < P2b injection"
+        # Verify ordering: Phase 1b must come before scenario block
+        # and P2b must come after the scenario block (i.e., inside it)
+        assert phase1b_pos < unschedulable_pos, \
+            f"Phase 1b ({phase1b_pos}) must come before scenario block ({unschedulable_pos})"
+        assert unschedulable_pos < p2b_pos, \
+            f"Scenario block ({unschedulable_pos}) must come before P2b ({p2b_pos})"
     
     def test_baseline_purity_guard_runs_after_baseline_ready(self) -> None:
         """Baseline purity check runs after deployments are ready, before scenario injection.

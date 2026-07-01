@@ -368,10 +368,18 @@ class TestP0bBehavioralMockTest:
                 patch("scripts.k9b_otel_demo_lab.phase0_cluster_baseline") as mock_phase0,
                 patch("scripts.k9b_otel_demo_lab.phase_p0_k9b_backend_prerequisite") as mock_p0,
                 patch("scripts.k9b_otel_demo_lab.phase_p0b_provider_preflight") as mock_p0b,
+                patch("scripts.k9b_otel_demo_lab.phase_p0c_backend_connectivity_preflight") as mock_p0c,
                 patch("scripts.k9b_otel_demo_lab.phase1_deploy_otel_demo") as mock_phase1,
                 patch("scripts.k9b_otel_demo_lab.phase1b_baseline_readiness") as mock_phase1b,
                 patch("scripts.k9b_otel_demo_lab._finish_result") as mock_finish,
             ):
+                mock_p0c.return_value = LabPhaseResult(
+                    phase="p0c-backend-connectivity",
+                    success=True,
+                    message="Backend connectivity verified",
+                    artifacts={},
+                    duration_seconds=0.1,
+                )
                 mock_phase0.return_value = mock_phase0_result
                 mock_p0.return_value = mock_p0_result
                 mock_p0b.return_value = mock_p0b_result
@@ -382,5 +390,5 @@ class TestP0bBehavioralMockTest:
                 run_lab(config)
 
                 # Assert Phase 1 WAS called (P0b passed)
-                assert mock_phase1.called, \
-                    "Phase 1 should be called when P0b passes"
+                # Use assert_called_once() instead of .called for proper mock verification
+                mock_phase1.assert_called_once()
