@@ -1,6 +1,8 @@
 """Unit tests for k9b_otel_demo_lab_k8s_diagnosis_backend_http.py.
 
-These tests validate the HTTP helpers for backend-targeted diagnosis.
+These tests validate the HTTP helpers for backend-targeted diagnosis,
+including the new fetch_backend_incident_detail_result() with precise
+failure classification.
 """
 
 from __future__ import annotations
@@ -9,6 +11,11 @@ import json
 from unittest.mock import MagicMock, patch
 
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+    FAILURE_BACKEND_INCIDENT_FETCH_CONTRACT_ERROR,
+    FAILURE_BACKEND_INCIDENT_FETCH_HTTP_ERROR,
+    FAILURE_BACKEND_INCIDENT_FETCH_INVALID_JSON,
+    FAILURE_BACKEND_INCIDENT_FETCH_NOT_FOUND,
+    FAILURE_BACKEND_INCIDENT_FETCH_TRANSPORT_ERROR,
     FAILURE_TARGETED_INVOCATION_HTTP_ERROR,
     FAILURE_TARGETED_INVOCATION_INVALID_JSON,
     FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
@@ -16,6 +23,7 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http import (
     curl_backend_exec,
     fetch_backend_incident_detail,
+    fetch_backend_incident_detail_result,
     invoke_targeted_automatic_diagnosis_loop,
 )
 
@@ -258,6 +266,272 @@ class TestFetchBackendIncidentDetail:
         )
 
         assert detail is None
+
+
+# =============================================================================
+# Test fetch_backend_incident_detail_result (precise classification)
+# =============================================================================
+
+
+class TestFetchBackendIncidentDetailResult:
+    """Tests for fetch_backend_incident_detail_result with precise error classification."""
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_successful_fetch_returns_incident(self, mock_curl: MagicMock) -> None:
+        """Test successful fetch returns incident detail."""
+        mock_curl.return_value = MagicMock(
+            success=True,
+            http_code=200,
+            body=json.dumps({
+                "status": "collecting_evidence",
+                "evidence_count": 5,
+                "review_packet": {"status": "ready"},
+            }),
+            curl_rc=0,
+            stderr="",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="inc-123",
+        )
+
+        assert result.success is True
+        assert result.incident is not None
+        assert result.incident.incident_id == "inc-123"
+        assert result.error_class is None
+        assert result.http_status == 200
+        assert result.curl_rc == 0
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_transport_error_classification(self, mock_curl: MagicMock) -> None:
+        """Test transport error (http_code=0) is classified as TRANSPORT_ERROR."""
+        mock_curl.return_value = MagicMock(
+            success=False,
+            http_code=0,
+            body="",
+            curl_rc=7,
+            stderr="Connection refused",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="inc-123",
+        )
+
+        assert result.success is False
+        assert result.error_class == FAILURE_BACKEND_INCIDENT_FETCH_TRANSPORT_ERROR
+        assert result.http_status == 0
+        assert result.curl_rc == 7
+        assert result.incident is None
+        assert "Transport error" in (result.error_detail or "")
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_curl_rc_nonzero_is_transport_error(self, mock_curl: MagicMock) -> None:
+        """Test nonzero curl_rc is classified as TRANSPORT_ERROR."""
+        mock_curl.return_value = MagicMock(
+            success=False,
+            http_code=0,
+            body="",
+            curl_rc=6,  # DNS resolution failed
+            stderr="Could not resolve host",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="inc-123",
+        )
+
+        assert result.success is False
+        assert result.error_class == FAILURE_BACKEND_INCIDENT_FETCH_TRANSPORT_ERROR
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_404_not_found_classification(self, mock_curl: MagicMock) -> None:
+        """Test HTTP 404 is classified as NOT_FOUND."""
+        mock_curl.return_value = MagicMock(
+            success=False,
+            http_code=404,
+            body='{"error": "incident not found"}',
+            curl_rc=0,
+            stderr="",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="inc-nonexistent",
+        )
+
+        assert result.success is False
+        assert result.error_class == FAILURE_BACKEND_INCIDENT_FETCH_NOT_FOUND
+        assert result.http_status == 404
+        assert result.incident is None
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_http_500_classification(self, mock_curl: MagicMock) -> None:
+        """Test HTTP 500 is classified as HTTP_ERROR."""
+        mock_curl.return_value = MagicMock(
+            success=False,
+            http_code=500,
+            body="Internal Server Error",
+            curl_rc=0,
+            stderr="",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="inc-123",
+        )
+
+        assert result.success is False
+        assert result.error_class == FAILURE_BACKEND_INCIDENT_FETCH_HTTP_ERROR
+        assert result.http_status == 500
+        assert "HTTP error" in (result.error_detail or "")
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_http_200_with_html_body_classification(self, mock_curl: MagicMock) -> None:
+        """Test HTTP 200 with HTML body is classified as INVALID_JSON."""
+        html_body = "<!doctype html><html><body>Login Page</body></html>"
+        mock_curl.return_value = MagicMock(
+            success=True,
+            http_code=200,
+            body=html_body,
+            curl_rc=0,
+            stderr="",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="inc-123",
+        )
+
+        assert result.success is False
+        assert result.error_class == FAILURE_BACKEND_INCIDENT_FETCH_INVALID_JSON
+        assert result.http_status == 200
+        assert result.body_prefix == html_body[:200]
+        assert result.json_error is not None
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_http_200_with_json_array_classification(self, mock_curl: MagicMock) -> None:
+        """Test HTTP 200 with JSON array (not object) is classified as CONTRACT_ERROR."""
+        mock_curl.return_value = MagicMock(
+            success=True,
+            http_code=200,
+            body="[1, 2, 3]",
+            curl_rc=0,
+            stderr="",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="inc-123",
+        )
+
+        assert result.success is False
+        assert result.error_class == FAILURE_BACKEND_INCIDENT_FETCH_CONTRACT_ERROR
+        assert result.http_status == 200
+        assert "list" in (result.error_detail or "").lower() or "array" in (result.error_detail or "").lower()
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_http_200_with_json_string_classification(self, mock_curl: MagicMock) -> None:
+        """Test HTTP 200 with JSON string (not object) is classified as CONTRACT_ERROR."""
+        mock_curl.return_value = MagicMock(
+            success=True,
+            http_code=200,
+            body='"just a string"',
+            curl_rc=0,
+            stderr="",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="inc-123",
+        )
+
+        assert result.success is False
+        assert result.error_class == FAILURE_BACKEND_INCIDENT_FETCH_CONTRACT_ERROR
+        assert result.http_status == 200
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_result_contains_diagnostic_metadata(self, mock_curl: MagicMock) -> None:
+        """Test result contains URL, path, encoded ID, and other metadata."""
+        mock_curl.return_value = MagicMock(
+            success=True,
+            http_code=200,
+            body=json.dumps({
+                "status": "collecting_evidence",
+                "evidence_count": 5,
+            }),
+            curl_rc=0,
+            stderr="",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="test-inc-123",
+        )
+
+        assert result.api_path == "/api/incidents/test-inc-123"
+        assert result.encoded_incident_id == "test-inc-123"
+        assert "localhost" in result.url
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_to_dict_contains_failure_fields_on_error(self, mock_curl: MagicMock) -> None:
+        """Test to_dict includes error fields when fetch fails."""
+        mock_curl.return_value = MagicMock(
+            success=False,
+            http_code=404,
+            body='{"error": "not found"}',
+            curl_rc=0,
+            stderr="",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="inc-123",
+        )
+
+        d = result.to_dict()
+        assert d["success"] is False
+        assert d["error_class"] == FAILURE_BACKEND_INCIDENT_FETCH_NOT_FOUND
+        assert d["http_status"] == 404
+        assert "body_prefix" in d
+        assert "error_detail" in d
+
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
+    def test_to_dict_compact_on_success(self, mock_curl: MagicMock) -> None:
+        """Test to_dict is compact on success (no error fields)."""
+        mock_curl.return_value = MagicMock(
+            success=True,
+            http_code=200,
+            body=json.dumps({
+                "status": "collecting_evidence",
+                "evidence_count": 5,
+            }),
+            curl_rc=0,
+            stderr="",
+        )
+
+        result = fetch_backend_incident_detail_result(
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            incident_id="inc-123",
+        )
+
+        d = result.to_dict()
+        assert d["success"] is True
+        assert "error_class" not in d
+        assert "body_prefix" not in d
+        assert "error_detail" not in d
 
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
     def test_invalid_json_returns_none(self, mock_curl: MagicMock) -> None:

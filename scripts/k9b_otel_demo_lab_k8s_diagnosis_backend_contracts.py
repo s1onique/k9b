@@ -18,6 +18,13 @@ from typing import Any
 # Failure Reason Constants
 # =============================================================================
 
+FAILURE_BACKEND_INCIDENT_FETCH_TRANSPORT_ERROR = "backend_incident_fetch_transport_error"
+FAILURE_BACKEND_INCIDENT_FETCH_HTTP_ERROR = "backend_incident_fetch_http_error"
+FAILURE_BACKEND_INCIDENT_FETCH_NOT_FOUND = "backend_incident_fetch_not_found"
+FAILURE_BACKEND_INCIDENT_FETCH_INVALID_JSON = "backend_incident_fetch_invalid_json"
+FAILURE_BACKEND_INCIDENT_FETCH_CONTRACT_ERROR = "backend_incident_fetch_contract_error"
+FAILURE_BACKEND_INCIDENT_FETCH_FAILED = "backend_incident_fetch_failed"
+
 FAILURE_TARGETED_INVOCATION_HTTP_ERROR = "targeted_automatic_diagnosis_invocation_http_error"
 FAILURE_TARGETED_INVOCATION_INVALID_JSON = "targeted_automatic_diagnosis_invocation_invalid_json"
 FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR = "targeted_automatic_diagnosis_invocation_transport_error"
@@ -125,3 +132,67 @@ class TargetedDiagnosisPollResult:
             "failure_reason": self.failure_reason,
             "error_detail": self.error_detail,
         }
+
+
+@dataclass
+class BackendIncidentFetchResult:
+    """Rich result of fetching incident detail from backend.
+
+    Provides precise failure classification for debugging P4c failures
+    without live-cluster access. Distinguishes transport, HTTP, JSON,
+    and contract errors.
+    """
+
+    success: bool
+    incident: BackendIncidentDetail | None = None
+    error_class: str | None = None
+    error_detail: str | None = None
+    http_status: int = 0
+    curl_rc: int | None = None
+    url: str = ""
+    api_path: str = ""
+    encoded_incident_id: str = ""
+    body_prefix: str = ""
+    stderr_prefix: str = ""
+    json_error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict for evidence artifact.
+
+        Only includes failure fields when not successful to keep
+        artifact compact. Incident is stored separately if needed.
+        """
+        result: dict[str, Any] = {
+            "success": self.success,
+            "http_status": self.http_status,
+            "curl_rc": self.curl_rc,
+            "url": self.url,
+            "api_path": self.api_path,
+            "encoded_incident_id": self.encoded_incident_id,
+        }
+        if not self.success:
+            result["error_class"] = self.error_class
+            result["error_detail"] = self.error_detail
+            result["body_prefix"] = self.body_prefix
+            result["stderr_prefix"] = self.stderr_prefix
+            result["json_error"] = self.json_error
+        return result
+
+    def to_log_lines(self) -> list[str]:
+        """Generate structured log lines for diagnostics."""
+        lines = [
+            f"backend_incident_fetch: success={self.success}",
+            f"  error_class={self.error_class or 'none'}",
+            f"  error_detail={self.error_detail or 'none'}",
+            f"  http_status={self.http_status}",
+            f"  curl_rc={self.curl_rc}",
+            f"  api_path={self.api_path}",
+            f"  encoded_incident_id={self.encoded_incident_id}",
+        ]
+        if self.body_prefix:
+            lines.append(f"  body_prefix={self.body_prefix[:100]}")
+        if self.stderr_prefix:
+            lines.append(f"  stderr_prefix={self.stderr_prefix[:100]}")
+        if self.json_error:
+            lines.append(f"  json_error={self.json_error}")
+        return lines

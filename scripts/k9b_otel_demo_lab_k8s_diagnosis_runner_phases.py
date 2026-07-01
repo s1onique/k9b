@@ -13,14 +13,16 @@ from pathlib import Path
 from typing import Any
 
 from scripts.k9b_lab_common_helpers import log
-from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_helpers import (
-    BackendIncidentDetail,
-    fetch_backend_incident_detail,
-    invoke_targeted_automatic_diagnosis_loop,
-    poll_backend_diagnosis_state,
-)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     FAILURE_TARGETED_INSUFFICIENT_PASSES,
+)
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_helpers import (
+    FAILURE_BACKEND_INCIDENT_FETCH_FAILED,
+    BackendIncidentDetail,
+    fetch_backend_incident_detail,
+    fetch_backend_incident_detail_result,
+    invoke_targeted_automatic_diagnosis_loop,
+    poll_backend_diagnosis_state,
 )
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
     MIN_REQUIRED_PASSES,
@@ -35,31 +37,53 @@ def phase1_confirm_incident(
 ) -> BackendIncidentDetail | None:
     """Phase 1: Confirm incident exists in backend.
 
+    This phase fetches the incident detail using the precise diagnostic
+    result object that classifies failures into transport, HTTP, JSON,
+    or contract errors.
+
     Args:
         kubeconfig: Path to kubeconfig
         namespace: Namespace where k9b backend runs
         incident_id: The incident ID to confirm
-        result: Result dict to populate
+        result: Result dict to populate with structured diagnostics
 
     Returns:
         BackendIncidentDetail or None if fetch fails.
     """
     log("  Step 1: Confirming incident exists in backend...")
-    incident_detail = fetch_backend_incident_detail(
+
+    fetch_result = fetch_backend_incident_detail_result(
         kubeconfig=kubeconfig,
         namespace=namespace,
         incident_id=incident_id,
     )
 
-    if incident_detail is None:
-        log("  ERROR: Could not fetch incident detail from backend")
-        result["failure_reason"] = "backend_incident_fetch_failed"
+    # Store structured fetch result for artifact/debugging
+    result["backend_incident_fetch_result"] = fetch_result.to_dict()
+
+    if not fetch_result.success:
+        # Log precise error classification
+        log(f"  ERROR: {fetch_result.error_class}")
+        log(f"    Detail: {fetch_result.error_detail}")
+        log(f"    HTTP status: {fetch_result.http_status}, curl_rc: {fetch_result.curl_rc}")
+        if fetch_result.body_prefix:
+            log(f"    Body prefix: {fetch_result.body_prefix[:100]}")
+
+        # Use precise error class if available, fallback to generic
+        result["failure_reason"] = fetch_result.error_class or FAILURE_BACKEND_INCIDENT_FETCH_FAILED
         result["status"] = "fetch_failed"
         result["backend_incident_detail"] = None
         return None
 
-    result["backend_incident_detail"] = incident_detail.to_compact_log()
-    log(f"  Backend incident: {incident_detail.to_compact_log()}")
+    # Success - store incident detail
+    incident_detail = fetch_result.incident
+    if incident_detail:
+        result["backend_incident_detail"] = incident_detail.to_compact_log()
+        log(f"  Backend incident: {incident_detail.to_compact_log()}")
+    else:
+        result["backend_incident_detail"] = None
+        log("  WARNING: Fetch succeeded but returned no incident detail")
+
     return incident_detail
 
 

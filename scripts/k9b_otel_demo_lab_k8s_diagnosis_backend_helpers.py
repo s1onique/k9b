@@ -24,6 +24,12 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_artifacts import (
 
 # Re-export contracts (dataclasses and constants)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+    FAILURE_BACKEND_INCIDENT_FETCH_CONTRACT_ERROR,
+    FAILURE_BACKEND_INCIDENT_FETCH_FAILED,
+    FAILURE_BACKEND_INCIDENT_FETCH_HTTP_ERROR,
+    FAILURE_BACKEND_INCIDENT_FETCH_INVALID_JSON,
+    FAILURE_BACKEND_INCIDENT_FETCH_NOT_FOUND,
+    FAILURE_BACKEND_INCIDENT_FETCH_TRANSPORT_ERROR,
     FAILURE_TARGETED_INSUFFICIENT_PASSES,
     FAILURE_TARGETED_INVOCATION_HTTP_ERROR,
     FAILURE_TARGETED_INVOCATION_INVALID_JSON,
@@ -32,6 +38,7 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     FAILURE_TARGETED_NO_PASS_ARTIFACTS,
     FAILURE_TARGETED_REVIEW_PACKET_MISSING,
     BackendIncidentDetail,
+    BackendIncidentFetchResult,
     TargetedDiagnosisInvocationResult,
     TargetedDiagnosisPollResult,
 )
@@ -40,6 +47,7 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http import (
     curl_backend_exec,
     fetch_backend_incident_detail,
+    fetch_backend_incident_detail_result,
     invoke_targeted_automatic_diagnosis_loop,
 )
 
@@ -49,7 +57,14 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_poll import (
 )
 
 __all__ = [
-    # Constants
+    # Constants - incident fetch
+    "FAILURE_BACKEND_INCIDENT_FETCH_CONTRACT_ERROR",
+    "FAILURE_BACKEND_INCIDENT_FETCH_FAILED",
+    "FAILURE_BACKEND_INCIDENT_FETCH_HTTP_ERROR",
+    "FAILURE_BACKEND_INCIDENT_FETCH_INVALID_JSON",
+    "FAILURE_BACKEND_INCIDENT_FETCH_NOT_FOUND",
+    "FAILURE_BACKEND_INCIDENT_FETCH_TRANSPORT_ERROR",
+    # Constants - targeted invocation
     "FAILURE_TARGETED_INVOCATION_HTTP_ERROR",
     "FAILURE_TARGETED_INVOCATION_INVALID_JSON",
     "FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR",
@@ -59,11 +74,13 @@ __all__ = [
     "FAILURE_TARGETED_INSUFFICIENT_PASSES",
     # Dataclasses
     "BackendIncidentDetail",
+    "BackendIncidentFetchResult",
     "TargetedDiagnosisInvocationResult",
     "TargetedDiagnosisPollResult",
     # Functions
     "curl_backend_exec",
     "fetch_backend_incident_detail",
+    "fetch_backend_incident_detail_result",
     "invoke_targeted_automatic_diagnosis_loop",
     "poll_backend_diagnosis_state",
     "check_pass_artifacts_in_backend",
