@@ -192,7 +192,7 @@ INTENTIONALLY_UNDOCUMENTED = {
 }
 
 
-def _normalize_path_for_comparison(path: str) -> tuple[str, str]:
+def _normalize_path_for_comparison(path: str) -> str:
     """Normalize a path to its template form for comparison.
 
     Examples:
