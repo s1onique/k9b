@@ -102,7 +102,6 @@ frontend/src/styles/components/run-overview-dashboard.css,llm_friendly_allowlist
 scripts/export_next_check_usefulness_review.py,llm_friendly_allowlist_py,[SCRIPT] Export tool - single-purpose,platform-team,grandfathered,Consider consolidating
 scripts/select_review_candidate_runs.py,llm_friendly_allowlist_py,[SCRIPT] Selection tool - single-purpose,platform-team,grandfathered,Consider consolidating
 frontend/src/api.ts,llm_friendly_allowlist_py,[FRONTEND] API client - large but coherent,frontend-team,planned_removal,Split by API domain
-frontend/src/hooks/useQueueState.ts,llm_friendly_allowlist_py,[FRONTEND] Queue state hook - complex logic,frontend-team,planned_removal,Extract state logic
 frontend/src/__tests__/alertmanager-snapshot-panel.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Snapshot panel tests,frontend-team,planned_removal,Extract snapshots
 frontend/src/__tests__/alertmanager-sources-panel.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Sources panel tests,frontend-team,planned_removal,Extract snapshots
 frontend/src/__tests__/pagination.test.tsx,llm_friendly_allowlist_py,[FRONTEND TEST] Pagination tests,frontend-team,planned_removal,Extract scenarios

@@ -131,7 +131,7 @@ ALLOWLIST: list[tuple[str, str]] = [
 
     # [FRONTEND] Additional frontend files
     ("frontend/src/api.ts", "[FRONTEND] API client - large but coherent"),
-    ("frontend/src/hooks/useQueueState.ts", "[FRONTEND] Queue state hook - complex logic"),
+    # NOTE: frontend/src/hooks/useQueueState.ts removed — extracted into queueState/
     ("frontend/src/__tests__/alertmanager-snapshot-panel.test.tsx", "[FRONTEND TEST] Snapshot panel tests"),
     ("frontend/src/__tests__/alertmanager-sources-panel.test.tsx", "[FRONTEND TEST] Sources panel tests"),
     ("frontend/src/__tests__/pagination.test.tsx", "[FRONTEND TEST] Pagination tests"),
