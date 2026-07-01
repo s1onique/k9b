@@ -149,6 +149,12 @@ def query_notifications(
     total_pages = max(1, math.ceil(total / limit_value)) if total else 1
     total_duration_ms = (time_module.perf_counter() - total_start) * 1000
     
+    # Determine path strategy for observability
+    # early_termination=1 means index was used (records loaded from index, then count pass done)
+    # early_termination=0 means full scan/fallback was used (had to scan files for accurate results)
+    path_strategy = "index_notifications_path" if counters.get("early_termination") else "notification_file_fallback_path"
+    path_strategy_reason = None if path_strategy == "index_notifications_path" else "full_scan_required"
+
     result = {
         "notifications": entries,
         "total": total,
@@ -160,6 +166,9 @@ def query_notifications(
         "notification_files_fully_parsed": counters["notification_files_fully_parsed"],
         "notification_records_matched": counters["notification_records_matched"],
         "notification_records_returned": counters["notification_records_returned"],
+        # Path strategy for distinguishing index vs fallback behavior
+        "path_strategy": path_strategy,
+        "path_strategy_reason": path_strategy_reason,
     }
     
     # Emit structured log with timing breakdown

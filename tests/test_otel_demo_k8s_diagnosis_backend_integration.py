@@ -26,6 +26,7 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution import (
 class TestP4cUsesBackendTargetedDiagnosis:
     """Integration tests verifying P4c uses backend-targeted diagnosis."""
 
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.poll_backend_diagnosis_state")
@@ -36,6 +37,7 @@ class TestP4cUsesBackendTargetedDiagnosis:
         mock_poll: MagicMock,
         mock_invoke: MagicMock,
         mock_fetch: MagicMock,
+        mock_fetch_result: MagicMock,
     ) -> None:
         """Test P4c invokes backend targeted diagnosis endpoint.
 
@@ -43,8 +45,31 @@ class TestP4cUsesBackendTargetedDiagnosis:
         should use the backend-targeted endpoint, not the scheduler
         periodic loop.
         """
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            BackendIncidentFetchResult,
+        )
+
         # Setup: incident exists, invocation succeeds, diagnosis completes
-        # Include raw with loop_summary for pass_count extraction
+        # fetch_backend_incident_detail_result returns BackendIncidentFetchResult
+        mock_fetch_result.return_value = BackendIncidentFetchResult(
+            success=True,
+            incident=BackendIncidentDetail(
+                incident_id="inc-otel-demo",
+                status="diagnosed",
+                evidence_count=5,
+                review_packet_status="ready",
+                loop_summary_status="completed",
+                review_available=True,
+                raw={
+                    "automatic_diagnosis_loop_summary": {
+                        "pass_run_ids": ["run-1", "run-2"],
+                        "pass_count": 2,
+                    }
+                },
+            ),
+        )
+
+        # fetch_backend_incident_detail returns BackendIncidentDetail directly (used in phase2)
         mock_fetch.return_value = BackendIncidentDetail(
             incident_id="inc-otel-demo",
             status="diagnosed",
@@ -84,6 +109,7 @@ class TestP4cUsesBackendTargetedDiagnosis:
         invoke_call_kwargs = mock_invoke.call_args[1]
         assert invoke_call_kwargs["incident_id"] == "inc-otel-demo"
 
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.poll_backend_diagnosis_state")
@@ -94,9 +120,33 @@ class TestP4cUsesBackendTargetedDiagnosis:
         mock_poll: MagicMock,
         mock_invoke: MagicMock,
         mock_fetch: MagicMock,
+        mock_fetch_result: MagicMock,
     ) -> None:
         """Test P4c validates pass artifacts after diagnosis."""
-        # Include raw field with loop summary for pass_count extraction
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            BackendIncidentFetchResult,
+        )
+
+        # fetch_backend_incident_detail_result returns BackendIncidentFetchResult
+        mock_fetch_result.return_value = BackendIncidentFetchResult(
+            success=True,
+            incident=BackendIncidentDetail(
+                incident_id="inc-otel-demo",
+                status="diagnosed",
+                evidence_count=5,
+                review_packet_status="ready",
+                loop_summary_status="completed",
+                review_available=True,
+                raw={
+                    "automatic_diagnosis_loop_summary": {
+                        "pass_run_ids": ["run-1", "run-2"],
+                        "pass_count": 2,
+                    }
+                },
+            ),
+        )
+
+        # fetch_backend_incident_detail returns BackendIncidentDetail directly (used in phase2)
         mock_fetch.return_value = BackendIncidentDetail(
             incident_id="inc-otel-demo",
             status="diagnosed",
@@ -152,21 +202,29 @@ class TestP4cUsesBackendTargetedDiagnosis:
 class TestP4cFailsOnEndpointErrors:
     """Tests verifying P4c fails appropriately on endpoint errors."""
 
-    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
     def test_fails_on_transport_error(
         self,
         mock_invoke: MagicMock,
-        mock_fetch: MagicMock,
+        mock_fetch_result: MagicMock,
     ) -> None:
         """Test P4c fails with structured error on transport error."""
-        mock_fetch.return_value = BackendIncidentDetail(
-            incident_id="inc-otel-demo",
-            status="collecting_evidence",
-            evidence_count=1,
-            review_packet_status=None,
-            loop_summary_status="pending",
-            review_available=False,
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            BackendIncidentFetchResult,
+        )
+
+        # fetch_backend_incident_detail_result returns BackendIncidentFetchResult
+        mock_fetch_result.return_value = BackendIncidentFetchResult(
+            success=True,
+            incident=BackendIncidentDetail(
+                incident_id="inc-otel-demo",
+                status="collecting_evidence",
+                evidence_count=1,
+                review_packet_status=None,
+                loop_summary_status="pending",
+                review_available=False,
+            ),
         )
 
         mock_invoke.return_value = TargetedDiagnosisInvocationResult(
@@ -193,21 +251,29 @@ class TestP4cFailsOnEndpointErrors:
         assert result["failure_reason"] == FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR
         assert result["status"] == "invocation_failed"
 
-    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
     def test_fails_on_http_error(
         self,
         mock_invoke: MagicMock,
-        mock_fetch: MagicMock,
+        mock_fetch_result: MagicMock,
     ) -> None:
         """Test P4c fails with structured error on HTTP error."""
-        mock_fetch.return_value = BackendIncidentDetail(
-            incident_id="inc-otel-demo",
-            status="collecting_evidence",
-            evidence_count=1,
-            review_packet_status=None,
-            loop_summary_status="pending",
-            review_available=False,
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            BackendIncidentFetchResult,
+        )
+
+        # fetch_backend_incident_detail_result returns BackendIncidentFetchResult
+        mock_fetch_result.return_value = BackendIncidentFetchResult(
+            success=True,
+            incident=BackendIncidentDetail(
+                incident_id="inc-otel-demo",
+                status="collecting_evidence",
+                evidence_count=1,
+                review_packet_status=None,
+                loop_summary_status="pending",
+                review_available=False,
+            ),
         )
 
         mock_invoke.return_value = TargetedDiagnosisInvocationResult(
@@ -277,6 +343,7 @@ class TestRegressionSchedulerPeriodicLoopBug:
         assert detail.status == "collecting_evidence"
         assert detail.evidence_count == 3
 
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.poll_backend_diagnosis_state")
@@ -287,6 +354,7 @@ class TestRegressionSchedulerPeriodicLoopBug:
         mock_poll: MagicMock,
         mock_invoke: MagicMock,
         mock_fetch: MagicMock,
+        mock_fetch_result: MagicMock,
     ) -> None:
         """Test backend-targeted diagnosis bypasses scheduler view.
 
@@ -294,7 +362,30 @@ class TestRegressionSchedulerPeriodicLoopBug:
         should work even when the scheduler periodic loop would fail
         with incidents_eligible=0.
         """
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            BackendIncidentFetchResult,
+        )
+
         # Setup: incident visible in backend (include raw for pass_count extraction)
+        mock_fetch_result.return_value = BackendIncidentFetchResult(
+            success=True,
+            incident=BackendIncidentDetail(
+                incident_id="inc-otel-demo",
+                status="diagnosed",
+                evidence_count=5,
+                review_packet_status="ready",
+                loop_summary_status="completed",
+                review_available=True,
+                raw={
+                    "automatic_diagnosis_loop_summary": {
+                        "pass_run_ids": ["run-1", "run-2"],
+                        "pass_count": 2,
+                    }
+                },
+            ),
+        )
+
+        # fetch_backend_incident_detail returns BackendIncidentDetail directly (used in phase2)
         mock_fetch.return_value = BackendIncidentDetail(
             incident_id="inc-otel-demo",
             status="diagnosed",
