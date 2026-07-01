@@ -151,14 +151,17 @@ class TestProviderCurlMarkerBasedParsing:
     """
 
     def test_exec_pod_parses_body_with_markers(self) -> None:
-        """_curl_exec_pod should correctly parse body using marker-based approach."""
+        """_curl_exec_pod should correctly parse body using marker-based approach.
+        
+        Shell script outputs: ---CURL_START---, CURL_EXIT, HTTP_CODE, body, STDERR_BLOCK
+        """
         from scripts.lab_common.provider_curl_helpers import _curl_exec_pod
 
         # Simulate kubectl exec output with markers
         logs_output = """---CURL_START---
-{"healthy": true, "version": "1.0.0"}
 CURL_EXIT=0
 HTTP_CODE=200
+{"healthy": true, "version": "1.0.0"}
 STDERR_BLOCK
 """
 

@@ -133,58 +133,52 @@ spec:
             timeout=10,
         )
         
-        # Parse diagnostics from logs
-        # Extract body after ---CURL_START--- marker
-        # Handle both formats: metadata before body AND metadata after body
-        # (shell script outputs: CURL_EXIT, HTTP_CODE, then cat response)
-        # Stop capturing body after STDERR_BLOCK to prevent stderr content from
-        # being appended to the response body.
-        http_code = 0
-        curl_exit: int | None = None
-        body_parts: list[str] = []
-        stderr_parts: list[str] = []
-        seen_curl_start = False
-        in_stderr_block = False
+        # Capture all lines between ---CURL_START--- and STDERR_BLOCK
+        # Then extract metadata (CURL_EXIT, HTTP_CODE) and body separately.
+        # This handles both orders: metadata before body OR body before metadata.
+        all_body_region_lines: list[str] = []
+        in_body_region = False
         
         for line in logs_result.stdout.split("\n"):
             stripped = line.strip()
             if stripped == "---CURL_START---":
-                # Start capturing lines after this marker
-                seen_curl_start = True
+                in_body_region = True
                 continue
             
             if stripped == "STDERR_BLOCK":
-                # Stop capturing body, start capturing stderr
-                in_stderr_block = True
+                in_body_region = False
                 continue
             
-            if in_stderr_block:
-                # Collect stderr lines after STDERR_BLOCK marker
-                stderr_parts.append(line)
-                continue
-            
+            if in_body_region:
+                all_body_region_lines.append(line)
+        
+        # Extract metadata and body from the captured region
+        # Handle both orders: CURL_EXIT/HTTP_CODE before body OR body before them
+        curl_exit: int | None = None
+        http_code = 0
+        body_parts: list[str] = []
+        stderr_parts: list[str] = []
+        
+        for line in all_body_region_lines:
+            stripped = line.strip()
             if stripped.startswith("CURL_EXIT="):
                 try:
                     curl_exit = int(stripped.split("=", 1)[1])
                 except (ValueError, IndexError):
                     pass
-                continue
             elif stripped.startswith("HTTP_CODE="):
                 try:
                     http_code = int(stripped.split("=", 1)[1])
                 except (ValueError, IndexError):
                     pass
-                continue
             elif stripped.startswith("RESOLVING_HOST=") or stripped == "NO_RESPONSE_BODY":
                 # Skip diagnostic markers
                 continue
             elif line.startswith("server ") or line.startswith("Address "):
                 # nslookup output, include for diagnostics
                 stderr_parts.append(line)
-                continue
-            
-            # Capture body lines after ---CURL_START--- and before STDERR_BLOCK
-            if seen_curl_start:
+            else:
+                # This is body content (or possibly leftover from malformed output)
                 body_parts.append(line)
         
         body = "\n".join(body_parts)
@@ -265,47 +259,47 @@ exit 0
         exec_cmd, capture_output=True, text=True, timeout=timeout_seconds + 5
     )
     
-    # Parse using marker-based approach (consistent with _curl_service_pod)
-    http_code = 0
-    curl_rc: int | None = None
-    body_parts: list[str] = []
-    stderr_parts: list[str] = []
-    seen_curl_start = False
-    in_stderr_block = False
+    # Capture all lines between ---CURL_START--- and STDERR_BLOCK
+    # Then extract metadata (CURL_EXIT, HTTP_CODE) and body separately.
+    # This handles both orders: metadata before body OR body before metadata.
+    all_body_region_lines: list[str] = []
+    in_body_region = False
     
     for line in exec_result.stdout.split("\n"):
         stripped = line.strip()
-        
         if stripped == "---CURL_START---":
-            seen_curl_start = True
+            in_body_region = True
             continue
         
         if stripped == "STDERR_BLOCK":
-            in_stderr_block = True
+            in_body_region = False
             continue
         
-        if in_stderr_block:
-            # Collect stderr lines (shouldn't happen via exec, but handle gracefully)
-            stderr_parts.append(line)
-            continue
-        
+        if in_body_region:
+            all_body_region_lines.append(line)
+    
+    # Extract metadata and body from the captured region
+    curl_rc: int | None = None
+    http_code = 0
+    body_parts: list[str] = []
+    stderr_parts: list[str] = []
+    
+    for line in all_body_region_lines:
+        stripped = line.strip()
         if stripped.startswith("CURL_EXIT="):
             try:
                 curl_rc = int(stripped.split("=", 1)[1])
             except (ValueError, IndexError):
                 pass
-            continue
         elif stripped.startswith("HTTP_CODE="):
             try:
                 http_code = int(stripped.split("=", 1)[1])
             except (ValueError, IndexError):
                 pass
-            continue
         elif stripped == "NO_RESPONSE_BODY":
             continue
-        
-        # Capture body lines after ---CURL_START--- and before STDERR_BLOCK
-        if seen_curl_start:
+        else:
+            # This is body content
             body_parts.append(line)
     
     body = "\n".join(body_parts)

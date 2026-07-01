@@ -78,17 +78,22 @@ STDERR_BLOCK
         assert parsed["diagnosis_provider"]["available"] is True
 
     def test_body_does_not_contain_diagnostic_markers(self) -> None:
-        """Body should NOT contain RESOLVING_HOST, CURL_EXIT, HTTP_CODE."""
+        """Body should NOT contain RESOLVING_HOST, CURL_EXIT, HTTP_CODE.
+        
+        This is the P0b fix: metadata lines must not be included in body.
+        """
         from scripts.lab_common.provider_curl_helpers import _curl_service_pod
 
+        # Shell script outputs metadata BEFORE body: CURL_EXIT, HTTP_CODE, then body
         raw_output = """RESOLVING_HOST=k9b-backend.k9b.svc.cluster.local
 Server: 10.43.0.10
 Address: 10.43.0.10#53
 
 ---CURL_START---
-{"healthy":true}
 CURL_EXIT=0
 HTTP_CODE=200
+{"healthy":true}
+STDERR_BLOCK
 """
 
         with self._mock_pod_execution(raw_output):
@@ -105,6 +110,8 @@ HTTP_CODE=200
         assert "HTTP_CODE" not in result.body
         assert "Server:" not in result.body
         assert "Address:" not in result.body
+        # Body should be just the JSON
+        assert result.body == '{"healthy":true}'
 
     def test_invalid_json_reported_only_for_extracted_body(self) -> None:
         """Invalid JSON error should only apply to extracted body, not wrapper."""
