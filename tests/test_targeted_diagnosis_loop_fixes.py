@@ -68,11 +68,11 @@ class TestTargetedDiagnosisResultShape:
         This test verifies the function correctly handles AutoLoopIncidentResult without
         crashing.
         """
-        from k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop import (
-            _extract_incident_result_from_collector,
-        )
         from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
             AutoLoopIncidentResult,
+        )
+        from k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop import (
+            _extract_incident_result_from_collector,
         )
 
         # Create a direct AutoLoopIncidentResult (not wrapped in collector result)
@@ -238,8 +238,8 @@ class TestTargetedFailureClassification:
     def test_transport_error_detection(self) -> None:
         """is_transport_error should return True for curl failures with error_class set."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
-            FAILURE_TARGETED_LOOP_BACKEND_EMPTY_REPLY,
             FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
+            FAILURE_TARGETED_LOOP_BACKEND_EMPTY_REPLY,
             TargetedDiagnosisInvocationResult,
         )
 
