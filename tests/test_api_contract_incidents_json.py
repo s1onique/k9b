@@ -9,10 +9,13 @@ These tests prove that incident routes always return JSON, never HTML:
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
+from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
+    AutoLoopIncidentResult,
+)
 from tests.helpers import MockApiHandler, assert_json_response, assert_no_html_in_response
 
 
@@ -175,14 +178,17 @@ class TestAutomaticDiagnosisLoopJsonContract:
             handle_incident_automatic_diagnosis_loop_one_pass_api,
         )
 
-        # Use MagicMock with all required attributes since the handler accesses result.skipped, etc.
-        mock_result = MagicMock()
-        mock_result.skipped = True
-        mock_result.eligible = False
-        mock_result.eligibility_reason = "incident_not_found"
-        mock_result.incident_results = {}
-        mock_result.run_id = "test-run-id"
-        mock_result.skip_reason = "incident_not_found"
+        # Use concrete AutoLoopIncidentResult instead of MagicMock to avoid
+        # attribute auto-creation that can cause recursive serialization issues
+        # with the budget_diagnostics field during JSON serialization.
+        mock_result = AutoLoopIncidentResult(
+            incident_id="nonexistent-incident",
+            eligible=False,
+            eligibility_reason="incident_not_found",
+            skipped=True,
+            skip_reason="incident_not_found",
+            budget_diagnostics=(),
+        )
 
         with patch(
             "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.collect_automatic_diagnosis_evidence",
