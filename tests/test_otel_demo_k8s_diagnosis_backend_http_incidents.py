@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlsplit
 
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http import (
     fetch_backend_incident_detail,
@@ -116,7 +117,13 @@ class TestFetchBackendIncidentDetailResult:
 
         assert result.api_path == "/api/incidents/test-inc-123"
         assert result.encoded_incident_id == "test-inc-123"
-        assert "localhost" in result.url
+        assert result.url.endswith(result.api_path)
+
+        # Verify stable URL contract (scheme + netloc + path) instead of hardcoded host
+        parsed_url = urlsplit(result.url)
+        assert parsed_url.scheme == "http"
+        assert parsed_url.netloc
+        assert parsed_url.path == result.api_path
 
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.curl_backend_exec")
     def test_to_dict_contains_failure_fields_on_error(self, mock_curl: MagicMock) -> None:
