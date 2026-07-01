@@ -9,15 +9,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+    FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
     BackendIncidentDetail,
     TargetedDiagnosisInvocationResult,
     TargetedDiagnosisPollResult,
-    FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
 )
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution import (
     run_backend_targeted_diagnosis,
 )
-
 
 # =============================================================================
 # Test P4c Uses Backend-Targeted Diagnosis

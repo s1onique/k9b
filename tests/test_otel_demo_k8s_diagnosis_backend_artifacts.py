@@ -14,7 +14,6 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     BackendIncidentDetail,
 )
 
-
 # =============================================================================
 # Test check_pass_artifacts_in_backend
 # =============================================================================

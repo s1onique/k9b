@@ -8,17 +8,16 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http import (
-    curl_backend_exec,
-    fetch_backend_incident_detail,
-    invoke_targeted_automatic_diagnosis_loop,
-)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     FAILURE_TARGETED_INVOCATION_HTTP_ERROR,
     FAILURE_TARGETED_INVOCATION_INVALID_JSON,
     FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
 )
-
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http import (
+    curl_backend_exec,
+    fetch_backend_incident_detail,
+    invoke_targeted_automatic_diagnosis_loop,
+)
 
 # =============================================================================
 # Test curl_backend_exec
