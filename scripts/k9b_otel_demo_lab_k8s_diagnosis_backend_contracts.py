@@ -122,6 +122,7 @@ class TargetedDiagnosisInvocationResult:
     error_detail: str | None = None
     curl_rc: int | None = None
     stderr_prefix: str = ""
+    budget_diagnostics: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for evidence."""
@@ -132,6 +133,7 @@ class TargetedDiagnosisInvocationResult:
             "error_class": self.error_class,
             "error_detail": self.error_detail,
             "curl_rc": self.curl_rc,
+            "budget_diagnostics": self.budget_diagnostics,
         }
 
     def is_transport_error(self) -> bool:
@@ -148,6 +150,22 @@ class TargetedDiagnosisInvocationResult:
         if self.error_class == FAILURE_TARGETED_LOOP_NOT_ELIGIBLE:
             return True
         return False
+
+    def budget_summary(self) -> str:
+        """Return human-readable budget diagnostics summary."""
+        if not self.budget_diagnostics:
+            return "no budget diagnostics"
+        lines = []
+        for bd in self.budget_diagnostics:
+            status = "EXHAUSTED" if bd.get("exhausted") else "OK"
+            lines.append(
+                f"{bd.get('name', 'unknown')}: {status} "
+                f"used={bd.get('used', 0)} limit={bd.get('limit', 0)} "
+                f"remaining={bd.get('remaining', 0)} "
+                f"source={bd.get('source', 'unknown')} "
+                f"resettable={bd.get('resettable', True)}"
+            )
+        return "; ".join(lines)
 
 
 @dataclass

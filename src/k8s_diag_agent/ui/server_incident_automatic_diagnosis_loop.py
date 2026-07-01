@@ -178,6 +178,9 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
             "skipped": True,
             "skip_reason": result.skip_reason,
         }
+        # Include budget diagnostics when available for budget_exhausted cases
+        if result.budget_diagnostics:
+            response["budget_diagnostics"] = [d.to_dict() for d in result.budget_diagnostics]
         send_json_response(handler, response, code=200)
         return
 

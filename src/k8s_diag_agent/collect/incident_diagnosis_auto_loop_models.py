@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .incident_diagnosis_auto_loop_config import DiagnosisBudgetDiagnostic
+
 __all__ = [
     "AutoLoopIncidentResult",
     "AutoLoopCollectorResult",
@@ -62,6 +64,7 @@ class AutoLoopIncidentResult:
     error: str | None = None
     skipped: bool = False
     skip_reason: str | None = None
+    budget_diagnostics: tuple[DiagnosisBudgetDiagnostic, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -88,6 +91,8 @@ class AutoLoopIncidentResult:
             result["skipped"] = True
             if self.skip_reason is not None:
                 result["skip_reason"] = self.skip_reason
+        if self.budget_diagnostics:
+            result["budget_diagnostics"] = [d.to_dict() for d in self.budget_diagnostics]
         return result
 
 

@@ -349,6 +349,11 @@ def invoke_targeted_automatic_diagnosis_loop(
         eligible = response_data.get("eligible", True)
 
         if skipped and not eligible:
+            # Extract budget diagnostics from response for debugging
+            budget_diagnostics = response_data.get("budget_diagnostics", [])
+            if not isinstance(budget_diagnostics, list):
+                budget_diagnostics = []
+
             # Structured "not eligible" response - this is expected runtime behavior
             # Return as success with detailed response_data for caller to handle
             return TargetedDiagnosisInvocationResult(
@@ -360,6 +365,7 @@ def invoke_targeted_automatic_diagnosis_loop(
                 # Include classification info for clarity
                 error_class=FAILURE_TARGETED_LOOP_NOT_ELIGIBLE,
                 error_detail=f"Loop not eligible: {response_data.get('eligibility_reason', 'unknown')}",
+                budget_diagnostics=budget_diagnostics,
             )
 
         # Successful response with valid JSON

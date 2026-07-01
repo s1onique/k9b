@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AutomaticDiagnosisLoopConfig",
+    "DiagnosisBudgetDiagnostic",
     "EligibilityResult",
     "check_incident_eligibility",
     "_ACTIVE_STATUSES",
@@ -92,6 +93,53 @@ class AutomaticDiagnosisLoopConfig:
 
 
 # =============================================================================
+# Budget Diagnostic Model
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class DiagnosisBudgetDiagnostic:
+    """Structured budget diagnostic for debugging eligibility failures.
+
+    Provides detailed information about each budget that affects eligibility,
+    making it easy to diagnose why an incident is not eligible.
+
+    Attributes:
+        name: Stable name for the budget (e.g., "review_packet_budget")
+        used: Number of units consumed
+        limit: Maximum allowed units
+        remaining: Units remaining (limit - used)
+        exhausted: Whether the budget is exhausted
+        source: Where the budget count comes from (e.g., "review_packet_artifacts")
+        resettable: Whether resetting would clear this budget
+    """
+
+    name: str
+    used: int
+    limit: int
+    remaining: int
+    exhausted: bool
+    source: str
+    resettable: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "used": self.used,
+            "limit": self.limit,
+            "remaining": self.remaining,
+            "exhausted": self.exhausted,
+            "source": self.source,
+            "resettable": self.resettable,
+        }
+
+    def summary(self) -> str:
+        """Human-readable summary for logging/debugging."""
+        status = "EXHAUSTED" if self.exhausted else "OK"
+        return f"{self.name}: {status} used={self.used} limit={self.limit} remaining={self.remaining} source={self.source} resettable={self.resettable}"
+
+
+# =============================================================================
 # Eligibility Model
 # =============================================================================
 
@@ -121,6 +169,7 @@ class EligibilityResult:
     status: str | None = None
     has_suggested_checks: bool = False
     auto_pass_count: int = 0
+    budget_diagnostics: tuple[DiagnosisBudgetDiagnostic, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -132,7 +181,20 @@ class EligibilityResult:
             result["status"] = self.status
         result["has_suggested_checks"] = self.has_suggested_checks
         result["auto_pass_count"] = self.auto_pass_count
+        if self.budget_diagnostics:
+            result["budget_diagnostics"] = [d.to_dict() for d in self.budget_diagnostics]
         return result
+
+    def exhausted_budget_names(self) -> tuple[str, ...]:
+        """Return names of exhausted budgets."""
+        return tuple(d.name for d in self.budget_diagnostics if d.exhausted)
+
+    def budget_summary(self) -> str:
+        """Human-readable summary of all budget diagnostics."""
+        if not self.budget_diagnostics:
+            return "no budget diagnostics"
+        lines = [d.summary() for d in self.budget_diagnostics]
+        return "; ".join(lines)
 
 
 def check_incident_eligibility(
@@ -154,7 +216,7 @@ def check_incident_eligibility(
         external_analysis_dir: Optional path to check for existing review packets
 
     Returns:
-        EligibilityResult with eligible flag and reason
+        EligibilityResult with eligible flag, reason, and budget diagnostics
     """
     store = get_incident_store()
     incident = store.get_incident(incident_id)
@@ -203,6 +265,21 @@ def check_incident_eligibility(
         except OSError:
             pass  # Ignore filesystem errors during budget check
 
+    # Build budget diagnostics for the response
+    budget_limit = config.max_passes_per_incident
+    budget_remaining = max(0, budget_limit - auto_pass_count)
+    budget_diagnostics = (
+        DiagnosisBudgetDiagnostic(
+            name="review_packet_budget",
+            used=auto_pass_count,
+            limit=budget_limit,
+            remaining=budget_remaining,
+            exhausted=auto_pass_count >= budget_limit,
+            source="review_packet_artifacts",
+            resettable=True,
+        ),
+    )
+
     if auto_pass_count >= config.max_passes_per_incident:
         return EligibilityResult(
             eligible=False,
@@ -211,6 +288,7 @@ def check_incident_eligibility(
             status=status.value,
             has_suggested_checks=has_suggested_checks,
             auto_pass_count=auto_pass_count,
+            budget_diagnostics=budget_diagnostics,
         )
 
     return EligibilityResult(
@@ -220,4 +298,5 @@ def check_incident_eligibility(
         status=status.value,
         has_suggested_checks=has_suggested_checks,
         auto_pass_count=auto_pass_count,
+        budget_diagnostics=budget_diagnostics,
     )

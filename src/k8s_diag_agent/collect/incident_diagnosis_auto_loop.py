@@ -205,6 +205,7 @@ def _process_incident(
             eligibility_reason=eligibility.reason,
             skipped=True,
             skip_reason=f"not_eligible: {eligibility.reason}",
+            budget_diagnostics=eligibility.budget_diagnostics,
         )
 
     # Generate run_id for this incident's automatic pass

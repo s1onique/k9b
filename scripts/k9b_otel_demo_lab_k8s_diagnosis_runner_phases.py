@@ -131,6 +131,21 @@ def phase2_invoke_and_poll_pass(
     if invocation_result.is_runtime_state():
         log(f"    [{current_pass_in_label}] ERROR: Loop not eligible: {invocation_result.error_detail}")
         log(f"    [{current_pass_in_label}] Budget exhausted - cannot run diagnosis")
+        
+        # Print structured budget diagnostics if available
+        budget_summary = invocation_result.budget_summary()
+        if budget_summary and budget_summary != "no budget diagnostics":
+            log(f"    [{current_pass_in_label}] Budget diagnostics:")
+            for bd in invocation_result.budget_diagnostics:
+                status = "EXHAUSTED" if bd.get("exhausted") else "OK"
+                log(
+                    f"    [{current_pass_in_label}]   {bd.get('name', 'unknown')}: {status} "
+                    f"used={bd.get('used', 0)} limit={bd.get('limit', 0)} "
+                    f"remaining={bd.get('remaining', 0)} "
+                    f"source={bd.get('source', 'unknown')} "
+                    f"resettable={bd.get('resettable', True)}"
+                )
+        
         result["real_loop_invoked"] = False
         # Preserve actionable detail: "budget_exhausted" not just "not_eligible"
         if invocation_result.error_detail:
