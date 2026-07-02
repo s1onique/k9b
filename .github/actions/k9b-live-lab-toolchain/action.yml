@@ -9,7 +9,7 @@ inputs:
     required: false
     default: '3.13'
     description: Python version (used for cache key fingerprint)
-  kubectl-version:
+  kube_cli_version:
     required: false
     default: 'latest'
     description: kubectl version (used for cache key fingerprint)
