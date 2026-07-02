@@ -58,7 +58,9 @@ on:
 
 # This job must run in the protected environment to require manual approval
 env:
+  PYTHON_VERSION: '3.13'
   KUBECTL_VERSION: 'v1.31.0'
+  HELM_VERSION: 'v3.16.3'
   MANIFEST: 'deploy/github-actions/k9b-cnpg-live-lab-runner-rbac.yaml'
   RUNNER_SA: 'system:serviceaccount:github-actions-runner:spbnix-k8s-gha-rs-no-permission'
 
@@ -228,36 +230,16 @@ jobs:
           echo "Admin kubeconfig decoded to temporary file"
 
       # =========================================================================
-      # Restore kubectl tool cache
-      # Uses restore/save split to save cache immediately after setup-kubectl,
-      # even if the job fails later. This is more robust for live-lab workflows.
+      # Setup lab toolchain (uses local runner tool cache)
+      # Wires Python, kubectl, and Helm from local runner tool cache.
       # =========================================================================
-      - name: Restore kubectl tool cache
-        id: cache-kubectl
-        uses: actions/cache/restore@v6
+      - name: Setup lab toolchain
+        id: toolchain
+        uses: ./.github/actions/k9b-live-lab-toolchain
         with:
-          path: ${{ runner.tool_cache }}/kubectl
-          key: kubectl-${{ runner.os }}-${{ runner.arch }}-${{ env.KUBECTL_VERSION }}
-
-      # =========================================================================
-      # Set up kubectl
-      # =========================================================================
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: '${{ env.KUBECTL_VERSION }}'
-
-      # =========================================================================
-      # Save kubectl tool cache
-      # Saves cache immediately after setup-kubectl (even if job fails later).
-      # Only saves when there was a cache miss (cache-hit != 'true').
-      # =========================================================================
-      - name: Save kubectl tool cache
-        if: steps.cache-kubectl.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: ${{ runner.tool_cache }}/kubectl
-          key: ${{ steps.cache-kubectl.outputs.cache-primary-key }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          kubectl-version: ${{ env.KUBECTL_VERSION }}
+          helm-version: ${{ env.HELM_VERSION }}
 
       # =========================================================================
       # Pre-apply diagnostics / API reachability check
