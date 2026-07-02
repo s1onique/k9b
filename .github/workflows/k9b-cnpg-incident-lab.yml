@@ -92,6 +92,9 @@ jobs:
       - name: Wire Python from tool cache
         run: source scripts/ci/wire_toolcache_python.sh "${{ env.PYTHON_VERSION }}"
 
+      - name: Emit toolchain provenance
+        run: scripts/ci/emit_toolchain_provenance.sh "go,python"
+
       - name: Create virtual environment
         run: python -m venv .venv
 

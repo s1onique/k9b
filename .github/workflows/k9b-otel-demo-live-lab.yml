@@ -109,6 +109,9 @@ jobs:
         id: buildx
         run: scripts/ci/wire_docker_buildx.sh k9b-builder
 
+      - name: Emit toolchain provenance
+        run: scripts/ci/emit_toolchain_provenance.sh "docker,buildx"
+
       - name: Extract backend metadata
         id: meta-backend
         run: |

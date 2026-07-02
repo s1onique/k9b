@@ -114,6 +114,9 @@ jobs:
           K9B_BUILDKIT_CONFIG: ${{ runner.temp }}/buildkit/buildkitd.toml
         run: scripts/ci/wire_docker_buildx.sh k9b-harbor-builder
 
+      - name: Emit Docker toolchain provenance
+        run: scripts/ci/emit_toolchain_provenance.sh "docker,buildx"
+
       # Patch BuildKit containers after they are created by setup-buildx-action
       - name: Patch BuildKit containers with Harbor CA
         env:

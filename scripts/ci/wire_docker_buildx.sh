@@ -83,4 +83,9 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     } >> "${GITHUB_OUTPUT}"
 fi
 
+# Export builder name for provenance and other steps
+if [[ -n "${GITHUB_ENV:-}" ]]; then
+    echo "K9B_BUILDX_BUILDER=${BUILDER_NAME}" >> "${GITHUB_ENV}"
+fi
+
 echo "Buildx builder setup complete: ${BUILDER_NAME}"

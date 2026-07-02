@@ -56,6 +56,9 @@ jobs:
       - name: Wire Python from tool cache
         run: source scripts/ci/wire_toolcache_python.sh "${{ env.PYTHON_VERSION }}"
 
+      - name: Emit toolchain provenance
+        run: scripts/ci/emit_toolchain_provenance.sh "python"
+
       - name: Create virtual environment
         run: python -m venv .venv
 
@@ -99,6 +102,9 @@ jobs:
 
       - name: Wire Node.js from tool cache
         run: source scripts/ci/wire_toolcache_node.sh "22.12.0"
+
+      - name: Emit toolchain provenance
+        run: scripts/ci/emit_toolchain_provenance.sh "python,node,npm"
 
       - name: Install frontend dependencies
         working-directory: ./frontend
@@ -228,6 +234,9 @@ jobs:
       - name: Wire Node.js from tool cache
         run: source scripts/ci/wire_toolcache_node.sh "22.12.0"
 
+      - name: Emit toolchain provenance
+        run: scripts/ci/emit_toolchain_provenance.sh "python,node,npm"
+
       - name: Install frontend dependencies
         working-directory: ./frontend
         run: npm ci
@@ -265,6 +274,9 @@ jobs:
 
       - name: Wire Helm from tool cache
         run: source scripts/ci/wire_toolcache_helm.sh "3.16.4"
+
+      - name: Emit toolchain provenance
+        run: scripts/ci/emit_toolchain_provenance.sh "python,helm"
 
       - name: Run Helm chart verification
         run: |
