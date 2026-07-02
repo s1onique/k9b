@@ -106,9 +106,11 @@ runs:
         for python_path in "${python_paths[@]}"; do
           if [[ -x "${python_path}/python3" ]]; then
             python_bin="${python_path}"
+            # python_path is already the bin dir (e.g. .../x64/bin); root is one level up
+            python_root="$(cd "${python_path}/.." && pwd)"
             echo "Found Python at: ${python_path}"
-            echo "python_bin=${python_path}" >> "$GITHUB_OUTPUT"
-            echo "python-bin-dir=${python_path}" >> "$GITHUB_OUTPUT"
+            echo "python_bin=${python_bin}" >> "$GITHUB_OUTPUT"
+            echo "python-bin-dir=${python_bin}" >> "$GITHUB_OUTPUT"
             break
           fi
         done
@@ -123,12 +125,42 @@ runs:
           exit 1
         fi
 
-        # Append Python bin to PATH
+        # Preflight: verify libpython is present (fails fast with diagnostics)
+        echo "python_root=${python_root}"
+        if ! ls "${python_root}/lib/libpython"* 1>/dev/null 2>&1; then
+          echo "::error::Python tool-cache entry is missing libpython under ${python_root}/lib"
+          ls -la "${python_root}/lib" 2>/dev/null || echo "lib directory not found"
+          exit 127
+        fi
+
+        # Append Python bin to PATH and set LD_LIBRARY_PATH for shared library linking
         echo "${python_bin}" >> "$GITHUB_PATH"
         echo "PATH extended with: ${python_bin}"
 
-        # Verify Python works
-        "${python_bin}/python3" --version
+        # Build LD_LIBRARY_PATH without trailing empty element (avoids cwd lookup from ':')
+        if [[ -n "${LD_LIBRARY_PATH:-}" ]]; then
+          python_ld_library_path="${python_root}/lib:${LD_LIBRARY_PATH}"
+        else
+          python_ld_library_path="${python_root}/lib"
+        fi
+
+        # Export Python environment variables (mirrors actions/setup-python behavior)
+        {
+          echo "pythonLocation=${python_root}"
+          echo "Python_ROOT_DIR=${python_root}"
+          echo "Python3_ROOT_DIR=${python_root}"
+          echo "PKG_CONFIG_PATH=${python_root}/lib/pkgconfig"
+          echo "LD_LIBRARY_PATH=${python_ld_library_path}"
+        } >> "$GITHUB_ENV"
+
+        echo "LD_LIBRARY_PATH set to: ${python_ld_library_path}"
+        echo "pythonLocation=${python_root}"
+
+        # Show library dependencies with correct LD_LIBRARY_PATH
+        LD_LIBRARY_PATH="${python_ld_library_path}" ldd "${python_bin}/python3" 2>&1 | grep -E 'libpython|not found' || true
+
+        # Verify Python works with LD_LIBRARY_PATH set
+        LD_LIBRARY_PATH="${python_ld_library_path}" "${python_bin}/python3" --version
 
         # --- Wire Helm ---
         echo "=== Wiring Helm ==="
@@ -227,13 +259,14 @@ runs:
       run: |
         set -euo pipefail
         echo "=== Python startup proof ==="
-        # Set LD_LIBRARY_PATH for shared library linking (libpython*.so*)
-        PYTHON_LIBDIR="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")' 2>/dev/null || echo "")"
-        if [[ -n "${PYTHON_LIBDIR}" && -d "${PYTHON_LIBDIR}" ]]; then
-          export LD_LIBRARY_PATH="${PYTHON_LIBDIR}:${LD_LIBRARY_PATH:-}"
-          echo "LD_LIBRARY_PATH set to: ${PYTHON_LIBDIR}"
+        # LD_LIBRARY_PATH is already set in Step 2 via GITHUB_ENV (inherited automatically).
+        # Verify it is present; if not, something is wrong with the wiring step.
+        if [[ -z "${LD_LIBRARY_PATH:-}" ]]; then
+          echo "::error::LD_LIBRARY_PATH not set. Step 2 (Wire tools) must export it to GITHUB_ENV."
+          exit 1
         fi
-        # Prove executable startup
+        echo "LD_LIBRARY_PATH inherited: ${LD_LIBRARY_PATH}"
+        # Prove executable startup (LD_LIBRARY_PATH inherited from GITHUB_ENV)
         python3 -VV
         python3 -c "import sys; print('sys.executable:', sys.executable)"
         python3 -c "import ssl; print('SSL OK')"
