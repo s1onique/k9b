@@ -348,9 +348,14 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
     # -------------------------------------------------------------------------
     # Rule 1: Must log in to internal hostname
     # -------------------------------------------------------------------------
-    if grep -qE "registry:.*${INTERNAL_HOST}" "${workflow}"; then
+    # Normalize workflow: join lines ending with backslash (shell line continuation)
+    workflow_normalized=$(sed ':a;N;$!ba;s/\\\n/ /g' "${workflow}")
+    
+    # Check for direct registry login (docker/login-action)
+    if echo "${workflow_normalized}" | grep -qE "registry:.*${INTERNAL_HOST}"; then
         echo "  OK: Login to ${INTERNAL_HOST} found"
-    elif grep -q 'registry:.*\${{ env\.REGISTRY }}' "${workflow}"; then
+    # Check for template-based registry (registry: ${{ env.REGISTRY }})
+    elif echo "${workflow_normalized}" | grep -q 'registry:.*\${{ env\.REGISTRY }}'; then
         # Check if REGISTRY is set to internal hostname
         if grep -qE "REGISTRY:.*${INTERNAL_HOST}" "${workflow}"; then
             echo "  OK: Login to ${INTERNAL_HOST} found (via \${{ env.REGISTRY }})"
@@ -359,6 +364,9 @@ for workflow in "${WORKFLOW_FILES[@]}"; do
             WORKFLOW_FAILED=1
             FAILED=1
         fi
+    # Check for helm registry login command (alternative to docker/login-action)
+    elif echo "${workflow_normalized}" | grep -qE "helm registry login.*${INTERNAL_HOST}"; then
+        echo "  OK: Login to ${INTERNAL_HOST} found (via helm registry login)"
     else
         echo "  FAIL: Missing login to ${INTERNAL_HOST}"
         WORKFLOW_FAILED=1

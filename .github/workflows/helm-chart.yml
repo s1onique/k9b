@@ -154,6 +154,16 @@ jobs:
           HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
         run: source scripts/ci/docker_login.sh "${HARBOR_REGISTRY}" "${HARBOR_USERNAME}" "HARBOR_TOKEN"
 
+      - name: Log in to Harbor Helm OCI registry
+        env:
+          HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+          HARBOR_PASSWORD: ${{ secrets.HARBOR_TOKEN }}
+        run: |
+          printf '%s' "$HARBOR_PASSWORD" \
+            | helm registry login harbor-pve1.spbnix.local \
+                --username "$HARBOR_USERNAME" \
+                --password-stdin
+
       - name: Download package artifact
         uses: actions/download-artifact@v4
         with:
