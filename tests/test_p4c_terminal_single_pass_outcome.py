@@ -256,3 +256,61 @@ class TestNormalizedOutcomeStructure:
         assert isinstance(outcome.read_only_constraints_satisfied, bool)
         assert isinstance(outcome.root_cause_evidence_satisfied, bool)
         assert isinstance(outcome.failure_reasons, tuple)
+
+
+class TestTerminalModeExclusivity:
+    """Regression tests for terminal mode exclusivity.
+
+    These tests prove that:
+    1. Terminal single-pass success is exclusive (no multipass failures)
+    2. Non-terminal evidence correctly falls through to multipass mode
+    """
+
+    def test_terminal_mode_is_exclusive(self) -> None:
+        """Terminal single-pass success must not contain multipass failure reasons."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "terminal_decision_reached": "stop_no_checks_proposed",
+            "pass_run_ids": ["run-123"],
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence)
+
+        # Core assertions
+        assert outcome.success is True
+        assert outcome.mode == "terminal_single_pass"
+        assert outcome.failure_reasons == ()
+
+        # Explicitly assert multipass failure reasons are absent
+        failure_reasons_str = " ".join(outcome.failure_reasons)
+        assert "insufficient_passes" not in failure_reasons_str
+        assert "missing_root_cause_term" not in failure_reasons_str
+        assert "multipass" not in failure_reasons_str
+
+    def test_non_terminal_falls_through_to_multipass(self) -> None:
+        """Non-terminal evidence (pass_count=1, not terminal) must use multipass mode."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": False,  # NOT terminal
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "root_cause_summary": "Some text without required terms",
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence)
+
+        # Should fall through to multipass mode
+        assert outcome.mode == "multipass"
+        # And correctly fail due to insufficient passes
+        assert outcome.success is False
+        assert any("insufficient_passes" in f for f in outcome.failure_reasons)

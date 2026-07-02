@@ -184,38 +184,54 @@ def compute_p4c_outcome(evidence: dict[str, Any]) -> P4cDiagnosisOutcome:
         # - root_cause_evidence_satisfied (checked above)
         success = len(failure_reasons) == 0
 
+        # FIX: Return early for terminal single-pass mode to prevent
+        # multi-pass validators from incorrectly adding failure_reasons.
+        # The terminal branch already validated all terminal-mode requirements.
+        return P4cDiagnosisOutcome(
+            success=success,
+            mode=mode,
+            incident_id=incident_id,
+            pass_count=pass_count,
+            pass_run_ids=pass_run_ids,
+            review_artifact_paths=review_artifact_paths,
+            terminal_decision=terminal_decision,
+            read_only_constraints_satisfied=read_only_constraints_satisfied,
+            root_cause_evidence_satisfied=root_cause_evidence_satisfied,
+            root_cause_evidence_reason=root_cause_evidence_reason,
+            failure_reasons=tuple(failure_reasons),
+        )
+
+    # Multi-pass mode (only reached when NOT terminal single-pass)
+    mode = "multipass"
+    MIN_REQUIRED = 2  # Local constant to avoid circular import
+
+    if pass_count < MIN_REQUIRED:
+        failure_reasons.append(f"insufficient_passes: {pass_count} < {MIN_REQUIRED}")
+
+    if not read_only_constraints_satisfied:
+        failure_reasons.append(f"read_only_contract_violated: {read_only_violations}")
+
+    # Root cause evidence from prose terms
+    required_terms = ["shipping", "nodeSelector", "k9b.dev/otel-lab-node"]
+    missing_terms = [t for t in required_terms if t.lower() not in root_cause_summary.lower()]
+
+    # Check for scheduling evidence
+    scheduling_markers = ["FailedScheduling", "Unschedulable", "nodeSelector", "no matching node"]
+    scheduling_found = any(m.lower() in root_cause_summary.lower() for m in scheduling_markers)
+
+    if missing_terms:
+        root_cause_evidence_reason = f"missing_root_cause_term: {', '.join(missing_terms)}"
+        failure_reasons.append(root_cause_evidence_reason)
+        root_cause_evidence_satisfied = False
+    elif not scheduling_found:
+        root_cause_evidence_reason = "missing_scheduling_root_cause_evidence"
+        failure_reasons.append(root_cause_evidence_reason)
+        root_cause_evidence_satisfied = False
     else:
-        # Multi-pass mode
-        mode = "multipass"
-        MIN_REQUIRED = 2  # Local constant to avoid circular import
+        root_cause_evidence_reason = None
+        root_cause_evidence_satisfied = True
 
-        if pass_count < MIN_REQUIRED:
-            failure_reasons.append(f"insufficient_passes: {pass_count} < {MIN_REQUIRED}")
-
-        if not read_only_constraints_satisfied:
-            failure_reasons.append(f"read_only_contract_violated: {read_only_violations}")
-
-        # Root cause evidence from prose terms
-        required_terms = ["shipping", "nodeSelector", "k9b.dev/otel-lab-node"]
-        missing_terms = [t for t in required_terms if t.lower() not in root_cause_summary.lower()]
-
-        # Check for scheduling evidence
-        scheduling_markers = ["FailedScheduling", "Unschedulable", "nodeSelector", "no matching node"]
-        scheduling_found = any(m.lower() in root_cause_summary.lower() for m in scheduling_markers)
-
-        if missing_terms:
-            root_cause_evidence_reason = f"missing_root_cause_term: {', '.join(missing_terms)}"
-            failure_reasons.append(root_cause_evidence_reason)
-            root_cause_evidence_satisfied = False
-        elif not scheduling_found:
-            root_cause_evidence_reason = "missing_scheduling_root_cause_evidence"
-            failure_reasons.append(root_cause_evidence_reason)
-            root_cause_evidence_satisfied = False
-        else:
-            root_cause_evidence_reason = None
-            root_cause_evidence_satisfied = True
-
-        success = len(failure_reasons) == 0
+    success = len(failure_reasons) == 0
 
     return P4cDiagnosisOutcome(
         success=success,
