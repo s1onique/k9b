@@ -43,3 +43,5 @@ scripts/ci/wire_toolcache_helm.sh,legacy-debt,platform-team,Helm toolcache wirin
 scripts/ci/wire_toolcache_kubectl.sh,legacy-debt,platform-team,kubectl toolcache wiring from RUNNER_TOOL_CACHE; CI hermetic toolchain wiring,shell,pending,N/A
 scripts/ci/wire_toolcache_node.sh,legacy-debt,platform-team,Node.js toolcache wiring from RUNNER_TOOL_CACHE; CI hermetic toolchain wiring,shell,pending,N/A
 scripts/ci/wire_toolcache_python.sh,legacy-debt,platform-team,Python toolcache wiring from RUNNER_TOOL_CACHE; CI hermetic toolchain wiring,shell,pending,N/A
+scripts/ci/wire_qemu_binfmt.sh,legacy-debt,platform-team,QEMU/binfmt wiring from Harbor-cached binfmt image; CI hermetic toolchain wiring,shell,pending,N/A
+scripts/ci/wire_docker_buildx.sh,legacy-debt,platform-team,Docker Buildx builder wiring using shell-first CLI commands; CI hermetic toolchain wiring,shell,pending,N/A

@@ -103,35 +103,11 @@ jobs:
         run: source scripts/ci/docker_login.sh "${HARBOR_REGISTRY}" "${HARBOR_USERNAME}" "HARBOR_TOKEN"
 
       - name: Set up QEMU
-        run: |
-          set -euo pipefail
-          echo "=== Setting up QEMU ==="
-          # Check if QEMU is already available
-          if command -v qemu-arm-static &>/dev/null || command -v qemu-aarch64-static &>/dev/null; then
-            echo "QEMU already available on runner"
-          else
-            echo "WARNING: QEMU not found in PATH"
-            echo "Multi-arch builds may fail if QEMU is not installed on runner"
-          fi
-          # Register QEMU binaries with binfmt_misc if available
-          if [ -d /proc/sys/fs/binfmt_misc ]; then
-            echo "binfmt_misc available"
-          fi
+        run: scripts/ci/wire_qemu_binfmt.sh aarch64
 
       - name: Set up Docker Buildx
-        run: |
-          set -euo pipefail
-          echo "=== Setting up Docker Buildx ==="
-          # Check if buildx is available
-          if docker buildx version &>/dev/null; then
-            echo "Buildx version: $(docker buildx version)"
-            # Create builder instance
-            docker buildx create --name k9b-builder --driver docker-container --use 2>/dev/null || docker buildx use default
-            docker buildx inspect --bootstrap
-          else
-            echo "WARNING: buildx not available"
-            exit 1
-          fi
+        id: buildx
+        run: scripts/ci/wire_docker_buildx.sh k9b-builder
 
       - name: Extract backend metadata
         id: meta-backend

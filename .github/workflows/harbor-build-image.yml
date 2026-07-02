@@ -79,22 +79,8 @@ jobs:
             exit 1
           }
 
-      # CI-HERMETIC-TOOLCACHE: QEMU setup replaced with shell-first wiring.
       - name: Set up QEMU
-        run: |
-          set -euo pipefail
-          echo "=== Setting up QEMU for arm64 ==="
-          if [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ] 2>/dev/null; then
-            echo "QEMU aarch64 already registered with binfmt_misc"
-          else
-            echo "Registering QEMU aarch64 with binfmt_misc..."
-            docker pull harbor-pve1.spbnix.local/dockerhub-cache/tonistiigi/binfmt:latest
-            docker run --rm --privileged \
-              harbor-pve1.spbnix.local/dockerhub-cache/tonistiigi/binfmt:latest \
-              --install aarch64
-          fi
-          echo "QEMU setup complete"
-          cat /proc/sys/fs/binfmt_misc/qemu-aarch64 2>/dev/null || echo "binfmt_misc not mounted, but Docker should still work"
+        run: scripts/ci/wire_qemu_binfmt.sh aarch64
 
       # Configure BuildKit with Harbor CA trust
       # BuildKit runs in docker-container driver mode, requiring explicit registry CA config.
@@ -122,29 +108,11 @@ jobs:
 
           echo "BuildKit config written to ${RUNNER_TEMP}/buildkit/buildkitd.toml"
 
-      # CI-HERMETIC-TOOLCACHE: Buildx setup replaced with shell-first wiring.
       - name: Set up Docker Buildx
         id: buildx
-        run: |
-          set -euo pipefail
-          echo "=== Setting up Docker Buildx ==="
-          BUILDER_NAME="k9b-harbor-builder"
-          if docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1; then
-            echo "Builder ${BUILDER_NAME} already exists, switching to it"
-            docker buildx use "${BUILDER_NAME}"
-          else
-            echo "Creating Buildx builder: ${BUILDER_NAME}"
-            docker buildx create \
-              --name "${BUILDER_NAME}" \
-              --driver docker-container \
-              --driver-opt "image=harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1" \
-              --buildkitd-config "${RUNNER_TEMP}/buildkit/buildkitd.toml" \
-              --use
-          fi
-          echo "Buildx builder configuration:"
-          docker buildx inspect "${BUILDER_NAME}" || true
-          echo "Using builder: ${BUILDER_NAME}"
-          echo "name=${BUILDER_NAME}" >> "$GITHUB_OUTPUT"
+        env:
+          K9B_BUILDKIT_CONFIG: ${{ runner.temp }}/buildkit/buildkitd.toml
+        run: scripts/ci/wire_docker_buildx.sh k9b-harbor-builder
 
       # Patch BuildKit containers after they are created by setup-buildx-action
       - name: Patch BuildKit containers with Harbor CA

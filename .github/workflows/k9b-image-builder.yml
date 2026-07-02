@@ -143,60 +143,15 @@ jobs:
       # =============================================================================
       # QEMU setup for multi-arch builds
       # =============================================================================
-      # CI-HERMETIC-TOOLCACHE: QEMU setup replaced with shell-first toolcache wiring.
       - name: Set up QEMU
-        run: |
-          set -euo pipefail
-          echo "=== Setting up QEMU for arm64 ==="
-          
-          # Check if QEMU is already registered with binfmt_misc
-          if [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ] 2>/dev/null; then
-            echo "QEMU aarch64 already registered with binfmt_misc"
-          else
-            echo "Registering QEMU aarch64 with binfmt_misc..."
-            # Pull the binfmt image from Harbor and register interpreters
-            docker pull harbor-pve1.spbnix.local/dockerhub-cache/tonistiigi/binfmt:latest
-            # The binfmt image auto-registers on run
-            docker run --rm --privileged \
-              harbor-pve1.spbnix.local/dockerhub-cache/tonistiigi/binfmt:latest \
-              --install aarch64
-          fi
-          
-          echo "QEMU setup complete"
-          # Verify registration
-          cat /proc/sys/fs/binfmt_misc/qemu-aarch64 2>/dev/null || echo "binfmt_misc not mounted, but Docker should still work"
+        run: scripts/ci/wire_qemu_binfmt.sh aarch64
 
       # =============================================================================
       # BuildKit setup
       # =============================================================================
-      # CI-HERMETIC-TOOLCACHE: Buildx setup replaced with shell-first toolcache wiring.
       - name: Set up Docker Buildx
         id: buildx
-        run: |
-          set -euo pipefail
-          echo "=== Setting up Docker Buildx ==="
-          
-          # Use idempotent builder creation: reuse if exists, create if not
-          BUILDER_NAME="k9b-harbor-builder"
-          
-          if docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1; then
-            echo "Builder ${BUILDER_NAME} already exists, switching to it"
-            docker buildx use "${BUILDER_NAME}"
-          else
-            echo "Creating Buildx builder: ${BUILDER_NAME}"
-            docker buildx create \
-              --name "${BUILDER_NAME}" \
-              --driver docker-container \
-              --driver-opt "image=harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1" \
-              --use
-          fi
-          
-          # Inspect the builder to verify setup
-          echo "Buildx builder configuration:"
-          docker buildx inspect "${BUILDER_NAME}" || true
-          
-          echo "Using builder: ${BUILDER_NAME}"
-          echo "name=${BUILDER_NAME}" >> "$GITHUB_OUTPUT"
+        run: scripts/ci/wire_docker_buildx.sh k9b-harbor-builder
 
       # =============================================================================
       # Patch BuildKit containers with Harbor CA
