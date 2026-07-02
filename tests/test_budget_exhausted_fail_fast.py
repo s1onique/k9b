@@ -71,14 +71,19 @@ class TestBudgetExhaustedFailFast:
         mock_invoke.return_value = budget_exhausted_result
 
         result: dict[str, object] = {}
-        success, pass_count, pass_run_ids, post_attempted = phase2_invoke_and_poll_pass(
-            kubeconfig="/path/to/kubeconfig",
-            namespace="k9b",
-            incident_id="test-incident",
-            pass_attempt=1,
-            max_passes=5,
-            result=result,
+        success, pass_count, pass_run_ids, post_attempted, review_artifact_path = (
+            phase2_invoke_and_poll_pass(
+                kubeconfig="/path/to/kubeconfig",
+                namespace="k9b",
+                incident_id="test-incident",
+                pass_attempt=1,
+                max_passes=5,
+                result=result,
+            )
         )
+
+        # Budget exhaustion should not produce a review artifact
+        assert review_artifact_path is None
 
         # Should fail immediately
         assert success is False, "Should fail on budget_exhausted"
