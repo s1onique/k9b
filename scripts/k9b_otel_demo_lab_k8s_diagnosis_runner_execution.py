@@ -170,9 +170,18 @@ def run_backend_targeted_diagnosis(
                 log(f"    [pass {pass_attempt}/{max_passes}] WARNING: Pass invocation failed, using accumulated passes")
                 break
 
-        # Update pass tracking
-        total_pass_count = pass_count
-        all_pass_run_ids = pass_run_ids
+        # Merge pass run IDs - accumulate from all invocations FIRST.
+        # This must happen before max() so len(all_pass_run_ids) reflects post-merge state.
+        for rid in pass_run_ids:
+            if rid not in all_pass_run_ids:
+                all_pass_run_ids.append(rid)
+
+        # Update pass tracking - ACCUMULATE from all invocations.
+        # The backend's current state may only show recent passes (split-brain state),
+        # so we track the maximum observed across all invocations.
+        # HARDENING: Also consider len(all_pass_run_ids) after merging current IDs
+        # to be resilient when backend loop_summary is latest-only.
+        total_pass_count = max(total_pass_count, pass_count, len(all_pass_run_ids))
 
         # Check for terminal no-checks decision AFTER pass count check
         # LAB-STRICT: Terminal no-checks alone is not sufficient - we must have
