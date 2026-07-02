@@ -87,6 +87,7 @@ class TestHandlerCallsCollector:
         mock_handler = MagicMock()
         mock_handler.command = "POST"
         mock_handler._health_root = Path("/tmp/health")
+        mock_handler.body = b"{}"  # Empty JSON body for config parsing
 
         # Call handler
         handle_incident_automatic_diagnosis_loop_one_pass_api(
@@ -124,6 +125,7 @@ class TestHandlerCallsCollector:
         mock_handler = MagicMock()
         mock_handler.command = "POST"
         mock_handler._health_root = Path("/tmp/health")
+        mock_handler.body = b"{}"  # Empty JSON body for config parsing
 
         with patch(
             "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.send_json_response"
@@ -199,6 +201,7 @@ class TestHandlerErrorCases:
         mock_handler = MagicMock()
         mock_handler.command = "POST"
         mock_handler._health_root = Path("/tmp/health")
+        mock_handler.body = b"{}"  # Empty JSON body for config parsing
 
         with patch(
             "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.send_json_response"
@@ -240,6 +243,7 @@ class TestHandlerErrorCases:
         mock_handler = MagicMock()
         mock_handler.command = "POST"
         mock_handler._health_root = Path("/tmp/health")
+        mock_handler.body = b"{}"  # Empty JSON body for config parsing
 
         with patch(
             "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.send_json_response"
@@ -297,6 +301,7 @@ class TestEndpointDistinction:
         mock_handler = MagicMock()
         mock_handler.command = "POST"
         mock_handler._health_root = Path("/tmp/health")
+        mock_handler.body = b"{}"  # Empty JSON body for config parsing
 
         with patch(
             "k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop.send_json_response"

@@ -45,6 +45,7 @@ def _response_for_result(result: object) -> dict[str, Any]:
     handler = SimpleNamespace(
         command="POST",
         _health_root=Path("/tmp/health"),
+        body=b"{}",  # Empty JSON body for config parsing
     )
 
     with (

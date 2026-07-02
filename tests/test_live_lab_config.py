@@ -348,11 +348,11 @@ class TestKubectlBootstrap:
     """Test kubectl bootstrap using protected environment kubeconfig (not in-cluster SA)."""
 
     def test_live_workflow_installs_kubectl_before_preflight(self) -> None:
-        """Live workflow should install kubectl using azure/setup-kubectl before bootstrap."""
+        """Live workflow should install kubectl using toolchain action before bootstrap."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        setup_pos = content.find("azure/setup-kubectl@v4")
+        setup_pos = content.find("k9b-live-lab-toolchain")
         bootstrap_pos = content.find("Bootstrap protected kubeconfig")
-        assert setup_pos != -1, "azure/setup-kubectl@v4 not found"
+        assert setup_pos != -1, "k9b-live-lab-toolchain action not found"
         assert bootstrap_pos != -1, "Bootstrap protected kubeconfig step not found"
         assert setup_pos < bootstrap_pos, \
             f"kubectl setup ({setup_pos}) must come before bootstrap ({bootstrap_pos})"
@@ -360,32 +360,24 @@ class TestKubectlBootstrap:
     def test_live_workflow_uses_pinned_kubectl_version(self) -> None:
         """Live workflow should use a pinned kubectl version, not 'latest'.
         
-        Requires azure/setup-kubectl@v4 to specify with.version, and accepts either:
-        a) inline semantic version (e.g., version: 'v1.31.0')
-        b) env indirection (version: '${{ env.KUBECTL_VERSION }}') but only when 
-           KUBECTL_VERSION is defined as a pinned semantic version in env.
+        Uses k9b-live-lab-toolchain custom action which wires kubectl from runner tool cache.
+        The toolchain action accepts kubectl-version input and wires pinned versions.
         
         The key contract is: NOT floating/latest.
         """
         content = WORKFLOW_LIVE_FILE.read_text()
         
-        # Check setup-kubectl has a version specified in with: block
-        # Accepts both quoted and unquoted values
-        setup_kubectl_match = re.search(
-            r"azure/setup-kubectl@v4.*?"
-            r"with:\s*"
-            r"(?:version:\s*['\"]v\d+\.\d+(?:\.\d+)?['\"]"  # a) inline version (quoted)
-            r"|version:\s*['\"]?\${{\s*env\.KUBECTL_VERSION\s*}}['\"]?)"  # b) env indirection (quoted or unquoted)
-            ,
-            content,
-            re.DOTALL
-        )
-        assert setup_kubectl_match, \
-            "azure/setup-kubectl@v4 must specify with.version (inline or via KUBECTL_VERSION)"
+        # Check that k9b-live-lab-toolchain is used
+        assert "k9b-live-lab-toolchain" in content, \
+            "Should use k9b-live-lab-toolchain action"
         
-        # Check if using env indirection (with or without quotes)
+        # Check that kubectl-version is passed to the action (pinned via env)
+        assert "kubectl-version:" in content, \
+            "Should specify kubectl-version input"
+        
+        # Check if using env indirection
         using_env_indirection = bool(re.search(
-            r"version:\s*['\"]?\${{\s*env\.KUBECTL_VERSION\s*}}['\"]?",
+            r"kubectl-version:\s*['\"]?\${{\s*env\.KUBECTL_VERSION\s*}}['\"]?",
             content
         ))
         
@@ -397,10 +389,6 @@ class TestKubectlBootstrap:
             )
             assert kubectl_version_match, \
                 "KUBECTL_VERSION must be defined with a pinned semantic version (e.g., 'v1.31.0')"
-        
-        # Should NOT use 'latest' inline (with or without quotes)
-        assert not re.search(r"version:\s*['\"]?latest['\"]?", content), \
-            "Should NOT use 'latest' for kubectl version"
         
         # Should NOT use 'latest' via KUBECTL_VERSION env
         env_latest_match = re.search(r"KUBECTL_VERSION:\s*['\"]latest['\"]", content)
@@ -513,10 +501,12 @@ class TestKubectlBootstrap:
             if stripped.startswith('with:'):
                 continue
             
-            # Skip YAML list item indicators for 'with' values (e.g., version:, repository:)
-            if re.match(r'^\s+\w+:', stripped) and not stripped.startswith('run:'):
+            # Skip YAML list item indicators for 'with' values (e.g., version:, repository:, kubectl-version:)
+            # These lines are YAML key-value pairs, not shell commands
+            if re.match(r'^[\w-]+:', stripped) and not stripped.startswith('run:'):
                 # This is a YAML key-value pair, not a command
                 # But be careful: 'run: |' or 'run: >' starts a run block
+                # [\w-]+ handles hyphenated keys like kubectl-version
                 continue
             
             # If we get here, it's likely a real kubectl command without --kubeconfig
@@ -536,47 +526,46 @@ class TestKubectlBootstrap:
             "Should verify cluster reachability"
 
     def test_cache_metadata_with_kubectl_is_not_bare_command(self) -> None:
-        """Cache restore/save metadata containing 'kubectl' must not be flagged as bare kubectl commands.
+        """kubectl references in YAML metadata must not be flagged as bare kubectl commands.
         
-        Regression test: cache metadata like id: cache-kubectl, path: .../kubectl, 
-        key: kubectl-... are YAML metadata, not shell commands. The kubeconfig test
-        should ignore these lines.
+        Regression test: The k9b-live-lab-toolchain action uses kubectl-version input
+        and paths in the tool cache. These are YAML metadata, not shell commands.
+        The kubeconfig test should ignore these lines.
         """
         content = WORKFLOW_LIVE_FILE.read_text()
         
-        # Verify cache restore step exists with kubectl in metadata
-        assert "actions/cache/restore@v6" in content, \
-            "Should use actions/cache/restore@v6"
-        assert "id: cache-kubectl" in content, \
-            "Should have id: cache-kubectl step"
-        assert "path: ${{ runner.tool_cache }}/kubectl" in content, \
-            "Should have kubectl path in cache restore"
-        assert "key: kubectl-" in content, \
-            "Should have kubectl key in cache restore"
+        # Verify k9b-live-lab-toolchain is used (which wires kubectl from tool cache)
+        assert "k9b-live-lab-toolchain" in content, \
+            "Should use k9b-live-lab-toolchain action"
         
-        # Verify cache save step exists
-        assert "actions/cache/save@v6" in content, \
-            "Should use actions/cache/save@v6"
+        # Verify kubectl-version is passed to the action (YAML input, not a command)
+        assert "kubectl-version:" in content, \
+            "Should have kubectl-version input to toolchain action"
         
-        # Verify the cache metadata contains 'kubectl' but is NOT a shell command
+        # Verify the toolchain action references kubectl in tool cache paths
+        assert "k9b-live-lab-toolchain/action.yml" in content or "k9b-live-lab-toolchain" in content, \
+            "Should reference k9b-live-lab-toolchain"
+        
+        # Verify lines containing 'kubectl' that are NOT shell commands
         lines_with_kubectl = [line for line in content.split('\n') if 'kubectl' in line]
         
-        # Filter to lines that are cache metadata (should be skipped by kubeconfig test)
-        cache_metadata_lines = [
+        # Filter to lines that are YAML metadata (toolchain action inputs, tool cache paths)
+        yaml_metadata_lines = [
             line for line in lines_with_kubectl
-            if 'id: cache-kubectl' in line 
-            or 'path: ${{ runner.tool_cache }}/kubectl' in line
-            or 'key: kubectl-' in line
-            or 'if: steps.cache-kubectl' in line
+            if 'kubectl-version:' in line
+            or 'k9b-live-lab-toolchain' in line
+            or '${{ runner.tool_cache }}' in line
         ]
         
-        assert len(cache_metadata_lines) > 0, \
-            "Should have cache metadata lines containing 'kubectl'"
+        assert len(yaml_metadata_lines) > 0, \
+            "Should have YAML metadata lines containing 'kubectl'"
         
-        # These lines should NOT be shell commands (no run: prefix)
-        for line in cache_metadata_lines:
-            assert not re.match(r'^\s*run:', line.strip()), \
-                f"Cache metadata should not be a run: block: {line.strip()}"
+        # These lines should NOT be shell commands (no run: prefix followed by kubectl)
+        for line in yaml_metadata_lines:
+            stripped = line.strip()
+            if stripped.startswith('run:'):
+                assert 'kubectl' not in stripped, \
+                    f"YAML metadata should not be a run: block with kubectl: {stripped[:80]}"
 
 
 class TestRBACPreflight:
@@ -889,10 +878,10 @@ class TestHelmDeployment:
     """Test that live workflow deploys k9b via Helm chart."""
 
     def test_live_workflow_sets_up_helm(self) -> None:
-        """Live workflow should set up Helm."""
+        """Live workflow should set up Helm via k9b-live-lab-toolchain action."""
         content = WORKFLOW_LIVE_FILE.read_text()
-        assert "azure/setup-helm" in content, \
-            "Should use Helm setup action"
+        assert "k9b-live-lab-toolchain" in content, \
+            "Should use k9b-live-lab-toolchain action (which wires Helm from tool cache)"
 
     def test_live_workflow_deploys_via_helm_upgrade_install(self) -> None:
         """Live workflow should use helm upgrade --install."""

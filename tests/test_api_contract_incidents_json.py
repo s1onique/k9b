@@ -197,6 +197,7 @@ class TestAutomaticDiagnosisLoopJsonContract:
             handler = MockApiHandler()
             handler.command = "POST"
             handler.path = "/api/incidents/nonexistent-incident/automatic-diagnosis-loop/one-pass"
+            handler.body = b"{}"  # Empty JSON body for config parsing
             handle_incident_automatic_diagnosis_loop_one_pass_api(handler, "nonexistent-incident")  # type: ignore[arg-type]
 
             # Must return JSON, not HTML
@@ -217,6 +218,7 @@ class TestAutomaticDiagnosisLoopJsonContract:
             handler = MockApiHandler()
             handler.command = "POST"
             handler.path = "/api/incidents/test-incident/automatic-diagnosis-loop/one-pass"
+            handler.body = b"{}"  # Empty JSON body for config parsing
             handle_incident_automatic_diagnosis_loop_one_pass_api(handler, "test-incident")  # type: ignore[arg-type]
 
             # Must return JSON

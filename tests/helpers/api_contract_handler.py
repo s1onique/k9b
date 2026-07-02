@@ -67,6 +67,8 @@ class MockApiHandler(BaseHTTPRequestHandler, JsonResponseSender):
         self._response_bytes: int = 0
         self._send_count: int = 0  # Track response calls to detect double-send
         self.wfile: _CapturingBytesIO = _CapturingBytesIO(self)
+        # Request body attribute for handlers that read request body (e.g., _parse_request_config)
+        self.body: bytes = b""
 
     def send_response(self, code: int, message: str | None = None) -> None:
         """Mock send_response for BaseHTTPRequestHandler compatibility."""

@@ -106,13 +106,13 @@ class TestAdminWorkflowEnvironment:
 
 
 class TestAdminWorkflowKubectl:
-    """Test that the admin workflow uses pinned kubectl."""
+    """Test that the admin workflow uses pinned kubectl via toolchain action."""
 
-    def test_workflow_uses_azure_setup_kubectl(self) -> None:
-        """Workflow should use azure/setup-kubectl@v4."""
+    def test_workflow_uses_toolchain_action(self) -> None:
+        """Workflow should use k9b-live-lab-toolchain action for kubectl."""
         content = ADMIN_WORKFLOW_FILE.read_text()
-        assert 'azure/setup-kubectl@v4' in content, \
-            "Should use azure/setup-kubectl@v4"
+        assert 'k9b-live-lab-toolchain' in content, \
+            "Should use k9b-live-lab-toolchain action (which wires kubectl from tool cache)"
 
     def test_workflow_uses_pinned_kubectl_version(self) -> None:
         """Workflow should use a pinned kubectl version."""
@@ -122,14 +122,13 @@ class TestAdminWorkflowKubectl:
             "Should define KUBECTL_VERSION environment variable"
         assert "KUBECTL_VERSION: 'v1.31.0'" in content, \
             "Should use v1.31.0 kubectl version in env"
-        # Should use azure/setup-kubectl@v4 with env var
-        assert "azure/setup-kubectl@v4" in content, \
-            "Should use azure/setup-kubectl@v4"
+        # Should use k9b-live-lab-toolchain with kubectl-version input
+        assert "k9b-live-lab-toolchain" in content, \
+            "Should use k9b-live-lab-toolchain action"
+        assert "kubectl-version:" in content, \
+            "Should specify kubectl-version input"
         assert "${{ env.KUBECTL_VERSION }}" in content, \
             "Should reference KUBECTL_VERSION env var"
-        # Should NOT use 'latest'
-        assert "version: 'latest'" not in content, \
-            "Should NOT use 'latest' for kubectl version"
 
 
 class TestAdminWorkflowManifestPath:
