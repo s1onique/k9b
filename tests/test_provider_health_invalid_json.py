@@ -27,8 +27,13 @@ def fake_provider_preflight_time(monkeypatch: pytest.MonkeyPatch) -> list[float]
 
     Also patches PREFLIGHT_RETRY_DEADLINE_SECONDS to 1s so tests don't wait
     for the full 60s retry window.
+
+    Patches both provider_preflight and provider_preflight_curl since the split
+    modules each have their own time imports.
     """
+    import time as time_module
     import scripts.lab_common.provider_preflight as provider_preflight
+    import scripts.lab_common.provider_preflight_curl as provider_preflight_curl
 
     now = 0.0
     sleeps: list[float] = []
@@ -41,9 +46,13 @@ def fake_provider_preflight_time(monkeypatch: pytest.MonkeyPatch) -> list[float]
         sleeps.append(float(seconds))
         now += max(float(seconds), 0.0)
 
-    monkeypatch.setattr(provider_preflight.time, "time", fake_time)
-    monkeypatch.setattr(provider_preflight.time, "sleep", fake_sleep)
+    # Patch time module globally for all imports
+    monkeypatch.setattr(time_module, "time", fake_time)
+    monkeypatch.setattr(time_module, "sleep", fake_sleep)
+
+    # Patch deadline in both modules (split modules each have their own imports)
     monkeypatch.setattr(provider_preflight, "PREFLIGHT_RETRY_DEADLINE_SECONDS", 1, raising=False)
+    monkeypatch.setattr(provider_preflight_curl, "PREFLIGHT_RETRY_DEADLINE_SECONDS", 1, raising=False)
 
     return sleeps
 

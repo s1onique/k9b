@@ -5,7 +5,6 @@ These tests cover the regression cases and failure message precision.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -17,7 +16,10 @@ import pytest
 @pytest.fixture(autouse=True)
 def fake_provider_preflight_time(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     """Mock time functions and shrink deadline for fast tests."""
+    import time as time_module
+
     import scripts.lab_common.provider_preflight as provider_preflight
+    import scripts.lab_common.provider_preflight_curl as provider_preflight_curl
 
     now = 0.0
     sleeps: list[float] = []
@@ -30,9 +32,11 @@ def fake_provider_preflight_time(monkeypatch: pytest.MonkeyPatch) -> list[float]
         sleeps.append(float(seconds))
         now += max(float(seconds), 0.0)
 
-    monkeypatch.setattr(provider_preflight.time, "time", fake_time)
-    monkeypatch.setattr(provider_preflight.time, "sleep", fake_sleep)
+    # Patch time module globally for both modules
+    monkeypatch.setattr(time_module, "time", fake_time)
+    monkeypatch.setattr(time_module, "sleep", fake_sleep)
     monkeypatch.setattr(provider_preflight, "PREFLIGHT_RETRY_DEADLINE_SECONDS", 1, raising=False)
+    monkeypatch.setattr(provider_preflight_curl, "PREFLIGHT_RETRY_DEADLINE_SECONDS", 1, raising=False)
 
     return sleeps
 
