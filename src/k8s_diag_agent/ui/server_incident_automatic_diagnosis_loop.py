@@ -116,6 +116,60 @@ def _extract_incident_result_from_collector(
         return result
 
 
+def _read_request_body(handler: object) -> bytes:
+    """Read request body from handler using standard HTTP primitives.
+
+    This function provides compatibility between:
+    1. Fakes/tests that provide a direct `.body` attribute
+    2. Real HealthUIRequestHandler which uses rfile + Content-Length
+
+    BaseHTTPRequestHandler does not define a `.body` attribute. It exposes
+    the request payload via rfile (input stream) and Content-Length header.
+
+    Args:
+        handler: HTTP request handler instance (HealthUIRequestHandler or mock)
+
+    Returns:
+        Raw request body as bytes, or empty bytes if unavailable
+    """
+    # Priority 1: Check for explicit .body attribute (for test fakes)
+    existing_body = getattr(handler, "body", None)
+    if existing_body is not None:
+        if isinstance(existing_body, bytes):
+            return existing_body
+        if isinstance(existing_body, str):
+            return existing_body.encode("utf-8")
+        try:
+            return bytes(existing_body)
+        except (TypeError, ValueError):
+            return b""
+
+    # Priority 2: Read from rfile using Content-Length (real HTTP handler)
+    headers = getattr(handler, "headers", None)
+    if headers is None:
+        return b""
+
+    raw_content_length = headers.get("Content-Length", "0")
+    try:
+        content_length = int(raw_content_length or "0")
+    except ValueError:
+        content_length = 0
+
+    if content_length <= 0:
+        return b""
+
+    rfile = getattr(handler, "rfile", None)
+    if rfile is None:
+        return b""
+
+    data = rfile.read(content_length)
+    if isinstance(data, bytes):
+        return data
+    if isinstance(data, str):
+        return data.encode("utf-8")
+    return b""
+
+
 def _parse_request_config(handler: HealthUIRequestHandler) -> AutomaticDiagnosisLoopConfig | None:
     """Parse optional config from request body.
 
@@ -130,30 +184,31 @@ def _parse_request_config(handler: HealthUIRequestHandler) -> AutomaticDiagnosis
     """
     import json
 
-    if not handler.body:
+    body = _read_request_body(handler)
+    if not body:
         return None
 
     try:
-        body = json.loads(handler.body)
+        parsed = json.loads(body)
     except (json.JSONDecodeError, UnicodeDecodeError):
         return None
 
-    if not isinstance(body, dict):
+    if not isinstance(parsed, dict):
         return None
 
     # Check if any config fields are present
     config_fields = ["max_passes_per_incident", "max_checks_per_pass", "max_incidents_per_run"]
-    if not any(field in body for field in config_fields):
+    if not any(field in parsed for field in config_fields):
         return None
 
     # Build config from request body with semantic validation.
     # _positive_int() rejects booleans, non-integers, zero, and negatives.
     return AutomaticDiagnosisLoopConfig(
-        max_incidents_per_run=_positive_int(body.get("max_incidents_per_run"), 10),
-        max_passes_per_incident=_positive_int(body.get("max_passes_per_incident"), 1),
-        max_checks_per_pass=_positive_int(body.get("max_checks_per_pass"), 5),
-        write_stop_path_packets=body.get("write_stop_path_packets", True),
-        write_ineligible_packets=body.get("write_ineligible_packets", False),
+        max_incidents_per_run=_positive_int(parsed.get("max_incidents_per_run"), 10),
+        max_passes_per_incident=_positive_int(parsed.get("max_passes_per_incident"), 1),
+        max_checks_per_pass=_positive_int(parsed.get("max_checks_per_pass"), 5),
+        write_stop_path_packets=parsed.get("write_stop_path_packets", True),
+        write_ineligible_packets=parsed.get("write_ineligible_packets", False),
     )
 
 
