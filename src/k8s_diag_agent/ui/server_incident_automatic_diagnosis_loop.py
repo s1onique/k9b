@@ -21,7 +21,11 @@ import re
 from dataclasses import asdict, is_dataclass
 from typing import TYPE_CHECKING, Any
 
-from ..collect.incident_diagnosis_auto_loop import collect_automatic_diagnosis_evidence
+from ..collect.incident_diagnosis_auto_loop_config import AutomaticDiagnosisLoopConfig
+from ..collect.incident_diagnosis_auto_loop_entrypoints import (
+    _positive_int,
+    collect_automatic_diagnosis_evidence,
+)
 from ..collect.incident_diagnosis_auto_loop_models import (
     AutoLoopCollectorResult,
     AutoLoopIncidentResult,
@@ -112,6 +116,47 @@ def _extract_incident_result_from_collector(
         return result
 
 
+def _parse_request_config(handler: HealthUIRequestHandler) -> AutomaticDiagnosisLoopConfig | None:
+    """Parse optional config from request body.
+
+    Uses _positive_int() to validate budget fields, rejecting booleans,
+    strings, zero, and negative values in favor of safe defaults.
+
+    Args:
+        handler: The HTTP request handler instance
+
+    Returns:
+        AutomaticDiagnosisLoopConfig if config fields are present in request body, None otherwise.
+    """
+    import json
+
+    if not handler.body:
+        return None
+
+    try:
+        body = json.loads(handler.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+    if not isinstance(body, dict):
+        return None
+
+    # Check if any config fields are present
+    config_fields = ["max_passes_per_incident", "max_checks_per_pass", "max_incidents_per_run"]
+    if not any(field in body for field in config_fields):
+        return None
+
+    # Build config from request body with semantic validation.
+    # _positive_int() rejects booleans, non-integers, zero, and negatives.
+    return AutomaticDiagnosisLoopConfig(
+        max_incidents_per_run=_positive_int(body.get("max_incidents_per_run"), 10),
+        max_passes_per_incident=_positive_int(body.get("max_passes_per_incident"), 1),
+        max_checks_per_pass=_positive_int(body.get("max_checks_per_pass"), 5),
+        write_stop_path_packets=body.get("write_stop_path_packets", True),
+        write_ineligible_packets=body.get("write_ineligible_packets", False),
+    )
+
+
 def handle_incident_automatic_diagnosis_loop_one_pass_api(
     handler: HealthUIRequestHandler,
     incident_id: str,
@@ -124,7 +169,12 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
     Unlike /diagnosis-loop/one-pass which uses fake-runner semantics,
     this endpoint runs the REAL automatic diagnosis loop collector.
 
-    Request body: None or empty (incident_id from URL)
+    Request body (optional):
+        {
+            "max_passes_per_incident": 5,  // Override default (1) for lab scenarios
+            "max_checks_per_pass": 5,       // Max checks per pass
+            "max_incidents_per_run": 10     // Max incidents to process
+        }
 
     Response (success):
         {
@@ -174,13 +224,19 @@ def handle_incident_automatic_diagnosis_loop_one_pass_api(
     # Step 2: Compute external_analysis_dir from handler's health_root
     external_analysis_dir = handler._health_root / "external-analysis"
 
-    # Step 3: Invoke the automatic diagnosis loop collector
+    # Step 3: Parse optional config from request body
+    # This allows lab scenarios (like P4c with min_required_passes=2) to override
+    # the default max_passes_per_incident=1 budget limit
+    config = _parse_request_config(handler)
+
+    # Step 4: Invoke the automatic diagnosis loop collector
     # NOTE: collect_automatic_diagnosis_evidence() returns AutoLoopIncidentResult directly,
     # NOT AutoLoopCollectorResult. The handler must not assume result.incident_results exists.
     try:
         result = collect_automatic_diagnosis_evidence(
             incident_id=incident_id,
             external_analysis_dir=external_analysis_dir,
+            config=config,
         )
     except Exception as exc:
         error_class = exc.__class__.__name__

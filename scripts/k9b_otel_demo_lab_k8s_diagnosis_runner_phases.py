@@ -121,6 +121,9 @@ def phase2_invoke_and_poll_pass(
         kubeconfig=kubeconfig,
         namespace=namespace,
         incident_id=incident_id,
+        # Pass max_passes as budget limit so backend allows multiple passes
+        # This fixes the contract: required_passes=2, budget.limit=1 was impossible
+        max_passes_per_incident=max_passes,
     )
 
     if pass_attempt == 1:

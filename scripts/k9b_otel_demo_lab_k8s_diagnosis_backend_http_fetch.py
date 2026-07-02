@@ -222,6 +222,7 @@ def invoke_targeted_automatic_diagnosis_loop(
     namespace: str,
     incident_id: str,
     backend_port: int = DEFAULT_K9B_BACKEND_PORT,
+    max_passes_per_incident: int = 5,
 ) -> TargetedDiagnosisInvocationResult:
     """Invoke the targeted automatic diagnosis-loop one-pass endpoint.
 
@@ -244,9 +245,12 @@ def invoke_targeted_automatic_diagnosis_loop(
 
     Args:
         kubeconfig: Path to kubeconfig
-        namespace: k9b namespace
+        namespace: Namespace where k9b backend runs
         incident_id: Incident ID to diagnose
         backend_port: Backend port (default: 8080)
+        max_passes_per_incident: Budget limit for passes per incident (default: 5).
+            For lab scenarios requiring multiple passes, this should be >= MIN_REQUIRED_PASSES.
+            The backend eligibility check uses this to determine if the incident is eligible.
 
     Returns:
         TargetedDiagnosisInvocationResult with invocation details
@@ -260,9 +264,12 @@ def invoke_targeted_automatic_diagnosis_loop(
 
     headers = {"Content-Type": "application/json"}
 
-    # Minimal request body - the backend will handle diagnosis
+    # Request body with budget config for lab scenarios
+    # The backend uses max_passes_per_incident as the budget limit for eligibility.
+    # For P4c with MIN_REQUIRED_PASSES=2, we need budget >= 2 to allow pass 2.
     request_body = json.dumps({
         "run_id": f"p4c-target-{int(time.time())}",
+        "max_passes_per_incident": max_passes_per_incident,
         "diagnosis_report": {
             "diagnosis": {
                 "recommended_investigations": []

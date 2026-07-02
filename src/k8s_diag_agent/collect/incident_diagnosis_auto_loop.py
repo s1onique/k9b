@@ -61,7 +61,8 @@ __all__ = [
     "AutoLoopIncidentResult",
     "AutoLoopCollectorResult",
     "run_automatic_diagnosis_loop_evidence_collection",
-    "collect_automatic_diagnosis_evidence",
+    # collect_automatic_diagnosis_evidence is available via lazy import
+    # from .incident_diagnosis_auto_loop_entrypoints
 ]
 
 
@@ -456,45 +457,11 @@ def _build_minimal_diagnosis_report(
 # =============================================================================
 
 
-def collect_automatic_diagnosis_evidence(
-    incident_id: str,
-    external_analysis_dir: Path,
-) -> AutoLoopIncidentResult:
-    """Collect automatic diagnosis evidence for a single incident.
-
-    Convenience wrapper for single-incident collection.
-    Respects the K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED setting.
-
-    Args:
-        incident_id: The incident ID to collect evidence for
-        external_analysis_dir: Path to external-analysis directory
-
-    Returns:
-        AutoLoopIncidentResult with processing outcome
-    """
-    if not is_automatic_diagnosis_loop_enabled():
-        return AutoLoopIncidentResult(
-            incident_id=incident_id,
-            eligible=False,
-            eligibility_reason="automatic_collector_disabled",
-            skipped=True,
-            skip_reason="K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED is not set to true",
-        )
-
-    result = run_automatic_diagnosis_loop_evidence_collection(
-        external_analysis_dir=external_analysis_dir,
-        incident_ids=[incident_id],
-    )
-
-    if result.incident_results:
-        return AutoLoopIncidentResult(
-            **result.incident_results[0]
-        )
-
-    return AutoLoopIncidentResult(
-        incident_id=incident_id,
-        eligible=False,
-        eligibility_reason="no_incidents_processed",
-        skipped=True,
-        skip_reason="No incidents were processed",
-    )
+# Backwards compatibility import - the single-incident entrypoint was extracted
+# to keep this module under the LLM-friendly size limit.
+# Import lazily to avoid circular dependency.
+def __getattr__(name: str) -> object:
+    if name == "collect_automatic_diagnosis_evidence":
+        from .incident_diagnosis_auto_loop_entrypoints import collect_automatic_diagnosis_evidence
+        return collect_automatic_diagnosis_evidence
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

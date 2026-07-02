@@ -227,6 +227,17 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
                 "on the k9b-scheduler deployment (not backend). "
                 "Ensure scheduler deployment has this env var configured."
             )
+        elif failure_reason == "premature_terminal_no_checks":
+            # Special case: the loop WAS invoked, but reached terminal decision before required passes
+            # This is NOT the same as "loop was not invoked"
+            pass_count = evidence.get("pass_count", 0)
+            failure_msg = (
+                f"premature_terminal_no_checks: observed {pass_count} targeted diagnosis pass(es), "
+                f"required {MIN_REQUIRED_PASSES}. "
+                f"The diagnosis loop was invoked and reached a terminal no-checks decision, "
+                f"but lab-strict multipass evidence was not satisfied before the terminal decision. "
+                f"incident_id={incident_id}"
+            )
         else:
             failure_msg = (
                 f"{failure_reason}: "
