@@ -89,6 +89,54 @@ class TestForbiddenActions:
             f"{yaml_path.relative_to(ROOT)} uses forbidden actions: {violations}"
         )
 
+    def test_no_docker_setup_buildx_action_in_workflows(self) -> None:
+        """Regression test: docker/setup-buildx-action must not appear in any workflow.
+
+        This external action is forbidden by hermetic doctrine. Buildx is pre-wired
+        by runner tool cache instead of being set up at runtime by a third-party action.
+
+        See docs/ci-hermetic-toolchain.md.
+        """
+        offenders: list[str] = []
+        for yaml_path in find_yaml_files():
+            if yaml_path.suffix not in (".yml", ".yaml"):
+                continue
+            text = yaml_path.read_text(encoding="utf-8")
+            if "docker/setup-buildx-action" in text:
+                offenders.append(str(yaml_path.relative_to(ROOT)))
+
+        assert not offenders, (
+            f"docker/setup-buildx-action found in: {', '.join(offenders)}. "
+            f"Buildx is pre-wired by runner tool cache; do not use the external action."
+        )
+
+    def test_harbor_build_workflow_uses_valid_buildx_pattern(self) -> None:
+        """Verify harbor-build-image.yml uses repo-owned buildx with --buildkitd-config and builder input.
+
+        The hermetic pattern uses docker buildx create --buildkitd-config to wire BuildKit CA config,
+        and wires the builder name to docker/build-push-action via the valid builder input.
+        """
+        workflow = ROOT / ".github/workflows/harbor-build-image.yml"
+        if not workflow.exists():
+            pytest.skip("harbor-build-image.yml not found")
+        content = workflow.read_text(encoding="utf-8")
+
+        # Must NOT use forbidden action
+        assert "docker/setup-buildx-action" not in content
+
+        # Must NOT pass buildkitd-config to build-push-action (not a valid input)
+        assert "buildkitd-config:" not in content
+
+        # Must use --buildkitd-config flag with buildx create (not --config)
+        assert (
+            '--buildkitd-config "${{ steps.buildkitd-config.outputs.path }}"'
+            in content
+        )
+        assert "--config" not in content
+
+        # Must wire builder to build-push-action
+        assert "builder: ${{ steps.buildx.outputs.name }}" in content
+
     @pytest.mark.parametrize(
         "action,violates",
         [

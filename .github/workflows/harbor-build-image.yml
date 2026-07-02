@@ -111,22 +111,27 @@ jobs:
           echo "BuildKit config written to ${RUNNER_TEMP}/buildkit/buildkitd.toml"
           echo "path=${RUNNER_TEMP}/buildkit/buildkitd.toml" >> "${GITHUB_OUTPUT}"
 
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v4
-        with:
-          buildkitd-config: ${{ steps.buildkitd-config.outputs.path }}
-
+      # CI-HERMETIC-TOOLCACHE: Buildx is pre-wired by runner tool cache, no setup action needed.
+      # BuildKit daemon is configured via buildkitd-config step above.
       - name: Emit Docker toolchain provenance
-        run: scripts/ci/emit_toolchain_provenance.sh "docker,buildx"
-
-      # Patch BuildKit containers after they are created by setup-buildx-action
-      - name: Patch BuildKit containers with Harbor CA
         env:
-          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
-          BUILDX_BUILDER_NAME: ${{ steps.buildx.outputs.name }}
-          SKIP_RUNNER_DOCKER_CERTS_D: "1"
-        run: .github/scripts/install-spbnix-harbor-ca.sh
+          TOOLCHAIN_COMPONENTS: docker,buildx
+        run: scripts/ci/emit_toolchain_provenance.sh "$TOOLCHAIN_COMPONENTS"
+
+      # CI-HERMETIC-TOOLCACHE: Buildx is pre-wired by runner tool cache.
+      # Create hermetic Buildx builder with BuildKit config for Harbor CA trust.
+      - name: Create hermetic Buildx builder
+        id: buildx
+        run: |
+          set -euo pipefail
+          builder_name="k9b-hermetic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker buildx create \
+            --name "$builder_name" \
+            --driver docker-container \
+            --buildkitd-config "${{ steps.buildkitd-config.outputs.path }}" \
+            --use
+          docker buildx inspect --bootstrap
+          echo "name=$builder_name" >> "$GITHUB_OUTPUT"
 
       # CI-HERMETIC-TOOLCACHE: docker/login-action replaced with docker_login.sh.
       - name: Login to Harbor
@@ -161,3 +166,4 @@ jobs:
           cache-from: type=registry,ref=${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache
           cache-to: type=registry,ref=${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache,mode=max
           build-args: ${{ inputs.build_args }}
+          builder: ${{ steps.buildx.outputs.name }}

@@ -107,14 +107,12 @@ jobs:
       - name: Set up QEMU
         run: scripts/ci/wire_qemu_binfmt.sh aarch64
 
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v4
-        with:
-          buildkitd-config: ${{ steps.buildkitd-config.outputs.path }}
-
+      # CI-HERMETIC-TOOLCACHE: Buildx is pre-wired by runner tool cache, no setup action needed.
+      # BuildKit daemon is configured via buildkitd-config step above.
       - name: Emit toolchain provenance
-        run: scripts/ci/emit_toolchain_provenance.sh "docker,buildx"
+        env:
+          TOOLCHAIN_COMPONENTS: docker,buildx
+        run: scripts/ci/emit_toolchain_provenance.sh "$TOOLCHAIN_COMPONENTS"
 
       - name: Extract backend metadata
         id: meta-backend
