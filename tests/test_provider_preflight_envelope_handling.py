@@ -228,3 +228,92 @@ class TestProviderHealthPayloadDataclass:
         assert payload.curl_exit is None
         assert payload.http_code is None
         assert payload.envelope_detected is False
+
+
+class TestStreamSeparationRegression:
+    """Regression tests for stream separation (stdout vs stderr metadata).
+
+    These tests verify the invariant that:
+    - Provider JSON body is parsed ONLY from stdout
+    - STDERR_BLOCK, CURL_EXIT, HTTP_CODE are envelope metadata, not JSON body
+    - Contamination detection works correctly when known patterns follow valid JSON
+    """
+
+    def test_parser_extracts_stderr_block_content_from_known_envelope(self) -> None:
+        """Valid JSON followed by STDERR_BLOCK should be parsed as known envelope metadata."""
+        raw = '{"available": true, "provider": "test"}\nSTDERR_BLOCK\nboom'
+        payload = _extract_provider_health_payload(raw)
+
+        # STDERR_BLOCK is known envelope marker, so content after it is extracted
+        # as stderr_block metadata, not treated as contamination
+        assert payload.envelope_detected is True
+        assert payload.json_body == '{"available": true, "provider": "test"}'
+        assert payload.stderr_block == "boom"
+
+    def test_parser_extracts_json_from_clean_output(self) -> None:
+        """Clean JSON without envelope should parse correctly."""
+        raw = '{"available": true, "provider": "test"}'
+        payload = _extract_provider_health_payload(raw)
+
+        assert payload.envelope_detected is False
+        assert payload.json_body == '{"available": true, "provider": "test"}'
+        assert payload.raw_suffix == ""
+
+    def test_curl_framing_detects_stderr_block(self) -> None:
+        """STDERR_BLOCK should be detected as curl framing."""
+        from scripts.lab_common.provider_preflight_json_classification import (
+            _looks_like_curl_framing_suffix,
+        )
+
+        assert _looks_like_curl_framing_suffix("STDERR_BLOCK") is True
+        assert _looks_like_curl_framing_suffix("STDERR_BLOCK\nsome error") is True
+
+    def test_curl_framing_rejects_non_curl_trailing_text(self) -> None:
+        """Non-curl trailing text should NOT be detected as curl framing."""
+        from scripts.lab_common.provider_preflight_json_classification import (
+            _looks_like_curl_framing_suffix,
+        )
+
+        assert _looks_like_curl_framing_suffix("random error message") is False
+        assert _looks_like_curl_framing_suffix("unexpected output") is False
+
+    def test_stderr_block_with_empty_content_is_valid_envelope(self) -> None:
+        """STDERR_BLOCK with empty content should be valid envelope."""
+        raw = '{"available": true}\nSTDERR_BLOCK\n\nCURL_EXIT=0\nHTTP_CODE=200'
+        payload = _extract_provider_health_payload(raw)
+
+        assert payload.envelope_detected is True
+        assert payload.json_body == '{"available": true}'
+        assert payload.curl_exit == 0
+        assert payload.http_code == 200
+        assert payload.stderr_block == ""
+
+    def test_json_with_only_stderr_block_suffix(self) -> None:
+        """JSON with only STDERR_BLOCK marker should be valid envelope."""
+        raw = '{"available": true}\nSTDERR_BLOCK\n'
+        payload = _extract_provider_health_payload(raw)
+
+        assert payload.envelope_detected is True
+        assert payload.json_body == '{"available": true}'
+        assert payload.raw_suffix == ""
+
+    def test_json_with_bare_stderr_block_suffix_is_valid_envelope(self) -> None:
+        """JSON followed by bare STDERR_BLOCK marker (no trailing newline) should be valid envelope."""
+        raw = '{"available": true}\nSTDERR_BLOCK'
+        payload = _extract_provider_health_payload(raw)
+
+        assert payload.envelope_detected is True
+        assert payload.json_body == '{"available": true}'
+        assert payload.stderr_block == ""
+        assert payload.raw_suffix == ""
+
+    def test_parser_preserves_unknown_suffix_as_true_contamination(self) -> None:
+        """Unknown text after valid JSON should not be treated as curl envelope metadata."""
+        raw = '{"available": true}\nNOT_A_CURL_ENVELOPE'
+        payload = _extract_provider_health_payload(raw)
+
+        # Unknown suffix is not envelope - the entire text including unknown suffix
+        # is returned as json_body, and raw_suffix captures the contamination
+        assert payload.envelope_detected is False
+        assert payload.json_body == raw
+        assert payload.raw_suffix == "NOT_A_CURL_ENVELOPE"
