@@ -304,7 +304,15 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     # Update validation_success to match normalized outcome
     # This ensures the phase result is consistent with the P4c contract
     evidence["validation_success"] = p4c_outcome.success
-    if not p4c_outcome.success:
+    
+    # Terminal single-pass success: clear stale legacy failure_reason
+    # The normalized outcome is the authoritative source; legacy validation
+    # may have set failure_reason before compute_p4c_outcome() ran
+    if p4c_outcome.success:
+        # Success: clear any stale legacy failure_reason
+        evidence["failure_reason"] = None
+    else:
+        # Failure: use normalized failure_reasons from outcome
         evidence["failure_reason"] = "; ".join(p4c_outcome.failure_reasons) if p4c_outcome.failure_reasons else evidence.get("failure_reason")
 
     # Log the normalized outcome
@@ -312,7 +320,7 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         _log(f"  P4c normalized outcome: SUCCESS (mode={p4c_outcome.mode})")
         _log(f"    pass_count={p4c_outcome.pass_count}, pass_run_ids={list(p4c_outcome.pass_run_ids)}")
     else:
-        _log(f"  P4c normalized outcome: FAILURE")
+        _log("  P4c normalized outcome: FAILURE")
         _log(f"    mode={p4c_outcome.mode}, failures={list(p4c_outcome.failure_reasons)}")
 
     write_diagnosis_evidence(diagnosis_dir, evidence)

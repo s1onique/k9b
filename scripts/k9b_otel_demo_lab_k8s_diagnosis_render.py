@@ -38,17 +38,59 @@ def log_diagnosis_result(
 ) -> None:
     """Log diagnosis result summary.
 
+    This function is outcome-aware: if p4c_outcome exists, it logs the normalized
+    mode and failure_reasons only. For terminal_single_pass success, it omits
+    legacy missing prose terms as validation failures.
+
     Args:
         success: Whether diagnosis succeeded
         evidence: Evidence dict with diagnosis results
         term_checks: Root cause term check results
     """
-    log(f"  Success: {evidence.get('validation_success', success)}")
-    log(f"  Incident ID: {evidence.get('incident_id', 'unknown')}")
-    log(f"  Pass count: {evidence.get('pass_count', 0)}")
-    log(f"  Pass run IDs: {evidence.get('pass_run_ids', [])}")
-    log(f"  Root cause matches: {term_checks}")
-    log(f"  Failure reason: {evidence.get('failure_reason', 'none')}")
+    # Use normalized p4c_outcome if available
+    p4c_outcome = evidence.get("p4c_outcome")
+    if p4c_outcome:
+        outcome_success = p4c_outcome.get("success", evidence.get("validation_success", success))
+        outcome_mode = p4c_outcome.get("mode", "unknown")
+        outcome_pass_count = p4c_outcome.get("pass_count", 0)
+        outcome_pass_run_ids = p4c_outcome.get("pass_run_ids", [])
+        outcome_failure_reasons = p4c_outcome.get("failure_reasons", [])
+        
+        # Log PASSED only when success is true, FAILED only when false
+        if outcome_success:
+            # "terminal" prefix only for terminal_single_pass mode
+            if outcome_mode == "terminal_single_pass":
+                log("  P4c diagnosis PASSED (terminal single-pass outcome)")
+            else:
+                log(f"  P4c diagnosis PASSED ({outcome_mode} outcome)")
+        else:
+            log(f"  P4c diagnosis FAILED ({outcome_mode} outcome)")
+        
+        log(f"  Success: {outcome_success}")
+        log(f"  Incident ID: {evidence.get('incident_id', 'unknown')}")
+        log(f"  Pass count: {outcome_pass_count}")
+        log(f"  Pass run IDs: {outcome_pass_run_ids}")
+        log(f"  Review artifact paths: {p4c_outcome.get('review_artifact_paths', [])}")
+        
+        if outcome_success:
+            # Success: no failure reasons to display
+            log(f"  Root cause matches: {term_checks}")
+            log("  Failure reason: none")
+        else:
+            # Failure: show normalized failure reasons only
+            log(f"  Root cause matches: {term_checks}")
+            if outcome_failure_reasons:
+                log(f"  Failure reasons: {outcome_failure_reasons}")
+            else:
+                log(f"  Failure reason: {evidence.get('failure_reason', 'unknown')}")
+    else:
+        # Legacy path: no normalized outcome available
+        log(f"  Success: {evidence.get('validation_success', success)}")
+        log(f"  Incident ID: {evidence.get('incident_id', 'unknown')}")
+        log(f"  Pass count: {evidence.get('pass_count', 0)}")
+        log(f"  Pass run IDs: {evidence.get('pass_run_ids', [])}")
+        log(f"  Root cause matches: {term_checks}")
+        log(f"  Failure reason: {evidence.get('failure_reason', 'none')}")
 
 
 def log_step(step_num: int, description: str) -> None:

@@ -143,6 +143,12 @@ def compute_p4c_outcome(evidence: dict[str, Any]) -> P4cDiagnosisOutcome:
         # Terminal single-pass mode
         mode: Literal["multipass", "terminal_single_pass"] = "terminal_single_pass"
 
+        # STRICT: terminal_decision must be stop_no_checks_proposed
+        if terminal_decision is None:
+            failure_reasons.append("terminal_decision_missing")
+        elif terminal_decision != "stop_no_checks_proposed":
+            failure_reasons.append(f"terminal_decision_unexpected:{terminal_decision}")
+
         # For terminal mode, pass_run_ids should come from review artifact if not set
         if not pass_run_ids:
             review = evidence.get("backend_incident_detail", {})
@@ -159,6 +165,10 @@ def compute_p4c_outcome(evidence: dict[str, Any]) -> P4cDiagnosisOutcome:
 
         if not review_artifact_paths and evidence.get("review_packet_path"):
             review_artifact_paths = (str(evidence["review_packet_path"]),)
+
+        # STRICT: terminal mode requires a durable run/artifact reference
+        if not pass_run_ids and not review_artifact_paths:
+            failure_reasons.append("missing_review_artifact_reference")
 
         # Read-only is required for terminal mode
         if not read_only_constraints_satisfied:
@@ -180,10 +190,12 @@ def compute_p4c_outcome(evidence: dict[str, Any]) -> P4cDiagnosisOutcome:
         else:
             root_cause_evidence_reason = None
 
-        # Terminal single-pass success requires:
+        # Terminal single-pass success requires ALL of:
+        # - terminal_decision == "stop_no_checks_proposed" (checked above)
+        # - durable run/artifact reference (checked above)
         # - read_only_constraints_satisfied (checked above)
         # - root_cause_evidence_satisfied (checked above)
-        success = read_only_constraints_satisfied and root_cause_evidence_satisfied
+        success = len(failure_reasons) == 0
 
     else:
         # Multi-pass mode

@@ -81,13 +81,20 @@ def _build_k8s_native_verdict(
             p4c_data["pass_run_ids"] = p4c_outcome.get("pass_run_ids", [])
             p4c_data["review_artifact_paths"] = p4c_outcome.get("review_artifact_paths", [])
             p4c_data["failure_reasons"] = p4c_outcome.get("failure_reasons", [])
-            # Use failure_reasons from normalized outcome
-            if p4c_outcome.get("failure_reasons"):
+            
+            # Terminal single-pass success: clear stale failure_reason
+            # The normalized outcome is the authoritative source
+            if p4c_outcome.get("success"):
+                # Success path: no failure_reason should be present
+                p4c_data["failure_reason"] = None
+            elif p4c_outcome.get("failure_reasons"):
+                # Failure path: use normalized failure_reasons only
                 p4c_data["failure_reason"] = "; ".join(p4c_outcome["failure_reasons"])
-            elif not p4c_outcome.get("success"):
+            else:
+                # Fallback for failures without normalized reasons
                 p4c_data["failure_reason"] = p4c_phase.artifacts.get("failure_reason")
         else:
-            # Fallback to legacy behavior
+            # Fallback to legacy behavior (no p4c_outcome present)
             if p4c_success is not None:
                 p4c_data["success"] = p4c_success
             p4c_data["failure_reason"] = p4c_phase.artifacts.get("failure_reason")
