@@ -200,9 +200,13 @@ def test_concatenated_json_without_markers_fails_strict_parsing() -> None:
     
     Acceptance test 5: {"healthy": true}{"extra": true} should fail as invalid.
     This prevents masking malformed server responses.
+    
+    Note: Concatenated JSON is now classified as output_contaminated because
+    raw_decode successfully parses the first JSON object with trailing bytes.
+    This is the correct classification for "valid JSON + extra data".
     """
     from scripts.lab_common.provider_preflight import (
-        FAILURE_PROVIDER_HEALTH_INVALID_JSON,
+        FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
         run_provider_preflight,
     )
 
@@ -234,9 +238,9 @@ def test_concatenated_json_without_markers_fails_strict_parsing() -> None:
                 artifact_dir=Path(tmpdir),
             )
 
-    # Should fail - this is genuinely invalid JSON
+    # Should fail - this is valid JSON + trailing bytes (output contamination)
     assert result.passed is False
-    assert result.failure_class == FAILURE_PROVIDER_HEALTH_INVALID_JSON
+    assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
 
 
 # =============================================================================

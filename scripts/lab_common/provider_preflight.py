@@ -47,8 +47,10 @@ from scripts.lab_common.constants import (
     FAILURE_PROVIDER_DISABLED_REQUIRED,
     FAILURE_PROVIDER_HEALTH_CONNECTION_FAILED,
     FAILURE_PROVIDER_HEALTH_DNS_FAILED,
+    FAILURE_PROVIDER_HEALTH_EMPTY_BODY,
     FAILURE_PROVIDER_HEALTH_INVALID_JSON,
     FAILURE_PROVIDER_HEALTH_NO_HTTP_RESPONSE,
+    FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
     FAILURE_PROVIDER_HEALTH_TIMEOUT,
     FAILURE_PROVIDER_HEALTH_TRANSPORT_ERROR,
     FAILURE_PROVIDER_HEALTH_UNHEALTHY,
@@ -387,6 +389,60 @@ def _curl_exec_pod_with_retry(
     )
 
 
+def _classify_json_parse_failure(body: str, exc: json.JSONDecodeError) -> tuple[str, str, str | None]:
+    """Classify a JSON parse failure with diagnostic probe.
+    
+    Uses raw_decode to determine if the failure is due to:
+    1. Empty body -> empty_body
+    2. Valid JSON + trailing bytes (contamination) -> output_contaminated
+    3. Genuinely invalid JSON -> invalid_json
+    
+    Args:
+        body: The raw body string that failed to parse
+        exc: The JSONDecodeError that was raised
+        
+    Returns:
+        Tuple of (failure_class, message, trailing_suffix_preview)
+    """
+    # Check for empty body
+    if not body or not body.strip():
+        return (
+            FAILURE_PROVIDER_HEALTH_EMPTY_BODY,
+            "Empty response body from /api/health/details",
+            None,
+        )
+    
+    # Use raw_decode to probe for valid JSON prefix with trailing bytes
+    # This distinguishes contamination (valid JSON + trailing metadata)
+    # from genuinely invalid JSON
+    try:
+        decoded, end_index = json.JSONDecoder().raw_decode(body)
+        remaining = body[end_index:].strip()
+        
+        if remaining:
+            # Valid JSON prefix with trailing bytes - this is contamination
+            trailing_preview = remaining[:100]  # Bounded preview
+            return (
+                FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+                f"JSON parse error: valid JSON followed by trailing bytes (output framing contamination). "
+                f"Trailing suffix preview (first 100 chars): {trailing_preview!r}",
+                trailing_preview,
+            )
+    except (json.JSONDecodeError, ValueError):
+        pass  # Not valid JSON prefix, fall through to invalid_json
+    
+    # Genuinely invalid JSON
+    json_error_msg = f"line {exc.lineno}, col {exc.colno}: {exc.msg}" if hasattr(exc, 'lineno') else str(exc)
+    body_prefix = body[:200]
+    return (
+        FAILURE_PROVIDER_HEALTH_INVALID_JSON,
+        f"Invalid JSON response from /api/health/details (HTTP 200). "
+        f"JSON parse error: {json_error_msg}. "
+        f"Body prefix (first 200 chars): {body_prefix!r}",
+        None,
+    )
+
+
 def _evaluate_health_response(
     result: ProviderPreflightResult,
     curl_result: CurlResult,
@@ -399,19 +455,14 @@ def _evaluate_health_response(
     try:
         health_details = json.loads(curl_result.body)
     except json.JSONDecodeError as exc:
-        # Enhanced diagnostics: include body prefix and JSON parse error
-        # This helps distinguish HTML/SPA fallback from malformed JSON
-        body_prefix = curl_result.body[:500] if curl_result.body else ""
-        json_error_msg = f"line {exc.lineno}, col {exc.colno}: {exc.msg}" if hasattr(exc, 'lineno') else str(exc)
-        
-        # Classify as INVALID_JSON for 2xx responses with invalid JSON
-        # This is distinct from transport/connection errors
-        result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
-        result.message = (
-            f"Invalid JSON response from /api/health/details (HTTP {curl_result.http_code}). "
-            f"JSON parse error: {json_error_msg}. "
-            f"Body prefix (first 200 chars): {body_prefix[:200]!r}"
-        )
+        # Enhanced diagnostics: use raw_decode probe to classify the failure
+        # This distinguishes:
+        # 1. Empty body -> provider_health_empty_body
+        # 2. Valid JSON + trailing bytes -> provider_health_output_contaminated
+        # 3. Genuinely invalid JSON -> provider_health_invalid_json
+        failure_class, message, _ = _classify_json_parse_failure(curl_result.body, exc)
+        result.failure_class = failure_class
+        result.message = message
         result.duration_seconds = time.time() - start
         _write_result(result, artifact_dir)
         return result
