@@ -83,6 +83,52 @@ WORKFLOW_EXPECTATIONS = {
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+import re
+from typing import Mapping
+
+
+_SHELL_ENV_REF_RE = re.compile(r"^\$([A-Za-z_][A-Za-z0-9_]*)$")
+_BRACED_SHELL_ENV_REF_RE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
+
+
+def _resolve_static_env_arg(
+    arg: str,
+    *,
+    workflow_env: Mapping[str, object],
+    job_env: Mapping[str, object],
+    step_env: Mapping[str, object],
+) -> str:
+    """Resolve simple shell env indirection used by hermetic workflow contracts.
+
+    This intentionally supports only whole-token env references such as:
+      $TOOLCHAIN_COMPONENTS
+      ${TOOLCHAIN_COMPONENTS}
+
+    It does not attempt general shell evaluation.
+    """
+    stripped = arg.strip().strip("\"'")
+
+    match = _SHELL_ENV_REF_RE.fullmatch(stripped)
+    if match is None:
+        match = _BRACED_SHELL_ENV_REF_RE.fullmatch(stripped)
+
+    if match is None:
+        return stripped
+
+    name = match.group(1)
+
+    for env in (step_env, job_env, workflow_env):
+        value = env.get(name)
+        if isinstance(value, str):
+            return value
+
+    return stripped
+
+
+# =============================================================================
 # Tests
 # =============================================================================
 
@@ -214,10 +260,12 @@ class TestWorkflowProvenanceIntegration:
         if not workflow_path.exists():
             pytest.skip(f"Workflow not found: {workflow_name}")
         data = load_yaml_file(workflow_path)
-        run_blocks = collect_runs_in_yaml(data)
+
+        # Extract env contexts for resolution
+        workflow_env: dict[str, object] = data.get("env", {}) or {}
 
         provenance_calls = [
-            block for block in run_blocks
+            block for block in collect_runs_in_yaml(data)
             if PROVENANCE_SCRIPT in block
         ]
 
@@ -225,7 +273,46 @@ class TestWorkflowProvenanceIntegration:
             match = PROVENANCE_PATTERN.search(call)
             if match:
                 tools_arg = match.group(1)
-                tools = [t.strip() for t in tools_arg.split(",")]
+
+                # Extract step env from the matching run block context
+                # We need to find the step that contains this provenance call
+                # to extract its env context. Stop both loops once matched.
+                step_env: dict[str, object] = {}
+                job_env: dict[str, object] = {}
+                matched_context = False
+
+                for _job_name, job_data in data.get("jobs", {}).items():
+                    if not isinstance(job_data, dict):
+                        continue
+
+                    candidate_job_env = job_data.get("env", {}) or {}
+
+                    for step in job_data.get("steps", []):
+                        if not isinstance(step, dict):
+                            continue
+
+                        step_run = step.get("run", "")
+                        if not isinstance(step_run, str):
+                            continue
+
+                        if step_run == call:
+                            job_env = candidate_job_env
+                            step_env = step.get("env", {}) or {}
+                            matched_context = True
+                            break
+
+                    if matched_context:
+                        break
+
+                # Resolve env references in the tools argument
+                resolved_arg = _resolve_static_env_arg(
+                    tools_arg,
+                    workflow_env=workflow_env,
+                    job_env=job_env,
+                    step_env=step_env,
+                )
+
+                tools = [t.strip() for t in resolved_arg.split(",")]
                 for tool in tools:
                     assert tool in VALID_TOOLS, (
                         f"{workflow_name}: invalid tool '{tool}' in provenance call. "
@@ -283,3 +370,79 @@ class TestProvenancePolicyCompleteness:
             f"These workflows use hermetic toolchain and must call "
             f"{PROVENANCE_SCRIPT} after toolchain wiring."
         )
+
+
+class TestEnvResolutionRegression:
+    """Regression tests for env variable resolution in provenance calls.
+
+    These tests ensure the provenance parser correctly resolves shell env
+    indirection patterns used in hermetic workflow contracts.
+    """
+
+    def test_provenance_allows_step_env_toolchain_components(self) -> None:
+        """Regression: step env $TOOLCHAIN_COMPONENTS must resolve correctly."""
+        workflow_env: dict[str, object] = {}
+        job_env: dict[str, object] = {}
+        step_env: dict[str, object] = {
+            "TOOLCHAIN_COMPONENTS": "python,helm,kubectl",
+        }
+
+        resolved = _resolve_static_env_arg(
+            "$TOOLCHAIN_COMPONENTS",
+            workflow_env=workflow_env,
+            job_env=job_env,
+            step_env=step_env,
+        )
+
+        assert resolved == "python,helm,kubectl"
+
+    def test_provenance_allows_braced_step_env_toolchain_components(self) -> None:
+        """Regression: braced step env ${TOOLCHAIN_COMPONENTS} must resolve correctly."""
+        resolved = _resolve_static_env_arg(
+            "${TOOLCHAIN_COMPONENTS}",
+            workflow_env={},
+            job_env={},
+            step_env={"TOOLCHAIN_COMPONENTS": "docker,buildx"},
+        )
+
+        assert resolved == "docker,buildx"
+
+    def test_resolve_static_env_arg_noop_for_literal_values(self) -> None:
+        """Literal tool names should pass through unchanged."""
+        resolved = _resolve_static_env_arg(
+            "python,helm",
+            workflow_env={},
+            job_env={},
+            step_env={},
+        )
+        assert resolved == "python,helm"
+
+    def test_resolve_static_env_arg_job_env_priority(self) -> None:
+        """Job env should override workflow env."""
+        resolved = _resolve_static_env_arg(
+            "$TOOLCHAIN_COMPONENTS",
+            workflow_env={"TOOLCHAIN_COMPONENTS": "wrong"},
+            job_env={"TOOLCHAIN_COMPONENTS": "correct"},
+            step_env={},
+        )
+        assert resolved == "correct"
+
+    def test_resolve_static_env_arg_step_env_highest_priority(self) -> None:
+        """Step env should override both workflow and job env."""
+        resolved = _resolve_static_env_arg(
+            "$TOOLCHAIN_COMPONENTS",
+            workflow_env={"TOOLCHAIN_COMPONENTS": "workflow"},
+            job_env={"TOOLCHAIN_COMPONENTS": "job"},
+            step_env={"TOOLCHAIN_COMPONENTS": "step"},
+        )
+        assert resolved == "step"
+
+    def test_resolve_static_env_arg_missing_env_returns_original(self) -> None:
+        """Unresolved references should return the original token."""
+        resolved = _resolve_static_env_arg(
+            "$UNDEFINED_VAR",
+            workflow_env={},
+            job_env={},
+            step_env={},
+        )
+        assert resolved == "$UNDEFINED_VAR"
