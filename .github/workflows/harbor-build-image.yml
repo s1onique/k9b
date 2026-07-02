@@ -116,25 +116,13 @@ jobs:
       - name: Emit Docker toolchain provenance
         run: scripts/ci/emit_toolchain_provenance.sh "docker,buildx"
 
-      # CI-HERMETIC-TOOLCACHE: Inline buildx create for hermetic BuildKit daemon config.
-      - name: Create hermetic Buildx builder
+      # CI-HERMETIC-TOOLCACHE: Buildx wired via hermetic shell script.
+      # BuildKit daemon is configured via buildkitd-config step above.
+      - name: Set up Docker Buildx
         id: buildx
         run: |
-          set -euo pipefail
-
-          builder="k9b-harbor-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-
-          docker buildx create \
-            --name "$builder" \
-            --driver docker-container \
-            --driver-opt "image=${K9B_BUILDKIT_IMAGE}" \
-            --buildkitd-config "${{ steps.buildkitd-config.outputs.path }}" \
-            --use
-
-          docker buildx inspect --bootstrap "$builder"
-          echo "name=$builder" >> "${GITHUB_OUTPUT}"
-        env:
-          K9B_BUILDKIT_IMAGE: harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1
+          scripts/ci/wire_docker_buildx.sh \
+            --buildkitd-config "${{ steps.buildkitd-config.outputs.path }}"
 
       # CI-HERMETIC-TOOLCACHE: docker/login-action replaced with docker_login.sh.
       - name: Login to Harbor

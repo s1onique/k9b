@@ -306,8 +306,8 @@ class TestBuildKitHarborCATrust:
             "Should have 'Set up Docker Buildx' step"
         assert "scripts/ci/wire_docker_buildx.sh" in build_section, \
             "Should use hermetic wire_docker_buildx.sh script"
-        assert "BUILDKITD_CONFIG:" in build_section, \
-            "Hermetic Buildx wiring should receive the generated BuildKit config"
+        assert "--buildkitd-config" in build_section, \
+            "Hermetic Buildx wiring should receive the generated BuildKit config via CLI flag"
         assert "steps.buildkitd-config.outputs.path" in build_section, \
             "BuildKit config should reference the generated config path"
         assert "docker/setup-buildx-action" not in build_section, \
@@ -385,8 +385,8 @@ class TestReusableHarborBuildImageWorkflow:
             "Should have 'Set up Docker Buildx' step"
         assert "scripts/ci/wire_docker_buildx.sh" in content, \
             "Should use hermetic wire_docker_buildx.sh script"
-        assert "BUILDKITD_CONFIG:" in content, \
-            "Hermetic Buildx wiring should receive the generated BuildKit config"
+        assert "--buildkitd-config" in content, \
+            "Hermetic Buildx wiring should receive the generated BuildKit config via CLI flag"
         assert "steps.buildkitd-config.outputs.path" in content, \
             "BuildKit config should reference the generated config path"
         assert "builder: ${{ steps.buildx.outputs.name }}" in content, \
