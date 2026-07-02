@@ -180,6 +180,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           kubectl-version: 'latest'
           helm-version: '3.16.3'
+          allow-tool-download: ${{ vars.K9B_LIVE_LAB_ALLOW_TOOL_DOWNLOAD || 'false' }}
 
       # =======================================================================
       # Install Python dependencies (explicit install for test contract)

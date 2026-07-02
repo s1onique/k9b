@@ -117,6 +117,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           kubectl-version: ${{ env.KUBECTL_VERSION }}
           helm-version: ${{ env.HELM_VERSION }}
+          allow-tool-download: ${{ vars.K9B_LIVE_LAB_ALLOW_TOOL_DOWNLOAD || 'false' }}
 
       - name: Emit toolchain provenance
         env:
