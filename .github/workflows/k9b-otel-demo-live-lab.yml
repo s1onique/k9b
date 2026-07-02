@@ -110,9 +110,16 @@ jobs:
       # CI-HERMETIC-TOOLCACHE: Buildx is pre-wired by runner tool cache, no setup action needed.
       # BuildKit daemon is configured via buildkitd-config step above.
       - name: Emit toolchain provenance
+        run: scripts/ci/emit_toolchain_provenance.sh "docker,buildx"
+
+      # CI-HERMETIC-TOOLCACHE: Use repo-owned wire script for Buildx builder.
+      # Creates hermetic Buildx builder with BuildKit config for Harbor CA trust.
+      - name: Set up Docker Buildx
+        id: buildx
         env:
-          TOOLCHAIN_COMPONENTS: docker,buildx
-        run: scripts/ci/emit_toolchain_provenance.sh "$TOOLCHAIN_COMPONENTS"
+          BUILDX_BUILDER_NAME: k9b-otel-demo-${{ github.run_id }}-${{ github.run_attempt }}
+          BUILDKITD_CONFIG: ${{ steps.buildkitd-config.outputs.path }}
+        run: scripts/ci/wire_docker_buildx.sh
 
       - name: Extract backend metadata
         id: meta-backend
@@ -140,6 +147,7 @@ jobs:
           build-args: |
             KUBECTL_VERSION=v1.29.6
             HELM_VERSION=3.20.1
+          builder: ${{ steps.buildx.outputs.name }}
 
       - name: Summary
         run: |

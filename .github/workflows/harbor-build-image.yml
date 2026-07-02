@@ -114,24 +114,16 @@ jobs:
       # CI-HERMETIC-TOOLCACHE: Buildx is pre-wired by runner tool cache, no setup action needed.
       # BuildKit daemon is configured via buildkitd-config step above.
       - name: Emit Docker toolchain provenance
-        env:
-          TOOLCHAIN_COMPONENTS: docker,buildx
-        run: scripts/ci/emit_toolchain_provenance.sh "$TOOLCHAIN_COMPONENTS"
+        run: scripts/ci/emit_toolchain_provenance.sh "docker,buildx"
 
-      # CI-HERMETIC-TOOLCACHE: Buildx is pre-wired by runner tool cache.
-      # Create hermetic Buildx builder with BuildKit config for Harbor CA trust.
-      - name: Create hermetic Buildx builder
+      # CI-HERMETIC-TOOLCACHE: Use repo-owned wire script for Buildx builder.
+      # Creates hermetic Buildx builder with BuildKit config for Harbor CA trust.
+      - name: Set up Docker Buildx
         id: buildx
-        run: |
-          set -euo pipefail
-          builder_name="k9b-hermetic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          docker buildx create \
-            --name "$builder_name" \
-            --driver docker-container \
-            --buildkitd-config "${{ steps.buildkitd-config.outputs.path }}" \
-            --use
-          docker buildx inspect --bootstrap
-          echo "name=$builder_name" >> "$GITHUB_OUTPUT"
+        env:
+          BUILDX_BUILDER_NAME: k9b-hermetic-${{ github.run_id }}-${{ github.run_attempt }}
+          BUILDKITD_CONFIG: ${{ steps.buildkitd-config.outputs.path }}
+        run: scripts/ci/wire_docker_buildx.sh
 
       # CI-HERMETIC-TOOLCACHE: docker/login-action replaced with docker_login.sh.
       - name: Login to Harbor

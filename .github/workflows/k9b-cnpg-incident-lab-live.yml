@@ -119,9 +119,7 @@ jobs:
           helm-version: ${{ env.HELM_VERSION }}
 
       - name: Emit toolchain provenance
-        env:
-          TOOLCHAIN_COMPONENTS: python,helm,kubectl
-        run: scripts/ci/emit_toolchain_provenance.sh "$TOOLCHAIN_COMPONENTS"
+        run: scripts/ci/emit_toolchain_provenance.sh "python,helm,kubectl"
 
       # =======================================================================
       # Install Python dependencies (explicit install for test contract)

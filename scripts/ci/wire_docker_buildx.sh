@@ -9,14 +9,18 @@
 #   builder_name - Buildx builder name (default: k9b-harbor-builder)
 #
 # Environment:
-#   K9B_BUILDX_DRIVER       - Buildx driver (default: docker-container)
-#   K9B_BUILDKIT_IMAGE     - BuildKit image (default: Harbor proxy-cache)
-#   K9B_BUILDKIT_CONFIG    - Optional path to buildkitd.toml
+#   BUILDX_BUILDER_NAME  - Buildx builder name (overrides positional arg)
+#   BUILDKITD_CONFIG    - Path to buildkitd.toml for Harbor CA trust
+#   K9B_BUILDX_DRIVER   - Buildx driver (default: docker-container)
+#   K9B_BUILDKIT_IMAGE  - BuildKit image (default: Harbor proxy-cache)
 #
 # Outputs:
 #   Writes builder name to $GITHUB_OUTPUT if set:
 #     name=<builder>
 #     builder_name=<builder>
+#
+#   Exports to $GITHUB_ENV:
+#     K9B_BUILDX_BUILDER=<builder>
 #
 # Requirements:
 #   - Docker must be available
@@ -27,10 +31,12 @@
 
 set -euo pipefail
 
-BUILDER_NAME="${1:-k9b-harbor-builder}"
+# Builder name: env var takes precedence, then positional arg, then default
+BUILDER_NAME="${BUILDX_BUILDER_NAME:-${1:-k9b-harbor-builder}}"
 BUILDX_DRIVER="${K9B_BUILDX_DRIVER:-docker-container}"
 BUILDKIT_IMAGE="${K9B_BUILDKIT_IMAGE:-harbor-pve1.spbnix.local/dockerhub-cache/moby/buildkit:buildx-stable-1}"
-BUILDKIT_CONFIG="${K9B_BUILDKIT_CONFIG:-}"
+# Support both BUILDKITD_CONFIG (preferred) and K9B_BUILDKIT_CONFIG (legacy)
+BUILDKIT_CONFIG="${BUILDKITD_CONFIG:-${K9B_BUILDKIT_CONFIG:-}}"
 
 # Validate Docker availability
 if ! command -v docker >/dev/null 2>&1; then
@@ -43,6 +49,15 @@ if ! docker buildx version >/dev/null 2>&1; then
     echo "ERROR: docker buildx is required"
     echo "Install docker-buildx-plugin or upgrade Docker"
     exit 1
+fi
+
+# Validate BuildKit config if provided
+if [[ -n "${BUILDKIT_CONFIG}" ]]; then
+    if [[ ! -f "${BUILDKIT_CONFIG}" ]]; then
+        echo "ERROR: BuildKit config does not exist: ${BUILDKIT_CONFIG}"
+        exit 1
+    fi
+    echo "BuildKit config: ${BUILDKIT_CONFIG}"
 fi
 
 echo "=== Docker Buildx setup ==="

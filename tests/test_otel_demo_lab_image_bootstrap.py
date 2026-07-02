@@ -299,10 +299,19 @@ class TestBuildKitHarborCATrust:
         # Verify BuildKit CA configuration exists
         assert "Configure BuildKit with Harbor CA" in build_section, \
             "Should have 'Configure BuildKit with Harbor CA' step"
-        assert 'buildkitd-config:' in build_section, \
-            "setup-buildx-action should have buildkitd-config"
         assert 'buildkitd.toml' in build_section, \
             "Should create buildkitd.toml for BuildKit registry CA config"
+        # Hermetic wiring: wire_docker_buildx.sh receives the config path
+        assert "Set up Docker Buildx" in build_section, \
+            "Should have 'Set up Docker Buildx' step"
+        assert "scripts/ci/wire_docker_buildx.sh" in build_section, \
+            "Should use hermetic wire_docker_buildx.sh script"
+        assert "BUILDKITD_CONFIG:" in build_section, \
+            "Hermetic Buildx wiring should receive the generated BuildKit config"
+        assert "steps.buildkitd-config.outputs.path" in build_section, \
+            "BuildKit config should reference the generated config path"
+        assert "docker/setup-buildx-action" not in build_section, \
+            "Should NOT use docker/setup-buildx-action (hermetic policy)"
 
     def test_otel_workflow_uses_runner_temp_cert_path(self) -> None:
         """OTel workflow should use RUNNER_TEMP for CA cert, not /run/secrets/.
@@ -371,8 +380,19 @@ class TestReusableHarborBuildImageWorkflow:
             "Should have TOML registry config section"
         assert 'ca = ["${cert_path}"]' in content, \
             "TOML ca config should use ${cert_path} variable"
-        assert "buildkitd-config:" in content, \
-            "setup-buildx-action should have buildkitd-config"
+        # Hermetic wiring: wire_docker_buildx.sh receives the config path
+        assert "Set up Docker Buildx" in content, \
+            "Should have 'Set up Docker Buildx' step"
+        assert "scripts/ci/wire_docker_buildx.sh" in content, \
+            "Should use hermetic wire_docker_buildx.sh script"
+        assert "BUILDKITD_CONFIG:" in content, \
+            "Hermetic Buildx wiring should receive the generated BuildKit config"
+        assert "steps.buildkitd-config.outputs.path" in content, \
+            "BuildKit config should reference the generated config path"
+        assert "builder: ${{ steps.buildx.outputs.name }}" in content, \
+            "build-push-action should use the builder from wire script"
+        assert "docker/setup-buildx-action" not in content, \
+            "Should NOT use docker/setup-buildx-action (hermetic policy)"
         assert "/run/secrets/buildkit-certs/" not in content, \
             "Should NOT use /run/secrets/ path (not accessible from runner)"
 
