@@ -417,10 +417,29 @@ def _merge_diagnosis_result(evidence: dict[str, Any], result: dict[str, Any]) ->
     return evidence
 
 
+def _diagnosis_used_simulation(pass_run_ids: list[str]) -> bool:
+    """Check if any pass run ID indicates simulation was used.
+
+    Simulation pass IDs follow the pattern 'sim-{incident_id[:8]}-pass{N}'.
+    Even if simulation_used flag is not set, checking pass_run_ids provides
+    an additional guard against simulated diagnosis being treated as success.
+
+    Args:
+        pass_run_ids: List of pass run IDs
+
+    Returns:
+        True if any pass_run_id starts with 'sim-'
+    """
+    return any(str(rid).startswith("sim-") for rid in pass_run_ids)
+
+
 def _collect_failures(evidence: dict[str, Any], term_checks: dict[str, bool]) -> list[str]:
     """Collect validation failure reasons."""
     failures: list[str] = []
-    if evidence["simulation_used"]:
+
+    # Check for simulation: either via flag or via pass_run_ids markers
+    pass_run_ids = evidence.get("pass_run_ids", [])
+    if evidence["simulation_used"] or _diagnosis_used_simulation(pass_run_ids):
         failures.append("simulation_used_but_not_allowed")
     if not evidence["real_loop_invoked"]:
         failures.append("real_loop_not_invoked")

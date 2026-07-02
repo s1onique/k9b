@@ -51,6 +51,22 @@ def _check_terminal_mode_scheduling_markers(evidence: dict[str, Any]) -> list[st
     return list(dict.fromkeys(found))
 
 
+def _diagnosis_used_simulation(pass_run_ids: tuple[str, ...]) -> bool:
+    """Check if any pass run ID indicates simulation was used.
+
+    Simulation pass IDs follow the pattern 'sim-{incident_id[:8]}-pass{N}'.
+    Even if simulation_used flag is not set, checking pass_run_ids provides
+    an additional guard against simulated diagnosis being treated as success.
+
+    Args:
+        pass_run_ids: Tuple of pass run IDs
+
+    Returns:
+        True if any pass_run_id starts with 'sim-'
+    """
+    return any(str(rid).startswith("sim-") for rid in pass_run_ids)
+
+
 def compute_p4c_outcome(evidence: dict[str, Any]) -> P4cDiagnosisOutcome:
     """Compute the normalized P4c outcome from diagnosis evidence.
 
@@ -68,6 +84,26 @@ def compute_p4c_outcome(evidence: dict[str, Any]) -> P4cDiagnosisOutcome:
     pass_count = evidence.get("pass_count", 0)
     pass_run_ids_raw = evidence.get("pass_run_ids", [])
     pass_run_ids = tuple(str(r) for r in pass_run_ids_raw if r)
+
+    # STRICT: Simulation diagnosis must NOT satisfy the live-lab phase contract.
+    # Check both the simulation_used flag and pass_run_ids for simulation markers.
+    simulation_used_flag = evidence.get("simulation_used", False)
+    simulation_via_pass_ids = _diagnosis_used_simulation(pass_run_ids)
+
+    if simulation_used_flag or simulation_via_pass_ids:
+        return P4cDiagnosisOutcome(
+            success=False,
+            mode="multipass",
+            incident_id=incident_id,
+            pass_count=pass_count,
+            pass_run_ids=pass_run_ids,
+            review_artifact_paths=(),
+            terminal_decision=None,
+            read_only_constraints_satisfied=False,
+            root_cause_evidence_satisfied=False,
+            root_cause_evidence_reason="simulation_used_but_not_allowed",
+            failure_reasons=("simulation_used_but_not_allowed",),
+        )
 
     terminal_no_checks_accepted = evidence.get("terminal_no_checks_accepted", False)
     terminal_decision = evidence.get("terminal_decision_reached")

@@ -61,13 +61,20 @@ from scripts.lab_common.constants import (
     FAILURE_PROVIDER_UNAVAILABLE,
     PREFLIGHT_RETRY_DEADLINE_SECONDS,
 )
-from scripts.lab_common.provider_curl_helpers import CurlResult
+from scripts.lab_common.provider_curl_helpers import (  # noqa: F401
+    CurlResult,
+    _is_retryable,
+)
 from scripts.lab_common.provider_preflight_curl import (
     _curl_exec_pod_with_retry,
     _curl_service_pod_with_retry,
 )
-from scripts.lab_common.provider_preflight_health import (
+
+# Re-export private helpers for backward compatibility with existing tests
+# These functions were moved from this module to specialized modules
+from scripts.lab_common.provider_preflight_health import (  # noqa: F401
     _evaluate_health_response,
+    _evaluate_provider_state,
 )
 from scripts.lab_common.provider_preflight_models import ProviderPreflightResult
 
