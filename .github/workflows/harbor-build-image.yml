@@ -86,8 +86,10 @@ jobs:
       # BuildKit runs in docker-container driver mode, requiring explicit registry CA config.
       # Without this, BuildKit cannot resolve Harbor images with self-signed certs.
       - name: Configure BuildKit with Harbor CA
+        id: buildkitd-config
         env:
           SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+          HARBOR_REGISTRY: ${{ inputs.registry }}
         run: |
           set -euo pipefail
 
@@ -107,12 +109,13 @@ jobs:
           EOF
 
           echo "BuildKit config written to ${RUNNER_TEMP}/buildkit/buildkitd.toml"
+          echo "path=${RUNNER_TEMP}/buildkit/buildkitd.toml" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Docker Buildx
         id: buildx
-        env:
-          K9B_BUILDKIT_CONFIG: ${{ runner.temp }}/buildkit/buildkitd.toml
-        run: scripts/ci/wire_docker_buildx.sh k9b-harbor-builder
+        uses: docker/setup-buildx-action@v4
+        with:
+          buildkitd-config: ${{ steps.buildkitd-config.outputs.path }}
 
       - name: Emit Docker toolchain provenance
         run: scripts/ci/emit_toolchain_provenance.sh "docker,buildx"
