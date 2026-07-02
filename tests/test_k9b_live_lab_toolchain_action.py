@@ -446,7 +446,6 @@ class TestWorkflowToolchainActionUsage:
             # Track if we're in the sanitize section (last section of workflow)
             # Sanitize section needs setup-python for artifact processing
             jobs = workflow.get("jobs", {})
-            steps_before_sanitize = 0
             sanitize_section_started = False
 
             for job_name, job in jobs.items():
