@@ -339,8 +339,10 @@ class TestProviderHealthJsonRobustness:
             run_provider_preflight,
         )
 
-        # Simulate the P0b bug: curl write-out appended to JSON body
-        concatenated_body = '{"healthy":true}CURL_EXIT=0'
+        # Two adjacent JSON objects are concatenated - this is invalid JSON,
+        # not contaminated output. Output contamination is for shell/log text
+        # surrounding valid JSON, not adjacent malformed JSON.
+        concatenated_body = '{"healthy":true}{"ok":true}'
 
         def make_curl_result() -> MagicMock:
             result = MagicMock()
@@ -370,3 +372,125 @@ class TestProviderHealthJsonRobustness:
         # Should fail with invalid_json classification
         assert result.passed is False
         assert result.failure_class == FAILURE_PROVIDER_HEALTH_INVALID_JSON
+
+    def test_preflight_with_log_contaminated_json_fails(self) -> None:
+        """Provider preflight with log text around valid JSON should fail with output_contaminated."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            run_provider_preflight,
+        )
+
+        # Valid JSON embedded in log/curl output text - this is output contamination
+        # because shell/log text surrounds the valid JSON payload
+        contaminated_body = 'INFO booted\n{"healthy":true}\n'
+
+        def make_curl_result() -> MagicMock:
+            result = MagicMock()
+            result.success = True
+            result.body = contaminated_body
+            result.http_code = 200
+            result.curl_rc = 0
+            result.stderr = ""
+            return result
+
+        with patch(
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
+            return_value=make_curl_result(),
+        ), patch(
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
+            return_value=make_curl_result(),
+        ):
+            with TemporaryDirectory() as tmpdir:
+                result = run_provider_preflight(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="k9b",
+                    service="k9b-backend",
+                    port=8080,
+                    artifact_dir=Path(tmpdir),
+                )
+
+        # Should fail with output_contaminated classification
+        # (shell/log text around valid JSON, not adjacent JSON documents)
+        assert result.passed is False
+        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+
+    def test_preflight_with_prefix_and_suffix_log_contamination(self) -> None:
+        """Provider preflight with log text before and after valid JSON should fail with output_contaminated."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            run_provider_preflight,
+        )
+
+        # Valid JSON embedded between log text on both sides - this is output contamination
+        contaminated_body = 'INFO booted\n{"healthy":true}\nTRAILING LOG'
+
+        def make_curl_result() -> MagicMock:
+            result = MagicMock()
+            result.success = True
+            result.body = contaminated_body
+            result.http_code = 200
+            result.curl_rc = 0
+            result.stderr = ""
+            return result
+
+        with patch(
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
+            return_value=make_curl_result(),
+        ), patch(
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
+            return_value=make_curl_result(),
+        ):
+            with TemporaryDirectory() as tmpdir:
+                result = run_provider_preflight(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="k9b",
+                    service="k9b-backend",
+                    port=8080,
+                    artifact_dir=Path(tmpdir),
+                )
+
+        # Should fail with output_contaminated classification
+        # Both prefix and suffix are non-curl log text
+        assert result.passed is False
+        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+
+    def test_preflight_with_suffix_only_log_contamination(self) -> None:
+        """Provider preflight with trailing log text after valid JSON should fail with output_contaminated."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            run_provider_preflight,
+        )
+
+        # Valid JSON with only suffix log text (no prefix) - this is output contamination
+        # Tests the suffix-only detection path specifically
+        contaminated_body = '{"healthy":true}\nTRAILING LOG'
+
+        def make_curl_result() -> MagicMock:
+            result = MagicMock()
+            result.success = True
+            result.body = contaminated_body
+            result.http_code = 200
+            result.curl_rc = 0
+            result.stderr = ""
+            return result
+
+        with patch(
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
+            return_value=make_curl_result(),
+        ), patch(
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
+            return_value=make_curl_result(),
+        ):
+            with TemporaryDirectory() as tmpdir:
+                result = run_provider_preflight(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="k9b",
+                    service="k9b-backend",
+                    port=8080,
+                    artifact_dir=Path(tmpdir),
+                )
+
+        # Should fail with output_contaminated classification
+        # Suffix (TRAILING LOG) is non-curl log text after valid JSON
+        assert result.passed is False
+        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
