@@ -33,6 +33,7 @@ For LLM-friendly reading, see:
 - provider_preflight_models.py - result types and serialization
 - provider_preflight_curl.py - curl retry logic
 - provider_preflight_health.py - health response evaluation and JSON classification
+- provider_preflight_json_classification.py - JSON classification helpers
 """
 
 from __future__ import annotations
@@ -73,8 +74,10 @@ from scripts.lab_common.provider_preflight_curl import (
 # Re-export private helpers for backward compatibility with existing tests
 # These functions were moved from this module to specialized modules
 from scripts.lab_common.provider_preflight_health import (  # noqa: F401
+    ProviderHealthPayload,
     _evaluate_health_response,
     _evaluate_provider_state,
+    _extract_provider_health_payload,
 )
 from scripts.lab_common.provider_preflight_models import ProviderPreflightResult
 
@@ -103,6 +106,9 @@ __all__ = [
     "_classify_json_parse_failure",
     "_looks_like_curl_framing_suffix",
     "_extract_clean_or_contaminated_json",
+    # New envelope extraction helpers
+    "_extract_provider_health_payload",
+    "ProviderHealthPayload",
 ]
 
 
@@ -138,13 +144,13 @@ def _classify_curl_failure(curl_result: CurlResult) -> tuple[str, str]:
 
 
 # Import from split modules for backward compatibility
-from scripts.lab_common.provider_preflight_health import (
+from scripts.lab_common.provider_preflight_json_classification import (  # noqa: E402
     _classify_json_parse_failure as _classify_json_parse_failure,
 )
-from scripts.lab_common.provider_preflight_health import (
+from scripts.lab_common.provider_preflight_json_classification import (  # noqa: E402
     _extract_clean_or_contaminated_json as _extract_clean_or_contaminated_json,
 )
-from scripts.lab_common.provider_preflight_health import (
+from scripts.lab_common.provider_preflight_json_classification import (  # noqa: E402
     _looks_like_curl_framing_suffix as _looks_like_curl_framing_suffix,
 )
 
