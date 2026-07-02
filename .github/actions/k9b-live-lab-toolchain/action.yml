@@ -1,3 +1,9 @@
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first. Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+
 name: k9b live lab toolchain
 description: |
   Wire Python, kubectl, and Helm from local runner tool cache for k9b live labs.
@@ -205,7 +211,27 @@ runs:
         echo "=== Tool wiring complete ==="
 
     # =======================================================================
-    # Step 3: Validate toolchain
+    # Step 3: Python startup proof (LD_LIBRARY_PATH + executable verification)
+    # =======================================================================
+    - name: Python startup proof
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "=== Python startup proof ==="
+        # Set LD_LIBRARY_PATH for shared library linking (libpython*.so*)
+        PYTHON_LIBDIR="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")' 2>/dev/null || echo "")"
+        if [[ -n "${PYTHON_LIBDIR}" && -d "${PYTHON_LIBDIR}" ]]; then
+          export LD_LIBRARY_PATH="${PYTHON_LIBDIR}:${LD_LIBRARY_PATH:-}"
+          echo "LD_LIBRARY_PATH set to: ${PYTHON_LIBDIR}"
+        fi
+        # Prove executable startup
+        python3 -VV
+        python3 -c "import sys; print('sys.executable:', sys.executable)"
+        python3 -c "import ssl; print('SSL OK')"
+        echo "=== Python startup proof PASSED ==="
+
+    # =======================================================================
+    # Step 4: Validate toolchain
     # =======================================================================
     - name: Validate toolchain
       shell: bash
@@ -223,7 +249,7 @@ runs:
         echo "=== Toolchain validation PASSED ==="
 
     # =======================================================================
-    # Step 4: Show final PATH and tool versions
+    # Step 5: Show final PATH and tool versions  (previous step was Step 4: Validate toolchain)
     # =======================================================================
     - name: Show final toolchain state
       shell: bash
