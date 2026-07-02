@@ -4,6 +4,11 @@ This module provides the health response evaluation and JSON parse failure
 classification logic. It is split from provider_preflight.py to keep file sizes
 under LLM-friendly limits.
 
+BROAD contamination contract (see _extract_clean_or_contaminated_json):
+Any non-JSON bytes (prefix, suffix, or both) around a valid provider-health
+JSON object → provider_health_output_contaminated.
+Adjacent JSON documents (no framing bytes) → provider_health_invalid_json.
+
 Classification contract:
 1. First attempt strict json.loads(isolated_body).
 2. If it succeeds: evaluate provider health semantics normally.
@@ -48,16 +53,91 @@ if TYPE_CHECKING:
     pass
 
 
-# Known curl/framing metadata patterns that indicate output contamination
-# These are patterns emitted by the curl harness in provider_curl_helpers.py
-_CURL_FRAMING_PATTERNS = (
-    r"^CURL_EXIT=\d+",  # curl exit code
-    r"^HTTP_CODE=\d+",  # HTTP response code
-    r"^---CURL_",  # framing marker from curl harness
-    r"^STDERR_BLOCK",  # stderr block marker
-    r"^RESOLVING_HOST=",  # DNS resolution diagnostic
-    r"^NO_RESPONSE_BODY$",  # empty body marker
-)
+def _extract_clean_or_contaminated_json(
+    text: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Return parsed provider health JSON, or a specific failure reason."""
+    stripped = text.strip()
+    if not stripped:
+        return None, FAILURE_PROVIDER_HEALTH_INVALID_JSON
+
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        pass
+    else:
+        if isinstance(parsed, dict):
+            return parsed, None
+        return None, FAILURE_PROVIDER_HEALTH_INVALID_JSON
+
+    decoder = json.JSONDecoder()
+
+    # Case 1: valid JSON object starts at position 0 but has trailing content.
+    try:
+        parsed, end_idx = decoder.raw_decode(stripped)
+    except json.JSONDecodeError:
+        parsed = None
+        end_idx = 0
+
+    if isinstance(parsed, dict):
+        suffix = stripped[end_idx:].strip()
+        if not suffix:
+            return parsed, None
+
+        # Adjacent JSON documents are malformed JSON, not log contamination.
+        # Only check for structural JSON tokens: { [ " - not t/f/n which can appear in normal text.
+        if suffix[0] in "{[\"-0123456789":
+            return None, FAILURE_PROVIDER_HEALTH_INVALID_JSON
+
+        return None, FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+
+    # Case 2: valid JSON object appears after log prefix or as array.
+    for idx, char in enumerate(stripped):
+        if char not in "{[":
+            continue
+
+        try:
+            parsed, end_idx = decoder.raw_decode(stripped[idx:])
+        except json.JSONDecodeError:
+            continue
+
+        if not isinstance(parsed, dict):
+            continue
+
+        prefix = stripped[:idx].strip()
+        suffix = stripped[idx + end_idx :].strip()
+
+        if not prefix and not suffix:
+            return parsed, None
+
+        # Check if prefix is a complete JSON value (array or primitive) followed by more JSON.
+        # This indicates adjacent JSON documents, which is invalid JSON, not contamination.
+        if prefix:
+            try:
+                # Try to parse prefix as complete JSON using raw_decode
+                decoder.raw_decode(prefix)
+                # Prefix is valid JSON - this is adjacent JSON, not contamination
+                return None, FAILURE_PROVIDER_HEALTH_INVALID_JSON
+            except (json.JSONDecodeError, ValueError):
+                # Prefix is not valid JSON - this is contamination
+                pass
+
+        # Check if suffix itself is valid JSON (adjacent JSON documents).
+        if suffix:
+            try:
+                json.loads(suffix)
+                # Suffix is valid JSON - adjacent JSON, not contamination
+                return None, FAILURE_PROVIDER_HEALTH_INVALID_JSON
+            except json.JSONDecodeError:
+                pass
+
+            # Check if suffix starts with JSON token (including ] for arrays)
+            if suffix[0] in "{[\"-0123456789]":
+                return None, FAILURE_PROVIDER_HEALTH_INVALID_JSON
+
+        return None, FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+
+    return None, FAILURE_PROVIDER_HEALTH_INVALID_JSON
 
 
 def _looks_like_curl_framing_suffix(suffix: str) -> bool:
@@ -82,7 +162,14 @@ def _looks_like_curl_framing_suffix(suffix: str) -> bool:
         return False
 
     # Check against known patterns
-    for pattern in _CURL_FRAMING_PATTERNS:
+    for pattern in (
+        r"^CURL_EXIT=\d+",  # curl exit code
+        r"^HTTP_CODE=\d+",  # HTTP response code
+        r"^---CURL_",  # framing marker from curl harness
+        r"^STDERR_BLOCK",  # stderr block marker
+        r"^RESOLVING_HOST=",  # DNS resolution diagnostic
+        r"^NO_RESPONSE_BODY$",  # empty body marker
+    ):
         if re.match(pattern, stripped, re.MULTILINE):
             return True
 
@@ -92,16 +179,15 @@ def _looks_like_curl_framing_suffix(suffix: str) -> bool:
 def _classify_json_parse_failure(body: str, exc: json.JSONDecodeError) -> tuple[str, str, str | None]:
     """Classify a JSON parse failure with diagnostic probe.
 
-    Uses raw_decode to determine if the failure is due to:
+    Uses the _extract_clean_or_contaminated_json helper to determine if the
+    failure is due to:
     1. Empty body -> empty_body
-    2. Valid JSON + adjacent JSON token -> invalid_json
-    3. Valid JSON + curl framing metadata -> output_contaminated
-    4. Genuinely invalid JSON -> invalid_json
+    2. Valid JSON with prefix/suffix -> output_contaminated
+    3. Genuinely invalid JSON -> invalid_json
 
     MARKER-ISOLATED OUTPUT RULE:
-    Only classify as contamination if the body STARTS with valid JSON followed by
-    curl framing metadata. Finding valid JSON embedded elsewhere in garbage text
-    (e.g., "not valid json{...}") is genuinely invalid JSON, not contamination.
+    Any non-whitespace content before or after a valid JSON object is
+    considered output contamination, not invalid JSON.
 
     Args:
         body: The raw body string that failed to parse
@@ -118,54 +204,21 @@ def _classify_json_parse_failure(body: str, exc: json.JSONDecodeError) -> tuple[
             None,
         )
 
-    # raw_decode from start to check for valid JSON + trailing bytes
-    try:
-        decoded, end_index = json.JSONDecoder().raw_decode(body)
-        remaining = body[end_index:].strip()
+    # Use the new helper to extract clean JSON or detect contamination
+    _, failure_reason = _extract_clean_or_contaminated_json(body)
 
-        if remaining:
-            # Valid JSON prefix with trailing bytes
-            stripped = remaining.lstrip()
-
-            # Check if trailing starts with JSON-like tokens: { [ " - 0-9 t f n
-            # Two adjacent JSON values like {"ok":true}{"ok":false} are
-            # malformed JSON, not contamination.
-            if stripped and stripped[0] in "{[\"-0123456789tfn":
-                # Adjacent JSON document - this is invalid JSON
-                body_prefix = body[:200]
-                return (
-                    FAILURE_PROVIDER_HEALTH_INVALID_JSON,
-                    f"Invalid JSON response from /api/health/details (HTTP 200). "
-                    f"JSON parse error: extra data after valid JSON object. "
-                    f"Body prefix (first 200 chars): {body_prefix!r}",
-                    None,
-                )
-
-            # Check if trailing suffix looks like known curl/framing metadata
-            if _looks_like_curl_framing_suffix(remaining):
-                # This is genuine output contamination (curl metadata appended)
-                trailing_preview = remaining[:100]  # Bounded preview
-                return (
-                    FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
-                    f"JSON parse error: valid JSON followed by known curl/framing metadata "
-                    f"(output framing contamination). Trailing suffix preview (first 100 chars): {trailing_preview!r}",
-                    trailing_preview,
-                )
-
-            # Non-curl trailing text -> invalid JSON (not contamination)
-            body_prefix = body[:200]
-            return (
-                FAILURE_PROVIDER_HEALTH_INVALID_JSON,
-                f"Invalid JSON response from /api/health/details (HTTP 200). "
-                f"JSON parse error: extra data after valid JSON object. "
-                f"Body prefix (first 200 chars): {body_prefix!r}",
-                None,
-            )
-    except (json.JSONDecodeError, ValueError):
-        pass
+    if failure_reason == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED:
+        # Extract preview of the contamination for the message
+        body_prefix = body[:200]
+        return (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            f"JSON parse error: valid JSON found but output contains non-JSON prefix/suffix "
+            f"(output contamination). Body prefix (first 200 chars): {body_prefix!r}",
+            None,
+        )
 
     # Genuinely invalid JSON (no valid JSON at start)
-    json_error_msg = f"line {exc.lineno}, col {exc.colno}: {exc.msg}" if hasattr(exc, 'lineno') else str(exc)
+    json_error_msg = f"line {exc.lineno}, col {exc.colno}: {exc.msg}" if hasattr(exc, "lineno") else str(exc)
     body_prefix = body[:200]
     return (
         FAILURE_PROVIDER_HEALTH_INVALID_JSON,

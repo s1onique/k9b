@@ -151,10 +151,10 @@ class TestProviderHealthInvalidJsonClassification:
         assert result.passed is False
         assert result.failure_class == FAILURE_PROVIDER_HEALTH_INVALID_JSON
 
-    def test_extra_data_after_json_classified_as_invalid(self) -> None:
-        """JSON with trailing non-whitespace data should be classified as invalid."""
+    def test_extra_data_after_json_classified_as_contaminated(self) -> None:
+        """JSON with trailing non-whitespace data should be classified as output_contaminated."""
         from scripts.lab_common.provider_preflight import (
-            FAILURE_PROVIDER_HEALTH_INVALID_JSON,
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
             run_provider_preflight,
         )
 
@@ -183,9 +183,81 @@ class TestProviderHealthInvalidJsonClassification:
                     artifact_dir=Path(tmpdir),
                 )
 
-        # Should fail with invalid_json classification
+        # Should fail with output_contaminated classification (valid JSON with prefix/suffix)
         assert result.passed is False
-        assert result.failure_class == FAILURE_PROVIDER_HEALTH_INVALID_JSON
+        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+
+    def test_prefix_contamination_classified_as_contaminated(self) -> None:
+        """JSON with log prefix before valid JSON should be classified as output_contaminated."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            run_provider_preflight,
+        )
+
+        # Log prefix followed by valid JSON
+        prefix_body = 'INFO starting log\n{"healthy":true}'
+        mock_curl_result = make_curl_result(
+            success=True,
+            body=prefix_body,
+            http_code=200,
+            curl_rc=0,
+        )
+
+        with patch(
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
+            return_value=mock_curl_result,
+        ), patch(
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
+            return_value=mock_curl_result,
+        ):
+            with TemporaryDirectory() as tmpdir:
+                result = run_provider_preflight(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="k9b",
+                    service="k9b-backend",
+                    port=8080,
+                    artifact_dir=Path(tmpdir),
+                )
+
+        # Should fail with output_contaminated classification
+        assert result.passed is False
+        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+
+    def test_prefix_and_suffix_contamination_classified_as_contaminated(self) -> None:
+        """JSON with both log prefix and suffix should be classified as output_contaminated."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            run_provider_preflight,
+        )
+
+        # Log prefix and suffix around valid JSON
+        both_body = 'INFO starting\n{"healthy":true}\nINFO done'
+        mock_curl_result = make_curl_result(
+            success=True,
+            body=both_body,
+            http_code=200,
+            curl_rc=0,
+        )
+
+        with patch(
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
+            return_value=mock_curl_result,
+        ), patch(
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
+            return_value=mock_curl_result,
+        ):
+            with TemporaryDirectory() as tmpdir:
+                result = run_provider_preflight(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="k9b",
+                    service="k9b-backend",
+                    port=8080,
+                    artifact_dir=Path(tmpdir),
+                )
+
+        # Should fail with output_contaminated classification
+        assert result.passed is False
+        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
 
     def test_valid_json_passes(self) -> None:
         """Valid JSON should allow provider preflight to continue."""

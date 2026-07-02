@@ -405,8 +405,8 @@ class TestUnhealthyProvider:
 class TestParserIsolation:
     """Tests that the parser only uses isolated body for JSON parsing."""
 
-    def test_provider_health_parser_does_not_parse_metadata_as_json(self) -> None:
-        """Parser should use isolated body only, not metadata."""
+    def test_provider_health_parser_classifies_garbage_prefix_with_json_as_contaminated(self) -> None:
+        """Parser should classify garbage before valid JSON as contamination."""
         from scripts.lab_common.provider_preflight import _classify_json_parse_failure
 
         metadata = '{"http_code": 200, "curl_exit": 0}'
@@ -418,5 +418,6 @@ class TestParserIsolation:
         except json.JSONDecodeError as exc:
             failure_class, message, _ = _classify_json_parse_failure(invalid_body, exc)
 
-        assert failure_class == "provider_health_invalid_json"
-        assert "contamination" not in message.lower()
+        # Valid JSON exists with garbage prefix - this is contamination
+        assert failure_class == "provider_health_output_contaminated"
+        assert "contamination" in message.lower()

@@ -91,10 +91,10 @@ class TestJsonParseFailureClassification:
         assert failure_class == FAILURE_PROVIDER_HEALTH_INVALID_JSON
         assert "contamination" not in message.lower()
 
-    def test_json_with_unknown_trailing_text_fails_invalid_json(self) -> None:
-        """JSON with unknown trailing text should be classified as invalid_json."""
+    def test_json_with_unknown_trailing_text_fails_contaminated(self) -> None:
+        """JSON with unknown trailing text should be classified as output_contaminated."""
         from scripts.lab_common.provider_preflight import (
-            FAILURE_PROVIDER_HEALTH_INVALID_JSON,
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
             _classify_json_parse_failure,
         )
 
@@ -105,9 +105,8 @@ class TestJsonParseFailureClassification:
         except json.JSONDecodeError as exc:
             failure_class, message, _ = _classify_json_parse_failure(body, exc)
 
-        assert failure_class == FAILURE_PROVIDER_HEALTH_INVALID_JSON
-        assert "contamination" not in message.lower()
-        assert "extra data" in message.lower()
+        assert failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+        assert "contamination" in message.lower()
 
     def test_json_with_curl_metadata_fails_contaminated(self) -> None:
         """JSON with curl metadata should be classified as output_contaminated."""
@@ -175,6 +174,86 @@ class TestJsonParseFailureClassification:
         assert failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
 
 
+class TestExtractCleanOrContaminatedJson:
+    """Tests for _extract_clean_or_contaminated_json helper."""
+
+    def test_clean_json_returns_parsed(self) -> None:
+        """Clean valid JSON should return parsed dict."""
+        from scripts.lab_common.provider_preflight import (
+            _extract_clean_or_contaminated_json,
+        )
+
+        parsed, failure = _extract_clean_or_contaminated_json('{"ok": true}')
+        assert parsed == {"ok": True}
+        assert failure is None
+
+    def test_suffix_contamination_returns_contaminated(self) -> None:
+        """JSON with trailing log text should return contaminated."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            _extract_clean_or_contaminated_json,
+        )
+
+        _, failure = _extract_clean_or_contaminated_json('{"ok": true}\nINFO trailing log')
+        assert failure == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+
+    def test_prefix_contamination_returns_contaminated(self) -> None:
+        """JSON with leading log text should return contaminated."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            _extract_clean_or_contaminated_json,
+        )
+
+        _, failure = _extract_clean_or_contaminated_json('INFO starting\n{"ok": true}')
+        assert failure == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+
+    def test_prefix_and_suffix_contamination_returns_contaminated(self) -> None:
+        """JSON with both log prefix and suffix should return contaminated."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            _extract_clean_or_contaminated_json,
+        )
+
+        _, failure = _extract_clean_or_contaminated_json('INFO starting\n{"ok": true}\nINFO done')
+        assert failure == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+
+    def test_truly_invalid_json_returns_invalid_json(self) -> None:
+        """Truly malformed JSON should return invalid_json."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_INVALID_JSON,
+            _extract_clean_or_contaminated_json,
+        )
+
+        _, failure = _extract_clean_or_contaminated_json('INFO only, no json')
+        assert failure == FAILURE_PROVIDER_HEALTH_INVALID_JSON
+
+        _, failure = _extract_clean_or_contaminated_json('{"ok": ')
+        assert failure == FAILURE_PROVIDER_HEALTH_INVALID_JSON
+
+    def test_concatenated_json_returns_invalid_json(self) -> None:
+        """Concatenated JSON should return invalid_json."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_INVALID_JSON,
+            _extract_clean_or_contaminated_json,
+        )
+
+        _, failure = _extract_clean_or_contaminated_json('{"ok": true}{"extra": true}')
+        assert failure == FAILURE_PROVIDER_HEALTH_INVALID_JSON
+
+    def test_empty_body_returns_invalid_json(self) -> None:
+        """Empty body should return invalid_json."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_INVALID_JSON,
+            _extract_clean_or_contaminated_json,
+        )
+
+        _, failure = _extract_clean_or_contaminated_json('')
+        assert failure == FAILURE_PROVIDER_HEALTH_INVALID_JSON
+
+        _, failure = _extract_clean_or_contaminated_json('   \n\t  ')
+        assert failure == FAILURE_PROVIDER_HEALTH_INVALID_JSON
+
+
 class TestFacadeExports:
     """Tests that facade exports all expected public interfaces."""
 
@@ -212,3 +291,10 @@ class TestFacadeExports:
 
         assert hasattr(provider_preflight, "_looks_like_curl_framing_suffix")
         assert callable(provider_preflight._looks_like_curl_framing_suffix)
+
+    def test_facade_exports_extract_clean_or_contaminated_json(self) -> None:
+        """Facade should export _extract_clean_or_contaminated_json for test use."""
+        from scripts.lab_common import provider_preflight
+
+        assert hasattr(provider_preflight, "_extract_clean_or_contaminated_json")
+        assert callable(provider_preflight._extract_clean_or_contaminated_json)

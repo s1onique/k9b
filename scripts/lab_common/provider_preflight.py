@@ -102,6 +102,7 @@ __all__ = [
     # Also expose _classify_json_parse_failure for tests
     "_classify_json_parse_failure",
     "_looks_like_curl_framing_suffix",
+    "_extract_clean_or_contaminated_json",
 ]
 
 
@@ -139,6 +140,9 @@ def _classify_curl_failure(curl_result: CurlResult) -> tuple[str, str]:
 # Import from split modules for backward compatibility
 from scripts.lab_common.provider_preflight_health import (
     _classify_json_parse_failure as _classify_json_parse_failure,
+)
+from scripts.lab_common.provider_preflight_health import (
+    _extract_clean_or_contaminated_json as _extract_clean_or_contaminated_json,
 )
 from scripts.lab_common.provider_preflight_health import (
     _looks_like_curl_framing_suffix as _looks_like_curl_framing_suffix,
