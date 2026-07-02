@@ -1,17 +1,52 @@
 name: k9b live lab toolchain
-description: Restore/install/cache Python and kubectl toolchains for k9b live labs
+description: |
+  Wire Python, kubectl, and Helm from local runner tool cache for k9b live labs.
+  This avoids redundant setup action overhead on warm self-hosted runners.
+  Fails fast with diagnostics when required tools are missing.
 
 inputs:
   python-version:
-    required: true
-    description: Python version for actions/setup-python
+    required: false
+    default: '3.13'
+    description: Python version (used for cache key fingerprint)
   kubectl-version:
-    required: true
-    description: kubectl version for azure/setup-kubectl
+    required: false
+    default: 'latest'
+    description: kubectl version (used for cache key fingerprint)
+  helm-version:
+    required: false
+    default: '3.16.3'
+    description: Helm version (used for cache key fingerprint)
+
+outputs:
+  python-location:
+    description: Path to Python binary directory
+    value: ${{ steps.wire-tools.outputs.python-bin-dir }}
+  helm-location:
+    description: Path to Helm binary
+    value: ${{ steps.wire-tools.outputs.helm-path }}
+  kubectl-location:
+    description: Path to kubectl binary
+    value: ${{ steps.wire-tools.outputs.kubectl-path }}
+  K9B_LIVE_LAB_PYTHON:
+    description: Path to Python binary
+    value: ${{ steps.wire-tools.outputs.python-bin-dir }}/python3
+  K9B_LIVE_LAB_HELM:
+    description: Path to Helm binary
+    value: ${{ steps.wire-tools.outputs.helm-path }}
+  K9B_LIVE_LAB_KUBECTL:
+    description: Path to kubectl binary
+    value: ${{ steps.wire-tools.outputs.kubectl-path }}
+  tool-cache-hit:
+    description: Whether all tools were found in local cache
+    value: ${{ steps.wire-tools.outputs.cache-hit }}
 
 runs:
   using: composite
   steps:
+    # =======================================================================
+    # Step 1: Show tool cache diagnostics
+    # =======================================================================
     - name: Show tool cache diagnostics
       shell: bash
       run: |
@@ -21,62 +56,183 @@ runs:
         echo "=== Top-level tool cache contents ==="
         ls -la "${{ runner.tool_cache }}" 2>/dev/null || echo "Tool cache root not accessible"
         echo "=== Python tool cache contents ==="
-        find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type d -print 2>/dev/null | sort || true
+        find "${{ runner.tool_cache }}/Python" -maxdepth 4 -type d -print 2>/dev/null | sort || true
         find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type f -name '*.complete' -print 2>/dev/null | sort || true
+        echo "=== Helm tool cache contents ==="
+        find "${{ runner.tool_cache }}/helm" -maxdepth 3 -type d -print 2>/dev/null | sort || true
+        echo "=== kubectl tool cache contents ==="
+        find "${{ runner.tool_cache }}/kubectl" -maxdepth 3 -type d -print 2>/dev/null | sort || true
 
-    - name: Check local Python tool cache
-      id: local-python-tool-cache
+    # =======================================================================
+    # Step 2: Wire tools from local runner tool cache
+    # =======================================================================
+    - name: Wire tools from local runner tool cache
+      id: wire-tools
       shell: bash
       run: |
         set -euo pipefail
 
-        tool_cache="${{ runner.tool_cache }}"
-        echo "Checking local Python tool cache at: ${tool_cache}/Python"
+        tool_cache="${RUNNER_TOOL_CACHE:-${{ runner.tool_cache }}}"
+        echo "Using tool cache root: ${tool_cache}"
+        echo "cache-hit=true" >> "$GITHUB_OUTPUT"
 
-        # Look for executable Python 3.13 under the tool cache
-        if find "${tool_cache}/Python" \
-          -type f \
-          -path "*/3.13.*/*/bin/python3*" \
-          -perm -111 \
-          2>/dev/null | grep -q .; then
-          echo "hit=true" >> "$GITHUB_OUTPUT"
-          echo "Local Python 3.13 tool cache hit"
-        else
-          echo "hit=false" >> "$GITHUB_OUTPUT"
-          echo "Local Python 3.13 tool cache miss"
+        # --- Wire Python ---
+        echo "=== Wiring Python ==="
+        python_bin=""
+        python_paths=(
+          "${tool_cache}/Python/3.13.14/x64/bin"
+          "${tool_cache}/Python/3.13.13/x64/bin"
+          "${tool_cache}/Python/3.13.12/x64/bin"
+          "${tool_cache}/Python/3.13.11/x64/bin"
+          "${tool_cache}/Python/3.13.10/x64/bin"
+          "${tool_cache}/Python/3.13.9/x64/bin"
+          "${tool_cache}/Python/3.13.8/x64/bin"
+          "${tool_cache}/Python/3.13.7/x64/bin"
+          "${tool_cache}/Python/3.13.6/x64/bin"
+          "${tool_cache}/Python/3.13.5/x64/bin"
+          "${tool_cache}/Python/3.13.4/x64/bin"
+          "${tool_cache}/Python/3.13.3/x64/bin"
+          "${tool_cache}/Python/3.13.2/x64/bin"
+          "${tool_cache}/Python/3.13.1/x64/bin"
+          "${tool_cache}/Python/3.13.0/x64/bin"
+        )
+
+        for python_path in "${python_paths[@]}"; do
+          if [[ -x "${python_path}/python3" ]]; then
+            python_bin="${python_path}"
+            echo "Found Python at: ${python_path}"
+            echo "python_bin=${python_path}" >> "$GITHUB_OUTPUT"
+            echo "python-bin-dir=${python_path}" >> "$GITHUB_OUTPUT"
+            break
+          fi
+        done
+
+        if [[ -z "${python_bin}" ]]; then
+          echo "ERROR: No Python 3.13 found in tool cache at expected paths"
+          echo "=== Directory listing of ${tool_cache}/Python ==="
+          find "${tool_cache}/Python" -maxdepth 4 -type d -print 2>/dev/null | sort || echo "No Python directory found"
+          echo "=== Directory listing of ${tool_cache} ==="
+          ls -la "${tool_cache}" 2>/dev/null || echo "Tool cache not accessible"
+          echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+          exit 1
         fi
 
-    - name: Restore Python tool cache (remote fallback)
-      id: cache-python
-      if: steps.local-python-tool-cache.outputs.hit != 'true'
-      uses: actions/cache/restore@v6
-      with:
-        path: ${{ runner.tool_cache }}/Python
-        key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.python-version }}-v1
+        # Append Python bin to PATH
+        echo "${python_bin}" >> "$GITHUB_PATH"
+        echo "PATH extended with: ${python_bin}"
 
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: ${{ inputs.python-version }}
-        architecture: x64
-        cache: 'pip'
+        # Verify Python works
+        "${python_bin}/python3" --version
 
-    - name: Save Python tool cache
-      if: steps.local-python-tool-cache.outputs.hit != 'true' && steps.cache-python.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6
-      continue-on-error: true
-      with:
-        path: ${{ runner.tool_cache }}/Python
-        key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.python-version }}-v1
+        # --- Wire Helm ---
+        echo "=== Wiring Helm ==="
+        helm_paths=(
+          "${tool_cache}/helm/3.16.3/linux-amd64/helm"
+          "${tool_cache}/helm/3.16.2/linux-amd64/helm"
+          "${tool_cache}/helm/3.16.1/linux-amd64/helm"
+          "${tool_cache}/helm/3.16.0/linux-amd64/helm"
+          "${tool_cache}/helm/3.15.0/linux-amd64/helm"
+          "${tool_cache}/helm/3.14.0/linux-amd64/helm"
+          "${tool_cache}/helm/3.13.0/linux-amd64/helm"
+        )
 
-    - name: Set up kubectl
-      uses: azure/setup-kubectl@v4
-      with:
-        version: ${{ inputs.kubectl-version }}
+        helm_path=""
+        for helm_p in "${helm_paths[@]}"; do
+          if [[ -x "${helm_p}" ]]; then
+            helm_path="${helm_p}"
+            echo "Found Helm at: ${helm_path}"
+            break
+          fi
+        done
 
-    - name: Verify Python bootstrap
+        # Also check if helm is in PATH already (from pre-installed)
+        if [[ -z "${helm_path}" ]] && command -v helm &>/dev/null; then
+          helm_path="$(command -v helm)"
+          echo "Using pre-installed Helm at: ${helm_path}"
+        fi
+
+        if [[ -z "${helm_path}" ]]; then
+          echo "ERROR: Helm not found in local runner tool cache"
+          echo "Searched paths:"
+          printf '  - %s\n' "${helm_paths[@]}"
+          echo "Helm is required for live lab execution. Ensure Helm is installed in the runner tool cache."
+          exit 1
+        else
+          helm_dir="$(dirname "${helm_path}")"
+          echo "${helm_dir}" >> "$GITHUB_PATH"
+          echo "helm-path=${helm_path}" >> "$GITHUB_OUTPUT"
+          "${helm_path}" version --short
+        fi
+
+        # --- Wire kubectl ---
+        echo "=== Wiring kubectl ==="
+        kubectl_paths=(
+          "${tool_cache}/kubectl/v1.31.0/linux-amd64/kubectl"
+          "${tool_cache}/kubectl/v1.30.0/linux-amd64/kubectl"
+          "${tool_cache}/kubectl/v1.29.6/linux-amd64/kubectl"
+          "${tool_cache}/kubectl/v1.29.0/linux-amd64/kubectl"
+          "${tool_cache}/kubectl/v1.28.0/linux-amd64/kubectl"
+        )
+
+        kubectl_path=""
+        for kubectl_p in "${kubectl_paths[@]}"; do
+          if [[ -x "${kubectl_p}" ]]; then
+            kubectl_path="${kubectl_p}"
+            echo "Found kubectl at: ${kubectl_path}"
+            break
+          fi
+        done
+
+        # Also check if kubectl is in PATH already (from pre-installed)
+        if [[ -z "${kubectl_path}" ]] && command -v kubectl &>/dev/null; then
+          kubectl_path="$(command -v kubectl)"
+          echo "Using pre-installed kubectl at: ${kubectl_path}"
+        fi
+
+        if [[ -z "${kubectl_path}" ]]; then
+          echo "ERROR: kubectl not found in local runner tool cache"
+          echo "Searched paths:"
+          printf '  - %s\n' "${kubectl_paths[@]}"
+          echo "kubectl is required for live lab execution. Ensure kubectl is installed in the runner tool cache."
+          exit 1
+        else
+          kubectl_dir="$(dirname "${kubectl_path}")"
+          echo "${kubectl_dir}" >> "$GITHUB_PATH"
+          echo "kubectl-path=${kubectl_path}" >> "$GITHUB_OUTPUT"
+          "${kubectl_path}" version --client
+        fi
+
+        echo "=== Tool wiring complete ==="
+
+    # =======================================================================
+    # Step 3: Validate toolchain
+    # =======================================================================
+    - name: Validate toolchain
       shell: bash
       run: |
-        echo "pythonLocation=${pythonLocation:-<unset>}"
-        command -v python
-        python --version
+        set -euo pipefail
+        echo "=== Validating wired toolchain ==="
+        which python3 || { echo "ERROR: python3 not in PATH"; exit 1; }
+        python3 --version || { echo "ERROR: python3 failed"; exit 1; }
+        which pip3 || { echo "ERROR: pip3 not in PATH"; exit 1; }
+        pip3 --version || { echo "ERROR: pip3 failed"; exit 1; }
+        which helm || { echo "ERROR: helm not in PATH"; exit 1; }
+        helm version --short || { echo "ERROR: helm failed"; exit 1; }
+        which kubectl || { echo "ERROR: kubectl not in PATH"; exit 1; }
+        kubectl version --client || { echo "ERROR: kubectl failed"; exit 1; }
+        echo "=== Toolchain validation PASSED ==="
+
+    # =======================================================================
+    # Step 4: Show final PATH and tool versions
+    # =======================================================================
+    - name: Show final toolchain state
+      shell: bash
+      run: |
+        echo "=== Final PATH ==="
+        echo "$PATH" | tr ':' '\n' | head -20
+        echo ""
+        echo "=== Tool versions ==="
+        echo "Python: $(python3 --version)"
+        echo "Pip: $(pip3 --version | head -1)"
+        echo "Helm: $(helm version --short)"
+        echo "kubectl: $(kubectl version --client | head -1)"

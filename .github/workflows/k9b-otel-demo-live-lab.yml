@@ -41,6 +41,9 @@ env:
   HARBOR_REGISTRY: harbor-pve1.spbnix.local
   HARBOR_PROJECT: k9b
   BACKEND_IMAGE_NAME: k9b-backend
+  # Pre-baked venv path (optional, set to empty to disable)
+  # Set to path of pre-baked venv to skip venv creation/caching
+  # K9B_LIVE_LAB_PREBAKED_VENV: /opt/k9b/live-lab-venv
 
 jobs:
   build-lab-images:
@@ -149,25 +152,98 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      # =======================================================================
+      # Setup lab toolchain (uses local runner tool cache)
+      # =======================================================================
       - name: Setup lab toolchain
+        id: toolchain
         uses: ./.github/actions/k9b-live-lab-toolchain
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           kubectl-version: 'latest'
+          helm-version: '3.16.3'
 
-      - name: Create virtual environment
-        run: python -m venv .venv
-
-      - name: Install Python dependencies
-        run: |
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/pip install pytest pyyaml requests ijson
-
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
+      # =======================================================================
+      # Restore or create .venv for live lab
+      # =======================================================================
+      - name: Restore live-lab venv cache
+        id: live-lab-venv-cache
+        uses: actions/cache/restore@v6
         with:
-          version: '3.14.0'
+          path: .venv
+          key: live-lab-venv-${{ runner.os }}-${{ runner.arch }}-py313-${{ hashFiles('requirements-live-lab.txt', 'pyproject.toml', '.github/workflows/k9b-otel-demo-live-lab.yml') }}
 
+      # =======================================================================
+      # Validate or create .venv
+      # =======================================================================
+      - name: Validate cached venv
+        id: validate-venv
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Check if pre-baked venv is configured and usable
+          if [[ -n "${K9B_LIVE_LAB_PREBAKED_VENV:-}" ]] && [[ -x "${K9B_LIVE_LAB_PREBAKED_VENV}/bin/python" ]]; then
+            echo "=== Using pre-baked venv: ${K9B_LIVE_LAB_PREBAKED_VENV} ==="
+            "${K9B_LIVE_LAB_PREBAKED_VENV}/bin/python" --version
+
+            # Validate required imports
+            "${K9B_LIVE_LAB_PREBAKED_VENV}/bin/python" -c "import importlib; [importlib.import_module(n) for n in ('pytest', 'yaml', 'requests', 'ijson')]; print('pre-baked venv validation OK')"
+
+            # Link pre-baked venv as .venv for workflow compatibility
+            rm -rf .venv
+            ln -s "${K9B_LIVE_LAB_PREBAKED_VENV}" .venv
+            echo "Using pre-baked venv"
+            echo "venv-validated=true" >> "$GITHUB_OUTPUT"
+            echo "venv-source=prebaked" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check if cached venv is valid
+          if [[ "${{ steps.live-lab-venv-cache.outputs.cache-hit }}" == "true" ]] && [[ -x .venv/bin/python ]]; then
+            echo "=== Validating cached venv ==="
+            .venv/bin/python --version
+
+            # Validate required imports
+            if .venv/bin/python -c "import importlib; [importlib.import_module(n) for n in ('pytest', 'yaml', 'requests', 'ijson')]; print('cached venv validation OK')"
+            then
+              echo "Cached venv is valid"
+              echo "venv-validated=true" >> "$GITHUB_OUTPUT"
+              echo "venv-source=cache" >> "$GITHUB_OUTPUT"
+              exit 0
+            else
+              echo "WARNING: Cached venv is invalid (missing packages), will recreate"
+              rm -rf .venv
+            fi
+          fi
+
+          echo "Creating fresh venv..."
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements-live-lab.txt
+
+          # Validate fresh venv
+          .venv/bin/python -c "import importlib; [importlib.import_module(n) for n in ('pytest', 'yaml', 'requests', 'ijson')]; print('fresh venv validation OK')"
+
+          echo "venv-validated=true" >> "$GITHUB_OUTPUT"
+          echo "venv-source=fresh" >> "$GITHUB_OUTPUT"
+
+      # =======================================================================
+      # Save .venv cache (after fresh venv creation)
+      # Saves cache immediately after venv creation (even if job fails later).
+      # Only saves when there was a cache miss.
+      # =======================================================================
+      - name: Save live-lab venv cache
+        if: steps.live-lab-venv-cache.outputs.cache-hit != 'true' && steps.validate-venv.outputs.venv-source == 'fresh'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: .venv
+          key: live-lab-venv-${{ runner.os }}-${{ runner.arch }}-py313-${{ hashFiles('requirements-live-lab.txt', 'pyproject.toml', '.github/workflows/k9b-otel-demo-live-lab.yml') }}
+
+      # =======================================================================
+      # Configure kubectl with kubeconfig
+      # =======================================================================
       - name: Configure kubectl
         env:
           KUBECONFIG_B64: ${{ secrets.K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 }}

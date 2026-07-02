@@ -1,0 +1,8 @@
+# Live lab minimal dependencies
+# Used by .github/workflows/*live*lab*.yml for fast .venv caching
+# Keep synchronized with pyproject.toml [project.dependencies]
+
+pytest>=7.0
+pyyaml>=6.0
+requests>=2.31.0
+ijson>=3.2

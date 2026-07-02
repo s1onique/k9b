@@ -100,103 +100,94 @@ jobs:
       - uses: actions/checkout@v5
 
       # =======================================================================
-      # Restore kubectl tool cache
-      # Uses restore/save split to save cache immediately after setup-kubectl,
-      # even if the job fails later. This is more robust for live-lab workflows.
+      # Setup lab toolchain (uses local runner tool cache)
+      # This action wires Python, kubectl, and Helm from local runner tool cache.
       # =======================================================================
-      - name: Restore kubectl tool cache
-        id: cache-kubectl
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ runner.tool_cache }}/kubectl
-          key: kubectl-${{ runner.os }}-${{ runner.arch }}-${{ env.KUBECTL_VERSION }}
-
-      # =======================================================================
-      # Setup kubectl (pinned version compatible with cluster)
-      # =======================================================================
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: '${{ env.KUBECTL_VERSION }}'
-
-      # =======================================================================
-      # Save kubectl tool cache
-      # Saves cache immediately after setup-kubectl (even if job fails later).
-      # Only saves when there was a cache miss (cache-hit != 'true').
-      # =======================================================================
-      - name: Save kubectl tool cache
-        if: steps.cache-kubectl.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: ${{ runner.tool_cache }}/kubectl
-          key: ${{ steps.cache-kubectl.outputs.cache-primary-key }}
-
-      # =======================================================================
-      # Set up Helm
-      # =======================================================================
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: '3.16.3'
-
-      - name: Verify Helm installation
-        run: helm version --short
-
-      # =======================================================================
-      # Restore Python tool cache (for ephemeral K8s runners)
-      # Ephemeral pods lose the tool cache between jobs, so we restore from
-      # GitHub Actions cache and save back after setup-python.
-      # =======================================================================
-      - name: Restore Python tool cache
-        id: cache-python
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ runner.tool_cache }}/Python
-          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
-
-      # =======================================================================
-      # Show Python tool cache before setup-python (diagnostic)
-      # =======================================================================
-      - name: Show Python tool cache before setup-python
-        run: |
-          echo "RUNNER_NAME=${RUNNER_NAME:-<unset>}"
-          echo "RUNNER_OS=${RUNNER_OS:-<unset>}"
-          echo "RUNNER_ARCH=${RUNNER_ARCH:-<unset>}"
-          echo "RUNNER_TOOL_CACHE=${RUNNER_TOOL_CACHE:-<unset>}"
-          echo "runner.tool_cache=${{ runner.tool_cache }}"
-          find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type d -print 2>/dev/null | sort || true
-          find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type f -name '*.complete' -print 2>/dev/null | sort || true
-
-      # =======================================================================
-      # Setup Python environment (needed for preflight scripts)
-      # =======================================================================
-      - uses: actions/setup-python@v6
+      - name: Setup lab toolchain
+        id: toolchain
+        uses: ./.github/actions/k9b-live-lab-toolchain
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          architecture: x64
-          cache: 'pip'
+          kubectl-version: '${{ env.KUBECTL_VERSION }}'
+          helm-version: '3.16.3'
 
       # =======================================================================
-      # Save Python tool cache (for ephemeral K8s runners)
-      # Saves cache immediately after setup-python (even if job fails later).
-      # Only saves when there was a cache miss (cache-hit != 'true').
-      # continue-on-error: true avoids failing if another parallel job saved first.
+      # Restore or create .venv for live lab
       # =======================================================================
-      - name: Save Python tool cache
-        if: steps.cache-python.outputs.cache-hit != 'true'
+      - name: Restore live-lab venv cache
+        id: live-lab-venv-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .venv
+          key: live-lab-venv-${{ runner.os }}-${{ runner.arch }}-py313-${{ hashFiles('requirements-live-lab.txt', 'pyproject.toml', '.github/workflows/k9b-cnpg-incident-lab-live.yml') }}
+
+      # =======================================================================
+      # Validate or create .venv
+      # =======================================================================
+      - name: Validate cached venv
+        id: validate-venv
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Check if pre-baked venv is configured and usable
+          if [[ -n "${K9B_LIVE_LAB_PREBAKED_VENV:-}" ]] && [[ -x "${K9B_LIVE_LAB_PREBAKED_VENV}/bin/python" ]]; then
+            echo "=== Using pre-baked venv: ${K9B_LIVE_LAB_PREBAKED_VENV} ==="
+            "${K9B_LIVE_LAB_PREBAKED_VENV}/bin/python" --version
+
+            # Validate required imports
+            "${K9B_LIVE_LAB_PREBAKED_VENV}/bin/python" -c "import importlib; [importlib.import_module(n) for n in ('pytest', 'yaml', 'requests', 'ijson')]; print('pre-baked venv validation OK')"
+
+            # Link pre-baked venv as .venv for workflow compatibility
+            rm -rf .venv
+            ln -s "${K9B_LIVE_LAB_PREBAKED_VENV}" .venv
+            echo "Using pre-baked venv"
+            echo "venv-validated=true" >> "$GITHUB_OUTPUT"
+            echo "venv-source=prebaked" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check if cached venv is valid
+          if [[ "${{ steps.live-lab-venv-cache.outputs.cache-hit }}" == "true" ]] && [[ -x .venv/bin/python ]]; then
+            echo "=== Validating cached venv ==="
+            .venv/bin/python --version
+
+            # Validate required imports
+            if .venv/bin/python -c "import importlib; [importlib.import_module(n) for n in ('pytest', 'yaml', 'requests', 'ijson')]; print('cached venv validation OK')"
+            then
+              echo "Cached venv is valid"
+              echo "venv-validated=true" >> "$GITHUB_OUTPUT"
+              echo "venv-source=cache" >> "$GITHUB_OUTPUT"
+              exit 0
+            else
+              echo "WARNING: Cached venv is invalid (missing packages), will recreate"
+              rm -rf .venv
+            fi
+          fi
+
+          echo "Creating fresh venv..."
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements-live-lab.txt
+
+          # Validate fresh venv
+          .venv/bin/python -c "import importlib; [importlib.import_module(n) for n in ('pytest', 'yaml', 'requests', 'ijson')]; print('fresh venv validation OK')"
+
+          echo "venv-validated=true" >> "$GITHUB_OUTPUT"
+          echo "venv-source=fresh" >> "$GITHUB_OUTPUT"
+
+      # =======================================================================
+      # Save .venv cache (after fresh venv creation)
+      # Saves cache immediately after venv creation (even if job fails later).
+      # Only saves when there was a cache miss.
+      # =======================================================================
+      - name: Save live-lab venv cache
+        if: steps.live-lab-venv-cache.outputs.cache-hit != 'true' && steps.validate-venv.outputs.venv-source == 'fresh'
         uses: actions/cache/save@v6
         continue-on-error: true
         with:
-          path: ${{ runner.tool_cache }}/Python
-          key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
-
-      - name: Create virtual environment
-        run: python -m venv .venv
-
-      - name: Install dependencies
-        run: |
-          .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install pytest pyyaml
+          path: .venv
+          key: live-lab-venv-${{ runner.os }}-${{ runner.arch }}-py313-${{ hashFiles('requirements-live-lab.txt', 'pyproject.toml', '.github/workflows/k9b-cnpg-incident-lab-live.yml') }}
 
       # =======================================================================
       # Initialize artifact directory
