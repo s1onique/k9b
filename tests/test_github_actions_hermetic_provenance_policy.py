@@ -10,6 +10,7 @@ See docs/ci-hermetic-toolchain.md for the full policy.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 
 import pytest
 
@@ -81,13 +82,9 @@ WORKFLOW_EXPECTATIONS = {
     },
 }
 
-
 # =============================================================================
 # Helpers
 # =============================================================================
-
-import re
-from typing import Mapping
 
 
 _SHELL_ENV_REF_RE = re.compile(r"^\$([A-Za-z_][A-Za-z0-9_]*)$")
