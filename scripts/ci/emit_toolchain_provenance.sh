@@ -219,7 +219,7 @@ if [[ -z "${REQUIRED_TOOLS}" ]]; then
 fi
 
 # Validate tools list
-VALID_TOOLS="python,node,npm,go,helm,kubectl,docker,buildx"
+VALID_TOOLS="python,node,npm,go,helm,kubectl,kube_cli,docker,buildx"
 IFS=',' read -ra TOOLS_ARRAY <<< "${REQUIRED_TOOLS}"
 for tool in "${TOOLS_ARRAY[@]}"; do
     if [[ ! ",${VALID_TOOLS}," == *",${tool},"* ]]; then
@@ -249,7 +249,7 @@ for tool in "${TOOLS_ARRAY[@]}"; do
         node)    collect_node "${tool}" || { if [[ $? -eq 1 ]]; then FAILED_REQUIRED=1; fi; } ;;
         npm)     collect_npm "${tool}" || { if [[ $? -eq 1 ]]; then FAILED_REQUIRED=1; fi; } ;;
         helm)    collect_helm "${tool}" || { if [[ $? -eq 1 ]]; then FAILED_REQUIRED=1; fi; } ;;
-        kubectl) collect_kubectl "${tool}" || { if [[ $? -eq 1 ]]; then FAILED_REQUIRED=1; fi; } ;;
+        kubectl|kube_cli) collect_kubectl "${tool}" || { if [[ $? -eq 1 ]]; then FAILED_REQUIRED=1; fi; } ;;
         docker)  collect_docker "${tool}" || { if [[ $? -eq 1 ]]; then FAILED_REQUIRED=1; fi; } ;;
         buildx)  collect_buildx "${tool}" || { if [[ $? -eq 1 ]]; then FAILED_REQUIRED=1; fi; } ;;
     esac
