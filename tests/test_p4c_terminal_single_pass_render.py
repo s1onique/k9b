@@ -95,7 +95,7 @@ class TestLogDiagnosisResultTerminalFailure:
 
         output = captured.getvalue()
         assert "P4c diagnosis FAILED" in output
-        assert "terminal_single_pass" in output
+        assert "terminal single-pass" in output.lower()
         assert "P4c diagnosis PASSED" not in output
 
     def test_terminal_single_pass_failure_shows_normalized_reasons(self) -> None:

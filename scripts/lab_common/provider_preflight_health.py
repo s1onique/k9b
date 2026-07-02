@@ -96,9 +96,12 @@ def _classify_json_parse_failure(body: str, exc: json.JSONDecodeError) -> tuple[
     1. Empty body -> empty_body
     2. Valid JSON + adjacent JSON token -> invalid_json
     3. Valid JSON + curl framing metadata -> output_contaminated
-    4. Valid JSON + log/shell trailing text -> output_contaminated
-    5. Valid JSON embedded in shell/log text -> output_contaminated
-    6. Genuinely invalid JSON -> invalid_json
+    4. Genuinely invalid JSON -> invalid_json
+
+    MARKER-ISOLATED OUTPUT RULE:
+    Only classify as contamination if the body STARTS with valid JSON followed by
+    curl framing metadata. Finding valid JSON embedded elsewhere in garbage text
+    (e.g., "not valid json{...}") is genuinely invalid JSON, not contamination.
 
     Args:
         body: The raw body string that failed to parse
@@ -115,15 +118,13 @@ def _classify_json_parse_failure(body: str, exc: json.JSONDecodeError) -> tuple[
             None,
         )
 
-    # First try: raw_decode from start (handles adjacent JSON documents)
+    # raw_decode from start to check for valid JSON + trailing bytes
     try:
         decoded, end_index = json.JSONDecoder().raw_decode(body)
         remaining = body[end_index:].strip()
 
         if remaining:
             # Valid JSON prefix with trailing bytes
-            # Distinguish adjacent JSON documents (invalid_json) from
-            # shell/log text embedding valid JSON (output_contaminated)
             stripped = remaining.lstrip()
 
             # Check if trailing starts with JSON-like tokens: { [ " - 0-9 t f n
@@ -151,20 +152,7 @@ def _classify_json_parse_failure(body: str, exc: json.JSONDecodeError) -> tuple[
                     trailing_preview,
                 )
 
-            # Check if remaining looks like log/shell text (non-trivial, non-JSON, non-curl)
-            # If the remaining is meaningful text (not just JSON or curl metadata), it's contamination
-            if stripped and len(stripped) > 0 and not _looks_like_curl_framing_suffix(stripped):
-                # Non-curl trailing text suggests log/shell output contamination
-                trailing_preview = stripped[:100]
-                return (
-                    FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
-                    f"JSON parse error: valid JSON followed by log/shell text "
-                    f"(output contamination). Trailing suffix preview (first 100 chars): {trailing_preview!r}",
-                    trailing_preview,
-                )
-
-            # Arbitrary trailing bytes that don't look like JSON or curl metadata
-            # This is invalid JSON, not contamination
+            # Non-curl trailing text -> invalid JSON (not contamination)
             body_prefix = body[:200]
             return (
                 FAILURE_PROVIDER_HEALTH_INVALID_JSON,
@@ -174,46 +162,9 @@ def _classify_json_parse_failure(body: str, exc: json.JSONDecodeError) -> tuple[
                 None,
             )
     except (json.JSONDecodeError, ValueError):
-        pass  # Not valid JSON at start, try finding JSON in middle
+        pass
 
-    # Second try: Find JSON-like content anywhere in body (for log contamination)
-    # Scan for JSON objects/arrays that could be valid if extracted
-    body_stripped = body.strip()
-    json_start_patterns = ('{', '[')
-    for i, ch in enumerate(body_stripped):
-        if ch in json_start_patterns:
-            # Found a potential JSON start, try parsing from here
-            try:
-                decoder = json.JSONDecoder()
-                decoded, end_index = decoder.raw_decode(body_stripped, i)
-                # Successfully parsed valid JSON from position i
-                # Check what came before (prefix) and after (suffix)
-                prefix = body_stripped[:i]
-                suffix = body_stripped[end_index:].strip()
-
-                # If there's non-trivial prefix or suffix (not just whitespace/newlines),
-                # this is log contamination (shell text around JSON)
-                if prefix and not _looks_like_curl_framing_suffix(prefix):
-                    # Non-curl prefix suggests log/shell text before JSON
-                    return (
-                        FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
-                        f"JSON parse error: valid JSON found embedded in non-JSON text "
-                        f"(log/shell output contamination). Body prefix (first 200 chars): {body[:200]!r}",
-                        None,
-                    )
-
-                if suffix and not _looks_like_curl_framing_suffix(suffix):
-                    # Non-curl suffix suggests log/shell text after JSON
-                    return (
-                        FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
-                        f"JSON parse error: valid JSON found embedded in non-JSON text "
-                        f"(log/shell output contamination). Body prefix (first 200 chars): {body[:200]!r}",
-                        None,
-                    )
-            except (json.JSONDecodeError, ValueError):
-                continue  # Not valid JSON at this position, keep scanning
-
-    # Genuinely invalid JSON (malformed, not just extra data)
+    # Genuinely invalid JSON (no valid JSON at start)
     json_error_msg = f"line {exc.lineno}, col {exc.colno}: {exc.msg}" if hasattr(exc, 'lineno') else str(exc)
     body_prefix = body[:200]
     return (

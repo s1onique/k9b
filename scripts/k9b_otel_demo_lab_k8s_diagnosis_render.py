@@ -12,6 +12,25 @@ from typing import Any
 from scripts.k9b_lab_common_helpers import log
 
 
+def _format_outcome_mode_for_log(mode: str) -> str:
+    """Format canonical mode value for human-readable log output.
+
+    Converts snake_case mode identifiers to human-readable labels
+    without changing the canonical mode value.
+
+    Args:
+        mode: Canonical mode identifier (e.g., "terminal_single_pass")
+
+    Returns:
+        Human-readable label (e.g., "terminal single-pass")
+    """
+    if mode == "terminal_single_pass":
+        return "terminal single-pass"
+    if mode == "premature_terminal_no_checks":
+        return "premature terminal/no-checks"
+    return mode.replace("_", " ")
+
+
 def log_phase_header() -> None:
     """Log the phase header."""
     log("=" * 60)
@@ -58,32 +77,29 @@ def log_diagnosis_result(
         outcome_pass_count = p4c_outcome.get("pass_count", 0)
         outcome_pass_run_ids = p4c_outcome.get("pass_run_ids", [])
         outcome_failure_reasons = p4c_outcome.get("failure_reasons", [])
-        
+
+        # Format mode for human-readable log output
+        mode_label = _format_outcome_mode_for_log(str(outcome_mode))
+
         # Log PASSED only when success is true, FAILED only when false
         if outcome_success:
             # Success: log appropriate message based on mode
-            if outcome_mode == "multipass":
-                log(f"  P4c diagnosis PASSED ({outcome_mode} outcome)")
-            elif outcome_mode == "terminal_single_pass":
-                # Only reached if accept_terminal_single_pass=True
-                log(f"  P4c diagnosis PASSED ({outcome_mode} outcome)")
-            else:
-                log(f"  P4c diagnosis PASSED ({outcome_mode} outcome)")
+            log(f"  P4c diagnosis PASSED ({mode_label} outcome)")
         else:
             # Failure: provide specific messaging for premature_terminal_no_checks
             if outcome_mode == "premature_terminal_no_checks":
                 log("  P4c diagnosis did not satisfy lab objective: premature terminal no-checks")
-                log(f"  P4c diagnosis FAILED (mode={outcome_mode})")
+                log(f"  P4c diagnosis FAILED (mode={mode_label})")
                 log(f"  Terminal no-checks decision after {outcome_pass_count} pass(es), but >=2 observable passes required")
             else:
-                log(f"  P4c diagnosis FAILED ({outcome_mode} outcome)")
-        
+                log(f"  P4c diagnosis FAILED ({mode_label} outcome)")
+
         log(f"  Success: {outcome_success}")
         log(f"  Incident ID: {evidence.get('incident_id', 'unknown')}")
         log(f"  Pass count: {outcome_pass_count}")
         log(f"  Pass run IDs: {outcome_pass_run_ids}")
         log(f"  Review artifact paths: {p4c_outcome.get('review_artifact_paths', [])}")
-        
+
         if outcome_success:
             # Success: no failure reasons to display
             log(f"  Root cause matches: {term_checks}")
