@@ -17,7 +17,6 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 
-
 class TestPhase3ReviewArtifactPathAccumulation:
     """Tests for review artifact path accumulation in phase3_validate_artifacts."""
 
