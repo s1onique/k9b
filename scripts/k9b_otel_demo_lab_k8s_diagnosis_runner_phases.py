@@ -98,7 +98,7 @@ def phase2_invoke_and_poll_pass(
     pass_attempt: int,
     max_passes: int,
     result: dict[str, Any],
-) -> tuple[bool, int, list[str], bool]:
+) -> tuple[bool, int, list[str], bool, str | None]:
     """Phase 2: Invoke one-pass diagnosis and poll for completion.
 
     Args:
@@ -110,9 +110,12 @@ def phase2_invoke_and_poll_pass(
         result: Result dict to populate
 
     Returns:
-        Tuple of (success, total_pass_count, all_pass_run_ids, post_attempted).
-        The post_attempted flag indicates whether the POST was actually made,
-        regardless of whether it succeeded or failed.
+        Tuple of (success, total_pass_count, all_pass_run_ids, post_attempted, review_artifact_path).
+        - success: Whether the pass completed successfully
+        - total_pass_count: Number of passes accumulated so far
+        - all_pass_run_ids: List of run IDs from this pass
+        - post_attempted: Whether the POST was actually made
+        - review_artifact_path: Artifact path/name from this pass's review (for evidence preservation)
     """
     current_pass_in_label = f"pass {pass_attempt}/{max_passes}"
     log(f"    [{current_pass_in_label}] Invoking targeted diagnosis-loop one-pass...")
@@ -133,7 +136,7 @@ def phase2_invoke_and_poll_pass(
     if not invocation_result.success:
         log(f"    [{current_pass_in_label}] ERROR: Targeted invocation failed: {invocation_result.error_class}")
         log(f"    [{current_pass_in_label}] Detail: {invocation_result.error_detail}")
-        return False, 0, [], True  # POST was attempted even though it failed
+        return False, 0, [], True, None  # POST was attempted even though it failed
 
     # Check for budget exhaustion BEFORE polling - fail fast
     # The invocation returned HTTP 200 but the incident is not eligible (budget exhausted)
@@ -161,7 +164,7 @@ def phase2_invoke_and_poll_pass(
             result["failure_reason"] = f"{invocation_result.error_class}: {invocation_result.error_detail}"
         else:
             result["failure_reason"] = invocation_result.error_class
-        return False, 0, [], True  # POST was attempted but loop was not eligible
+        return False, 0, [], True, None  # POST was attempted but loop was not eligible
 
     log(f"    [{current_pass_in_label}] Invocation succeeded (HTTP {invocation_result.http_status})")
     result["real_loop_invoked"] = True
@@ -188,7 +191,7 @@ def phase2_invoke_and_poll_pass(
     if not poll_result.success:
         log(f"    [{current_pass_in_label}] ERROR: Diagnosis did not complete: {poll_result.failure_reason}")
         log(f"    [{current_pass_in_label}] Final status: {poll_result.final_status}")
-        return False, 0, [], True  # POST succeeded, polling failed
+        return False, 0, [], True, None  # POST succeeded, polling failed
 
     # Check if loop actually ran a pass or if it was skipped/not_run
     # even though the invocation returned HTTP 200
@@ -197,7 +200,7 @@ def phase2_invoke_and_poll_pass(
         log(f"    [{current_pass_in_label}] Invocation returned HTTP 200 but no pass was recorded")
         result["real_loop_invoked"] = False
         result["failure_reason"] = poll_result.failure_reason
-        return False, 0, [], True  # POST succeeded, but loop didn't run
+        return False, 0, [], True, None  # POST succeeded, but loop didn't run
 
     log(f"    [{current_pass_in_label}] Diagnosis completed: loop_summary.status={poll_result.loop_summary_status}")
 
@@ -240,15 +243,20 @@ def phase2_invoke_and_poll_pass(
         if "root_cause_summary" in loop_summary:
             result["root_cause_summary"] = loop_summary["root_cause_summary"]
 
+        # Capture review artifact path for evidence preservation
+        # This is used as fallback when pass_run_ids are not available
+        review_artifact_path: str | None = None
+        review = current_detail.raw.get("automatic_diagnosis_review", {})
+        if review.get("artifact_name"):
+            review_artifact_path = review["artifact_name"]
+
         # Check for terminal no-checks decision
         if is_terminal_no_checks_decision(current_detail.raw):
             terminal_decision_reached = True
-            review = current_detail.raw.get("automatic_diagnosis_review", {})
-            artifact_name = review.get("artifact_name", "unknown")
             log(f"    [{current_pass_in_label}] Diagnosis review artifact available: {review.get('artifact_type', 'unknown')}")
             log(f"    [{current_pass_in_label}] Terminal diagnosis decision: stop_no_checks_proposed")
             log(f"    [{current_pass_in_label}] Observable passes so far: {total_pass_count}")
-            log(f"    [{current_pass_in_label}] Review artifact: {artifact_name}")
+            log(f"    [{current_pass_in_label}] Review artifact: {review_artifact_path}")
             
             # Check if read-only constraints are satisfied
             if is_read_only_terminal_decision(current_detail.raw):
@@ -260,7 +268,7 @@ def phase2_invoke_and_poll_pass(
 
     result["terminal_decision_reached"] = terminal_decision_reached
     log(f"    [{current_pass_in_label}] Total passes so far: {total_pass_count}/{MIN_REQUIRED_PASSES}")
-    return True, total_pass_count, all_pass_run_ids, True  # POST succeeded, loop completed
+    return True, total_pass_count, all_pass_run_ids, True, review_artifact_path  # POST succeeded, loop completed
 
 
 def phase3_validate_artifacts(
@@ -269,6 +277,7 @@ def phase3_validate_artifacts(
     external_analysis_dir: Path,
     result: dict[str, Any],
     terminal_no_checks: bool = False,
+    all_review_artifact_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     """Phase 3: Validate pass artifacts.
 
@@ -282,6 +291,8 @@ def phase3_validate_artifacts(
         external_analysis_dir: Directory for diagnosis artifacts
         result: Result dict to populate
         terminal_no_checks: Whether a terminal no-checks decision was reached
+        all_review_artifact_paths: Accumulated review artifact paths from all passes
+            (used as fallback observable pass evidence when pass_run_ids are missing)
 
     Returns:
         Updated result dict with pass metadata for compute_p4c_outcome().
@@ -321,5 +332,21 @@ def phase3_validate_artifacts(
             for rid in all_pass_run_ids
         ]
         result["artifact_path"] = str(external_analysis_dir / "diagnosis-loop-passes")
+
+    # EVIDENCE PRESERVATION: Store accumulated review artifact paths from all passes.
+    # This is the fallback observable pass evidence when pass_run_ids are not available.
+    # The backend may not return stable pass_run_ids across multiple targeted-diagnosis calls,
+    # but review artifacts are observable and persisted during each pass.
+    if all_review_artifact_paths:
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        unique_paths: list[str] = []
+        for path in all_review_artifact_paths:
+            if path not in seen:
+                seen.add(path)
+                unique_paths.append(path)
+        result["review_artifact_paths"] = unique_paths
+        # Log for debugging
+        log(f"  Review artifact paths preserved: {unique_paths}")
 
     return result

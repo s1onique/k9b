@@ -416,6 +416,9 @@ def _merge_diagnosis_result(evidence: dict[str, Any], result: dict[str, Any]) ->
     evidence["root_cause_summary"] = result.get("root_cause_summary", "")
     evidence["raw_diagnosis_artifact_path"] = result.get("artifact_path")
     evidence["review_packet_path"] = result.get("review_packet_path")
+    # EVIDENCE PRESERVATION: Copy accumulated review artifact paths from all passes.
+    # This is the fallback observable pass evidence when pass_run_ids are not available.
+    evidence["review_artifact_paths"] = result.get("review_artifact_paths", [])
     
     # Critical for compute_p4c_outcome: terminal no-checks detection
     evidence["terminal_no_checks_accepted"] = result.get("terminal_no_checks_accepted", False)

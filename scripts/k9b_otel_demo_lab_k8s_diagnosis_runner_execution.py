@@ -86,6 +86,7 @@ def run_backend_targeted_diagnosis(
     # Initialize pass tracking
     total_pass_count = 0
     all_pass_run_ids: list[str] = []
+    all_review_artifact_paths: list[str] = []
 
     # Step 2: Reset budget state for deterministic P4c isolation
     # CRITICAL: Must reset budget in the BACKEND's artifact root (runs/health/external-analysis/)
@@ -147,7 +148,7 @@ def run_backend_targeted_diagnosis(
     invocation_count = 0
 
     for pass_attempt in range(1, max_passes + 1):
-        success, pass_count, pass_run_ids, post_attempted = phase2_invoke_and_poll_pass(
+        success, pass_count, pass_run_ids, post_attempted, review_artifact_path = phase2_invoke_and_poll_pass(
             kubeconfig=kubeconfig,
             namespace=namespace,
             incident_id=incident_id,
@@ -175,6 +176,13 @@ def run_backend_targeted_diagnosis(
         for rid in pass_run_ids:
             if rid not in all_pass_run_ids:
                 all_pass_run_ids.append(rid)
+
+        # EVIDENCE PRESERVATION: Accumulate review artifact paths from all passes.
+        # This is the fallback observable pass evidence when pass_run_ids are not available.
+        # The backend may not return stable pass_run_ids across multiple targeted-diagnosis calls,
+        # but review artifacts are observable and persisted during each pass.
+        if review_artifact_path and review_artifact_path not in all_review_artifact_paths:
+            all_review_artifact_paths.append(review_artifact_path)
 
         # Update pass tracking - ACCUMULATE from all invocations.
         # The backend's current state may only show recent passes (split-brain state),
@@ -225,6 +233,7 @@ def run_backend_targeted_diagnosis(
         external_analysis_dir=external_analysis_dir,
         result=result,
         terminal_no_checks=terminal_no_checks_reached or premature_terminal,
+        all_review_artifact_paths=all_review_artifact_paths,
     )
 
     return result

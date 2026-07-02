@@ -125,9 +125,18 @@ def compute_p4c_outcome(
     terminal_decision = evidence.get("terminal_decision_reached")
 
     # Review artifact paths
-    review_paths_raw = []
+    # EVIDENCE PRESERVATION: Include accumulated review_artifact_paths from all passes.
+    # This is the fallback observable pass evidence when pass_run_ids are not available.
+    # The runner accumulates review artifacts from each targeted-diagnosis pass.
+    review_paths_raw: list[str] = []
+    # Include single review_packet_path if present
     if evidence.get("review_packet_path"):
         review_paths_raw.append(str(evidence["review_packet_path"]))
+    # Include accumulated review_artifact_paths from all passes (deduplicated)
+    accumulated_paths = evidence.get("review_artifact_paths", [])
+    for path in accumulated_paths:
+        if path and path not in review_paths_raw:
+            review_paths_raw.append(path)
     review_artifact_paths = tuple(review_paths_raw)
 
     # Read-only constraints
