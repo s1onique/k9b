@@ -17,12 +17,16 @@ inputs:
     description: Python version (used for cache key fingerprint)
   kubectl-version:
     required: false
-    default: 'latest'
-    description: kubectl version (used for cache key fingerprint)
+    default: 'v1.31.0'
+    description: kubectl version to use (pinned, e.g. v1.31.0)
   helm-version:
     required: false
     default: '3.16.3'
     description: Helm version (used for cache key fingerprint)
+  allow-tool-download:
+    required: false
+    default: 'false'
+    description: Allow downloading missing kubectl into runner tool cache
 
 outputs:
   python-location:
@@ -212,42 +216,140 @@ runs:
         fi
 
         # --- Wire kubectl ---
+        # Cache-first: try known toolcache paths, then pre-installed PATH lookup,
+        # then download-on-miss with checksum validation (if allow-tool-download=true).
+        # Default behavior is fail-fast (allow-tool-download=false) for hermetic mode.
         echo "=== Wiring kubectl ==="
-        kubectl_paths=(
-          "${tool_cache}/kubectl/v1.31.0/linux-amd64/kubectl"
-          "${tool_cache}/kubectl/v1.30.0/linux-amd64/kubectl"
-          "${tool_cache}/kubectl/v1.29.6/linux-amd64/kubectl"
-          "${tool_cache}/kubectl/v1.29.0/linux-amd64/kubectl"
-          "${tool_cache}/kubectl/v1.28.0/linux-amd64/kubectl"
-        )
+        kubectl_version="${{ inputs.kubectl-version }}"
+        allow_tool_download="${{ inputs.allow-tool-download }}"
+        echo "kubectl-version requested: ${kubectl_version}"
+        echo "allow-tool-download: ${allow_tool_download}"
 
-        kubectl_path=""
-        for kubectl_p in "${kubectl_paths[@]}"; do
-          if [[ -x "${kubectl_p}" ]]; then
-            kubectl_path="${kubectl_p}"
-            echo "Found kubectl at: ${kubectl_path}"
-            break
+        # Determine architecture for download
+        case "$(uname -m)" in
+          x86_64|amd64) kubectl_arch="amd64" ;;
+          aarch64|arm64) kubectl_arch="arm64" ;;
+          *)
+            echo "ERROR: unsupported architecture for kubectl: $(uname -m)" >&2
+            exit 1
+            ;;
+        esac
+        echo "kubectl architecture: ${kubectl_arch}"
+
+        # Resolve 'latest' to actual version BEFORE cache lookup.
+        # This ensures 'latest' actually means latest, not an older cached fallback.
+        if [[ "${kubectl_version}" == "latest" ]]; then
+          echo "Fetching latest kubectl version..."
+          kubectl_version="$(curl -fsSL https://dl.k8s.io/release/stable.txt 2>/dev/null)"
+          if [[ -z "${kubectl_version}" ]]; then
+            echo "ERROR: Failed to fetch latest kubectl version" >&2
+            exit 1
           fi
-        done
+          echo "Latest kubectl version: ${kubectl_version}"
+        fi
+
+        # Try exact version in toolcache (no fallback for pinned versions)
+        kubectl_path=""
+        kubectl_cache_dir=""
+
+        exact_path="${tool_cache}/kubectl/${kubectl_version}/linux-${kubectl_arch}/kubectl"
+        if [[ -x "${exact_path}" ]]; then
+          kubectl_path="${exact_path}"
+          kubectl_cache_dir="${tool_cache}/kubectl/${kubectl_version}/linux-${kubectl_arch}"
+          echo "Found kubectl at: ${kubectl_path}"
+        fi
 
         # Also check if kubectl is in PATH already (from pre-installed)
         if [[ -z "${kubectl_path}" ]] && command -v kubectl &>/dev/null; then
           kubectl_path="$(command -v kubectl)"
+          kubectl_dir="$(dirname "${kubectl_path}")"
+          kubectl_cache_dir="${kubectl_dir}"
           echo "Using pre-installed kubectl at: ${kubectl_path}"
         fi
 
+        # Cache miss: download if allowed
         if [[ -z "${kubectl_path}" ]]; then
-          echo "ERROR: kubectl not found in local runner tool cache"
-          echo "Searched paths:"
-          printf '  - %s\n' "${kubectl_paths[@]}"
-          echo "kubectl is required for live lab execution. Ensure kubectl is installed in the runner tool cache."
-          exit 1
-        else
-          kubectl_dir="$(dirname "${kubectl_path}")"
-          echo "${kubectl_dir}" >> "$GITHUB_PATH"
-          echo "kubectl-path=${kubectl_path}" >> "$GITHUB_OUTPUT"
-          "${kubectl_path}" version --client
+          if [[ "${allow_tool_download}" != "true" ]]; then
+            echo "ERROR: kubectl not found in local runner tool cache and allow-tool-download=false"
+            echo "Searched path: ${tool_cache}/kubectl/${kubectl_version}/linux-${kubectl_arch}/kubectl"
+            echo "kubectl is required for live lab execution."
+            echo "Either pre-seed kubectl in the runner tool cache, or set allow-tool-download=true."
+            exit 1
+          fi
+
+          echo "kubectl not found in local runner tool cache, downloading..."
+
+          kubectl_cache_dir="${tool_cache}/kubectl/${kubectl_version}/linux-${kubectl_arch}"
+          kubectl_path="${kubectl_cache_dir}/kubectl"
+
+          echo "Downloading kubectl ${kubectl_version} for linux/${kubectl_arch}"
+
+          tmp_dir="$(mktemp -d)"
+          cleanup() {
+            rm -rf "${tmp_dir}"
+          }
+          trap cleanup EXIT
+
+          base_url="https://dl.k8s.io/release/${kubectl_version}/bin/linux/${kubectl_arch}"
+
+          echo "Downloading binary from: ${base_url}/kubectl"
+          curl -fsSL -o "${tmp_dir}/kubectl" "${base_url}/kubectl" || {
+            echo "ERROR: Failed to download kubectl binary" >&2
+            exit 1
+          }
+
+          echo "Downloading checksum from: ${base_url}/kubectl.sha256"
+          curl -fsSL -o "${tmp_dir}/kubectl.sha256" "${base_url}/kubectl.sha256" || {
+            echo "ERROR: Failed to download kubectl checksum" >&2
+            exit 1
+          }
+
+          # Validate checksum using Kubernetes' official format:
+          # echo "<sha256>  <filename>" | sha256sum --check
+          echo "Validating checksum..."
+          (
+            cd "${tmp_dir}"
+            echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check || {
+              echo "ERROR: kubectl checksum validation failed" >&2
+              exit 1
+            }
+          )
+          echo "Checksum validated successfully"
+
+          chmod 0755 "${tmp_dir}/kubectl"
+
+          # Atomic install with file locking for concurrent cache population safety
+          mkdir -p "${tool_cache}/kubectl/${kubectl_version}"
+          mkdir -p "${tool_cache}/.locks"
+
+          lock_file="${tool_cache}/.locks/kubectl-${kubectl_version}-linux-${kubectl_arch}.lock"
+          exec 9>"${lock_file}"
+          flock 9 || {
+            echo "ERROR: Failed to acquire lock: ${lock_file}" >&2
+            exit 1
+          }
+
+          # Double-check after acquiring lock (another job may have installed it)
+          if [[ ! -x "${kubectl_path}" ]]; then
+            install_dir_tmp="${kubectl_cache_dir}.tmp.$$"
+            rm -rf "${install_dir_tmp}"
+            mkdir -p "${install_dir_tmp}"
+            install -m 0755 "${tmp_dir}/kubectl" "${install_dir_tmp}/kubectl"
+
+            # Remove existing directory to handle broken partial cache dirs
+            rm -rf "${kubectl_cache_dir}"
+            mv -T "${install_dir_tmp}" "${kubectl_cache_dir}"
+            echo "Installed kubectl to: ${kubectl_path}"
+          else
+            echo "kubectl already installed by another process: ${kubectl_path}"
+          fi
         fi
+
+        kubectl_dir="$(dirname "${kubectl_path}")"
+        echo "${kubectl_dir}" >> "$GITHUB_PATH"
+        echo "kubectl-path=${kubectl_path}" >> "$GITHUB_OUTPUT"
+        echo "kubectl-cache-dir=${kubectl_cache_dir}" >> "$GITHUB_OUTPUT"
+        "${kubectl_path}" version --client
 
         echo "=== Tool wiring complete ==="
 

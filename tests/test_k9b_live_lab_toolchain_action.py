@@ -450,41 +450,10 @@ class TestWorkflowToolchainActionUsage:
                         )
 
 
-class TestToolchainActionInputs:
-    """Test that the action accepts expected inputs."""
-
-    def test_action_has_inputs(self) -> None:
-        """Action should define inputs."""
-        action = _load_action_yaml(TOOLCHAIN_ACTION_FILE)
-        inputs = action.get("inputs", {})
-
-        assert len(inputs) > 0, (
-            "Action should define inputs"
-        )
-
-    def test_action_accepts_python_version(self) -> None:
-        """Action should accept python-version input."""
-        action = _load_action_yaml(TOOLCHAIN_ACTION_FILE)
-        inputs = action.get("inputs", {})
-
-        assert "python-version" in inputs, (
-            "Action should accept python-version input"
-        )
-
-    def test_action_accepts_kubectl_version(self) -> None:
-        """Action should accept kubectl-version input."""
-        action = _load_action_yaml(TOOLCHAIN_ACTION_FILE)
-        inputs = action.get("inputs", {})
-
-        assert "kubectl-version" in inputs, (
-            "Action should accept kubectl-version input"
-        )
-
-    def test_action_accepts_helm_version(self) -> None:
-        """Action should accept helm-version input."""
-        action = _load_action_yaml(TOOLCHAIN_ACTION_FILE)
-        inputs = action.get("inputs", {})
-
-        assert "helm-version" in inputs, (
-            "Action should accept helm-version input"
-        )
+# NOTE: Input tests moved to:
+# tests/test_k9b_live_lab_toolchain_action_inputs.py
+#
+# kubectl download-on-miss tests moved to:
+# tests/test_k9b_live_lab_toolchain_action_kubectl_download.py
+#
+# (Split to keep files under 500 lines per llm-friendly policy)
