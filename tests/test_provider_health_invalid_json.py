@@ -32,6 +32,7 @@ def fake_provider_preflight_time(monkeypatch: pytest.MonkeyPatch) -> list[float]
     modules each have their own time imports.
     """
     import time as time_module
+
     import scripts.lab_common.provider_preflight as provider_preflight
     import scripts.lab_common.provider_preflight_curl as provider_preflight_curl
 
