@@ -18,11 +18,24 @@ KUBECTL_VERSION="${1:-v1.31.0}"
 # Use AGENT_TOOLSDIRECTORY as fallback (GitHub's internal variable)
 TOOL_CACHE="${RUNNER_TOOL_CACHE:-${AGENT_TOOLSDIRECTORY:-/home/runner/_work/_tool}}"
 
+# Derive clean semver (strip leading v) for @actions/tool-cache layout.
+KUBECTL_VERSION_CLEAN="${KUBECTL_VERSION#v}"
+
 echo "=== Wiring kubectl ${KUBECTL_VERSION} from tool cache ==="
 echo "Tool cache root: ${TOOL_CACHE}"
 
 # kubectl paths to check (in order of preference)
+# @actions/tool-cache normalizes semver with semver.clean() so v1.31.0 → 1.31.0
+# and uses machine arch default (x64 on linux). It does NOT use linux-amd64/kubectl.
+# azure/setup-kubectl returns path.join(cachedToolpath, "kubectl") directly.
 KUBECTL_PATHS=(
+    # Actions tool-cache / azure/setup-kubectl layout: kubectl/<version>/<arch>/kubectl
+    "${TOOL_CACHE}/kubectl/${KUBECTL_VERSION_CLEAN}/x64/kubectl"
+
+    # Defensive fallback if a future cache preserves the v-prefix.
+    "${TOOL_CACHE}/kubectl/${KUBECTL_VERSION}/x64/kubectl"
+
+    # Legacy/manual archive-style paths.
     "${TOOL_CACHE}/kubectl/${KUBECTL_VERSION}/linux-amd64/kubectl"
     "${TOOL_CACHE}/kubectl/v1.31.0/linux-amd64/kubectl"
     "${TOOL_CACHE}/kubectl/v1.30.0/linux-amd64/kubectl"
@@ -51,8 +64,8 @@ if [[ -z "${KUBECTL_PATH}" ]]; then
     echo "Searched paths:"
     printf '  - %s\n' "${KUBECTL_PATHS[@]}"
     echo "kubectl is required. Ensure kubectl is installed in the runner tool cache."
-    echo "=== Available kubectl in tool cache ==="
-    find "${TOOL_CACHE}/kubectl" -maxdepth 4 -type d -print 2>/dev/null | sort || echo "No kubectl directory found"
+    echo "=== kubectl tool-cache files ==="
+    find "${TOOL_CACHE}/kubectl" -maxdepth 5 -print 2>/dev/null | sort || echo "No kubectl directory found"
     exit 1
 fi
 
