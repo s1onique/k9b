@@ -75,6 +75,7 @@ from scripts.lab_common.provider_preflight_curl import (
 # These functions were moved from this module to specialized modules
 from scripts.lab_common.provider_preflight_health import (  # noqa: F401
     ProviderHealthPayload,
+    _classify_provider_health_body,
     _evaluate_health_response,
     _evaluate_provider_state,
     _extract_provider_health_payload,
@@ -106,7 +107,8 @@ __all__ = [
     "_classify_json_parse_failure",
     "_looks_like_curl_framing_suffix",
     "_extract_clean_or_contaminated_json",
-    # New envelope extraction helpers
+    # New wire-format validation helper
+    "_classify_provider_health_body",
     "_extract_provider_health_payload",
     "ProviderHealthPayload",
 ]

@@ -3,6 +3,10 @@
 This module provides the health response evaluation logic for provider preflight.
 JSON classification logic is split to provider_preflight_json_classification.py.
 
+Wire-format validation contract:
+Provider health response body must be EXACTLY one clean JSON document.
+Any prefix/suffix that is not whitespace constitutes contamination.
+
 Envelope handling:
 The curl wrapper emits a known diagnostic envelope around provider health JSON:
   - STDOUT_BLOCK prefix (optional)
@@ -11,8 +15,9 @@ The curl wrapper emits a known diagnostic envelope around provider health JSON:
   - CURL_EXIT=<code>
   - HTTP_CODE=<code>
 
-This envelope is NON-FATAL: valid JSON + known envelope suffix → extract and parse.
-Unknown contamination → provider_health_output_contaminated (hard failure).
+This envelope is NON-FATAL only when detected by _extract_provider_health_payload().
+The strict parser (_classify_provider_health_body) validates wire-format FIRST.
+Semantic evaluation happens ONLY after wire-format validation passes.
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from typing import TYPE_CHECKING
 
 from scripts.lab_common.constants import (
     FAILURE_PROVIDER_DISABLED_REQUIRED,
+    FAILURE_PROVIDER_HEALTH_EMPTY_BODY,
     FAILURE_PROVIDER_HEALTH_INVALID_JSON,
     FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
     FAILURE_PROVIDER_NOT_INITIALIZED,
@@ -155,6 +161,122 @@ def _extract_provider_health_payload(raw_output: str) -> ProviderHealthPayload:
     )
 
 
+def _find_first_json_start(raw: str) -> int | None:
+    """Find the index of the first '{' or '[' in the string.
+
+    Args:
+        raw: The raw body string
+
+    Returns:
+        Index of first JSON start character, or None if not found
+    """
+    for idx, ch in enumerate(raw):
+        if ch in "{[":
+            return idx
+    return None
+
+
+def _suffix_starts_with_json_document(suffix: str) -> bool:
+    """Check if suffix starts with a valid JSON document.
+
+    Args:
+        suffix: The trailing bytes after valid JSON prefix
+
+    Returns:
+        True if suffix starts with '{' or '[' (after stripping whitespace)
+    """
+    stripped = suffix.lstrip()
+    return stripped.startswith("{") or stripped.startswith("[")
+
+
+def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None, str]:
+    """Strict wire-format validation for provider health response body.
+
+    Provider health response body must be EXACTLY one clean JSON document.
+    Wire-format validation MUST happen before semantic health evaluation.
+
+    Classification order:
+    1. Empty/whitespace-only body -> provider_health_empty_body
+    2. Non-whitespace prefix + JSON -> provider_health_output_contaminated
+    3. JSON + non-whitespace suffix that is valid JSON -> provider_health_invalid_json
+    4. JSON + non-whitespace suffix (log/contamination) -> provider_health_output_contaminated
+    5. Exactly one clean JSON document -> (None, payload, "") for semantic evaluation
+
+    Args:
+        raw: The raw body string from curl response
+
+    Returns:
+        Tuple of (failure_class, payload_or_none, detail_message).
+        If failure_class is None, payload contains the parsed JSON and evaluation proceeds.
+    """
+    # 1. Check for empty/whitespace-only body
+    if raw.strip() == "":
+        return (
+            FAILURE_PROVIDER_HEALTH_EMPTY_BODY,
+            None,
+            "Provider health response body was empty",
+        )
+
+    # Find where actual content starts (skip leading whitespace)
+    first_non_ws = len(raw) - len(raw.lstrip())
+    candidate = raw[first_non_ws:]
+
+    decoder = json.JSONDecoder()
+
+    # Try to decode JSON starting at first non-whitespace
+    try:
+        payload, end = decoder.raw_decode(candidate)
+    except json.JSONDecodeError:
+        # JSON decode failed - check if there's JSON somewhere in the content
+        json_start = _find_first_json_start(raw)
+        if json_start is not None and json_start > first_non_ws:
+            # Found JSON but after some non-whitespace prefix = contamination
+            return (
+                FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+                None,
+                _format_json_contamination_detail(raw),
+            )
+        return (
+            FAILURE_PROVIDER_HEALTH_INVALID_JSON,
+            None,
+            f"Invalid JSON response from /api/health/details (HTTP 200). "
+            f"Body prefix (first 200 chars): {raw[:200]!r}",
+        )
+
+    # Calculate absolute position of where JSON document ends
+    absolute_end = first_non_ws + end
+    suffix = raw[absolute_end:]
+
+    # 2. Check for non-whitespace suffix
+    if suffix.strip():
+        # If suffix itself starts with valid JSON = adjacent JSON documents = invalid
+        if _suffix_starts_with_json_document(suffix):
+            return (
+                FAILURE_PROVIDER_HEALTH_INVALID_JSON,
+                None,
+                f"Invalid JSON response: concatenated JSON documents. "
+                f"Body prefix (first 200 chars): {raw[:200]!r}",
+            )
+        # Otherwise, suffix is contamination (log output, metadata, etc.)
+        return (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            None,
+            f"Output contamination: trailing non-JSON data after valid JSON. {_format_json_contamination_detail(raw)}",
+        )
+
+    # 3. Check for non-whitespace prefix (leading whitespace is OK, prefix is not)
+    if first_non_ws > 0:
+        # There's non-whitespace content before JSON = contamination
+        return (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            None,
+            _format_json_contamination_detail(raw),
+        )
+
+    # 4. Valid: exactly one clean JSON document with no prefix/suffix contamination
+    return None, payload, ""
+
+
 def _evaluate_health_response(
     result: ProviderPreflightResult,
     curl_result: CurlResult,
@@ -165,59 +287,40 @@ def _evaluate_health_response(
 ) -> ProviderPreflightResult:
     """Evaluate a successful health response and determine provider state.
 
-    This function handles the known curl wrapper envelope pattern where provider
-    health JSON may be followed by metadata like CURL_EXIT=, HTTP_CODE=, and
-    STDERR_BLOCK markers. Known envelope patterns are extracted and not treated
-    as contamination.
-    """
-    try:
-        health_details = json.loads(curl_result.body)
-    except json.JSONDecodeError as exc:
-        # JSON parse failed - try envelope extraction first
-        payload = _extract_provider_health_payload(curl_result.body)
+    Wire-format validation MUST happen before semantic health evaluation.
+    Provider health response body must be EXACTLY one clean JSON document.
+    Any prefix/suffix that is not whitespace constitutes contamination.
 
-        if payload.envelope_detected:
-            try:
-                health_details = json.loads(payload.json_body)
-            except json.JSONDecodeError:
-                json_error_msg = (
-                    f"line {exc.lineno}, col {exc.colno}: {exc.msg}"
-                    if hasattr(exc, "lineno") else str(exc)
-                )
-                result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
-                result.message = (
-                    f"Invalid JSON response from /api/health/details (HTTP 200). "
-                    f"JSON parse error: {json_error_msg}. "
-                    f"Body prefix (first 200 chars): {payload.json_body[:200]!r}"
-                )
-                result.duration_seconds = time.time() - start
-                _write_result(result, artifact_dir)
-                return result
-        else:
-            if payload.raw_suffix:
-                contamination_detail = _format_json_contamination_detail(
-                    curl_result.body
-                )
-                result.failure_class = FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
-                result.message = (
-                    f"JSON parse error: valid JSON found but output contains "
-                    f"non-JSON prefix/suffix (output contamination). "
-                    f"{contamination_detail}"
-                )
-            else:
-                json_error_msg = (
-                    f"line {exc.lineno}, col {exc.colno}: {exc.msg}"
-                    if hasattr(exc, "lineno") else str(exc)
-                )
-                result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
-                result.message = (
-                    f"Invalid JSON response from /api/health/details (HTTP 200). "
-                    f"JSON parse error: {json_error_msg}. "
-                    f"Body prefix (first 200 chars): {curl_result.body[:200]!r}"
-                )
-            result.duration_seconds = time.time() - start
-            _write_result(result, artifact_dir)
-            return result
+    The known curl wrapper envelope is handled by _extract_provider_health_payload(),
+    which is a separate mode from strict wire-format validation.
+    """
+    # Step 1: Strict wire-format validation FIRST
+    # This validates that body is exactly one clean JSON document
+    failure_class, payload, detail = _classify_provider_health_body(curl_result.body)
+
+    if failure_class is not None:
+        # Wire-format validation failed - return immediately, no semantic evaluation
+        result.failure_class = failure_class
+        result.message = detail
+        result.duration_seconds = time.time() - start
+        _write_result(result, artifact_dir)
+        return result
+
+    # Step 2: Wire-format valid - parse and evaluate semantic content
+    assert payload is not None, "payload should not be None when failure_class is None"
+
+    # Handle the case where payload might be a string (json_body) or dict
+    if isinstance(payload, str):
+        health_details = json.loads(payload)
+    elif isinstance(payload, dict):
+        health_details = payload
+    else:
+        # This shouldn't happen with proper classification
+        result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
+        result.message = f"Unexpected payload type: {type(payload).__name__}"
+        result.duration_seconds = time.time() - start
+        _write_result(result, artifact_dir)
+        return result
 
     result.parsed_status = parse_provider_status_from_health_details(health_details)
 

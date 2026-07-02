@@ -116,26 +116,12 @@ jobs:
       - name: Emit Docker toolchain provenance
         run: scripts/ci/emit_toolchain_provenance.sh "docker,buildx"
 
-      # CI-HERMETIC-TOOLCACHE: Inline buildx create with --buildkitd-config for CA trust.
-      # BuildKit config is passed via --buildkitd-config flag on buildx create.
+      # CI-HERMETIC-TOOLCACHE: Use hermetic wire script for Buildx setup.
       - name: Set up Docker Buildx
         id: buildx
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          builder="k9b-${{ inputs.image_name }}-${{ github.run_id }}-${{ github.run_attempt }}"
-
-          docker buildx create \
-            --name "$builder" \
-            --driver docker-container \
-            --buildkitd-config "${{ steps.buildkitd-config.outputs.path }}" \
-            --use \
-            --bootstrap
-
-          echo "name=$builder" >> "$GITHUB_OUTPUT"
-
-          docker buildx inspect "$builder"
+        env:
+          BUILDKITD_CONFIG: ${{ steps.buildkitd-config.outputs.path }}
+        run: scripts/ci/wire_docker_buildx.sh --buildkitd-config "${{ env.BUILDKITD_CONFIG }}"
 
       # CI-HERMETIC-TOOLCACHE: docker/login-action replaced with docker_login.sh.
       - name: Login to Harbor
