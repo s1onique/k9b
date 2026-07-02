@@ -47,10 +47,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Wire Python from tool cache
+        run: source scripts/ci/wire_toolcache_python.sh "${{ env.PYTHON_VERSION }}"
 
       - name: Install Python dependencies
         run: |
@@ -68,7 +66,7 @@ jobs:
           echo "=== Verifying passing fixture ==="
           python -m scripts.k9b_otel_demo_lab_verify --artifact-dir fixtures/otel-demo/pass
 
-      - name: Verify fail-no-recommendationservice fixture
+      - name: Verify fail-no-recommendationservice fixture fails as expected
         run: |
           echo "=== Verifying fail-no-recommendationservice fixture (should fail) ==="
           set +e

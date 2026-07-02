@@ -78,13 +78,12 @@ def find_yaml_files(pattern: str = "**/*.yml") -> Iterator[Path]:
     yield from github_dir.glob(pattern)
 
 
-def load_yaml_file(path: Path) -> dict | None:
-    """Load YAML file safely."""
-    try:
-        with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f)  # type: ignore[no-any-return]
-    except (yaml.YAMLError, OSError):
-        return None
+def load_yaml_file(path: Path) -> dict:
+    """Load YAML file; hard fail on parse error for workflow policy gates."""
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    assert isinstance(data, dict), f"{path} did not parse to a YAML mapping"
+    return data
 
 
 def collect_uses_in_yaml(data: dict) -> list[str]:
@@ -168,8 +167,6 @@ class TestForbiddenActions:
     def test_no_forbidden_actions(self, yaml_path: Path) -> None:
         """Fail on forbidden action patterns unless allowlisted."""
         data = load_yaml_file(yaml_path)
-        if data is None:
-            pytest.skip(f"Could not parse {yaml_path}")
         uses = collect_uses_in_yaml(data)
         violations = []
         for u in uses:
@@ -266,5 +263,211 @@ class TestToolchainActionPythonWiring:
 
 
 # ---------------------------------------------------------------------
+# Regression tests: runtime hazards
+# ---------------------------------------------------------------------
+
+
+class TestRuntimeHazardRegression:
+    """Regression tests for known runtime hazards in shell wiring."""
+
+    def test_no_runner_tool_cache_in_shell_scripts(self) -> None:
+        """Checked-in shell scripts must not use '${runner.tool_cache}' (GitHub expression, not Bash var)."""
+        # Forbidden: ${runner.tool_cache} is a GitHub expression, not a Bash variable.
+        # Scripts must use RUNNER_TOOL_CACHE env var or AGENT_TOOLSDIRECTORY fallback.
+        ci_scripts_dir = ROOT / "scripts" / "ci"
+        if not ci_scripts_dir.exists():
+            pytest.skip("scripts/ci/ directory not found")
+
+        forbidden_pattern = "${runner.tool_cache}"
+        violations: list[tuple[Path, str]] = []
+
+        for shell_file in ci_scripts_dir.glob("*.sh"):
+            content = shell_file.read_text(encoding="utf-8")
+            if forbidden_pattern in content:
+                # Find line numbers for diagnostics
+                lines_with_violation = [
+                    f"  line {i+1}: {line.rstrip()}"
+                    for i, line in enumerate(content.splitlines())
+                    if forbidden_pattern in line
+                ]
+                violations.append((shell_file, "\n".join(lines_with_violation)))
+
+        assert not violations, (
+            "Checked-in shell scripts must not use '${runner.tool_cache}' "
+            "(GitHub expression, not Bash variable). "
+            "Use RUNNER_TOOL_CACHE env var or AGENT_TOOLSDIRECTORY fallback.\n"
+            + "\n".join(
+                f"{path.relative_to(ROOT)}:\n{violation}"
+                for path, violation in violations
+            )
+        )
+
+    def test_wire_scripts_export_path_before_proof(self) -> None:
+        """Wire scripts must export PATH before running verification commands."""
+        ci_scripts_dir = ROOT / "scripts" / "ci"
+        if not ci_scripts_dir.exists():
+            pytest.skip("scripts/ci/ directory not found")
+
+        # For each wire script, check that 'export PATH=' appears before
+        # any proof command (invoking the tool with --version, -VV, etc.)
+        violations: list[tuple[Path, str]] = []
+
+        for shell_file in ci_scripts_dir.glob("*.sh"):
+            content = shell_file.read_text(encoding="utf-8")
+            lines = content.splitlines()
+
+            # Find position of first "export PATH=" (not LD_LIBRARY_PATH, not in comments)
+            export_path_line = None
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                if stripped.startswith("export PATH=") and "LD_LIBRARY_PATH" not in stripped:
+                    export_path_line = i
+                    break
+
+            # Find position of first proof command invocation
+            # Proof commands are when we actually invoke the tool with version flags:
+            # - "${PYTHON_BIN}" -VV or "${PYTHON_BIN}" -c "import sys"
+            # - "${GO_BIN}/go" version
+            # - "${NODE_BIN}" --version
+            # - npm --version
+            # - "${HELM_PATH}" version
+            # - "${KUBECTL_PATH}" version --client
+            proof_line = None
+            # Only match lines where the tool is ACTUALLY INVOKED (after the tool path)
+            proof_patterns = [
+                '"${PYTHON_BIN}" -',   # Python invocation with flag
+                '"${GO_BIN}/go" ve',   # Go version invocation
+                '"${NODE_BIN}" --',     # Node invocation with flag
+                '"${HELM_PATH}" ve',   # Helm version invocation
+                '"${KUBECTL_PATH}" ve', # kubectl version invocation
+                "npm --version",        # npm (no path variable)
+            ]
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                # Skip comments
+                if stripped.startswith("#"):
+                    continue
+                # Skip variable assignments (e.g., PYTHON_BIN="${...}")
+                if "=" in stripped and not stripped.startswith("export "):
+                    continue
+                # Skip echo statements and command -v checks
+                if stripped.startswith("echo ") or "command -v" in stripped:
+                    continue
+                # Look for proof command invocations
+                for pattern in proof_patterns:
+                    if pattern in stripped:
+                        proof_line = i
+                        break
+                if proof_line is not None:
+                    break
+
+            if proof_line is not None and (export_path_line is None or export_path_line > proof_line):
+                violations.append((
+                    shell_file,
+                    f"  export PATH at line {export_path_line + 1 if export_path_line else 'NOT FOUND'}, "
+                    f"proof command at line {proof_line + 1}"
+                ))
+
+        assert not violations, (
+            "Wire scripts must export PATH before running proof commands.\n"
+            + "\n".join(
+                f"{path.relative_to(ROOT)}: {v}"
+                for path, v in violations
+            )
+        )
+
+
+# ---------------------------------------------------------------------
 # End of policy gate
 # ---------------------------------------------------------------------
+
+
+class TestDockerLoginSecurity:
+    """Regression tests for Docker login security hygiene."""
+
+    @pytest.mark.parametrize(
+        "yaml_path",
+        [p for p in find_yaml_files() if p.suffix in (".yml", ".yaml")],
+        ids=lambda p: str(p.relative_to(ROOT)),
+    )
+    def test_no_inline_docker_login_with_secrets(self, yaml_path: Path) -> None:
+        """Fail on inline 'docker login' with direct ${{ secrets.* }} interpolation.
+
+        Workflows must use scripts/ci/docker_login.sh instead of piping secrets
+        to 'docker login' inline. This prevents secrets from appearing in shell
+        history or CI logs.
+        """
+        data = load_yaml_file(yaml_path)
+
+        # Collect all 'run' blocks from the workflow
+        run_blocks: list[str] = []
+        def collect_runs(d: dict | list) -> None:
+            if isinstance(d, dict):
+                if "run" in d and isinstance(d["run"], str):
+                    run_blocks.append(d["run"])
+                for v in d.values():
+                    collect_runs(v)
+            elif isinstance(d, list):
+                for item in d:
+                    collect_runs(item)
+
+        collect_runs(data)
+
+        violations: list[str] = []
+        for block in run_blocks:
+            # Check for 'docker login' followed by '${{ secrets.' in same run block
+            if "docker login" in block and "${{ secrets." in block:
+                # Extract the relevant lines for diagnostics
+                lines = [line for line in block.splitlines() if "secrets" in line or "docker login" in line]
+                violations.append(f"Lines: {', '.join(line.strip() for line in lines[:3])}")
+
+        assert not violations, (
+            f"{yaml_path.relative_to(ROOT)}: inline 'docker login' with "
+            f"${{ secrets.* }} interpolation found. Use scripts/ci/docker_login.sh instead.\n"
+            + "\n".join(violations)
+        )
+
+
+class TestNoManualToolcacheProbing:
+    """Regression tests to ensure Python toolcache probing is centralized."""
+
+    @pytest.mark.parametrize(
+        "yaml_path",
+        [p for p in find_yaml_files() if p.suffix in (".yml", ".yaml") and "/workflows/" in str(p)],
+        ids=lambda p: str(p.relative_to(ROOT)),
+    )
+    def test_no_manual_python_toolcache_probing(self, yaml_path: Path) -> None:
+        """Fail on manual RUNNER_TOOL_CACHE/Python path probing unless using shared script.
+
+        Workflows must use scripts/ci/wire_toolcache_python.sh instead of manually
+        checking for Python at specific paths in RUNNER_TOOL_CACHE. This prevents
+        drift when Python patch versions change.
+        """
+        data = load_yaml_file(yaml_path)
+        run_blocks: list[str] = []
+        def collect_runs(d: dict | list) -> None:
+            if isinstance(d, dict):
+                if "run" in d and isinstance(d["run"], str):
+                    run_blocks.append(d["run"])
+                for v in d.values():
+                    collect_runs(v)
+            elif isinstance(d, list):
+                for item in d:
+                    collect_runs(item)
+        collect_runs(data)
+
+        violations: list[str] = []
+        for block in run_blocks:
+            # Check for manual RUNNER_TOOL_CACHE/Python probing
+            has_manual_probe = "RUNNER_TOOL_CACHE" in block and "/Python/" in block
+            uses_shared_script = "wire_toolcache_python.sh" in block
+            if has_manual_probe and not uses_shared_script:
+                violations.append(block[:100])
+
+        assert not violations, (
+            f"{yaml_path.relative_to(ROOT)}: manual RUNNER_TOOL_CACHE/Python probing "
+            f"found. Use scripts/ci/wire_toolcache_python.sh instead.\n"
+            + "\n".join(violations)
+        )

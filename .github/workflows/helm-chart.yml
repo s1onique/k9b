@@ -47,10 +47,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: v3.14.0
+      - name: Wire Helm from tool cache
+        run: source scripts/ci/wire_toolcache_helm.sh "3.14.0"
 
       - name: Verify Helm chart
         run: bash scripts/verify_helm_chart.sh
@@ -67,10 +65,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: v3.14.0
+      - name: Wire Helm from tool cache
+        run: source scripts/ci/wire_toolcache_helm.sh "3.14.0"
 
       - name: Read chart version
         id: version
@@ -110,10 +106,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: v3.14.0
+      - name: Wire Helm from tool cache
+        run: source scripts/ci/wire_toolcache_helm.sh "3.14.0"
 
       - name: Docker preflight
         run: |
@@ -154,11 +148,11 @@ jobs:
           echo "✓ Harbor secrets configured (HARBOR_USERNAME, HARBOR_TOKEN)"
 
       - name: Log in to Harbor
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_TOKEN }}
+        env:
+          HARBOR_REGISTRY: ${{ env.REGISTRY }}
+          HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+          HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
+        run: source scripts/ci/docker_login.sh "${HARBOR_REGISTRY}" "${HARBOR_USERNAME}" "HARBOR_TOKEN"
 
       - name: Download package artifact
         uses: actions/download-artifact@v4

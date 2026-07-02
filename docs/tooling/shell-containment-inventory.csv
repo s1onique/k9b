@@ -37,3 +37,9 @@ scripts/k9b_cnpg_live_lab_rbac_preflight.sh,legacy-debt,k9b-team,RBAC preflight 
 scripts/k9b_cnpg_live_lab_bootstrap.sh,legacy-debt,k9b-team,Kubeconfig bootstrap for live lab; credential validation and error classification,Python,pending,Live-lab-Bootstrap-ACT
 scripts/generate_frontend_api_client.sh,legacy-debt,platform-team,OpenAPI TypeScript client generator; orchestrates Python export and npm generation,Python,pending,ACT-2024-shell-migration
 evidence.sh,legacy-debt,k9b-team,Simple kubectl diagnostic script; collects k9b backend evidence,Python,pending,N/A
+scripts/ci/docker_login.sh,legacy-debt,platform-team,Docker registry login via password-stdin; CI hermetic toolchain wiring,shell,pending,N/A
+scripts/ci/wire_toolcache_go.sh,legacy-debt,platform-team,Go toolcache wiring from RUNNER_TOOL_CACHE; CI hermetic toolchain wiring,shell,pending,N/A
+scripts/ci/wire_toolcache_helm.sh,legacy-debt,platform-team,Helm toolcache wiring from RUNNER_TOOL_CACHE; CI hermetic toolchain wiring,shell,pending,N/A
+scripts/ci/wire_toolcache_kubectl.sh,legacy-debt,platform-team,kubectl toolcache wiring from RUNNER_TOOL_CACHE; CI hermetic toolchain wiring,shell,pending,N/A
+scripts/ci/wire_toolcache_node.sh,legacy-debt,platform-team,Node.js toolcache wiring from RUNNER_TOOL_CACHE; CI hermetic toolchain wiring,shell,pending,N/A
+scripts/ci/wire_toolcache_python.sh,legacy-debt,platform-team,Python toolcache wiring from RUNNER_TOOL_CACHE; CI hermetic toolchain wiring,shell,pending,N/A

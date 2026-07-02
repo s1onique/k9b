@@ -2109,9 +2109,6 @@ jobs:
       # =======================================================================
       # Sanitize artifacts for verification and upload
       # =======================================================================
-      # Restore Python tool cache (for ephemeral K8s runners)
-      # Ephemeral pods lose the tool cache between jobs, so we restore from
-      # GitHub Actions cache and save back after setup-python.
       - name: Restore Python tool cache (sanitize)
         id: cache-python-sanitize
         uses: actions/cache/restore@v6
@@ -2119,8 +2116,8 @@ jobs:
           path: ${{ runner.tool_cache }}/Python
           key: python-toolcache-${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}-v1
 
-      # Show Python tool cache before setup-python (diagnostic)
-      - name: Show Python tool cache before setup-python (sanitize)
+      # Show Python tool cache state (diagnostic)
+      - name: Show Python tool cache state (sanitize)
         run: |
           echo "RUNNER_NAME=${RUNNER_NAME:-<unset>}"
           echo "RUNNER_OS=${RUNNER_OS:-<unset>}"
@@ -2130,14 +2127,11 @@ jobs:
           find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type d -print 2>/dev/null | sort || true
           find "${{ runner.tool_cache }}/Python" -maxdepth 3 -type f -name '*.complete' -print 2>/dev/null | sort || true
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          architecture: x64
-          cache: 'pip'
+      # CI-HERMETIC-TOOLCACHE: Python wiring replaced with shared script.
+      - name: Wire Python from toolcache
+        run: |
+          source scripts/ci/wire_toolcache_python.sh "${{ env.PYTHON_VERSION }}"
 
-      # Save Python tool cache (for ephemeral K8s runners)
-      # Saves cache immediately after setup-python (even if job fails later).
       # Only saves when there was a cache miss (cache-hit != 'true').
       # continue-on-error: true avoids failing if another parallel job saved first.
       - name: Save Python tool cache (sanitize)

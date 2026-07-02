@@ -4,16 +4,16 @@
 # Missing cached tools must fail fast, not download mutable replacements.
 # See docs/ci-hermetic-toolchain.md.
 
-name: Prewarm Python Tool Cache
+name: Verify Python Tool Cache
 
-# Prewarm Python tool cache for self-hosted runners.
+# Verify Python tool cache for self-hosted runners.
 #
 # Background:
-#   actions/setup-python first checks the runner tool cache (RUNNER_TOOL_CACHE/Python/*).
-#   If the requested Python version is not found, it downloads from actions/python-versions.
+#   GitHub Actions runners have Python available via the tool cache at RUNNER_TOOL_CACHE/Python/*.
+#   For self-hosted runners without internet access, this workflow can be used to verify or bootstrap the cache.
 #
 # Usage:
-#   - Run manually via workflow_dispatch on a self-hosted runner to prewarm the cache.
+#   - Run manually via workflow_dispatch on a self-hosted runner to verify or bootstrap the cache.
 #   - After prewarming, subsequent jobs on the same persistent runner will hit local cache.
 #
 # For air-gapped runners, see:
@@ -61,12 +61,8 @@ jobs:
             echo "No Python cache found at ${RUNNER_TOOL_CACHE}/Python"
           fi
 
-      - name: Install Python into runner tool cache
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ inputs.python_version }}
-          architecture: ${{ inputs.architecture }}
-          check-latest: false
+      - name: Wire Python from tool cache
+        run: source scripts/ci/wire_toolcache_python.sh "${{ inputs.python_version }}"
 
       - name: Verify Python installation
         run: |
@@ -92,18 +88,8 @@ jobs:
     permissions:
       contents: none
     steps:
-      - name: Reset temporary tool cache
-        run: |
-          sudo rm -rf "${{ runner.tool_cache }}"
-          sudo mkdir -p "${{ runner.tool_cache }}"
-          sudo chown -R "$USER" "${{ runner.tool_cache }}"
-
-      - name: Install Python into tool cache
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ inputs.python_version }}
-          architecture: ${{ inputs.architecture }}
-          check-latest: false
+      - name: Wire Python from tool cache
+        run: source scripts/ci/wire_toolcache_python.sh "${{ inputs.python_version }}"
 
       - name: Archive Python tool cache
         run: |
