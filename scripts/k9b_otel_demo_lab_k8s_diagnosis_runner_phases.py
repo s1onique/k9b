@@ -290,11 +290,16 @@ def phase3_validate_artifacts(
 
     # Log terminal no-checks status (but do NOT treat as success here)
     # The compute_p4c_outcome() function determines final outcome
+    # For premature terminal no-checks, ensure failure_reason is set for downstream logging
     if terminal_no_checks:
         if total_pass_count < MIN_REQUIRED_PASSES:
             log(f"  Terminal no-checks decision before required pass count: {total_pass_count} < {MIN_REQUIRED_PASSES}")
             log("  P4c diagnosis did not satisfy lab objective: premature terminal no-checks")
             log("  This will be evaluated by compute_p4c_outcome() with lab-strict semantics")
+            # Explicitly mark this as premature for compute_p4c_outcome()
+            result["premature_terminal_no_checks"] = True
+            # Set failure_reason so legacy callers can see the issue
+            result["failure_reason"] = f"premature_terminal_no_checks: {total_pass_count} < {MIN_REQUIRED_PASSES}"
         else:
             log(f"  Backend-targeted diagnosis completed: terminal no-checks ({total_pass_count} observable passes)")
             log("  Final outcome determined by compute_p4c_outcome()")

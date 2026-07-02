@@ -174,11 +174,15 @@ def run_backend_targeted_diagnosis(
         total_pass_count = pass_count
         all_pass_run_ids = pass_run_ids
 
-        # Check for terminal no-checks decision BEFORE checking pass count
-        # If terminal no-checks was reached in this pass, accept it as valid single-pass success
-        if result.get("terminal_no_checks_accepted"):
+        # Check for terminal no-checks decision AFTER pass count check
+        # LAB-STRICT: Terminal no-checks alone is not sufficient - we must have
+        # accumulated min_required_passes observable passes before accepting it.
+        # Only break early if both conditions are met:
+        # 1. Terminal no-checks decision was reached
+        # 2. We have accumulated at least MIN_REQUIRED_PASSES
+        if result.get("terminal_no_checks_accepted") and total_pass_count >= MIN_REQUIRED_PASSES:
             terminal_no_checks_reached = True
-            log(f"    [pass {pass_attempt}/{max_passes}] Terminal no-checks decision accepted: stopping loop")
+            log(f"    [pass {pass_attempt}/{max_passes}] Terminal no-checks decision with {total_pass_count} passes: stopping loop")
             break
 
         # Standard pass count check
@@ -196,12 +200,22 @@ def run_backend_targeted_diagnosis(
 
     # Step 4: Final validation
     # Pass terminal_no_checks flag to validation
+    # Also detect premature terminal no-checks (terminal accepted but insufficient passes)
+    # This needs to be explicitly flagged since terminal_no_checks_reached only tracks
+    # the post-loop state where both conditions were met
+    premature_terminal = (
+        result.get("terminal_no_checks_accepted", False)
+        and total_pass_count < MIN_REQUIRED_PASSES
+    )
+    if premature_terminal:
+        result["premature_terminal_no_checks"] = True
+
     result = phase3_validate_artifacts(
         total_pass_count=total_pass_count,
         all_pass_run_ids=all_pass_run_ids,
         external_analysis_dir=external_analysis_dir,
         result=result,
-        terminal_no_checks=terminal_no_checks_reached,
+        terminal_no_checks=terminal_no_checks_reached or premature_terminal,
     )
 
     return result

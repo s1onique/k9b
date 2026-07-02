@@ -192,8 +192,8 @@ class TestTerminalNoChecksDecision:
 # =============================================================================
 
 
-class TestNoRedundantSecondPass:
-    """Integration tests verifying no redundant second pass after terminal."""
+class TestLabStrictTerminalNoChecks:
+    """Tests for lab-strict mode where terminal single-pass is NOT sufficient."""
 
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.get_budget_status_in_backend")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.reset_diagnosis_loop_budget_in_backend")
@@ -201,7 +201,7 @@ class TestNoRedundantSecondPass:
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
     @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.poll_backend_diagnosis_state")
-    def test_no_second_pass_after_terminal_no_checks(
+    def test_runner_continues_when_terminal_no_checks_with_insufficient_passes(
         self,
         mock_poll: MagicMock,
         mock_invoke: MagicMock,
@@ -210,7 +210,11 @@ class TestNoRedundantSecondPass:
         mock_reset: MagicMock,
         mock_status: MagicMock,
     ) -> None:
-        """P4c does not invoke second pass after terminal no-checks decision."""
+        """LAB-STRICT: Runner continues to pass 2 when terminal no-checks reached with only 1 pass.
+
+        This is the FIXED behavior: previously the runner would break immediately on
+        terminal_no_checks_accepted, but now it checks pass_count >= MIN_REQUIRED_PASSES first.
+        """
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
             BackendIncidentDetail,
             BackendIncidentFetchResult,
@@ -285,14 +289,117 @@ class TestNoRedundantSecondPass:
             allow_simulation=False,
         )
 
-        # Should succeed with terminal no-checks
-        assert result.get("failure_reason") is None, f"Expected success, got: {result.get('failure_reason')}"
-        assert result.get("real_pass_artifacts_found") is True
+        # With the fix, runner continues to all max_passes because pass_count=1 < MIN_REQUIRED_PASSES=2
+        # terminal_no_checks_accepted is True in the result (from the phase)
+        # but the runner does NOT set terminal_no_checks_reached (because pass_count < required)
         assert result.get("terminal_no_checks_accepted") is True
+        # Should exhaust all max_passes (DEFAULT_MAX_PASSES=5) because pass_count never reaches 2
+        assert mock_invoke.call_count == 5, (
+            f"Expected 5 invocations (exhaust all max_passes because pass_count=1 < 2), got {mock_invoke.call_count}"
+        )
 
-        # Should only invoke ONCE, not twice
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.get_budget_status_in_backend")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution.reset_diagnosis_loop_budget_in_backend")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail_result")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.fetch_backend_incident_detail")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.invoke_targeted_automatic_diagnosis_loop")
+    @patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases.poll_backend_diagnosis_state")
+    def test_runner_stops_early_when_terminal_with_sufficient_passes(
+        self,
+        mock_poll: MagicMock,
+        mock_invoke: MagicMock,
+        mock_fetch: MagicMock,
+        mock_fetch_result: MagicMock,
+        mock_reset: MagicMock,
+        mock_status: MagicMock,
+    ) -> None:
+        """Runner CAN stop early when terminal no-checks reached WITH sufficient passes.
+
+        This is the optimized case: terminal decision reached AND pass_count >= MIN_REQUIRED_PASSES.
+        """
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            BackendIncidentDetail,
+            BackendIncidentFetchResult,
+            TargetedDiagnosisInvocationResult,
+            TargetedDiagnosisPollResult,
+        )
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution import (
+            run_backend_targeted_diagnosis,
+        )
+
+        # Setup: terminal no-checks with 2 passes
+        mock_status.return_value = {
+            "incident_id": "test-incident",
+            "budget_clean": True,
+            "review_packet_count": 0,
+            "total_auto_artifact_count": 0,
+            "error": None,
+        }
+        mock_reset.return_value = MagicMock(
+            reset_file_count=0,
+            error=None,
+        )
+
+        # Incident detail with terminal no-checks AND 2 passes
+        terminal_detail = {
+            "incident_id": "test-incident",
+            "status": "collecting_evidence",
+            "evidence_count": 1,
+            "review_packet": {"status": "not_generated"},
+            "automatic_diagnosis_loop_summary": {
+                "pass_count": 2,
+                "pass_run_ids": ["run-1", "run-2"],
+            },
+            "automatic_diagnosis_review": {
+                "available": True,
+                "artifact_type": "diagnosis-loop-review-packet",
+                "run_id": "auto-test-incident-20260701220449",
+                "decision": "stop_no_checks_proposed",
+                "checks_requested": 0,
+                "checks_run": 0,
+                "read_only": True,
+                "review_required_before_any_action": True,
+                "no_remediation_attempted": True,
+            },
+        }
+
+        mock_fetch_result.return_value = BackendIncidentFetchResult(
+            success=True,
+            incident=BackendIncidentDetail.from_dict("test-incident", terminal_detail),
+        )
+        mock_fetch.return_value = BackendIncidentDetail.from_dict("test-incident", terminal_detail)
+
+        mock_invoke.return_value = TargetedDiagnosisInvocationResult(
+            success=True,
+            http_status=200,
+            body='{"status": "diagnosis_pass_completed"}',
+            json_parsed=True,
+        )
+
+        mock_poll.return_value = TargetedDiagnosisPollResult(
+            success=True,
+            final_status="collecting_evidence",
+            loop_summary_status="completed",
+            review_available=True,
+            attempts=1,
+            max_attempts=12,
+        )
+
+        result = run_backend_targeted_diagnosis(
+            incident_id="test-incident",
+            external_analysis_dir=Path("/tmp/analysis"),
+            kubeconfig="/path/to/kubeconfig",
+            namespace="k9b",
+            result={},
+            allow_simulation=False,
+        )
+
+        # With terminal decision AND pass_count >= MIN_REQUIRED_PASSES, should stop after pass 1
+        assert result.get("pass_count") == 2
+        assert result.get("terminal_no_checks_accepted") is True
+        # Should only invoke ONCE because pass_count >= required after first pass
         assert mock_invoke.call_count == 1, (
-            f"Expected 1 invocation (terminal after first pass), got {mock_invoke.call_count}"
+            f"Expected 1 invocation (terminal after pass with sufficient passes), got {mock_invoke.call_count}"
         )
 
 
@@ -371,60 +478,8 @@ class TestLiveLabContractPayload:
         assert is_read_only_terminal_decision(live_lab_detail) is True
 
     def test_terminal_no_checks_is_success(self) -> None:
-        """Terminal no-checks should be classified as success, not failure."""
-        # This is the new success classification
+        """Terminal no-checks remains a canonical backend classification.
+
+        Lab-strict success still depends on satisfying the required observable pass count.
+        """
         assert FAILURE_TARGETED_TERMINAL_NO_CHECKS == "targeted_automatic_diagnosis_terminal_no_checks"
-
-
-# =============================================================================
-# Test 7: Phase3 validates terminal single-pass
-# =============================================================================
-
-
-class TestPhase3TerminalValidation:
-    """Tests for phase3_validate_artifacts with terminal single-pass."""
-
-    def test_terminal_single_pass_succeeds(self) -> None:
-        """Terminal no-checks with 1 observable pass should succeed."""
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases import (
-            phase3_validate_artifacts,
-        )
-
-        result: dict[str, Any] = {}
-        external_dir = Path("/tmp/analysis")
-
-        # With terminal_no_checks=True and total_pass_count=1
-        updated_result = phase3_validate_artifacts(
-            total_pass_count=1,
-            all_pass_run_ids=["auto-test-run"],
-            external_analysis_dir=external_dir,
-            result=result,
-            terminal_no_checks=True,
-        )
-
-        # Should succeed
-        assert updated_result.get("failure_reason") is None
-        assert updated_result.get("real_pass_artifacts_found") is True
-        assert updated_result.get("pass_count") == 1
-
-    def test_non_terminal_single_pass_fails(self) -> None:
-        """Non-terminal single pass should still fail (require 2 passes)."""
-        from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_phases import (
-            phase3_validate_artifacts,
-        )
-
-        result: dict[str, Any] = {}
-        external_dir = Path("/tmp/analysis")
-
-        # Without terminal_no_checks (or False) and total_pass_count=1
-        updated_result = phase3_validate_artifacts(
-            total_pass_count=1,
-            all_pass_run_ids=["auto-test-run"],
-            external_analysis_dir=external_dir,
-            result=result,
-            terminal_no_checks=False,
-        )
-
-        # Should fail with insufficient_passes
-        assert updated_result.get("failure_reason") == FAILURE_TARGETED_INSUFFICIENT_PASSES
-        assert updated_result.get("real_pass_artifacts_found") is False
