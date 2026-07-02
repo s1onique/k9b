@@ -69,6 +69,7 @@ def compute_p4c_outcome(
     *,
     accept_terminal_single_pass: bool = False,
     min_required_passes: int = 2,
+    require_root_cause_terms: bool = True,
 ) -> P4cDiagnosisOutcome:
     """Compute the normalized P4c outcome from diagnosis evidence.
 
@@ -257,25 +258,45 @@ def compute_p4c_outcome(
     if not read_only_constraints_satisfied:
         failure_reasons.append(f"read_only_contract_violated: {read_only_violations}")
 
-    # Root cause evidence from prose terms
-    required_terms = ["shipping", "nodeSelector", "k9b.dev/otel-lab-node"]
-    missing_terms = [t for t in required_terms if t.lower() not in root_cause_summary.lower()]
+    # Ensure review_artifact_paths is populated from backend_incident_detail if not set
+    if not review_artifact_paths:
+        review = evidence.get("backend_incident_detail", {})
+        if isinstance(review, dict):
+            auto_review = review.get("automatic_diagnosis_review", {}) or {}
+            artifact_name = auto_review.get("artifact_name")
+            if artifact_name:
+                review_artifact_paths = (f"backend:{artifact_name}",)
 
-    # Check for scheduling evidence
-    scheduling_markers = ["FailedScheduling", "Unschedulable", "nodeSelector", "no matching node"]
-    scheduling_found = any(m.lower() in root_cause_summary.lower() for m in scheduling_markers)
+    # Root cause evidence from prose terms (only if require_root_cause_terms is True)
+    if require_root_cause_terms:
+        required_terms = ["shipping", "nodeSelector", "k9b.dev/otel-lab-node"]
+        missing_terms = [t for t in required_terms if t.lower() not in root_cause_summary.lower()]
 
-    if missing_terms:
-        root_cause_evidence_reason = f"missing_root_cause_term: {', '.join(missing_terms)}"
-        failure_reasons.append(root_cause_evidence_reason)
-        root_cause_evidence_satisfied = False
-    elif not scheduling_found:
-        root_cause_evidence_reason = "missing_scheduling_root_cause_evidence"
-        failure_reasons.append(root_cause_evidence_reason)
-        root_cause_evidence_satisfied = False
+        # Check for scheduling evidence
+        scheduling_markers = ["FailedScheduling", "Unschedulable", "nodeSelector", "no matching node"]
+        scheduling_found = any(m.lower() in root_cause_summary.lower() for m in scheduling_markers)
+
+        if missing_terms:
+            root_cause_evidence_reason = f"missing_root_cause_term: {', '.join(missing_terms)}"
+            failure_reasons.append(root_cause_evidence_reason)
+            root_cause_evidence_satisfied = False
+        elif not scheduling_found:
+            root_cause_evidence_reason = "missing_scheduling_root_cause_evidence"
+            failure_reasons.append(root_cause_evidence_reason)
+            root_cause_evidence_satisfied = False
+        else:
+            root_cause_evidence_reason = None
+            root_cause_evidence_satisfied = True
     else:
-        root_cause_evidence_reason = None
-        root_cause_evidence_satisfied = True
+        # When root cause terms are not required, check p4c_verdict
+        # Only use p4c_verdict if it has a meaningful "success" key
+        p4c_verdict = evidence.get("p4c_verdict", {})
+        if isinstance(p4c_verdict, dict) and "success" in p4c_verdict:
+            root_cause_evidence_satisfied = bool(p4c_verdict.get("success"))
+            root_cause_evidence_reason = None if root_cause_evidence_satisfied else "missing_scheduling_root_cause_evidence"
+        else:
+            root_cause_evidence_satisfied = True
+            root_cause_evidence_reason = None
 
     success = len(failure_reasons) == 0
 

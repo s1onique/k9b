@@ -296,6 +296,7 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         evidence,
         accept_terminal_single_pass=False,  # LAB-STRICT: require multi-pass diagnosis
         min_required_passes=MIN_REQUIRED_PASSES,
+        require_root_cause_terms=True,  # LAB-STRICT: require scheduling root-cause evidence
     )
     evidence["p4c_outcome"] = {
         "success": p4c_outcome.success,
