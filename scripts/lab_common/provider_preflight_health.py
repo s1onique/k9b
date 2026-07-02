@@ -53,6 +53,47 @@ if TYPE_CHECKING:
     pass
 
 
+def _format_json_contamination_detail(output: str, *, limit: int = 200) -> str:
+    """Format JSON contamination diagnostic details using raw_decode to locate JSON boundaries.
+
+    Args:
+        output: The raw body string that contains JSON + contamination
+        limit: Maximum number of characters to include for each part
+
+    Returns:
+        A string describing the non-JSON prefix/suffix with bounded snippets
+    """
+    body = output or ""
+    stripped = body.lstrip()
+    leading_len = len(body) - len(stripped)
+
+    decoder = json.JSONDecoder()
+
+    try:
+        _, end = decoder.raw_decode(stripped)
+    except json.JSONDecodeError:
+        return f"Body prefix (first {limit} chars): {body[:limit]!r}"
+
+    json_start = leading_len
+    json_end = leading_len + end
+
+    prefix = body[:json_start].strip()
+    suffix = body[json_end:].strip()
+
+    parts: list[str] = []
+
+    if prefix:
+        parts.append(f"Non-JSON prefix (first {limit} chars): {prefix[:limit]!r}")
+
+    if suffix:
+        parts.append(f"Non-JSON suffix (first {limit} chars): {suffix[:limit]!r}")
+
+    if not parts:
+        parts.append(f"Body prefix (first {limit} chars): {body[:limit]!r}")
+
+    return "; ".join(parts)
+
+
 def _extract_clean_or_contaminated_json(
     text: str,
 ) -> tuple[dict[str, object] | None, str | None]:
@@ -208,12 +249,12 @@ def _classify_json_parse_failure(body: str, exc: json.JSONDecodeError) -> tuple[
     _, failure_reason = _extract_clean_or_contaminated_json(body)
 
     if failure_reason == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED:
-        # Extract preview of the contamination for the message
-        body_prefix = body[:200]
+        # Extract preview of the contamination for the message using raw_decode
+        contamination_detail = _format_json_contamination_detail(body)
         return (
             FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
             f"JSON parse error: valid JSON found but output contains non-JSON prefix/suffix "
-            f"(output contamination). Body prefix (first 200 chars): {body_prefix!r}",
+            f"(output contamination). {contamination_detail}",
             None,
         )
 
