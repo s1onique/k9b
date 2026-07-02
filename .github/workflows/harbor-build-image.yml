@@ -119,9 +119,7 @@ jobs:
       # CI-HERMETIC-TOOLCACHE: Use hermetic wire script for Buildx setup.
       - name: Set up Docker Buildx
         id: buildx
-        env:
-          BUILDKITD_CONFIG: ${{ steps.buildkitd-config.outputs.path }}
-        run: scripts/ci/wire_docker_buildx.sh --buildkitd-config "${{ env.BUILDKITD_CONFIG }}"
+        run: scripts/ci/wire_docker_buildx.sh --buildkitd-config "${{ steps.buildkitd-config.outputs.path }}"
 
       # CI-HERMETIC-TOOLCACHE: docker/login-action replaced with docker_login.sh.
       - name: Login to Harbor
