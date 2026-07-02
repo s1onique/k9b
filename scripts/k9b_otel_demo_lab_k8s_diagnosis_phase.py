@@ -417,6 +417,11 @@ def _merge_diagnosis_result(evidence: dict[str, Any], result: dict[str, Any]) ->
     evidence["raw_diagnosis_artifact_path"] = result.get("artifact_path")
     evidence["review_packet_path"] = result.get("review_packet_path")
     
+    # Critical for compute_p4c_outcome: terminal no-checks detection
+    evidence["terminal_no_checks_accepted"] = result.get("terminal_no_checks_accepted", False)
+    evidence["terminal_decision_reached"] = result.get("terminal_decision_reached", False)
+    evidence["premature_terminal_no_checks"] = result.get("premature_terminal_no_checks", False)
+    
     # Include detailed loop enabled check results for diagnostics
     if result.get("loop_enabled_check_reason"):
         evidence["loop_enabled_check_reason"] = result.get("loop_enabled_check_reason")

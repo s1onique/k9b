@@ -144,3 +144,80 @@ class TestFacadeIntegration:
 
             assert diagnosis_dir.name == "p4c-k8s-multipass-diagnosis"
             assert diagnosis_dir.parent.name == "phase4-diagnosis"
+
+
+class TestMergeDiagnosisResultTerminalFlags:
+    """Regression tests for terminal no-checks flag merging.
+
+    These tests ensure the bridge between runner phases and compute_p4c_outcome
+    cannot regress by losing critical terminal decision metadata.
+    """
+
+    def test_merge_diagnosis_result_preserves_terminal_no_checks_flags(self) -> None:
+        """Merge must preserve terminal_no_checks flags for compute_p4c_outcome.
+
+        This is the exact bridge that was broken: runner set these flags but
+        _merge_diagnosis_result() never copied them to evidence.
+        """
+        from typing import Any
+
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_phase import (
+            _merge_diagnosis_result,
+        )
+
+        evidence: dict[str, Any] = {}
+        result: dict[str, Any] = {
+            "terminal_no_checks_accepted": True,
+            "terminal_decision_reached": True,
+            "premature_terminal_no_checks": True,
+        }
+
+        _merge_diagnosis_result(evidence, result)
+
+        assert evidence["terminal_no_checks_accepted"] is True
+        assert evidence["terminal_decision_reached"] is True
+        assert evidence["premature_terminal_no_checks"] is True
+
+    def test_p4c_phase_normalizes_premature_terminal_before_root_cause_failures(self) -> None:
+        """Premature terminal must be normalized, not fall through to multipass.
+
+        Given result has premature_terminal_no_checks=True and pass_count=1
+        When merged and normalized under lab-strict min_required_passes=2
+        Then mode is premature_terminal_no_checks, not multipass
+        """
+        from typing import Any
+
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_p4c_outcome import (
+            compute_p4c_outcome,
+        )
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_phase import (
+            _merge_diagnosis_result,
+        )
+
+        # Simulate runner output with premature terminal
+        evidence: dict[str, Any] = {}
+        result: dict[str, Any] = {
+            "status": "completed",
+            "pass_count": 1,
+            "terminal_no_checks_accepted": True,
+            "terminal_decision_reached": True,
+            "premature_terminal_no_checks": True,
+            "real_pass_artifacts_found": True,
+            "root_cause_summary": "Pod failed scheduling",
+        }
+
+        _merge_diagnosis_result(evidence, result)
+
+        # Normalize with lab-strict settings
+        outcome = compute_p4c_outcome(
+            evidence,
+            accept_terminal_single_pass=False,
+            min_required_passes=2,
+            require_root_cause_terms=True,
+        )
+
+        assert outcome.mode == "premature_terminal_no_checks"
+        assert outcome.success is False
+        assert outcome.root_cause_evidence_reason == (
+            "premature_terminal_no_checks_before_required_passes"
+        )
