@@ -25,6 +25,9 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_artifacts import (
     get_p3c_evidence_path,
     write_diagnosis_evidence,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+    compute_p4c_outcome,
+)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_helpers import (
     FAILURE_TARGETED_INVOCATION_HTTP_ERROR,
     FAILURE_TARGETED_INVOCATION_INVALID_JSON,
@@ -280,11 +283,43 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
             evidence["failure_reason"] = evidence["failure_reason"] + "; missing_scheduling_root_cause_evidence"
         evidence["validation_success"] = False
     
+    # Step 7: Compute normalized P4c outcome
+    # This is the SINGLE AUTHORITATIVE SOURCE for P4c success/failure determination.
+    # All downstream validation and lab-result rendering must use this normalized outcome.
+    log_step(7, "Computing normalized P4c outcome")
+    p4c_outcome = compute_p4c_outcome(evidence)
+    evidence["p4c_outcome"] = {
+        "success": p4c_outcome.success,
+        "mode": p4c_outcome.mode,
+        "pass_count": p4c_outcome.pass_count,
+        "pass_run_ids": list(p4c_outcome.pass_run_ids),
+        "review_artifact_paths": list(p4c_outcome.review_artifact_paths),
+        "terminal_decision": p4c_outcome.terminal_decision,
+        "read_only_constraints_satisfied": p4c_outcome.read_only_constraints_satisfied,
+        "root_cause_evidence_satisfied": p4c_outcome.root_cause_evidence_satisfied,
+        "root_cause_evidence_reason": p4c_outcome.root_cause_evidence_reason,
+        "failure_reasons": list(p4c_outcome.failure_reasons),
+    }
+
+    # Update validation_success to match normalized outcome
+    # This ensures the phase result is consistent with the P4c contract
+    evidence["validation_success"] = p4c_outcome.success
+    if not p4c_outcome.success:
+        evidence["failure_reason"] = "; ".join(p4c_outcome.failure_reasons) if p4c_outcome.failure_reasons else evidence.get("failure_reason")
+
+    # Log the normalized outcome
+    if p4c_outcome.success:
+        _log(f"  P4c normalized outcome: SUCCESS (mode={p4c_outcome.mode})")
+        _log(f"    pass_count={p4c_outcome.pass_count}, pass_run_ids={list(p4c_outcome.pass_run_ids)}")
+    else:
+        _log(f"  P4c normalized outcome: FAILURE")
+        _log(f"    mode={p4c_outcome.mode}, failures={list(p4c_outcome.failure_reasons)}")
+
     write_diagnosis_evidence(diagnosis_dir, evidence)
     duration = time.time() - start
     log_diagnosis_result(evidence["validation_success"], evidence, term_checks)
     log_phase_footer(duration)
-    
+
     return _build_result(evidence, start, diagnosis_dir, success=evidence["validation_success"], term_checks=term_checks)
 
 
@@ -431,6 +466,13 @@ def _build_result(
         "incident_id": evidence.get("incident_id"),
         "failure_reason": evidence.get("failure_reason"),
     }
+    # Include normalized P4c outcome if computed
+    p4c_outcome = evidence.get("p4c_outcome")
+    if p4c_outcome:
+        artifacts["p4c_outcome"] = p4c_outcome
+        # Normalize pass_run_ids from outcome if empty
+        if not artifacts["pass_run_ids"] and p4c_outcome.get("pass_run_ids"):
+            artifacts["pass_run_ids"] = p4c_outcome["pass_run_ids"]
     return LabPhaseResult(
         phase=PHASE_NAME,
         success=success,

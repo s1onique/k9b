@@ -24,11 +24,15 @@ def find_p4c_artifacts(artifact_dir: Path) -> list[Path]:
 def verify_p4c_diagnosis(artifact_dir: Path, report: VerificationReport) -> bool:
     """Verify P4c diagnosis contract.
 
-    Require diagnosis evidence to reference:
-    - shipping
-    - at least one scheduling root-cause marker
+    This verifier uses the SINGLE AUTHORITATIVE SOURCE for P4c outcome determination:
+    the normalized p4c_outcome embedded in diagnosis-evidence.json.
 
-    Supports two success modes:
+    If p4c_outcome is present, success/failure is determined solely by that normalized
+    outcome. This prevents the split-brain failure where:
+    - Backend-targeted diagnosis accepts terminal single-pass as valid
+    - Legacy multipass validator still requires pass_count >= 2
+
+    Legacy behavior (when p4c_outcome is not present):
     - Multi-pass (standard): pass_count >= 2, root-cause terms in diagnosis prose
     - Terminal single-pass: terminal_no_checks_accepted=True, pass_count >= 1,
       scheduling evidence from deterministic K8s evidence (not diagnosis prose)
@@ -52,6 +56,41 @@ def verify_p4c_diagnosis(artifact_dir: Path, report: VerificationReport) -> bool
         report.add_error("P4c: real_loop_invoked is False - simulation not allowed")
         return False
 
+    # Use normalized p4c_outcome if present - this is the single authoritative source
+    p4c_outcome = evidence.get("p4c_outcome")
+    if p4c_outcome:
+        # Normalized outcome is present - use it as the single authoritative source
+        outcome_success = p4c_outcome.get("success", False)
+        outcome_mode = p4c_outcome.get("mode", "unknown")
+        outcome_pass_count = p4c_outcome.get("pass_count", 0)
+        outcome_pass_run_ids = p4c_outcome.get("pass_run_ids", [])
+        outcome_failure_reasons = p4c_outcome.get("failure_reasons", [])
+
+        if outcome_success:
+            # Success via normalized outcome - accept terminal or multipass
+            report.add_check(
+                ContractCheck(
+                    name="p4c_diagnosis",
+                    passed=True,
+                    phase="p4c",
+                    reason=P4C_REASON_DIAGNOSIS_RCA_VALID,
+                    details={
+                        "incident_id": evidence.get("incident_id"),
+                        "pass_count": outcome_pass_count,
+                        "pass_run_ids": outcome_pass_run_ids,
+                        "success_mode": outcome_mode,
+                        "p4c_outcome_source": "normalized",
+                    },
+                )
+            )
+            return True
+        else:
+            # Failure via normalized outcome - report all failure reasons
+            for reason in outcome_failure_reasons:
+                report.add_error(f"P4c normalized outcome failure: {reason}")
+            return False
+
+    # Fallback: legacy validation (when p4c_outcome is not present)
     # Check for terminal no-checks single-pass mode
     terminal_no_checks_accepted = evidence.get("terminal_no_checks_accepted", False)
     pass_count = evidence.get("pass_count", 0)

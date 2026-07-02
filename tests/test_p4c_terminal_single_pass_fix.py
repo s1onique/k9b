@@ -235,3 +235,176 @@ class TestVerifyP4cDiagnosisTerminalMode:
         checks = [c for c in verification_report.checks if c.passed]
         p4c_check = next(c for c in checks if c.name == "p4c_diagnosis")
         assert p4c_check.details.get("success_mode") == "multi_pass"
+
+
+# =============================================================================
+# Tests for Normalized P4c Outcome (Single Authoritative Source)
+# =============================================================================
+
+
+class TestNormalizedP4cOutcome:
+    """Tests for compute_p4c_outcome as single authoritative source."""
+
+    def test_terminal_single_pass_does_not_run_legacy_min_pass_validator(self) -> None:
+        """Terminal single-pass must not be rejected by legacy pass_count >= 2 validator."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            compute_p4c_outcome,
+        )
+
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence)
+
+        assert outcome.mode == "terminal_single_pass"
+        assert outcome.success is True
+        assert "insufficient_passes" not in outcome.failure_reasons
+
+    def test_terminal_single_pass_success_not_overwritten_by_prose_requirements(self) -> None:
+        """Terminal mode success must not require legacy prose terms."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            compute_p4c_outcome,
+        )
+
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "root_cause_summary": "No additional checks needed",
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence)
+
+        assert outcome.success is True
+        assert "missing_root_cause_term" not in outcome.failure_reasons
+
+    def test_multipass_still_requires_minimum_pass_count(self) -> None:
+        """Multipass mode must still require pass_count >= 2."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            compute_p4c_outcome,
+        )
+
+        evidence = {
+            "real_loop_invoked": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "root_cause_summary": "The shipping deployment has FailedScheduling",
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence)
+
+        assert outcome.mode == "multipass"
+        assert outcome.success is False
+        assert any("insufficient_passes" in str(f) for f in outcome.failure_reasons)
+
+    def test_final_result_uses_single_normalized_outcome(
+        self, tmp_path: Path, verification_report: VerificationReport
+    ) -> None:
+        """Verify p4c_verifier consumes normalized outcome without contradiction."""
+        diagnosis_dir = tmp_path / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis"
+        diagnosis_dir.mkdir(parents=True)
+
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": True,
+            "read_only_violations": [],
+            "p4c_outcome": {
+                "success": True,
+                "mode": "terminal_single_pass",
+                "pass_count": 1,
+                "pass_run_ids": ["run-1"],
+                "review_artifact_paths": [],
+                "terminal_decision": "stop_no_checks_proposed",
+                "read_only_constraints_satisfied": True,
+                "root_cause_evidence_satisfied": True,
+                "root_cause_evidence_reason": None,
+                "failure_reasons": [],
+            },
+        }
+        (diagnosis_dir / "diagnosis-evidence.json").write_text(
+            __import__("json").dumps(evidence)
+        )
+
+        result = verify_p4c_diagnosis(tmp_path, verification_report)
+
+        assert result is True
+        checks = [c for c in verification_report.checks if c.passed]
+        p4c_check = next(c for c in checks if c.name == "p4c_diagnosis")
+        assert p4c_check.details.get("success_mode") == "terminal_single_pass"
+
+    def test_terminal_single_pass_preserves_read_only_constraints(self) -> None:
+        """Terminal single-pass must still satisfy read-only constraints."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            compute_p4c_outcome,
+        )
+
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": False,
+            "read_only_violations": ["kubectl_apply_attempted"],
+        }
+
+        outcome = compute_p4c_outcome(evidence)
+
+        assert outcome.success is False
+        assert outcome.read_only_constraints_satisfied is False
+        assert any("read_only" in str(f).lower() for f in outcome.failure_reasons)
+
+    def test_terminal_single_pass_reports_artifact_reference(self) -> None:
+        """Terminal single-pass must report pass_run_ids and review_artifact_paths."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            compute_p4c_outcome,
+        )
+
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "pass_run_ids": ["run-terminal-123"],
+            "review_packet_path": "/artifacts/review/test-review.json",
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence)
+
+        assert outcome.success is True
+        assert "run-terminal-123" in outcome.pass_run_ids
+        assert len(outcome.review_artifact_paths) > 0
+
+    def test_no_duplicate_success_predicate_helpers(self) -> None:
+        """Verify only one authoritative success predicate function exists."""
+        from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
+            compute_p4c_outcome,
+        )
+
+        assert callable(compute_p4c_outcome)

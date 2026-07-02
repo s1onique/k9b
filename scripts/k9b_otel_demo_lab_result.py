@@ -66,14 +66,31 @@ def _build_k8s_native_verdict(
         p3c_data["root_cause_final"] = False  # P3c is symptom-level only
     verdict["p3c"] = p3c_data
 
-    # P4c verdict
+    # P4c verdict - use normalized p4c_outcome if available
     p4c_data: dict[str, Any] = {
         "phase": "root_cause_validation",
     }
-    if p4c_success is not None:
-        p4c_data["success"] = p4c_success
     if p4c_phase is not None:
-        p4c_data["failure_reason"] = p4c_phase.artifacts.get("failure_reason")
+        # Use the normalized p4c_outcome from the phase artifacts
+        p4c_outcome = p4c_phase.artifacts.get("p4c_outcome")
+        if p4c_outcome:
+            # Use the single authoritative source for P4c success/failure
+            p4c_data["success"] = p4c_outcome.get("success", p4c_success)
+            p4c_data["mode"] = p4c_outcome.get("mode")
+            p4c_data["pass_count"] = p4c_outcome.get("pass_count")
+            p4c_data["pass_run_ids"] = p4c_outcome.get("pass_run_ids", [])
+            p4c_data["review_artifact_paths"] = p4c_outcome.get("review_artifact_paths", [])
+            p4c_data["failure_reasons"] = p4c_outcome.get("failure_reasons", [])
+            # Use failure_reasons from normalized outcome
+            if p4c_outcome.get("failure_reasons"):
+                p4c_data["failure_reason"] = "; ".join(p4c_outcome["failure_reasons"])
+            elif not p4c_outcome.get("success"):
+                p4c_data["failure_reason"] = p4c_phase.artifacts.get("failure_reason")
+        else:
+            # Fallback to legacy behavior
+            if p4c_success is not None:
+                p4c_data["success"] = p4c_success
+            p4c_data["failure_reason"] = p4c_phase.artifacts.get("failure_reason")
     verdict["p4c"] = p4c_data
 
     return verdict
