@@ -38,6 +38,7 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
     DEFAULT_MAX_CHECKS_PER_PASS,
     DEFAULT_MAX_PASSES,
     DIAGNOSIS_SOURCE_REAL,
+    MIN_REQUIRED_PASSES,
     PHASE_NAME,
 )
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_contract import create_initial_evidence
@@ -287,8 +288,15 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     # Step 7: Compute normalized P4c outcome
     # This is the SINGLE AUTHORITATIVE SOURCE for P4c success/failure determination.
     # All downstream validation and lab-result rendering must use this normalized outcome.
+    #
+    # LAB-STRICT MODE: accept_terminal_single_pass=False enforces multi-pass root-cause
+    # diagnosis contract. Terminal single-pass before required passes is a FAILURE.
     log_step(7, "Computing normalized P4c outcome")
-    p4c_outcome = compute_p4c_outcome(evidence)
+    p4c_outcome = compute_p4c_outcome(
+        evidence,
+        accept_terminal_single_pass=False,  # LAB-STRICT: require multi-pass diagnosis
+        min_required_passes=MIN_REQUIRED_PASSES,
+    )
     evidence["p4c_outcome"] = {
         "success": p4c_outcome.success,
         "mode": p4c_outcome.mode,

@@ -23,18 +23,23 @@ class P4cDiagnosisOutcome:
     JSON and filesystem artifacts with separate criteria.
 
     Modes:
-    - terminal_single_pass: Terminal no-checks decision reached in single pass
     - multipass: Standard multi-pass diagnosis requiring >= 2 passes
+    - terminal_single_pass: Terminal no-checks decision reached in single pass
+      (only with accept_terminal_single_pass=True)
+    - premature_terminal_no_checks: Terminal no-checks before required passes
+      in lab-strict mode (accept_terminal_single_pass=False)
 
     Success criteria:
-    - terminal_single_pass: pass_count >= 1, terminal_decision == stop_no_checks_proposed,
-      read_only_constraints_satisfied == True, review_artifact exists
     - multipass: pass_count >= 2, root_cause_evidence_satisfied == True,
       read_only_constraints_satisfied == True
+    - terminal_single_pass: pass_count >= 1, terminal_decision == stop_no_checks_proposed,
+      read_only_constraints_satisfied == True, review_artifact exists
+      (only with accept_terminal_single_pass=True)
+    - premature_terminal_no_checks: Always FAILURE (lab-strict mode)
     """
 
     success: bool
-    mode: Literal["multipass", "terminal_single_pass"]
+    mode: Literal["multipass", "terminal_single_pass", "premature_terminal_no_checks"]
     incident_id: str
     pass_count: int
     pass_run_ids: tuple[str, ...]
@@ -43,7 +48,7 @@ class P4cDiagnosisOutcome:
     read_only_constraints_satisfied: bool
     root_cause_evidence_satisfied: bool
     root_cause_evidence_reason: str | None
-    failure_reasons: tuple[str, ...] = field(default_factory=tuple())
+    failure_reasons: tuple[str, ...] = field(default_factory=tuple)
 
 
 # =============================================================================

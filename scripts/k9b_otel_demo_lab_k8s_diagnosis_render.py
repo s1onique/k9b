@@ -39,8 +39,11 @@ def log_diagnosis_result(
     """Log diagnosis result summary.
 
     This function is outcome-aware: if p4c_outcome exists, it logs the normalized
-    mode and failure_reasons only. For terminal_single_pass success, it omits
-    legacy missing prose terms as validation failures.
+    mode and failure_reasons only.
+
+    LAB-STRICT: terminal_single_pass is only logged as SUCCESS when explicitly
+    allowed via accept_terminal_single_pass=True. In lab-strict mode (default),
+    premature_terminal_no_checks is a failure.
 
     Args:
         success: Whether diagnosis succeeded
@@ -58,13 +61,22 @@ def log_diagnosis_result(
         
         # Log PASSED only when success is true, FAILED only when false
         if outcome_success:
-            # "terminal" prefix only for terminal_single_pass mode
-            if outcome_mode == "terminal_single_pass":
-                log("  P4c diagnosis PASSED (terminal single-pass outcome)")
+            # Success: log appropriate message based on mode
+            if outcome_mode == "multipass":
+                log(f"  P4c diagnosis PASSED ({outcome_mode} outcome)")
+            elif outcome_mode == "terminal_single_pass":
+                # Only reached if accept_terminal_single_pass=True
+                log(f"  P4c diagnosis PASSED ({outcome_mode} outcome)")
             else:
                 log(f"  P4c diagnosis PASSED ({outcome_mode} outcome)")
         else:
-            log(f"  P4c diagnosis FAILED ({outcome_mode} outcome)")
+            # Failure: provide specific messaging for premature_terminal_no_checks
+            if outcome_mode == "premature_terminal_no_checks":
+                log("  P4c diagnosis did not satisfy lab objective: premature terminal no-checks")
+                log(f"  P4c diagnosis FAILED (mode={outcome_mode})")
+                log(f"  Terminal no-checks decision after {outcome_pass_count} pass(es), but >=2 observable passes required")
+            else:
+                log(f"  P4c diagnosis FAILED ({outcome_mode} outcome)")
         
         log(f"  Success: {outcome_success}")
         log(f"  Incident ID: {evidence.get('incident_id', 'unknown')}")

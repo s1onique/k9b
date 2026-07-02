@@ -269,6 +269,10 @@ def phase3_validate_artifacts(
 ) -> dict[str, Any]:
     """Phase 3: Validate pass artifacts.
 
+    LAB-STRICT: This phase no longer treats terminal single-pass as success.
+    The compute_p4c_outcome() function (called in phase.py) determines the
+    final outcome with lab-strict semantics.
+
     Args:
         total_pass_count: Number of passes accumulated
         all_pass_run_ids: List of pass run IDs
@@ -277,31 +281,37 @@ def phase3_validate_artifacts(
         terminal_no_checks: Whether a terminal no-checks decision was reached
 
     Returns:
-        Updated result dict.
+        Updated result dict with pass metadata for compute_p4c_outcome().
     """
     log("  Step 5: Validating pass artifacts...")
     result["pass_count"] = total_pass_count
     result["pass_run_ids"] = all_pass_run_ids
+    result["real_pass_artifacts_found"] = total_pass_count >= MIN_REQUIRED_PASSES or terminal_no_checks
 
-    # Terminal no-checks decision is a valid single-pass success
-    if terminal_no_checks and total_pass_count >= 1:
-        result["failure_reason"] = None
-        result["real_pass_artifacts_found"] = True
-        log(f"  Backend-targeted diagnosis completed: terminal no-checks single-pass ({total_pass_count} observable passes)")
-        log("  P4c diagnosis PASSED (terminal single-pass outcome)")
-        return result
-
-    # Standard multi-pass validation
-    if result["pass_count"] < MIN_REQUIRED_PASSES:
+    # Log terminal no-checks status (but do NOT treat as success here)
+    # The compute_p4c_outcome() function determines final outcome
+    if terminal_no_checks:
+        if total_pass_count < MIN_REQUIRED_PASSES:
+            log(f"  Terminal no-checks decision before required pass count: {total_pass_count} < {MIN_REQUIRED_PASSES}")
+            log("  P4c diagnosis did not satisfy lab objective: premature terminal no-checks")
+            log("  This will be evaluated by compute_p4c_outcome() with lab-strict semantics")
+        else:
+            log(f"  Backend-targeted diagnosis completed: terminal no-checks ({total_pass_count} observable passes)")
+            log("  Final outcome determined by compute_p4c_outcome()")
+    elif total_pass_count < MIN_REQUIRED_PASSES:
         result["failure_reason"] = FAILURE_TARGETED_INSUFFICIENT_PASSES
         result["real_pass_artifacts_found"] = False
         log(f"  ERROR: Insufficient passes: {result['pass_count']} < {MIN_REQUIRED_PASSES}")
         return result
+    else:
+        log(f"  Backend-targeted diagnosis completed: {result['pass_count']} passes")
 
-    result["real_pass_artifacts_found"] = result["pass_count"] >= MIN_REQUIRED_PASSES
-    result["pass_artifact_paths"] = [str(external_analysis_dir / "diagnosis-loop-passes" / f"{rid}.json")
-                                    for rid in result["pass_run_ids"]]
-    result["artifact_path"] = str(external_analysis_dir / "diagnosis-loop-passes")
+    # Always populate pass_artifact_paths when we have pass IDs
+    if all_pass_run_ids:
+        result["pass_artifact_paths"] = [
+            str(external_analysis_dir / "diagnosis-loop-passes" / f"{rid}.json")
+            for rid in all_pass_run_ids
+        ]
+        result["artifact_path"] = str(external_analysis_dir / "diagnosis-loop-passes")
 
-    log(f"  Backend-targeted diagnosis completed: {result['pass_count']} passes")
     return result

@@ -1,4 +1,8 @@
-"""Tests for compute_p4c_outcome() - the single authoritative source for P4c outcome."""
+"""Tests for compute_p4c_outcome() - the single authoritative source for P4c outcome.
+
+Lab-strict mode (accept_terminal_single_pass=False) is the default and required for
+live lab execution. Terminal single-pass before required passes is a FAILURE.
+"""
 
 from __future__ import annotations
 
@@ -7,11 +11,11 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
 )
 
 
-class TestTerminalSinglePassSuccess:
-    """Terminal single-pass success cases."""
+class TestPrematureTerminalNoChecks:
+    """Tests for premature_terminal_no_checks mode in lab-strict execution."""
 
-    def test_terminal_single_pass_success_with_all_requirements(self) -> None:
-        """Terminal single-pass succeeds when all requirements are met."""
+    def test_p4c_rejects_terminal_single_pass_when_multipass_required(self) -> None:
+        """Terminal single-pass fails when lab-strict mode requires multipass diagnosis."""
         evidence = {
             "real_loop_invoked": True,
             "terminal_no_checks_accepted": True,
@@ -25,7 +29,103 @@ class TestTerminalSinglePassSuccess:
             "read_only_violations": [],
         }
 
+        # LAB-STRICT: accept_terminal_single_pass=False (default)
         outcome = compute_p4c_outcome(evidence)
+
+        assert outcome.success is False
+        assert outcome.mode == "premature_terminal_no_checks"
+        assert any("premature_terminal_no_checks" in reason for reason in outcome.failure_reasons)
+        assert any("missing_multipass_root_cause_confirmation" in reason for reason in outcome.failure_reasons)
+
+    def test_p4c_rejects_terminal_single_pass_with_min_required_2(self) -> None:
+        """Terminal single-pass with pass_count=1 fails when min_required_passes=2."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "terminal_decision_reached": "stop_no_checks_proposed",
+            "pass_run_ids": ["run-123"],
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        # Explicit min_required_passes=2 (lab-strict)
+        outcome = compute_p4c_outcome(evidence, min_required_passes=2)
+
+        assert outcome.success is False
+        assert outcome.mode == "premature_terminal_no_checks"
+        assert "1 < 2" in outcome.failure_reasons[0]
+
+    def test_p4c_terminal_single_pass_requires_explicit_acceptance_flag(self) -> None:
+        """Terminal single-pass requires accept_terminal_single_pass=True to succeed."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "terminal_decision_reached": "stop_no_checks_proposed",
+            "pass_run_ids": ["run-123"],
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        # STRICT: should fail
+        strict = compute_p4c_outcome(evidence, accept_terminal_single_pass=False)
+        assert strict.success is False
+        assert strict.mode == "premature_terminal_no_checks"
+
+        # PERMISSIVE: should succeed (all requirements met)
+        permissive = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
+        assert permissive.success is True
+        assert permissive.mode == "terminal_single_pass"
+
+    def test_p4c_preserves_pass_run_ids_on_premature_failure(self) -> None:
+        """Pass run IDs are preserved even when premature_terminal_no_checks fails."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "terminal_decision_reached": "stop_no_checks_proposed",
+            "pass_run_ids": ["pass-a", "pass-b"],  # IDs collected during loop
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence)
+
+        # pass_run_ids should be preserved
+        assert outcome.pass_run_ids == ("pass-a", "pass-b")
+        assert outcome.success is False
+        assert outcome.mode == "premature_terminal_no_checks"
+
+
+class TestTerminalSinglePassSuccess:
+    """Terminal single-pass success cases (only with accept_terminal_single_pass=True)."""
+
+    def test_terminal_single_pass_success_with_all_requirements(self) -> None:
+        """Terminal single-pass succeeds when all requirements are met and flag is set."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "terminal_decision_reached": "stop_no_checks_proposed",
+            "pass_run_ids": ["run-123"],
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
 
         assert outcome.success is True
         assert outcome.mode == "terminal_single_pass"
@@ -48,14 +148,14 @@ class TestTerminalSinglePassSuccess:
             "read_only_violations": [],
         }
 
-        outcome = compute_p4c_outcome(evidence)
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
 
         assert outcome.success is True
         assert len(outcome.review_artifact_paths) > 0
 
 
 class TestTerminalSinglePassFailure:
-    """Terminal single-pass failure cases (negative cases)."""
+    """Terminal single-pass failure cases (negative cases with accept_terminal_single_pass=True)."""
 
     def test_terminal_single_pass_missing_terminal_decision(self) -> None:
         """Terminal mode fails when terminal_decision_reached is missing."""
@@ -72,7 +172,7 @@ class TestTerminalSinglePassFailure:
             "read_only_violations": [],
         }
 
-        outcome = compute_p4c_outcome(evidence)
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
 
         assert outcome.success is False
         assert "terminal_decision_missing" in outcome.failure_reasons
@@ -92,7 +192,7 @@ class TestTerminalSinglePassFailure:
             "read_only_violations": [],
         }
 
-        outcome = compute_p4c_outcome(evidence)
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
 
         assert outcome.success is False
         assert any("terminal_decision_unexpected" in f for f in outcome.failure_reasons)
@@ -112,7 +212,7 @@ class TestTerminalSinglePassFailure:
             "read_only_violations": [],
         }
 
-        outcome = compute_p4c_outcome(evidence)
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
 
         assert outcome.success is False
         assert "missing_review_artifact_reference" in outcome.failure_reasons
@@ -132,7 +232,7 @@ class TestTerminalSinglePassFailure:
             "read_only_violations": ["kubectl_apply_attempted"],
         }
 
-        outcome = compute_p4c_outcome(evidence)
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
 
         assert outcome.success is False
         assert outcome.read_only_constraints_satisfied is False
@@ -154,7 +254,7 @@ class TestTerminalSinglePassFailure:
             "read_only_violations": [],
         }
 
-        outcome = compute_p4c_outcome(evidence)
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
 
         assert outcome.success is False
         assert "missing_scheduling_root_cause_evidence" in outcome.failure_reasons
@@ -200,6 +300,50 @@ class TestMultipassMode:
         assert outcome.mode == "multipass"
         assert any("insufficient_passes" in f for f in outcome.failure_reasons)
 
+    def test_multipass_passes_only_with_multipass_root_cause_evidence(self) -> None:
+        """Multipass requires root-cause evidence for scheduling."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": False,
+            "pass_count": 2,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "root_cause_summary": "shipping deployment",  # Missing scheduling terms
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence)
+
+        # Should fail due to missing root cause terms
+        assert outcome.success is False
+        assert outcome.mode == "multipass"
+        assert any("missing_root_cause_term" in f for f in outcome.failure_reasons)
+
+    def test_multipass_success_with_complete_scheduling_evidence(self) -> None:
+        """Multipass succeeds with complete scheduling root-cause evidence."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": False,
+            "pass_count": 2,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "root_cause_summary": (
+                "The shipping deployment has FailedScheduling due to nodeSelector mismatch. "
+                "Pod requires k9b.dev/otel-lab-node=missing but no node matches. "
+                "This is an Unschedulable pod situation."
+            ),
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence)
+
+        assert outcome.success is True
+        assert outcome.mode == "multipass"
+        assert outcome.root_cause_evidence_satisfied is True
+        assert outcome.failure_reasons == ()
+
 
 class TestLegacyCleanup:
     """Tests that terminal single-pass clears legacy stale failure reasons."""
@@ -221,7 +365,7 @@ class TestLegacyCleanup:
             "failure_reason": "insufficient_passes: 1 < 2",
         }
 
-        outcome = compute_p4c_outcome(evidence)
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
 
         assert outcome.success is True
         assert "insufficient_passes" not in outcome.failure_reasons
@@ -246,10 +390,10 @@ class TestNormalizedOutcomeStructure:
             "read_only_violations": [],
         }
 
-        outcome = compute_p4c_outcome(evidence)
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
 
         assert outcome.success is not None
-        assert outcome.mode in ("multipass", "terminal_single_pass")
+        assert outcome.mode in ("multipass", "terminal_single_pass", "premature_terminal_no_checks")
         assert isinstance(outcome.pass_count, int)
         assert isinstance(outcome.pass_run_ids, tuple)
         assert isinstance(outcome.review_artifact_paths, tuple)
@@ -281,7 +425,7 @@ class TestTerminalModeExclusivity:
             "read_only_violations": [],
         }
 
-        outcome = compute_p4c_outcome(evidence)
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=True)
 
         # Core assertions
         assert outcome.success is True
@@ -314,3 +458,52 @@ class TestTerminalModeExclusivity:
         # And correctly fail due to insufficient passes
         assert outcome.success is False
         assert any("insufficient_passes" in f for f in outcome.failure_reasons)
+
+    def test_premature_terminal_no_checks_mode_is_distinct(self) -> None:
+        """premature_terminal_no_checks mode is distinct from multipass mode."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 1,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "terminal_decision_reached": "stop_no_checks_proposed",
+            "pass_run_ids": ["run-123"],
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        # LAB-STRICT: should get premature_terminal_no_checks
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=False)
+
+        assert outcome.mode == "premature_terminal_no_checks"
+        assert outcome.success is False
+        # Verify it's NOT the same as multipass insufficient_passes
+        assert "insufficient_passes" not in " ".join(outcome.failure_reasons)
+        assert "premature_terminal_no_checks" in outcome.failure_reasons[0]
+
+    def test_lab_strict_terminal_after_required_passes_uses_multipass_mode(self) -> None:
+        """Lab-strict mode should not return terminal_single_pass unless explicitly accepted."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": True,
+            "pass_count": 2,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "terminal_decision_reached": "stop_no_checks_proposed",
+            "pass_run_ids": ["pass-a", "pass-b"],
+            "root_cause_summary": (
+                "The shipping pod is Unschedulable because FailedScheduling reports "
+                "a nodeSelector mismatch for k9b.dev/otel-lab-node=missing."
+            ),
+            "p4c_verdict": {"matched_evidence": ["FailedScheduling"], "success": True},
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=False)
+
+        assert outcome.success is True
+        assert outcome.mode == "multipass"
+        assert outcome.pass_count == 2

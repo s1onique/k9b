@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from typing import Literal
+from typing import Any
 
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contract_types import P4cDiagnosisOutcome
 
@@ -67,15 +64,33 @@ def _diagnosis_used_simulation(pass_run_ids: tuple[str, ...]) -> bool:
     return any(str(rid).startswith("sim-") for rid in pass_run_ids)
 
 
-def compute_p4c_outcome(evidence: dict[str, Any]) -> P4cDiagnosisOutcome:
+def compute_p4c_outcome(
+    evidence: dict[str, Any],
+    *,
+    accept_terminal_single_pass: bool = False,
+    min_required_passes: int = 2,
+) -> P4cDiagnosisOutcome:
     """Compute the normalized P4c outcome from diagnosis evidence.
 
     This function is the SINGLE AUTHORITATIVE SOURCE for P4c outcome classification.
     All downstream validation and lab-result rendering must use the returned
     P4cDiagnosisOutcome instead of re-checking evidence fields.
 
+    LAB-STRICT MODE (default, accept_terminal_single_pass=False):
+        - Terminal single-pass before required passes is a FAILURE
+        - P4c must demonstrate >= min_required_passes observable passes
+        - Root-cause evidence for scheduling root cause is required
+
+    PRODUCT MODE (accept_terminal_single_pass=True):
+        - Terminal single-pass with all requirements met is SUCCESS
+        - Useful for contexts where single-pass diagnosis is acceptable
+
     Args:
         evidence: Diagnosis evidence dict from phase_p4c_verify_k8s_mult_pass_diagnosis
+        accept_terminal_single_pass: If True, allow terminal single-pass as success
+            (for product-mode compatibility). If False (default, lab-strict mode),
+            terminal single-pass before required passes is treated as failure.
+        min_required_passes: Minimum passes required for multipass mode (default: 2).
 
     Returns:
         P4cDiagnosisOutcome with the definitive success/failure determination
@@ -126,84 +141,115 @@ def compute_p4c_outcome(evidence: dict[str, Any]) -> P4cDiagnosisOutcome:
     failure_reasons: list[str] = []
 
     # Determine mode and validate
+    # CONTRACT: terminal_single_pass mode requires accept_terminal_single_pass=True
+    # - accept_terminal_single_pass=True → terminal_single_pass may succeed
+    # - accept_terminal_single_pass=False and pass_count < required → premature_terminal_no_checks
+    # - accept_terminal_single_pass=False and pass_count >= required → multipass
     if terminal_no_checks_accepted and pass_count >= 1 and evidence.get("real_pass_artifacts_found"):
-        # Terminal single-pass mode
-        mode: Literal["multipass", "terminal_single_pass"] = "terminal_single_pass"
+        if accept_terminal_single_pass:
+            # PRODUCT MODE: Terminal single-pass is acceptable
+            # STRICT: terminal_decision must be stop_no_checks_proposed
+            if terminal_decision is None:
+                failure_reasons.append("terminal_decision_missing")
+            elif terminal_decision != "stop_no_checks_proposed":
+                failure_reasons.append(f"terminal_decision_unexpected:{terminal_decision}")
 
-        # STRICT: terminal_decision must be stop_no_checks_proposed
-        if terminal_decision is None:
-            failure_reasons.append("terminal_decision_missing")
-        elif terminal_decision != "stop_no_checks_proposed":
-            failure_reasons.append(f"terminal_decision_unexpected:{terminal_decision}")
+            # For terminal mode, pass_run_ids should come from review artifact if not set
+            if not pass_run_ids:
+                review = evidence.get("backend_incident_detail", {})
+                if not isinstance(review, dict):
+                    review = {}
+                auto_review = review.get("automatic_diagnosis_review", {}) or {}
+                run_id = auto_review.get("run_id")
+                if run_id:
+                    pass_run_ids = (str(run_id),)
+                # Also check for run_id in evidence directly (from phase2)
+                if not pass_run_ids and evidence.get("review_available"):
+                    # Use a generated run_id based on incident_id if we have a review
+                    pass_run_ids = (f"auto-{incident_id}",)
 
-        # For terminal mode, pass_run_ids should come from review artifact if not set
-        if not pass_run_ids:
-            review = evidence.get("backend_incident_detail", {})
-            if not isinstance(review, dict):
-                review = {}
-            auto_review = review.get("automatic_diagnosis_review", {}) or {}
-            run_id = auto_review.get("run_id")
-            if run_id:
-                pass_run_ids = (str(run_id),)
-            # Also check for run_id in evidence directly (from phase2)
-            if not pass_run_ids and evidence.get("review_available"):
-                # Use a generated run_id based on incident_id if we have a review
-                pass_run_ids = (f"auto-{incident_id}",)
+            if not review_artifact_paths and evidence.get("review_packet_path"):
+                review_artifact_paths = (str(evidence["review_packet_path"]),)
 
-        if not review_artifact_paths and evidence.get("review_packet_path"):
-            review_artifact_paths = (str(evidence["review_packet_path"]),)
+            # STRICT: terminal mode requires a durable run/artifact reference
+            if not pass_run_ids and not review_artifact_paths:
+                failure_reasons.append("missing_review_artifact_reference")
 
-        # STRICT: terminal mode requires a durable run/artifact reference
-        if not pass_run_ids and not review_artifact_paths:
-            failure_reasons.append("missing_review_artifact_reference")
+            # Read-only is required for terminal mode
+            if not read_only_constraints_satisfied:
+                failure_reasons.append(f"read_only_contract_violated: {read_only_violations}")
 
-        # Read-only is required for terminal mode
-        if not read_only_constraints_satisfied:
-            failure_reasons.append(f"read_only_contract_violated: {read_only_violations}")
+            # Terminal mode doesn't require root_cause_evidence in prose
+            # (evidence comes from deterministic K8s markers in p4c_verdict)
+            p4c_verdict = evidence.get("p4c_verdict", {})
+            if isinstance(p4c_verdict, dict):
+                root_cause_evidence_satisfied = p4c_verdict.get("success", False)
+            else:
+                # Fallback: check scheduling markers in evidence
+                scheduling_markers_found = _check_terminal_mode_scheduling_markers(evidence)
+                root_cause_evidence_satisfied = len(scheduling_markers_found) > 0
 
-        # Terminal mode doesn't require root_cause_evidence in prose
-        # (evidence comes from deterministic K8s markers in p4c_verdict)
-        p4c_verdict = evidence.get("p4c_verdict", {})
-        if isinstance(p4c_verdict, dict):
-            root_cause_evidence_satisfied = p4c_verdict.get("success", False)
-        else:
-            # Fallback: check scheduling markers in evidence
-            scheduling_markers_found = _check_terminal_mode_scheduling_markers(evidence)
-            root_cause_evidence_satisfied = len(scheduling_markers_found) > 0
+            if not root_cause_evidence_satisfied:
+                root_cause_evidence_reason = "missing_scheduling_root_cause_evidence"
+                failure_reasons.append(root_cause_evidence_reason)
+            else:
+                root_cause_evidence_reason = None
 
-        if not root_cause_evidence_satisfied:
-            root_cause_evidence_reason = "missing_scheduling_root_cause_evidence"
-            failure_reasons.append(root_cause_evidence_reason)
-        else:
-            root_cause_evidence_reason = None
+            # Terminal single-pass success requires ALL of:
+            # - terminal_decision == "stop_no_checks_proposed" (checked above)
+            # - durable run/artifact reference (checked above)
+            # - read_only_constraints_satisfied (checked above)
+            # - root_cause_evidence_satisfied (checked above)
+            success = len(failure_reasons) == 0
 
-        # Terminal single-pass success requires ALL of:
-        # - terminal_decision == "stop_no_checks_proposed" (checked above)
-        # - durable run/artifact reference (checked above)
-        # - read_only_constraints_satisfied (checked above)
-        # - root_cause_evidence_satisfied (checked above)
-        success = len(failure_reasons) == 0
+            return P4cDiagnosisOutcome(
+                success=success,
+                mode="terminal_single_pass",
+                incident_id=incident_id,
+                pass_count=pass_count,
+                pass_run_ids=pass_run_ids,
+                review_artifact_paths=review_artifact_paths,
+                terminal_decision=terminal_decision,
+                read_only_constraints_satisfied=read_only_constraints_satisfied,
+                root_cause_evidence_satisfied=root_cause_evidence_satisfied,
+                root_cause_evidence_reason=root_cause_evidence_reason,
+                failure_reasons=tuple(failure_reasons),
+            )
 
-        # FIX: Return early for terminal single-pass mode to prevent
-        # multi-pass validators from incorrectly adding failure_reasons.
-        # The terminal branch already validated all terminal-mode requirements.
-        return P4cDiagnosisOutcome(
-            success=success,
-            mode=mode,
-            incident_id=incident_id,
-            pass_count=pass_count,
-            pass_run_ids=pass_run_ids,
-            review_artifact_paths=review_artifact_paths,
-            terminal_decision=terminal_decision,
-            read_only_constraints_satisfied=read_only_constraints_satisfied,
-            root_cause_evidence_satisfied=root_cause_evidence_satisfied,
-            root_cause_evidence_reason=root_cause_evidence_reason,
-            failure_reasons=tuple(failure_reasons),
-        )
+        # LAB-STRICT: Terminal with accept_terminal_single_pass=False
+        # Reject premature termination, but let pass_count >= required fall through to multipass
+        if pass_count < min_required_passes:
+            # Extract pass_run_ids for the failure response
+            if not pass_run_ids:
+                review = evidence.get("backend_incident_detail", {})
+                if isinstance(review, dict):
+                    auto_review = review.get("automatic_diagnosis_review", {}) or {}
+                    run_id = auto_review.get("run_id")
+                    if run_id:
+                        pass_run_ids = (str(run_id),)
+
+            return P4cDiagnosisOutcome(
+                success=False,
+                mode="premature_terminal_no_checks",
+                incident_id=incident_id,
+                pass_count=pass_count,
+                pass_run_ids=pass_run_ids,
+                review_artifact_paths=review_artifact_paths,
+                terminal_decision=terminal_decision,
+                read_only_constraints_satisfied=read_only_constraints_satisfied,
+                root_cause_evidence_satisfied=False,
+                root_cause_evidence_reason="premature_terminal_no_checks_before_required_passes",
+                failure_reasons=(
+                    f"premature_terminal_no_checks: {pass_count} < {min_required_passes}",
+                    "missing_multipass_root_cause_confirmation",
+                ),
+            )
+
+        # pass_count >= min_required_passes: fall through to multipass validation
+        # (lab-strict mode treats this as multipass, not terminal_single_pass)
 
     # Multi-pass mode (only reached when NOT terminal single-pass)
-    mode = "multipass"
-    MIN_REQUIRED = 2  # Local constant to avoid circular import
+    MIN_REQUIRED = min_required_passes
 
     if pass_count < MIN_REQUIRED:
         failure_reasons.append(f"insufficient_passes: {pass_count} < {MIN_REQUIRED}")
@@ -235,7 +281,7 @@ def compute_p4c_outcome(evidence: dict[str, Any]) -> P4cDiagnosisOutcome:
 
     return P4cDiagnosisOutcome(
         success=success,
-        mode=mode,
+        mode="multipass",
         incident_id=incident_id,
         pass_count=pass_count,
         pass_run_ids=pass_run_ids,
