@@ -4,9 +4,8 @@
  * Covers: listIncidents, getIncident, captureIncidentSnapshot,
  *         generateIncidentReviewPacket, getAutomaticDiagnosisReviewHandoff.
  *
- * GET operations use the generated OpenAPI client (IncidentsApi).
- * POST operations with request bodies use raw fetch to preserve
- * exact request format since API schema doesn't define request bodies.
+ * All operations use the generated OpenAPI client (IncidentsApi).
+ * Request body types are generated from the backend API_ROUTES registry.
  *
  * Auth/session behavior: Uses generated client configuration with credentials: "include"
  * to preserve existing browser auth (cookies, session headers).
@@ -58,10 +57,13 @@ import type {
 
 // Generated client imports
 import { IncidentsApi } from "../generated/k9b-api";
+import {
+  CaptureIncidentSnapshotRequest,
+  CaptureIncidentSnapshot200Response,
+  CreateIncidentReviewPacketRequest,
+  CreateIncidentReviewPacket200Response,
+} from "../generated/k9b-api";
 import { createK9bApiConfiguration, normalizeGeneratedApiError } from "./generatedClient";
-
-// Import extractErrorMessage for raw fetch error handling
-import { extractErrorMessage } from "./client";
 
 // =============================================================================
 // API Factory
@@ -135,61 +137,57 @@ export const getAutomaticDiagnosisReviewHandoff = async (
 };
 
 // =============================================================================
-// POST Operations (use raw fetch - API schema doesn't define request bodies)
+// POST Operations (use generated client)
 // =============================================================================
 
 /**
  * Capture an incident snapshot.
  *
- * Uses raw fetch because the generated client doesn't have request body support
- * (API schema doesn't define request body for this endpoint).
+ * Uses the generated client with typed request body from API schema.
  *
  * @param request - Snapshot request with namespace and optional time window
  */
 export const captureIncidentSnapshot = async (
   request: IncidentSnapshotRequest
 ): Promise<IncidentSnapshotResponse> => {
-  const response = await fetch("/api/incidents/snapshot", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const message = await extractErrorMessage(response);
-    throw new Error(message || "Failed to capture incident snapshot");
+  try {
+    const api = createIncidentsApi();
+    // Map frontend camelCase to generated camelCase
+    const generatedRequest: CaptureIncidentSnapshotRequest = {
+      namespace: request.namespace,
+      sinceHours: request.sinceHours,
+    };
+    const result = await api.captureIncidentSnapshot({
+      captureIncidentSnapshotRequest: generatedRequest,
+    });
+    return result as CaptureIncidentSnapshot200Response as IncidentSnapshotResponse;
+  } catch (error) {
+    throw await normalizeGeneratedApiError(error);
   }
-
-  return (await response.json()) as IncidentSnapshotResponse;
 };
 
 /**
  * Generate an incident review packet from a snapshot bundle.
  *
- * Uses raw fetch because the generated client doesn't have request body support
- * (API schema doesn't define request body for this endpoint).
+ * Uses the generated client with typed request body from API schema.
  *
  * @param request - Review packet request with bundle data
  */
 export const generateIncidentReviewPacket = async (
   request: IncidentReviewPacketRequest
 ): Promise<IncidentReviewPacketResponse> => {
-  const response = await fetch("/api/incidents/review-packet", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const message = await extractErrorMessage(response);
-    throw new Error(message || "Failed to generate incident review packet");
+  try {
+    const api = createIncidentsApi();
+    // Map frontend camelCase to generated camelCase
+    const generatedRequest: CreateIncidentReviewPacketRequest = {
+      bundle: request.bundle,
+      format: request.format,
+    };
+    const result = await api.createIncidentReviewPacket({
+      createIncidentReviewPacketRequest: generatedRequest,
+    });
+    return result as CreateIncidentReviewPacket200Response as IncidentReviewPacketResponse;
+  } catch (error) {
+    throw await normalizeGeneratedApiError(error);
   }
-
-  return (await response.json()) as IncidentReviewPacketResponse;
 };

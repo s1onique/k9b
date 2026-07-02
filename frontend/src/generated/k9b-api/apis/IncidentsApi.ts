@@ -14,15 +14,35 @@
 
 import * as runtime from '../runtime';
 import {
+    type ApproveNextCheckRequest,
+    ApproveNextCheckRequestFromJSON,
+    ApproveNextCheckRequestToJSON,
+} from '../models/ApproveNextCheckRequest';
+import {
     type CaptureIncidentSnapshot200Response,
     CaptureIncidentSnapshot200ResponseFromJSON,
     CaptureIncidentSnapshot200ResponseToJSON,
 } from '../models/CaptureIncidentSnapshot200Response';
 import {
+    type CaptureIncidentSnapshotRequest,
+    CaptureIncidentSnapshotRequestFromJSON,
+    CaptureIncidentSnapshotRequestToJSON,
+} from '../models/CaptureIncidentSnapshotRequest';
+import {
     type CreateIncidentReviewPacket200Response,
     CreateIncidentReviewPacket200ResponseFromJSON,
     CreateIncidentReviewPacket200ResponseToJSON,
 } from '../models/CreateIncidentReviewPacket200Response';
+import {
+    type CreateIncidentReviewPacketRequest,
+    CreateIncidentReviewPacketRequestFromJSON,
+    CreateIncidentReviewPacketRequestToJSON,
+} from '../models/CreateIncidentReviewPacketRequest';
+import {
+    type ExecuteNextCheckRequest,
+    ExecuteNextCheckRequestFromJSON,
+    ExecuteNextCheckRequestToJSON,
+} from '../models/ExecuteNextCheckRequest';
 import {
     type ListIncidents200Response,
     ListIncidents200ResponseFromJSON,
@@ -38,6 +58,47 @@ import {
     ListRuns200ResponseFromJSON,
     ListRuns200ResponseToJSON,
 } from '../models/ListRuns200Response';
+import {
+    type PerformAlertmanagerSourceActionRequest,
+    PerformAlertmanagerSourceActionRequestFromJSON,
+    PerformAlertmanagerSourceActionRequestToJSON,
+} from '../models/PerformAlertmanagerSourceActionRequest';
+import {
+    type PromoteDeterministicNextCheckRequest,
+    PromoteDeterministicNextCheckRequestFromJSON,
+    PromoteDeterministicNextCheckRequestToJSON,
+} from '../models/PromoteDeterministicNextCheckRequest';
+import {
+    type RecordAlertmanagerRelevanceFeedbackRequest,
+    RecordAlertmanagerRelevanceFeedbackRequestFromJSON,
+    RecordAlertmanagerRelevanceFeedbackRequestToJSON,
+} from '../models/RecordAlertmanagerRelevanceFeedbackRequest';
+import {
+    type RecordNextCheckUsefulnessRequest,
+    RecordNextCheckUsefulnessRequestFromJSON,
+    RecordNextCheckUsefulnessRequestToJSON,
+} from '../models/RecordNextCheckUsefulnessRequest';
+import {
+    type RunBatchNextCheckExecutionRequest,
+    RunBatchNextCheckExecutionRequestFromJSON,
+    RunBatchNextCheckExecutionRequestToJSON,
+} from '../models/RunBatchNextCheckExecutionRequest';
+
+export interface ApproveNextCheckOperationRequest {
+    approveNextCheckRequest: ApproveNextCheckRequest;
+}
+
+export interface CaptureIncidentSnapshotOperationRequest {
+    captureIncidentSnapshotRequest: CaptureIncidentSnapshotRequest;
+}
+
+export interface CreateIncidentReviewPacketOperationRequest {
+    createIncidentReviewPacketRequest: CreateIncidentReviewPacketRequest;
+}
+
+export interface ExecuteNextCheckOperationRequest {
+    executeNextCheckRequest: ExecuteNextCheckRequest;
+}
 
 export interface GetClusterDetailRequest {
     clusterLabel?: string;
@@ -75,9 +136,26 @@ export interface ListRunsRequest {
     clusterLabel?: string;
 }
 
-export interface PerformAlertmanagerSourceActionRequest {
+export interface PerformAlertmanagerSourceActionOperationRequest {
     runId: string;
     sourceId: string;
+    performAlertmanagerSourceActionRequest: PerformAlertmanagerSourceActionRequest;
+}
+
+export interface PromoteDeterministicNextCheckOperationRequest {
+    promoteDeterministicNextCheckRequest: PromoteDeterministicNextCheckRequest;
+}
+
+export interface RecordAlertmanagerRelevanceFeedbackOperationRequest {
+    recordAlertmanagerRelevanceFeedbackRequest: RecordAlertmanagerRelevanceFeedbackRequest;
+}
+
+export interface RecordNextCheckUsefulnessOperationRequest {
+    recordNextCheckUsefulnessRequest: RecordNextCheckUsefulnessRequest;
+}
+
+export interface RunBatchNextCheckExecutionOperationRequest {
+    runBatchNextCheckExecutionRequest: RunBatchNextCheckExecutionRequest;
 }
 
 export interface RunIncidentAutomaticDiagnosisLoopRequest {
@@ -100,10 +178,19 @@ export class IncidentsApi extends runtime.BaseAPI {
     /**
      * Creates request options for approveNextCheck without sending the request
      */
-    async approveNextCheckRequestOpts(): Promise<runtime.RequestOpts> {
+    async approveNextCheckRequestOpts(requestParameters: ApproveNextCheckOperationRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['approveNextCheckRequest'] == null) {
+            throw new runtime.RequiredError(
+                'approveNextCheckRequest',
+                'Required parameter "approveNextCheckRequest" was null or undefined when calling approveNextCheck().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
 
         let urlPath = `/api/next-check-approval`;
@@ -113,6 +200,7 @@ export class IncidentsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
+            body: ApproveNextCheckRequestToJSON(requestParameters['approveNextCheckRequest']),
         };
     }
 
@@ -120,8 +208,8 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Approve a next-check for execution.
      * Approve next-check
      */
-    async approveNextCheckRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
-        const requestOptions = await this.approveNextCheckRequestOpts();
+    async approveNextCheckRaw(requestParameters: ApproveNextCheckOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
+        const requestOptions = await this.approveNextCheckRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse<any>(response);
@@ -131,18 +219,27 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Approve a next-check for execution.
      * Approve next-check
      */
-    async approveNextCheck(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
-        const response = await this.approveNextCheckRaw(initOverrides);
+    async approveNextCheck(requestParameters: ApproveNextCheckOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
+        const response = await this.approveNextCheckRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Creates request options for captureIncidentSnapshot without sending the request
      */
-    async captureIncidentSnapshotRequestOpts(): Promise<runtime.RequestOpts> {
+    async captureIncidentSnapshotRequestOpts(requestParameters: CaptureIncidentSnapshotOperationRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['captureIncidentSnapshotRequest'] == null) {
+            throw new runtime.RequiredError(
+                'captureIncidentSnapshotRequest',
+                'Required parameter "captureIncidentSnapshotRequest" was null or undefined when calling captureIncidentSnapshot().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
 
         let urlPath = `/api/incidents/snapshot`;
@@ -152,6 +249,7 @@ export class IncidentsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
+            body: CaptureIncidentSnapshotRequestToJSON(requestParameters['captureIncidentSnapshotRequest']),
         };
     }
 
@@ -159,8 +257,8 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Capture a cluster snapshot for the current state.
      * Capture incident snapshot
      */
-    async captureIncidentSnapshotRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CaptureIncidentSnapshot200Response>> {
-        const requestOptions = await this.captureIncidentSnapshotRequestOpts();
+    async captureIncidentSnapshotRaw(requestParameters: CaptureIncidentSnapshotOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CaptureIncidentSnapshot200Response>> {
+        const requestOptions = await this.captureIncidentSnapshotRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => CaptureIncidentSnapshot200ResponseFromJSON(jsonValue));
@@ -170,18 +268,27 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Capture a cluster snapshot for the current state.
      * Capture incident snapshot
      */
-    async captureIncidentSnapshot(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CaptureIncidentSnapshot200Response> {
-        const response = await this.captureIncidentSnapshotRaw(initOverrides);
+    async captureIncidentSnapshot(requestParameters: CaptureIncidentSnapshotOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CaptureIncidentSnapshot200Response> {
+        const response = await this.captureIncidentSnapshotRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Creates request options for createIncidentReviewPacket without sending the request
      */
-    async createIncidentReviewPacketRequestOpts(): Promise<runtime.RequestOpts> {
+    async createIncidentReviewPacketRequestOpts(requestParameters: CreateIncidentReviewPacketOperationRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['createIncidentReviewPacketRequest'] == null) {
+            throw new runtime.RequiredError(
+                'createIncidentReviewPacketRequest',
+                'Required parameter "createIncidentReviewPacketRequest" was null or undefined when calling createIncidentReviewPacket().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
 
         let urlPath = `/api/incidents/review-packet`;
@@ -191,6 +298,7 @@ export class IncidentsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
+            body: CreateIncidentReviewPacketRequestToJSON(requestParameters['createIncidentReviewPacketRequest']),
         };
     }
 
@@ -198,8 +306,8 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Generate a diagnostic review packet for an incident.
      * Generate incident review packet
      */
-    async createIncidentReviewPacketRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CreateIncidentReviewPacket200Response>> {
-        const requestOptions = await this.createIncidentReviewPacketRequestOpts();
+    async createIncidentReviewPacketRaw(requestParameters: CreateIncidentReviewPacketOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CreateIncidentReviewPacket200Response>> {
+        const requestOptions = await this.createIncidentReviewPacketRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => CreateIncidentReviewPacket200ResponseFromJSON(jsonValue));
@@ -209,18 +317,27 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Generate a diagnostic review packet for an incident.
      * Generate incident review packet
      */
-    async createIncidentReviewPacket(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CreateIncidentReviewPacket200Response> {
-        const response = await this.createIncidentReviewPacketRaw(initOverrides);
+    async createIncidentReviewPacket(requestParameters: CreateIncidentReviewPacketOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CreateIncidentReviewPacket200Response> {
+        const response = await this.createIncidentReviewPacketRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Creates request options for executeNextCheck without sending the request
      */
-    async executeNextCheckRequestOpts(): Promise<runtime.RequestOpts> {
+    async executeNextCheckRequestOpts(requestParameters: ExecuteNextCheckOperationRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['executeNextCheckRequest'] == null) {
+            throw new runtime.RequiredError(
+                'executeNextCheckRequest',
+                'Required parameter "executeNextCheckRequest" was null or undefined when calling executeNextCheck().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
 
         let urlPath = `/api/next-check-execution`;
@@ -230,6 +347,7 @@ export class IncidentsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
+            body: ExecuteNextCheckRequestToJSON(requestParameters['executeNextCheckRequest']),
         };
     }
 
@@ -237,8 +355,8 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Execute a next-check with manual input.
      * Execute next-check
      */
-    async executeNextCheckRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
-        const requestOptions = await this.executeNextCheckRequestOpts();
+    async executeNextCheckRaw(requestParameters: ExecuteNextCheckOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
+        const requestOptions = await this.executeNextCheckRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse<any>(response);
@@ -248,8 +366,8 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Execute a next-check with manual input.
      * Execute next-check
      */
-    async executeNextCheck(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
-        const response = await this.executeNextCheckRaw(initOverrides);
+    async executeNextCheck(requestParameters: ExecuteNextCheckOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
+        const response = await this.executeNextCheckRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -675,7 +793,7 @@ export class IncidentsApi extends runtime.BaseAPI {
     /**
      * Creates request options for performAlertmanagerSourceAction without sending the request
      */
-    async performAlertmanagerSourceActionRequestOpts(requestParameters: PerformAlertmanagerSourceActionRequest): Promise<runtime.RequestOpts> {
+    async performAlertmanagerSourceActionRequestOpts(requestParameters: PerformAlertmanagerSourceActionOperationRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['runId'] == null) {
             throw new runtime.RequiredError(
                 'runId',
@@ -690,9 +808,18 @@ export class IncidentsApi extends runtime.BaseAPI {
             );
         }
 
+        if (requestParameters['performAlertmanagerSourceActionRequest'] == null) {
+            throw new runtime.RequiredError(
+                'performAlertmanagerSourceActionRequest',
+                'Required parameter "performAlertmanagerSourceActionRequest" was null or undefined when calling performAlertmanagerSourceAction().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
 
         let urlPath = `/api/runs/{run_id}/alertmanager-sources/{source_id}/action`;
@@ -704,6 +831,7 @@ export class IncidentsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
+            body: PerformAlertmanagerSourceActionRequestToJSON(requestParameters['performAlertmanagerSourceActionRequest']),
         };
     }
 
@@ -711,7 +839,7 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Perform an action (promote/disable) on an AlertManager source.
      * Perform AlertManager source action
      */
-    async performAlertmanagerSourceActionRaw(requestParameters: PerformAlertmanagerSourceActionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
+    async performAlertmanagerSourceActionRaw(requestParameters: PerformAlertmanagerSourceActionOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
         const requestOptions = await this.performAlertmanagerSourceActionRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -722,7 +850,7 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Perform an action (promote/disable) on an AlertManager source.
      * Perform AlertManager source action
      */
-    async performAlertmanagerSourceAction(requestParameters: PerformAlertmanagerSourceActionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
+    async performAlertmanagerSourceAction(requestParameters: PerformAlertmanagerSourceActionOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
         const response = await this.performAlertmanagerSourceActionRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -730,10 +858,19 @@ export class IncidentsApi extends runtime.BaseAPI {
     /**
      * Creates request options for promoteDeterministicNextCheck without sending the request
      */
-    async promoteDeterministicNextCheckRequestOpts(): Promise<runtime.RequestOpts> {
+    async promoteDeterministicNextCheckRequestOpts(requestParameters: PromoteDeterministicNextCheckOperationRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['promoteDeterministicNextCheckRequest'] == null) {
+            throw new runtime.RequiredError(
+                'promoteDeterministicNextCheckRequest',
+                'Required parameter "promoteDeterministicNextCheckRequest" was null or undefined when calling promoteDeterministicNextCheck().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
 
         let urlPath = `/api/deterministic-next-check/promote`;
@@ -743,6 +880,7 @@ export class IncidentsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
+            body: PromoteDeterministicNextCheckRequestToJSON(requestParameters['promoteDeterministicNextCheckRequest']),
         };
     }
 
@@ -750,8 +888,8 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Promote a deterministic next-check candidate.
      * Promote deterministic next-check
      */
-    async promoteDeterministicNextCheckRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
-        const requestOptions = await this.promoteDeterministicNextCheckRequestOpts();
+    async promoteDeterministicNextCheckRaw(requestParameters: PromoteDeterministicNextCheckOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
+        const requestOptions = await this.promoteDeterministicNextCheckRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse<any>(response);
@@ -761,18 +899,27 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Promote a deterministic next-check candidate.
      * Promote deterministic next-check
      */
-    async promoteDeterministicNextCheck(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
-        const response = await this.promoteDeterministicNextCheckRaw(initOverrides);
+    async promoteDeterministicNextCheck(requestParameters: PromoteDeterministicNextCheckOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
+        const response = await this.promoteDeterministicNextCheckRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Creates request options for recordAlertmanagerRelevanceFeedback without sending the request
      */
-    async recordAlertmanagerRelevanceFeedbackRequestOpts(): Promise<runtime.RequestOpts> {
+    async recordAlertmanagerRelevanceFeedbackRequestOpts(requestParameters: RecordAlertmanagerRelevanceFeedbackOperationRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['recordAlertmanagerRelevanceFeedbackRequest'] == null) {
+            throw new runtime.RequiredError(
+                'recordAlertmanagerRelevanceFeedbackRequest',
+                'Required parameter "recordAlertmanagerRelevanceFeedbackRequest" was null or undefined when calling recordAlertmanagerRelevanceFeedback().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
 
         let urlPath = `/api/alertmanager-relevance-feedback`;
@@ -782,6 +929,7 @@ export class IncidentsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
+            body: RecordAlertmanagerRelevanceFeedbackRequestToJSON(requestParameters['recordAlertmanagerRelevanceFeedbackRequest']),
         };
     }
 
@@ -789,8 +937,8 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Record operator feedback on AlertManager source relevance.
      * Record AlertManager relevance feedback
      */
-    async recordAlertmanagerRelevanceFeedbackRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
-        const requestOptions = await this.recordAlertmanagerRelevanceFeedbackRequestOpts();
+    async recordAlertmanagerRelevanceFeedbackRaw(requestParameters: RecordAlertmanagerRelevanceFeedbackOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
+        const requestOptions = await this.recordAlertmanagerRelevanceFeedbackRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse<any>(response);
@@ -800,18 +948,27 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Record operator feedback on AlertManager source relevance.
      * Record AlertManager relevance feedback
      */
-    async recordAlertmanagerRelevanceFeedback(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
-        const response = await this.recordAlertmanagerRelevanceFeedbackRaw(initOverrides);
+    async recordAlertmanagerRelevanceFeedback(requestParameters: RecordAlertmanagerRelevanceFeedbackOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
+        const response = await this.recordAlertmanagerRelevanceFeedbackRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Creates request options for recordNextCheckUsefulness without sending the request
      */
-    async recordNextCheckUsefulnessRequestOpts(): Promise<runtime.RequestOpts> {
+    async recordNextCheckUsefulnessRequestOpts(requestParameters: RecordNextCheckUsefulnessOperationRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['recordNextCheckUsefulnessRequest'] == null) {
+            throw new runtime.RequiredError(
+                'recordNextCheckUsefulnessRequest',
+                'Required parameter "recordNextCheckUsefulnessRequest" was null or undefined when calling recordNextCheckUsefulness().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
 
         let urlPath = `/api/next-check-execution-usefulness`;
@@ -821,6 +978,7 @@ export class IncidentsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
+            body: RecordNextCheckUsefulnessRequestToJSON(requestParameters['recordNextCheckUsefulnessRequest']),
         };
     }
 
@@ -828,8 +986,8 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Record operator feedback on next-check usefulness.
      * Record next-check usefulness feedback
      */
-    async recordNextCheckUsefulnessRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
-        const requestOptions = await this.recordNextCheckUsefulnessRequestOpts();
+    async recordNextCheckUsefulnessRaw(requestParameters: RecordNextCheckUsefulnessOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
+        const requestOptions = await this.recordNextCheckUsefulnessRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse<any>(response);
@@ -839,18 +997,27 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Record operator feedback on next-check usefulness.
      * Record next-check usefulness feedback
      */
-    async recordNextCheckUsefulness(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
-        const response = await this.recordNextCheckUsefulnessRaw(initOverrides);
+    async recordNextCheckUsefulness(requestParameters: RecordNextCheckUsefulnessOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
+        const response = await this.recordNextCheckUsefulnessRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Creates request options for runBatchNextCheckExecution without sending the request
      */
-    async runBatchNextCheckExecutionRequestOpts(): Promise<runtime.RequestOpts> {
+    async runBatchNextCheckExecutionRequestOpts(requestParameters: RunBatchNextCheckExecutionOperationRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['runBatchNextCheckExecutionRequest'] == null) {
+            throw new runtime.RequiredError(
+                'runBatchNextCheckExecutionRequest',
+                'Required parameter "runBatchNextCheckExecutionRequest" was null or undefined when calling runBatchNextCheckExecution().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
 
         let urlPath = `/api/run-batch-next-check-execution`;
@@ -860,6 +1027,7 @@ export class IncidentsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
+            body: RunBatchNextCheckExecutionRequestToJSON(requestParameters['runBatchNextCheckExecutionRequest']),
         };
     }
 
@@ -867,8 +1035,8 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Execute multiple next-checks in batch.
      * Batch execute next-checks
      */
-    async runBatchNextCheckExecutionRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
-        const requestOptions = await this.runBatchNextCheckExecutionRequestOpts();
+    async runBatchNextCheckExecutionRaw(requestParameters: RunBatchNextCheckExecutionOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<object>> {
+        const requestOptions = await this.runBatchNextCheckExecutionRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse<any>(response);
@@ -878,8 +1046,8 @@ export class IncidentsApi extends runtime.BaseAPI {
      * Execute multiple next-checks in batch.
      * Batch execute next-checks
      */
-    async runBatchNextCheckExecution(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
-        const response = await this.runBatchNextCheckExecutionRaw(initOverrides);
+    async runBatchNextCheckExecution(requestParameters: RunBatchNextCheckExecutionOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
+        const response = await this.runBatchNextCheckExecutionRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

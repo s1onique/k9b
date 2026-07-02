@@ -489,5 +489,57 @@ def test_openapi_contract_gate() -> None:
                     assert "application/json" in response.get("content", {}), f"{method.upper()} {path} {status_code} missing JSON schema"
 
 
+# =============================================================================
+# Schema strictness tests
+# =============================================================================
+
+
+def test_request_body_object_schemas_disallow_extra_properties() -> None:
+    """Request body objects should explicitly set additionalProperties: false.
+
+    This ensures that object schemas in the OpenAPI spec are strict and will
+    reject unexpected fields. Without explicit additionalProperties: false,
+    JSON Schema/OpenAPI defaults allow extra properties, which can mask typos
+    and version skew between client and server.
+    """
+    schema = build_openapi_schema()
+
+    # Check the next-check-execution endpoint as a representative request body
+    request_schema = schema["paths"]["/api/next-check-execution"]["post"]["requestBody"][
+        "content"
+    ]["application/json"]["schema"]
+
+    # Request schemas must explicitly disallow extra properties
+    assert request_schema["type"] == "object", "Request body must be an object schema"
+    assert (
+        "additionalProperties" in request_schema
+    ), "Object schema must have additionalProperties key"
+    assert (
+        request_schema["additionalProperties"] is False
+    ), "additionalProperties must be False to reject unknown fields"
+
+
+def test_open_object_schemas_allow_additional_properties() -> None:
+    """Open object schemas (like bundle) should allow additional properties.
+
+    The bundle field in incident review packet is intentionally open-ended
+    to accept arbitrary evidence data.
+    """
+    schema = build_openapi_schema()
+
+    request_schema = schema["paths"]["/api/incidents/review-packet"]["post"]["requestBody"][
+        "content"
+    ]["application/json"]["schema"]
+
+    # The bundle property is an open object
+    assert request_schema["type"] == "object"
+    assert "properties" in request_schema
+    assert "bundle" in request_schema["properties"]
+    assert request_schema["properties"]["bundle"]["type"] == "object"
+    assert request_schema["properties"]["bundle"].get(
+        "additionalProperties", False
+    ) is True, "bundle schema must allow additional properties"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -160,4 +160,6 @@ def _build_schema_dict(schema: APISchema) -> dict[str, Any]:
         result["properties"] = schema.properties
     if schema.required:
         result["required"] = schema.required
+    if schema.additional_properties is not None:
+        result["additionalProperties"] = schema.additional_properties
     return result

@@ -6,6 +6,17 @@ Split from api_routes_registry.py to keep file sizes below LLM-friendly threshol
 from __future__ import annotations
 
 from .api_contract_types import APIOperation, APIResponse, APISchema
+from .api_request_schemas import (
+    ALERTMANAGER_RELEVANCE_FEEDBACK_REQUEST_SCHEMA,
+    ALERTMANAGER_SOURCE_ACTION_REQUEST_SCHEMA,
+    BATCH_EXECUTION_REQUEST_SCHEMA,
+    DETERMINISTIC_PROMOTION_REQUEST_SCHEMA,
+    INCIDENT_REVIEW_PACKET_REQUEST_SCHEMA,
+    INCIDENT_SNAPSHOT_REQUEST_SCHEMA,
+    NEXT_CHECK_APPROVAL_REQUEST_SCHEMA,
+    NEXT_CHECK_EXECUTION_REQUEST_SCHEMA,
+    USEFULNESS_FEEDBACK_REQUEST_SCHEMA,
+)
 
 # =============================================================================
 # Incident management endpoints
@@ -84,6 +95,7 @@ INCIDENT_ROUTES: tuple[APIOperation, ...] = (
         tags=("incidents",),
         operation_id="capture_incident_snapshot",
         handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_incident_snapshot_dispatch",
+        request_schema=INCIDENT_SNAPSHOT_REQUEST_SCHEMA,
         responses=(
             APIResponse(
                 status_code=200,
@@ -106,6 +118,7 @@ INCIDENT_ROUTES: tuple[APIOperation, ...] = (
         tags=("incidents",),
         operation_id="create_incident_review_packet",
         handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_incident_review_packet_dispatch",
+        request_schema=INCIDENT_REVIEW_PACKET_REQUEST_SCHEMA,
         responses=(
             APIResponse(
                 status_code=200,
@@ -310,6 +323,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         tags=("incidents",),
         operation_id="promote_deterministic_next_check",
         handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_deterministic_promotion_dispatch",
+        request_schema=DETERMINISTIC_PROMOTION_REQUEST_SCHEMA,
         responses=(
             APIResponse(
                 status_code=200,
@@ -326,6 +340,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         tags=("incidents",),
         operation_id="execute_next_check",
         handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_next_check_execution_dispatch",
+        request_schema=NEXT_CHECK_EXECUTION_REQUEST_SCHEMA,
         responses=(
             APIResponse(
                 status_code=200,
@@ -342,6 +357,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         tags=("incidents",),
         operation_id="approve_next_check",
         handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_next_check_approval_dispatch",
+        request_schema=NEXT_CHECK_APPROVAL_REQUEST_SCHEMA,
         responses=(
             APIResponse(
                 status_code=200,
@@ -358,6 +374,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         tags=("incidents",),
         operation_id="record_next_check_usefulness",
         handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_usefulness_feedback_dispatch",
+        request_schema=USEFULNESS_FEEDBACK_REQUEST_SCHEMA,
         responses=(
             APIResponse(
                 status_code=200,
@@ -374,6 +391,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         tags=("incidents",),
         operation_id="record_alertmanager_relevance_feedback",
         handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_alertmanager_relevance_feedback_dispatch",
+        request_schema=ALERTMANAGER_RELEVANCE_FEEDBACK_REQUEST_SCHEMA,
         responses=(
             APIResponse(
                 status_code=200,
@@ -390,6 +408,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         tags=("incidents",),
         operation_id="run_batch_next_check_execution",
         handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_batch_next_check_execution_dispatch",
+        request_schema=BATCH_EXECUTION_REQUEST_SCHEMA,
         responses=(
             APIResponse(
                 status_code=200,
@@ -408,6 +427,7 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
         handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_alertmanager_source_action_dispatch",
         match="template",
         path_params=("run_id", "source_id"),
+        request_schema=ALERTMANAGER_SOURCE_ACTION_REQUEST_SCHEMA,
         responses=(
             APIResponse(
                 status_code=200,

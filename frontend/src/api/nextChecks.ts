@@ -4,8 +4,8 @@
  * Covers: executeNextCheckCandidate, approveNextCheckCandidate,
  *         promoteDeterministicNextCheck, submitUsefulnessFeedback.
  *
- * POST operations with request bodies use raw fetch because the API schema
- * doesn't define request bodies for these endpoints.
+ * All POST operations use the generated OpenAPI client (IncidentsApi).
+ * Request body types are generated from the backend API_ROUTES registry.
  *
  * Auth/session behavior: Uses credentials: "include" to preserve session cookies.
  */
@@ -21,35 +21,46 @@ import type {
   UsefulnessFeedbackResponse,
 } from "../types";
 
+// Generated client imports
+import { IncidentsApi } from "../generated/k9b-api";
+import {
+  ExecuteNextCheckRequest,
+  ApproveNextCheckRequest,
+  PromoteDeterministicNextCheckRequest,
+  RecordNextCheckUsefulnessRequest,
+} from "../generated/k9b-api";
+import { createK9bApiConfiguration, normalizeGeneratedApiError } from "./generatedClient";
+import { ResponseError } from "../generated/k9b-api/runtime";
+
 // =============================================================================
-// Next-check execution (raw fetch - API schema doesn't define request body)
+// API Factory
+// =============================================================================
+
+function createIncidentsApi(): IncidentsApi {
+  return new IncidentsApi(createK9bApiConfiguration());
+}
+
+// =============================================================================
+// Next-check execution
 // =============================================================================
 
 type NextCheckExecutionError = Error & { blockingReason?: string | null };
 
 /**
- * Execute a next-check candidate.
+ * Normalize errors from next-check execution, preserving blockingReason.
  *
- * Uses raw fetch because the generated client doesn't have request body support
- * (API schema doesn't define request body for this endpoint).
+ * This is a specialized error normalizer that parses ResponseError directly
+ * to extract the blockingReason field before generic error normalization.
  */
-export const executeNextCheckCandidate = async (
-  request: NextCheckExecutionRequest
-): Promise<NextCheckExecutionResponse> => {
-  const response = await fetch("/api/next-check-execution", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    let message = response.statusText;
+async function normalizeNextCheckExecutionError(
+  error: unknown
+): Promise<NextCheckExecutionError> {
+  if (error instanceof ResponseError) {
+    let message = error.response.statusText;
     let blockingReason: string | null | undefined;
+
     try {
-      const payload = await response.json();
+      const payload = await error.response.json();
       if (payload && typeof payload === "object") {
         if ("error" in payload) {
           message = String((payload as Record<string, unknown>).error);
@@ -59,128 +70,140 @@ export const executeNextCheckCandidate = async (
         }
       }
     } catch {
-      // ignore
+      // keep statusText
     }
-    const error = new Error(message || "Failed to execute next-check candidate") as NextCheckExecutionError;
-    error.blockingReason = blockingReason ?? null;
-    throw error;
+
+    const nextError = new Error(
+      message || "Failed to execute next-check candidate"
+    ) as NextCheckExecutionError;
+    nextError.blockingReason = blockingReason ?? null;
+    return nextError;
   }
 
-  const data = await response.json();
-  return data as NextCheckExecutionResponse;
+  const normalized = await normalizeGeneratedApiError(error);
+  const nextError = normalized as NextCheckExecutionError;
+  nextError.blockingReason ??= null;
+  return nextError;
+}
+
+/**
+ * Execute a next-check candidate.
+ *
+ * Uses the generated client with typed request body from API schema.
+ */
+export const executeNextCheckCandidate = async (
+  request: NextCheckExecutionRequest
+): Promise<NextCheckExecutionResponse> => {
+  try {
+    const api = createIncidentsApi();
+    const generatedRequest: ExecuteNextCheckRequest = {
+      candidateId: request.candidateId,
+      candidateIndex: request.candidateIndex,
+      clusterLabel: request.clusterLabel,
+      planArtifactPath: request.planArtifactPath,
+    };
+    const result = await api.executeNextCheck({
+      executeNextCheckRequest: generatedRequest,
+    });
+    return result as NextCheckExecutionResponse;
+  } catch (error) {
+    throw await normalizeNextCheckExecutionError(error);
+  }
 };
 
 // =============================================================================
-// Next-check approval (raw fetch - API schema doesn't define request body)
+// Next-check approval
 // =============================================================================
 
 /**
  * Approve a next-check candidate for execution.
  *
- * Uses raw fetch because the generated client doesn't have request body support
- * (API schema doesn't define request body for this endpoint).
+ * Uses the generated client with typed request body from API schema.
  */
 export const approveNextCheckCandidate = async (
   request: NextCheckApprovalRequest
 ): Promise<NextCheckApprovalResponse> => {
-  const response = await fetch("/api/next-check-approval", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    let message = response.statusText;
-    try {
-      const payload = await response.json();
-      if (payload && typeof payload === "object" && "error" in payload) {
-        message = String((payload as Record<string, unknown>).error);
-      }
-    } catch {
-      // ignore
-    }
-    throw new Error(message || "Failed to approve next-check candidate");
+  try {
+    const api = createIncidentsApi();
+    const generatedRequest: ApproveNextCheckRequest = {
+      candidateId: request.candidateId,
+      candidateIndex: request.candidateIndex,
+      clusterLabel: request.clusterLabel,
+    };
+    const result = await api.approveNextCheck({
+      approveNextCheckRequest: generatedRequest,
+    });
+    return result as NextCheckApprovalResponse;
+  } catch (error) {
+    throw await normalizeGeneratedApiError(error);
   }
-
-  const data = await response.json();
-  return data as NextCheckApprovalResponse;
 };
 
 // =============================================================================
-// Deterministic next-check promotion (raw fetch - API schema doesn't define request body)
+// Deterministic next-check promotion
 // =============================================================================
 
 /**
  * Promote a deterministic next-check candidate.
  *
- * Uses raw fetch because the generated client doesn't have request body support
- * (API schema doesn't define request body for this endpoint).
+ * Uses the generated client with typed request body from API schema.
  */
 export const promoteDeterministicNextCheck = async (
   request: DeterministicNextCheckPromotionRequest
 ): Promise<DeterministicNextCheckPromotionResponse> => {
-  const response = await fetch("/api/deterministic-next-check/promote", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    let message = response.statusText;
-    try {
-      const payload = await response.json();
-      if (payload && typeof payload === "object" && "error" in payload) {
-        message = String((payload as Record<string, unknown>).error);
-      }
-    } catch {
-      // ignore
-    }
-    throw new Error(message || "Failed to promote deterministic next check");
+  try {
+    const api = createIncidentsApi();
+    const generatedRequest: PromoteDeterministicNextCheckRequest = {
+      clusterLabel: request.clusterLabel,
+      description: request.description,
+      method: request.method,
+      evidenceNeeded: request.evidenceNeeded,
+      workstream: request.workstream,
+      urgency: request.urgency,
+      whyNow: request.whyNow,
+      topProblem: request.topProblem,
+      priorityScore: request.priorityScore,
+      context: request.context,
+    };
+    const result = await api.promoteDeterministicNextCheck({
+      promoteDeterministicNextCheckRequest: generatedRequest,
+    });
+    return result as DeterministicNextCheckPromotionResponse;
+  } catch (error) {
+    throw await normalizeGeneratedApiError(error);
   }
-
-  return (await response.json()) as DeterministicNextCheckPromotionResponse;
 };
 
 // =============================================================================
-// Usefulness feedback (raw fetch - API schema doesn't define request body)
+// Usefulness feedback
 // =============================================================================
 
 /**
  * Submit usefulness feedback for a next-check execution.
  *
- * Uses raw fetch because the generated client doesn't have request body support
- * (API schema doesn't define request body for this endpoint).
+ * Uses the generated client with typed request body from API schema.
  */
 export const submitUsefulnessFeedback = async (
   request: UsefulnessFeedbackRequest
 ): Promise<UsefulnessFeedbackResponse> => {
-  const response = await fetch("/api/next-check-execution-usefulness", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    let message = response.statusText;
-    try {
-      const payload = await response.json();
-      if (payload && typeof payload === "object" && "error" in payload) {
-        message = String((payload as Record<string, unknown>).error);
-      }
-    } catch {
-      // ignore
-    }
-    throw new Error(message || "Failed to submit usefulness feedback");
+  try {
+    const api = createIncidentsApi();
+    const generatedRequest: RecordNextCheckUsefulnessRequest = {
+      artifactPath: request.artifactPath,
+      usefulnessClass: request.usefulnessClass,
+      usefulnessSummary: request.usefulnessSummary,
+      // Pass optional context fields for stage-aware feedback
+      reviewStage: request.reviewStage,
+      workstream: request.workstream,
+      problemClass: request.problemClass,
+      judgmentScope: request.judgmentScope,
+      reviewerConfidence: request.reviewerConfidence,
+    };
+    const result = await api.recordNextCheckUsefulness({
+      recordNextCheckUsefulnessRequest: generatedRequest,
+    });
+    return result as UsefulnessFeedbackResponse;
+  } catch (error) {
+    throw await normalizeGeneratedApiError(error);
   }
-
-  return (await response.json()) as UsefulnessFeedbackResponse;
 };

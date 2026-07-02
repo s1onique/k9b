@@ -4,10 +4,10 @@ All URIs are relative to *http://localhost*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**approveNextCheck**](IncidentsApi.md#approvenextcheck) | **POST** /api/next-check-approval | Approve next-check |
-| [**captureIncidentSnapshot**](IncidentsApi.md#captureincidentsnapshot) | **POST** /api/incidents/snapshot | Capture incident snapshot |
-| [**createIncidentReviewPacket**](IncidentsApi.md#createincidentreviewpacket) | **POST** /api/incidents/review-packet | Generate incident review packet |
-| [**executeNextCheck**](IncidentsApi.md#executenextcheck) | **POST** /api/next-check-execution | Execute next-check |
+| [**approveNextCheck**](IncidentsApi.md#approvenextcheckoperation) | **POST** /api/next-check-approval | Approve next-check |
+| [**captureIncidentSnapshot**](IncidentsApi.md#captureincidentsnapshotoperation) | **POST** /api/incidents/snapshot | Capture incident snapshot |
+| [**createIncidentReviewPacket**](IncidentsApi.md#createincidentreviewpacketoperation) | **POST** /api/incidents/review-packet | Generate incident review packet |
+| [**executeNextCheck**](IncidentsApi.md#executenextcheckoperation) | **POST** /api/next-check-execution | Execute next-check |
 | [**getClusterDetail**](IncidentsApi.md#getclusterdetail) | **GET** /api/cluster-detail | Get cluster detail |
 | [**getFleet**](IncidentsApi.md#getfleet) | **GET** /api/fleet | Get fleet overview |
 | [**getIncidentDetail**](IncidentsApi.md#getincidentdetail) | **GET** /api/incidents/{incident_id} | Get incident detail |
@@ -17,11 +17,11 @@ All URIs are relative to *http://localhost*
 | [**listIncidents**](IncidentsApi.md#listincidents) | **GET** /api/incidents | List incidents |
 | [**listNotifications**](IncidentsApi.md#listnotifications) | **GET** /api/notifications | List notifications |
 | [**listRuns**](IncidentsApi.md#listruns) | **GET** /api/runs | List runs |
-| [**performAlertmanagerSourceAction**](IncidentsApi.md#performalertmanagersourceaction) | **POST** /api/runs/{run_id}/alertmanager-sources/{source_id}/action | Perform AlertManager source action |
-| [**promoteDeterministicNextCheck**](IncidentsApi.md#promotedeterministicnextcheck) | **POST** /api/deterministic-next-check/promote | Promote deterministic next-check |
-| [**recordAlertmanagerRelevanceFeedback**](IncidentsApi.md#recordalertmanagerrelevancefeedback) | **POST** /api/alertmanager-relevance-feedback | Record AlertManager relevance feedback |
-| [**recordNextCheckUsefulness**](IncidentsApi.md#recordnextcheckusefulness) | **POST** /api/next-check-execution-usefulness | Record next-check usefulness feedback |
-| [**runBatchNextCheckExecution**](IncidentsApi.md#runbatchnextcheckexecution) | **POST** /api/run-batch-next-check-execution | Batch execute next-checks |
+| [**performAlertmanagerSourceAction**](IncidentsApi.md#performalertmanagersourceactionoperation) | **POST** /api/runs/{run_id}/alertmanager-sources/{source_id}/action | Perform AlertManager source action |
+| [**promoteDeterministicNextCheck**](IncidentsApi.md#promotedeterministicnextcheckoperation) | **POST** /api/deterministic-next-check/promote | Promote deterministic next-check |
+| [**recordAlertmanagerRelevanceFeedback**](IncidentsApi.md#recordalertmanagerrelevancefeedbackoperation) | **POST** /api/alertmanager-relevance-feedback | Record AlertManager relevance feedback |
+| [**recordNextCheckUsefulness**](IncidentsApi.md#recordnextcheckusefulnessoperation) | **POST** /api/next-check-execution-usefulness | Record next-check usefulness feedback |
+| [**runBatchNextCheckExecution**](IncidentsApi.md#runbatchnextcheckexecutionoperation) | **POST** /api/run-batch-next-check-execution | Batch execute next-checks |
 | [**runIncidentAutomaticDiagnosisLoop**](IncidentsApi.md#runincidentautomaticdiagnosisloop) | **POST** /api/incidents/{incident_id}/automatic-diagnosis-loop/one-pass | Run automatic diagnosis loop one-pass |
 | [**runIncidentDiagnosisLoop**](IncidentsApi.md#runincidentdiagnosisloop) | **POST** /api/incidents/{incident_id}/diagnosis-loop/one-pass | Run one-pass diagnosis loop |
 | [**runIncidentOnePassDiagnosis**](IncidentsApi.md#runincidentonepassdiagnosis) | **POST** /api/incidents/{incident_id}/one-pass-diagnosis | Run one-pass diagnosis service |
@@ -30,7 +30,7 @@ All URIs are relative to *http://localhost*
 
 ## approveNextCheck
 
-> object approveNextCheck()
+> object approveNextCheck(approveNextCheckRequest)
 
 Approve next-check
 
@@ -43,14 +43,19 @@ import {
   Configuration,
   IncidentsApi,
 } from '';
-import type { ApproveNextCheckRequest } from '';
+import type { ApproveNextCheckOperationRequest } from '';
 
 async function example() {
   console.log("🚀 Testing  SDK...");
   const api = new IncidentsApi();
 
+  const body = {
+    // ApproveNextCheckRequest
+    approveNextCheckRequest: ...,
+  } satisfies ApproveNextCheckOperationRequest;
+
   try {
-    const data = await api.approveNextCheck();
+    const data = await api.approveNextCheck(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -63,7 +68,10 @@ example().catch(console.error);
 
 ### Parameters
 
-This endpoint does not need any parameter.
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **approveNextCheckRequest** | [ApproveNextCheckRequest](ApproveNextCheckRequest.md) |  | |
 
 ### Return type
 
@@ -75,7 +83,7 @@ No authorization required
 
 ### HTTP request headers
 
-- **Content-Type**: Not defined
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 
@@ -89,7 +97,7 @@ No authorization required
 
 ## captureIncidentSnapshot
 
-> CaptureIncidentSnapshot200Response captureIncidentSnapshot()
+> CaptureIncidentSnapshot200Response captureIncidentSnapshot(captureIncidentSnapshotRequest)
 
 Capture incident snapshot
 
@@ -102,14 +110,19 @@ import {
   Configuration,
   IncidentsApi,
 } from '';
-import type { CaptureIncidentSnapshotRequest } from '';
+import type { CaptureIncidentSnapshotOperationRequest } from '';
 
 async function example() {
   console.log("🚀 Testing  SDK...");
   const api = new IncidentsApi();
 
+  const body = {
+    // CaptureIncidentSnapshotRequest
+    captureIncidentSnapshotRequest: ...,
+  } satisfies CaptureIncidentSnapshotOperationRequest;
+
   try {
-    const data = await api.captureIncidentSnapshot();
+    const data = await api.captureIncidentSnapshot(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -122,7 +135,10 @@ example().catch(console.error);
 
 ### Parameters
 
-This endpoint does not need any parameter.
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **captureIncidentSnapshotRequest** | [CaptureIncidentSnapshotRequest](CaptureIncidentSnapshotRequest.md) |  | |
 
 ### Return type
 
@@ -134,7 +150,7 @@ No authorization required
 
 ### HTTP request headers
 
-- **Content-Type**: Not defined
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 
@@ -148,7 +164,7 @@ No authorization required
 
 ## createIncidentReviewPacket
 
-> CreateIncidentReviewPacket200Response createIncidentReviewPacket()
+> CreateIncidentReviewPacket200Response createIncidentReviewPacket(createIncidentReviewPacketRequest)
 
 Generate incident review packet
 
@@ -161,14 +177,19 @@ import {
   Configuration,
   IncidentsApi,
 } from '';
-import type { CreateIncidentReviewPacketRequest } from '';
+import type { CreateIncidentReviewPacketOperationRequest } from '';
 
 async function example() {
   console.log("🚀 Testing  SDK...");
   const api = new IncidentsApi();
 
+  const body = {
+    // CreateIncidentReviewPacketRequest
+    createIncidentReviewPacketRequest: ...,
+  } satisfies CreateIncidentReviewPacketOperationRequest;
+
   try {
-    const data = await api.createIncidentReviewPacket();
+    const data = await api.createIncidentReviewPacket(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -181,7 +202,10 @@ example().catch(console.error);
 
 ### Parameters
 
-This endpoint does not need any parameter.
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **createIncidentReviewPacketRequest** | [CreateIncidentReviewPacketRequest](CreateIncidentReviewPacketRequest.md) |  | |
 
 ### Return type
 
@@ -193,7 +217,7 @@ No authorization required
 
 ### HTTP request headers
 
-- **Content-Type**: Not defined
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 
@@ -207,7 +231,7 @@ No authorization required
 
 ## executeNextCheck
 
-> object executeNextCheck()
+> object executeNextCheck(executeNextCheckRequest)
 
 Execute next-check
 
@@ -220,14 +244,19 @@ import {
   Configuration,
   IncidentsApi,
 } from '';
-import type { ExecuteNextCheckRequest } from '';
+import type { ExecuteNextCheckOperationRequest } from '';
 
 async function example() {
   console.log("🚀 Testing  SDK...");
   const api = new IncidentsApi();
 
+  const body = {
+    // ExecuteNextCheckRequest
+    executeNextCheckRequest: ...,
+  } satisfies ExecuteNextCheckOperationRequest;
+
   try {
-    const data = await api.executeNextCheck();
+    const data = await api.executeNextCheck(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -240,7 +269,10 @@ example().catch(console.error);
 
 ### Parameters
 
-This endpoint does not need any parameter.
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **executeNextCheckRequest** | [ExecuteNextCheckRequest](ExecuteNextCheckRequest.md) |  | |
 
 ### Return type
 
@@ -252,7 +284,7 @@ No authorization required
 
 ### HTTP request headers
 
-- **Content-Type**: Not defined
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 
@@ -879,7 +911,7 @@ No authorization required
 
 ## performAlertmanagerSourceAction
 
-> object performAlertmanagerSourceAction(runId, sourceId)
+> object performAlertmanagerSourceAction(runId, sourceId, performAlertmanagerSourceActionRequest)
 
 Perform AlertManager source action
 
@@ -892,7 +924,7 @@ import {
   Configuration,
   IncidentsApi,
 } from '';
-import type { PerformAlertmanagerSourceActionRequest } from '';
+import type { PerformAlertmanagerSourceActionOperationRequest } from '';
 
 async function example() {
   console.log("🚀 Testing  SDK...");
@@ -903,7 +935,9 @@ async function example() {
     runId: runId_example,
     // string
     sourceId: sourceId_example,
-  } satisfies PerformAlertmanagerSourceActionRequest;
+    // PerformAlertmanagerSourceActionRequest
+    performAlertmanagerSourceActionRequest: ...,
+  } satisfies PerformAlertmanagerSourceActionOperationRequest;
 
   try {
     const data = await api.performAlertmanagerSourceAction(body);
@@ -924,6 +958,7 @@ example().catch(console.error);
 |------------- | ------------- | ------------- | -------------|
 | **runId** | `string` |  | [Defaults to `undefined`] |
 | **sourceId** | `string` |  | [Defaults to `undefined`] |
+| **performAlertmanagerSourceActionRequest** | [PerformAlertmanagerSourceActionRequest](PerformAlertmanagerSourceActionRequest.md) |  | |
 
 ### Return type
 
@@ -935,7 +970,7 @@ No authorization required
 
 ### HTTP request headers
 
-- **Content-Type**: Not defined
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 
@@ -949,7 +984,7 @@ No authorization required
 
 ## promoteDeterministicNextCheck
 
-> object promoteDeterministicNextCheck()
+> object promoteDeterministicNextCheck(promoteDeterministicNextCheckRequest)
 
 Promote deterministic next-check
 
@@ -962,14 +997,19 @@ import {
   Configuration,
   IncidentsApi,
 } from '';
-import type { PromoteDeterministicNextCheckRequest } from '';
+import type { PromoteDeterministicNextCheckOperationRequest } from '';
 
 async function example() {
   console.log("🚀 Testing  SDK...");
   const api = new IncidentsApi();
 
+  const body = {
+    // PromoteDeterministicNextCheckRequest
+    promoteDeterministicNextCheckRequest: ...,
+  } satisfies PromoteDeterministicNextCheckOperationRequest;
+
   try {
-    const data = await api.promoteDeterministicNextCheck();
+    const data = await api.promoteDeterministicNextCheck(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -982,7 +1022,10 @@ example().catch(console.error);
 
 ### Parameters
 
-This endpoint does not need any parameter.
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **promoteDeterministicNextCheckRequest** | [PromoteDeterministicNextCheckRequest](PromoteDeterministicNextCheckRequest.md) |  | |
 
 ### Return type
 
@@ -994,7 +1037,7 @@ No authorization required
 
 ### HTTP request headers
 
-- **Content-Type**: Not defined
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 
@@ -1008,7 +1051,7 @@ No authorization required
 
 ## recordAlertmanagerRelevanceFeedback
 
-> object recordAlertmanagerRelevanceFeedback()
+> object recordAlertmanagerRelevanceFeedback(recordAlertmanagerRelevanceFeedbackRequest)
 
 Record AlertManager relevance feedback
 
@@ -1021,14 +1064,19 @@ import {
   Configuration,
   IncidentsApi,
 } from '';
-import type { RecordAlertmanagerRelevanceFeedbackRequest } from '';
+import type { RecordAlertmanagerRelevanceFeedbackOperationRequest } from '';
 
 async function example() {
   console.log("🚀 Testing  SDK...");
   const api = new IncidentsApi();
 
+  const body = {
+    // RecordAlertmanagerRelevanceFeedbackRequest
+    recordAlertmanagerRelevanceFeedbackRequest: ...,
+  } satisfies RecordAlertmanagerRelevanceFeedbackOperationRequest;
+
   try {
-    const data = await api.recordAlertmanagerRelevanceFeedback();
+    const data = await api.recordAlertmanagerRelevanceFeedback(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -1041,7 +1089,10 @@ example().catch(console.error);
 
 ### Parameters
 
-This endpoint does not need any parameter.
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **recordAlertmanagerRelevanceFeedbackRequest** | [RecordAlertmanagerRelevanceFeedbackRequest](RecordAlertmanagerRelevanceFeedbackRequest.md) |  | |
 
 ### Return type
 
@@ -1053,7 +1104,7 @@ No authorization required
 
 ### HTTP request headers
 
-- **Content-Type**: Not defined
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 
@@ -1067,7 +1118,7 @@ No authorization required
 
 ## recordNextCheckUsefulness
 
-> object recordNextCheckUsefulness()
+> object recordNextCheckUsefulness(recordNextCheckUsefulnessRequest)
 
 Record next-check usefulness feedback
 
@@ -1080,14 +1131,19 @@ import {
   Configuration,
   IncidentsApi,
 } from '';
-import type { RecordNextCheckUsefulnessRequest } from '';
+import type { RecordNextCheckUsefulnessOperationRequest } from '';
 
 async function example() {
   console.log("🚀 Testing  SDK...");
   const api = new IncidentsApi();
 
+  const body = {
+    // RecordNextCheckUsefulnessRequest
+    recordNextCheckUsefulnessRequest: ...,
+  } satisfies RecordNextCheckUsefulnessOperationRequest;
+
   try {
-    const data = await api.recordNextCheckUsefulness();
+    const data = await api.recordNextCheckUsefulness(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -1100,7 +1156,10 @@ example().catch(console.error);
 
 ### Parameters
 
-This endpoint does not need any parameter.
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **recordNextCheckUsefulnessRequest** | [RecordNextCheckUsefulnessRequest](RecordNextCheckUsefulnessRequest.md) |  | |
 
 ### Return type
 
@@ -1112,7 +1171,7 @@ No authorization required
 
 ### HTTP request headers
 
-- **Content-Type**: Not defined
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 
@@ -1126,7 +1185,7 @@ No authorization required
 
 ## runBatchNextCheckExecution
 
-> object runBatchNextCheckExecution()
+> object runBatchNextCheckExecution(runBatchNextCheckExecutionRequest)
 
 Batch execute next-checks
 
@@ -1139,14 +1198,19 @@ import {
   Configuration,
   IncidentsApi,
 } from '';
-import type { RunBatchNextCheckExecutionRequest } from '';
+import type { RunBatchNextCheckExecutionOperationRequest } from '';
 
 async function example() {
   console.log("🚀 Testing  SDK...");
   const api = new IncidentsApi();
 
+  const body = {
+    // RunBatchNextCheckExecutionRequest
+    runBatchNextCheckExecutionRequest: ...,
+  } satisfies RunBatchNextCheckExecutionOperationRequest;
+
   try {
-    const data = await api.runBatchNextCheckExecution();
+    const data = await api.runBatchNextCheckExecution(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -1159,7 +1223,10 @@ example().catch(console.error);
 
 ### Parameters
 
-This endpoint does not need any parameter.
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **runBatchNextCheckExecutionRequest** | [RunBatchNextCheckExecutionRequest](RunBatchNextCheckExecutionRequest.md) |  | |
 
 ### Return type
 
@@ -1171,7 +1238,7 @@ No authorization required
 
 ### HTTP request headers
 
-- **Content-Type**: Not defined
+- **Content-Type**: `application/json`
 - **Accept**: `application/json`
 
 

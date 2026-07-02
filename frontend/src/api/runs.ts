@@ -220,30 +220,27 @@ export const fetchRunsList = async (options?: {
 };
 
 // =============================================================================
-// POST Operations (use raw fetch - API schema doesn't define request body)
+// POST Operations (use generated client)
 // =============================================================================
 
 /**
  * Execute multiple next-checks in batch.
  *
- * Uses raw fetch because the generated client doesn't have request body support
- * (API schema doesn't define request body for this endpoint).
+ * Uses the generated client with typed request body from API schema.
  */
 export const runBatchExecution = async (
   request: BatchExecutionRequest
 ): Promise<BatchExecutionResponse> => {
-  const response = await fetch("/api/run-batch-next-check-execution", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
-  });
-
-  if (!response.ok) {
-    const message = await extractErrorMessage(response);
-    throw new Error(message || "Failed to run batch execution");
+  try {
+    const api = createIncidentsApi();
+    const result = await api.runBatchNextCheckExecution({
+      runBatchNextCheckExecutionRequest: {
+        runId: request.runId,
+        dryRun: request.dryRun,
+      },
+    });
+    return result as BatchExecutionResponse;
+  } catch (error) {
+    throw await normalizeGeneratedApiError(error);
   }
-
-  return (await response.json()) as BatchExecutionResponse;
 };

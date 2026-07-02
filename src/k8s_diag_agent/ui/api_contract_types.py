@@ -19,6 +19,7 @@ class APISchema:
     items: dict[str, Any] | None = None
     properties: dict[str, Any] | None = None
     required: list[str] | None = None
+    additional_properties: bool | None = None
 
 
 @dataclass(frozen=True)

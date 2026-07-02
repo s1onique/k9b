@@ -98,7 +98,8 @@ def handle_incident_snapshot_api(handler: HealthUIRequestHandler) -> None:
         )
         return
 
-    since_hours = body.get("since_hours", 2)
+    # Accept both snake_case (legacy) and camelCase (OpenAPI spec) field names
+    since_hours = body.get("sinceHours") or body.get("since_hours") or 2
     if not isinstance(since_hours, int) or since_hours < 1:
         since_hours = 2
 

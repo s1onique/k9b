@@ -582,6 +582,12 @@ export type UsefulnessFeedbackRequest = {
   artifactPath: string;
   usefulnessClass: "useful" | "partial" | "noisy" | "empty";
   usefulnessSummary?: string;
+  // Optional context fields for stage-aware feedback
+  reviewStage?: string;
+  workstream?: string;
+  problemClass?: string;
+  judgmentScope?: string;
+  reviewerConfidence?: string;
 };
 
 export type UsefulnessFeedbackResponse = {
