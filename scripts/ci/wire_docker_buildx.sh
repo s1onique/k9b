@@ -4,16 +4,17 @@
 # Creates a Buildx builder with BuildKit daemon configuration.
 #
 # Usage:
-#   scripts/ci/wire_docker_buildx.sh --buildkitd-config <path>
+#   scripts/ci/wire_docker_buildx.sh --buildkitd-config <path> [builder_name]
 #
 # Arguments:
 #   --buildkitd-config  Path to buildkitd.toml configuration file (required)
+#   builder_name        Optional builder name (defaults to k9b-{RUN_ID}-{RUN_ATTEMPT})
 #
 # Environment:
-#   GITHUB_RUN_ID       GitHub run ID (used for builder name uniqueness)
+#   GITHUB_RUN_ID        GitHub run ID (used for builder name uniqueness)
 #   GITHUB_RUN_ATTEMPT   GitHub run attempt number
 #   GITHUB_OUTPUT        Path to GitHub output file (set by GitHub Actions)
-#   GITHUB_ENV           Path to GitHub env file (set by GitHub Actions)
+#   GITHUB_ENV          Path to GitHub env file (set by GitHub Actions)
 #
 # Outputs:
 #   K9B_BUILDX_BUILDER   Builder name (written to GITHUB_ENV and GITHUB_OUTPUT)
@@ -32,6 +33,7 @@ set -euo pipefail
 
 # Parse arguments
 buildkitd_config=""
+builder_name=""  # Optional positional argument for explicit builder name
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -39,10 +41,20 @@ while [[ $# -gt 0 ]]; do
             buildkitd_config="${2:?missing --buildkitd-config value}"
             shift 2
             ;;
-        *)
+        -*)
             echo "unknown argument: $1" >&2
-            echo "Usage: $0 --buildkitd-config <path>" >&2
+            echo "Usage: $0 --buildkitd-config <path> [builder_name]" >&2
             exit 2
+            ;;
+        *)
+            # Positional argument: builder name
+            if [[ -n "${builder_name}" ]]; then
+                echo "unexpected extra positional argument: $1" >&2
+                echo "Usage: $0 --buildkitd-config <path> [builder_name]" >&2
+                exit 2
+            fi
+            builder_name="$1"
+            shift
             ;;
     esac
 done
@@ -68,10 +80,14 @@ HARBOR_REGISTRY="${HARBOR_REGISTRY:-harbor-pve1.spbnix.local}"
 # BuildKit image from Harbor proxy-cache for hermetic builds
 K9B_BUILDKIT_IMAGE="${K9B_BUILDKIT_IMAGE:-${HARBOR_REGISTRY}/dockerhub-cache/moby/buildkit:buildx-stable-1}"
 
-# Generate unique builder name
-run_id="${GITHUB_RUN_ID:-local}"
-run_attempt="${GITHUB_RUN_ATTEMPT:-0}"
-builder="k9b-${run_id}-${run_attempt}"
+# Determine builder name: use explicit name if provided, otherwise generate unique one
+if [[ -n "${builder_name}" ]]; then
+    builder="${builder_name}"
+else
+    run_id="${GITHUB_RUN_ID:-local}"
+    run_attempt="${GITHUB_RUN_ATTEMPT:-0}"
+    builder="k9b-${run_id}-${run_attempt}"
+fi
 
 echo "Builder name: ${builder}"
 

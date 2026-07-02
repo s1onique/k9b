@@ -149,9 +149,29 @@ jobs:
       # =============================================================================
       # BuildKit setup
       # =============================================================================
+      - name: Configure BuildKit with Harbor CA
+        id: buildkitd-config
+        env:
+          SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/buildkit-certs"
+          mkdir -p "${RUNNER_TEMP}/buildkit"
+          cert_path="${RUNNER_TEMP}/buildkit-certs/harbor-pve1.spbnix.local.pem"
+          printf '%s\n' "${SPBNIX_CA_CERT_PEM}" > "${cert_path}"
+          cat > "${RUNNER_TEMP}/buildkit/buildkitd.toml" <<EOF
+          debug = true
+          [registry."harbor-pve1.spbnix.local"]
+            ca = ["${cert_path}"]
+          EOF
+          echo "path=${RUNNER_TEMP}/buildkit/buildkitd.toml" >> "${GITHUB_OUTPUT}"
+
       - name: Set up Docker Buildx
         id: buildx
-        run: scripts/ci/wire_docker_buildx.sh k9b-harbor-builder
+        run: |
+          scripts/ci/wire_docker_buildx.sh \
+            --buildkitd-config "${{ steps.buildkitd-config.outputs.path }}" \
+            k9b-harbor-builder
 
       - name: Emit toolchain provenance
         run: scripts/ci/emit_toolchain_provenance.sh "docker,buildx"

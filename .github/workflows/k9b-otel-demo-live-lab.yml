@@ -116,10 +116,10 @@ jobs:
       # Creates hermetic Buildx builder with BuildKit config for Harbor CA trust.
       - name: Set up Docker Buildx
         id: buildx
-        env:
-          BUILDX_BUILDER_NAME: k9b-otel-demo-${{ github.run_id }}-${{ github.run_attempt }}
-          BUILDKITD_CONFIG: ${{ steps.buildkitd-config.outputs.path }}
-        run: scripts/ci/wire_docker_buildx.sh
+        run: |
+          scripts/ci/wire_docker_buildx.sh \
+            --buildkitd-config "${{ steps.buildkitd-config.outputs.path }}" \
+            k9b-otel-demo-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Extract backend metadata
         id: meta-backend

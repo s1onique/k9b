@@ -5,6 +5,8 @@ rootless BuildKit options, and CA/auth config mounting are correct in all
 docker/build-push-action usages in k9b workflows.
 """
 
+from pathlib import Path
+
 from tests.helpers.docker_harbor_cache_helpers import (
     HARBOR_BUILD_IMAGE_WORKFLOW,
     K9B_IMAGE_BUILDER_WORKFLOW,
@@ -12,6 +14,9 @@ from tests.helpers.docker_harbor_cache_helpers import (
     find_build_push_steps,
     load_workflow,
 )
+
+# Root of the repository
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class TestHarborBuildImageCacheBehavior:
@@ -296,4 +301,78 @@ class TestOTelDemoLiveLabCacheBehavior:
         cache_to = cache_to_match.group(1)
         assert "mode=max" in cache_to, (
             f"cache-to must use mode=max, got: {cache_to}"
+        )
+
+
+class TestWorkflowContractPreservation:
+    """Regression tests that verify workflows pass --buildkitd-config to wire_docker_buildx.sh.
+
+    This contract ensures the script is called with the required --buildkitd-config argument
+    and that workflows produce the config via a step with id='buildkitd-config'.
+    """
+
+    def test_k9b_image_builder_passes_buildkitd_config_to_wire_script(self) -> None:
+        """Verify k9b-image-builder.yml calls wire_docker_buildx.sh with --buildkitd-config.
+
+        The workflow must:
+        1. Have a step with id='buildkitd-config' that outputs the config path
+        2. Call wire_docker_buildx.sh with --buildkitd-config pointing to that output
+        """
+        workflow_path = REPO_ROOT / ".github/workflows/k9b-image-builder.yml"
+        assert workflow_path.exists(), f"workflow missing: {workflow_path}"
+
+        content = workflow_path.read_text()
+
+        # Must call wire_docker_buildx.sh
+        assert "scripts/ci/wire_docker_buildx.sh" in content, (
+            "k9b-image-builder.yml must call wire_docker_buildx.sh"
+        )
+
+        # Must have buildkitd-config step with path output
+        assert 'id: buildkitd-config' in content, (
+            "k9b-image-builder.yml must have a step with id='buildkitd-config'"
+        )
+        assert '>> "${GITHUB_OUTPUT}"' in content or '>> "$GITHUB_OUTPUT"' in content, (
+            "buildkitd-config step must write to GITHUB_OUTPUT"
+        )
+        assert "path=" in content, (
+            "buildkitd-config step must output 'path' variable"
+        )
+
+        # Must pass --buildkitd-config to the script
+        assert '--buildkitd-config "${{ steps.buildkitd-config.outputs.path }}"' in content, (
+            "k9b-image-builder.yml must pass --buildkitd-config to wire_docker_buildx.sh"
+        )
+
+    def test_otel_demo_live_lab_passes_buildkitd_config_to_wire_script(self) -> None:
+        """Verify k9b-otel-demo-live-lab.yml calls wire_docker_buildx.sh with --buildkitd-config.
+
+        The workflow must:
+        1. Have a step with id='buildkitd-config' that outputs the config path
+        2. Call wire_docker_buildx.sh with --buildkitd-config pointing to that output
+        """
+        workflow_path = REPO_ROOT / ".github/workflows/k9b-otel-demo-live-lab.yml"
+        assert workflow_path.exists(), f"workflow missing: {workflow_path}"
+
+        content = workflow_path.read_text()
+
+        # Must call wire_docker_buildx.sh
+        assert "scripts/ci/wire_docker_buildx.sh" in content, (
+            "k9b-otel-demo-live-lab.yml must call wire_docker_buildx.sh"
+        )
+
+        # Must have buildkitd-config step with path output
+        assert 'id: buildkitd-config' in content, (
+            "k9b-otel-demo-live-lab.yml must have a step with id='buildkitd-config'"
+        )
+        assert '>> "${GITHUB_OUTPUT}"' in content or '>> "$GITHUB_OUTPUT"' in content, (
+            "buildkitd-config step must write to GITHUB_OUTPUT"
+        )
+        assert "path=" in content, (
+            "buildkitd-config step must output 'path' variable"
+        )
+
+        # Must pass --buildkitd-config to the script
+        assert '--buildkitd-config "${{ steps.buildkitd-config.outputs.path }}"' in content, (
+            "k9b-otel-demo-live-lab.yml must pass --buildkitd-config to wire_docker_buildx.sh"
         )
