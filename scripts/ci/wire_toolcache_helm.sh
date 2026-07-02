@@ -22,7 +22,17 @@ echo "=== Wiring Helm ${HELM_VERSION} from tool cache ==="
 echo "Tool cache root: ${TOOL_CACHE}"
 
 # Helm paths to check (in order of preference)
+# x64 paths (azure/setup-helm / Actions tool-cache style layout) checked first
 HELM_PATHS=(
+    "${TOOL_CACHE}/helm/${HELM_VERSION}/x64/linux-amd64/helm"
+    "${TOOL_CACHE}/helm/3.16.3/x64/linux-amd64/helm"
+    "${TOOL_CACHE}/helm/3.16.2/x64/linux-amd64/helm"
+    "${TOOL_CACHE}/helm/3.16.1/x64/linux-amd64/helm"
+    "${TOOL_CACHE}/helm/3.16.0/x64/linux-amd64/helm"
+    "${TOOL_CACHE}/helm/3.15.0/x64/linux-amd64/helm"
+    "${TOOL_CACHE}/helm/3.14.0/x64/linux-amd64/helm"
+    "${TOOL_CACHE}/helm/3.13.0/x64/linux-amd64/helm"
+    # Legacy paths (without x64 segment) - fallback for older runner caches
     "${TOOL_CACHE}/helm/${HELM_VERSION}/linux-amd64/helm"
     "${TOOL_CACHE}/helm/3.16.3/linux-amd64/helm"
     "${TOOL_CACHE}/helm/3.16.2/linux-amd64/helm"
