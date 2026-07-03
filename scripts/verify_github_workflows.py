@@ -12,6 +12,16 @@ from pathlib import Path
 
 import yaml
 
+from scripts.verify_github_workflows_contracts import (
+    run_toolchain_contract_tests,
+)
+from scripts.verify_github_workflows_rendering import (
+    WorkflowError,
+    format_skipped_shells_report,
+    print_errors,
+    print_warnings,
+)
+
 REPO_ROOT = Path(__file__).parent.parent
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 METADATA_ONLY_KEYS = frozenset({
@@ -23,33 +33,6 @@ PATH_LIKE_PATTERNS = [
     r"^\./", r"^\.\./", r"^[a-zA-Z]:[/\\]", r"\.yml$", r"\.yaml$",
     r"\.yml/", r"\.yaml/",
 ]
-
-
-class WorkflowError:
-    def __init__(
-        self,
-        workflow_path: Path,
-        job_id: str | None = None,
-        step_index: int | None = None,
-        step_name: str | None = None,
-        error_type: str = "ERROR",
-        message: str = "",
-    ) -> None:
-        self.workflow_path = workflow_path
-        self.job_id = job_id
-        self.step_index = step_index
-        self.step_name = step_name
-        self.error_type = error_type
-        self.message = message
-
-    def __str__(self) -> str:
-        parts = [f"{self.error_type} in {self.workflow_path}"]
-        for attr in ("job_id", "step_index", "step_name"):
-            val = getattr(self, attr)
-            if val is not None:
-                parts.append(f"{attr.replace('_', ' ')} '{val}'" if isinstance(val, str) else f"{attr}[{val}]")
-        parts.append(f": {self.message}")
-        return " | ".join(parts)
 
 
 class WorkflowVerifier:
@@ -176,9 +159,7 @@ class WorkflowVerifier:
                 script_path.unlink()
 
     def get_skipped_shells_report(self) -> str:
-        if not self._skipped_shells:
-            return ""
-        return "\nSkipped shell checks (explicit non-bash shells):\n" + "\n".join(f"  - {detail}" for _, detail in self._skipped_shells) + "\n"
+        return format_skipped_shells_report(self._skipped_shells)
 
 
 def verify_workflows(workflows_dir: Path | None = None, verbose: bool = False) -> bool:
@@ -188,164 +169,9 @@ def verify_workflows(workflows_dir: Path | None = None, verbose: bool = False) -
     ok = verifier.verify_all()
     if verbose and verifier._skipped_shells:
         print(verifier.get_skipped_shells_report())
-    for error in verifier.errors:
-        print(str(error), file=sys.stderr)
-    for warning in verifier.warnings:
-        print(str(warning), file=sys.stderr)
+    print_errors(verifier.errors)
+    print_warnings(verifier.warnings)
     return ok
-
-
-def run_toolchain_contract_tests(verbose: bool = False, emit_summary: bool = True, emit_diagnostics: bool = True) -> bool:
-    """Run toolchain contract tests and report results.
-
-    Returns True if all tests pass, False otherwise.
-    """
-    all_passed = True
-
-    # Run workflow consumer tests
-    p, f = test_toolchain_python_executable_contract(verbose=verbose, emit_diagnostics=emit_diagnostics)
-    if f > 0:
-        all_passed = False
-    if emit_summary:
-        print(f"Toolchain consumer tests: {p} passed, {f} failed")
-
-    # Run action output contract tests
-    p, f = test_toolchain_action_outputs_contract(verbose=verbose, emit_diagnostics=emit_diagnostics)
-    if f > 0:
-        all_passed = False
-    if emit_summary:
-        print(f"Toolchain action output tests: {p} passed, {f} failed")
-
-    return all_passed
-
-
-def find_step_by_name(workflow: dict, step_name: str) -> dict | None:
-    """Find a step by name in a workflow dict."""
-    for job in workflow.get("jobs", {}).values():
-        for step in job.get("steps", []):
-            if step.get("name") == step_name:
-                return step  # type: ignore[return-value]
-    return None
-
-
-def test_toolchain_python_executable_contract(verbose: bool = False, emit_diagnostics: bool = True) -> tuple[int, int]:
-    """Test that toolchain consumers use python-executable, not python-location.
-
-    This prevents regressions where consumers mistakenly use the bin directory
-    instead of the Python executable path.
-    """
-    passed = 0
-    failed = 0
-
-    # Workflows that should use python-executable for venv setup
-    EXPECTED_EXECUTABLE = {
-        "k9b-otel-demo-live-lab.yml": "Prepare live lab Python venv",
-    }
-
-    for workflow_name, step_name in EXPECTED_EXECUTABLE.items():
-        wf_path = WORKFLOWS_DIR / workflow_name
-        if not wf_path.exists():
-            failed += 1
-            if emit_diagnostics:
-                print(f"  FAIL: {workflow_name} not found")
-            continue
-
-        try:
-            with open(wf_path, encoding="utf-8") as f:
-                workflow = yaml.safe_load(f)
-        except Exception as e:
-            failed += 1
-            if emit_diagnostics:
-                print(f"  FAIL: {workflow_name} parse error: {e}")
-            continue
-
-        step = find_step_by_name(workflow, step_name)
-        if step is None:
-            failed += 1
-            if emit_diagnostics:
-                print(f"  FAIL: {workflow_name} step '{step_name}' not found")
-            continue
-
-        env = step.get("env", {})
-        python_env = env.get("K9B_LIVE_LAB_PYTHON", "")
-
-        if "python-executable" in python_env:
-            passed += 1
-            if verbose:
-                print(f"  PASS: {workflow_name}/{step_name} uses python-executable")
-        else:
-            failed += 1
-            if emit_diagnostics:
-                print(f"  FAIL: {workflow_name}/{step_name} K9B_LIVE_LAB_PYTHON={python_env!r}, expected python-executable")
-
-    return passed, failed
-
-
-def test_toolchain_action_outputs_contract(verbose: bool = False, emit_diagnostics: bool = True) -> tuple[int, int]:
-    """Test that toolchain action outputs have correct contracts.
-
-    - python-location should be bin directory (legacy)
-    - python-executable should end with /python3
-    - python-root should reference python-root step output
-    """
-    passed = 0
-    failed = 0
-
-    action_path = REPO_ROOT / ".github" / "actions" / "k9b-live-lab-toolchain" / "action.yml"
-    if not action_path.exists():
-        failed += 1
-        if emit_diagnostics:
-            print(f"  FAIL: action.yml not found at {action_path}")
-        return passed, failed
-
-    try:
-        with open(action_path, encoding="utf-8") as f:
-            action = yaml.safe_load(f)
-    except Exception as e:
-        failed += 1
-        if emit_diagnostics:
-            print(f"  FAIL: action.yml parse error: {e}")
-        return passed, failed
-
-    outputs = action.get("outputs", {})
-
-    # Test python-location is legacy bin dir
-    python_loc = outputs.get("python-location", {})
-    python_loc_value = python_loc.get("value", "") if isinstance(python_loc, dict) else ""
-    if "python-bin-dir" in python_loc_value and "python3" not in python_loc_value:
-        passed += 1
-        if verbose:
-            print("  PASS: python-location is legacy bin dir")
-    else:
-        failed += 1
-        if emit_diagnostics:
-            print(f"  FAIL: python-location value={python_loc_value!r}, expected python-bin-dir without python3")
-
-    # Test python-executable ends with /python3
-    python_exec = outputs.get("python-executable", {})
-    python_exec_value = python_exec.get("value", "") if isinstance(python_exec, dict) else ""
-    if python_exec_value.endswith("/python3"):
-        passed += 1
-        if verbose:
-            print("  PASS: python-executable ends with /python3")
-    else:
-        failed += 1
-        if emit_diagnostics:
-            print(f"  FAIL: python-executable value={python_exec_value!r}, expected to end with /python3")
-
-    # Test python-root references python-root step output
-    python_root = outputs.get("python-root", {})
-    python_root_value = python_root.get("value", "") if isinstance(python_root, dict) else ""
-    if "python-root" in python_root_value:
-        passed += 1
-        if verbose:
-            print("  PASS: python-root references step output")
-    else:
-        failed += 1
-        if emit_diagnostics:
-            print(f"  FAIL: python-root value={python_root_value!r}, expected to reference step output")
-
-    return passed, failed
 
 
 def run_self_test(verbose: bool = False) -> bool:
@@ -517,13 +343,13 @@ def main() -> int:
     if args.json:
         print(json.dumps({"success": ok, "workflows_dir": str(workflows_dir), "errors": error_list, "skipped_shell_checks": skipped_list}, indent=2))
     else:
-        if verifier.errors:
-            print(f"Found {len(verifier.errors)} error(s):", file=sys.stderr)
-            for error in verifier.errors:
-                print(f"  {error}", file=sys.stderr)
-        if verifier._skipped_shells:
-            print(verifier.get_skipped_shells_report())
-        print(f"\nWorkflow verification: {'PASS' if ok else 'FAIL'}")
+        from scripts.verify_github_workflows_rendering import print_workflow_results
+        print_workflow_results(
+            errors=verifier.errors,
+            warnings=verifier.warnings,
+            skipped_shells=verifier._skipped_shells,
+            ok=ok,
+        )
 
     return 0 if ok else 1
 
