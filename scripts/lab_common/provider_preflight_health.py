@@ -251,9 +251,19 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
                 f"Body prefix (first 200 chars): {raw[:200]!r}",
             )
         except json.JSONDecodeError:
-            # CRITICAL FIX: Any trailing curl metadata (CURL_EXIT, HTTP_CODE, STDERR_BLOCK)
-            # is wire-format contamination. The contract requires EXACTLY one clean JSON
-            # document. Semantic evaluation never proceeds when wire format is contaminated.
+            # Suffix is not valid JSON - check if it's a known curl envelope
+            envelope = parse_known_curl_envelope_suffix(suffix_stripped)
+            if envelope is not None:
+                # Known successful curl envelope is accepted - extract JSON body
+                json_body = raw[:end].strip()
+                # Re-parse the extracted JSON body
+                try:
+                    parsed_payload, _ = decoder.raw_decode(json_body)
+                    return None, parsed_payload, ""
+                except json.JSONDecodeError:
+                    # Should not happen - we already successfully parsed this
+                    pass
+            # Not a known curl envelope = contamination
             return (
                 FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
                 None,
