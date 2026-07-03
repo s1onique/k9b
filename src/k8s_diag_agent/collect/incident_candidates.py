@@ -290,21 +290,47 @@ def detect_incident_candidates(
             # scheduling failures (e.g., nodeSelector mismatches). The scheduling
             # failure events (FailedScheduling, Unschedulable) are on the Pods,
             # not the Deployment itself.
-            candidate = _make_deployment_candidate(
-                deployment=deployment,
+            scheduling_evts = _find_scheduling_events_for_deployment(deployment, events)
+            sigs: list[CandidateSignal] = [
+                CandidateSignal(
+                    source="deployment",
+                    reason="replicas_unavailable",
+                    message=_sanitize_message(
+                        f"Deployment {deployment.name} has {deployment.available_replicas}/"
+                        f"{deployment.replicas} replicas available"
+                    ),
+                ),
+            ]
+            for evt in scheduling_evts[:3]:
+                sigs.append(
+                    CandidateSignal(
+                        source="event",
+                        reason=evt.reason,
+                        message=_sanitize_message(evt.message),
+                    )
+                )
+            evidence: tuple[str, ...] = (
+                "deployment_describe",
+                "replica_status",
+                "pod_describe",
+                "pod_events",
+            )
+            if scheduling_evts:
+                evidence = evidence + ("pod_node_selector", "node_labels")
+            candidate = IncidentCandidate(
+                candidate_id=_make_candidate_id(
+                    namespace=deployment.namespace,
+                    object_kind=ObjectKind.DEPLOYMENT,
+                    object_name=deployment.name,
+                    candidate_class=CandidateClass.DEPLOYMENT_UNAVAILABLE,
+                ),
+                namespace=deployment.namespace,
+                object_kind=ObjectKind.DEPLOYMENT,
+                object_name=deployment.name,
                 candidate_class=CandidateClass.DEPLOYMENT_UNAVAILABLE,
                 severity=Severity.WARNING,
-                reason="replicas_unavailable",
-                message=(
-                    f"Deployment {deployment.name} has {deployment.available_replicas}/"
-                    f"{deployment.replicas} replicas available"
-                ),
-                evidence_needed=(
-                    "deployment_describe",
-                    "replica_status",
-                    "pod_describe",
-                    "pod_events",
-                ),
+                signals=tuple(sigs),
+                evidence_needed=evidence,
             )
             candidates[candidate.candidate_id] = candidate
 
@@ -364,6 +390,34 @@ def detect_incident_candidates(
 
     # Return sorted by candidate_id for deterministic output
     return tuple(sorted(candidates.values(), key=lambda c: c.candidate_id))
+
+
+# Scheduling failure reason patterns
+_SCHEDULING_FAILURE_REASONS = frozenset(["FailedScheduling", "SchedulerExclude", "FailedToSchedule"])
+
+
+def _find_scheduling_events_for_deployment(
+    deployment: DeploymentSummary,
+    events: list[EventSummary] | tuple[EventSummary, ...],
+) -> list[EventSummary]:
+    """Find scheduling failure events for pods owned by a deployment.
+
+    This enables P4c root-cause diagnosis where scheduling failures
+    (nodeSelector mismatches) cause deployment unavailability.
+    """
+    result: list[EventSummary] = []
+    for evt in events:
+        if evt.reason not in _SCHEDULING_FAILURE_REASONS:
+            continue
+        if evt.type and evt.type != "Warning":
+            continue
+        if evt.namespace != deployment.namespace:
+            continue
+        name = evt.involved_object_name or ""
+        # Match exact name or name with deployment-name- prefix (pod naming pattern)
+        if name == deployment.name or name.startswith(f"{deployment.name}-"):
+            result.append(evt)
+    return result
 
 
 def _make_pod_candidate(
