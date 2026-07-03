@@ -1,6 +1,7 @@
-"""Regression tests for P0b provider health output framing contamination.
+"""Regression tests for P0b provider health - contamination rejection.
 
-These tests cover the regression cases and failure message precision.
+These tests verify that unknown/unrecognized suffix patterns still fail as contamination
+and that the distinction between clean and contaminated payloads is maintained.
 """
 
 from __future__ import annotations
@@ -32,7 +33,6 @@ def fake_provider_preflight_time(monkeypatch: pytest.MonkeyPatch) -> list[float]
         sleeps.append(float(seconds))
         now += max(float(seconds), 0.0)
 
-    # Patch time module globally for both modules
     monkeypatch.setattr(time_module, "time", fake_time)
     monkeypatch.setattr(time_module, "sleep", fake_sleep)
     monkeypatch.setattr(provider_preflight, "PREFLIGHT_RETRY_DEADLINE_SECONDS", 1, raising=False)
@@ -58,116 +58,17 @@ def make_curl_result(
     return result
 
 
-class TestLiveLogRegression:
-    """Regression tests from actual live lab failures."""
+class TestUnknownSuffixStillFails:
+    """Tests that unknown/unrecognized suffix patterns still fail as contamination."""
 
-    def test_live_log_fixture_json_with_trailing_metadata(self) -> None:
-        """Exact fixture from live lab: valid JSON + curl metadata."""
+    def test_unknown_suffix_is_still_contamination(self) -> None:
+        """JSON with unknown trailing text should still fail as contamination."""
         from scripts.lab_common.provider_preflight import (
             FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
             run_provider_preflight,
         )
 
-        # Exact format from live lab that caused "Extra data" failure
-        live_fixture = (
-            '{"timestamp": "2026-06-16T10:00:00Z", "healthy": true, '
-            '"primary_failure_class": "", "provider_enabled": true, '
-            '"dependencies": [{"dependency_name": "diagnosis_provider", '
-            '"status": "available", "phase": "models_list_ok"}]}'
-            '\nCURL_EXIT=0\nHTTP_CODE=200'
-        )
-
-        mock_curl_result = make_curl_result(
-            success=True,
-            body=live_fixture,
-            http_code=200,
-            curl_rc=0,
-        )
-
-        with patch(
-            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
-            return_value=mock_curl_result,
-        ), patch(
-            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
-            return_value=mock_curl_result,
-        ):
-            with TemporaryDirectory() as tmpdir:
-                result = run_provider_preflight(
-                    kubeconfig="/fake/kubeconfig",
-                    namespace="k9b",
-                    service="k9b-backend",
-                    port=8080,
-                    artifact_dir=Path(tmpdir),
-                )
-
-        # Should be classified as output contamination, not invalid_json
-        assert result.passed is False
-        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
-        # Message should include trailing preview
-        assert "CURL_EXIT" in result.message or "HTTP_CODE" in result.message
-
-
-class TestFailureMessages:
-    """Tests for precise failure messages."""
-
-    def test_p0b_failure_message_includes_precise_failure_class(self) -> None:
-        """Failure message should include the precise failure class name."""
-        from scripts.lab_common.provider_preflight import (
-            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
-            run_provider_preflight,
-        )
-
-        valid_json = '{"healthy": true}'
-        contaminated_body = f'{valid_json}\nCURL_EXIT=0\nHTTP_CODE=200'
-
-        mock_curl_result = make_curl_result(
-            success=True,
-            body=contaminated_body,
-            http_code=200,
-            curl_rc=0,
-        )
-
-        with patch(
-            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
-            return_value=mock_curl_result,
-        ), patch(
-            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
-            return_value=mock_curl_result,
-        ):
-            with TemporaryDirectory() as tmpdir:
-                result = run_provider_preflight(
-                    kubeconfig="/fake/kubeconfig",
-                    namespace="k9b",
-                    service="k9b-backend",
-                    port=8080,
-                    artifact_dir=Path(tmpdir),
-                )
-
-        # Failure class should be precise
-        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
-        # Message should include diagnostic info
-        assert "trailing" in result.message.lower() or "contamination" in result.message.lower()
-        # Should NOT be generic invalid_json
-        assert "invalid_json" not in result.failure_class or "contamination" in result.failure_class
-
-
-class TestProviderDisabledRegression:
-    """Regression tests for provider_disabled_required classification.
-
-    These tests ensure that contaminated payloads containing provider_disabled
-    fields are classified as provider_health_output_contaminated, NOT as
-    provider_disabled_required.
-    """
-
-    def test_contaminated_disabled_payload_never_returns_provider_disabled_required(self) -> None:
-        """Contaminated payload with diagnosis_provider_enabled=false should return contamination."""
-        from scripts.lab_common.provider_preflight import (
-            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
-            run_provider_preflight,
-        )
-
-        # This body contains valid JSON followed by curl metadata
-        body = '{"diagnosis_provider_enabled": false}\nCURL_EXIT=0\nHTTP_CODE=200\n'
+        body = '{"healthy":true,"provider_enabled":true}\nNOT_A_CURL_ENVELOPE\n'
 
         mock_curl_result = make_curl_result(
             success=True,
@@ -192,19 +93,21 @@ class TestProviderDisabledRegression:
                     artifact_dir=Path(tmpdir),
                 )
 
-        # Must be contamination, NOT provider_disabled_required
         assert result.passed is False
         assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
 
-    def test_contaminated_available_payload_never_passes(self) -> None:
-        """Contaminated payload with provider_status=available should return contamination."""
+
+class TestCleanVsContaminatedPayloads:
+    """Tests that verify the distinction between clean and contaminated payloads."""
+
+    def test_contaminated_disabled_payload_still_fails(self) -> None:
+        """Contaminated payload with diagnosis_provider_enabled=false should fail contamination."""
         from scripts.lab_common.provider_preflight import (
             FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
             run_provider_preflight,
         )
 
-        # This body contains valid JSON followed by curl metadata
-        body = '{"provider_status": "available", "healthy": true}\nCURL_EXIT=0\nHTTP_CODE=200\n'
+        body = '{"diagnosis_provider_enabled": false}\nUNKNOWN_SUFFIX\n'
 
         mock_curl_result = make_curl_result(
             success=True,
@@ -229,7 +132,41 @@ class TestProviderDisabledRegression:
                     artifact_dir=Path(tmpdir),
                 )
 
-        # Must be contamination, NOT passed
+        assert result.passed is False
+        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+
+    def test_contaminated_available_payload_still_fails(self) -> None:
+        """Contaminated payload with unknown suffix should fail contamination."""
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            run_provider_preflight,
+        )
+
+        body = '{"provider_status": "available", "healthy": true}\nUNKNOWN_SUFFIX\n'
+
+        mock_curl_result = make_curl_result(
+            success=True,
+            body=body,
+            http_code=200,
+            curl_rc=0,
+        )
+
+        with patch(
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
+            return_value=mock_curl_result,
+        ), patch(
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
+            return_value=mock_curl_result,
+        ):
+            with TemporaryDirectory() as tmpdir:
+                result = run_provider_preflight(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="k9b",
+                    service="k9b-backend",
+                    port=8080,
+                    artifact_dir=Path(tmpdir),
+                )
+
         assert result.passed is False
         assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
 
@@ -240,7 +177,6 @@ class TestProviderDisabledRegression:
             run_provider_preflight,
         )
 
-        # This body is exactly one clean JSON document (no trailing metadata)
         body = '{"diagnosis_provider_enabled": false}'
 
         mock_curl_result = make_curl_result(
@@ -266,8 +202,5 @@ class TestProviderDisabledRegression:
                     artifact_dir=Path(tmpdir),
                 )
 
-        # Clean JSON with disabled provider should fail with provider_disabled_required
         assert result.passed is False
         assert result.failure_class == FAILURE_PROVIDER_DISABLED_REQUIRED
-        # Must NOT be contamination (proves semantic evaluation happened)
-        assert "contamination" not in result.failure_class
