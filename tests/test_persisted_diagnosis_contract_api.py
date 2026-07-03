@@ -129,7 +129,7 @@ class TestPersistedDiagnosisContract:
 
         # Build loop summary from events
         loop_summary = build_automatic_diagnosis_loop_summary(
-            events=events_data,  # type: ignore[arg-type]
+            events=events_data,
             review_packet_available=True,
         )
 
@@ -186,7 +186,7 @@ class TestPersistedDiagnosisContract:
             })
 
         loop_summary = build_automatic_diagnosis_loop_summary(
-            events=events_data,  # type: ignore[arg-type]
+            events=events_data,
             review_packet_available=True,
         )
 

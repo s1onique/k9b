@@ -38,7 +38,7 @@ class TestAuthGuardJsonResponse:
             "k8s_diag_agent.ui.auth_guard.get_session_id_from_request",
             return_value=None,
         ):
-            result = check_route_auth(handler)  # type: ignore[arg-type]
+            result = check_route_auth(handler)
 
             # Should return False (not authenticated)
             assert result is False, "check_route_auth should return False for unauthenticated request"
@@ -69,7 +69,7 @@ class TestAuthGuardJsonResponse:
             "k8s_diag_agent.ui.auth_guard.get_principal_for_session",
             return_value=None,  # Invalid session
         ):
-            result = check_route_auth(handler)  # type: ignore[arg-type]
+            result = check_route_auth(handler)
 
             # Should return False
             assert result is False
@@ -94,7 +94,7 @@ class TestAuthGuardJsonResponse:
             "k8s_diag_agent.ui.auth_guard.get_auth_config",
             return_value=MagicMock(enabled=False),  # Auth disabled
         ):
-            result = check_route_auth(handler)  # type: ignore[arg-type]
+            result = check_route_auth(handler)
 
             # Should return True (auth disabled means allow all)
             assert result is True, "check_route_auth should return True when auth is disabled"
@@ -113,7 +113,7 @@ class TestAuthGuardJsonResponse:
             "k8s_diag_agent.ui.auth_guard.get_session_id_from_request",
             return_value=None,
         ):
-            check_route_auth(handler)  # type: ignore[arg-type]
+            check_route_auth(handler)
 
             # Exactly ONE response should be sent
             assert handler._send_count == 1, (
@@ -139,7 +139,7 @@ class TestAuthResponseContract:
             "k8s_diag_agent.ui.auth_guard.get_session_id_from_request",
             return_value=None,
         ):
-            check_route_auth(handler)  # type: ignore[arg-type]
+            check_route_auth(handler)
 
             # Response must have 'error' field
             assert handler._sent_body is not None
@@ -161,7 +161,7 @@ class TestAuthResponseContract:
             "k8s_diag_agent.ui.auth_guard.get_session_id_from_request",
             return_value=None,
         ):
-            check_route_auth(handler)  # type: ignore[arg-type]
+            check_route_auth(handler)
 
             # Must not contain HTML
             assert_no_html_in_response(handler)
@@ -183,7 +183,7 @@ class TestAuthResponseContract:
             "k8s_diag_agent.ui.auth_guard.get_principal_for_session",
             return_value=None,  # Session expired/invalid
         ):
-            check_route_auth(handler)  # type: ignore[arg-type]
+            check_route_auth(handler)
 
             # Error message should be descriptive
             assert handler._sent_body is not None

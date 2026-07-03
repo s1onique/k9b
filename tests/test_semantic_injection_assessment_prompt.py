@@ -83,7 +83,7 @@ class TestSemanticInjectionAssessmentPrompt:
         return MockClusterSnapshotForAssessment(
             metadata=meta,
             collection_status=MockCollectionStatus(),
-        )  # type: ignore[return-value]
+        )
 
     @staticmethod
     def _create_mock_comparison(

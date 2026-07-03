@@ -7,6 +7,7 @@ to separate trusted instructions from untrusted cluster/artifact data.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 from unittest.mock import MagicMock
 
 from k8s_diag_agent.llm.prompt_boundaries import (
@@ -48,7 +49,7 @@ class TestDrilldownPromptBoundaries:
         artifact.missing_evidence = []
         artifact.collection_timestamps = {}
 
-        return build_drilldown_prompt(artifact)
+        return cast(str, build_drilldown_prompt(artifact))
 
     def test_drilldown_prompt_boundary_structure(self) -> None:
         """Verify drilldown prompt follows boundary convention exactly."""

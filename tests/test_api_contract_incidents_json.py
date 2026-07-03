@@ -32,7 +32,7 @@ class TestIncidentListJsonContract:
         ):
             handler = MockApiHandler()
             handler.path = "/api/incidents"
-            result = handle_incidents_list_route(handler, "")  # type: ignore[arg-type]
+            result = handle_incidents_list_route(handler, "")
 
             assert result is True
             assert_json_response(handler, expected_code=200, expected_body_keys=["incidents"])
@@ -55,7 +55,7 @@ class TestIncidentListJsonContract:
         ):
             handler = MockApiHandler()
             handler.path = "/api/incidents"
-            handle_incidents_list_route(handler, "")  # type: ignore[arg-type]
+            handle_incidents_list_route(handler, "")
 
             json_str = json.dumps(handler._sent_body)
             parsed = json.loads(json_str)
@@ -80,7 +80,7 @@ class TestIncidentDetailJsonContract:
         ):
             handler = MockApiHandler()
             handler.path = "/api/incidents/test-incident-123"
-            result = handle_incident_detail_route(handler, handler.path)  # type: ignore[arg-type]
+            result = handle_incident_detail_route(handler, handler.path)
 
             assert result is True
             assert_json_response(handler, expected_code=200)
@@ -97,7 +97,7 @@ class TestIncidentDetailJsonContract:
         ):
             handler = MockApiHandler()
             handler.path = "/api/incidents/nonexistent-incident-123"
-            result = handle_incident_detail_route(handler, handler.path)  # type: ignore[arg-type]
+            result = handle_incident_detail_route(handler, handler.path)
 
             assert result is True
             assert handler._sent_code == 404, f"Expected 404, got {handler._sent_code}"
@@ -122,7 +122,7 @@ class TestIncidentDetailJsonContract:
         ):
             handler = MockApiHandler()
             handler.path = "/api/incidents/test-incident-123"
-            result = handle_incident_detail_route(handler, handler.path)  # type: ignore[arg-type]
+            result = handle_incident_detail_route(handler, handler.path)
 
             assert result is True
             assert handler._sent_code == 500
@@ -143,7 +143,7 @@ class TestIncidentDetailJsonContract:
         ):
             handler = MockApiHandler()
             handler.path = "/api/incidents/test-incident"
-            handle_incident_detail_route(handler, handler.path)  # type: ignore[arg-type]
+            handle_incident_detail_route(handler, handler.path)
 
             assert_no_html_in_response(handler)
 
@@ -157,7 +157,7 @@ class TestIncidentChildRouteFallback:
 
         handler = MockApiHandler()
         handler.path = "/api/incidents/test-incident/nonexistent-child"
-        result = handle_incident_routes(handler, handler.path, "")  # type: ignore[arg-type]
+        result = handle_incident_routes(handler, handler.path, "")
 
         # Route should not match any known pattern
         # If it returns False, the caller should handle as 404
@@ -198,7 +198,7 @@ class TestAutomaticDiagnosisLoopJsonContract:
             handler.command = "POST"
             handler.path = "/api/incidents/nonexistent-incident/automatic-diagnosis-loop/one-pass"
             handler.body = b"{}"  # Empty JSON body for config parsing
-            handle_incident_automatic_diagnosis_loop_one_pass_api(handler, "nonexistent-incident")  # type: ignore[arg-type]
+            handle_incident_automatic_diagnosis_loop_one_pass_api(handler, "nonexistent-incident")
 
             # Must return JSON, not HTML
             assert handler._sent_code in (200, 400, 404, 500)
@@ -219,7 +219,7 @@ class TestAutomaticDiagnosisLoopJsonContract:
             handler.command = "POST"
             handler.path = "/api/incidents/test-incident/automatic-diagnosis-loop/one-pass"
             handler.body = b"{}"  # Empty JSON body for config parsing
-            handle_incident_automatic_diagnosis_loop_one_pass_api(handler, "test-incident")  # type: ignore[arg-type]
+            handle_incident_automatic_diagnosis_loop_one_pass_api(handler, "test-incident")
 
             # Must return JSON
             assert handler._sent_code == 500
@@ -235,7 +235,7 @@ class TestAutomaticDiagnosisLoopJsonContract:
         handler = MockApiHandler()
         handler.command = "GET"  # Wrong method
         handler.path = "/api/incidents/test-incident/automatic-diagnosis-loop/one-pass"
-        handle_incident_automatic_diagnosis_loop_one_pass_api(handler, "test-incident")  # type: ignore[arg-type]
+        handle_incident_automatic_diagnosis_loop_one_pass_api(handler, "test-incident")
 
         # Must return JSON 405
         assert handler._sent_code == 405

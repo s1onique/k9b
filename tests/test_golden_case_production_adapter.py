@@ -133,7 +133,7 @@ class TestDeterministicDiagnosisProvider(TestCase):
         )
         diagnosis = diag_provider.diagnose()
         forbidden = diagnosis.get("forbidden_actions_observed", [])
-        self.assertEqual(len(forbidden), 0, f"Forbidden conclusions: {forbidden}")  # type: ignore[arg-type]
+        self.assertEqual(len(forbidden), 0, f"Forbidden conclusions: {forbidden}")
 
     def test_provider_no_mutation_proposals(self) -> None:
         """Provider should not propose mutations."""
@@ -144,7 +144,7 @@ class TestDeterministicDiagnosisProvider(TestCase):
         )
         diagnosis = diag_provider.diagnose()
         mutation = diagnosis.get("mutation_proposals_observed", [])
-        self.assertEqual(len(mutation), 0, f"Mutation proposals: {mutation}")  # type: ignore[arg-type]
+        self.assertEqual(len(mutation), 0, f"Mutation proposals: {mutation}")
 
     def test_provider_has_evidence_refs(self) -> None:
         """Provider should include evidence references."""
@@ -156,7 +156,7 @@ class TestDeterministicDiagnosisProvider(TestCase):
         diagnosis = diag_provider.diagnose()
         self.assertIn("evidence_refs", diagnosis)
         self.assertIsInstance(diagnosis["evidence_refs"], list)
-        self.assertGreater(len(diagnosis["evidence_refs"] or []), 0)  # type: ignore[arg-type]
+        self.assertGreater(len(diagnosis["evidence_refs"] or []), 0)
 
     def test_provider_includes_cnpg_state(self) -> None:
         """Provider should include CNPG state evidence ref."""
@@ -166,7 +166,7 @@ class TestDeterministicDiagnosisProvider(TestCase):
             self.manifest, self.expected, self.provider
         )
         diagnosis = diag_provider.diagnose()
-        self.assertIn("incident/cnpg-clusters.json", diagnosis["evidence_refs"] or [])  # type: ignore[arg-type]
+        self.assertIn("incident/cnpg-clusters.json", diagnosis["evidence_refs"] or [])
 
     def test_provider_includes_k9b_incident(self) -> None:
         """Provider should include k9b incident detail evidence ref."""
@@ -176,7 +176,7 @@ class TestDeterministicDiagnosisProvider(TestCase):
             self.manifest, self.expected, self.provider
         )
         diagnosis = diag_provider.diagnose()
-        self.assertIn("incident/k9b-incident-detail.json", diagnosis["evidence_refs"] or [])  # type: ignore[arg-type]
+        self.assertIn("incident/k9b-incident-detail.json", diagnosis["evidence_refs"] or [])
 
     def test_provider_next_checks_are_read_only(self) -> None:
         """Provider should only propose read-only checks."""

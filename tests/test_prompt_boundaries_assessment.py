@@ -6,6 +6,7 @@ to separate trusted instructions from untrusted cluster/artifact data.
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import MagicMock
 
 from k8s_diag_agent.llm.prompt_boundaries import (
@@ -49,7 +50,7 @@ class TestAssessmentPromptBoundaries:
 
         comparison.differences = {"metadata": {}, "helm_releases": {}, "crds": {}}
 
-        return build_assessment_prompt(primary, secondary, comparison)
+        return cast(str, build_assessment_prompt(primary, secondary, comparison))
 
     def test_assessment_prompt_boundary_structure(self) -> None:
         """Verify assessment prompt follows boundary convention exactly."""

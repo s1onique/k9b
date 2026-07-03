@@ -578,7 +578,7 @@ class TestSemanticInjectionFindingDataclass:
         # Note: frozen dataclasses can still be modified via object.__setattr__
         # but they prevent normal attribute assignment
         with pytest.raises(AttributeError):
-            finding.category = "modified"  # type: ignore[misc]
+            finding.category = "modified"
 
     def test_finding_equality(self) -> None:
         """Identical findings are equal."""

@@ -34,7 +34,7 @@ class TestApiFallbackGuard:
             "_load_context",
             return_value={"run_id": "test-run", "clusters": []},
         ):
-            handle_api(handler, handler.path, "")  # type: ignore[arg-type]
+            handle_api(handler, handler.path, "")
 
             # Must return 404
             assert handler._sent_code == 404, f"Expected 404, got {handler._sent_code}"
@@ -58,7 +58,7 @@ class TestApiFallbackGuard:
         handler.runs_dir = Path("/tmp/test/runs")
 
         with patch.object(handler, "_load_context", return_value=None):
-            handle_api(handler, handler.path, "")  # type: ignore[arg-type]
+            handle_api(handler, handler.path, "")
 
             # Should return 404 or handle gracefully
             if handler._sent_code == 404:
@@ -99,7 +99,7 @@ class TestRouteOrdering:
                 "error_class": "provider_available",
             },
         ):
-            handle_get_request(handler)  # type: ignore[arg-type]
+            handle_get_request(handler)
 
             # Should have sent a response (not fallen through to SPA)
             assert handler._sent_code is not None
@@ -117,7 +117,7 @@ class TestRouteOrdering:
             "k8s_diag_agent.ui.auth_guard.get_auth_config",
             return_value=MagicMock(enabled=False),
         ):
-            handle_get_request(handler)  # type: ignore[arg-type]
+            handle_get_request(handler)
 
             # Should reach SPA fallback
             # (May return 200 with HTML or 404 depending on static dir contents)
@@ -187,7 +187,7 @@ class TestNoHtmlLeakage:
         ):
             handler = MockApiHandler()
             handler.path = "/api/incidents/missing"
-            handle_incident_detail_route(handler, handler.path)  # type: ignore[arg-type]
+            handle_incident_detail_route(handler, handler.path)
 
             assert handler._sent_body is not None
             json_str = json.dumps(handler._sent_body)
