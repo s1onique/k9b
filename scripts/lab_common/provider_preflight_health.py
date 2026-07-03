@@ -302,68 +302,58 @@ def _evaluate_health_response(
 ) -> ProviderPreflightResult:
     """Evaluate provider health response.
 
-    Provider health output must be valid JSON. The curl wrapper may emit a known
-    diagnostic envelope around provider health JSON:
+    Provider health output must be EXACTLY one clean JSON document.
+    Wire-format validation MUST happen before semantic evaluation.
+
+    The curl wrapper may emit a known diagnostic envelope around provider health JSON:
       - STDOUT_BLOCK prefix (optional)
       - Valid provider health JSON
       - STDERR_BLOCK marker (optional)
       - CURL_EXIT=<code>
       - HTTP_CODE=<code>
 
-    Known envelope patterns are NON-FATAL and are extracted before semantic evaluation.
-    Unknown suffixes or prefix contamination result in contamination failure.
+    CRITICAL: Known curl envelope metadata is NOT accepted as envelope recovery.
+    Any trailing curl metadata (CURL_EXIT, HTTP_CODE, STDERR_BLOCK) in the body
+    constitutes wire-format contamination. Semantic evaluation only proceeds
+    when the body contains exactly one clean JSON document.
 
-    Step 1: Try known envelope extraction (accepts known curl metadata patterns).
-    Step 2: If envelope extraction fails, fall back to strict wire-format validation.
-    Step 3: Semantic provider-health evaluation only for valid JSON.
+    Step 1: Strict wire-format validation on raw body.
+    Step 2: Semantic provider-health evaluation only for valid clean JSON.
     """
     raw_body = curl_result.body
 
-    # Step 1: Try known envelope extraction FIRST
-    # This handles the common case where curl wrapper emits diagnostic metadata
-    # around the JSON response (CURL_EXIT, HTTP_CODE, STDERR_BLOCK, etc.)
-    payload = _extract_provider_health_payload(raw_body)
+    # Step 1: Strict wire-format validation MUST happen BEFORE any semantic evaluation.
+    # This rejects any body with trailing curl metadata (CURL_EXIT, HTTP_CODE, etc.)
+    # as contaminated, regardless of whether the JSON is valid.
+    failure_class, json_payload, detail = _classify_raw_body_for_wire_format(raw_body)
 
-    if payload.envelope_detected:
-        # Known curl envelope detected - use extracted JSON for semantic evaluation
-        try:
-            health_details = json.loads(payload.json_body)
-        except json.JSONDecodeError:
-            result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
-            result.message = f"Invalid JSON in envelope-extracted body: {payload.json_body[:200]!r}"
-            result.duration_seconds = time.time() - start
-            _write_result(result, artifact_dir)
-            return result
+    if failure_class is not None:
+        # Wire-format validation failed - return immediately, no semantic evaluation.
+        # Semantic failures like provider_disabled_required must never override
+        # contaminated transport/wire output.
+        result.failure_class = failure_class
+        result.message = detail
+        result.duration_seconds = time.time() - start
+        _write_result(result, artifact_dir)
+        return result
+
+    # Wire-format passed - parse JSON for semantic evaluation
+    assert json_payload is not None, "payload should not be None when failure_class is None"
+
+    # Handle the case where payload might be a string (json_body) or dict
+    if isinstance(json_payload, str):
+        health_details = json.loads(json_payload)
+    elif isinstance(json_payload, dict):
+        health_details = json_payload
     else:
-        # No known envelope detected - fall back to strict wire-format validation
-        # This ensures that bodies with unknown prefixes/suffixes are classified as contaminated
-        failure_class, json_payload, detail = _classify_raw_body_for_wire_format(raw_body)
+        # This shouldn't happen with proper classification
+        result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
+        result.message = f"Unexpected payload type: {type(json_payload).__name__}"
+        result.duration_seconds = time.time() - start
+        _write_result(result, artifact_dir)
+        return result
 
-        if failure_class is not None:
-            # Wire-format validation failed - return immediately, no semantic evaluation
-            result.failure_class = failure_class
-            result.message = detail
-            result.duration_seconds = time.time() - start
-            _write_result(result, artifact_dir)
-            return result
-
-        # Wire-format valid - parse JSON for semantic evaluation
-        assert json_payload is not None, "payload should not be None when failure_class is None"
-
-        # Handle the case where payload might be a string (json_body) or dict
-        if isinstance(json_payload, str):
-            health_details = json.loads(json_payload)
-        elif isinstance(json_payload, dict):
-            health_details = json_payload
-        else:
-            # This shouldn't happen with proper classification
-            result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
-            result.message = f"Unexpected payload type: {type(json_payload).__name__}"
-            result.duration_seconds = time.time() - start
-            _write_result(result, artifact_dir)
-            return result
-
-    # Step 3: Semantic provider-health evaluation
+    # Step 2: Semantic provider-health evaluation
     result.parsed_status = parse_provider_status_from_health_details(health_details)
 
     result.provider_enabled = result.parsed_status.provider_enabled
