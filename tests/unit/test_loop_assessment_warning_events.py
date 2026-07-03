@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from k8s_diag_agent.collect.cluster_snapshot import WarningEventSummary
 from k8s_diag_agent.health.loop_assessment_warning_events import match_warning_event_patterns
 from k8s_diag_agent.models import Finding, Hypothesis, Layer, NextCheck, Signal
@@ -23,7 +25,7 @@ def _make_warning_event(
     )
 
 
-def _signal_id_generator() -> callable:
+def _signal_id_generator() -> Callable[[], str]:
     """Simple signal ID generator for testing."""
     _counter = [0]
     def generator() -> str:
@@ -323,7 +325,7 @@ class TestMatchWarningEventPatterns:
         assert signals1[0].id == signals2[0].id
 
     def test_no_signals_for_unmatched_events(self) -> None:
-        """Events that don't match any pattern should not produce signals."""
+        """Events that do not match any pattern should not produce signals."""
         events = [
             _make_warning_event(
                 namespace="default",

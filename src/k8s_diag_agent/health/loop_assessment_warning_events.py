@@ -155,6 +155,12 @@ def match_warning_event_patterns(
     def _match_scheduling_events() -> None:
         def _scheduling_cause(event: WarningEventSummary) -> str | None:
             msg = (event.message or "").lower()
+            # Check "didn't match" first since messages may contain both
+            # "affinity" and "didn't match Pod's node affinity/selector".
+            if "didn't match" in msg and ("node affinity/selector" in msg or "node selector" in msg):
+                return "node selector mismatch"
+            if "nodes are available" in msg and ("node selector" in msg or "nodeselector" in msg):
+                return "node selector mismatch"
             if "untolerated taint" in msg:
                 return "node taints"
             if "affinity" in msg:
