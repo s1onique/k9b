@@ -25,6 +25,9 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_artifacts import (
     get_p3c_evidence_path,
     write_diagnosis_evidence,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contract_types import (
+    normalize_p4c_outcome_for_dict,
+)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     compute_p4c_outcome,
 )
@@ -477,7 +480,9 @@ def _build_result(
         "failure_reason": evidence.get("failure_reason"),
     }
     # Include normalized P4c outcome if computed
-    p4c_outcome = evidence.get("p4c_outcome")
+    # Normalize to handle shape mismatches (tuple vs list, nested lists, etc.)
+    p4c_outcome_raw = evidence.get("p4c_outcome")
+    p4c_outcome = normalize_p4c_outcome_for_dict(p4c_outcome_raw)
     if p4c_outcome:
         artifacts["p4c_outcome"] = p4c_outcome
         # Normalize pass_run_ids from outcome if empty

@@ -16,6 +16,9 @@ from typing import Any
 
 from .k9b_lab_common_helpers import log, write_json_artifact
 from .k9b_otel_demo_lab_contract import LabPhaseResult, LabResult
+from .k9b_otel_demo_lab_k8s_diagnosis_backend_contract_types import (
+    normalize_p4c_outcome_for_dict,
+)
 
 
 def _phase_to_dict(phase: LabPhaseResult) -> dict[str, Any]:
@@ -72,7 +75,9 @@ def _build_k8s_native_verdict(
     }
     if p4c_phase is not None:
         # Use the normalized p4c_outcome from the phase artifacts
-        p4c_outcome = p4c_phase.artifacts.get("p4c_outcome")
+        # Normalize to handle shape mismatches (tuple vs list, nested lists, etc.)
+        p4c_outcome_raw = p4c_phase.artifacts.get("p4c_outcome")
+        p4c_outcome = normalize_p4c_outcome_for_dict(p4c_outcome_raw)
         if p4c_outcome:
             # Use the single authoritative source for P4c success/failure
             p4c_data["success"] = p4c_outcome.get("success", p4c_success)

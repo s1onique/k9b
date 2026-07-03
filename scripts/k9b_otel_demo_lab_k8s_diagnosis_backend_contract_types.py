@@ -2,11 +2,101 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from typing import Literal
+
+
+# =============================================================================
+# P4c Outcome Normalization Helpers
+# =============================================================================
+
+
+def normalize_p4c_outcome_for_dict(outcome: object) -> dict[str, Any]:
+    """Normalize a P4c outcome to a serializable dict with correct shapes.
+
+    This function handles shape mismatches that can occur when the outcome
+    is passed across boundary layers (e.g., from compute_p4c_outcome to
+    result artifacts to lab-result.json).
+
+    Common shape issues:
+    - review_artifact_paths may arrive as list[str], tuple[str, ...], or nested
+    - pass_run_ids may arrive as list or tuple
+    - p4c_outcome itself may be wrapped in unexpected containers
+
+    Args:
+        outcome: Raw outcome object (typically dict, P4cDiagnosisOutcome, or str)
+
+    Returns:
+        Normalized dict with correct shapes:
+        - review_artifact_paths: list[str]
+        - pass_run_ids: list[str]
+        - failure_reasons: list[str]
+    """
+    if outcome is None:
+        return {}
+
+    if isinstance(outcome, P4cDiagnosisOutcome):
+        return {
+            "success": outcome.success,
+            "mode": outcome.mode,
+            "incident_id": outcome.incident_id,
+            "pass_count": outcome.pass_count,
+            "pass_run_ids": list(outcome.pass_run_ids) if outcome.pass_run_ids else [],
+            "review_artifact_paths": list(outcome.review_artifact_paths) if outcome.review_artifact_paths else [],
+            "terminal_decision": outcome.terminal_decision,
+            "read_only_constraints_satisfied": outcome.read_only_constraints_satisfied,
+            "root_cause_evidence_satisfied": outcome.root_cause_evidence_satisfied,
+            "root_cause_evidence_reason": outcome.root_cause_evidence_reason,
+            "failure_reasons": list(outcome.failure_reasons) if outcome.failure_reasons else [],
+        }
+
+    if isinstance(outcome, dict):
+        result: dict[str, Any] = {}
+        for key, value in outcome.items():
+            if key in ("review_artifact_paths", "pass_run_ids", "failure_reasons"):
+                if isinstance(value, (list, tuple)):
+                    normalized: list[str] = []
+                    for item in value:
+                        if isinstance(item, str):
+                            normalized.append(item)
+                        elif isinstance(item, (list, tuple)):
+                            for subitem in item:
+                                if isinstance(subitem, str):
+                                    normalized.append(subitem)
+                    result[key] = normalized
+                else:
+                    result[key] = []
+            else:
+                result[key] = value
+        return result
+
+    if isinstance(outcome, str):
+        return {}
+
+    return {}
+
+
+def normalize_review_artifact_ref(value: object) -> dict[str, Any]:
+    """Normalize a review artifact reference to a dict with 'path' key.
+
+    This handles the case where review artifact paths arrive as strings
+    instead of dict objects, which can cause '.keys()' errors when
+    downstream code expects a mapping.
+    """
+    if isinstance(value, Mapping):
+        return dict(value)
+    if isinstance(value, str):
+        return {"path": value}
+    if value is None:
+        return {}
+    raise TypeError(
+        f"unsupported review artifact ref type: {type(value).__name__}"
+    )
+
 
 # =============================================================================
 # P4c Outcome Types
@@ -294,4 +384,6 @@ __all__ = [
     "TargetedDiagnosisInvocationResult",
     "TargetedDiagnosisPollResult",
     "BackendIncidentFetchResult",
+    "normalize_p4c_outcome_for_dict",
+    "normalize_review_artifact_ref",
 ]
