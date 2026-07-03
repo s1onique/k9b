@@ -189,6 +189,69 @@ def _suffix_starts_with_json_document(suffix: str) -> bool:
     return stripped.startswith("{") or stripped.startswith("[")
 
 
+def _looks_like_successful_curl_envelope(suffix: str) -> bool:
+    """Check if suffix is a known successful curl envelope pattern.
+
+    Known successful curl metadata patterns:
+    - CURL_EXIT=0\\nHTTP_CODE=200
+    - STDERR_BLOCK\\nCURL_EXIT=0\\nHTTP_CODE=200
+    - STDERR_BLOCK\\n<debug noise>\\nCURL_EXIT=0\\nHTTP_CODE=200
+
+    Args:
+        suffix: The trailing bytes after valid JSON prefix
+
+    Returns:
+        True if suffix matches known successful curl envelope pattern
+    """
+    if not suffix:
+        return False
+
+    stripped = suffix.strip()
+    if not stripped:
+        return False
+
+    # Check for successful curl exit code
+    if not re.search(r"^\s*CURL_EXIT=0\s*$", stripped, re.MULTILINE):
+        return False
+
+    # Check for successful HTTP code
+    if not re.search(r"^\s*HTTP_CODE=200\s*$", stripped, re.MULTILINE):
+        return False
+
+    # Ensure there are no non-whitespace lines before CURL_EXIT=0
+    # that aren't part of STDERR_BLOCK or other known prefixes
+    lines = stripped.split("\n")
+    in_stderr_block = False
+    for line in lines:
+        line_stripped = line.strip()
+        # Lines before CURL_EXIT=0
+        if line_stripped.startswith("CURL_EXIT="):
+            break
+        # STDERR_BLOCK marker - everything after is allowed until CURL_EXIT=0
+        if line_stripped == "STDERR_BLOCK":
+            in_stderr_block = True
+            continue
+        # After STDERR_BLOCK, any content is allowed until CURL_EXIT
+        if in_stderr_block:
+            continue
+        # Any other non-empty line before STDERR_BLOCK or CURL_EXIT
+        # that's not just whitespace means this is NOT a known envelope pattern
+        if line_stripped:
+            # Allow lines that are clearly part of the envelope
+            allowed_prefixes = (
+                "STDERR_BLOCK",
+                "CURL_EXIT=",
+                "HTTP_CODE=",
+                "---CURL_",
+                "RESOLVING_HOST=",
+                "NO_RESPONSE_BODY",
+            )
+            if not any(line_stripped.startswith(p) for p in allowed_prefixes):
+                return False
+
+    return True
+
+
 def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None, str]:
     """Strict wire-format validation for provider health response body.
 
@@ -198,10 +261,11 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
     Classification order:
     1. Empty/whitespace-only body -> provider_health_empty_body
     2. JSON + non-whitespace suffix that is valid JSON -> provider_health_invalid_json
-    3. JSON + non-whitespace suffix (including curl metadata) -> provider_health_output_contaminated
-    4. Non-whitespace prefix + JSON -> provider_health_output_contaminated
-    5. Malformed JSON with no embedded JSON -> provider_health_invalid_json
-    6. Exactly one clean JSON document -> (None, payload, "") for semantic evaluation
+    3. JSON + known successful curl envelope suffix -> clean (None, payload, "")
+    4. JSON + non-whitespace suffix (arbitrary contamination) -> provider_health_output_contaminated
+    5. Non-whitespace prefix + JSON -> provider_health_output_contaminated
+    6. Malformed JSON with no embedded JSON -> provider_health_invalid_json
+    7. Exactly one clean JSON document -> (None, payload, "") for semantic evaluation
 
     Args:
         raw: The raw body string from curl response
@@ -261,7 +325,11 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
                 f"Body prefix (first 200 chars): {raw[:200]!r}",
             )
         except json.JSONDecodeError:
-            # Suffix is not valid JSON - this is contamination (log output, curl metadata, etc.)
+            # Suffix is not valid JSON - check if it's a known successful curl envelope
+            if _looks_like_successful_curl_envelope(suffix):
+                # Known successful curl envelope: valid provider JSON + curl metadata = clean
+                return None, payload, ""
+            # Unknown suffix - this is contamination (log output, arbitrary metadata, etc.)
             return (
                 FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
                 None,

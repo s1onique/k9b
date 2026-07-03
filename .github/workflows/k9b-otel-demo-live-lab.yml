@@ -193,34 +193,21 @@ jobs:
       # Install Python dependencies (deterministic, no remote cache)
       # Uses pre-baked venv if available, otherwise creates fresh from requirements.
       # =======================================================================
-      - name: Install Python dependencies
-        id: live-lab-venv
-        shell: bash
+      - name: Prepare live lab Python venv
+        run: scripts/ci/ensure_live_lab_venv.sh
         env:
           K9B_LIVE_LAB_PYTHON: ${{ steps.toolchain.outputs.python-location }}
           K9B_LIVE_LAB_PREBAKED_VENV: ${{ vars.K9B_LIVE_LAB_PREBAKED_VENV || '' }}
+          K9B_LIVE_LAB_REQUIREMENTS: requirements-live-lab.txt
+
+      - name: Verify live lab Python dependencies
+        id: live-lab-venv
+        shell: bash
         run: |
           set -euo pipefail
-          python_bin="$K9B_LIVE_LAB_PYTHON"
-          venv_path=".venv"
-
-          # Use pre-baked venv if available
-          if [[ -n "${K9B_LIVE_LAB_PREBAKED_VENV:-}" ]] && [[ -x "${K9B_LIVE_LAB_PREBAKED_VENV}/bin/python" ]]; then
-            echo "Using pre-baked venv: ${K9B_LIVE_LAB_PREBAKED_VENV}"
-            rm -rf "${venv_path}"
-            ln -s "${K9B_LIVE_LAB_PREBAKED_VENV}" "${venv_path}"
-            exit 0
-          fi
-
-          # Create fresh venv and install dependencies
-          rm -rf "${venv_path}"
-          "${python_bin}" -m venv "${venv_path}"
-          "${venv_path}/bin/python" -m pip install --upgrade pip
-          "${venv_path}/bin/python" -m pip install \
-            'pytest>=7.0' \
-            'PyYAML>=6.0' \
-            'requests>=2.31.0' \
-            'ijson>=3.2'
+          # Verify venv exists
+          .venv/bin/python --version
+          .venv/bin/python -c "import pytest; import yaml; import requests; import ijson; print('Dependencies OK')"
 
       # =======================================================================
       # Configure kubectl with kubeconfig
