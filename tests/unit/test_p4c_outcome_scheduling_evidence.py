@@ -5,6 +5,8 @@ Tests the control flow for structured vs prose fallback paths.
 
 from __future__ import annotations
 
+import pytest
+
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_p4c_outcome import compute_p4c_outcome
 
 
@@ -50,9 +52,40 @@ class TestP4cSchedulingEvidenceFallback:
         assert outcome.success is True
         assert outcome.root_cause_evidence_satisfied is True
 
+    @pytest.mark.parametrize(
+        "malformed_scheduling_evidence",
+        [None, {}, [], "bad", 42, 3.14, True],
+    )
+    def test_p4c_outcome_tolerates_malformed_scheduling_evidence(
+        self, malformed_scheduling_evidence: object
+    ) -> None:
+        """Regression test: compute_p4c_outcome should not crash on malformed scheduling_evidence.
+
+        This prevents the "'str' object has no attribute 'keys'" error that occurred
+        when forensic dump modules called .keys() on non-dict values.
+        """
+        # Provide valid prose fallback so we can verify the function completes
+        outcome = compute_p4c_outcome(
+            evidence={
+                "incident_id": "test-incident",
+                "pass_count": 2,
+                "scheduling_evidence": malformed_scheduling_evidence,
+                "root_cause_summary": (
+                    "Deployment/shipping FailedScheduling "
+                    "nodeSelector k9b.dev/otel-lab-node=missing no matching node"
+                ),
+                "read_only": True,
+                "read_only_violations": [],
+            },
+            require_root_cause_terms=True,
+        )
+        assert outcome is not None
+        assert outcome.success in (True, False)
+        assert isinstance(outcome.failure_reasons, tuple)
+
     def test_p4c_incomplete_structured_evidence_does_not_fallback_to_prose(self) -> None:
         """Verify incomplete structured evidence fails without falling back to prose.
-        
+
         Even if root_cause_summary has all terms, an incomplete structured
         evidence dict should NOT fall back to prose - it should fail.
         """

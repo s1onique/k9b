@@ -22,6 +22,7 @@ import json
 import os
 import subprocess
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -229,17 +230,22 @@ def dump_p4c_outcome_input(
     dump_dir = _get_forensic_dump_dir(artifact_dir)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
+    # Nil-safe extraction: normalize to Mapping to safely call .get() and .keys()
+    # This prevents crashes when evidence arrives as non-Mapping types
+    # (string, None, list, int, etc.) at evidence boundary crossings.
+    evidence_mapping: Mapping[str, Any] = evidence if isinstance(evidence, Mapping) else {}
+
     provenance: dict[str, Any] = {
         "timestamp": timestamp,
         "incident_id": incident_id,
         "phase": "before_compute_p4c_outcome",
-        "fields_present": list(evidence.keys()),
-        "scheduling_evidence": evidence.get("scheduling_evidence"),
-        "p4c_verdict": evidence.get("p4c_verdict"),
-        "root_cause_summary": evidence.get("root_cause_summary"),
-        "pass_count": evidence.get("pass_count"),
-        "pass_run_ids": evidence.get("pass_run_ids"),
-        "evidence_size": len(json.dumps(evidence, default=str)),
+        "fields_present": list(evidence_mapping.keys()),
+        "scheduling_evidence": evidence_mapping.get("scheduling_evidence"),
+        "p4c_verdict": evidence_mapping.get("p4c_verdict"),
+        "root_cause_summary": evidence_mapping.get("root_cause_summary"),
+        "pass_count": evidence_mapping.get("pass_count"),
+        "pass_run_ids": evidence_mapping.get("pass_run_ids"),
+        "evidence_size": len(json.dumps(dict(evidence_mapping), default=str)),
     }
 
     # Write full evidence to separate file
