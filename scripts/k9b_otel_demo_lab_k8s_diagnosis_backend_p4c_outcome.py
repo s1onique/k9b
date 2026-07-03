@@ -385,25 +385,21 @@ def compute_p4c_outcome(
                 "did not match",
             )
             
-            # OTel lab cause: accept any form of the label reference
-            otel_lab_terms = (
-                "k9b.dev/otel-lab-node",
-                "otel-lab-node",
-                "missing label",
-                "label missing",
-            )
+            # P4c FIX: Require exact selector literal for lab cause.
+            # The legacy prose fallback must have the complete causal marker,
+            # not just related terms that could match different evidence.
+            has_selector_literal = "k9b.dev/otel-lab-node=missing" in combined_text
             
             has_scheduling = any(term in combined_text for term in scheduling_terms)
-            has_lab_cause = any(term in combined_text for term in otel_lab_terms)
             
-            # Require shipping + nodeselector + (lab cause OR scheduling evidence)
+            # Require shipping + nodeselector + exact selector literal
             combined_summary = root_cause_summary.lower()
             required_prose_terms = ["shipping", "nodeselector"]
             missing_terms = [t for t in required_prose_terms if t not in combined_summary]
             
-            # For lab cause, accept any form in combined_text
-            if not has_lab_cause:
-                missing_terms.append("k9b.dev/otel-lab-node (or variant)")
+            # Require the exact selector literal, not just partial matches
+            if not has_selector_literal:
+                missing_terms.append("k9b.dev/otel-lab-node=missing")
 
             if missing_terms:
                 root_cause_evidence_reason = f"missing_root_cause_term: {', '.join(missing_terms)}"

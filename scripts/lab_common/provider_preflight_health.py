@@ -251,15 +251,9 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
                 f"Body prefix (first 200 chars): {raw[:200]!r}",
             )
         except json.JSONDecodeError:
-            # P0b FIX: Check for known curl envelope patterns before marking as contamination.
-            # The curl wrapper emits known metadata (STDERR_BLOCK, CURL_EXIT, HTTP_CODE)
-            # after valid JSON. These are NOT contamination - they provide diagnostic context.
-            envelope = parse_known_curl_envelope_suffix(suffix_stripped)
-            if envelope is not None:
-                # Known curl envelope detected - this is valid wire format
-                # The semantic content is valid; envelope provides diagnostic metadata
-                return None, payload, ""
-            # Not a known envelope pattern - this is true contamination
+            # CRITICAL FIX: Any trailing curl metadata (CURL_EXIT, HTTP_CODE, STDERR_BLOCK)
+            # is wire-format contamination. The contract requires EXACTLY one clean JSON
+            # document. Semantic evaluation never proceeds when wire format is contaminated.
             return (
                 FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
                 None,
