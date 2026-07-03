@@ -194,19 +194,29 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     detection_evidence_local = evidence.get("detection_evidence", {}) or {}
     try:
         from src.k8s_diag_agent.collect.incident_scheduling_root_cause import (
+            check_scheduling_root_cause_complete,
             extract_scheduling_root_cause,
         )
+        
+        # P4c DIAGNOSTIC: Log the raw signals structure to understand live artifact shape
+        matching_signals_raw = detection_evidence_local.get("matching_signals", [])
+        _log(f"  DIAGNOSTIC: matching_signals count={len(matching_signals_raw)}")
+        if matching_signals_raw:
+            sample = matching_signals_raw[0] if matching_signals_raw else None
+            _log(f"  DIAGNOSTIC: first signal type={type(sample).__name__}, keys={list(sample.keys()) if isinstance(sample, dict) else 'N/A'}")
+            if isinstance(sample, dict):
+                _log(f"  DIAGNOSTIC: first signal reason={sample.get('reason', 'MISSING')}, has_message={'message' in sample}")
         
         # Create a minimal incident-like dict for extract_scheduling_root_cause
         incident_for_extraction = {
             "namespace": evidence.get("target_namespace", detection_evidence_local.get("target_namespace", "otel-demo")),
             "object_kind": "deployment",
             "object_name": "shipping",
-            "signals": detection_evidence_local.get("matching_signals", []),
+            "signals": matching_signals_raw,
         }
         
         # Also get signals/evidence from detection
-        events_from_detection = detection_evidence_local.get("matching_signals", [])
+        events_from_detection = matching_signals_raw
         
         # Extract scheduling evidence
         scheduling_evidence_obj = extract_scheduling_root_cause(
@@ -216,7 +226,14 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         
         if scheduling_evidence_obj.root_cause_summary:
             evidence["scheduling_evidence"] = scheduling_evidence_obj.to_dict()
+            # P4c DIAGNOSTIC: Log the complete extracted evidence
             _log(f"  Extracted scheduling_evidence: {scheduling_evidence_obj.root_cause_summary[:100]}...")
+            _log(f"  DIAGNOSTIC: scheduling_evidence keys={list(scheduling_evidence_obj.to_dict().keys())}")
+            _log(f"  DIAGNOSTIC: scheduling_evidence completeness={check_scheduling_root_cause_complete(scheduling_evidence_obj)}")
+            _log(f"  DIAGNOSTIC: scheduling_evidence selector_key={scheduling_evidence_obj.selector_key}")
+            _log(f"  DIAGNOSTIC: scheduling_evidence selector_value={scheduling_evidence_obj.selector_value}")
+            _log(f"  DIAGNOSTIC: scheduling_evidence failed_scheduling={scheduling_evidence_obj.failed_scheduling}")
+            _log(f"  DIAGNOSTIC: scheduling_evidence unschedulable={scheduling_evidence_obj.unschedulable}")
         else:
             _log("  No scheduling_evidence extracted from detection_evidence")
     except Exception as e:

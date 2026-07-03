@@ -121,14 +121,14 @@ def log_diagnosis_result(
         log(f"  Failure reason: {evidence.get('failure_reason', 'none')}")
 
 
-def log_step(step_num: int, description: str) -> None:
+def log_step(step: str | int, description: str) -> None:
     """Log a step header.
 
     Args:
-        step_num: Step number
+        step: Step number or label (e.g., 1, "6b")
         description: Step description
     """
-    log(f"Step {step_num}: {description}...")
+    log(f"Step {step}: {description}...")
 
 
 def log_step_result(description: str) -> None:

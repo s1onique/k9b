@@ -308,3 +308,144 @@ class TestP4cSchedulingEvidenceIncompleteStructured:
         # Should fail because workload is not 'shipping'
         assert outcome.success is False
         assert outcome.root_cause_evidence_satisfied is False
+
+
+class TestP4cMultipassStructuredEvidenceWithoutLLMProse:
+    """Regression tests for P4c multipass accepting structured evidence without LLM prose markers.
+
+    These tests verify that compute_p4c_outcome() accepts complete structured scheduling_evidence
+    even when the prose root_cause_summary does not contain marker terms.
+
+    This addresses the OTel Demo Lab P4c failure where:
+    - Multi-pass accounting satisfied
+    - Read-only constraints satisfied
+    - Structured scheduling_evidence present in case file
+    - But LLM prose did NOT mention scheduling markers
+
+    The fix ensures structured evidence is validated as first-class root-cause evidence,
+    not only via LLM prose text matching.
+    """
+
+    def test_multipass_accepts_structured_scheduling_evidence_without_llm_prose_markers(self) -> None:
+        """Verify multipass mode accepts complete structured evidence even when prose has no markers.
+
+        This is the primary regression test for the OTel Demo Lab P4c failure.
+        The scenario:
+        - Multi-pass diagnosis completed (pass_count >= 2)
+        - Read-only constraints satisfied
+        - Structured scheduling_evidence dict is complete
+        - But root_cause_summary prose does NOT mention scheduling markers
+
+        The P4c outcome should PASS because structured evidence proves the root cause.
+        """
+        # Complete structured scheduling evidence - all required fields present
+        complete_scheduling_evidence = {
+            "namespace": "otel-demo",
+            "workload_name": "shipping",
+            "selector_key": "k9b.dev/otel-lab-node",
+            "selector_value": "missing",
+            "selector_literal": "k9b.dev/otel-lab-node=missing",
+            "failed_scheduling": True,
+            "unschedulable": True,
+            "scheduler_message": "0/8 nodes are available: 8 node(s) didn't match Pod's node affinity/selector",
+            "root_cause_summary": (
+                "Deployment/shipping in namespace otel-demo failed scheduling: "
+                "pods cannot be scheduled - no nodes match nodeSelector k9b.dev/otel-lab-node=missing"
+            ),
+        }
+
+        # Prose has NO scheduling markers - simulates LLM not mentioning them
+        prose_without_markers = "The shipping deployment appears to have availability issues."
+
+        outcome = compute_p4c_outcome(
+            evidence={
+                "incident_id": "shipping-otel-lab",
+                "pass_count": 2,
+                "terminal_no_checks_accepted": True,
+                "real_pass_artifacts_found": True,
+                "scheduling_evidence": complete_scheduling_evidence,
+                "root_cause_summary": prose_without_markers,
+                "read_only": True,
+                "read_only_violations": [],
+                # Simulate the root_cause_matches dict that would have all False
+                "root_cause_matches": {
+                    "mentions_shipping": False,
+                    "mentions_node_selector": False,
+                    "mentions_selector_key": False,
+                    "mentions_selector_value": False,
+                    "mentions_no_matching_node": False,
+                },
+            },
+            require_root_cause_terms=True,
+        )
+
+        assert outcome.success is True, (
+            f"Expected success with complete structured evidence, but got: {outcome.failure_reasons}"
+        )
+        assert outcome.mode == "multipass"
+        assert outcome.root_cause_evidence_satisfied is True
+        assert "missing_scheduling_root_cause_evidence" not in outcome.failure_reasons
+
+    def test_multipass_rejects_incomplete_structured_scheduling_evidence(self) -> None:
+        """Verify multipass mode rejects incomplete structured evidence.
+
+        The negative boundary test: even with pass_count >= 2 and read_only satisfied,
+        an incomplete scheduling_evidence dict should fail P4c validation.
+        """
+        # Incomplete scheduling evidence - missing critical fields
+        incomplete_scheduling_evidence = {
+            "workload_name": "shipping",
+            # Missing: selector_key, selector_value, selector_literal
+            "failed_scheduling": True,
+            "root_cause_summary": "Deployment/shipping failed scheduling",
+        }
+
+        outcome = compute_p4c_outcome(
+            evidence={
+                "incident_id": "shipping-otel-lab",
+                "pass_count": 2,
+                "terminal_no_checks_accepted": True,
+                "real_pass_artifacts_found": True,
+                "scheduling_evidence": incomplete_scheduling_evidence,
+                "root_cause_summary": "The shipping deployment has issues.",
+                "read_only": True,
+                "read_only_violations": [],
+            },
+            require_root_cause_terms=True,
+        )
+
+        assert outcome.success is False
+        assert "missing_scheduling_root_cause_evidence" in outcome.failure_reasons
+        assert outcome.root_cause_evidence_satisfied is False
+
+    def test_multipass_rejects_workload_name_mismatch_with_complete_evidence(self) -> None:
+        """Verify multipass fails even with complete evidence if workload is not shipping.
+
+        The OTel lab specifically requires shipping as the workload name.
+        """
+        complete_non_shipping_evidence = {
+            "namespace": "otel-demo",
+            "workload_name": "payments",  # Not the lab's shipping workload
+            "selector_key": "k9b.dev/otel-lab-node",
+            "selector_value": "missing",
+            "selector_literal": "k9b.dev/otel-lab-node=missing",
+            "failed_scheduling": True,
+            "unschedulable": True,
+            "root_cause_summary": "Deployment/payments in otel-demo failed scheduling",
+        }
+
+        outcome = compute_p4c_outcome(
+            evidence={
+                "incident_id": "payments-otel-lab",
+                "pass_count": 2,
+                "scheduling_evidence": complete_non_shipping_evidence,
+                "root_cause_summary": "Payments deployment unavailable.",
+                "read_only": True,
+                "read_only_violations": [],
+            },
+            require_root_cause_terms=True,
+        )
+
+        assert outcome.success is False
+        assert outcome.root_cause_evidence_satisfied is False
+        assert "missing_scheduling_root_cause_evidence" in outcome.failure_reasons
