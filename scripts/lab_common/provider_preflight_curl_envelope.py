@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import re
 
-
 _CURL_EXIT_RE = re.compile(r"^CURL_EXIT=(\d+)$")
 _HTTP_CODE_RE = re.compile(r"^HTTP_CODE=(\d{3})$")
 

@@ -20,7 +20,6 @@ from typing import Any
 import yaml
 from sanitize_live_lab_artifacts_contract import Finding, FindingKind
 
-
 # Sentinel maps that preserve Kubernetes Secret field semantics while redacting values
 _SECRET_DATA_SENTINEL = {"<redacted>": "contains base64-encoded secret values"}
 _SECRET_STRING_DATA_SENTINEL = {"<redacted>": "contains plaintext secret values"}

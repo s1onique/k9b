@@ -11,11 +11,13 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from .k9b_lab_common_helpers import kubectl_json as _default_kubectl_json, log
+from .k9b_lab_common_helpers import kubectl_json as _default_kubectl_json
+from .k9b_lab_common_helpers import log
 
 # HTTP port name patterns for common services
 _HTTP_PORT_NAMES = {"http", "service", "frontend-proxy", "web", "http-web", "http1"}

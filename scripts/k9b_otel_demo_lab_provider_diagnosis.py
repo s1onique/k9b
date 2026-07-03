@@ -59,7 +59,7 @@ def phase_p2_incident_discovery_provider(
     incident_namespace = config.namespace  # OTEL_DEMO_NAMESPACE from config
     
     log("=== Phase P2: Incident Discovery (k9b API) ===")
-    log(f"Polling k9b backend for incidents:")
+    log("Polling k9b backend for incidents:")
     log(f"  backend_namespace={backend_namespace}")
     log(f"  incident_namespace={incident_namespace}")
     log(f"  expected_fixture={OTEL_INCIDENT_FIXTURE}")

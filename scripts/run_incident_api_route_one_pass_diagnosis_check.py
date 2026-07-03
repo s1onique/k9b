@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from k8s_diag_agent.ui.server import HealthUIRequestHandler
+    pass
 
 # Add src to path for imports
 REPO_ROOT = Path(__file__).parent.parent
@@ -315,11 +315,11 @@ def main() -> int:
         )
 
         handle_incident_one_pass_diagnosis_service_api(
-            handler=mismatch_handler,  # type: ignore[arg-type]
+            handler=mismatch_handler,
             incident_id="correct-incident",
         )
 
-        mismatch_status, mismatch_headers, mismatch_body_bytes = (
+        mismatch_status, _, mismatch_body_bytes = (
             mismatch_handler._response_status,
             mismatch_handler._headers,
             mismatch_handler._response_buffer.getvalue(),
@@ -359,7 +359,6 @@ def main() -> int:
             )
 
             handle_incident_one_pass_diagnosis_service_api(
-                # type: ignore[arg-type] - FakeHTTPHandler mocks HealthUIRequestHandler interface
                 handler=fake_handler,
                 incident_id=manifest["case_id"],
             )

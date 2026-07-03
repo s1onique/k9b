@@ -6,6 +6,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 
 def run_kubectl(kubeconfig: str, namespace: str, args: list[str], timeout: int = 60) -> tuple[int, str, str]:
@@ -59,19 +60,19 @@ def delete_pod(kubeconfig: str, namespace: str, pod_name: str) -> None:
     run_kubectl(kubeconfig, namespace, ["delete", "pod", pod_name, "--wait=false"])
 
 
-def get_pod_status(kubeconfig: str, namespace: str, pod_name: str) -> dict:
+def get_pod_status(kubeconfig: str, namespace: str, pod_name: str) -> dict[str, Any]:
     """Get pod status JSON including container states."""
     rc, stdout, _ = run_kubectl(kubeconfig, namespace, ["get", "pod", pod_name, "-o", "json"])
     if rc == 0:
-        return json.loads(stdout)
+        return json.loads(stdout)  # type: ignore[no-any-return]
     return {}
 
 
-def get_pod_events(kubeconfig: str, namespace: str) -> dict:
+def get_pod_events(kubeconfig: str, namespace: str) -> dict[str, Any]:
     """Get namespace events JSON."""
     rc, stdout, _ = run_kubectl(kubeconfig, namespace, ["get", "events", "--sort-by=.lastTimestamp", "-o", "json"])
     if rc == 0:
-        return json.loads(stdout)
+        return json.loads(stdout)  # type: ignore[no-any-return]
     return {"items": []}
 
 
@@ -87,8 +88,11 @@ def classify_pull_failure(events_json: dict, pod_name: str, describe_output: str
     Returns (failure_class, message).
     """
     from k9b_cnpg_image_preflight_types import (
-        FAIL_NODE_IMAGE_MISSING, FAIL_NODE_NETWORK, FAIL_NODE_PULL_BACKOFF,
-        FAIL_NODE_TLS, FAIL_NODE_UNAUTHORIZED,
+        FAIL_NODE_IMAGE_MISSING,
+        FAIL_NODE_NETWORK,
+        FAIL_NODE_PULL_BACKOFF,
+        FAIL_NODE_TLS,
+        FAIL_NODE_UNAUTHORIZED,
     )
 
     # Check events for our specific pod
@@ -139,8 +143,11 @@ def check_container_waiting_reason(pod_status: dict) -> tuple[str, str]:
     Returns (reason, message) for the first waiting container.
     """
     from k9b_cnpg_image_preflight_types import (
-        FAIL_NODE_IMAGE_MISSING, FAIL_NODE_NETWORK, FAIL_NODE_PULL_BACKOFF,
-        FAIL_NODE_TLS, FAIL_NODE_UNAUTHORIZED,
+        FAIL_NODE_IMAGE_MISSING,
+        FAIL_NODE_NETWORK,
+        FAIL_NODE_PULL_BACKOFF,
+        FAIL_NODE_TLS,
+        FAIL_NODE_UNAUTHORIZED,
     )
 
     for cs in pod_status.get("status", {}).get("containerStatuses", []):
@@ -169,28 +176,33 @@ def check_node_pullability(
     image_ref: str,
     component: str,
     artifact_dir: Path,
-) -> dict:
+) -> dict[str, Any]:
     """Test image pullability on cluster nodes.
 
     Creates diagnostic pod, polls for container waiting reason, fails fast on pull failure.
     Returns dict with keys matching NodePullResult.
     """
     from k9b_cnpg_image_preflight_types import (
-        FAIL_NODE_IMAGE_MISSING, FAIL_NODE_NETWORK, FAIL_NODE_PULL_BACKOFF,
-        FAIL_NODE_TLS, FAIL_NODE_UNAUTHORIZED, FAIL_NODE_UNKNOWN, NodePullResult,
+        FAIL_NODE_IMAGE_MISSING,
+        FAIL_NODE_NETWORK,
+        FAIL_NODE_PULL_BACKOFF,
+        FAIL_NODE_TLS,
+        FAIL_NODE_UNAUTHORIZED,
+        FAIL_NODE_UNKNOWN,
+        NodePullResult,
     )
 
     timestamp = datetime.now(UTC).isoformat()
-    pod_name = ""
+    pod_name: str | None = None
     pod_phase = ""
     container_reason = ""
     container_message = ""
     describe_output = ""
-    events_json = {"items": []}
+    events_json: dict[str, Any] = {"items": []}
 
     pod_name, create_error = create_diagnostic_pod(kubeconfig, namespace, image_ref, component)
     if not pod_name:
-        return NodePullResult(
+        return NodePullResult(  # type: ignore[no-any-return]
             component=component,
             image_ref=image_ref,
             pod_name="",
@@ -228,7 +240,7 @@ def check_node_pullability(
                 else:
                     failure_class = FAIL_NODE_PULL_BACKOFF
 
-                return NodePullResult(
+                return NodePullResult(  # type: ignore[no-any-return]
                     component=component,
                     image_ref=image_ref,
                     pod_name=pod_name,
@@ -245,7 +257,7 @@ def check_node_pullability(
             # Pod succeeded - pull works
             if pod_phase == "Succeeded":
                 events_json = get_pod_events(kubeconfig, namespace)
-                return NodePullResult(
+                return NodePullResult(  # type: ignore[no-any-return]
                     component=component,
                     image_ref=image_ref,
                     pod_name=pod_name,
@@ -262,7 +274,7 @@ def check_node_pullability(
                 fc, msg = classify_pull_failure(events_json, pod_name, describe_output)
                 if fc:
                     container_reason = "ErrImagePull" if "imagepull" not in container_reason.lower() else container_reason
-                    return NodePullResult(
+                    return NodePullResult(  # type: ignore[no-any-return]
                         component=component,
                         image_ref=image_ref,
                         pod_name=pod_name,
@@ -275,7 +287,7 @@ def check_node_pullability(
                         describe_output=describe_output[:2000],
                         timestamp=timestamp,
                     ).to_dict()
-                return NodePullResult(
+                return NodePullResult(  # type: ignore[no-any-return]
                     component=component,
                     image_ref=image_ref,
                     pod_name=pod_name,
@@ -294,7 +306,7 @@ def check_node_pullability(
         describe_output = get_pod_describe(kubeconfig, namespace, pod_name)
         fc, msg = classify_pull_failure(events_json, pod_name, describe_output)
         if fc:
-            return NodePullResult(
+            return NodePullResult(  # type: ignore[no-any-return]
                 component=component,
                 image_ref=image_ref,
                 pod_name=pod_name,
@@ -306,7 +318,7 @@ def check_node_pullability(
                 timestamp=timestamp,
             ).to_dict()
 
-        return NodePullResult(
+        return NodePullResult(  # type: ignore[no-any-return]
             component=component,
             image_ref=image_ref,
             pod_name=pod_name,
