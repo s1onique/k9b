@@ -233,6 +233,8 @@ class TestBadCurlMetadataGuardrail:
                 )
 
         assert result.passed is False
+        assert result.message is not None
+        assert result.failure_class is not None
         assert "timeout" in result.message.lower() or "curl" in result.failure_class.lower()
 
     def test_non_2xx_http_code_is_rejected_early(self) -> None:
