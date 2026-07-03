@@ -129,6 +129,105 @@ class TestKnownCurlEnvelopeAccepted:
         assert result.passed is True
         assert result.failure_class is None
 
+
+class TestKnownCurlEnvelopeRejected:
+    """Unknown or failed curl envelope patterns should still be classified as contamination.
+
+    This guards against weakening the contamination detection when accepting
+    known successful envelope patterns.
+    """
+
+    @pytest.mark.parametrize(
+        "suffix",
+        [
+            "CURL_EXIT=1\nHTTP_CODE=200",
+            "CURL_EXIT=0\nHTTP_CODE=500",
+            "CURL_EXIT=0\nHTTP_CODE=200\nextra",
+            "STDERR_BLOCK\nnoise\nHTTP_CODE=200\nCURL_EXIT=0",
+            "totally random suffix",
+        ],
+    )
+    def test_unknown_or_failed_suffix_is_still_contamination(self, suffix: str) -> None:
+        """Unknown or failed curl metadata should still fail as contamination."""
+        from scripts.lab_common.provider_preflight import run_provider_preflight
+
+        body = '{"provider_enabled": true, "provider_configured": true}\n' + suffix
+
+        mock_curl_result = make_curl_result(success=True, body=body, http_code=200, curl_rc=0)
+
+        with patch(
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
+            return_value=mock_curl_result,
+        ), patch(
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
+            return_value=mock_curl_result,
+        ):
+            with TemporaryDirectory() as tmpdir:
+                result = run_provider_preflight(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="k9b",
+                    service="k9b-backend",
+                    port=8080,
+                    artifact_dir=Path(tmpdir),
+                )
+
+        assert result.passed is False
+        assert result.failure_class == "provider_health_output_contaminated"
+
+    def test_concatenated_json_is_still_invalid_json(self) -> None:
+        """Concatenated JSON documents should still fail as invalid_json."""
+        from scripts.lab_common.provider_preflight import run_provider_preflight
+
+        body = '{"healthy": true}{"extra": true}'
+
+        mock_curl_result = make_curl_result(success=True, body=body, http_code=200, curl_rc=0)
+
+        with patch(
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
+            return_value=mock_curl_result,
+        ), patch(
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
+            return_value=mock_curl_result,
+        ):
+            with TemporaryDirectory() as tmpdir:
+                result = run_provider_preflight(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="k9b",
+                    service="k9b-backend",
+                    port=8080,
+                    artifact_dir=Path(tmpdir),
+                )
+
+        assert result.passed is False
+        assert result.failure_class == "provider_health_invalid_json"
+
+    def test_prefix_contamination_still_fails(self) -> None:
+        """Non-whitespace prefix before JSON should still fail as contamination."""
+        from scripts.lab_common.provider_preflight import run_provider_preflight
+
+        body = 'INFO starting\n{"healthy": true}'
+
+        mock_curl_result = make_curl_result(success=True, body=body, http_code=200, curl_rc=0)
+
+        with patch(
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
+            return_value=mock_curl_result,
+        ), patch(
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
+            return_value=mock_curl_result,
+        ):
+            with TemporaryDirectory() as tmpdir:
+                result = run_provider_preflight(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="k9b",
+                    service="k9b-backend",
+                    port=8080,
+                    artifact_dir=Path(tmpdir),
+                )
+
+        assert result.passed is False
+        assert result.failure_class == "provider_health_output_contaminated"
+
     def test_full_curl_envelope_suffix_is_accepted(self) -> None:
         """JSON with full curl envelope should pass."""
         from scripts.lab_common.provider_preflight import run_provider_preflight

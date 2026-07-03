@@ -90,23 +90,23 @@ class TestExtractProviderHealthPayload:
         assert payload.curl_exit == 0
         assert payload.http_code == 200
 
-    def test_extracts_json_with_only_curl_exit(self) -> None:
-        """JSON with only CURL_EXIT suffix should be accepted."""
+    def test_rejects_json_with_only_curl_exit(self) -> None:
+        """JSON with only CURL_EXIT suffix (no HTTP_CODE) is rejected as contamination."""
         raw = '{"available": true}\nCURL_EXIT=0\n'
         payload = _extract_provider_health_payload(raw)
 
-        assert payload.envelope_detected is True
-        assert json.loads(payload.json_body)["available"] is True
-        assert payload.curl_exit == 0
+        # Both CURL_EXIT=0 AND HTTP_CODE=200 are required
+        assert payload.envelope_detected is False
+        assert payload.raw_suffix == "CURL_EXIT=0"
 
-    def test_extracts_json_with_only_http_code(self) -> None:
-        """JSON with only HTTP_CODE suffix should be accepted."""
+    def test_rejects_json_with_only_http_code(self) -> None:
+        """JSON with only HTTP_CODE suffix (no CURL_EXIT) is rejected as contamination."""
         raw = '{"available": true}\nHTTP_CODE=200\n'
         payload = _extract_provider_health_payload(raw)
 
-        assert payload.envelope_detected is True
-        assert json.loads(payload.json_body)["available"] is True
-        assert payload.http_code == 200
+        # Both CURL_EXIT=0 AND HTTP_CODE=200 are required
+        assert payload.envelope_detected is False
+        assert payload.raw_suffix == "HTTP_CODE=200"
 
     def test_rejects_unknown_suffix_contamination(self) -> None:
         """JSON with unknown trailing text should be flagged as raw_suffix."""
@@ -240,12 +240,11 @@ class TestStreamSeparationRegression:
     """
 
     def test_parser_extracts_stderr_block_content_from_known_envelope(self) -> None:
-        """Valid JSON followed by STDERR_BLOCK should be parsed as known envelope metadata."""
-        raw = '{"available": true, "provider": "test"}\nSTDERR_BLOCK\nboom'
+        """Valid JSON followed by STDERR_BLOCK with CURL_EXIT/HTTP_CODE is parsed as known envelope."""
+        raw = '{"available": true, "provider": "test"}\nSTDERR_BLOCK\nboom\nCURL_EXIT=0\nHTTP_CODE=200'
         payload = _extract_provider_health_payload(raw)
 
-        # STDERR_BLOCK is known envelope marker, so content after it is extracted
-        # as stderr_block metadata, not treated as contamination
+        # Full envelope with CURL_EXIT=0 AND HTTP_CODE=200 is accepted
         assert payload.envelope_detected is True
         assert payload.json_body == '{"available": true, "provider": "test"}'
         assert payload.stderr_block == "boom"
@@ -288,24 +287,23 @@ class TestStreamSeparationRegression:
         assert payload.http_code == 200
         assert payload.stderr_block == ""
 
-    def test_json_with_only_stderr_block_suffix(self) -> None:
-        """JSON with only STDERR_BLOCK marker should be valid envelope."""
+    def test_rejects_json_with_only_stderr_block_suffix(self) -> None:
+        """JSON with only STDERR_BLOCK marker (no CURL_EXIT/HTTP_CODE) is rejected as contamination."""
         raw = '{"available": true}\nSTDERR_BLOCK\n'
         payload = _extract_provider_health_payload(raw)
 
-        assert payload.envelope_detected is True
-        assert payload.json_body == '{"available": true}'
-        assert payload.raw_suffix == ""
+        # Incomplete envelope (no CURL_EXIT=0 and HTTP_CODE=200) is rejected
+        assert payload.envelope_detected is False
+        assert payload.raw_suffix == "STDERR_BLOCK"
 
-    def test_json_with_bare_stderr_block_suffix_is_valid_envelope(self) -> None:
-        """JSON followed by bare STDERR_BLOCK marker (no trailing newline) should be valid envelope."""
+    def test_rejects_json_with_bare_stderr_block_suffix(self) -> None:
+        """JSON followed by bare STDERR_BLOCK marker (no CURL_EXIT/HTTP_CODE) is rejected as contamination."""
         raw = '{"available": true}\nSTDERR_BLOCK'
         payload = _extract_provider_health_payload(raw)
 
-        assert payload.envelope_detected is True
-        assert payload.json_body == '{"available": true}'
-        assert payload.stderr_block == ""
-        assert payload.raw_suffix == ""
+        # Incomplete envelope (no CURL_EXIT=0 and HTTP_CODE=200) is rejected
+        assert payload.envelope_detected is False
+        assert payload.raw_suffix == "STDERR_BLOCK"
 
     def test_parser_preserves_unknown_suffix_as_true_contamination(self) -> None:
         """Unknown text after valid JSON should not be treated as curl envelope metadata."""

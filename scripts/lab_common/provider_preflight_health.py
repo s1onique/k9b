@@ -2,6 +2,7 @@
 
 This module provides the health response evaluation logic for provider preflight.
 JSON classification logic is split to provider_preflight_json_classification.py.
+Curl envelope parsing logic is split to provider_preflight_curl_envelope.py.
 
 Wire-format validation contract:
 Provider health response body must be EXACTLY one clean JSON document.
@@ -24,7 +25,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +39,7 @@ from scripts.lab_common.constants import (
     FAILURE_PROVIDER_UNAVAILABLE,
 )
 from scripts.lab_common.provider_curl_helpers import CurlResult
+from scripts.lab_common.provider_preflight_curl_envelope import parse_known_curl_envelope_suffix
 from scripts.lab_common.provider_preflight_json_classification import (
     _format_json_contamination_detail,
 )
@@ -80,7 +81,11 @@ def _extract_provider_health_payload(raw_output: str) -> ProviderHealthPayload:
 
     The curl wrapper emits a known diagnostic envelope around provider health JSON.
     This function uses raw_decode to find where the JSON document ends, then
-    parses the remaining envelope metadata. Known envelope patterns are NON-FATAL.
+    parses the remaining envelope metadata. Known successful envelope patterns
+    (CURL_EXIT=0, HTTP_CODE=200) are NON-FATAL.
+
+    Invalid or failed curl metadata (non-zero exit, non-200 HTTP code) is NOT
+    accepted as envelope - it falls through to contamination detection.
     """
     text = raw_output.strip()
 
@@ -116,48 +121,28 @@ def _extract_provider_health_payload(raw_output: str) -> ProviderHealthPayload:
             raw_suffix="",
         )
 
-    # Check if suffix starts with known envelope pattern
-    known_envelope_prefixes = (
-        "STDERR_BLOCK",
-        "CURL_EXIT=",
-        "HTTP_CODE=",
-        "---CURL_",
-        "RESOLVING_HOST=",
-        "NO_RESPONSE_BODY",
-    )
-    suffix_starts_known = any(suffix.startswith(p) for p in known_envelope_prefixes)
-
-    if not suffix_starts_known:
-        _debug_dump_provider_health_raw(raw_output)
+    # Try to parse as known successful curl envelope
+    envelope = parse_known_curl_envelope_suffix(suffix)
+    if envelope is not None:
+        curl_exit, http_code, stderr_block = envelope
         return ProviderHealthPayload(
-            json_body=raw_output.strip(),
-            stderr_block="",
-            curl_exit=None,
-            http_code=None,
-            envelope_detected=False,
-            raw_suffix=suffix,
+            json_body=json_body,
+            stderr_block=stderr_block,
+            curl_exit=curl_exit,
+            http_code=http_code,
+            envelope_detected=True,
+            raw_suffix="",
         )
 
-    # Parse known envelope metadata
-    curl_exit_match = re.search(r"\bCURL_EXIT=(\d+)\b", suffix)
-    http_code_match = re.search(r"\bHTTP_CODE=(\d{3})\b", suffix)
-
-    # Extract stderr block content (between STDERR_BLOCK marker and CURL_EXIT/HTTP_CODE)
-    # Handle empty block case: STDERR_BLOCK\nCURL_EXIT=0
-    stderr_block = ""
-    stderr_match = re.search(
-        r"STDERR_BLOCK\n(.*?)(?=\nCURL_EXIT=|\nHTTP_CODE=|\Z)", suffix, re.DOTALL
-    )
-    if stderr_match:
-        stderr_block = stderr_match.group(1).strip()
-
+    # Not a known successful envelope - mark as raw (will be contamination)
+    _debug_dump_provider_health_raw(raw_output)
     return ProviderHealthPayload(
-        json_body=json_body,
-        stderr_block=stderr_block,
-        curl_exit=int(curl_exit_match.group(1)) if curl_exit_match else None,
-        http_code=int(http_code_match.group(1)) if http_code_match else None,
-        envelope_detected=True,
-        raw_suffix="",
+        json_body=raw_output.strip(),
+        stderr_block="",
+        curl_exit=None,
+        http_code=None,
+        envelope_detected=False,
+        raw_suffix=suffix,
     )
 
 
@@ -187,73 +172,6 @@ def _suffix_starts_with_json_document(suffix: str) -> bool:
     """
     stripped = suffix.lstrip()
     return stripped.startswith("{") or stripped.startswith("[")
-
-
-def _looks_like_successful_curl_envelope(suffix: str) -> bool:
-    """Check if suffix is a known successful curl envelope pattern.
-
-    Known successful curl metadata patterns:
-    - CURL_EXIT=0\\nHTTP_CODE=200
-    - STDERR_BLOCK\\nCURL_EXIT=0\\nHTTP_CODE=200
-    - STDERR_BLOCK\\n<debug noise>\\nCURL_EXIT=0\\nHTTP_CODE=200
-    - STDERR_BLOCK (alone, if curl wrapper is incomplete)
-
-    This function is lenient: if the suffix starts with known envelope markers
-    and has no trailing garbage, it accepts the envelope. Missing CURL_EXIT/HTTP_CODE
-    are treated as warnings, not contamination.
-
-    Args:
-        suffix: The trailing bytes after valid JSON prefix
-
-    Returns:
-        True if suffix matches known curl envelope pattern (even if incomplete)
-    """
-    if not suffix:
-        return False
-
-    stripped = suffix.strip()
-    if not stripped:
-        return False
-
-    lines = stripped.split("\n")
-    in_stderr_block = False
-    has_envelope_marker = False
-
-    for line in lines:
-        line_stripped = line.strip()
-        if not line_stripped:
-            continue
-
-        # Known envelope markers
-        allowed_prefixes = (
-            "STDERR_BLOCK",
-            "CURL_EXIT=",
-            "HTTP_CODE=",
-            "---CURL_",
-            "RESOLVING_HOST=",
-            "NO_RESPONSE_BODY",
-        )
-
-        # Check if this line is a known envelope marker
-        is_envelope_marker = any(line_stripped.startswith(p) for p in allowed_prefixes)
-
-        if is_envelope_marker:
-            has_envelope_marker = True
-            if line_stripped == "STDERR_BLOCK":
-                in_stderr_block = True
-            continue
-
-        # After STDERR_BLOCK marker, allow any content (debug noise, etc.)
-        if in_stderr_block:
-            continue
-
-        # Any other non-whitespace content that's not a known envelope marker
-        # means this is NOT a known curl envelope pattern
-        return False
-
-    # Accept if we saw at least one envelope marker (even without CURL_EXIT/HTTP_CODE)
-    # This handles cases where the curl wrapper emits incomplete envelopes
-    return has_envelope_marker
 
 
 def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None, str]:
@@ -384,44 +302,66 @@ def _evaluate_health_response(
 ) -> ProviderPreflightResult:
     """Evaluate provider health response.
 
-    Provider health output is strict: the response body must be exactly one
-    clean JSON document. Curl wrapper metadata such as CURL_EXIT, HTTP_CODE,
-    or STDERR_BLOCK in the body is output contamination and must fail before
-    semantic provider-health evaluation.
+    Provider health output must be valid JSON. The curl wrapper may emit a known
+    diagnostic envelope around provider health JSON:
+      - STDOUT_BLOCK prefix (optional)
+      - Valid provider health JSON
+      - STDERR_BLOCK marker (optional)
+      - CURL_EXIT=<code>
+      - HTTP_CODE=<code>
 
-    Step 1: strict wire-format validation.
-    Step 2: return contamination/invalid-json failures immediately.
-    Step 3: run semantic provider-health evaluation only for clean JSON.
+    Known envelope patterns are NON-FATAL and are extracted before semantic evaluation.
+    Unknown suffixes or prefix contamination result in contamination failure.
+
+    Step 1: Try known envelope extraction (accepts known curl metadata patterns).
+    Step 2: If envelope extraction fails, fall back to strict wire-format validation.
+    Step 3: Semantic provider-health evaluation only for valid JSON.
     """
     raw_body = curl_result.body
 
-    # Step 1: STRICT wire-format validation FIRST - before any envelope extraction
-    # This ensures that bodies with curl metadata suffixes are classified as contaminated
-    failure_class, json_payload, detail = _classify_raw_body_for_wire_format(raw_body)
+    # Step 1: Try known envelope extraction FIRST
+    # This handles the common case where curl wrapper emits diagnostic metadata
+    # around the JSON response (CURL_EXIT, HTTP_CODE, STDERR_BLOCK, etc.)
+    payload = _extract_provider_health_payload(raw_body)
 
-    if failure_class is not None:
-        # Wire-format validation failed - return immediately, no semantic evaluation
-        result.failure_class = failure_class
-        result.message = detail
-        result.duration_seconds = time.time() - start
-        _write_result(result, artifact_dir)
-        return result
-
-    # Wire-format valid - parse JSON for semantic evaluation
-    assert json_payload is not None, "payload should not be None when failure_class is None"
-
-    # Handle the case where payload might be a string (json_body) or dict
-    if isinstance(json_payload, str):
-        health_details = json.loads(json_payload)
-    elif isinstance(json_payload, dict):
-        health_details = json_payload
+    if payload.envelope_detected:
+        # Known curl envelope detected - use extracted JSON for semantic evaluation
+        try:
+            health_details = json.loads(payload.json_body)
+        except json.JSONDecodeError:
+            result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
+            result.message = f"Invalid JSON in envelope-extracted body: {payload.json_body[:200]!r}"
+            result.duration_seconds = time.time() - start
+            _write_result(result, artifact_dir)
+            return result
     else:
-        # This shouldn't happen with proper classification
-        result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
-        result.message = f"Unexpected payload type: {type(json_payload).__name__}"
-        result.duration_seconds = time.time() - start
-        _write_result(result, artifact_dir)
-        return result
+        # No known envelope detected - fall back to strict wire-format validation
+        # This ensures that bodies with unknown prefixes/suffixes are classified as contaminated
+        failure_class, json_payload, detail = _classify_raw_body_for_wire_format(raw_body)
+
+        if failure_class is not None:
+            # Wire-format validation failed - return immediately, no semantic evaluation
+            result.failure_class = failure_class
+            result.message = detail
+            result.duration_seconds = time.time() - start
+            _write_result(result, artifact_dir)
+            return result
+
+        # Wire-format valid - parse JSON for semantic evaluation
+        assert json_payload is not None, "payload should not be None when failure_class is None"
+
+        # Handle the case where payload might be a string (json_body) or dict
+        if isinstance(json_payload, str):
+            health_details = json.loads(json_payload)
+        elif isinstance(json_payload, dict):
+            health_details = json_payload
+        else:
+            # This shouldn't happen with proper classification
+            result.failure_class = FAILURE_PROVIDER_HEALTH_INVALID_JSON
+            result.message = f"Unexpected payload type: {type(json_payload).__name__}"
+            result.duration_seconds = time.time() - start
+            _write_result(result, artifact_dir)
+            return result
 
     # Step 3: Semantic provider-health evaluation
     result.parsed_status = parse_provider_status_from_health_details(health_details)
