@@ -45,6 +45,7 @@ def run_backend_targeted_diagnosis(
     allow_simulation: bool,
     max_passes: int = DEFAULT_MAX_PASSES,
     require_complete_root_cause_before_stop: bool = False,
+    artifact_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Run backend-targeted diagnosis for the incident.
 
@@ -81,6 +82,7 @@ def run_backend_targeted_diagnosis(
         namespace=namespace,
         incident_id=incident_id,
         result=result,
+        artifact_dir=artifact_dir,
     )
 
     if incident_detail is None:
@@ -160,6 +162,7 @@ def run_backend_targeted_diagnosis(
             result=result,
             # P4c lab-strict mode: require complete root cause before accepting stop_no_checks_proposed
             require_complete_root_cause_before_stop=require_complete_root_cause_before_stop,
+            artifact_dir=artifact_dir,
         )
         # Track actual POST attempts, not just phase invocations
         if post_attempted:

@@ -40,6 +40,14 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_debug import (
     dump_proposed_next_checks,
     dump_review_packet,
 )
+from scripts.k9b_otel_demo_lab_p4c_forensic_dump import (
+    FORENSIC_DUMP_ENABLED,
+    dump_backend_incident_detail_before_loop,
+    dump_diagnosis_loop_pass,
+)
+from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence import (
+    dump_review_artifact_files,
+)
 
 
 def phase1_confirm_incident(
@@ -47,6 +55,7 @@ def phase1_confirm_incident(
     namespace: str,
     incident_id: str,
     result: dict[str, Any],
+    artifact_dir: Path | None = None,
 ) -> BackendIncidentDetail | None:
     """Phase 1: Confirm incident exists in backend.
 
@@ -95,6 +104,15 @@ def phase1_confirm_incident(
         log(f"  Backend incident: {incident_detail.to_compact_log()}")
         # P4c debug: dump bounded incident detail snippet
         dump_backend_incident_detail(incident_detail.to_dict(), incident_id)
+        
+        # FORENSIC DUMP: Full incident detail before diagnosis loop
+        # This captures whether scheduling_evidence already exists in the incident
+        if FORENSIC_DUMP_ENABLED and artifact_dir:
+            dump_backend_incident_detail_before_loop(
+                artifact_dir=artifact_dir,
+                incident_detail=incident_detail.to_dict(),
+                incident_id=incident_id,
+            )
     else:
         result["backend_incident_detail"] = None
         log("  WARNING: Fetch succeeded but returned no incident detail")
@@ -110,6 +128,7 @@ def phase2_invoke_and_poll_pass(
     max_passes: int,
     result: dict[str, Any],
     require_complete_root_cause_before_stop: bool = False,
+    artifact_dir: Path | None = None,
 ) -> tuple[bool, int, list[str], bool, str | None]:
     """Phase 2: Invoke one-pass diagnosis and poll for completion.
 
@@ -306,6 +325,51 @@ def phase2_invoke_and_poll_pass(
 
     result["terminal_decision_reached"] = terminal_decision_reached
     log(f"    [{current_pass_in_label}] Total passes so far: {total_pass_count}/{MIN_REQUIRED_PASSES}")
+
+    # FORENSIC DUMP: Per-pass diagnosis loop dump after each successful pass
+    # This captures the request/response and review artifact metadata for gap diagnosis
+    if FORENSIC_DUMP_ENABLED and artifact_dir:
+        # Build request body for documentation
+        request_body = {
+            "incident_id": incident_id,
+            "max_passes_per_incident": max_passes,
+            "require_complete_root_cause_before_stop": require_complete_root_cause_before_stop,
+        }
+        # Build response body from invocation and poll results
+        response_body = invocation_result.to_dict()
+        response_body["poll_status"] = poll_result.to_dict()
+        if current_detail:
+            response_body["incident_detail"] = current_detail.raw
+
+        dump_diagnosis_loop_pass(
+            artifact_dir=artifact_dir,
+            incident_id=incident_id,
+            pass_num=pass_attempt,
+            request_body=request_body,
+            http_status=invocation_result.http_status,
+            response_body=response_body,
+            loop_summary=loop_summary if current_detail else None,
+            review_packet_metadata={
+                "artifact_name": review_artifact_path,
+                "review_available": current_detail.review_available if current_detail else False,
+            } if current_detail else None,
+        )
+
+        # FORENSIC DUMP: Review artifact files after each pass where artifact path is known
+        # Use kubeconfig and namespace for kubectl exec into backend container
+        if review_artifact_path:
+            dump_review_artifact_files(
+                artifact_dir=artifact_dir,
+                incident_id=incident_id,
+                pass_num=pass_attempt,
+                # Backend container paths (kubectl exec needed)
+                backend_review_paths=[review_artifact_path],
+                # Host paths (if copied out of container)
+                host_review_paths=[],
+                kubeconfig=kubeconfig,
+                backend_namespace=namespace,
+            )
+
     return True, total_pass_count, all_pass_run_ids, True, review_artifact_path  # POST succeeded, loop completed
 
 

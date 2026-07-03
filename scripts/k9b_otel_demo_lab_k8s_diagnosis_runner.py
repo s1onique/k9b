@@ -47,6 +47,7 @@ def run_diagnosis_loop(
     allow_simulation: bool = False,
     kubeconfig: str | None = None,
     namespace: str = "k9b",
+    artifact_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Run the automatic diagnosis loop for an incident.
 
@@ -139,6 +140,7 @@ def run_diagnosis_loop(
         # This ensures that premature terminal no-checks (before root cause evidence is present)
         # is rejected, allowing the loop to continue until scheduling root cause is diagnosed.
         require_complete_root_cause_before_stop=True,
+        artifact_dir=artifact_dir,
     )
 
 

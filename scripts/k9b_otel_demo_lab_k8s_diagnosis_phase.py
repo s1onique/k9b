@@ -61,6 +61,17 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner import run_diagnosis_loop
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_config import (
     DEFAULT_K9B_NAMESPACE,
 )
+from scripts.k9b_otel_demo_lab_p4c_forensic_dump import (
+    FORENSIC_DUMP_ENABLED,
+    dump_backend_incident_detail_before_loop,
+    dump_backend_runtime_provenance,
+    dump_diagnosis_loop_pass,
+    dump_p4c_runtime_provenance,
+)
+from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence import (
+    dump_p4c_outcome_input,
+    write_forensic_summary,
+)
 from scripts.k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
 
 __all__ = [
@@ -99,6 +110,15 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     start = time.time()
     diagnosis_dir = get_diagnosis_dir(artifact_dir)
     
+    # FORENSIC DUMP: Capture backend and p4c runtime provenance at phase start
+    provenance: dict[str, Any] = {}
+    if FORENSIC_DUMP_ENABLED:
+        _log("  [FORENSIC] Starting P4c forensic dump")
+        provenance["backend"] = dump_backend_runtime_provenance(
+            artifact_dir, kubeconfig=config.kubeconfig
+        )
+        provenance["p4c_script"] = dump_p4c_runtime_provenance(artifact_dir)
+    
     log_phase_header()
     _log(f"Target: diagnose shipping incident in {config.namespace}")
     evidence = create_initial_evidence(config.namespace)
@@ -134,9 +154,18 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         max_checks_per_pass=DEFAULT_MAX_CHECKS_PER_PASS,
         kubeconfig=config.kubeconfig,
         namespace=DEFAULT_K9B_NAMESPACE,
+        artifact_dir=artifact_dir,
     )
     
     evidence = _merge_diagnosis_result(evidence, diagnosis_result)
+    
+    # FORENSIC DUMP: Dump backend incident detail after diagnosis loop
+    if FORENSIC_DUMP_ENABLED and evidence.get("backend_incident_detail"):
+        dump_backend_incident_detail_before_loop(
+            artifact_dir,
+            evidence.get("backend_incident_detail"),
+            incident_id,
+        )
     
     # Step 3b: Fail immediately if real loop was not invoked
     # This is the most common P4c failure - the diagnosis loop never ran.
@@ -265,6 +294,22 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     #
     # LAB-STRICT MODE: accept_terminal_single_pass=False enforces multi-pass root-cause
     # diagnosis contract. Terminal single-pass before required passes is a FAILURE.
+    
+    # FORENSIC DUMP: Dump raw P4c outcome input immediately before compute_p4c_outcome
+    if FORENSIC_DUMP_ENABLED:
+        provenance["p4c_input"] = dump_p4c_outcome_input(
+            artifact_dir, evidence, incident_id,
+        )
+        provenance["scheduling_evidence"] = evidence.get("scheduling_evidence")
+        provenance["detection_evidence_summary"] = {
+            "matching_signals_count": len(detection_evidence_local.get("matching_signals", [])),
+            "has_scheduling_evidence": "scheduling_evidence" in evidence,
+        }
+        write_forensic_summary(
+            artifact_dir, incident_id, None,
+            ["backend", "p4c_script", "p4c_input"], provenance,
+        )
+    
     log_step(7, "Computing normalized P4c outcome")
     p4c_outcome = compute_p4c_outcome(
         evidence,
