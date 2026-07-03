@@ -197,10 +197,11 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
 
     Classification order:
     1. Empty/whitespace-only body -> provider_health_empty_body
-    2. Non-whitespace prefix + JSON -> provider_health_output_contaminated
-    3. JSON + non-whitespace suffix that is valid JSON -> provider_health_invalid_json
-    4. JSON + non-whitespace suffix (log/contamination) -> provider_health_output_contaminated
-    5. Exactly one clean JSON document -> (None, payload, "") for semantic evaluation
+    2. JSON + non-whitespace suffix that is valid JSON -> provider_health_invalid_json
+    3. JSON + non-whitespace suffix (including curl metadata) -> provider_health_output_contaminated
+    4. Non-whitespace prefix + JSON -> provider_health_output_contaminated
+    5. Malformed JSON with no embedded JSON -> provider_health_invalid_json
+    6. Exactly one clean JSON document -> (None, payload, "") for semantic evaluation
 
     Args:
         raw: The raw body string from curl response
@@ -209,25 +210,23 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
         Tuple of (failure_class, payload_or_none, detail_message).
         If failure_class is None, payload contains the parsed JSON and evaluation proceeds.
     """
-    # 1. Check for empty/whitespace-only body
-    if raw.strip() == "":
+    if not raw.strip():
         return (
             FAILURE_PROVIDER_HEALTH_EMPTY_BODY,
             None,
             "Provider health response body was empty",
         )
 
-    # Find where actual content starts (skip leading whitespace)
-    first_non_ws = len(raw) - len(raw.lstrip())
-    candidate = raw[first_non_ws:]
-
     decoder = json.JSONDecoder()
+
+    # Find first non-whitespace position
+    first_non_ws = len(raw) - len(raw.lstrip())
 
     # Try to decode JSON starting at first non-whitespace
     try:
-        payload, end = decoder.raw_decode(candidate)
+        payload, end = decoder.raw_decode(raw, first_non_ws)
     except json.JSONDecodeError:
-        # JSON decode failed - check if there's JSON somewhere in the content
+        # JSON decode failed - check if there's JSON somewhere after the prefix
         json_start = _find_first_json_start(raw)
         if json_start is not None and json_start > first_non_ws:
             # Found JSON but after some non-whitespace prefix = contamination
@@ -243,38 +242,63 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
             f"Body prefix (first 200 chars): {raw[:200]!r}",
         )
 
-    # Calculate absolute position of where JSON document ends
-    absolute_end = first_non_ws + end
-    suffix = raw[absolute_end:]
+    # end is already an absolute index into raw (from raw_decode starting at first_non_ws)
+    suffix_start = end
+    suffix = raw[suffix_start:]
 
-    # 2. Check for non-whitespace suffix
-    if suffix.strip():
-        # If suffix itself starts with valid JSON = adjacent JSON documents = invalid
-        if _suffix_starts_with_json_document(suffix):
+    # Skip whitespace-only suffix
+    suffix_stripped = suffix.lstrip()
+
+    if suffix_stripped:
+        # Try to decode at suffix start - if it succeeds, this is concatenated JSON
+        try:
+            decoder.raw_decode(suffix_stripped)
+            # Suffix is valid JSON - concatenated documents = invalid_json
             return (
                 FAILURE_PROVIDER_HEALTH_INVALID_JSON,
                 None,
                 f"Invalid JSON response: concatenated JSON documents. "
                 f"Body prefix (first 200 chars): {raw[:200]!r}",
             )
-        # Otherwise, suffix is contamination (log output, metadata, etc.)
-        return (
-            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
-            None,
-            f"Output contamination: trailing non-JSON data after valid JSON. {_format_json_contamination_detail(raw)}",
-        )
+        except json.JSONDecodeError:
+            # Suffix is not valid JSON - this is contamination (log output, curl metadata, etc.)
+            return (
+                FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+                None,
+                f"Output contamination: trailing non-JSON data after valid JSON. {_format_json_contamination_detail(raw)}",
+            )
 
-    # 3. Check for non-whitespace prefix (leading whitespace is OK, prefix is not)
-    if first_non_ws > 0:
-        # There's non-whitespace content before JSON = contamination
-        return (
-            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
-            None,
-            _format_json_contamination_detail(raw),
-        )
-
-    # 4. Valid: exactly one clean JSON document with no prefix/suffix contamination
+    # Valid: exactly one clean JSON document with no prefix/suffix contamination
+    # Leading whitespace is allowed and already skipped by raw_decode starting at first_non_ws
+    # Non-whitespace prefix contamination is handled in the JSONDecodeError path
     return None, payload, ""
+
+
+def _classify_raw_body_for_wire_format(
+    raw_body: str,
+) -> tuple[str | None, object | None, str]:
+    """Classify raw body for wire-format validation.
+
+    This classifies the RAW body before any envelope extraction.
+    Any trailing curl metadata (CURL_EXIT, HTTP_CODE) is contamination.
+
+    Args:
+        raw_body: The raw body string from curl response
+
+    Returns:
+        Tuple of (failure_class, payload_or_none, detail_message).
+        If failure_class is None, payload contains the parsed JSON and evaluation proceeds.
+    """
+    # Classify the raw body directly
+    failure_class, payload, detail = _classify_provider_health_body(raw_body)
+
+    if failure_class is not None:
+        # Wire-format validation failed on raw body
+        return failure_class, payload, detail
+
+    # Wire-format passed on raw body - envelope metadata extraction
+    # happens later in _evaluate_health_response if needed for diagnostics
+    return None, payload, detail
 
 
 def _evaluate_health_response(
@@ -298,33 +322,16 @@ def _evaluate_health_response(
       - CURL_EXIT=<code>
       - HTTP_CODE=<code>
 
-    Step 1: Extract known envelope FIRST - this separates curl metadata from JSON body.
-    Step 2: Strict wire-format validation on the extracted JSON body only.
+    Step 1: Classify raw body wire-format FIRST (before envelope extraction).
+    Step 2: If raw body is exactly one clean JSON, extract envelope metadata.
     Step 3: Semantic provider-health evaluation after wire-format validation passes.
     """
     raw_body = curl_result.body
 
-    # Step 1: Extract known curl envelope from raw body FIRST
-    # This separates curl metadata (STDERR_BLOCK, CURL_EXIT, HTTP_CODE) from JSON body.
-    # Known envelope patterns are NON-FATAL and are stripped before classification.
-    payload = _extract_provider_health_payload(raw_body)
-
-    # If extraction detected unknown suffix, that's true contamination
-    if payload.raw_suffix and not payload.envelope_detected:
-        _debug_dump_provider_health_raw(raw_body)
-        result.failure_class = FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
-        result.message = (
-            f"Output contamination: unrecognized trailing data after valid JSON. "
-            f"Raw suffix: {payload.raw_suffix[:100]!r}"
-        )
-        result.duration_seconds = time.time() - start
-        _write_result(result, artifact_dir)
-        return result
-
-    # Step 2: Strict wire-format validation on the extracted JSON body
-    # This validates that the JSON body (after envelope extraction) is exactly one
-    # clean JSON document. Known envelope metadata has already been stripped.
-    failure_class, json_payload, detail = _classify_provider_health_body(payload.json_body)
+    # Step 1: Classify raw body wire-format FIRST
+    # This validates that the raw body is exactly one clean JSON document.
+    # Trailing curl metadata (CURL_EXIT, HTTP_CODE) is contamination.
+    failure_class, json_payload, detail = _classify_raw_body_for_wire_format(raw_body)
 
     if failure_class is not None:
         # Wire-format validation failed - return immediately, no semantic evaluation
@@ -333,6 +340,9 @@ def _evaluate_health_response(
         result.duration_seconds = time.time() - start
         _write_result(result, artifact_dir)
         return result
+
+    # Step 2: Wire-format valid - proceed to semantic evaluation.
+    # The raw body is exactly one clean JSON document; no envelope extraction needed.
 
     # Step 3: Wire-format valid - parse and evaluate semantic content
     assert json_payload is not None, "payload should not be None when failure_class is None"

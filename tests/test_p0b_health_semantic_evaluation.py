@@ -59,24 +59,20 @@ def make_curl_result(
 
 
 class TestEnvelopeExtractionThenSemanticEvaluation:
-    """Tests that prove envelope extraction enables semantic evaluation.
+    """Tests for wire-format classification contract.
 
-    After the fix, known curl envelope is stripped, and semantic evaluation
-    proceeds. This means provider_disabled_required should be returned for
-    disabled providers (even when curl envelope is present).
+    The classifier must run on raw body BEFORE envelope extraction.
+    Any trailing curl metadata (CURL_EXIT, HTTP_CODE) is contamination.
     """
 
-    def test_known_envelope_with_disabled_provider_returns_disabled_required(self) -> None:
-        """Known curl envelope with disabled provider should return provider_disabled_required.
+    def test_known_envelope_with_disabled_provider_returns_contaminated(self) -> None:
+        """Known curl envelope with disabled provider should return output_contaminated.
 
-        After envelope extraction:
-        1. JSON body is extracted
-        2. Wire-format validation passes
-        3. Semantic evaluation happens
-        4. provider_disabled_required is returned
+        Wire-format contract: JSON + trailing curl metadata = contamination.
+        Semantic evaluation (provider_disabled_required) only happens on clean JSON.
         """
         from scripts.lab_common.provider_preflight import (
-            FAILURE_PROVIDER_DISABLED_REQUIRED,
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
             run_provider_preflight,
         )
 
@@ -106,11 +102,18 @@ class TestEnvelopeExtractionThenSemanticEvaluation:
                 )
 
         assert result.passed is False
-        assert result.failure_class == FAILURE_PROVIDER_DISABLED_REQUIRED
+        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
 
-    def test_known_envelope_with_available_provider_passes(self) -> None:
-        """Known curl envelope with available provider should pass."""
-        from scripts.lab_common.provider_preflight import run_provider_preflight
+    def test_known_envelope_with_available_provider_returns_contaminated(self) -> None:
+        """Known curl envelope with available provider should return output_contaminated.
+
+        Wire-format contract: JSON + trailing curl metadata = contamination.
+        The provider state is NOT evaluated because wire-format validation fails first.
+        """
+        from scripts.lab_common.provider_preflight import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            run_provider_preflight,
+        )
 
         body = (
             '{"provider_status": "available", "phase": "models_list_ok", '
@@ -143,8 +146,8 @@ class TestEnvelopeExtractionThenSemanticEvaluation:
                     artifact_dir=Path(tmpdir),
                 )
 
-        assert result.passed is True
-        assert result.failure_class is None
+        assert result.passed is False
+        assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
 
     def test_unknown_suffix_with_disabled_provider_returns_contamination(self) -> None:
         """Unknown suffix with disabled provider should return contamination.

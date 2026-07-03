@@ -440,3 +440,63 @@ class TestHealthDetailsJsonValidity:
         assert "healthy" in parsed
         assert "primary_failure_class" in parsed
         assert "dependencies" in parsed
+
+
+class TestLeadingWhitespaceHandling:
+    """Regression tests for leading whitespace handling.
+
+    These tests verify that leading whitespace is properly handled:
+    - Leading whitespace + clean JSON proceeds to semantic evaluation
+    - Leading whitespace + JSON + trailing contamination is still contamination
+    """
+
+    def test_leading_whitespace_clean_json_evaluates_semantically(self) -> None:
+        """Leading whitespace + clean JSON should proceed to semantic evaluation."""
+        from scripts.lab_common.provider_preflight_health import (
+            _classify_provider_health_body,
+        )
+
+        body = '\n  {"provider_status":"disabled","provider_enabled":false}'
+        failure_class, payload, detail = _classify_provider_health_body(body)
+
+        assert failure_class is None
+        assert payload == {"provider_status": "disabled", "provider_enabled": False}
+
+    def test_leading_whitespace_then_trailing_curl_metadata_is_contaminated(self) -> None:
+        """Leading whitespace + JSON + CURL_EXIT/HTTP_CODE is contamination."""
+        from scripts.lab_common.provider_preflight_health import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            _classify_provider_health_body,
+        )
+
+        body = '\n  {"provider_status":"available"}\nCURL_EXIT=0\nHTTP_CODE=200\n'
+        failure_class, payload, detail = _classify_provider_health_body(body)
+
+        assert failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+        assert payload is None
+
+    def test_leading_whitespace_with_concatenated_json_is_invalid(self) -> None:
+        """Leading whitespace + concatenated JSON should be invalid_json."""
+        from scripts.lab_common.provider_preflight_health import (
+            FAILURE_PROVIDER_HEALTH_INVALID_JSON,
+            _classify_provider_health_body,
+        )
+
+        body = '\n  {"a":1}{"b":2}'
+        failure_class, payload, detail = _classify_provider_health_body(body)
+
+        assert failure_class == FAILURE_PROVIDER_HEALTH_INVALID_JSON
+        assert payload is None
+
+    def test_leading_whitespace_with_prefix_contamination_is_contaminated(self) -> None:
+        """Leading non-whitespace text + JSON should be contamination."""
+        from scripts.lab_common.provider_preflight_health import (
+            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
+            _classify_provider_health_body,
+        )
+
+        body = 'INFO starting\n  {"healthy":true}'
+        failure_class, payload, detail = _classify_provider_health_body(body)
+
+        assert failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
+        assert payload is None
