@@ -17,12 +17,43 @@ Design constraints:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 # =============================================================================
 # Dataclasses
 # =============================================================================
+
+
+def _string_field(obj: Any, key: str, default: str = "") -> str:
+    """Get string field from dict or object with enum-safe extraction.
+
+    This handles the boundary between dict-shaped incidents, Incident objects,
+    and enum-like values at the module level.
+
+    Args:
+        obj: Dict, Mapping, or object to extract field from
+        key: Field name to extract
+        default: Default value if field not found or None
+
+    Returns:
+        String value or default
+    """
+    if isinstance(obj, (dict, Mapping)):
+        value = obj.get(key, default)
+    else:
+        value = getattr(obj, key, default)
+
+    if value is None:
+        return default
+
+    # Handle enum-like values that have a .value attribute
+    enum_value = getattr(value, "value", None)
+    if enum_value is not None:
+        return str(enum_value)
+
+    return str(value)
 
 
 @dataclass(frozen=True)
@@ -57,6 +88,40 @@ class SchedulingRootCauseEvidence:
     scheduler_message: str | None = None
     matching_nodes: tuple[str, ...] = field(default_factory=tuple)
     root_cause_summary: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> SchedulingRootCauseEvidence:
+        """Create SchedulingRootCauseEvidence from a dict/Mapping.
+
+        Accepts missing keys safely. Converts matching_nodes list/tuple to tuple.
+        Preserves booleans and optional fields.
+
+        Args:
+            data: Dict or Mapping containing scheduling evidence fields
+
+        Returns:
+            SchedulingRootCauseEvidence instance
+        """
+        # Convert matching_nodes to tuple if present
+        matching_nodes_raw = data.get("matching_nodes", ())
+        if isinstance(matching_nodes_raw, (list, tuple)):
+            matching_nodes = tuple(str(n) for n in matching_nodes_raw)
+        else:
+            matching_nodes = ()
+
+        return cls(
+            namespace=str(data.get("namespace", "")),
+            workload_kind=str(data.get("workload_kind", "")),
+            workload_name=str(data.get("workload_name", "")),
+            selector_key=data.get("selector_key"),
+            selector_value=data.get("selector_value"),
+            selector_literal=data.get("selector_literal"),
+            failed_scheduling=bool(data.get("failed_scheduling", False)),
+            unschedulable=bool(data.get("unschedulable", False)),
+            scheduler_message=data.get("scheduler_message"),
+            matching_nodes=matching_nodes,
+            root_cause_summary=str(data.get("root_cause_summary", "")),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON serialization."""

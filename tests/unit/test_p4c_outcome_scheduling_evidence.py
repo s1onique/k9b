@@ -151,3 +151,160 @@ class TestP4cSchedulingEvidenceFallback:
             "k9b.dev/otel-lab-node=missing" in reason
             for reason in outcome.failure_reasons
         )
+
+
+class TestP4cSchedulingEvidenceEmptyProse:
+    """Tests for P4c outcome with complete structured evidence but empty prose."""
+
+    def test_p4c_succeeds_with_complete_structured_evidence_empty_prose(self) -> None:
+        """Verify complete structured evidence passes even when root_cause_summary is empty.
+
+        This is test E from the requirements: P4c outcome accepts complete structured
+        evidence even when prose summary is empty.
+        """
+        outcome = compute_p4c_outcome(
+            evidence={
+                "incident_id": "test-incident",
+                "pass_count": 2,
+                "scheduling_evidence": {
+                    "namespace": "otel-demo",
+                    "workload_name": "shipping",
+                    "selector_key": "k9b.dev/otel-lab-node",
+                    "selector_value": "missing",
+                    "selector_literal": "k9b.dev/otel-lab-node=missing",
+                    "failed_scheduling": True,
+                    "unschedulable": False,
+                    "root_cause_summary": (
+                        "Deployment/shipping FailedScheduling "
+                        "nodeSelector k9b.dev/otel-lab-node=missing no matching node"
+                    ),
+                },
+                # Empty root_cause_summary - structured evidence should still pass
+                "root_cause_summary": "",
+                "read_only": True,
+                "read_only_violations": [],
+            },
+            require_root_cause_terms=True,
+        )
+
+        assert outcome.success is True, f"Expected success but got failure reasons: {outcome.failure_reasons}"
+        assert outcome.root_cause_evidence_satisfied is True
+        # Should not fail for missing_root_cause_term since structured evidence is complete
+        assert not any("missing_root_cause_term" in r for r in outcome.failure_reasons)
+
+    def test_p4c_succeeds_with_from_dict_reconstructed_evidence(self) -> None:
+        """Verify from_dict reconstructed evidence works in P4c outcome.
+
+        This tests the full round-trip: extract -> to_dict -> from_dict -> validate.
+        """
+        from src.k8s_diag_agent.collect.incident_scheduling_root_cause import (
+            SchedulingRootCauseEvidence,
+        )
+
+        # Create evidence using from_dict
+        original = SchedulingRootCauseEvidence(
+            namespace="otel-demo",
+            workload_name="shipping",
+            selector_key="k9b.dev/otel-lab-node",
+            selector_value="missing",
+            selector_literal="k9b.dev/otel-lab-node=missing",
+            failed_scheduling=True,
+            unschedulable=False,
+            root_cause_summary="Deployment/shipping FailedScheduling nodeSelector k9b.dev/otel-lab-node=missing no matching node",
+        )
+
+        # Round-trip through dict
+        evidence_dict = original.to_dict()
+        reconstructed = SchedulingRootCauseEvidence.from_dict(evidence_dict)
+
+        # Verify round-trip preserves data
+        assert reconstructed.namespace == original.namespace
+        assert reconstructed.workload_name == original.workload_name
+        assert reconstructed.selector_key == original.selector_key
+        assert reconstructed.selector_value == original.selector_value
+        assert reconstructed.failed_scheduling == original.failed_scheduling
+
+        # Verify outcome passes with reconstructed evidence
+        outcome = compute_p4c_outcome(
+            evidence={
+                "incident_id": "test-incident",
+                "pass_count": 2,
+                "scheduling_evidence": reconstructed.to_dict(),
+                "root_cause_summary": "",
+                "read_only": True,
+                "read_only_violations": [],
+            },
+            require_root_cause_terms=True,
+        )
+
+        assert outcome.success is True, f"Expected success but got failure reasons: {outcome.failure_reasons}"
+
+
+class TestP4cSchedulingEvidenceIncompleteStructured:
+    """Tests for P4c outcome rejecting incomplete structured evidence."""
+
+    def test_p4c_fails_with_incomplete_structured_evidence_no_fallback(self) -> None:
+        """Verify incomplete structured evidence fails without falling back to prose.
+
+        This is test F from the requirements: P4c outcome rejects incomplete
+        structured evidence without compatible text fallback.
+        """
+        outcome = compute_p4c_outcome(
+            evidence={
+                "incident_id": "test-incident",
+                "pass_count": 2,
+                # Incomplete structured evidence - missing selector key
+                "scheduling_evidence": {
+                    "workload_name": "shipping",
+                    "selector_key": None,  # Missing selector key
+                    "failed_scheduling": True,
+                    "root_cause_summary": "Deployment/shipping FailedScheduling scheduling failure",
+                },
+                # Prose has all terms but structured is incomplete
+                "root_cause_summary": (
+                    "Deployment/shipping FailedScheduling "
+                    "nodeSelector k9b.dev/otel-lab-node=missing no matching node"
+                ),
+                "read_only": True,
+                "read_only_violations": [],
+            },
+            require_root_cause_terms=True,
+        )
+
+        # Should fail because structured evidence is incomplete
+        assert outcome.success is False
+        assert "missing_scheduling_root_cause_evidence" in outcome.failure_reasons
+        # Should NOT fall back to prose and succeed
+        assert not outcome.root_cause_evidence_satisfied
+
+    def test_p4c_fails_with_non_shipping_workload_structured_evidence(self) -> None:
+        """Verify non-shipping workload structured evidence fails without fallback.
+
+        Even if the structured evidence has all required fields, if the workload
+        is not 'shipping', the P4c validation should fail.
+        """
+        outcome = compute_p4c_outcome(
+            evidence={
+                "incident_id": "test-incident",
+                "pass_count": 2,
+                "scheduling_evidence": {
+                    "workload_name": "payments",  # Not shipping
+                    "selector_key": "k9b.dev/otel-lab-node",
+                    "selector_value": "missing",
+                    "selector_literal": "k9b.dev/otel-lab-node=missing",
+                    "failed_scheduling": True,
+                    "root_cause_summary": (
+                        "Deployment/payments FailedScheduling "
+                        "nodeSelector k9b.dev/otel-lab-node=missing no matching node"
+                    ),
+                },
+                "root_cause_summary": "",
+                "read_only": True,
+                "read_only_violations": [],
+            },
+            require_root_cause_terms=True,
+        )
+
+        # Should fail because workload is not 'shipping'
+        assert outcome.success is False
+        assert outcome.root_cause_evidence_satisfied is False

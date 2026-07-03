@@ -44,6 +44,64 @@ class TestSchedulingRootCauseEvidence:
         assert d["scheduler_message"] is not None
         assert "no matching node" in d["root_cause_summary"]
 
+    def test_from_dict_creates_evidence(self) -> None:
+        """Verify from_dict() creates evidence from a dict."""
+        data = {
+            "namespace": "otel-demo",
+            "workload_kind": "Deployment",
+            "workload_name": "shipping",
+            "selector_key": "k9b.dev/otel-lab-node",
+            "selector_value": "missing",
+            "selector_literal": "k9b.dev/otel-lab-node=missing",
+            "failed_scheduling": True,
+            "unschedulable": False,
+            "scheduler_message": "0/1 nodes are available",
+            "matching_nodes": ["node-1", "node-2"],
+            "root_cause_summary": "Deployment/shipping FailedScheduling nodeSelector k9b.dev/otel-lab-node=missing",
+        }
+
+        evidence = SchedulingRootCauseEvidence.from_dict(data)
+
+        assert evidence.namespace == "otel-demo"
+        assert evidence.workload_kind == "Deployment"
+        assert evidence.workload_name == "shipping"
+        assert evidence.selector_key == "k9b.dev/otel-lab-node"
+        assert evidence.selector_value == "missing"
+        assert evidence.failed_scheduling is True
+        assert evidence.unschedulable is False
+        assert evidence.matching_nodes == ("node-1", "node-2")
+
+    def test_from_dict_handles_missing_keys(self) -> None:
+        """Verify from_dict() handles missing keys safely."""
+        evidence = SchedulingRootCauseEvidence.from_dict({})
+
+        assert evidence.namespace == ""
+        assert evidence.workload_kind == ""
+        assert evidence.workload_name == ""
+        assert evidence.selector_key is None
+        assert evidence.failed_scheduling is False
+        assert evidence.matching_nodes == ()
+
+    def test_from_dict_roundtrip(self) -> None:
+        """Verify from_dict(to_dict()) roundtrip preserves data."""
+        original = SchedulingRootCauseEvidence(
+            namespace="otel-demo",
+            workload_name="shipping",
+            selector_key="k9b.dev/otel-lab-node",
+            selector_value="missing",
+            failed_scheduling=True,
+            root_cause_summary="Deployment/shipping FailedScheduling nodeSelector k9b.dev/otel-lab-node=missing",
+        )
+
+        roundtrip = SchedulingRootCauseEvidence.from_dict(original.to_dict())
+
+        assert roundtrip.namespace == original.namespace
+        assert roundtrip.workload_name == original.workload_name
+        assert roundtrip.selector_key == original.selector_key
+        assert roundtrip.selector_value == original.selector_value
+        assert roundtrip.failed_scheduling == original.failed_scheduling
+        assert roundtrip.root_cause_summary == original.root_cause_summary
+
 
 class TestExtractSchedulingRootCause:
     """Tests for extract_scheduling_root_cause function."""

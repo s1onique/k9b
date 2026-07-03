@@ -317,19 +317,8 @@ def compute_p4c_outcome(
                 check_scheduling_root_cause_complete,
             )
             
-            # Reconstruct evidence from dict
-            scheduling_evidence = SchedulingRootCauseEvidence(
-                namespace=str(scheduling_evidence_raw.get("namespace", "")),
-                workload_kind=str(scheduling_evidence_raw.get("workload_kind", "")),
-                workload_name=str(scheduling_evidence_raw.get("workload_name", "")),
-                selector_key=scheduling_evidence_raw.get("selector_key"),
-                selector_value=scheduling_evidence_raw.get("selector_value"),
-                selector_literal=scheduling_evidence_raw.get("selector_literal"),
-                failed_scheduling=bool(scheduling_evidence_raw.get("failed_scheduling", False)),
-                unschedulable=bool(scheduling_evidence_raw.get("unschedulable", False)),
-                scheduler_message=scheduling_evidence_raw.get("scheduler_message"),
-                root_cause_summary=str(scheduling_evidence_raw.get("root_cause_summary", "")),
-            )
+            # Use from_dict() for structured evidence reconstruction
+            scheduling_evidence = SchedulingRootCauseEvidence.from_dict(scheduling_evidence_raw)
             
             if check_scheduling_root_cause_complete(scheduling_evidence):
                 root_cause_evidence_satisfied = True
