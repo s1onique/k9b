@@ -373,6 +373,7 @@ def _process_incident(
         checks_requested=checks_requested,
         checks_run=checks_run,
         checks_rejected=checks_rejected,
+        decision=decision if decision else None,
     )
 
     # Extract artifact flags

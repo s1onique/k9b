@@ -453,3 +453,11 @@ class AutomaticDiagnosisLoopSummary(TypedDict, total=False):
     read_only: bool
     review_required_before_any_action: bool
     no_remediation_attempted: bool
+
+    # P4c contract fields: multi-pass diagnosis tracking
+    # pass_count: Number of completed diagnosis passes (None if not run)
+    pass_count: int | None
+    # pass_run_ids: Unique run IDs from each completed pass
+    pass_run_ids: list[str] | None
+    # terminal_decision: Decision from the latest completed pass
+    terminal_decision: str | None

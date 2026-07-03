@@ -288,11 +288,15 @@ def mark_diagnosis_loop_completed(
     checks_requested: int = 0,
     checks_run: int = 0,
     checks_rejected: int = 0,
+    decision: str | None = None,
     occurred_at: datetime | None = None,
 ) -> Incident:
     """Mark that automatic diagnosis loop completed successfully.
 
     Safe metadata only - no raw packet contents, logs, or stack traces.
+
+    The decision field is captured and stored in the event data to enable
+    pass accumulation tracking in the automatic diagnosis loop summary.
 
     Args:
         incident: The incident to update
@@ -302,6 +306,8 @@ def mark_diagnosis_loop_completed(
         checks_requested: Number of checks requested
         checks_run: Number of checks actually run
         checks_rejected: Number of checks rejected
+        decision: The terminal decision from the policy-enforced loop pass
+            (e.g., "stop_no_checks_proposed", "stop_root_cause_found")
         occurred_at: Optional timestamp (defaults to now)
 
     Returns:
@@ -322,6 +328,10 @@ def mark_diagnosis_loop_completed(
 
     if review_packet_name:
         event_data["review_packet_id"] = review_packet_name
+
+    # Store the terminal decision for pass accumulation tracking.
+    if decision:
+        event_data["decision"] = decision
 
     new_event = IncidentEvent(
         event_id=make_event_id(incident.incident_id, "diagnosis_loop_completed", now, event_data),

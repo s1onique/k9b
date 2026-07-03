@@ -430,6 +430,7 @@ class IncidentStore:
         checks_requested: int = 0,
         checks_run: int = 0,
         checks_rejected: int = 0,
+        decision: str | None = None,
     ) -> Incident | None:
         """Mark that automatic diagnosis loop completed successfully.
 
@@ -443,6 +444,8 @@ class IncidentStore:
             checks_requested: Number of checks requested
             checks_run: Number of checks actually run
             checks_rejected: Number of checks rejected
+            decision: The terminal decision from the policy-enforced loop pass
+                (e.g., "stop_no_checks_proposed", "stop_root_cause_found")
 
         Returns:
             Updated incident snapshot, or None if not found
@@ -452,6 +455,7 @@ class IncidentStore:
         updated = _helper(
             self, incident_id, run_id, collector_run_id,
             review_packet_name, checks_requested, checks_run, checks_rejected,
+            decision=decision,
         )
         return self._snapshot_incident(updated) if updated else None
 
@@ -485,7 +489,7 @@ class IncidentStore:
         return len(self._incidents)
 
     def __repr__(self) -> str:
-        """String representation for debugging."""
+        """Return string representation for debugging."""
         return f"IncidentStore(incidents={len(self._incidents)})"
 
 

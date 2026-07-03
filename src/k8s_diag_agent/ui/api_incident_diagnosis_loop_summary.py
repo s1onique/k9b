@@ -192,6 +192,9 @@ def build_automatic_diagnosis_loop_summary(
     This function derives a read-only summary of the latest automatic diagnosis
     loop run from existing incident timeline events and review metadata.
 
+    Each diagnosis_loop_completed event represents one observable pass; its run_id
+    is accumulated into pass_run_ids for multi-pass validation.
+
     Args:
         events: List of incident timeline events (serialized as dicts)
             Expected keys: event_id, event_type, occurred_at, data
@@ -215,6 +218,9 @@ def build_automatic_diagnosis_loop_summary(
         - read_only: Always True
         - review_required_before_any_action: Always True
         - no_remediation_attempted: Always True
+        - pass_count: Number of completed passes
+        - pass_run_ids: List of unique run_ids from completed passes
+        - terminal_decision: Decision from latest completed pass
 
     Safety constraints enforced:
     - Only diagnosis_loop_started/completed/failed events are considered
@@ -262,6 +268,9 @@ def build_automatic_diagnosis_loop_summary(
             "read_only": True,
             "review_required_before_any_action": True,
             "no_remediation_attempted": True,
+            "pass_count": None,
+            "pass_run_ids": None,
+            "terminal_decision": None,
         }
 
     # Sort by occurred_at descending to find latest event
@@ -282,15 +291,40 @@ def build_automatic_diagnosis_loop_summary(
     latest_completed_at: str | None = None
     latest_failed_at: str | None = None
 
+    # Each completed event represents one observable pass.
+    completed_run_ids: list[str] = []
+    # Track terminal decision from the latest completed pass
+    terminal_decision: str | None = None
+
     for dt, evt in diagnosis_events:
         et = evt.get("event_type", "")
         ts = dt.isoformat()
         if et == _DIAGNOSIS_LOOP_STARTED and latest_started_at is None:
             latest_started_at = ts
-        elif et == _DIAGNOSIS_LOOP_COMPLETED and latest_completed_at is None:
-            latest_completed_at = ts
+        elif et == _DIAGNOSIS_LOOP_COMPLETED:
+            if latest_completed_at is None:
+                latest_completed_at = ts
+            # Accumulate run_id from each completed pass
+            evt_data = evt.get("data")
+            if evt_data:
+                run_id = evt_data.get("run_id")
+                if isinstance(run_id, str) and run_id:
+                    completed_run_ids.append(run_id)
         elif et == _DIAGNOSIS_LOOP_FAILED and latest_failed_at is None:
             latest_failed_at = ts
+
+    # Extract terminal decision from latest completed pass.
+    if status == DiagnosisLoopStatus.COMPLETED:
+        # Find the latest completed event to get its terminal decision
+        for dt, evt in diagnosis_events:
+            evt_type = evt.get("event_type", "")
+            if evt_type == _DIAGNOSIS_LOOP_COMPLETED:
+                evt_data = evt.get("data")
+                if evt_data:
+                    terminal_decision = evt_data.get("decision")
+                    if terminal_decision is not None:
+                        terminal_decision = _bound_string(str(terminal_decision), MAX_REASON_LENGTH)
+                break
 
     # Extract unavailable_reason from failed events only
     unavailable_reason: str | None = None
@@ -304,7 +338,7 @@ def build_automatic_diagnosis_loop_summary(
                     unavailable_reason = reason
                     break
 
-    # Extract check counts from completed events only
+    # Extract check counts from latest completed event
     checks_requested: int | None = None
     checks_run: int | None = None
     checks_rejected: int | None = None
@@ -318,6 +352,15 @@ def build_automatic_diagnosis_loop_summary(
                 checks_run = _extract_int(evt_data, "checks_run")
                 checks_rejected = _extract_int(evt_data, "checks_rejected")
                 break
+
+    # Return accumulated pass_run_ids and pass_count.
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    unique_run_ids: list[str] = []
+    for rid in completed_run_ids:
+        if rid not in seen:
+            seen.add(rid)
+            unique_run_ids.append(rid)
 
     return {
         "status": status,
@@ -335,6 +378,10 @@ def build_automatic_diagnosis_loop_summary(
         "read_only": True,
         "review_required_before_any_action": True,
         "no_remediation_attempted": True,
+        # P4c contract fields
+        "pass_count": len(unique_run_ids) if unique_run_ids else None,
+        "pass_run_ids": unique_run_ids if unique_run_ids else None,
+        "terminal_decision": terminal_decision,
     }
 
 

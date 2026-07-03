@@ -55,6 +55,7 @@ def mark_diagnosis_loop_completed(
     checks_requested: int = 0,
     checks_run: int = 0,
     checks_rejected: int = 0,
+    decision: str | None = None,
 ) -> Incident | None:
     """Mark that automatic diagnosis loop completed successfully.
 
@@ -67,6 +68,8 @@ def mark_diagnosis_loop_completed(
         checks_requested: Number of checks requested
         checks_run: Number of checks actually run
         checks_rejected: Number of checks rejected
+        decision: The terminal decision from the policy-enforced loop pass
+            (e.g., "stop_no_checks_proposed", "stop_root_cause_found")
 
     Returns:
         Updated incident or None if not found
@@ -85,6 +88,7 @@ def mark_diagnosis_loop_completed(
         checks_requested=checks_requested,
         checks_run=checks_run,
         checks_rejected=checks_rejected,
+        decision=decision,
     )
     store._incidents[incident_id] = updated
     return updated
