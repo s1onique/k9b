@@ -176,6 +176,81 @@ class TestParseRequestConfigValidation:
         # P4c with MIN_REQUIRED_PASSES=2 requires budget >= 2
         assert result.max_passes_per_incident >= 2
 
+    def test_parse_accepts_require_complete_root_cause_true(self) -> None:
+        """require_complete_root_cause_before_stop=True is parsed correctly.
+
+        This is the P4c lab-strict mode activation.
+        """
+        from k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop import (
+            _parse_request_config,
+        )
+
+        handler: MockHandler = MockHandlerImpl(
+            '{"max_passes_per_incident": 5, "require_complete_root_cause_before_stop": true}'
+        )
+        result = _parse_request_config(handler)  # type: ignore[arg-type]
+        assert result is not None
+        assert result.require_complete_root_cause_before_stop is True
+
+    def test_parse_accepts_require_complete_root_cause_false(self) -> None:
+        """require_complete_root_cause_before_stop=false is parsed correctly."""
+        from k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop import (
+            _parse_request_config,
+        )
+
+        handler: MockHandler = MockHandlerImpl(
+            '{"max_passes_per_incident": 5, "require_complete_root_cause_before_stop": false}'
+        )
+        result = _parse_request_config(handler)  # type: ignore[arg-type]
+        assert result is not None
+        assert result.require_complete_root_cause_before_stop is False
+
+    def test_parse_defaults_require_complete_root_cause_when_missing(self) -> None:
+        """require_complete_root_cause_before_stop defaults to False when not in body."""
+        from k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop import (
+            _parse_request_config,
+        )
+
+        handler: MockHandler = MockHandlerImpl('{"max_passes_per_incident": 5}')
+        result = _parse_request_config(handler)  # type: ignore[arg-type]
+        assert result is not None
+        # Default is False for safety
+        assert result.require_complete_root_cause_before_stop is False
+
+    def test_parse_defaults_non_boolean_require_complete_to_false(self) -> None:
+        """Non-boolean values for require_complete_root_cause_before_stop default to False."""
+        from k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop import (
+            _parse_request_config,
+        )
+
+        # String value should be rejected
+        handler: MockHandler = MockHandlerImpl(
+            '{"max_passes_per_incident": 5, "require_complete_root_cause_before_stop": "true"}'
+        )
+        result = _parse_request_config(handler)  # type: ignore[arg-type]
+        assert result is not None
+        # Should default to False when non-boolean
+        assert result.require_complete_root_cause_before_stop is False
+
+    def test_parse_p4c_lab_strict_activation(self) -> None:
+        """P4c lab-strict mode activates with both budget and lab-strict flag.
+
+        This is the exact activation path for P4c unschedulable-shipping scenario.
+        """
+        from k8s_diag_agent.ui.server_incident_automatic_diagnosis_loop import (
+            _parse_request_config,
+        )
+
+        handler: MockHandler = MockHandlerImpl(
+            '{"max_passes_per_incident": 5, "require_complete_root_cause_before_stop": true}'
+        )
+        result = _parse_request_config(handler)  # type: ignore[arg-type]
+        assert result is not None
+        # P4c requires at least 2 passes
+        assert result.max_passes_per_incident >= 2
+        # Lab-strict mode must be enabled
+        assert result.require_complete_root_cause_before_stop is True
+
 
 class MockHandlerImpl:
     """Concrete implementation of MockHandler for tests."""

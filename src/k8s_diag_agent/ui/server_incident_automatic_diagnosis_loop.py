@@ -197,18 +197,29 @@ def _parse_request_config(handler: HealthUIRequestHandler) -> AutomaticDiagnosis
         return None
 
     # Check if any config fields are present
-    config_fields = ["max_passes_per_incident", "max_checks_per_pass", "max_incidents_per_run"]
+    config_fields = [
+        "max_passes_per_incident",
+        "max_checks_per_pass",
+        "max_incidents_per_run",
+        "require_complete_root_cause_before_stop",
+    ]
     if not any(field in parsed for field in config_fields):
         return None
 
     # Build config from request body with semantic validation.
     # _positive_int() rejects booleans, non-integers, zero, and negatives.
+    # require_complete_root_cause_before_stop is a boolean for P4c lab-strict mode.
+    require_complete = parsed.get("require_complete_root_cause_before_stop")
+    if not isinstance(require_complete, bool):
+        require_complete = False
+
     return AutomaticDiagnosisLoopConfig(
         max_incidents_per_run=_positive_int(parsed.get("max_incidents_per_run"), 10),
         max_passes_per_incident=_positive_int(parsed.get("max_passes_per_incident"), 1),
         max_checks_per_pass=_positive_int(parsed.get("max_checks_per_pass"), 5),
         write_stop_path_packets=parsed.get("write_stop_path_packets", True),
         write_ineligible_packets=parsed.get("write_ineligible_packets", False),
+        require_complete_root_cause_before_stop=require_complete,
     )
 
 

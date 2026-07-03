@@ -47,3 +47,4 @@ scripts/ci/wire_qemu_binfmt.sh,legacy-debt,platform-team,QEMU/binfmt wiring from
 scripts/ci/wire_docker_buildx.sh,legacy-debt,platform-team,Docker Buildx builder wiring using shell-first CLI commands; CI hermetic toolchain wiring,shell,pending,N/A
 scripts/ci/emit_toolchain_provenance.sh,legacy-debt,platform-team,Toolchain provenance emitter for hermetic CI workflows; writes GITHUB_STEP_SUMMARY and GITHUB_OUTPUT,shell,pending,N/A
 scripts/ci/ensure_live_lab_venv.sh,legacy-debt,platform-team,Live-lab venv preparation with fingerprinting; simple logic but shell-native,shell,pending,ACT-2025-shell-migration
+test.sh,legacy-debt,k9b-team,Git activity snapshot script; Python heredoc for stats,Python,pending,N/A

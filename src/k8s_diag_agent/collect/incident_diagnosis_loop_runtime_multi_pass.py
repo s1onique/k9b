@@ -47,6 +47,7 @@ def run_policy_enforced_loop(
     policy: DiagnosisLoopPolicy | None = None,
     now: datetime | None = None,
     fake_handlers: Mapping[str, ReadOnlyCheckHandler] | None = None,
+    require_complete_root_cause_before_stop: bool = False,
 ) -> dict[str, object]:
     """Run the complete policy-enforced diagnosis loop.
     
@@ -55,6 +56,10 @@ def run_policy_enforced_loop(
     - Pre-execution policy gating
     - Budget enforcement before each pass
     - Proper P4c artifact path writing
+    
+    Args:
+        require_complete_root_cause_before_stop: If True (P4c lab-strict mode),
+            stop_no_checks_proposed requires complete scheduling root cause.
     
     Returns:
         Dict with loop results and all pass artifacts
@@ -129,6 +134,7 @@ def run_policy_enforced_loop(
             runtime_state=runtime_state,
             now=resolved_now,
             fake_handlers=fake_handlers,
+            require_complete_root_cause_before_stop=require_complete_root_cause_before_stop,
         )
         
         pass_results.append(pass_result)

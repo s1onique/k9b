@@ -351,6 +351,7 @@ def plan_one_read_only_diagnosis_loop_pass(
     run_id: str,
     prior_loop_state: Mapping[str, object] | None = None,
     now: datetime | None = None,
+    require_complete_root_cause_before_stop: bool = False,
 ) -> dict[str, object]:
     """Plan one diagnosis loop pass WITHOUT executing checks.
 
@@ -373,6 +374,8 @@ def plan_one_read_only_diagnosis_loop_pass(
         run_id: Unique identifier for this orchestrator run (must be safe)
         prior_loop_state: Prior loop state from previous pass (if continuing)
         now: Optional datetime for deterministic timestamps
+        require_complete_root_cause_before_stop: If True (P4c lab-strict mode),
+            stop_no_checks_proposed requires complete scheduling root cause.
 
     Returns:
         Planner-only result dict:
@@ -432,6 +435,7 @@ def plan_one_read_only_diagnosis_loop_pass(
         diagnosis_report=dict(diagnosis_report),
         prior_loop_state=dict(prior_loop_state) if prior_loop_state is not None else None,
         now=resolved_now,
+        require_complete_root_cause_before_stop=require_complete_root_cause_before_stop,
     )
 
     # Extract decision

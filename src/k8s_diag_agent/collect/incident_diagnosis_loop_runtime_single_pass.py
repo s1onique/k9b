@@ -82,6 +82,7 @@ def run_policy_enforced_loop_pass(
     runtime_state: LoopRuntimeState | None = None,
     now: datetime | None = None,
     fake_handlers: Mapping[str, ReadOnlyCheckHandler] | None = None,
+    require_complete_root_cause_before_stop: bool = False,
 ) -> dict[str, object]:
     """Run one diagnosis loop pass with PRE-EXECUTION policy enforcement.
 
@@ -220,6 +221,7 @@ def run_policy_enforced_loop_pass(
                     run_id=run_id,
                     prior_loop_state=prior_loop_state,
                     now=resolved_now,
+                    require_complete_root_cause_before_stop=require_complete_root_cause_before_stop,
                 )
                 plan_span_ctx.set_ok()
             except Exception as exc:
