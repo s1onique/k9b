@@ -153,14 +153,19 @@ def log_term_check(term: str, found: bool) -> None:
 def log_validation_result(success: bool, message: str) -> None:
     """Log validation result.
 
+    NOTE: This logs mechanical criteria validation (Step 5 in P4c), NOT root-cause
+    evidence validation. Root-cause validation happens in Step 6 and produces the
+    definitive P4c outcome. This function exists for backward compatibility with
+    legacy validation paths.
+
     Args:
         success: Whether validation passed
         message: Validation message
     """
     if success:
-        log(f"Validation PASSED: {message}")
+        log(f"[MECHANICAL] Validation PASSED: {message}")
     else:
-        log(f"Validation FAILED: {message}")
+        log(f"[MECHANICAL] Validation FAILED: {message}")
 
 
 def log_error(error_msg: str) -> None:

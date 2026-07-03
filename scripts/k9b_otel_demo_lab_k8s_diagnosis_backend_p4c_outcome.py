@@ -67,6 +67,7 @@ def _diagnosis_used_simulation(pass_run_ids: tuple[str, ...]) -> bool:
 def compute_p4c_outcome(
     evidence: dict[str, Any],
     *,
+    scenario: str | None = None,
     accept_terminal_single_pass: bool = False,
     min_required_passes: int = 2,
     require_root_cause_terms: bool = True,
@@ -81,6 +82,7 @@ def compute_p4c_outcome(
         - Terminal single-pass before required passes is a FAILURE
         - P4c must demonstrate >= min_required_passes observable passes
         - Root-cause evidence for scheduling root cause is required
+        - Scenario manifest grades determine pass/fail for causal-level diagnosis
 
     PRODUCT MODE (accept_terminal_single_pass=True):
         - Terminal single-pass with all requirements met is SUCCESS
@@ -88,14 +90,35 @@ def compute_p4c_outcome(
 
     Args:
         evidence: Diagnosis evidence dict from phase_p4c_verify_k8s_mult_pass_diagnosis
+        scenario: Scenario name for manifest-based diagnosis grade validation.
+            When provided, the manifest's evaluate_diagnosis_grade() is used to
+            determine if the diagnosis reached causal-level or exact-root-cause.
         accept_terminal_single_pass: If True, allow terminal single-pass as success
             (for product-mode compatibility). If False (default, lab-strict mode),
             terminal single-pass before required passes is treated as failure.
         min_required_passes: Minimum passes required for multipass mode (default: 2).
+        require_root_cause_terms: If True (default), require specific root cause
+            prose terms in addition to manifest grade validation.
 
     Returns:
         P4cDiagnosisOutcome with the definitive success/failure determination
     """
+    # Import here to avoid circular imports at module level
+    from scripts.k9b_otel_demo_lab_scenario_truth_manifest import (
+        DiagnosisGrade,
+        EvidencePipelineFailure,
+        evaluate_diagnosis_grade,
+        get_scenario_manifest,
+    )
+
+    # Get scenario manifest for diagnosis grade evaluation
+    # FAIL CLOSED: Unknown scenario names must not silently disable manifest authority
+    manifest = None
+    unknown_scenario: str | None = None
+    if scenario:
+        manifest = get_scenario_manifest(scenario)
+        if manifest is None:
+            unknown_scenario = scenario
     incident_id = evidence.get("incident_id", "")
     pass_count = evidence.get("pass_count", 0)
     pass_run_ids_raw = evidence.get("pass_run_ids", [])
@@ -149,6 +172,10 @@ def compute_p4c_outcome(
 
     # Collect failure reasons
     failure_reasons: list[str] = []
+
+    # FAIL CLOSED: Unknown scenario names fail the outcome
+    if unknown_scenario:
+        failure_reasons.append(f"unknown_scenario_manifest:{unknown_scenario}")
 
     # Determine mode and validate
     # CONTRACT: terminal_single_pass mode requires accept_terminal_single_pass=True
@@ -306,6 +333,20 @@ def compute_p4c_outcome(
         else:
             root_cause_evidence_satisfied = True
             root_cause_evidence_reason = None
+
+    # MANIFEST AUTHORITY: When scenario manifest is provided, validate diagnosis grade.
+    # A scheduling-level diagnosis (without causal root cause) is insufficient.
+    if manifest is not None:
+        diagnosis_grade = evaluate_diagnosis_grade(evidence, manifest)
+        if diagnosis_grade in (DiagnosisGrade.NO_SIGNAL, DiagnosisGrade.SYMPTOM_LEVEL, DiagnosisGrade.SCHEDULING_LEVEL):
+            grade_failure = (
+                f"{EvidencePipelineFailure.DIAGNOSIS_OUTPUT_IGNORED_ROOT_CAUSE}: "
+                f"diagnosis reached {diagnosis_grade}, expected causal_level or exact_root_cause"
+            )
+            failure_reasons.append(grade_failure)
+            if root_cause_evidence_satisfied:
+                root_cause_evidence_satisfied = False
+                root_cause_evidence_reason = f"insufficient_diagnosis_grade:{diagnosis_grade}"
 
     success = len(failure_reasons) == 0
 
