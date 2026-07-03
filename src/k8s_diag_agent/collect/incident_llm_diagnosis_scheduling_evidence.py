@@ -46,8 +46,10 @@ def build_scheduling_evidence_for_prompt(
 
         if scheduling_evidence.root_cause_summary:
             return scheduling_evidence.to_dict()
-    except Exception:
+    except (TypeError, ValueError, KeyError, AttributeError):
         # Fallback: don't let extraction failures break the prompt
+        # These are the narrow exceptions that extract_scheduling_root_cause may raise
+        # for invalid input types, values, missing keys, or attribute errors.
         pass
 
     return None

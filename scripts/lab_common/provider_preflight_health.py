@@ -5,21 +5,30 @@ JSON classification logic is split to provider_preflight_json_classification.py.
 Curl envelope parsing logic is split to provider_preflight_curl_envelope.py.
 
 Wire-format validation contract:
-Provider health response body must be EXACTLY one clean JSON document.
-Any prefix/suffix that is not whitespace constitutes contamination.
+Provider health response body consists of:
+1. Optional leading whitespace
+2. Valid provider health JSON document
+3. Optional known successful curl wrapper envelope metadata (transport layer)
+
+STDOUT_BLOCK prefix handling is performed before this classifier receives the
+provider-health body. This classifier owns JSON + optional successful curl suffix
+handling only.
 
 Envelope handling:
 The curl wrapper may emit a known diagnostic envelope around provider health JSON:
-  - STDOUT_BLOCK prefix (optional)
   - Valid provider health JSON
   - STDERR_BLOCK marker (optional)
   - CURL_EXIT=<code>
   - HTTP_CODE=<code>
 
-Wire-format validation (_classify_provider_health_body) classifies raw output FIRST.
-Known curl envelope metadata is wire-format CONTAMINATION - not accepted as valid input.
-Semantic evaluation happens ONLY after wire-format validation passes on exactly one
-clean JSON document.
+Known successful curl envelope (CURL_EXIT=0, HTTP_CODE=200) is ACCEPTED as transport
+envelope metadata. It is NOT provider-health JSON body contamination.
+
+Contamination rules:
+- Non-whitespace prefix before JSON -> contamination
+- Concatenated JSON documents -> invalid_json
+- Unknown non-whitespace suffix -> contamination
+- Malformed JSON -> invalid_json
 """
 
 from __future__ import annotations
@@ -176,22 +185,22 @@ def _suffix_starts_with_json_document(suffix: str) -> bool:
 
 
 def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None, str]:
-    """Strict wire-format validation for provider health response body.
+    """Wire-format validation for provider health response body.
 
-    Provider health response body must be EXACTLY one clean JSON document.
-    Wire-format validation MUST happen before semantic health evaluation.
-
-    Wire-format contract:
+    Provider health body validation contract:
     - Empty/whitespace-only body -> provider_health_empty_body
-    - JSON + non-whitespace suffix that is valid JSON -> provider_health_invalid_json
-    - JSON + any non-whitespace suffix (including known curl envelope) -> provider_health_output_contaminated
     - Non-whitespace prefix + JSON -> provider_health_output_contaminated
+    - JSON + non-whitespace suffix that is valid JSON -> provider_health_invalid_json
+    - JSON + known successful curl envelope -> PASS (accepted transport metadata)
+    - JSON + unknown non-whitespace suffix -> provider_health_output_contaminated
     - Malformed JSON with no embedded JSON -> provider_health_invalid_json
     - Exactly one clean JSON document (no prefix/suffix) -> (None, payload, "") for semantic evaluation
 
-    CRITICAL: Known curl envelope metadata (CURL_EXIT=0, HTTP_CODE=200, STDERR_BLOCK)
-    is wire-format CONTAMINATION. The envelope may be recognized for diagnostics but
-    must NOT be accepted as valid input. Only exactly one clean JSON document passes.
+    Wire-format layers:
+    1. Transport envelope extraction: Known successful curl metadata (CURL_EXIT=0, HTTP_CODE=200,
+       STDERR_BLOCK) is ACCEPTED as transport envelope. Not provider-body contamination.
+    2. JSON body classification: Valid JSON body passes to semantic evaluation.
+    3. Semantic provider-health evaluation: Only proceeds after wire-format passes.
 
     Args:
         raw: The raw body string from curl response
@@ -236,7 +245,7 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
     suffix_start = end
     suffix = raw[suffix_start:]
 
-    # Skip whitespace-only suffix
+    # Skip whitespace-only suffix - this is valid (leading/trailing whitespace allowed)
     suffix_stripped = suffix.lstrip()
 
     if suffix_stripped:
@@ -251,10 +260,14 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
                 f"Body prefix (first 200 chars): {raw[:200]!r}",
             )
         except json.JSONDecodeError:
-            # Suffix is not valid JSON - any trailing data after the first JSON document
-            # is wire-format contamination, even if it looks like known curl metadata.
-            # Known curl envelope metadata (CURL_EXIT=0, HTTP_CODE=200) may be recognized
-            # for diagnostics but must NOT be accepted as valid envelope.
+            # Suffix is not valid JSON. Check if it's a known successful curl envelope.
+            # Known successful curl envelope (CURL_EXIT=0, HTTP_CODE=200) is ACCEPTED
+            # as transport envelope metadata - not provider-body contamination.
+            envelope = parse_known_curl_envelope_suffix(suffix_stripped)
+            if envelope is not None:
+                # Known successful curl envelope - ACCEPTED
+                return None, payload, ""
+            # Not a known successful envelope - mark as contamination
             return (
                 FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
                 None,
@@ -304,7 +317,6 @@ def _evaluate_health_response(
 ) -> ProviderPreflightResult:
     """Evaluate provider health response.
 
-    Provider health output must be EXACTLY one clean JSON document.
     Wire-format validation MUST happen before semantic evaluation.
 
     The curl wrapper may emit a known diagnostic envelope around provider health JSON:
@@ -314,19 +326,16 @@ def _evaluate_health_response(
       - CURL_EXIT=<code>
       - HTTP_CODE=<code>
 
-    CRITICAL: Known curl envelope metadata is NOT accepted as envelope recovery.
-    Any trailing curl metadata (CURL_EXIT, HTTP_CODE, STDERR_BLOCK) in the body
-    constitutes wire-format contamination. Semantic evaluation only proceeds
-    when the body contains exactly one clean JSON document.
+    Known successful curl envelope (CURL_EXIT=0, HTTP_CODE=200) is ACCEPTED as transport
+    envelope metadata. Semantic evaluation proceeds with the valid JSON body.
 
-    Step 1: Strict wire-format validation on raw body.
+    Step 1: Wire-format validation on raw body (includes curl envelope extraction).
     Step 2: Semantic provider-health evaluation only for valid clean JSON.
     """
     raw_body = curl_result.body
 
-    # Step 1: Strict wire-format validation MUST happen BEFORE any semantic evaluation.
-    # This rejects any body with trailing curl metadata (CURL_EXIT, HTTP_CODE, etc.)
-    # as contaminated, regardless of whether the JSON is valid.
+    # Step 1: Wire-format validation MUST happen BEFORE any semantic evaluation.
+    # This includes accepting known successful curl envelope as transport metadata.
     failure_class, json_payload, detail = _classify_raw_body_for_wire_format(raw_body)
 
     if failure_class is not None:

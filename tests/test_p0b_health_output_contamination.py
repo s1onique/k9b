@@ -116,15 +116,16 @@ class TestValidJsonPasses:
 class TestOutputContamination:
     """Tests for output framing contamination detection."""
 
-    def test_json_with_trailing_curl_metadata_classified_as_output_contaminated(self) -> None:
-        """JSON with trailing curl metadata should be classified as provider_health_output_contaminated."""
+    def test_json_with_trailing_unknown_suffix_classified_as_contaminated(self) -> None:
+        """JSON with trailing unknown suffix (not known curl envelope) should be classified as contamination."""
         from scripts.lab_common.provider_preflight import (
             FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
             run_provider_preflight,
         )
 
         valid_json = json.dumps({"healthy": True, "timestamp": "2026-06-16T10:00:00Z"})
-        contaminated_body = f'{valid_json}\nCURL_EXIT=0\nHTTP_CODE=200'
+        # Unknown suffix that's not a known successful curl envelope
+        contaminated_body = f'{valid_json}\nUNKNOWN_METADATA=value'
         mock_curl_result = make_curl_result(success=True, body=contaminated_body, http_code=200, curl_rc=0)
 
         with patch(
@@ -143,6 +144,47 @@ class TestOutputContamination:
         assert result.passed is False
         assert result.failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
         assert "trailing" in result.message.lower() or "contamination" in result.message.lower()
+
+    def test_json_with_trailing_known_curl_envelope_is_accepted(self) -> None:
+        """JSON with known successful curl envelope (CURL_EXIT=0, HTTP_CODE=200) is ACCEPTED.
+
+        Per APF doctrine: Known successful curl wrapper metadata is accepted transport
+        envelope metadata, not provider-health JSON contamination.
+        """
+        from scripts.lab_common.provider_preflight import run_provider_preflight
+
+        # Use fully semantic-valid health JSON so preflight result is deterministic
+        valid_json = json.dumps({
+            "healthy": True,
+            "timestamp": "2026-06-16T10:00:00Z",
+            "primary_failure_class": "",
+            "provider_enabled": True,
+            "provider_configured": True,
+            "provider_status": "available",
+            "phase": "models_list_ok",
+            "dependencies": [],
+        })
+        # Known successful curl envelope is ACCEPTED (not contamination)
+        accepted_body = f'{valid_json}\nCURL_EXIT=0\nHTTP_CODE=200'
+        mock_curl_result = make_curl_result(success=True, body=accepted_body, http_code=200, curl_rc=0)
+
+        with patch(
+            "scripts.lab_common.provider_preflight._curl_service_pod_with_retry",
+            return_value=mock_curl_result,
+        ), patch(
+            "scripts.lab_common.provider_preflight._curl_exec_pod_with_retry",
+            return_value=mock_curl_result,
+        ):
+            with TemporaryDirectory() as tmpdir:
+                result = run_provider_preflight(
+                    kubeconfig="/fake/kubeconfig", namespace="k9b",
+                    service="k9b-backend", port=8080, artifact_dir=Path(tmpdir),
+                )
+
+        # Known successful curl envelope is accepted - preflight should pass
+        # (wire-format passes, semantic evaluation succeeds)
+        assert result.passed is True, f"Expected pass, got: {result.failure_class} - {result.message}"
+        assert result.failure_class is None
 
     def test_json_with_trailing_curl_exit_classified_as_contaminated(self) -> None:
         """JSON followed by CURL_EXIT=0 should be classified as contaminated."""

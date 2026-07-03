@@ -130,11 +130,14 @@ class TestKnownCurlEnvelopeAccepted:
         assert result.failure_class is None
 
 
-class TestKnownCurlEnvelopeRejected:
-    """Unknown or failed curl envelope patterns should still be classified as contamination.
+class TestKnownCurlEnvelopeBoundary:
+    """Boundary tests for known curl envelope acceptance and rejection.
 
     This guards against weakening the contamination detection when accepting
-    known successful envelope patterns.
+    known successful envelope patterns. Contains both acceptance and rejection tests.
+
+    APF contract: Known successful curl wrapper metadata is accepted transport envelope,
+    not provider-health JSON contamination.
     """
 
     @pytest.mark.parametrize(
