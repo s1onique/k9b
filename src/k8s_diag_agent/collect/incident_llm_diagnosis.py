@@ -33,6 +33,10 @@ from typing import Any, Protocol, runtime_checkable
 from .incident_llm_diagnosis_scheduling_evidence import (
     build_scheduling_evidence_for_prompt,
 )
+from .incident_llm_diagnosis_type_helpers import (
+    _as_object_list,
+    _as_object_mapping,
+)
 from .incident_llm_prompt_contracts import (
     DEFAULT_MAX_INCIDENT_JSON_CHARS,
     DEFAULT_MAX_PROMPT_CHARS,
@@ -78,6 +82,7 @@ class IncidentDiagnosisLLM(Protocol):
             Raw model output as string.
         """
         ...
+
 
 
 # =============================================================================
@@ -136,10 +141,14 @@ def build_diagnosis_prompt(
         if events:
             incident_summary["recent_events"] = events[:10]
 
-    # P4c FIX: Extract scheduling evidence using durable structured extraction.
-    # This ensures the LLM sees the scheduling failure details directly from
-    # the structured evidence that survives evidence boundary crossings.
-    scheduling_evidence = build_scheduling_evidence_for_prompt(incident, events)
+    # P4c FIX: Extract scheduling evidence using durable structured extraction
+    # that survives evidence boundary crossings.
+    incident_for_extraction = _as_object_mapping(incident)
+    event_list = _as_object_list(events)
+    scheduling_evidence = build_scheduling_evidence_for_prompt(
+        incident_for_extraction,
+        event_list,
+    )
     if scheduling_evidence:
         incident_summary["scheduling_evidence"] = scheduling_evidence
 
@@ -442,14 +451,15 @@ def build_incident_diagnosis(
             "These remain as text only and do not create executable controls."
         )
 
-    # P4c FIX: Extract scheduling evidence using durable structured extraction.
-    # This ensures scheduling evidence survives evidence boundary crossings even
-    # when the LLM diagnosis text doesn't explicitly mention scheduling markers.
-    # The scheduling_evidence dict is included in diagnosis_data for
+    # P4c FIX: Extract scheduling evidence using durable structured extraction
+    # that survives evidence boundary crossings. Included in diagnosis_data for
     # check_stop_no_checks_proposed_acceptable() validation in the planner.
-    incident_for_extraction = dict(incident)
-    events = list(case_file.get("events", []))
-    scheduling_evidence = build_scheduling_evidence_for_prompt(incident_for_extraction, events)
+    incident_for_extraction = _as_object_mapping(incident)
+    event_list = _as_object_list(case_file.get("events", []))
+    scheduling_evidence = build_scheduling_evidence_for_prompt(
+        incident_for_extraction,
+        event_list,
+    )
 
     # Build final diagnosis report
     diagnosis_report: dict[str, object] = {
