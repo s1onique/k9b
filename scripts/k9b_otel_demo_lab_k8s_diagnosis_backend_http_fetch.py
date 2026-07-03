@@ -223,6 +223,7 @@ def invoke_targeted_automatic_diagnosis_loop(
     incident_id: str,
     backend_port: int = DEFAULT_K9B_BACKEND_PORT,
     max_passes_per_incident: int = 5,
+    require_complete_root_cause_before_stop: bool = False,
 ) -> TargetedDiagnosisInvocationResult:
     """Invoke the targeted automatic diagnosis-loop one-pass endpoint.
 
@@ -251,6 +252,10 @@ def invoke_targeted_automatic_diagnosis_loop(
         max_passes_per_incident: Budget limit for passes per incident (default: 5).
             For lab scenarios requiring multiple passes, this should be >= MIN_REQUIRED_PASSES.
             The backend eligibility check uses this to determine if the incident is eligible.
+        require_complete_root_cause_before_stop: If True (P4c lab-strict mode),
+            stop_no_checks_proposed requires complete scheduling root cause evidence.
+            This prevents premature termination before the diagnosis reaches
+            a complete root-cause understanding.
 
     Returns:
         TargetedDiagnosisInvocationResult with invocation details
@@ -267,9 +272,14 @@ def invoke_targeted_automatic_diagnosis_loop(
     # Request body with budget config for lab scenarios
     # The backend uses max_passes_per_incident as the budget limit for eligibility.
     # For P4c with MIN_REQUIRED_PASSES=2, we need budget >= 2 to allow pass 2.
+    #
+    # P4c lab-strict mode: require_complete_root_cause_before_stop ensures that
+    # stop_no_checks_proposed is only accepted when the diagnosis contains complete
+    # scheduling root cause evidence (shipping, nodeSelector, k9b.dev/otel-lab-node, FailedScheduling).
     request_body = json.dumps({
         "run_id": f"p4c-target-{int(time.time())}",
         "max_passes_per_incident": max_passes_per_incident,
+        "require_complete_root_cause_before_stop": require_complete_root_cause_before_stop,
         "diagnosis_report": {
             "diagnosis": {
                 "recommended_investigations": []

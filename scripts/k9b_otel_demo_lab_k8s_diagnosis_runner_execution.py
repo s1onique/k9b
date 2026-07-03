@@ -44,6 +44,7 @@ def run_backend_targeted_diagnosis(
     result: dict[str, Any],
     allow_simulation: bool,
     max_passes: int = DEFAULT_MAX_PASSES,
+    require_complete_root_cause_before_stop: bool = False,
 ) -> dict[str, Any]:
     """Run backend-targeted diagnosis for the incident.
 
@@ -66,6 +67,8 @@ def run_backend_targeted_diagnosis(
         result: Result dict to populate
         allow_simulation: If True, allow simulation fallback
         max_passes: Maximum passes to allow
+        require_complete_root_cause_before_stop: If True (P4c lab-strict mode),
+            stop_no_checks_proposed requires complete scheduling root cause evidence.
 
     Returns:
         Result dict with diagnosis loop results
@@ -155,6 +158,8 @@ def run_backend_targeted_diagnosis(
             pass_attempt=pass_attempt,
             max_passes=max_passes,
             result=result,
+            # P4c lab-strict mode: require complete root cause before accepting stop_no_checks_proposed
+            require_complete_root_cause_before_stop=require_complete_root_cause_before_stop,
         )
         # Track actual POST attempts, not just phase invocations
         if post_attempted:

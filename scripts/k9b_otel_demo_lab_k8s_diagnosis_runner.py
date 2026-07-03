@@ -22,26 +22,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from scripts.k9b_lab_common_helpers import log
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
     DEFAULT_MAX_CHECKS_PER_PASS,
     DEFAULT_MAX_PASSES,
     DIAGNOSIS_SOURCE_REAL,
-    DIAGNOSIS_SOURCE_SIMULATED,
-    FAILURE_REASON_LOOP_ENV_RBAC_DENIED,
-    FAILURE_REASON_LOOP_ENV_READ_FAILED,
-    MIN_REQUIRED_PASSES,
     SIMULATION_ENV_VAR,
 )
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_config import (
     DEFAULT_K9B_NAMESPACE,
-    _LOOP_CHECK_REASON_TO_FAILURE,
 )
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_execution import (
     extract_root_cause_from_review,
     run_backend_targeted_diagnosis,
     simulate_diagnosis_loop,
 )
-from scripts.k9b_lab_common_helpers import log
 
 
 def run_diagnosis_loop(
@@ -140,6 +135,10 @@ def run_diagnosis_loop(
         result=result,
         allow_simulation=allow_simulation,
         max_passes=max_passes,
+        # P4c lab-strict mode: require complete root cause before accepting stop_no_checks_proposed.
+        # This ensures that premature terminal no-checks (before root cause evidence is present)
+        # is rejected, allowing the loop to continue until scheduling root cause is diagnosed.
+        require_complete_root_cause_before_stop=True,
     )
 
 

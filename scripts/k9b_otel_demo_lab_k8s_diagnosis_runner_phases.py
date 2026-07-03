@@ -109,6 +109,7 @@ def phase2_invoke_and_poll_pass(
     pass_attempt: int,
     max_passes: int,
     result: dict[str, Any],
+    require_complete_root_cause_before_stop: bool = False,
 ) -> tuple[bool, int, list[str], bool, str | None]:
     """Phase 2: Invoke one-pass diagnosis and poll for completion.
 
@@ -119,6 +120,8 @@ def phase2_invoke_and_poll_pass(
         pass_attempt: Current pass attempt number (1-indexed)
         max_passes: Maximum passes to allow
         result: Result dict to populate
+        require_complete_root_cause_before_stop: If True (P4c lab-strict mode),
+            stop_no_checks_proposed requires complete scheduling root cause evidence.
 
     Returns:
         Tuple of (success, total_pass_count, all_pass_run_ids, post_attempted, review_artifact_path).
@@ -138,6 +141,8 @@ def phase2_invoke_and_poll_pass(
         # Pass max_passes as budget limit so backend allows multiple passes
         # This fixes the contract: required_passes=2, budget.limit=1 was impossible
         max_passes_per_incident=max_passes,
+        # P4c lab-strict mode: require complete root cause before accepting stop_no_checks_proposed
+        require_complete_root_cause_before_stop=require_complete_root_cause_before_stop,
     )
 
     if pass_attempt == 1:
