@@ -28,12 +28,6 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_artifacts import (
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     compute_p4c_outcome,
 )
-from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_helpers import (
-    FAILURE_TARGETED_INVOCATION_HTTP_ERROR,
-    FAILURE_TARGETED_INVOCATION_INVALID_JSON,
-    FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR,
-    FAILURE_TARGETED_LOOP_NOT_COMPLETED,
-)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
     DEFAULT_MAX_CHECKS_PER_PASS,
     DEFAULT_MAX_PASSES,
@@ -48,6 +42,9 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_match import (
 )
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_phase_failures import (
     _collect_failures,
+)
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_phase_rendering import (
+    render_phase_failure,
 )
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_render import (
     log as _log,
@@ -147,104 +144,13 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     if not evidence.get("real_loop_invoked", False):
         failure_reason = evidence.get("failure_reason") or "automatic_diagnosis_loop_disabled"
         
-        # Build enhanced diagnostic message for backend-targeted diagnosis failures
-        invocation_result = evidence.get("targeted_invocation_result") or {}
-        poll_result = evidence.get("targeted_poll_result") or {}
-        backend_detail = evidence.get("backend_incident_detail") or ""
-        
-        # Provide specific guidance based on the failure reason
-        if failure_reason == FAILURE_TARGETED_INVOCATION_HTTP_ERROR:
-            failure_msg = (
-                f"{FAILURE_TARGETED_INVOCATION_HTTP_ERROR}: "
-                f"Backend targeted endpoint returned non-2xx. "
-                f"HTTP status: {invocation_result.get('http_status', 'unknown')}. "
-                f"Body preview: {invocation_result.get('body', '')[:200]}. "
-                f"incident_id={incident_id}"
-            )
-        elif failure_reason == FAILURE_TARGETED_INVOCATION_INVALID_JSON:
-            failure_msg = (
-                f"{FAILURE_TARGETED_INVOCATION_INVALID_JSON}: "
-                f"Backend targeted endpoint returned invalid JSON. "
-                f"HTTP status: {invocation_result.get('http_status', 'unknown')}. "
-                f"Body preview: {invocation_result.get('body', '')[:200]}. "
-                f"incident_id={incident_id}"
-            )
-        elif failure_reason == FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR:
-            failure_msg = (
-                f"{FAILURE_TARGETED_INVOCATION_TRANSPORT_ERROR}: "
-                f"Backend targeted endpoint unreachable. "
-                f"curl_rc: {invocation_result.get('curl_rc', 'unknown')}. "
-                f"HTTP status: {invocation_result.get('http_status', 'unknown')}. "
-                f"incident_id={incident_id}"
-            )
-        elif failure_reason == FAILURE_TARGETED_LOOP_NOT_COMPLETED:
-            failure_msg = (
-                f"{FAILURE_TARGETED_LOOP_NOT_COMPLETED}: "
-                f"Diagnosis did not complete within poll timeout. "
-                f"Attempts: {poll_result.get('attempts', 'unknown')}/{poll_result.get('max_attempts', 'unknown')}. "
-                f"Final status: {poll_result.get('final_status', 'unknown')}. "
-                f"Loop summary: {poll_result.get('loop_summary_status', 'unknown')}. "
-                f"Review available: {poll_result.get('review_available', False)}. "
-                f"incident_id={incident_id}"
-            )
-        elif failure_reason == "backend_incident_fetch_failed":
-            # Enhanced: Extract backend fetch result for actionable diagnostics
-            fetch_result = evidence.get("backend_incident_fetch_result") or {}
-            failure_msg = (
-                f"backend_incident_fetch_failed: "
-                f"Could not fetch incident from backend. "
-                f"Check backend health and incident existence. "
-                f"incident_id={incident_id}. "
-                f"backend_url={fetch_result.get('url', 'N/A')}. "
-                f"http_code={fetch_result.get('http_status', 'N/A')}. "
-                f"curl_rc={fetch_result.get('curl_rc', 'N/A')}. "
-                f"stderr={fetch_result.get('stderr_prefix', 'N/A')[:100]}"
-            )
-        elif failure_reason == "kubeconfig_required":
-            failure_msg = (
-                f"kubeconfig_required: "
-                f"kubeconfig is required for backend-targeted diagnosis. "
-                f"incident_id={incident_id}"
-            )
-        elif failure_reason == "automatic_loop_env_rbac_denied":
-            failure_msg = (
-                "automatic_loop_env_rbac_denied: "
-                "Cannot read k9b-scheduler deployment to verify loop config. "
-                "The GitHub runner identity lacks 'get' permission on deployments.apps in namespace k9b. "
-                f"Check error: {evidence.get('loop_enabled_check_error', 'N/A')}"
-            )
-        elif failure_reason == "automatic_loop_env_read_failed":
-            failure_msg = (
-                "automatic_loop_env_read_failed: "
-                "Cannot read k9b-scheduler deployment (network/timeout/not found). "
-                "Verify the k9b namespace and scheduler deployment exist. "
-                f"Check error: {evidence.get('loop_enabled_check_error', 'N/A')}"
-            )
-        elif failure_reason == "automatic_diagnosis_loop_disabled":
-            failure_msg = (
-                "automatic_diagnosis_loop_disabled: "
-                "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED must be set to true "
-                "on the k9b-scheduler deployment (not backend). "
-                "Ensure scheduler deployment has this env var configured."
-            )
-        elif failure_reason == "premature_terminal_no_checks":
-            # Special case: the loop WAS invoked, but reached terminal decision before required passes
-            # This is NOT the same as "loop was not invoked"
-            pass_count = evidence.get("pass_count", 0)
-            failure_msg = (
-                f"premature_terminal_no_checks: observed {pass_count} targeted diagnosis pass(es), "
-                f"required {MIN_REQUIRED_PASSES}. "
-                f"The diagnosis loop was invoked and reached a terminal no-checks decision, "
-                f"but lab-strict multipass evidence was not satisfied before the terminal decision. "
-                f"incident_id={incident_id}"
-            )
-        else:
-            failure_msg = (
-                f"{failure_reason}: "
-                f"Automatic diagnosis loop was not invoked. "
-                f"incident_id={incident_id}. "
-                f"backend_detail={backend_detail}"
-            )
+        # Build failure message using the rendering module
+        failure_msg = render_phase_failure(
+            failure_reason=failure_reason,
+            evidence=evidence,
+            incident_id=incident_id,
+            min_required_passes=MIN_REQUIRED_PASSES,
+        )
         
         evidence["failure_reason"] = failure_msg
         evidence["validation_success"] = False
