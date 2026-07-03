@@ -21,6 +21,25 @@ venv_path="${K9B_LIVE_LAB_VENV_PATH:-.venv}"
 requirements="${K9B_LIVE_LAB_REQUIREMENTS:-requirements-live-lab.txt}"
 python_bin="${K9B_LIVE_LAB_PYTHON:-python3}"
 
+# Normalize python_bin: if it is a directory (toolcache-style .../x64/bin),
+# resolve to the actual executable. This guards against GitHub Actions
+# outputs that pass the bin directory instead of the python executable.
+if [[ -d "${python_bin}" ]]; then
+  if [[ -x "${python_bin}/python" ]]; then
+    python_bin="${python_bin}/python"
+  elif [[ -x "${python_bin}/python3" ]]; then
+    python_bin="${python_bin}/python3"
+  else
+    echo "ERROR: python_bin points to a directory without python/python3: ${python_bin}" >&2
+    exit 2
+  fi
+fi
+
+if [[ ! -x "${python_bin}" ]]; then
+  echo "ERROR: python_bin is not an executable: ${python_bin}" >&2
+  exit 2
+fi
+
 validate_venv() {
   local candidate="$1"
 

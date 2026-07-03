@@ -480,10 +480,7 @@ class TestWorkflowToolchainActionUsage:
                         )
 
 
-# NOTE: Input tests moved to:
-# tests/test_k9b_live_lab_toolchain_action_inputs.py
-#
-# kubectl download-on-miss tests moved to:
-# tests/test_k9b_live_lab_toolchain_action_kubectl_download.py
+# NOTE: Regression tests for ensure_live_lab_venv.sh moved to:
+# tests/test_ensure_live_lab_venv_contract.py
 #
 # (Split to keep files under 500 lines per llm-friendly policy)

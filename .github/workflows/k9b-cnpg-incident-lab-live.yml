@@ -132,7 +132,7 @@ jobs:
         id: install-python-deps
         shell: bash
         env:
-          K9B_LIVE_LAB_PYTHON: ${{ steps.toolchain.outputs.python-location }}
+          K9B_LIVE_LAB_PYTHON: ${{ steps.toolchain.outputs.K9B_LIVE_LAB_PYTHON }}
           K9B_LIVE_LAB_PREBAKED_VENV: ${{ vars.K9B_LIVE_LAB_PREBAKED_VENV || '' }}
         run: scripts/ci/ensure_live_lab_venv.sh
 
