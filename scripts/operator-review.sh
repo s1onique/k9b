@@ -65,7 +65,9 @@ fi
 
 if $RUN_MYPY; then
   echo "Running mypy"
-  "$PYTHON" -m mypy src tests
+  # Use src/k8s_diag_agent (not src) to avoid duplicate module discovery
+  # with explicit_package_bases=True.
+  "$PYTHON" -m mypy src/k8s_diag_agent tests
 fi
 
 log_operator_event "INFO" "Operator review workflow invoked" "operator-review"

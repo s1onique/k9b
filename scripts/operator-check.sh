@@ -30,7 +30,9 @@ echo "Running unit tests"
 log_operator_event "INFO" "Unit tests completed" "operator-check"
 
 echo "Running mypy"
-"$PYTHON" -m mypy src tests
+# Use src/k8s_diag_agent (not src) to avoid duplicate module discovery
+# with explicit_package_bases=True.
+"$PYTHON" -m mypy src/k8s_diag_agent tests
 log_operator_event "INFO" "Mypy completed" "operator-check"
 
 echo "Running health loop"

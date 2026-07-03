@@ -37,14 +37,14 @@ STEPS: dict[str, dict] = {
         "command": ".venv/bin/python -m mypy src/k8s_diag_agent",
         "lane": "python",
         "category": StepCategory.POLICY,
-        "description": "Mypy type checking on main package",
+        "description": "Mypy type checking on main package (use src/k8s_diag_agent, not src, to avoid duplicate module discovery)",
         "is_expensive": False,
     },
     "mypy-tests": {
         "command": ".venv/bin/python -m mypy tests/__init__.py tests/path_helper.py tests/test_*.py",
         "lane": "python",
         "category": StepCategory.POLICY,
-        "description": "Mypy type checking on tests",
+        "description": "Mypy type checking on tests (run separately from src package to avoid duplicate module discovery)",
         "is_expensive": False,
     },
     "llm-friendly": {
