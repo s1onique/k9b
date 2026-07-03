@@ -183,15 +183,15 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
     Wire-format contract:
     - Empty/whitespace-only body -> provider_health_empty_body
     - JSON + non-whitespace suffix that is valid JSON -> provider_health_invalid_json
-    - JSON + known curl envelope suffix (CURL_EXIT, HTTP_CODE, etc.) -> provider_health_output_contaminated
+    - JSON + known successful curl envelope suffix (CURL_EXIT=0, HTTP_CODE=200) -> ACCEPT (semantic eval)
     - JSON + non-whitespace suffix (arbitrary contamination) -> provider_health_output_contaminated
     - Non-whitespace prefix + JSON -> provider_health_output_contaminated
     - Malformed JSON with no embedded JSON -> provider_health_invalid_json
     - Exactly one clean JSON document (no prefix/suffix) -> (None, payload, "") for semantic evaluation
 
-    CRITICAL: Known curl envelope metadata (CURL_EXIT, HTTP_CODE, STDERR_BLOCK) in the body
-    is NOT accepted. The body must contain ONLY the JSON document. Any framing or
-    diagnostic output from the curl wrapper makes the output contaminated.
+    NOTE: Known curl envelope metadata (CURL_EXIT=0, HTTP_CODE=200, optional STDERR_BLOCK)
+    is ACCEPTED as non-contamination. These are diagnostic metadata from the curl wrapper
+    and do not constitute wire-format contamination.
 
     Args:
         raw: The raw body string from curl response

@@ -310,7 +310,7 @@ class TestComputeP4cOutcomeWithSchedulingEvidence(unittest.TestCase):
     """Test compute_p4c_outcome with scheduling evidence scenarios."""
 
     def test_p4c_outcome_fails_with_incomplete_scheduling_evidence(self) -> None:
-        """compute_p4c_outcome should fail when scheduling evidence is incomplete."""
+        """compute_p4c_outcome should fail when scheduling evidence is incomplete in lab-strict mode."""
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_p4c_outcome import (
             compute_p4c_outcome,
         )
@@ -328,10 +328,11 @@ class TestComputeP4cOutcomeWithSchedulingEvidence(unittest.TestCase):
             "terminal_no_checks_accepted": True,
         }
 
-        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=False)
+        # Lab-strict mode (require_root_cause_terms=True) should fail
+        outcome = compute_p4c_outcome(evidence, accept_terminal_single_pass=False, require_root_cause_terms=True)
 
         self.assertFalse(outcome.success,
-                       "P4c outcome should FAIL with incomplete scheduling evidence")
+                       "P4c outcome should FAIL with incomplete scheduling evidence in lab-strict mode")
         failure_reasons_str = " ".join(outcome.failure_reasons)
         self.assertIn("missing_root_cause_term", failure_reasons_str,
                      "Failure should mention missing root cause terms")

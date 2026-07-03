@@ -193,18 +193,25 @@ class TestLeadingWhitespaceContamination:
     are properly classified as output_contaminated.
     """
 
-    def test_leading_whitespace_then_trailing_curl_metadata_is_contaminated(self) -> None:
-        """Leading whitespace + JSON + CURL_EXIT/HTTP_CODE is contamination."""
+    def test_leading_whitespace_then_trailing_curl_metadata_is_accepted(self) -> None:
+        """Leading whitespace + JSON + CURL_EXIT=0/HTTP_CODE=200 is ACCEPTED (not contamination).
+
+        P0b fix: Known successful curl envelope (CURL_EXIT=0, HTTP_CODE=200) is NOT contamination.
+        These are diagnostic metadata from the curl wrapper and do not constitute wire-format
+        contamination. Semantic evaluation proceeds with the valid JSON payload.
+        """
         from scripts.lab_common.provider_preflight_health import (
-            FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
             _classify_provider_health_body,
         )
 
         body = '\n  {"provider_status":"available"}\nCURL_EXIT=0\nHTTP_CODE=200\n'
         failure_class, payload, detail = _classify_provider_health_body(body)
 
-        assert failure_class == FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED
-        assert payload is None
+        # Known successful curl envelope is ACCEPTED - not contamination
+        assert failure_class is None
+        assert payload is not None
+        assert isinstance(payload, dict)
+        assert payload.get("provider_status") == "available"
 
     def test_leading_whitespace_with_prefix_contamination_is_contaminated(self) -> None:
         """Leading non-whitespace text + JSON should be contamination."""

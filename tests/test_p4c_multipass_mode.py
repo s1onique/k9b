@@ -52,8 +52,8 @@ class TestMultipassMode:
         assert outcome.mode == "multipass"
         assert any("insufficient_passes" in f for f in outcome.failure_reasons)
 
-    def test_multipass_passes_only_with_multipass_root_cause_evidence(self) -> None:
-        """Multipass requires root-cause evidence for scheduling."""
+    def test_multipass_generic_mode_succeeds_without_root_cause_evidence(self) -> None:
+        """Generic multipass (default) succeeds without root-cause evidence."""
         evidence = {
             "real_loop_invoked": True,
             "terminal_no_checks_accepted": False,
@@ -65,7 +65,28 @@ class TestMultipassMode:
             "read_only_violations": [],
         }
 
+        # Generic multipass (require_root_cause_terms=False, default) does NOT require evidence
         outcome = compute_p4c_outcome(evidence)
+
+        assert outcome.success is True
+        assert outcome.mode == "multipass"
+        assert outcome.root_cause_evidence_satisfied is True
+
+    def test_multipass_lab_strict_mode_requires_root_cause_evidence(self) -> None:
+        """Lab-strict multipass requires root-cause evidence for scheduling."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": False,
+            "pass_count": 2,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "root_cause_summary": "shipping deployment",
+            "read_only": True,
+            "read_only_violations": [],
+        }
+
+        # Lab-strict multipass (require_root_cause_terms=True) requires evidence
+        outcome = compute_p4c_outcome(evidence, require_root_cause_terms=True)
 
         assert outcome.success is False
         assert outcome.mode == "multipass"

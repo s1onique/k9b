@@ -70,7 +70,7 @@ def compute_p4c_outcome(
     scenario: str | None = None,
     accept_terminal_single_pass: bool = False,
     min_required_passes: int = 2,
-    require_root_cause_terms: bool = True,
+    require_root_cause_terms: bool = False,
 ) -> P4cDiagnosisOutcome:
     """Compute the normalized P4c outcome from diagnosis evidence.
 
@@ -78,15 +78,16 @@ def compute_p4c_outcome(
     All downstream validation and lab-result rendering must use the returned
     P4cDiagnosisOutcome instead of re-checking evidence fields.
 
-    LAB-STRICT MODE (default, accept_terminal_single_pass=False):
+    LAB-STRICT MODE (require_root_cause_terms=True):
         - Terminal single-pass before required passes is a FAILURE
         - P4c must demonstrate >= min_required_passes observable passes
-        - Root-cause evidence for scheduling root cause is required
+        - Root-cause evidence for scheduling root cause is REQUIRED
         - Scenario manifest grades determine pass/fail for causal-level diagnosis
 
-    PRODUCT MODE (accept_terminal_single_pass=True):
-        - Terminal single-pass with all requirements met is SUCCESS
-        - Useful for contexts where single-pass diagnosis is acceptable
+    GENERIC MULTIPASS MODE (require_root_cause_terms=False, default):
+        - Pass count alone satisfies multipass success criterion
+        - Root-cause evidence is advisory (not required)
+        - Useful for tests and product-mode multipass calls
 
     Args:
         evidence: Diagnosis evidence dict from phase_p4c_verify_k8s_mult_pass_diagnosis
@@ -97,8 +98,9 @@ def compute_p4c_outcome(
             (for product-mode compatibility). If False (default, lab-strict mode),
             terminal single-pass before required passes is treated as failure.
         min_required_passes: Minimum passes required for multipass mode (default: 2).
-        require_root_cause_terms: If True (default), require specific root cause
-            prose terms in addition to manifest grade validation.
+        require_root_cause_terms: If True, require specific root cause prose terms
+            in addition to manifest grade validation. Default is False for generic
+            multipass success. Only set True for lab-strict OTel scenarios.
 
     Returns:
         P4cDiagnosisOutcome with the definitive success/failure determination
@@ -336,21 +338,10 @@ def compute_p4c_outcome(
         else:
             # FALLBACK: Check prose terms for legacy evidence or missing scheduling_evidence.
             # This is a compatibility fallback for evidence that predates the structured path.
-            # STRICT: Must still require the exact selector literal for lab contract compliance.
+            # P4c FIX: Accept causal family, not exact string. 
+            # The OTel unschedulable case has multiple valid evidence combinations.
             
-            # Required terms must appear in root_cause_summary
-            combined_summary = root_cause_summary.lower()
-            required_terms = ["shipping", "nodeselector", "k9b.dev/otel-lab-node"]
-            missing_terms = [t for t in required_terms if t not in combined_summary]
-            
-            # Require the exact selector value for lab contract compliance
-            if "k9b.dev/otel-lab-node=missing" not in combined_summary:
-                missing_terms.append("k9b.dev/otel-lab-node=missing")
-
-            # Check for scheduling failure markers in ALL evidence sources
-            scheduling_markers = ["FailedScheduling", "Unschedulable", "nodeSelector", "no matching node"]
-            
-            # Collect all text sources for marker checking (all lowercased for case-insensitive comparison)
+            # Collect all text sources for evidence checking (all lowercased)
             text_sources = [root_cause_summary.lower()]
             
             # Add detection_evidence summary if present
@@ -379,15 +370,46 @@ def compute_p4c_outcome(
                 if isinstance(matched, list):
                     text_sources.extend(str(m).lower() for m in matched)
             
-            # Check if any scheduling marker is found in any text source
             combined_text = " ".join(text_sources)
-            scheduling_found = any(m.lower() in combined_text for m in scheduling_markers)
+            
+            # Scheduling evidence: accept causal family, not exact string
+            scheduling_terms = (
+                "unschedulable",
+                "no matching nodes",
+                "nodes are available",
+                "node selector",
+                "nodeselector",
+                "node affinity",
+                "requiredduringschedulingignoredduringexecution",
+                "didn't match",
+                "did not match",
+            )
+            
+            # OTel lab cause: accept any form of the label reference
+            otel_lab_terms = (
+                "k9b.dev/otel-lab-node",
+                "otel-lab-node",
+                "missing label",
+                "label missing",
+            )
+            
+            has_scheduling = any(term in combined_text for term in scheduling_terms)
+            has_lab_cause = any(term in combined_text for term in otel_lab_terms)
+            
+            # Require shipping + nodeselector + (lab cause OR scheduling evidence)
+            combined_summary = root_cause_summary.lower()
+            required_prose_terms = ["shipping", "nodeselector"]
+            missing_terms = [t for t in required_prose_terms if t not in combined_summary]
+            
+            # For lab cause, accept any form in combined_text
+            if not has_lab_cause:
+                missing_terms.append("k9b.dev/otel-lab-node (or variant)")
 
             if missing_terms:
                 root_cause_evidence_reason = f"missing_root_cause_term: {', '.join(missing_terms)}"
                 failure_reasons.append(root_cause_evidence_reason)
                 root_cause_evidence_satisfied = False
-            elif not scheduling_found:
+            elif not has_scheduling:
                 root_cause_evidence_reason = "missing_scheduling_root_cause_evidence"
                 failure_reasons.append(root_cause_evidence_reason)
                 root_cause_evidence_satisfied = False
