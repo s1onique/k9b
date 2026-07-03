@@ -196,7 +196,7 @@ jobs:
       - name: Prepare live lab Python venv
         run: scripts/ci/ensure_live_lab_venv.sh
         env:
-          K9B_LIVE_LAB_PYTHON: ${{ steps.toolchain.outputs.python-location }}
+          K9B_LIVE_LAB_PYTHON: ${{ steps.toolchain.outputs.python-executable }}
           K9B_LIVE_LAB_PREBAKED_VENV: ${{ vars.K9B_LIVE_LAB_PREBAKED_VENV || '' }}
           K9B_LIVE_LAB_REQUIREMENTS: requirements-live-lab.txt
 

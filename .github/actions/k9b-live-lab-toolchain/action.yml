@@ -30,8 +30,17 @@ inputs:
 
 outputs:
   python-location:
-    description: Path to Python binary directory
+    description: "Python bin directory (legacy; prefer python-executable)"
     value: ${{ steps.wire-tools.outputs.python-bin-dir }}
+  python-executable:
+    description: "Absolute path to Python executable"
+    value: ${{ steps.wire-tools.outputs.python-bin-dir }}/python3
+  python-bin-dir:
+    description: "Python bin directory"
+    value: ${{ steps.wire-tools.outputs.python-bin-dir }}
+  python-root:
+    description: "Python installation root directory"
+    value: ${{ steps.wire-tools.outputs.python-root }}
   helm-location:
     description: Path to Helm binary
     value: ${{ steps.wire-tools.outputs.helm-path }}
@@ -115,6 +124,7 @@ runs:
             echo "Found Python at: ${python_path}"
             echo "python_bin=${python_bin}" >> "$GITHUB_OUTPUT"
             echo "python-bin-dir=${python_bin}" >> "$GITHUB_OUTPUT"
+            echo "python-root=${python_root}" >> "$GITHUB_OUTPUT"
             break
           fi
         done
