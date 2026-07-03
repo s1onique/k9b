@@ -33,6 +33,7 @@ from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence import (  # noqa: F401
     FORENSIC_DUMP_DIR_ENV,
     FORENSIC_DUMP_ENABLED,
     _get_forensic_dump_dir,
+    _mapping_summary,
 )
 
 # =============================================================================
@@ -323,24 +324,25 @@ def dump_backend_incident_detail_before_loop(
     dump_dir = _get_forensic_dump_dir(artifact_dir)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
-    # Nil-safe extraction: normalize to Mapping to safely call .get() and .keys()
-    # This prevents crashes when incident_detail arrives as non-Mapping types.
-    detail_mapping: Mapping[str, Any] = incident_detail if isinstance(incident_detail, Mapping) else {}
+    # Stable schema: wrap incident_detail in a summary dict for non-Mapping inputs
+    # This ensures forensic artifacts have stable JSON schemas even when
+    # the source value is malformed/non-mapping (None, list, str, etc.)
+    incident_detail_summary = _mapping_summary(incident_detail)
 
     provenance: dict[str, Any] = {
         "timestamp": timestamp,
         "incident_id": incident_id,
         "phase": "before_diagnosis_loop_pass_1",
-        "incident_detail": incident_detail,
-        "fields_present": list(detail_mapping.keys()),
+        "incident_detail": incident_detail_summary,
+        "fields_present": incident_detail_summary["fields_present"],
     }
 
-    # Extract scheduling_evidence if present
-    if detail_mapping:
-        provenance["scheduling_evidence"] = detail_mapping.get("scheduling_evidence")
-        provenance["signals_count"] = len(detail_mapping.get("signals", []))
-        provenance["events_count"] = len(detail_mapping.get("events", []))
-        provenance["evidence_links_count"] = len(detail_mapping.get("evidence_links", []))
+    # Extract scheduling_evidence if the input was a valid mapping
+    if isinstance(incident_detail, Mapping):
+        provenance["scheduling_evidence"] = incident_detail.get("scheduling_evidence")
+        provenance["signals_count"] = len(incident_detail.get("signals", []))
+        provenance["events_count"] = len(incident_detail.get("events", []))
+        provenance["evidence_links_count"] = len(incident_detail.get("evidence_links", []))
 
     # Write to file
     output_path = dump_dir / f"incident-detail-before-loop-{incident_id[:8]}-{timestamp}.json"
@@ -393,9 +395,10 @@ def dump_diagnosis_loop_pass(
     dump_dir = _get_forensic_dump_dir(artifact_dir)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
-    # Nil-safe extraction: normalize to Mapping to safely call .get() and .keys()
-    # This prevents crashes when response_body arrives as non-Mapping types.
-    response_mapping: Mapping[str, Any] = response_body if isinstance(response_body, Mapping) else {}
+    # Stable schema: get response summary using _mapping_summary
+    # This ensures forensic artifacts have stable JSON schemas even when
+    # the source value is malformed/non-mapping (None, list, str, etc.)
+    response_summary = _mapping_summary(response_body, fields_key="response_fields_present")
 
     provenance: dict[str, Any] = {
         "timestamp": timestamp,
@@ -404,18 +407,19 @@ def dump_diagnosis_loop_pass(
         "phase": "diagnosis_loop_pass",
         "http_status": http_status,
         "request_body": request_body,
-        "response_fields_present": list(response_mapping.keys()),
+        "response_summary": response_summary,
+        "response_fields_present": response_summary["response_fields_present"],
         "loop_summary": loop_summary,
         "review_packet_metadata": review_packet_metadata,
     }
 
-    # Extract key fields from response
-    if response_mapping:
-        provenance["scheduling_evidence"] = response_mapping.get("scheduling_evidence")
-        provenance["root_cause_summary"] = response_mapping.get("root_cause_summary")
-        provenance["terminal_decision"] = response_mapping.get("terminal_decision")
-        provenance["review_packet_path"] = response_mapping.get("review_packet_path")
-        provenance["review_packet_artifact_name"] = response_mapping.get("review_packet_artifact_name")
+    # Extract key fields from response if it was a valid mapping
+    if isinstance(response_body, Mapping):
+        provenance["scheduling_evidence"] = response_body.get("scheduling_evidence")
+        provenance["root_cause_summary"] = response_body.get("root_cause_summary")
+        provenance["terminal_decision"] = response_body.get("terminal_decision")
+        provenance["review_packet_path"] = response_body.get("review_packet_path")
+        provenance["review_packet_artifact_name"] = response_body.get("review_packet_artifact_name")
 
     # Write to file
     output_path = dump_dir / f"diagnosis-loop-pass{pass_num}-{incident_id[:8]}-{timestamp}.json"

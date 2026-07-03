@@ -34,6 +34,49 @@ FORENSIC_DUMP_ENABLED = os.environ.get("K9B_P4C_FORENSIC_DUMP", "0") == "1"
 FORENSIC_DUMP_DIR_ENV = os.environ.get("K9B_FORENSIC_DUMP_DIR", "")
 
 
+# =============================================================================
+# Mapping Summary Helpers (shared between forensic dump modules)
+# =============================================================================
+
+
+def _mapping_fields_present(value: object) -> list[str]:
+    """Return sorted list of field names for Mapping values, [] otherwise.
+
+    Args:
+        value: Any Python object
+
+    Returns:
+        Sorted list of string keys if value is a Mapping, empty list otherwise
+    """
+    if not isinstance(value, Mapping):
+        return []
+    return sorted(str(key) for key in value.keys())
+
+
+def _mapping_summary(
+    value: object,
+    *,
+    fields_key: str = "fields_present",
+) -> dict[str, Any]:
+    """Create a stable summary dict for any value, mapping or not.
+
+    This ensures forensic artifacts have stable JSON schemas even when
+    the source value is malformed/non-mapping.
+
+    Args:
+        value: Any Python object (dict, None, list, str, int, etc.)
+        fields_key: Key name for the fields_present list (default "fields_present")
+
+    Returns:
+        Dict with is_mapping, value_type, and fields_present keys
+    """
+    return {
+        "is_mapping": isinstance(value, Mapping),
+        "value_type": type(value).__name__,
+        fields_key: _mapping_fields_present(value),
+    }
+
+
 def _get_forensic_dump_dir(artifact_dir: Path) -> Path:
     """Get the forensic dump directory path.
 
@@ -230,23 +273,33 @@ def dump_p4c_outcome_input(
     dump_dir = _get_forensic_dump_dir(artifact_dir)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
-    # Nil-safe extraction: normalize to Mapping to safely call .get() and .keys()
-    # This prevents crashes when evidence arrives as non-Mapping types
-    # (string, None, list, int, etc.) at evidence boundary crossings.
-    evidence_mapping: Mapping[str, Any] = evidence if isinstance(evidence, Mapping) else {}
+    # Stable schema: get evidence summary using _mapping_summary
+    # This ensures forensic artifacts have stable JSON schemas even when
+    # the source value is malformed/non-mapping (None, list, str, etc.)
+    evidence_summary = _mapping_summary(evidence)
 
     provenance: dict[str, Any] = {
         "timestamp": timestamp,
         "incident_id": incident_id,
         "phase": "before_compute_p4c_outcome",
-        "fields_present": list(evidence_mapping.keys()),
-        "scheduling_evidence": evidence_mapping.get("scheduling_evidence"),
-        "p4c_verdict": evidence_mapping.get("p4c_verdict"),
-        "root_cause_summary": evidence_mapping.get("root_cause_summary"),
-        "pass_count": evidence_mapping.get("pass_count"),
-        "pass_run_ids": evidence_mapping.get("pass_run_ids"),
-        "evidence_size": len(json.dumps(dict(evidence_mapping), default=str)),
+        "evidence_summary": evidence_summary,
+        "fields_present": evidence_summary["fields_present"],
+        "scheduling_evidence": None,
+        "p4c_verdict": None,
+        "root_cause_summary": None,
+        "pass_count": None,
+        "pass_run_ids": None,
+        "evidence_size": 0,
     }
+
+    # Extract key fields if evidence was a valid mapping
+    if isinstance(evidence, Mapping):
+        provenance["scheduling_evidence"] = evidence.get("scheduling_evidence")
+        provenance["p4c_verdict"] = evidence.get("p4c_verdict")
+        provenance["root_cause_summary"] = evidence.get("root_cause_summary")
+        provenance["pass_count"] = evidence.get("pass_count")
+        provenance["pass_run_ids"] = evidence.get("pass_run_ids")
+        provenance["evidence_size"] = len(json.dumps(dict(evidence), default=str))
 
     # Write full evidence to separate file
     output_path = dump_dir / f"p4c-outcome-input-{incident_id[:8]}-{timestamp}.json"
