@@ -66,6 +66,7 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_config import (
 )
 from scripts.k9b_otel_demo_lab_p4c_forensic_dump import (
     FORENSIC_DUMP_ENABLED,
+    check_live_lab_freshness,
     dump_backend_incident_detail_before_loop,
     dump_backend_runtime_provenance,
     dump_p4c_runtime_provenance,
@@ -112,6 +113,35 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     start = time.time()
     diagnosis_dir = get_diagnosis_dir(artifact_dir)
     
+    # FRESHNESS GUARD: Print tested revision before P4c starts
+    # This fails early if the running live-lab image/worktree does not contain
+    # the fixed extractor/call-site behavior.
+    freshness = check_live_lab_freshness()
+    freshness_result = {
+        "git_sha": freshness.get("git_sha"),
+        "is_fresh": freshness.get("is_fresh", False),
+        "has_extractor_backend_param": freshness.get("has_extractor_backend_param", False),
+        "has_extractor_selector_param": freshness.get("has_extractor_selector_param", False),
+        "errors": freshness.get("errors", []),
+    }
+    
+    log_phase_header()
+    _log(f"Target: diagnose shipping incident in {config.namespace}")
+    evidence = create_initial_evidence(config.namespace)
+    
+    # Record freshness check in evidence
+    evidence["freshness_check"] = freshness_result
+    
+    if not freshness.get("is_fresh", False):
+        # Fail early - stale code detected
+        _log("FATAL: Live-lab freshness check failed - running stale code")
+        for err in freshness.get("errors", []):
+            _log(f"  - {err}")
+        evidence["failure_reason"] = "stale_live_lab_code"
+        evidence["validation_success"] = False
+        write_diagnosis_evidence(diagnosis_dir, evidence)
+        return _build_result(evidence, start, diagnosis_dir, success=False)
+    
     # FORENSIC DUMP: Capture backend and p4c runtime provenance at phase start
     provenance: dict[str, Any] = {}
     if FORENSIC_DUMP_ENABLED:
@@ -120,10 +150,6 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
             artifact_dir, kubeconfig=config.kubeconfig
         )
         provenance["p4c_script"] = dump_p4c_runtime_provenance(artifact_dir)
-    
-    log_phase_header()
-    _log(f"Target: diagnose shipping incident in {config.namespace}")
-    evidence = create_initial_evidence(config.namespace)
     
     # Step 1: Read P3c detection evidence
     log_step(1, "Reading P3c detection evidence")
@@ -227,7 +253,10 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     # Try to extract scheduling_evidence from detection_evidence using structured extraction
     detection_evidence_local = evidence.get("detection_evidence", {}) or {}
     try:
+        import inspect as _inspect
+
         from src.k8s_diag_agent.collect.incident_scheduling_root_cause import (
+            _is_failed_scheduling_signal,
             check_scheduling_root_cause_complete,
             extract_scheduling_root_cause,
         )
@@ -246,7 +275,61 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
             if detection_evidence_local.get("selector_key") and detection_evidence_local.get("selector_value")
             else None
         )
-        _log(f"  DIAGNOSTIC: backend_incident_detail={'present' if backend_incident_detail else 'None'}, selector_literal={detection_selector_literal}")
+
+        # =================================================================
+        # P4c CALL-SITE INVARIANT LOGGING (freshness guard for live lab)
+        # =================================================================
+        # Log extract_scheduling_root_cause signature and invariants BEFORE calling it
+        # This proves the runtime has the fixed extractor with required parameters.
+        _log("  [INVARIANT] extract_scheduling_root_cause call-site pre-flight:")
+        
+        # 1. Function signature inspection
+        try:
+            sig = _inspect.signature(extract_scheduling_root_cause)
+            params = list(sig.parameters.keys())
+            has_backend = "backend_incident_detail" in params
+            has_selector = "detection_evidence_selector_literal" in params
+            _log(f"    function signature: {params}")
+            _log(f"    has backend_incident_detail param: {has_backend}")
+            _log(f"    has detection_evidence_selector_literal param: {has_selector}")
+        except (ValueError, TypeError) as e:
+            _log(f"    signature inspection failed: {e}")
+
+        # 2. Log backend_incident_detail type and shape (defensive: nil-safe as extractor)
+        if backend_incident_detail is not None:
+            _log(f"    backend_incident_detail type: {type(backend_incident_detail).__name__}")
+            if isinstance(backend_incident_detail, dict):
+                backend_keys = list(backend_incident_detail.keys())
+                _log(f"    backend_incident_detail keys: {backend_keys[:10]}")  # Limit to first 10
+                # Defensive: raw may be None, list, string - handle all cases
+                raw = backend_incident_detail.get("raw") if isinstance(backend_incident_detail, dict) else None
+                raw_signals = raw.get("signals", []) if isinstance(raw, dict) else []
+                if not isinstance(raw_signals, list):
+                    raw_signals = []
+                _log(f"    backend_incident_detail.raw.signals count: {len(raw_signals)}")
+                # Log first FailedScheduling signal
+                failed_count = 0
+                for sig_item in raw_signals:
+                    if isinstance(sig_item, dict):
+                        if _is_failed_scheduling_signal(sig_item):
+                            failed_count += 1
+                            if failed_count == 1:
+                                _log(f"    backend first FailedScheduling signal: reason={sig_item.get('reason')}, message={str(sig_item.get('message', ''))[:80]}...")
+                if failed_count == 0:
+                    _log("    backend FailedScheduling signals: 0 (none found)")
+                else:
+                    _log(f"    backend FailedScheduling signals: {failed_count}")
+            else:
+                _log("    backend_incident_detail shape: non-dict")
+        else:
+            _log("    backend_incident_detail: None")
+
+        # 3. Log detection_evidence_selector_literal value
+        _log(f"    detection_evidence_selector_literal: {detection_selector_literal}")
+
+        # 4. Log detection_evidence path used
+        detection_path = evidence.get("detection_evidence_path", "unknown")
+        _log(f"    detection_evidence path: {detection_path}")
 
         # Create a minimal incident-like dict for extract_scheduling_root_cause
         incident_for_extraction = {
@@ -270,6 +353,7 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
             _log(f"  DIAGNOSTIC: scheduling_evidence completeness={check_scheduling_root_cause_complete(scheduling_evidence_obj)}")
             _log(f"  DIAGNOSTIC: selector_key={scheduling_evidence_obj.selector_key}, selector_value={scheduling_evidence_obj.selector_value}")
             _log(f"  DIAGNOSTIC: failed_scheduling={scheduling_evidence_obj.failed_scheduling}, unschedulable={scheduling_evidence_obj.unschedulable}")
+            _log(f"  DIAGNOSTIC: selector_literal={scheduling_evidence_obj.selector_literal}")
         else:
             _log("  No scheduling_evidence extracted from detection_evidence")
     except Exception as e:
