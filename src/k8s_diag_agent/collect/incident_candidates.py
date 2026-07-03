@@ -286,6 +286,10 @@ def detect_incident_candidates(
             continue
 
         if not deployment.available:
+            # For deployment unavailability, we need Pod-level evidence to diagnose
+            # scheduling failures (e.g., nodeSelector mismatches). The scheduling
+            # failure events (FailedScheduling, Unschedulable) are on the Pods,
+            # not the Deployment itself.
             candidate = _make_deployment_candidate(
                 deployment=deployment,
                 candidate_class=CandidateClass.DEPLOYMENT_UNAVAILABLE,
@@ -295,7 +299,12 @@ def detect_incident_candidates(
                     f"Deployment {deployment.name} has {deployment.available_replicas}/"
                     f"{deployment.replicas} replicas available"
                 ),
-                evidence_needed=("deployment_describe", "replica_status"),
+                evidence_needed=(
+                    "deployment_describe",
+                    "replica_status",
+                    "pod_describe",
+                    "pod_events",
+                ),
             )
             candidates[candidate.candidate_id] = candidate
 
