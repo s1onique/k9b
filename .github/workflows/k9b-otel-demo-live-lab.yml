@@ -199,7 +199,28 @@ jobs:
         env:
           K9B_LIVE_LAB_PYTHON: ${{ steps.toolchain.outputs.python-location }}
           K9B_LIVE_LAB_PREBAKED_VENV: ${{ vars.K9B_LIVE_LAB_PREBAKED_VENV || '' }}
-        run: scripts/ci/ensure_live_lab_venv.sh
+        run: |
+          set -euo pipefail
+          python_bin="$K9B_LIVE_LAB_PYTHON"
+          venv_path=".venv"
+
+          # Use pre-baked venv if available
+          if [[ -n "${K9B_LIVE_LAB_PREBAKED_VENV:-}" ]] && [[ -x "${K9B_LIVE_LAB_PREBAKED_VENV}/bin/python" ]]; then
+            echo "Using pre-baked venv: ${K9B_LIVE_LAB_PREBAKED_VENV}"
+            rm -rf "${venv_path}"
+            ln -s "${K9B_LIVE_LAB_PREBAKED_VENV}" "${venv_path}"
+            exit 0
+          fi
+
+          # Create fresh venv and install dependencies
+          rm -rf "${venv_path}"
+          "${python_bin}" -m venv "${venv_path}"
+          "${venv_path}/bin/python" -m pip install --upgrade pip
+          "${venv_path}/bin/python" -m pip install \
+            'pytest>=7.0' \
+            'PyYAML>=6.0' \
+            'requests>=2.31.0' \
+            'ijson>=3.2'
 
       # =======================================================================
       # Configure kubectl with kubeconfig
@@ -244,15 +265,15 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== P4c RBAC Pre-flight Diagnostics ==="
-          
+
           # Show current identity
           echo "--- Runner Identity ---"
           kubectl --kubeconfig "$KUBECONFIG" auth whoami 2>&1 || true
-          
+
           # Show current context
           echo "--- Current Context ---"
           kubectl --kubeconfig "$KUBECONFIG" config current-context 2>&1 || true
-          
+
           # Check RBAC for reading k9b-scheduler deployment (required for P4c env check)
           # Note: Only get is needed - the helper reads a named Deployment, not a list
           echo "--- RBAC Check: Read k9b-scheduler deployment ---"

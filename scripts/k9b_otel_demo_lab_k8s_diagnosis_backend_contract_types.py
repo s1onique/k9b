@@ -96,6 +96,18 @@ class BackendIncidentDetail:
             f"review_available={self.review_available}"
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict for artifact serialization."""
+        return {
+            "incident_id": self.incident_id,
+            "status": self.status,
+            "evidence_count": self.evidence_count,
+            "review_packet_status": self.review_packet_status,
+            "loop_summary_status": self.loop_summary_status,
+            "review_available": self.review_available,
+            "raw": self.raw,
+        }
+
 
 # =============================================================================
 # Invocation Result Types
