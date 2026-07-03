@@ -125,6 +125,7 @@ def run_one_read_only_diagnosis_loop_pass(
     prior_loop_state: Mapping[str, object] | None = None,
     now: datetime | None = None,
     fake_handlers: Mapping[str, ReadOnlyCheckHandler] | None = None,
+    require_complete_root_cause_before_stop: bool = False,
 ) -> dict[str, object]:
     """Run one deterministic read-only diagnosis loop pass.
 
@@ -148,6 +149,8 @@ def run_one_read_only_diagnosis_loop_pass(
         now: Optional datetime for deterministic timestamps
         fake_handlers: Optional mapping of check_id -> ReadOnlyCheckHandler
             for test injection
+        require_complete_root_cause_before_stop: If True (P4c lab-strict mode),
+            stop_no_checks_proposed requires complete scheduling root cause.
 
     Returns:
         Bounded JSON-serializable orchestration result:
@@ -200,6 +203,7 @@ def run_one_read_only_diagnosis_loop_pass(
         diagnosis_report=dict(diagnosis_report),
         prior_loop_state=dict(prior_loop_state) if prior_loop_state is not None else None,
         now=resolved_now,
+        require_complete_root_cause_before_stop=require_complete_root_cause_before_stop,
     )
 
     # Extract decision

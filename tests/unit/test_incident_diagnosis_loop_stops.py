@@ -197,7 +197,7 @@ class TestBudgetExhausted(unittest.TestCase):
                 now=now,
                 max_passes=3,
             )
-            prior_state = result["loop_state"]
+            prior_state = result["loop_state"]  # type: ignore[assignment]
 
         # Next call should trigger budget exhaustion
         final_result = plan_next_diagnosis_pass(
@@ -217,7 +217,7 @@ class TestNoChecksProposed(unittest.TestCase):
 
     def test_no_checks_proposed(self) -> None:
         """No checks proposed returns True."""
-        proposals = []
+        proposals: list[dict[str, object]] = []
         self.assertTrue(check_no_checks_proposed(proposals))
 
     def test_checks_proposed(self) -> None:
@@ -290,6 +290,96 @@ class TestNoSafeChecks(unittest.TestCase):
         )
 
         self.assertEqual(result["decision"], LoopDecision.STOP_NO_SAFE_CHECKS.value)
+
+
+class TestP4cLabStrictMode(unittest.TestCase):
+    """Tests for P4c lab-strict mode with require_complete_root_cause_before_stop."""
+
+    def test_default_no_checks_stops(self) -> None:
+        """Default mode: no proposals = stop_no_checks_proposed."""
+        case_file = FakeCaseFile.make_basic()
+        diagnosis_report = FakeDiagnosisReport.make(
+            confidence="low",
+            likely_causes=["Unknown"],
+            supporting_evidence=[],
+            uncertainties=["Need investigation"],
+            recommended_investigations=[],
+        )
+
+        result = plan_next_diagnosis_pass(
+            incident_id="test-incident-001",
+            case_file=case_file,
+            diagnosis_report=diagnosis_report,
+            now=datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC),
+            require_complete_root_cause_before_stop=False,
+        )
+
+        self.assertEqual(result["decision"], LoopDecision.STOP_NO_CHECKS_PROPOSED.value)
+
+    def test_lab_strict_no_checks_incomplete_root_cause_continues(self) -> None:
+        """P4c lab-strict mode: no proposals + incomplete root cause = continue."""
+        case_file = FakeCaseFile.make_basic()
+        # Diagnosis without complete scheduling evidence
+        diagnosis_report = FakeDiagnosisReport.make(
+            confidence="low",
+            likely_causes=["Unknown"],
+            supporting_evidence=[],
+            uncertainties=["Need investigation"],
+            recommended_investigations=[],
+        )
+
+        result = plan_next_diagnosis_pass(
+            incident_id="test-incident-001",
+            case_file=case_file,
+            diagnosis_report=diagnosis_report,
+            now=datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC),
+            require_complete_root_cause_before_stop=True,  # P4c lab-strict mode
+        )
+
+        # Should NOT stop - root cause is incomplete
+        self.assertNotEqual(result["decision"], LoopDecision.STOP_NO_CHECKS_PROPOSED.value)
+        self.assertEqual(result["decision"], LoopDecision.RUN_ALLOWED_READ_ONLY_CHECKS.value)
+
+    def test_lab_strict_no_checks_complete_root_cause_stops(self) -> None:
+        """P4c lab-strict mode: no proposals + complete scheduling root cause = stop."""
+        case_file = FakeCaseFile.make_basic()
+        # Diagnosis with complete scheduling evidence (but low confidence to avoid
+        # STOP_ROOT_CAUSE_FOUND triggering first due to credible root cause check)
+        diagnosis_report = {
+            "schema_version": "1.0",
+            "generated_at": "2024-06-01T12:00:00+00:00",
+            "read_only": True,
+            "allowed_actions": [],
+            "disallowed_actions": ["execute", "promote"],
+            "incident_id": "test-incident-001",
+            "diagnosis": {
+                "summary": "Shipping deployment unavailable due to nodeSelector",
+                "likely_causes": [
+                    "Deployment shipping has nodeSelector k9b.dev/otel-lab-node=missing",
+                    "No nodes match the selector",
+                    "Pod is FailedScheduling/Unschedulable",
+                ],
+                "supporting_evidence": ["FailedScheduling event", "0 matching nodes"],
+                "recommended_investigations": [],
+                "uncertainties": [],
+                "confidence": "medium",  # Not high, to avoid STOP_ROOT_CAUSE_FOUND
+                "scheduling_evidence": ["FailedScheduling", "Unschedulable", "no matching node"],
+                "proposed_operator_action": "Add label k9b.dev/otel-lab-node to a node",
+                "action_is_review_only": True,
+            },
+            "safety_notes": [],
+        }
+
+        result = plan_next_diagnosis_pass(
+            incident_id="test-incident-001",
+            case_file=case_file,
+            diagnosis_report=diagnosis_report,
+            now=datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC),
+            require_complete_root_cause_before_stop=True,  # P4c lab-strict mode
+        )
+
+        # Should stop with no_checks_proposed - root cause has required scheduling terms
+        self.assertEqual(result["decision"], LoopDecision.STOP_NO_CHECKS_PROPOSED.value)
 
 
 if __name__ == "__main__":

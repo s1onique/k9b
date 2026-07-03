@@ -82,6 +82,11 @@ class AutomaticDiagnosisLoopConfig:
     # Whether to write review packet for ineligible incidents
     write_ineligible_packets: bool = False
 
+    # P4c lab-strict mode: require complete root cause before accepting stop_no_checks_proposed.
+    # When True, the diagnosis must contain complete scheduling root cause evidence
+    # (shipping, nodeSelector, k9b.dev/otel-lab-node, FailedScheduling) before stopping.
+    require_complete_root_cause_before_stop: bool = False
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "max_incidents_per_run": self.max_incidents_per_run,
@@ -89,6 +94,7 @@ class AutomaticDiagnosisLoopConfig:
             "max_checks_per_pass": self.max_checks_per_pass,
             "write_stop_path_packets": self.write_stop_path_packets,
             "write_ineligible_packets": self.write_ineligible_packets,
+            "require_complete_root_cause_before_stop": self.require_complete_root_cause_before_stop,
         }
 
 

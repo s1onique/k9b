@@ -103,6 +103,7 @@ def plan_next_diagnosis_pass(
     max_passes: int = DEFAULT_MAX_PASSES,
     max_checks_per_pass: int = DEFAULT_MAX_CHECKS_PER_PASS,
     max_total_checks: int = DEFAULT_MAX_TOTAL_CHECKS,
+    require_complete_root_cause_before_stop: bool = False,
 ) -> dict[str, object]:
     """Plan the next diagnosis pass or make a stop decision.
 
@@ -122,6 +123,9 @@ def plan_next_diagnosis_pass(
         max_passes: Maximum diagnosis passes (default 3)
         max_checks_per_pass: Maximum checks per pass (default 5)
         max_total_checks: Maximum total checks (default 15)
+        require_complete_root_cause_before_stop: If True (P4c lab-strict mode),
+            stop_no_checks_proposed requires complete scheduling root cause.
+            If False (default), no proposals = stop immediately.
 
     Returns:
         Loop-state update dict with:
@@ -302,49 +306,74 @@ def plan_next_diagnosis_pass(
             proposals=proposals,
         )
 
-    # 4. No checks proposed - HARDENED: only accept if root cause has required evidence
-    # For P4c multipass diagnosis, stop_no_checks_proposed is only acceptable when:
-    # - No new checks are proposed (proposals is empty)
-    # - Diagnosis text (from all fields) contains required scheduling terms
-    # - Diagnosis text has scheduling failure evidence
-    # - Proposed operator action is present and review-only
+    # 4. No checks proposed - mode-gated stop decision
     #
-    # Extract root cause summary from diagnosis data
-    root_cause_summary = ""
-    if diagnosis_data:
-        likely_causes = diagnosis_data.get("likely_causes", [])
-        if likely_causes:
-            root_cause_summary = "; ".join(str(c) for c in likely_causes[:3])
+    # Unit/product default (require_complete_root_cause_before_stop=False):
+    #   - no proposals => stop_no_checks_proposed
+    #
+    # P4c lab-strict mode (require_complete_root_cause_before_stop=True):
+    #   - no proposals + complete scheduling root cause => stop_no_checks_proposed
+    #   - no proposals + incomplete scheduling root cause => continue loop
+    if len(proposals) == 0:
+        if require_complete_root_cause_before_stop:
+            # P4c lab-strict mode: check if root cause is complete
+            root_cause_summary = ""
+            if diagnosis_data:
+                likely_causes = diagnosis_data.get("likely_causes", [])
+                if likely_causes:
+                    root_cause_summary = "; ".join(str(c) for c in likely_causes[:3])
 
-    if check_stop_no_checks_proposed_acceptable(
-        proposals,
-        root_cause_candidate,
-        root_cause_summary,
-        diagnosis_data=diagnosis_data,
-        require_operator_action=True,  # Require proposed operator action for terminal stop
-    ):
-        new_state = stop_loop(loop_state, StopReason.NO_CHECKS_PROPOSED, now=timestamp)
-        pass_result = DiagnosisPass(
-            pass_index=current_pass_index,
-            case_file_summary=case_file_summary,
-            diagnosis=diagnosis_data,
-            root_cause_candidate=root_cause_candidate.to_dict() if root_cause_candidate else None,
-            proposed_next_checks=(),
-            policy_decision=policy_decision,
-            stop_reason=StopReason.NO_CHECKS_PROPOSED.value,
-        )
-        new_state = add_pass_to_state(new_state, pass_result, now=timestamp)
+            if check_stop_no_checks_proposed_acceptable(
+                proposals,
+                root_cause_candidate,
+                root_cause_summary,
+                diagnosis_data=diagnosis_data,
+                require_operator_action=True,
+            ):
+                # Complete root cause - accept stop
+                new_state = stop_loop(loop_state, StopReason.NO_CHECKS_PROPOSED, now=timestamp)
+                pass_result = DiagnosisPass(
+                    pass_index=current_pass_index,
+                    case_file_summary=case_file_summary,
+                    diagnosis=diagnosis_data,
+                    root_cause_candidate=root_cause_candidate.to_dict() if root_cause_candidate else None,
+                    proposed_next_checks=(),
+                    policy_decision=policy_decision,
+                    stop_reason=StopReason.NO_CHECKS_PROPOSED.value,
+                )
+                new_state = add_pass_to_state(new_state, pass_result, now=timestamp)
 
-        return _build_loop_update(
-            loop_state=new_state,
-            decision=LoopDecision.STOP_NO_CHECKS_PROPOSED,
-            stop_reason=StopReason.NO_CHECKS_PROPOSED,
-            accepted_checks=[],
-            rejected_checks=[],
-            proposals=[],
-        )
-    # If no checks proposed BUT root cause is incomplete, fall through to continue loop
-    # This ensures the diagnosis reaches complete root-cause understanding before stopping
+                return _build_loop_update(
+                    loop_state=new_state,
+                    decision=LoopDecision.STOP_NO_CHECKS_PROPOSED,
+                    stop_reason=StopReason.NO_CHECKS_PROPOSED,
+                    accepted_checks=[],
+                    rejected_checks=[],
+                    proposals=[],
+                )
+            # Incomplete root cause - fall through to continue loop
+        else:
+            # Default mode: no proposals = stop immediately
+            new_state = stop_loop(loop_state, StopReason.NO_CHECKS_PROPOSED, now=timestamp)
+            pass_result = DiagnosisPass(
+                pass_index=current_pass_index,
+                case_file_summary=case_file_summary,
+                diagnosis=diagnosis_data,
+                root_cause_candidate=root_cause_candidate.to_dict() if root_cause_candidate else None,
+                proposed_next_checks=(),
+                policy_decision=policy_decision,
+                stop_reason=StopReason.NO_CHECKS_PROPOSED.value,
+            )
+            new_state = add_pass_to_state(new_state, pass_result, now=timestamp)
+
+            return _build_loop_update(
+                loop_state=new_state,
+                decision=LoopDecision.STOP_NO_CHECKS_PROPOSED,
+                stop_reason=StopReason.NO_CHECKS_PROPOSED,
+                accepted_checks=[],
+                rejected_checks=[],
+                proposals=[],
+            )
 
     # 5. No safe checks (all rejected)
     if check_no_safe_checks(proposals, validation_results):
