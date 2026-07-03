@@ -80,31 +80,29 @@ def _all_steps(workflow: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def test_live_lab_workflow_installs_ijson() -> None:
-    """Ensure live lab workflow installs ijson package.
+    """Ensure live lab workflow installs ijson package via ensure_live_lab_venv.sh.
 
-    The live-lab runner installs a minimal set of Python packages.
-    This test verifies that `ijson` is explicitly listed in the
-    "Install Python dependencies" step's run block.
+    The live-lab runner uses the ensure_live_lab_venv.sh script which installs
+    from requirements-live-lab.txt. This test verifies that:
+    1. The workflow uses ensure_live_lab_venv.sh script
+    2. requirements-live-lab.txt includes ijson
 
     P4c diagnosis imports ijson, so the live-lab workflow must install ijson
     to avoid ImportError during the diagnosis phase.
     """
-    workflow = _load_workflow()
+    workflow_text = WORKFLOW.read_text()
 
-    install_steps = [
-        step
-        for step in _all_steps(workflow)
-        if step.get("name") == "Install Python dependencies"
-    ]
+    # Verify workflow uses the ensure script
+    assert "scripts/ci/ensure_live_lab_venv.sh" in workflow_text, (
+        "Live-lab workflow should use ensure_live_lab_venv.sh script"
+    )
 
-    assert install_steps, "live-lab workflow must have an Install Python dependencies step"
-
-    run_blocks = [
-        step.get("run", "")
-        for step in install_steps
-        if isinstance(step.get("run"), str)
-    ]
-
-    assert any("pip install" in run and "ijson" in run for run in run_blocks), (
-        "P4c diagnosis imports ijson, so the live-lab workflow must install ijson"
+    # Verify requirements file includes ijson
+    requirements_path = REPO_ROOT / "requirements-live-lab.txt"
+    assert requirements_path.exists(), (
+        f"requirements-live-lab.txt not found at {requirements_path}"
+    )
+    requirements_content = requirements_path.read_text()
+    assert "ijson" in requirements_content, (
+        "requirements-live-lab.txt should include ijson for P4c diagnosis"
     )

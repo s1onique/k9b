@@ -10,6 +10,8 @@ These tests verify that the action:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import yaml
 
 from tests.helpers.k9b_live_lab_toolchain_action_helpers import (
@@ -331,50 +333,78 @@ class TestWorkflowRequirementsFile:
 
 
 class TestWorkflowVenvCaching:
-    """Test that workflows use .venv caching."""
+    """Test that workflows use deterministic local venv preparation (no remote cache)."""
 
-    def test_otel_workflow_uses_venv_cache(self) -> None:
-        """OTel live lab workflow should use .venv caching."""
+    def test_otel_workflow_uses_ensure_venv_script(self) -> None:
+        """OTel live lab workflow should use ensure_live_lab_venv.sh script."""
+        workflow_text = OTEL_LIVE_LAB_WORKFLOW.read_text()
+        assert "scripts/ci/ensure_live_lab_venv.sh" in workflow_text, (
+            "OTel workflow should use scripts/ci/ensure_live_lab_venv.sh for venv preparation"
+        )
+
+    def test_otel_workflow_no_venv_cache_restore(self) -> None:
+        """OTel live lab workflow should NOT use actions/cache/restore for .venv."""
+        _assert_no_venv_cache_steps(OTEL_LIVE_LAB_WORKFLOW)
+
+    def test_otel_workflow_no_venv_cache_save(self) -> None:
+        """OTel live lab workflow should NOT use actions/cache/save for .venv."""
+        _assert_no_venv_cache_steps(OTEL_LIVE_LAB_WORKFLOW)
+
+    def test_otel_workflow_install_python_deps_step(self) -> None:
+        """OTel live lab workflow should have 'Install Python dependencies' step."""
         workflow = yaml.safe_load(OTEL_LIVE_LAB_WORKFLOW.read_text())
-
-        for job in workflow.get("jobs", {}).values():
-            for step in job.get("steps", []):
-                uses = step.get("uses", "")
-                if "cache/restore" in uses:
-                    path = step.get("with", {}).get("path", "")
-                    if ".venv" in path:
-                        return
-
-        assert False, "OTel workflow should use actions/cache/restore for .venv"
-
-    def test_otel_workflow_has_venv_validation(self) -> None:
-        """OTel live lab workflow should validate cached .venv."""
-        workflow = yaml.safe_load(OTEL_LIVE_LAB_WORKFLOW.read_text())
-
-        # Check the live-k3s-lab job specifically (where venv validation happens)
         jobs = workflow.get("jobs", {})
         if "live-k3s-lab" not in jobs:
             assert False, "OTel workflow should have live-k3s-lab job"
 
         live_job = jobs["live-k3s-lab"]
-        run_text = " ".join(
-            step.get("run", "")
-            for step in live_job.get("steps", [])
-            if step.get("run")
-        )
-
-        # Should have validation step with importlib check
-        assert "validate" in run_text.lower() or "importlib" in run_text, (
-            "OTel workflow should validate cached .venv with importlib check"
+        step_names = [step.get("name", "") for step in live_job.get("steps", [])]
+        assert "Install Python dependencies" in step_names, (
+            "OTel workflow should have 'Install Python dependencies' step"
         )
 
     def test_otel_workflow_supports_prebaked_venv(self) -> None:
         """OTel live lab workflow should support pre-baked venv via env var."""
-        # Check raw workflow file for prebaked venv documentation (comment or env)
         workflow_text = OTEL_LIVE_LAB_WORKFLOW.read_text()
-        assert "PREBAKED" in workflow_text or "prebaked" in workflow_text.lower(), (
-            "OTel workflow should document pre-baked venv support in env section"
+        assert "K9B_LIVE_LAB_PREBAKED_VENV" in workflow_text, (
+            "OTel workflow should reference K9B_LIVE_LAB_PREBAKED_VENV for pre-baked venv support"
         )
+
+    def test_cnpg_workflow_uses_ensure_venv_script(self) -> None:
+        """CNPG live lab workflow should use ensure_live_lab_venv.sh script."""
+        workflow_text = CNPG_LIVE_LAB_WORKFLOW.read_text()
+        assert "scripts/ci/ensure_live_lab_venv.sh" in workflow_text, (
+            "CNPG workflow should use scripts/ci/ensure_live_lab_venv.sh for venv preparation"
+        )
+
+    def test_cnpg_workflow_no_venv_cache_restore(self) -> None:
+        """CNPG live lab workflow should NOT use actions/cache/restore for .venv."""
+        _assert_no_venv_cache_steps(CNPG_LIVE_LAB_WORKFLOW)
+
+    def test_cnpg_workflow_no_venv_cache_save(self) -> None:
+        """CNPG live lab workflow should NOT use actions/cache/save for .venv."""
+        _assert_no_venv_cache_steps(CNPG_LIVE_LAB_WORKFLOW)
+
+
+def _assert_no_venv_cache_steps(workflow_path: Path) -> None:
+    """Assert workflow does not use actions/cache for .venv directory."""
+    workflow = yaml.safe_load(workflow_path.read_text())
+
+    for job_name, job in workflow.get("jobs", {}).items():
+        for step in job.get("steps", []):
+            uses = step.get("uses", "")
+            with_block = step.get("with", {})
+            path = str(with_block.get("path", ""))
+
+            assert not (
+                uses.startswith("actions/cache/restore")
+                and path == ".venv"
+            ), f"{workflow_path}: job {job_name} restores .venv via actions/cache"
+
+            assert not (
+                uses.startswith("actions/cache/save")
+                and path == ".venv"
+            ), f"{workflow_path}: job {job_name} saves .venv via actions/cache"
 
 
 class TestWorkflowToolchainActionUsage:
