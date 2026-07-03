@@ -38,7 +38,7 @@ from .incident_llm_prompt_contracts import (
     DISALLOWED_ACTIONS,
     READ_ONLY_INSTRUCTIONS,
 )
-from .incident_scheduling_evidence import extract_scheduling_evidence
+from .incident_scheduling_root_cause import extract_scheduling_root_cause
 
 __all__ = [
     "build_incident_diagnosis",
@@ -50,7 +50,6 @@ __all__ = [
     "DEFAULT_MAX_RAW_OUTPUT_CHARS",
     "DEFAULT_MAX_INCIDENT_JSON_CHARS",
     "READ_ONLY_INSTRUCTIONS",
-    "extract_scheduling_evidence",  # For testing
 ]
 
 
@@ -82,6 +81,44 @@ class IncidentDiagnosisLLM(Protocol):
 # =============================================================================
 # Prompt Builder
 # =============================================================================
+
+
+def _build_scheduling_evidence_for_prompt(
+    incident: Mapping[str, object],
+    events: list[object],
+) -> dict[str, Any] | None:
+    """Build scheduling evidence for the prompt using extract_scheduling_root_cause.
+    
+    This uses the durable structured evidence extraction that survives evidence
+    boundary crossings in the diagnosis loop.
+    
+    Args:
+        incident: Incident data from case file
+        events: Events list from case file
+        
+    Returns:
+        Scheduling evidence dict or None
+    """
+    # Build a minimal case file dict for extract_scheduling_root_cause
+    # The function needs: incident + case_file (with events)
+    case_file_for_extraction = {
+        "events": events,
+    }
+    
+    try:
+        # Pass incident dict (we have it as a Mapping, extract_scheduling_root_cause handles dict/object)
+        scheduling_evidence = extract_scheduling_root_cause(
+            incident=dict(incident),
+            case_file=case_file_for_extraction,
+        )
+        
+        if scheduling_evidence.root_cause_summary:
+            return scheduling_evidence.to_dict()
+    except Exception:
+        # Fallback: don't let extraction failures break the prompt
+        pass
+    
+    return None
 
 
 def build_diagnosis_prompt(
@@ -135,9 +172,10 @@ def build_diagnosis_prompt(
         if events:
             incident_summary["recent_events"] = events[:10]
 
-    # Extract scheduling evidence explicitly for P4c scheduling diagnosis
-    # This ensures the LLM sees the scheduling failure details directly
-    scheduling_evidence = extract_scheduling_evidence(events)
+    # P4c FIX: Extract scheduling evidence using durable structured extraction.
+    # This ensures the LLM sees the scheduling failure details directly from
+    # the structured evidence that survives evidence boundary crossings.
+    scheduling_evidence = _build_scheduling_evidence_for_prompt(incident, events)
     if scheduling_evidence:
         incident_summary["scheduling_evidence"] = scheduling_evidence
 
@@ -440,12 +478,14 @@ def build_incident_diagnosis(
             "These remain as text only and do not create executable controls."
         )
 
-    # Extract scheduling evidence from case file for P4c root-cause validation
+    # P4c FIX: Extract scheduling evidence using durable structured extraction.
     # This ensures scheduling evidence survives evidence boundary crossings even
     # when the LLM diagnosis text doesn't explicitly mention scheduling markers.
-    scheduling_evidence = extract_scheduling_evidence(
-        case_file.get("events", [])
-    )
+    # The scheduling_evidence dict is included in diagnosis_data for
+    # check_stop_no_checks_proposed_acceptable() validation in the planner.
+    incident_for_extraction = dict(incident)
+    events = list(case_file.get("events", []))
+    scheduling_evidence = _build_scheduling_evidence_for_prompt(incident_for_extraction, events)
 
     # Build final diagnosis report
     diagnosis_report: dict[str, object] = {

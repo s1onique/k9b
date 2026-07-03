@@ -274,14 +274,54 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         evidence["failure_reason"] = "; ".join(failures)
         log_validation_result(False, evidence["failure_reason"])
     
-    # Step 6: P4c root-cause validation - check scheduling markers
-    # This is the key P4c validation that distinguishes symptom-level discovery (P3c)
-    # from root-cause diagnosis (P4c)
-    log_step(6, "Validating scheduling root-cause evidence (P4c)")
+    # Step 6: Extract structured scheduling_evidence (must come before Step 6b validation)
+    # This extraction ensures scheduling root-cause evidence survives evidence boundary
+    # crossings when the LLM diagnosis text doesn't explicitly mention scheduling markers.
+    # compute_p4c_outcome requires scheduling_evidence to be present for structured validation.
+    log_step(6, "Extracting structured scheduling evidence (P4c)")
     from scripts.k9b_otel_demo_lab_k8s_verdicts import (
         SCHEDULING_ROOT_CAUSE_MARKERS,
         validate_unschedulable_shipping_root_cause,
     )
+    
+    # Try to extract scheduling_evidence from detection_evidence using structured extraction
+    detection_evidence_local = evidence.get("detection_evidence", {}) or {}
+    try:
+        from src.k8s_diag_agent.collect.incident_scheduling_root_cause import (
+            extract_scheduling_root_cause,
+        )
+        
+        # Create a minimal incident-like dict for extract_scheduling_root_cause
+        incident_for_extraction = {
+            "namespace": evidence.get("target_namespace", detection_evidence_local.get("target_namespace", "otel-demo")),
+            "object_kind": "deployment",
+            "object_name": "shipping",
+            "signals": detection_evidence_local.get("matching_signals", []),
+        }
+        
+        # Also get signals/evidence from detection
+        events_from_detection = detection_evidence_local.get("matching_signals", [])
+        
+        # Extract scheduling evidence
+        scheduling_evidence_obj = extract_scheduling_root_cause(
+            incident=incident_for_extraction,
+            case_file={"events": events_from_detection},
+        )
+        
+        if scheduling_evidence_obj.root_cause_summary:
+            evidence["scheduling_evidence"] = scheduling_evidence_obj.to_dict()
+            _log(f"  Extracted scheduling_evidence: {scheduling_evidence_obj.root_cause_summary[:100]}...")
+        else:
+            _log("  No scheduling_evidence extracted from detection_evidence")
+    except Exception as e:
+        _log(f"  WARNING: Could not extract scheduling_evidence: {e}")
+        # Don't fail the phase - let compute_p4c_outcome handle the missing evidence
+    
+    # Step 6b: P4c root-cause validation - check scheduling markers using extracted evidence
+    # This validation consumes evidence["scheduling_evidence"] from Step 6.
+    # It's the key P4c check that distinguishes symptom-level discovery (P3c)
+    # from root-cause diagnosis (P4c).
+    log_step("6b", "Validating scheduling root-cause evidence (P4c)")
     root_cause_verdict = validate_unschedulable_shipping_root_cause(evidence)
     evidence["p4c_verdict"] = root_cause_verdict.to_dict()
     
