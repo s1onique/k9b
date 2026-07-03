@@ -38,9 +38,11 @@ from .incident_llm_prompt_contracts import (
     DISALLOWED_ACTIONS,
     READ_ONLY_INSTRUCTIONS,
 )
+from .incident_scheduling_evidence import extract_scheduling_evidence
 
 __all__ = [
     "build_incident_diagnosis",
+    "build_diagnosis_prompt",
     "IncidentDiagnosisLLM",
     "DIAGNOSIS_SCHEMA_VERSION",
     "DISALLOWED_ACTIONS",
@@ -48,6 +50,7 @@ __all__ = [
     "DEFAULT_MAX_RAW_OUTPUT_CHARS",
     "DEFAULT_MAX_INCIDENT_JSON_CHARS",
     "READ_ONLY_INSTRUCTIONS",
+    "extract_scheduling_evidence",  # For testing
 ]
 
 
@@ -131,6 +134,12 @@ def build_diagnosis_prompt(
         incident_summary["event_count"] = len(events)
         if events:
             incident_summary["recent_events"] = events[:10]
+
+    # Extract scheduling evidence explicitly for P4c scheduling diagnosis
+    # This ensures the LLM sees the scheduling failure details directly
+    scheduling_evidence = extract_scheduling_evidence(events)
+    if scheduling_evidence:
+        incident_summary["scheduling_evidence"] = scheduling_evidence
 
     # Add suggested checks (bounded)
     suggested_checks = case_file.get("suggested_checks", [])
