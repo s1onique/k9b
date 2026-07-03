@@ -388,10 +388,6 @@ def _format_candidate(candidate: IncidentCandidate) -> list[str]:
     return lines
 
 
-if TYPE_CHECKING:
-    from k8s_diag_agent.collect.incident_candidates import IncidentCandidate
-
-
 __all__ = [
     "build_metadata_section",
     "build_evidence_summary",
