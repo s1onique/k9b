@@ -166,6 +166,13 @@ jobs:
     needs: build-lab-images
     permissions:
       contents: read
+    env:
+      # Debug: dump raw provider preflight output to GitHub Actions logs
+      K9B_PROVIDER_PREFLIGHT_DUMP_RAW: "1"
+      # Debug: enable P4c diagnosis packet snippets (incident detail, review packets, deployment health)
+      K9B_DIAGNOSIS_PACKET_SNIPPETS: "1"
+      # Debug: enable P4c loop summary and decision dumps
+      K9B_DIAGNOSIS_LOOP_DEBUG: "1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5

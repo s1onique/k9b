@@ -31,6 +31,15 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_helpers import (
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
     MIN_REQUIRED_PASSES,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_debug import (
+    dump_backend_incident_detail,
+    dump_deployment_health,
+    dump_failing_pods,
+    dump_final_decision,
+    dump_loop_summary,
+    dump_proposed_next_checks,
+    dump_review_packet,
+)
 
 
 def phase1_confirm_incident(
@@ -84,6 +93,8 @@ def phase1_confirm_incident(
     if incident_detail:
         result["backend_incident_detail"] = incident_detail.to_compact_log()
         log(f"  Backend incident: {incident_detail.to_compact_log()}")
+        # P4c debug: dump bounded incident detail snippet
+        dump_backend_incident_detail(incident_detail.to_dict(), incident_id)
     else:
         result["backend_incident_detail"] = None
         log("  WARNING: Fetch succeeded but returned no incident detail")
@@ -249,6 +260,28 @@ def phase2_invoke_and_poll_pass(
         review = current_detail.raw.get("automatic_diagnosis_review", {})
         if review.get("artifact_name"):
             review_artifact_path = review["artifact_name"]
+
+        # P4c debug: dump bounded review packet snippet
+        dump_review_packet(review, incident_id, pass_attempt)
+
+        # P4c debug: dump bounded failing pods from review
+        failing_pods = review.get("failing_pods")
+        dump_failing_pods(failing_pods, incident_id)
+
+        # P4c debug: dump bounded deployment health (may contain nodeSelector/pod template)
+        deployment_health = review.get("deployment_health")
+        dump_deployment_health(deployment_health, incident_id)
+
+        # P4c debug: dump bounded loop summary snippet
+        dump_loop_summary(loop_summary, incident_id, pass_attempt)
+
+        # P4c debug: dump final decision
+        final_decision = loop_summary.get("final_decision")
+        dump_final_decision(final_decision, incident_id, pass_attempt)
+
+        # P4c debug: dump proposed next checks
+        proposed_next_checks = loop_summary.get("proposed_next_checks")
+        dump_proposed_next_checks(proposed_next_checks, incident_id, pass_attempt)
 
         # Check for terminal no-checks decision
         if is_terminal_no_checks_decision(current_detail.raw):
