@@ -17,6 +17,7 @@ Design constraints:
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .incident_scheduling_root_cause_contracts import (
@@ -32,6 +33,111 @@ __all__ = [
     "extract_scheduling_root_cause",
     "check_scheduling_root_cause_complete",
 ]
+
+# =============================================================================
+# Backend Incident Signal Extraction
+# =============================================================================
+
+
+def _as_mapping(value: object) -> Mapping[str, Any] | None:
+    """Convert value to Mapping if possible, else None."""
+    return value if isinstance(value, Mapping) else None
+
+
+def _iter_backend_incident_signals(value: object) -> list[Mapping[str, Any]]:
+    """Iterate over all signals in a backend incident detail.
+
+    Handles both top-level and wrapped backend incident shapes:
+    - root.signals
+    - root.raw.signals
+    - root.incident.signals
+    - root.incident.raw.signals
+
+    Args:
+        value: Backend incident detail (dict or object)
+
+    Returns:
+        List of signal dicts extracted from all candidate paths
+    """
+    root = _as_mapping(value)
+    if root is None:
+        return []
+
+    candidates: list[object] = [
+        root.get("signals"),
+    ]
+
+    raw = _as_mapping(root.get("raw"))
+    if raw is not None:
+        candidates.append(raw.get("signals"))
+
+    incident = _as_mapping(root.get("incident"))
+    if incident is not None:
+        candidates.append(incident.get("signals"))
+
+        incident_raw = _as_mapping(incident.get("raw"))
+        if incident_raw is not None:
+            candidates.append(incident_raw.get("signals"))
+
+    out: list[Mapping[str, Any]] = []
+    for candidate in candidates:
+        if isinstance(candidate, Sequence) and not isinstance(candidate, (str, bytes, bytearray)):
+            out.extend(item for item in candidate if isinstance(item, Mapping))
+
+    return out
+
+
+def _is_failed_scheduling_signal(signal: Mapping[str, Any]) -> bool:
+    """Check if a signal indicates a scheduling failure.
+
+    Matches on structured reason field and message content for robustness.
+    Uses lowercase comparison for message content to protect against casing drift.
+
+    Args:
+        signal: Signal dict to check
+
+    Returns:
+        True if signal indicates FailedScheduling or unschedulable condition
+    """
+    reason = str(signal.get("reason") or "")
+    message = str(signal.get("message") or "")
+    message_lower = message.lower()
+
+    return (
+        reason == "FailedScheduling"
+        or "failedscheduling" in message_lower
+        or "unschedulable" in message_lower
+        or "didn't match pod's node affinity/selector" in message_lower
+        or "did not match pod's node affinity/selector" in message_lower
+        or "node affinity/selector" in message_lower
+    )
+
+
+def _parse_selector_literal(value: object) -> tuple[str | None, str | None, str | None]:
+    """Parse a selector literal string into key, value, and full literal.
+
+    Args:
+        value: Selector literal string (e.g., "k9b.dev/otel-lab-node=missing")
+
+    Returns:
+        Tuple of (key, value, literal) or (None, None, None) if invalid
+    """
+    if not isinstance(value, str):
+        return None, None, None
+
+    literal = value.strip()
+    if not literal or "=" not in literal:
+        return None, None, None
+
+    key, selector_value = literal.split("=", 1)
+    key = key.strip()
+    selector_value = selector_value.strip()
+
+    if not key or not selector_value:
+        return None, None, None
+
+    return key, selector_value, f"{key}={selector_value}"
+
 
 # =============================================================================
 # Evidence Extraction
@@ -63,12 +169,14 @@ def extract_scheduling_root_cause(
     *,
     default_namespace: str = "otel-demo",
     default_workload_name: str = "shipping",
+    backend_incident_detail: object = None,
+    detection_evidence_selector_literal: str | None = None,
 ) -> SchedulingRootCauseEvidence:
     """Extract scheduling root-cause evidence from incident and case file.
 
     This function performs deterministic extraction of scheduling-related evidence
-    from incident data and case file. It does NOT perform remediation or make
-    LLM calls.
+    from incident data, case file, and backend incident detail. It does NOT perform
+    remediation or make LLM calls.
 
     The extraction is designed to be resilient to different data shapes and
     missing fields, returning empty/default evidence when data is unavailable.
@@ -80,6 +188,12 @@ def extract_scheduling_root_cause(
         case_file: Optional case-file packet for additional context
         default_namespace: Default namespace for shipping workloads
         default_workload_name: Default workload name for shipping
+        backend_incident_detail: Optional backend incident detail containing raw.signals
+            with FailedScheduling events from the k9b backend. This is the authoritative
+            source for scheduling evidence when P3c detection provides selector_literal.
+        detection_evidence_selector_literal: Optional selector literal from P3c detection
+            evidence (e.g., "k9b.dev/otel-lab-node=missing"). This is joined with
+            backend raw.signals to construct complete scheduling evidence.
 
     Returns:
         SchedulingRootCauseEvidence with extracted evidence
@@ -124,7 +238,7 @@ def extract_scheduling_root_cause(
             if not scheduler_message:
                 scheduler_message = message
 
-    # Also check signals from incident for scheduling evidence
+    # Check signals from incident for scheduling evidence
     # Signals may contain the scheduling failure message
     for sig in signals:
         if isinstance(sig, dict):
@@ -147,14 +261,48 @@ def extract_scheduling_root_cause(
     if "unschedulable" in signals_text:
         unschedulable = True
 
+    # CRITICAL FIX: Extract scheduling evidence from backend incident raw.signals
+    # This is the authoritative source when the live lab contains FailedScheduling events
+    if backend_incident_detail is not None:
+        backend_signals = _iter_backend_incident_signals(backend_incident_detail)
+        
+        for sig in backend_signals:
+            if _is_failed_scheduling_signal(sig):
+                failed_scheduling = True
+                message = str(sig.get("message", ""))
+                if not scheduler_message:
+                    scheduler_message = message
+                
+                # Extract node affinity/selector mismatch from message
+                if "node affinity/selector" in message.lower():
+                    unschedulable = True
+
     # Extract nodeSelector from deployment template if available in case file
     selector_key: str | None = None
     selector_value: str | None = None
     selector_literal: str | None = None
     matching_nodes: tuple[str, ...] = ()
 
-    # Check for explicit nodeSelector in read-only check results from case file
-    if case_file:
+    # Selector source priority:
+    # 1. detection_evidence_selector_literal (from P3c)
+    # 2. scheduler_message extraction
+    # 3. case_file read_only_check_results
+    # 4. lab-specific fallback for known P4c lab scenario
+
+    # Priority 1: Use detection_evidence selector_literal if provided
+    if detection_evidence_selector_literal:
+        parsed = _parse_selector_literal(detection_evidence_selector_literal)
+        if parsed[0]:
+            selector_key, selector_value, selector_literal = parsed
+
+    # Priority 2: Extract from scheduler message if not already found
+    if not selector_key and scheduler_message:
+        ns = _extract_selector_from_message(scheduler_message)
+        if ns:
+            selector_key, selector_value, selector_literal = ns
+
+    # Priority 3: Check for explicit nodeSelector in read-only check results from case file
+    if not selector_key and case_file:
         check_results = case_file.get("read_only_check_results", []) or []
         for result in check_results:
             if isinstance(result, dict):
@@ -163,16 +311,9 @@ def extract_scheduling_root_cause(
                     selector_key, selector_value, selector_literal = ns
                     break
 
-    # Infer selector from scheduling messages if not found in check results
+    # Priority 4: Fallback for known P4c lab scenario only
+    # This prevents generic scheduling failures from being promoted to the exact lab root cause.
     if not selector_key:
-        # Try to extract from scheduler message
-        if scheduler_message:
-            ns = _extract_selector_from_message(scheduler_message)
-            if ns:
-                selector_key, selector_value, selector_literal = ns
-
-        # Fallback: ONLY for known P4c lab scenario: otel-demo + shipping + scheduling failure.
-        # This prevents generic scheduling failures from being promoted to the exact lab root cause.
         is_known_p4c_lab_shipping = (
             namespace == "otel-demo"
             and workload_name.lower() == "shipping"
@@ -185,7 +326,7 @@ def extract_scheduling_root_cause(
         if scheduler_message:
             message_has_lab_marker = "k9b.dev/otel-lab-node" in scheduler_message
 
-        if not selector_key and is_known_p4c_lab_shipping and message_has_lab_marker:
+        if is_known_p4c_lab_shipping and message_has_lab_marker:
             selector_key = "k9b.dev/otel-lab-node"
             selector_value = "missing"
             selector_literal = f"{selector_key}={selector_value}"

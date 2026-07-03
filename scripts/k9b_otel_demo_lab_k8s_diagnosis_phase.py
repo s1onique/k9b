@@ -234,13 +234,20 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         
         # P4c DIAGNOSTIC: Log the raw signals structure to understand live artifact shape
         matching_signals_raw = detection_evidence_local.get("matching_signals", [])
-        _log(f"  DIAGNOSTIC: matching_signals count={len(matching_signals_raw)}")
-        if matching_signals_raw:
-            sample = matching_signals_raw[0] if matching_signals_raw else None
-            _log(f"  DIAGNOSTIC: first signal type={type(sample).__name__}, keys={list(sample.keys()) if isinstance(sample, dict) else 'N/A'}")
-            if isinstance(sample, dict):
-                _log(f"  DIAGNOSTIC: first signal reason={sample.get('reason', 'MISSING')}, has_message={'message' in sample}")
-        
+        sample = matching_signals_raw[0] if matching_signals_raw else None
+        sample_info = f"keys={list(sample.keys())}" if isinstance(sample, dict) else "N/A"
+        _log(f"  DIAGNOSTIC: matching_signals count={len(matching_signals_raw)}, first_signal={sample_info}")
+
+        # CRITICAL FIX: Get backend_incident_detail and detection selector_literal
+        # to join FailedScheduling evidence from backend with selector from P3c
+        backend_incident_detail = evidence.get("backend_incident_detail")
+        detection_selector_literal = detection_evidence_local.get("selector_literal") or (
+            f"{detection_evidence_local.get('selector_key')}={detection_evidence_local.get('selector_value')}"
+            if detection_evidence_local.get("selector_key") and detection_evidence_local.get("selector_value")
+            else None
+        )
+        _log(f"  DIAGNOSTIC: backend_incident_detail={'present' if backend_incident_detail else 'None'}, selector_literal={detection_selector_literal}")
+
         # Create a minimal incident-like dict for extract_scheduling_root_cause
         incident_for_extraction = {
             "namespace": evidence.get("target_namespace", detection_evidence_local.get("target_namespace", "otel-demo")),
@@ -249,25 +256,20 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
             "signals": matching_signals_raw,
         }
         
-        # Also get signals/evidence from detection
-        events_from_detection = matching_signals_raw
-        
-        # Extract scheduling evidence
+        # Extract scheduling evidence with backend incident detail and selector literal
         scheduling_evidence_obj = extract_scheduling_root_cause(
             incident=incident_for_extraction,
-            case_file={"events": events_from_detection},
+            case_file={"events": matching_signals_raw},
+            backend_incident_detail=backend_incident_detail,
+            detection_evidence_selector_literal=detection_selector_literal,
         )
-        
+
         if scheduling_evidence_obj.root_cause_summary:
             evidence["scheduling_evidence"] = scheduling_evidence_obj.to_dict()
-            # P4c DIAGNOSTIC: Log the complete extracted evidence
             _log(f"  Extracted scheduling_evidence: {scheduling_evidence_obj.root_cause_summary[:100]}...")
-            _log(f"  DIAGNOSTIC: scheduling_evidence keys={list(scheduling_evidence_obj.to_dict().keys())}")
             _log(f"  DIAGNOSTIC: scheduling_evidence completeness={check_scheduling_root_cause_complete(scheduling_evidence_obj)}")
-            _log(f"  DIAGNOSTIC: scheduling_evidence selector_key={scheduling_evidence_obj.selector_key}")
-            _log(f"  DIAGNOSTIC: scheduling_evidence selector_value={scheduling_evidence_obj.selector_value}")
-            _log(f"  DIAGNOSTIC: scheduling_evidence failed_scheduling={scheduling_evidence_obj.failed_scheduling}")
-            _log(f"  DIAGNOSTIC: scheduling_evidence unschedulable={scheduling_evidence_obj.unschedulable}")
+            _log(f"  DIAGNOSTIC: selector_key={scheduling_evidence_obj.selector_key}, selector_value={scheduling_evidence_obj.selector_value}")
+            _log(f"  DIAGNOSTIC: failed_scheduling={scheduling_evidence_obj.failed_scheduling}, unschedulable={scheduling_evidence_obj.unschedulable}")
         else:
             _log("  No scheduling_evidence extracted from detection_evidence")
     except Exception as e:
