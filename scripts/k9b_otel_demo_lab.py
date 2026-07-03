@@ -44,6 +44,9 @@ from pathlib import Path
 
 from .k9b_lab_common_helpers import log
 from .k9b_otel_demo_lab_contract import LabConfig, LabResult
+from .k9b_otel_demo_lab_k8s_injection_cleanup import (
+    reset_shipping_node_selector,
+)
 from .k9b_otel_demo_lab_phases import (
     phase0_cluster_baseline,
     phase1_deploy_otel_demo,
@@ -167,6 +170,21 @@ def run_lab(config: LabConfig) -> LabResult:
             log("=" * 60)
             log("K8S-NATIVE SCENARIO: Running unschedulable-shipping path")
             log("=" * 60)
+
+            # Preflight: Reset shipping nodeSelector to clean state
+            # This clears any leftover contamination from previous runs before injection.
+            # Idempotent: skips if deployment doesn't exist yet, succeeds if already clean.
+            log("=" * 60)
+            log("PREFLIGHT: Resetting shipping nodeSelector to clean schedulable state")
+            log("=" * 60)
+            reset_ok = reset_shipping_node_selector(
+                kubeconfig=config.kubeconfig,
+                namespace=config.namespace,
+            )
+            if not reset_ok:
+                result.failure_reason = "Preflight reset failed: shipping nodeSelector could not be cleared"
+                return _finish_result(result, artifact_dir, start_time)
+            log("Preflight reset completed successfully")
 
             phase_p2b = phase_p2b_inject_unschedulable_shipping_rollout(config, artifact_dir)
             result.phases.append(_phase_to_dict(phase_p2b))

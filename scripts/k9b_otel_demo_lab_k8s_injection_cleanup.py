@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 
-from scripts.k9b_lab_common_helpers import kubectl_patch, log
+from scripts.k9b_lab_common_helpers import kubectl_json, kubectl_patch, log
 from scripts.k9b_otel_demo_lab_constants import SHIPPING_DEPLOYMENT
 
 from .k9b_otel_demo_lab_k8s_injection_helpers import _kubectl_scale
@@ -202,3 +202,104 @@ def _rollback_deployment(
     if not success:
         log("Rollback failed - manual intervention may be required")
         log(f"Run: kubectl rollout undo deployment/{deployment} -n {namespace}")
+
+
+def reset_shipping_node_selector(
+    kubeconfig: str,
+    namespace: str,
+) -> bool:
+    """Reset shipping deployment nodeSelector to clean schedulable state (lab-start preflight).
+
+    This is an idempotent preflight reset that clears any leftover nodeSelector from
+    previous lab runs before the scenario injection phase. It ensures every run starts
+    from a clean schedulable state.
+
+    Args:
+        kubeconfig: Path to kubeconfig
+        namespace: Namespace where shipping deployment exists (default: otel-demo)
+
+    Returns:
+        True if reset succeeded or deployment doesn't exist yet (skip).
+        False if reset failed for a real error (fail-closed for contamination scenarios).
+
+    Behavior:
+        - If shipping deployment does NOT exist: returns True (skip - not an error)
+        - If nodeSelector is already absent: returns True (idempotent success)
+        - If nodeSelector is present: patches to null, waits for rollout, returns True
+        - If patch fails for a real error: returns False (fail-closed)
+    """
+    # Check if deployment exists first
+    deploy_result = kubectl_json(
+        kubeconfig,
+        "deployment",
+        namespace,
+        extra_args=[SHIPPING_DEPLOYMENT, "-o", "json"],
+    )
+
+    if not deploy_result.success:
+        # Deployment doesn't exist yet - this is OK for early preflight
+        log(f"shipping deployment not present yet ({namespace}/{SHIPPING_DEPLOYMENT}); skipping nodeSelector reset")
+        return True
+
+    log(f"Resetting {namespace}/{SHIPPING_DEPLOYMENT} nodeSelector to clean schedulable state")
+
+    # Use merge patch to set nodeSelector to null (clears it)
+    patch_result = kubectl_patch(
+        kubeconfig,
+        "deployment",
+        SHIPPING_DEPLOYMENT,
+        namespace,
+        patch={"spec": {"template": {"spec": {"nodeSelector": None}}}},
+        patch_type="merge",
+    )
+
+    if not patch_result.success:
+        # Check if the error indicates nodeSelector is already absent (idempotent case)
+        if _is_json_patch_path_absent_error(patch_result.stderr or ""):
+            log("nodeSelector already absent - reset idempotent, considered successful")
+            return True
+        log(f"Failed to reset nodeSelector: {patch_result.stderr}")
+        return False
+
+    # Wait for rollout to complete
+    log("Waiting for rollout to complete...")
+    rollout_result = _wait_for_rollout(kubeconfig, namespace, SHIPPING_DEPLOYMENT, timeout=120)
+    if not rollout_result:
+        log("WARNING: Rollout status check failed, but nodeSelector was patched successfully")
+        # Don't fail closed here - the patch succeeded, just rollout status timed out
+        return True
+
+    log("nodeSelector reset completed successfully")
+    return True
+
+
+def _wait_for_rollout(
+    kubeconfig: str,
+    namespace: str,
+    deployment: str,
+    timeout: int = 120,
+) -> bool:
+    """Wait for deployment rollout to complete.
+
+    Args:
+        kubeconfig: Path to kubeconfig
+        namespace: Namespace
+        deployment: Deployment name
+        timeout: Timeout in seconds
+
+    Returns:
+        True if rollout completed within timeout, False otherwise
+    """
+    import subprocess
+
+    cmd = [
+        "kubectl",
+        "--kubeconfig", kubeconfig,
+        "rollout", "status",
+        f"deployment/{deployment}",
+        "--namespace", namespace,
+        f"--timeout={timeout}s",
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return result.returncode == 0

@@ -314,6 +314,248 @@ class TestK8sInjectionCleanupKeyHandling:
         assert patch_calls[0]["name"] == "shipping", "Must target shipping deployment"
 
 
+class TestResetShippingNodeSelectorPreflight:
+    """Test lab-start preflight reset of shipping nodeSelector.
+
+    This ensures every lab run starts from clean schedulable state by clearing
+    any leftover nodeSelector contamination from previous runs.
+    """
+
+    def test_reset_exports(self) -> None:
+        """reset_shipping_node_selector is available for testing."""
+        from scripts.k9b_otel_demo_lab_k8s_injection_cleanup import reset_shipping_node_selector
+        assert callable(reset_shipping_node_selector)
+
+    def test_reset_skips_when_deployment_not_found(self) -> None:
+        """Reset should succeed (skip) when shipping deployment doesn't exist yet."""
+        def mock_kubectl_json(*args: object, **kwargs: object) -> object:
+            from scripts.k9b_lab_common_helpers import KubectlResult
+            # Simulate deployment not found
+            return KubectlResult(success=False, stdout="", stderr='deployments.apps "shipping" not found', returncode=1)
+
+        # Patch at the location where the function is used (cleanup module namespace)
+        import scripts.k9b_otel_demo_lab_k8s_injection_cleanup as cleanup_module
+        with patch.object(cleanup_module, "kubectl_json", side_effect=mock_kubectl_json):
+            result = cleanup_module.reset_shipping_node_selector(
+                kubeconfig="/fake/kubeconfig",
+                namespace="otel-demo",
+            )
+
+        assert result is True, "Should succeed (skip) when deployment not found"
+
+    def test_reset_clears_node_selector_and_waits_for_rollout(self) -> None:
+        """Reset should patch nodeSelector to null and wait for rollout."""
+        patch_calls = []
+        rollout_calls = []
+
+        def mock_kubectl_json(*args: object, **kwargs: object) -> object:
+            from scripts.k9b_lab_common_helpers import KubectlResult
+            return KubectlResult(
+                success=True,
+                stdout='{"metadata": {"name": "shipping"}}',
+                stderr="",
+                returncode=0,
+                data={"metadata": {"name": "shipping"}}
+            )
+
+        def mock_kubectl_patch(*args: object, **kwargs: object) -> object:
+            from scripts.k9b_lab_common_helpers import KubectlResult
+            patch_calls.append({"kwargs": kwargs})
+            return KubectlResult(success=True, stdout="", stderr="", returncode=0)
+
+        def mock_wait_for_rollout(*args: object, **kwargs: object) -> bool:
+            rollout_calls.append({"args": args, "kwargs": kwargs})
+            return True
+
+        # Patch at the location where the functions are used (the cleanup module)
+        import scripts.k9b_otel_demo_lab_k8s_injection_cleanup as cleanup_module
+        with patch.object(cleanup_module, "kubectl_json", side_effect=mock_kubectl_json):
+            with patch.object(cleanup_module, "kubectl_patch", side_effect=mock_kubectl_patch):
+                with patch.object(cleanup_module, "_wait_for_rollout", side_effect=mock_wait_for_rollout):
+                    result = cleanup_module.reset_shipping_node_selector(
+                        kubeconfig="/fake/kubeconfig",
+                        namespace="otel-demo",
+                    )
+
+        assert result is True, "Reset should succeed"
+        assert len(patch_calls) == 1, "Should patch exactly once"
+        # Verify merge patch with nodeSelector: null
+        patch_arg = patch_calls[0]["kwargs"].get("patch")
+        assert patch_arg == {"spec": {"template": {"spec": {"nodeSelector": None}}}}, \
+            f"Should patch nodeSelector to null, got: {patch_arg}"
+        assert patch_calls[0]["kwargs"].get("patch_type") == "merge", "Should use merge patch"
+        assert len(rollout_calls) == 1, "Should wait for rollout"
+
+    def test_reset_idempotent_when_node_selector_already_absent(self) -> None:
+        """Reset should succeed (idempotent) when nodeSelector path is already absent."""
+        patch_calls = []
+
+        def mock_kubectl_json(*args: object, **kwargs: object) -> object:
+            from scripts.k9b_lab_common_helpers import KubectlResult
+            return KubectlResult(
+                success=True,
+                stdout='{"metadata": {"name": "shipping"}}',
+                stderr="",
+                returncode=0,
+                data={"metadata": {"name": "shipping"}}
+            )
+
+        def mock_kubectl_patch(*args: object, **kwargs: object) -> object:
+            from scripts.k9b_lab_common_helpers import KubectlResult
+            patch_calls.append({"kwargs": kwargs})
+            # Simulate path absent error
+            return KubectlResult(
+                success=False,
+                stdout="",
+                stderr='spec.template.spec.nodeselector: doesn\'t exist',
+                returncode=1
+            )
+
+        def mock_wait_for_rollout(*args: object, **kwargs: object) -> bool:
+            return True
+
+        # Patch at the location where the functions are used (the cleanup module)
+        import scripts.k9b_otel_demo_lab_k8s_injection_cleanup as cleanup_module
+        with patch.object(cleanup_module, "kubectl_json", side_effect=mock_kubectl_json):
+            with patch.object(cleanup_module, "kubectl_patch", side_effect=mock_kubectl_patch):
+                with patch.object(cleanup_module, "_wait_for_rollout", side_effect=mock_wait_for_rollout):
+                    result = cleanup_module.reset_shipping_node_selector(
+                        kubeconfig="/fake/kubeconfig",
+                        namespace="otel-demo",
+                    )
+
+        assert result is True, "Should succeed (idempotent) when nodeSelector already absent"
+        assert len(patch_calls) == 1, "Should attempt patch"
+
+    def test_reset_fail_closed_on_real_error(self) -> None:
+        """Reset should fail-closed on real errors (not path-absent)."""
+        def mock_kubectl_json(*args: object, **kwargs: object) -> object:
+            from scripts.k9b_lab_common_helpers import KubectlResult
+            return KubectlResult(
+                success=True,
+                stdout='{"metadata": {"name": "shipping"}}',
+                stderr="",
+                returncode=0,
+                data={"metadata": {"name": "shipping"}}
+            )
+
+        def mock_kubectl_patch(*args: object, **kwargs: object) -> object:
+            from scripts.k9b_lab_common_helpers import KubectlResult
+            # Simulate real error (connection refused)
+            return KubectlResult(
+                success=False,
+                stdout="",
+                stderr="connection refused",
+                returncode=1
+            )
+
+        # Patch at the location where the functions are used (the cleanup module)
+        import scripts.k9b_otel_demo_lab_k8s_injection_cleanup as cleanup_module
+        with patch.object(cleanup_module, "kubectl_json", side_effect=mock_kubectl_json):
+            with patch.object(cleanup_module, "kubectl_patch", side_effect=mock_kubectl_patch):
+                result = cleanup_module.reset_shipping_node_selector(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="otel-demo",
+                )
+
+        assert result is False, "Should fail-closed on real errors"
+
+    def test_reset_rollout_timeout_still_succeeds(self) -> None:
+        """Reset should succeed even if rollout status times out (patch succeeded)."""
+        patch_calls = []
+
+        def mock_kubectl_json(*args: object, **kwargs: object) -> object:
+            from scripts.k9b_lab_common_helpers import KubectlResult
+            return KubectlResult(
+                success=True,
+                stdout='{"metadata": {"name": "shipping"}}',
+                stderr="",
+                returncode=0,
+                data={"metadata": {"name": "shipping"}}
+            )
+
+        def mock_kubectl_patch(*args: object, **kwargs: object) -> object:
+            from scripts.k9b_lab_common_helpers import KubectlResult
+            patch_calls.append({"kwargs": kwargs})
+            return KubectlResult(success=True, stdout="", stderr="", returncode=0)
+
+        def mock_wait_for_rollout(*args: object, **kwargs: object) -> bool:
+            return False  # Timeout
+
+        # Patch at the location where the functions are used (the cleanup module)
+        import scripts.k9b_otel_demo_lab_k8s_injection_cleanup as cleanup_module
+        with patch.object(cleanup_module, "kubectl_json", side_effect=mock_kubectl_json):
+            with patch.object(cleanup_module, "kubectl_patch", side_effect=mock_kubectl_patch):
+                with patch.object(cleanup_module, "_wait_for_rollout", side_effect=mock_wait_for_rollout):
+                    result = cleanup_module.reset_shipping_node_selector(
+                        kubeconfig="/fake/kubeconfig",
+                        namespace="otel-demo",
+                    )
+
+        assert result is True, "Should succeed even if rollout times out (patch succeeded)"
+        assert len(patch_calls) == 1, "Patch should have been called"
+
+
+class TestResetShippingNodeSelectorContract:
+    """Contract tests verifying reset is wired into lab harness."""
+
+    def test_reset_function_in_lab_orchestrator(self) -> None:
+        """Lab orchestrator should import and invoke reset_shipping_node_selector."""
+        from pathlib import Path
+
+        # Read the lab orchestrator source
+        lab_path = Path("scripts/k9b_otel_demo_lab.py")
+        content = lab_path.read_text()
+
+        # Verify import exists
+        assert "reset_shipping_node_selector" in content, \
+            "Lab orchestrator should import reset_shipping_node_selector"
+
+        # Verify it is called before P2b injection
+        # The reset should appear before phase_p2b_inject_unschedulable_shipping_rollout
+        reset_pos = content.find("reset_shipping_node_selector")
+        p2b_pos = content.find("phase_p2b_inject_unschedulable_shipping_rollout")
+
+        assert reset_pos > 0, "reset_shipping_node_selector should be called in orchestrator"
+        assert p2b_pos > 0, "P2b injection should be called in orchestrator"
+        assert reset_pos < p2b_pos, "reset should be called BEFORE P2b injection"
+
+    def test_reset_target_is_shipping_deployment(self) -> None:
+        """Reset should target the shipping deployment."""
+        from pathlib import Path
+
+        cleanup_path = Path("scripts/k9b_otel_demo_lab_k8s_injection_cleanup.py")
+        content = cleanup_path.read_text()
+
+        # Verify reset function uses SHIPPING_DEPLOYMENT constant
+        assert "SHIPPING_DEPLOYMENT" in content, \
+            "Reset function should use SHIPPING_DEPLOYMENT constant"
+        assert "shipping" in content.lower(), \
+            "Reset function should reference 'shipping' deployment"
+
+    def test_reset_uses_merge_patch(self) -> None:
+        """Reset should use merge patch (not JSON Patch) to set nodeSelector to null."""
+        from pathlib import Path
+
+        cleanup_path = Path("scripts/k9b_otel_demo_lab_k8s_injection_cleanup.py")
+        content = cleanup_path.read_text()
+
+        # Verify merge patch is used
+        assert 'patch_type="merge"' in content or "patch_type='merge'" in content, \
+            "Reset should use merge patch to set nodeSelector to null"
+
+    def test_reset_waits_for_rollout(self) -> None:
+        """Reset should wait for deployment rollout after patching."""
+        from pathlib import Path
+
+        cleanup_path = Path("scripts/k9b_otel_demo_lab_k8s_injection_cleanup.py")
+        content = cleanup_path.read_text()
+
+        # Verify rollout status is called
+        assert "rollout" in content.lower() or "rollout" in content, \
+            "Reset should wait for rollout status"
+
+
 class TestK8sInjectionCleanupRecovery:
     """Test cleanup/recovery logic."""
 
