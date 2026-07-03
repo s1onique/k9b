@@ -345,6 +345,7 @@ class TestP4cLabStrictMode(unittest.TestCase):
         case_file = FakeCaseFile.make_basic()
         # Diagnosis with complete scheduling evidence (but low confidence to avoid
         # STOP_ROOT_CAUSE_FOUND triggering first due to credible root cause check)
+        # Note: proposed_operator_action is NOT required - P4c validates root cause only
         diagnosis_report = {
             "schema_version": "1.0",
             "generated_at": "2024-06-01T12:00:00+00:00",
@@ -364,8 +365,8 @@ class TestP4cLabStrictMode(unittest.TestCase):
                 "uncertainties": [],
                 "confidence": "medium",  # Not high, to avoid STOP_ROOT_CAUSE_FOUND
                 "scheduling_evidence": ["FailedScheduling", "Unschedulable", "no matching node"],
-                "proposed_operator_action": "Add label k9b.dev/otel-lab-node to a node",
-                "action_is_review_only": True,
+                # Note: proposed_operator_action is NOT required for lab-strict mode
+                # The P4c outcome validation handles operator action separately
             },
             "safety_notes": [],
         }
@@ -379,6 +380,46 @@ class TestP4cLabStrictMode(unittest.TestCase):
         )
 
         # Should stop with no_checks_proposed - root cause has required scheduling terms
+        self.assertEqual(result["decision"], LoopDecision.STOP_NO_CHECKS_PROPOSED.value)
+
+    def test_lab_strict_no_checks_complete_root_cause_stops_with_operator_action(self) -> None:
+        """P4c lab-strict mode: stop works even WITH proposed_operator_action present."""
+        case_file = FakeCaseFile.make_basic()
+        # Diagnosis with complete scheduling evidence AND proposed operator action
+        diagnosis_report = {
+            "schema_version": "1.0",
+            "generated_at": "2024-06-01T12:00:00+00:00",
+            "read_only": True,
+            "allowed_actions": [],
+            "disallowed_actions": ["execute", "promote"],
+            "incident_id": "test-incident-001",
+            "diagnosis": {
+                "summary": "Shipping deployment unavailable due to nodeSelector",
+                "likely_causes": [
+                    "Deployment shipping has nodeSelector k9b.dev/otel-lab-node=missing",
+                    "No nodes match the selector",
+                    "Pod is FailedScheduling/Unschedulable",
+                ],
+                "supporting_evidence": ["FailedScheduling event", "0 matching nodes"],
+                "recommended_investigations": [],
+                "uncertainties": [],
+                "confidence": "medium",
+                "scheduling_evidence": ["FailedScheduling", "Unschedulable", "no matching node"],
+                "proposed_operator_action": "Add label k9b.dev/otel-lab-node to a node",
+                "action_is_review_only": True,
+            },
+            "safety_notes": [],
+        }
+
+        result = plan_next_diagnosis_pass(
+            incident_id="test-incident-001",
+            case_file=case_file,
+            diagnosis_report=diagnosis_report,
+            now=datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC),
+            require_complete_root_cause_before_stop=True,
+        )
+
+        # Should still stop - operator action is accepted but not required
         self.assertEqual(result["decision"], LoopDecision.STOP_NO_CHECKS_PROPOSED.value)
 
 

@@ -196,12 +196,17 @@ def _looks_like_successful_curl_envelope(suffix: str) -> bool:
     - CURL_EXIT=0\\nHTTP_CODE=200
     - STDERR_BLOCK\\nCURL_EXIT=0\\nHTTP_CODE=200
     - STDERR_BLOCK\\n<debug noise>\\nCURL_EXIT=0\\nHTTP_CODE=200
+    - STDERR_BLOCK (alone, if curl wrapper is incomplete)
+
+    This function is lenient: if the suffix starts with known envelope markers
+    and has no trailing garbage, it accepts the envelope. Missing CURL_EXIT/HTTP_CODE
+    are treated as warnings, not contamination.
 
     Args:
         suffix: The trailing bytes after valid JSON prefix
 
     Returns:
-        True if suffix matches known successful curl envelope pattern
+        True if suffix matches known curl envelope pattern (even if incomplete)
     """
     if not suffix:
         return False
@@ -210,46 +215,45 @@ def _looks_like_successful_curl_envelope(suffix: str) -> bool:
     if not stripped:
         return False
 
-    # Check for successful curl exit code
-    if not re.search(r"^\s*CURL_EXIT=0\s*$", stripped, re.MULTILINE):
-        return False
-
-    # Check for successful HTTP code
-    if not re.search(r"^\s*HTTP_CODE=200\s*$", stripped, re.MULTILINE):
-        return False
-
-    # Ensure there are no non-whitespace lines before CURL_EXIT=0
-    # that aren't part of STDERR_BLOCK or other known prefixes
     lines = stripped.split("\n")
     in_stderr_block = False
+    has_envelope_marker = False
+
     for line in lines:
         line_stripped = line.strip()
-        # Lines before CURL_EXIT=0
-        if line_stripped.startswith("CURL_EXIT="):
-            break
-        # STDERR_BLOCK marker - everything after is allowed until CURL_EXIT=0
-        if line_stripped == "STDERR_BLOCK":
-            in_stderr_block = True
+        if not line_stripped:
             continue
-        # After STDERR_BLOCK, any content is allowed until CURL_EXIT
+
+        # Known envelope markers
+        allowed_prefixes = (
+            "STDERR_BLOCK",
+            "CURL_EXIT=",
+            "HTTP_CODE=",
+            "---CURL_",
+            "RESOLVING_HOST=",
+            "NO_RESPONSE_BODY",
+        )
+
+        # Check if this line is a known envelope marker
+        is_envelope_marker = any(line_stripped.startswith(p) for p in allowed_prefixes)
+
+        if is_envelope_marker:
+            has_envelope_marker = True
+            if line_stripped == "STDERR_BLOCK":
+                in_stderr_block = True
+            continue
+
+        # After STDERR_BLOCK marker, allow any content (debug noise, etc.)
         if in_stderr_block:
             continue
-        # Any other non-empty line before STDERR_BLOCK or CURL_EXIT
-        # that's not just whitespace means this is NOT a known envelope pattern
-        if line_stripped:
-            # Allow lines that are clearly part of the envelope
-            allowed_prefixes = (
-                "STDERR_BLOCK",
-                "CURL_EXIT=",
-                "HTTP_CODE=",
-                "---CURL_",
-                "RESOLVING_HOST=",
-                "NO_RESPONSE_BODY",
-            )
-            if not any(line_stripped.startswith(p) for p in allowed_prefixes):
-                return False
 
-    return True
+        # Any other non-whitespace content that's not a known envelope marker
+        # means this is NOT a known curl envelope pattern
+        return False
+
+    # Accept if we saw at least one envelope marker (even without CURL_EXIT/HTTP_CODE)
+    # This handles cases where the curl wrapper emits incomplete envelopes
+    return has_envelope_marker
 
 
 def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None, str]:

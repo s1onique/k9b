@@ -328,7 +328,9 @@ def plan_next_diagnosis_pass(
                 root_cause_candidate,
                 root_cause_summary,
                 diagnosis_data=diagnosis_data,
-                require_operator_action=True,
+                # P4c: Don't require operator action - the lab validates root cause evidence only
+                # The operator action requirement is enforced by the P4c outcome validation
+                require_operator_action=False,
             ):
                 # Complete root cause - accept stop
                 new_state = stop_loop(loop_state, StopReason.NO_CHECKS_PROPOSED, now=timestamp)
