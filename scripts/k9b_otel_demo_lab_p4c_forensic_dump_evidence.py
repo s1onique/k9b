@@ -284,11 +284,16 @@ def write_forensic_summary(
 
     # Nil-safe extraction of scheduling_evidence
     raw_scheduling_evidence = provenance.get("scheduling_evidence")
-    scheduling_evidence: dict[str, Any] = (
-        raw_scheduling_evidence
-        if isinstance(raw_scheduling_evidence, dict)
-        else {}
-    )
+    
+    # Guard against malformed scheduling_evidence (string, list, None, etc.)
+    if isinstance(raw_scheduling_evidence, dict) and raw_scheduling_evidence:
+        scheduling_evidence: dict[str, Any] = raw_scheduling_evidence
+        scheduling_evidence_keys: list[str] = list(scheduling_evidence.keys())
+        scheduling_evidence_type: str = "dict"
+    else:
+        scheduling_evidence = {}
+        scheduling_evidence_keys = []
+        scheduling_evidence_type = type(raw_scheduling_evidence).__name__ if raw_scheduling_evidence is not None else "NoneType"
 
     summary: dict[str, Any] = {
         "timestamp": timestamp,
@@ -299,7 +304,8 @@ def write_forensic_summary(
             "has_backend_provenance": "backend" in provenance,
             "has_p4c_script_provenance": "p4c_script" in provenance,
             "has_p4c_input": "p4c_input" in provenance,
-            "scheduling_evidence_keys": list(scheduling_evidence.keys()) if scheduling_evidence else [],
+            "scheduling_evidence_keys": scheduling_evidence_keys,
+            "scheduling_evidence_type": scheduling_evidence_type,
         },
         "failure_symptoms": {
             "matching_signals_count": scheduling_evidence.get("matching_signals_count", "N/A"),
