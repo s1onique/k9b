@@ -65,7 +65,6 @@ from scripts.k9b_otel_demo_lab_p4c_forensic_dump import (
     FORENSIC_DUMP_ENABLED,
     dump_backend_incident_detail_before_loop,
     dump_backend_runtime_provenance,
-    dump_diagnosis_loop_pass,
     dump_p4c_runtime_provenance,
 )
 from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence import (
@@ -129,6 +128,9 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     if detection_evidence is None:
         write_diagnosis_evidence(diagnosis_dir, evidence)
         return _build_result(evidence, start, diagnosis_dir, success=False)
+    
+    # Store detection_evidence in evidence dict so scheduling extraction can access it
+    evidence["detection_evidence"] = detection_evidence
     
     # Step 2: Validate P3c evidence
     log_step(2, "Validating P3c evidence")

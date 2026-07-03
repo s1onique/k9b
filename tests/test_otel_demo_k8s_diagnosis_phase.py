@@ -31,7 +31,10 @@ class TestPhaseMetadataPropagation:
         with tempfile.TemporaryDirectory() as tmpdir:
             artifact_dir = Path(tmpdir)
 
-            # Create P3c evidence
+            # Create P3c evidence with scheduling signals for evidence extraction
+            # Note: These signals test metadata propagation, not structured evidence
+            # extraction. TestPhasePassesVerifier exercises marker fallback with
+            # k9b.dev/otel-lab-node present in the message.
             p3c_dir = artifact_dir / "phase3-discovery" / "p3c-k8s-discovery"
             p3c_dir.mkdir(parents=True)
             p3c_evidence = {
@@ -39,6 +42,35 @@ class TestPhaseMetadataPropagation:
                 "validation_success": True,
                 "incident_id": "inc-123",
                 "candidate_class": "pending_pod",
+                "target_namespace": "otel-demo",
+                "matching_signals": [
+                    {
+                        "reason": "FailedScheduling",
+                        "message": (
+                            "0/3 nodes are available: 1 node(s) had volume node "
+                            "affinity conflict, 2 node(s) didn't match Pod's node "
+                            "affinity/selector. preemption: 0/3 nodes are available."
+                        ),
+                        "involved_object": {
+                            "kind": "Pod",
+                            "name": "shipping-7d9f8b6c5-xyz12",
+                            "namespace": "otel-demo",
+                        },
+                    },
+                    {
+                        "reason": "FailedScheduling",
+                        "message": (
+                            "nodes are available: 1 node(s) had volume node "
+                            "affinity conflict, 2 node(s) didn't match Pod's node "
+                            "affinity/selector. preemption: 0/3 nodes available."
+                        ),
+                        "involved_object": {
+                            "kind": "Pod",
+                            "name": "shipping-7d9f8b6c5-xyz12",
+                            "namespace": "otel-demo",
+                        },
+                    },
+                ],
             }
             (p3c_dir / "detection-evidence.json").write_text(json.dumps(p3c_evidence))
 
@@ -376,7 +408,7 @@ class TestPhasePassesVerifier:
         with tempfile.TemporaryDirectory() as tmpdir:
             artifact_dir = Path(tmpdir)
 
-            # Create P3c evidence
+            # Create P3c evidence with scheduling signals for structured evidence extraction
             p3c_dir = artifact_dir / "phase3-discovery" / "p3c-k8s-discovery"
             p3c_dir.mkdir(parents=True)
             p3c_evidence = {
@@ -384,6 +416,22 @@ class TestPhasePassesVerifier:
                 "validation_success": True,
                 "incident_id": "inc-123",
                 "candidate_class": "pending_pod",
+                "target_namespace": "otel-demo",
+                "matching_signals": [
+                    {
+                        "reason": "FailedScheduling",
+                        "message": (
+                            "0/3 nodes are available: 1 node(s) had volume node "
+                            "affinity conflict, 2 node(s) didn't match Pod node "
+                            "selector (k9b.dev/otel-lab-node). preemption: 0/3 nodes."
+                        ),
+                        "involved_object": {
+                            "kind": "Pod",
+                            "name": "shipping-7d9f8b6c5-xyz12",
+                            "namespace": "otel-demo",
+                        },
+                    },
+                ],
             }
             (p3c_dir / "detection-evidence.json").write_text(json.dumps(p3c_evidence))
 
