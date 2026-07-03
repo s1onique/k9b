@@ -440,6 +440,13 @@ def build_incident_diagnosis(
             "These remain as text only and do not create executable controls."
         )
 
+    # Extract scheduling evidence from case file for P4c root-cause validation
+    # This ensures scheduling evidence survives evidence boundary crossings even
+    # when the LLM diagnosis text doesn't explicitly mention scheduling markers.
+    scheduling_evidence = extract_scheduling_evidence(
+        case_file.get("events", [])
+    )
+
     # Build final diagnosis report
     diagnosis_report: dict[str, object] = {
         # Schema version
@@ -460,6 +467,12 @@ def build_incident_diagnosis(
             "recommended_investigations": diagnosis_components["recommended_investigations"],
             "uncertainties": diagnosis_components["uncertainties"],
             "confidence": diagnosis_components["confidence"],
+            # P4c FIX: Include scheduling_evidence in diagnosis_data for
+            # check_stop_no_checks_proposed_acceptable() validation.
+            # This ensures terminal no-checks is accepted when scheduling
+            # evidence exists in case file, even if LLM diagnosis text
+            # doesn't explicitly mention scheduling markers.
+            "scheduling_evidence": scheduling_evidence,
         },
         # Raw model output (bounded, untrusted)
         "raw_model_output": bounded_output,

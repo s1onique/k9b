@@ -304,6 +304,10 @@ def compute_p4c_outcome(
                 review_artifact_paths = (f"backend:{artifact_name}",)
 
     # Root cause evidence from prose terms (only if require_root_cause_terms is True)
+    # Initialize defaults for all code paths
+    root_cause_evidence_satisfied = False
+    root_cause_evidence_reason: str | None = None
+    
     if require_root_cause_terms:
         # PRIMARY PATH: Use structured scheduling evidence validation.
         # This is the durable path that survives evidence boundary crossings.
@@ -346,8 +350,8 @@ def compute_p4c_outcome(
             # Check for scheduling failure markers in ALL evidence sources
             scheduling_markers = ["FailedScheduling", "Unschedulable", "nodeSelector", "no matching node"]
             
-            # Collect all text sources for marker checking
-            text_sources = [root_cause_summary]
+            # Collect all text sources for marker checking (all lowercased for case-insensitive comparison)
+            text_sources = [root_cause_summary.lower()]
             
             # Add detection_evidence summary if present
             detection_evidence = evidence.get("detection_evidence", {})

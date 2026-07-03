@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
     compute_p4c_outcome,
 )
@@ -20,7 +22,7 @@ class TestMultipassMode:
             "incident_id": "test-incident",
             "root_cause_summary": (
                 "The shipping deployment has FailedScheduling due to nodeSelector mismatch "
-                "on k9b.dev/otel-lab-node"
+                "on k9b.dev/otel-lab-node=missing"
             ),
             "read_only": True,
             "read_only_violations": [],
@@ -140,3 +142,89 @@ class TestNonTerminalFallback:
         assert outcome.success is True
         assert outcome.mode == "multipass"
         assert outcome.pass_count == 2
+
+
+class TestSchedulingEvidenceBoundaryRobustness:
+    """Regression tests for malformed scheduling_evidence boundary handling.
+    
+    These tests ensure that compute_p4c_outcome() does not crash on
+    malformed/missing scheduling_evidence. Missing/legacy evidence should
+    fail semantically, not explode mechanically.
+    """
+
+    @pytest.mark.parametrize("scheduling_evidence", [None, {}, [], "bad", 42])
+    def test_p4c_scheduling_evidence_boundary_is_non_crashing(
+        self, scheduling_evidence: object
+    ) -> None:
+        """Malformed scheduling_evidence should not raise an exception.
+        
+        Expected behavior: no exception, falls back to prose/structured evidence check.
+        If neither can prove the root cause, returns a deterministic failure.
+        """
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": False,
+            "pass_count": 2,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "scheduling_evidence": scheduling_evidence,
+            "root_cause_summary": (
+                "The shipping deployment has FailedScheduling due to nodeSelector mismatch "
+                "on k9b.dev/otel-lab-node=missing"
+            ),
+            "read_only": True,
+            "read_only_violations": [],
+        }
+        
+        # Should not raise
+        outcome = compute_p4c_outcome(evidence)
+        
+        # Should have a deterministic result (success depends on evidence completeness)
+        assert outcome is not None
+        assert isinstance(outcome.success, bool)
+
+    def test_p4c_none_scheduling_evidence_falls_back_to_prose(self) -> None:
+        """None scheduling_evidence falls back to prose term checking."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": False,
+            "pass_count": 2,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "scheduling_evidence": None,
+            # Complete prose evidence should satisfy FALLBACK
+            "root_cause_summary": (
+                "The shipping deployment has FailedScheduling due to nodeSelector mismatch "
+                "on k9b.dev/otel-lab-node=missing"
+            ),
+            "read_only": True,
+            "read_only_violations": [],
+        }
+        
+        outcome = compute_p4c_outcome(evidence)
+        
+        # With complete prose evidence, should succeed
+        assert outcome.success is True
+
+    def test_p4c_empty_dict_scheduling_evidence_falls_back_to_prose(self) -> None:
+        """Empty dict scheduling_evidence falls back to prose term checking."""
+        evidence = {
+            "real_loop_invoked": True,
+            "terminal_no_checks_accepted": False,
+            "pass_count": 2,
+            "real_pass_artifacts_found": True,
+            "incident_id": "test-incident",
+            "scheduling_evidence": {},
+            # Complete prose evidence should satisfy FALLBACK
+            "root_cause_summary": (
+                "The shipping deployment has FailedScheduling due to nodeSelector mismatch "
+                "on k9b.dev/otel-lab-node=missing"
+            ),
+            "read_only": True,
+            "read_only_violations": [],
+        }
+        
+        outcome = compute_p4c_outcome(evidence)
+        
+        # With complete prose evidence, should succeed
+        assert outcome.success is True

@@ -251,8 +251,15 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
                 f"Body prefix (first 200 chars): {raw[:200]!r}",
             )
         except json.JSONDecodeError:
-            # Suffix is not valid JSON - this is contamination
-            # Any trailing data (curl metadata, logs, etc.) after valid JSON is contamination
+            # P0b FIX: Check for known curl envelope patterns before marking as contamination.
+            # The curl wrapper emits known metadata (STDERR_BLOCK, CURL_EXIT, HTTP_CODE)
+            # after valid JSON. These are NOT contamination - they provide diagnostic context.
+            envelope = parse_known_curl_envelope_suffix(suffix_stripped)
+            if envelope is not None:
+                # Known curl envelope detected - this is valid wire format
+                # The semantic content is valid; envelope provides diagnostic metadata
+                return None, payload, ""
+            # Not a known envelope pattern - this is true contamination
             return (
                 FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
                 None,
