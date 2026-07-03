@@ -17,148 +17,25 @@ Design constraints:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
 from typing import Any
 
-# =============================================================================
-# Dataclasses
-# =============================================================================
+from .incident_scheduling_root_cause_contracts import (
+    _SCHEDULING_FAILURE_MARKERS,
+    SchedulingRootCauseEvidence,
+    _normalize_workload_kind,
+)
+from .incident_scheduling_root_cause_rendering import _build_root_cause_summary
 
-
-def _string_field(obj: Any, key: str, default: str = "") -> str:
-    """Get string field from dict or object with enum-safe extraction.
-
-    This handles the boundary between dict-shaped incidents, Incident objects,
-    and enum-like values at the module level.
-
-    Args:
-        obj: Dict, Mapping, or object to extract field from
-        key: Field name to extract
-        default: Default value if field not found or None
-
-    Returns:
-        String value or default
-    """
-    if isinstance(obj, (dict, Mapping)):
-        value = obj.get(key, default)
-    else:
-        value = getattr(obj, key, default)
-
-    if value is None:
-        return default
-
-    # Handle enum-like values that have a .value attribute
-    enum_value = getattr(value, "value", None)
-    if enum_value is not None:
-        return str(enum_value)
-
-    return str(value)
-
-
-@dataclass(frozen=True)
-class SchedulingRootCauseEvidence:
-    """Structured scheduling root-cause evidence for P4c diagnosis.
-
-    This dataclass captures the deterministic evidence needed to prove
-    a scheduling root cause for unschedulable-shipping scenarios.
-
-    Attributes:
-        namespace: Namespace of the affected workload
-        workload_kind: Kind of workload (e.g., Deployment, StatefulSet)
-        workload_name: Name of the affected workload
-        selector_key: The nodeSelector key that cannot be matched
-        selector_value: The nodeSelector value that cannot be matched
-        selector_literal: The full selector as a string (e.g., "k9b.dev/otel-lab-node=missing")
-        failed_scheduling: Whether FailedScheduling events were observed
-        unschedulable: Whether pods are in Unschedulable state
-        scheduler_message: Raw scheduler message from events
-        matching_nodes: Tuple of node names that match the selector (empty = no match)
-        root_cause_summary: Human-readable root-cause summary
-    """
-
-    namespace: str = ""
-    workload_kind: str = ""
-    workload_name: str = ""
-    selector_key: str | None = None
-    selector_value: str | None = None
-    selector_literal: str | None = None
-    failed_scheduling: bool = False
-    unschedulable: bool = False
-    scheduler_message: str | None = None
-    matching_nodes: tuple[str, ...] = field(default_factory=tuple)
-    root_cause_summary: str = ""
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> SchedulingRootCauseEvidence:
-        """Create SchedulingRootCauseEvidence from a dict/Mapping.
-
-        Accepts missing keys safely. Converts matching_nodes list/tuple to tuple.
-        Preserves booleans and optional fields.
-
-        Args:
-            data: Dict or Mapping containing scheduling evidence fields
-
-        Returns:
-            SchedulingRootCauseEvidence instance
-        """
-        # Convert matching_nodes to tuple if present
-        matching_nodes_raw = data.get("matching_nodes", ())
-        if isinstance(matching_nodes_raw, (list, tuple)):
-            matching_nodes = tuple(str(n) for n in matching_nodes_raw)
-        else:
-            matching_nodes = ()
-
-        return cls(
-            namespace=str(data.get("namespace", "")),
-            workload_kind=str(data.get("workload_kind", "")),
-            workload_name=str(data.get("workload_name", "")),
-            selector_key=data.get("selector_key"),
-            selector_value=data.get("selector_value"),
-            selector_literal=data.get("selector_literal"),
-            failed_scheduling=bool(data.get("failed_scheduling", False)),
-            unschedulable=bool(data.get("unschedulable", False)),
-            scheduler_message=data.get("scheduler_message"),
-            matching_nodes=matching_nodes,
-            root_cause_summary=str(data.get("root_cause_summary", "")),
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dict for JSON serialization."""
-        return {
-            "namespace": self.namespace,
-            "workload_kind": self.workload_kind,
-            "workload_name": self.workload_name,
-            "selector_key": self.selector_key,
-            "selector_value": self.selector_value,
-            "selector_literal": self.selector_literal,
-            "failed_scheduling": self.failed_scheduling,
-            "unschedulable": self.unschedulable,
-            "scheduler_message": self.scheduler_message,
-            "matching_nodes": list(self.matching_nodes),
-            "root_cause_summary": self.root_cause_summary,
-        }
-
+# Re-export for backward compatibility
+__all__ = [
+    "SchedulingRootCauseEvidence",
+    "extract_scheduling_root_cause",
+    "check_scheduling_root_cause_complete",
+]
 
 # =============================================================================
 # Evidence Extraction
 # =============================================================================
-
-# Markers that indicate scheduling failure
-_SCHEDULING_FAILURE_MARKERS = (
-    "FailedScheduling",
-    "Unschedulable",
-    "no matching node",
-    "cannot schedule",
-    "unschedulable",
-)
-
-# Markers for nodeSelector mismatch
-_NODE_SELECTOR_MARKERS = (
-    "nodeSelector",
-    "node selector",
-    "nodeselector",
-)
 
 
 def _get_field(obj: Any, key: str, default: Any = None) -> Any:
@@ -253,12 +130,12 @@ def extract_scheduling_root_cause(
         if isinstance(sig, dict):
             reason = str(sig.get("reason", ""))
             message = str(sig.get("message", ""))
-            
+
             if reason == "FailedScheduling":
                 failed_scheduling = True
                 if not scheduler_message:
                     scheduler_message = message
-                    
+
             if reason == "Unschedulable" or "unschedulable" in message.lower():
                 unschedulable = True
                 if not scheduler_message:
@@ -293,7 +170,7 @@ def extract_scheduling_root_cause(
             ns = _extract_selector_from_message(scheduler_message)
             if ns:
                 selector_key, selector_value, selector_literal = ns
-        
+
         # Fallback: ONLY for known P4c lab scenario: otel-demo + shipping + scheduling failure.
         # This prevents generic scheduling failures from being promoted to the exact lab root cause.
         is_known_p4c_lab_shipping = (
@@ -301,13 +178,13 @@ def extract_scheduling_root_cause(
             and workload_name.lower() == "shipping"
             and (failed_scheduling or unschedulable)
         )
-        
+
         # Only apply lab selector fallback when we have strong evidence it's the P4c lab scenario
         # Check if message contains lab-specific markers
         message_has_lab_marker = False
         if scheduler_message:
             message_has_lab_marker = "k9b.dev/otel-lab-node" in scheduler_message
-        
+
         if not selector_key and is_known_p4c_lab_shipping and message_has_lab_marker:
             selector_key = "k9b.dev/otel-lab-node"
             selector_value = "missing"
@@ -338,18 +215,6 @@ def extract_scheduling_root_cause(
         matching_nodes=matching_nodes,
         root_cause_summary=root_cause_summary,
     )
-
-
-def _normalize_workload_kind(kind: str) -> str:
-    """Normalize workload kind to title case."""
-    kind_map = {
-        "deployment": "Deployment",
-        "statefulset": "StatefulSet",
-        "daemonset": "DaemonSet",
-        "job": "Job",
-        "cronjob": "CronJob",
-    }
-    return kind_map.get(kind.lower(), kind.title() if kind else "Deployment")
 
 
 def _has_scheduling_evidence_in_text(text: str) -> bool:
@@ -427,61 +292,6 @@ def _extract_node_selector_from_check_result(result: dict[str, Any]) -> tuple[st
     return None
 
 
-def _build_root_cause_summary(
-    workload_kind: str,
-    workload_name: str,
-    namespace: str,
-    selector_key: str | None,
-    selector_value: str | None,
-    failed_scheduling: bool,
-    unschedulable: bool,
-    scheduler_message: str | None,
-) -> str:
-    """Build a human-readable root-cause summary.
-
-    The summary MUST contain these terms for P4c validation:
-    - shipping (workload name)
-    - nodeSelector
-    - k9b.dev/otel-lab-node
-    - FailedScheduling (if applicable)
-    - Unschedulable (if applicable)
-
-    Args:
-        workload_kind: Kind of workload
-        workload_name: Name of workload
-        namespace: Namespace
-        selector_key: nodeSelector key
-        selector_value: nodeSelector value
-        failed_scheduling: Whether FailedScheduling was observed
-        unschedulable: Whether pods are unschedulable
-        scheduler_message: Raw scheduler message
-
-    Returns:
-        Human-readable root-cause summary
-    """
-    parts: list[str] = []
-
-    # Core identity
-    parts.append(f"{workload_kind}/{workload_name}")
-
-    # Scheduling failure indicator
-    if failed_scheduling:
-        parts.append("FailedScheduling")
-    if unschedulable:
-        parts.append("Unschedulable")
-
-    # nodeSelector evidence
-    if selector_key and selector_value:
-        parts.append(f"nodeSelector {selector_key}={selector_value}")
-        parts.append("no matching node")
-
-    # Fallback for generic scheduling evidence
-    if not selector_key and (failed_scheduling or unschedulable):
-        parts.append("scheduling failure")
-
-    return " ".join(parts)
-
-
 def check_scheduling_root_cause_complete(
     evidence: SchedulingRootCauseEvidence,
 ) -> bool:
@@ -508,13 +318,13 @@ def check_scheduling_root_cause_complete(
     # Check for required terms
     has_workload = "shipping" in summary_lower or evidence.workload_name.lower() == "shipping"
     has_selector = "nodeselector" in summary_lower or "node selector" in summary_lower
-    
+
     # Check for selector key (k9b.dev/otel-lab-node)
     has_key = (
         "k9b.dev/otel-lab-node" in summary_lower
         or evidence.selector_key == "k9b.dev/otel-lab-node"
     )
-    
+
     # Check for selector value (missing) - must match the lab contract
     has_value = (
         "k9b.dev/otel-lab-node=missing" in summary_lower
@@ -523,16 +333,9 @@ def check_scheduling_root_cause_complete(
             and evidence.selector_value == "missing"
         )
     )
-    
+
     has_failure = evidence.failed_scheduling or evidence.unschedulable or any(
         marker.lower() in summary_lower for marker in _SCHEDULING_FAILURE_MARKERS
     )
 
     return has_workload and has_selector and has_key and has_value and has_failure
-
-
-__all__ = [
-    "SchedulingRootCauseEvidence",
-    "extract_scheduling_root_cause",
-    "check_scheduling_root_cause_complete",
-]
