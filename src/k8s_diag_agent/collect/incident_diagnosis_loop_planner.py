@@ -34,10 +34,10 @@ from .incident_diagnosis_loop_stops import (
     build_root_cause_candidate,
     check_budget_exhausted,
     check_low_confidence_no_progress,
-    check_no_checks_proposed,
     check_no_safe_checks,
     check_root_cause_found,
     check_safety_blocked,
+    check_stop_no_checks_proposed_acceptable,
 )
 from .incident_next_check_policy import (
     DEFAULT_MAX_CHECKS_PER_PASS,
@@ -302,8 +302,27 @@ def plan_next_diagnosis_pass(
             proposals=proposals,
         )
 
-    # 4. No checks proposed
-    if check_no_checks_proposed(proposals):
+    # 4. No checks proposed - HARDENED: only accept if root cause has required evidence
+    # For P4c multipass diagnosis, stop_no_checks_proposed is only acceptable when:
+    # - No new checks are proposed (proposals is empty)
+    # - Diagnosis text (from all fields) contains required scheduling terms
+    # - Diagnosis text has scheduling failure evidence
+    # - Proposed operator action is present and review-only
+    #
+    # Extract root cause summary from diagnosis data
+    root_cause_summary = ""
+    if diagnosis_data:
+        likely_causes = diagnosis_data.get("likely_causes", [])
+        if likely_causes:
+            root_cause_summary = "; ".join(str(c) for c in likely_causes[:3])
+
+    if check_stop_no_checks_proposed_acceptable(
+        proposals,
+        root_cause_candidate,
+        root_cause_summary,
+        diagnosis_data=diagnosis_data,
+        require_operator_action=True,  # Require proposed operator action for terminal stop
+    ):
         new_state = stop_loop(loop_state, StopReason.NO_CHECKS_PROPOSED, now=timestamp)
         pass_result = DiagnosisPass(
             pass_index=current_pass_index,
@@ -324,6 +343,8 @@ def plan_next_diagnosis_pass(
             rejected_checks=[],
             proposals=[],
         )
+    # If no checks proposed BUT root cause is incomplete, fall through to continue loop
+    # This ensures the diagnosis reaches complete root-cause understanding before stopping
 
     # 5. No safe checks (all rejected)
     if check_no_safe_checks(proposals, validation_results):

@@ -17,7 +17,7 @@ Design constraints:
 
 Module organization:
 - Protocol definition for LLM provider seam
-- Constants for schema version and safety metadata
+- Constants imported from incident_llm_prompt_contracts
 - Prompt builder helper
 - Main diagnosis function with full safety metadata
 """
@@ -29,53 +29,15 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
-# =============================================================================
-# Schema and Constants
-# =============================================================================
-
-# Diagnosis report schema version
-DIAGNOSIS_SCHEMA_VERSION = "1.0"
-
-# Safety boundary - disallowed actions
-DISALLOWED_ACTIONS: list[str] = [
-    "execute",
-    "promote",
-    "apply",
-    "remediate",
-    "delete",
-    "mutate_cluster",
-]
-
-# Default bounds for safety
-DEFAULT_MAX_PROMPT_CHARS = 12000
-DEFAULT_MAX_RAW_OUTPUT_CHARS = 12000
-DEFAULT_MAX_INCIDENT_JSON_CHARS = 8000
-
-# Prompt instructions (read-only enforcement)
-READ_ONLY_INSTRUCTIONS = """You are a read-only diagnostic assistant. You MUST NOT:
-- Execute any commands or actions
-- Promote, apply, or remediate anything
-- Delete resources or mutate cluster state
-- Invent evidence not present in the case file
-- Recommend executable actions
-
-You MAY only:
-- Analyze the provided case file
-- Suggest read-only investigation directions (e.g., what to check, not what to run)
-- Distinguish facts from hypotheses
-- Identify missing evidence
-
-Output format: Respond with a JSON object containing:
-{
-  "summary": "brief summary of the incident",
-  "likely_causes": ["list of likely causes"],
-  "supporting_evidence": ["evidence from case file supporting each cause"],
-  "recommended_investigations": ["read-only investigation suggestions"],
-  "uncertainties": ["areas of uncertainty or missing information"],
-  "confidence": "low|medium|high|unknown"
-}
-
-If you cannot produce valid JSON, respond with plain text diagnostic summary."""
+# Import constants from contracts module to keep file sizes LLM-friendly
+from .incident_llm_prompt_contracts import (
+    DEFAULT_MAX_INCIDENT_JSON_CHARS,
+    DEFAULT_MAX_PROMPT_CHARS,
+    DEFAULT_MAX_RAW_OUTPUT_CHARS,
+    DIAGNOSIS_SCHEMA_VERSION,
+    DISALLOWED_ACTIONS,
+    READ_ONLY_INSTRUCTIONS,
+)
 
 __all__ = [
     "build_incident_diagnosis",
@@ -84,6 +46,8 @@ __all__ = [
     "DISALLOWED_ACTIONS",
     "DEFAULT_MAX_PROMPT_CHARS",
     "DEFAULT_MAX_RAW_OUTPUT_CHARS",
+    "DEFAULT_MAX_INCIDENT_JSON_CHARS",
+    "READ_ONLY_INSTRUCTIONS",
 ]
 
 
