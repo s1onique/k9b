@@ -262,14 +262,18 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
     Provider health response body must be EXACTLY one clean JSON document.
     Wire-format validation MUST happen before semantic health evaluation.
 
-    Classification order:
-    1. Empty/whitespace-only body -> provider_health_empty_body
-    2. JSON + non-whitespace suffix that is valid JSON -> provider_health_invalid_json
-    3. JSON + known successful curl envelope suffix -> clean (None, payload, "")
-    4. JSON + non-whitespace suffix (arbitrary contamination) -> provider_health_output_contaminated
-    5. Non-whitespace prefix + JSON -> provider_health_output_contaminated
-    6. Malformed JSON with no embedded JSON -> provider_health_invalid_json
-    7. Exactly one clean JSON document -> (None, payload, "") for semantic evaluation
+    Wire-format contract:
+    - Empty/whitespace-only body -> provider_health_empty_body
+    - JSON + non-whitespace suffix that is valid JSON -> provider_health_invalid_json
+    - JSON + known curl envelope suffix (CURL_EXIT, HTTP_CODE, etc.) -> provider_health_output_contaminated
+    - JSON + non-whitespace suffix (arbitrary contamination) -> provider_health_output_contaminated
+    - Non-whitespace prefix + JSON -> provider_health_output_contaminated
+    - Malformed JSON with no embedded JSON -> provider_health_invalid_json
+    - Exactly one clean JSON document (no prefix/suffix) -> (None, payload, "") for semantic evaluation
+
+    CRITICAL: Known curl envelope metadata (CURL_EXIT, HTTP_CODE, STDERR_BLOCK) in the body
+    is NOT accepted. The body must contain ONLY the JSON document. Any framing or
+    diagnostic output from the curl wrapper makes the output contaminated.
 
     Args:
         raw: The raw body string from curl response
@@ -329,11 +333,8 @@ def _classify_provider_health_body(raw: str) -> tuple[str | None, object | None,
                 f"Body prefix (first 200 chars): {raw[:200]!r}",
             )
         except json.JSONDecodeError:
-            # Suffix is not valid JSON - check if it's a known successful curl envelope
-            if _looks_like_successful_curl_envelope(suffix):
-                # Known successful curl envelope: valid provider JSON + curl metadata = clean
-                return None, payload, ""
-            # Unknown suffix - this is contamination (log output, arbitrary metadata, etc.)
+            # Suffix is not valid JSON - this is contamination
+            # Any trailing data (curl metadata, logs, etc.) after valid JSON is contamination
             return (
                 FAILURE_PROVIDER_HEALTH_OUTPUT_CONTAMINATED,
                 None,

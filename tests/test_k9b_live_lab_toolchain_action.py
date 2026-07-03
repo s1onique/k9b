@@ -350,8 +350,15 @@ class TestWorkflowVenvCaching:
         """OTel live lab workflow should NOT use actions/cache/save for .venv."""
         _assert_no_venv_cache_steps(OTEL_LIVE_LAB_WORKFLOW)
 
-    def test_otel_workflow_install_python_deps_step(self) -> None:
-        """OTel live lab workflow should have 'Install Python dependencies' step."""
+    def test_otel_workflow_prepares_live_lab_python_venv(self) -> None:
+        """OTel live lab workflow should use redesigned venv preparation steps.
+
+        The live-lab Python installation was recently redesigned so dependency
+        preparation is delegated through scripts/ci/ensure_live_lab_venv.sh.
+        The workflow should have:
+        - 'Prepare live lab Python venv' step that invokes ensure_live_lab_venv.sh
+        - 'Verify live lab Python dependencies' step that proves imports are available
+        """
         workflow = yaml.safe_load(OTEL_LIVE_LAB_WORKFLOW.read_text())
         jobs = workflow.get("jobs", {})
         if "live-k3s-lab" not in jobs:
@@ -359,9 +366,25 @@ class TestWorkflowVenvCaching:
 
         live_job = jobs["live-k3s-lab"]
         step_names = [step.get("name", "") for step in live_job.get("steps", [])]
-        assert "Install Python dependencies" in step_names, (
-            "OTel workflow should have 'Install Python dependencies' step"
+
+        # Check for redesigned venv preparation steps
+        assert "Prepare live lab Python venv" in step_names, (
+            "OTel workflow should have 'Prepare live lab Python venv' step"
         )
+        assert "Verify live lab Python dependencies" in step_names, (
+            "OTel workflow should have 'Verify live lab Python dependencies' step"
+        )
+
+        # Verify the prepare step invokes ensure_live_lab_venv.sh
+        for step in live_job.get("steps", []):
+            if step.get("name") == "Prepare live lab Python venv":
+                run_block = step.get("run", "")
+                assert "ensure_live_lab_venv.sh" in run_block, (
+                    "Prepare live lab Python venv step should invoke ensure_live_lab_venv.sh"
+                )
+                return
+
+        assert False, "Prepare live lab Python venv step not found"
 
     def test_otel_workflow_supports_prebaked_venv(self) -> None:
         """OTel live lab workflow should support pre-baked venv via env var."""

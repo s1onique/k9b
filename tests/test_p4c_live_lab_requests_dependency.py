@@ -57,33 +57,40 @@ def test_p4c_verifier_does_not_import_requests() -> None:
 def test_live_lab_workflow_installs_requests() -> None:
     """Ensure live lab workflow installs requests package.
 
-    The live-lab runner installs a minimal set of Python packages.
-    This test verifies that `requests` is explicitly listed in the
-    "Install Python dependencies" step's run block.
+    The live-lab Python installation was recently redesigned so dependency
+    preparation is delegated through scripts/ci/ensure_live_lab_venv.sh.
+    This test verifies that `requests` is installed via the venv script path.
+
+    The venv script reads requirements from requirements-live-lab.txt which
+    contains the `requests` package.
     """
     import yaml
 
     workflow_path = Path(__file__).parent.parent / ".github/workflows/k9b-otel-demo-live-lab.yml"
     workflow = yaml.safe_load(workflow_path.read_text())
 
-    # Find the "Install Python dependencies" step
-    install_step = None
+    # Find the "Prepare live lab Python venv" step that invokes the venv script
+    venv_prepare_step = None
     for job_name, job in workflow.get("jobs", {}).items():
         for step in job.get("steps", []):
-            if step.get("name") == "Install Python dependencies":
-                install_step = step
+            if step.get("name") == "Prepare live lab Python venv":
+                venv_prepare_step = step
                 break
-        if install_step:
+        if venv_prepare_step:
             break
 
-    assert install_step is not None, (
-        "Workflow should have 'Install Python dependencies' step"
+    assert venv_prepare_step is not None, (
+        "Workflow should have 'Prepare live lab Python venv' step"
     )
 
-    run_block = install_step.get("run", "")
-    assert "pip install" in run_block, (
-        "Install step should contain 'pip install' command"
+    run_block = venv_prepare_step.get("run", "")
+    assert "ensure_live_lab_venv.sh" in run_block, (
+        "Prepare live lab Python venv step should invoke ensure_live_lab_venv.sh"
     )
-    assert "requests" in run_block, (
-        "Install step should install 'requests' package"
+
+    # Verify requirements-live-lab.txt contains requests
+    requirements_path = Path(__file__).parent.parent / "requirements-live-lab.txt"
+    requirements_content = requirements_path.read_text()
+    assert "requests" in requirements_content, (
+        "requirements-live-lab.txt should include 'requests' package"
     )
