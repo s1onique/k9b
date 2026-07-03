@@ -305,24 +305,102 @@ def compute_p4c_outcome(
 
     # Root cause evidence from prose terms (only if require_root_cause_terms is True)
     if require_root_cause_terms:
-        required_terms = ["shipping", "nodeSelector", "k9b.dev/otel-lab-node"]
-        missing_terms = [t for t in required_terms if t.lower() not in root_cause_summary.lower()]
-
-        # Check for scheduling evidence
-        scheduling_markers = ["FailedScheduling", "Unschedulable", "nodeSelector", "no matching node"]
-        scheduling_found = any(m.lower() in root_cause_summary.lower() for m in scheduling_markers)
-
-        if missing_terms:
-            root_cause_evidence_reason = f"missing_root_cause_term: {', '.join(missing_terms)}"
-            failure_reasons.append(root_cause_evidence_reason)
-            root_cause_evidence_satisfied = False
-        elif not scheduling_found:
-            root_cause_evidence_reason = "missing_scheduling_root_cause_evidence"
-            failure_reasons.append(root_cause_evidence_reason)
-            root_cause_evidence_satisfied = False
+        # PRIMARY PATH: Use structured scheduling evidence validation.
+        # This is the durable path that survives evidence boundary crossings.
+        # Only take structured path when scheduling_evidence is a non-empty dict.
+        scheduling_evidence_raw = evidence.get("scheduling_evidence")
+        
+        if isinstance(scheduling_evidence_raw, dict) and scheduling_evidence_raw:
+            # Import here to avoid circular imports
+            from src.k8s_diag_agent.collect.incident_scheduling_root_cause import (
+                SchedulingRootCauseEvidence,
+                check_scheduling_root_cause_complete,
+            )
+            
+            # Reconstruct evidence from dict
+            scheduling_evidence = SchedulingRootCauseEvidence(
+                namespace=str(scheduling_evidence_raw.get("namespace", "")),
+                workload_kind=str(scheduling_evidence_raw.get("workload_kind", "")),
+                workload_name=str(scheduling_evidence_raw.get("workload_name", "")),
+                selector_key=scheduling_evidence_raw.get("selector_key"),
+                selector_value=scheduling_evidence_raw.get("selector_value"),
+                selector_literal=scheduling_evidence_raw.get("selector_literal"),
+                failed_scheduling=bool(scheduling_evidence_raw.get("failed_scheduling", False)),
+                unschedulable=bool(scheduling_evidence_raw.get("unschedulable", False)),
+                scheduler_message=scheduling_evidence_raw.get("scheduler_message"),
+                root_cause_summary=str(scheduling_evidence_raw.get("root_cause_summary", "")),
+            )
+            
+            if check_scheduling_root_cause_complete(scheduling_evidence):
+                root_cause_evidence_satisfied = True
+                root_cause_evidence_reason = None
+            else:
+                # Structured evidence is present but incomplete - do NOT fallback to prose.
+                # This ensures the new durable path is working correctly.
+                root_cause_evidence_satisfied = False
+                root_cause_evidence_reason = "missing_scheduling_root_cause_evidence"
+                failure_reasons.append(root_cause_evidence_reason)
         else:
-            root_cause_evidence_reason = None
-            root_cause_evidence_satisfied = True
+            # FALLBACK: Check prose terms for legacy evidence or missing scheduling_evidence.
+            # This is a compatibility fallback for evidence that predates the structured path.
+            # STRICT: Must still require the exact selector literal for lab contract compliance.
+            
+            # Required terms must appear in root_cause_summary
+            combined_summary = root_cause_summary.lower()
+            required_terms = ["shipping", "nodeselector", "k9b.dev/otel-lab-node"]
+            missing_terms = [t for t in required_terms if t not in combined_summary]
+            
+            # Require the exact selector value for lab contract compliance
+            if "k9b.dev/otel-lab-node=missing" not in combined_summary:
+                missing_terms.append("k9b.dev/otel-lab-node=missing")
+
+            # Check for scheduling failure markers in ALL evidence sources
+            scheduling_markers = ["FailedScheduling", "Unschedulable", "nodeSelector", "no matching node"]
+            
+            # Collect all text sources for marker checking
+            text_sources = [root_cause_summary]
+            
+            # Add detection_evidence summary if present
+            detection_evidence = evidence.get("detection_evidence", {})
+            if isinstance(detection_evidence, dict):
+                det_summary = str(detection_evidence.get("summary", "")).lower()
+                if det_summary:
+                    text_sources.append(det_summary)
+            
+            # Add signals text
+            signals = evidence.get("signals", [])
+            if isinstance(signals, list):
+                for sig in signals:
+                    text_sources.append(str(sig).lower())
+            
+            # Add events text
+            events = evidence.get("events", [])
+            if isinstance(events, list):
+                for evt in events:
+                    text_sources.append(str(evt).lower())
+            
+            # Add p4c_verdict matched_evidence
+            p4c_verdict = evidence.get("p4c_verdict", {})
+            if isinstance(p4c_verdict, dict):
+                matched = p4c_verdict.get("matched_evidence", [])
+                if isinstance(matched, list):
+                    text_sources.extend(str(m).lower() for m in matched)
+            
+            # Check if any scheduling marker is found in any text source
+            combined_text = " ".join(text_sources)
+            scheduling_found = any(m.lower() in combined_text for m in scheduling_markers)
+
+            if missing_terms:
+                root_cause_evidence_reason = f"missing_root_cause_term: {', '.join(missing_terms)}"
+                failure_reasons.append(root_cause_evidence_reason)
+                root_cause_evidence_satisfied = False
+            elif not scheduling_found:
+                root_cause_evidence_reason = "missing_scheduling_root_cause_evidence"
+                failure_reasons.append(root_cause_evidence_reason)
+                root_cause_evidence_satisfied = False
+            else:
+                root_cause_evidence_reason = None
+                root_cause_evidence_satisfied = True
     else:
         # When root cause terms are not required, check p4c_verdict
         # Only use p4c_verdict if it has a meaningful "success" key

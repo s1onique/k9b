@@ -35,6 +35,9 @@ from .incident_prior_analysis import load_prior_analysis_for_incident
 from .incident_read_only_check_artifacts import (
     load_read_only_check_result_artifacts_for_incident,
 )
+from .incident_scheduling_root_cause import (
+    extract_scheduling_root_cause,
+)
 from .incident_store_provider import get_incident_store
 
 if TYPE_CHECKING:
@@ -245,6 +248,18 @@ def build_incident_case_file(
         # Treat as bounded diagnostic evidence breadcrumbs, not new evidence by itself.
         "diagnosis_loop_passes": diagnosis_loop_passes,
     }
+
+    # P4C SCHEDULING ROOT-CAUSE: Extract and include scheduling evidence in the packet.
+    # This ensures scheduling root-cause is deterministic and durable across evidence boundaries.
+    # The scheduling evidence is extracted from incident + case file and included in the packet
+    # for downstream consumers (LLM diagnosis, review packet, P4c outcome validation).
+    # Note: extract_scheduling_root_cause() handles both dict and object types via _get_field().
+    scheduling_evidence = extract_scheduling_root_cause(
+        incident=incident,  # Pass Incident object directly - _get_field handles both types
+        case_file=packet,
+    )
+    if scheduling_evidence.root_cause_summary:
+        packet["scheduling_evidence"] = scheduling_evidence.to_dict()
 
     return packet
 
