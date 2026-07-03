@@ -291,26 +291,16 @@ def _evaluate_health_response(
     Provider health response body must be EXACTLY one clean JSON document.
     Any prefix/suffix that is not whitespace constitutes contamination.
 
-    The curl wrapper envelope (STDERR_BLOCK, CURL_EXIT, HTTP_CODE) is extracted
-    before strict JSON classification to prevent false contamination detection.
+    CRITICAL: Contamination detection runs on the RAW body BEFORE envelope extraction.
+    This ensures bodies like '{"healthy": true}\nCURL_EXIT=0\nHTTP_CODE=200' are
+    classified as provider_health_output_contaminated, NOT passed through as clean JSON.
     """
-    # Extract the known curl wrapper envelope. If successful, use the cleaned
-    # JSON body for classification. If envelope is not detected, fall back to
-    # strict classification.
-    extracted = _extract_provider_health_payload(curl_result.body)
+    raw_body = curl_result.body
 
-    if extracted.envelope_detected:
-        # Envelope was successfully extracted - use the cleaned JSON body
-        # The envelope metadata (stderr_block, curl_exit, http_code) is preserved
-        # in the extracted payload for debugging purposes
-        body_for_classification = extracted.json_body
-    else:
-        # No envelope detected - use raw body for strict classification
-        body_for_classification = curl_result.body
-
-    # Step 1: Strict wire-format validation FIRST
-    # This validates that body is exactly one clean JSON document
-    failure_class, payload, detail = _classify_provider_health_body(body_for_classification)
+    # Step 1: Strict wire-format validation on RAW body FIRST
+    # This validates that body is exactly one clean JSON document BEFORE any envelope extraction.
+    # This prevents contaminated bodies from passing wire-format check by stripping metadata.
+    failure_class, payload, detail = _classify_provider_health_body(raw_body)
 
     if failure_class is not None:
         # Wire-format validation failed - return immediately, no semantic evaluation
