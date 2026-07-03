@@ -346,6 +346,8 @@ jobs:
             --set "scheduler.smallProvider.apiKeyKey=K9B_EXTERNAL_ANALYSIS_API_KEY"
 
       - name: Run Live OTel Demo Lab
+        env:
+          K9B_P4C_FORENSIC_DUMP: "1"
         run: |
           echo "=== Starting Live OTel Demo Lab ==="
           echo "Incident scenario: ${{ inputs.incident_scenario }}"
@@ -402,6 +404,17 @@ jobs:
             ./lab-artifacts/otel-demo/**
           if-no-files-found: warn
           retention-days: ${{ inputs.artifact_retention_days || '7' }}
+
+      - name: Upload P4c Forensic Dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p4c-forensic-dumps-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./lab-artifacts/otel-demo/phase4-diagnosis/p4c-debug/
+            ./lab-artifacts/otel-demo/lab-result.json
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Summary
         run: |
