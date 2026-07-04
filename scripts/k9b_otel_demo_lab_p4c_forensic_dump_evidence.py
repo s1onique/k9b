@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """P4c forensic dump: evidence and summary helpers.
 
-This module provides forensic dumps 5-6 and summary/integration helpers for
-diagnosing P4c scheduling evidence gaps.
-Dumps are written to lab-artifacts/otel-demo/phase4-diagnosis/p4c-debug/.
+This module is a thin facade that re-exports from focused sibling modules:
+- k9b_otel_demo_lab_p4c_forensic_dump_evidence_contract: Constants and helpers
+
+Dumps written to lab-artifacts/otel-demo/phase4-diagnosis/p4c-debug/.
 
 Required forensic dumps:
 5. Backend review artifact files after each pass
@@ -19,80 +20,23 @@ The provenance/loop dumps (1-4) are in k9b_otel_demo_lab_p4c_forensic_dump.py.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import time
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-# =============================================================================
-# Environment and Configuration
-# =============================================================================
+from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence_contract import (  # noqa: F401
+    FORENSIC_DUMP_DIR_ENV,
+    FORENSIC_DUMP_ENABLED,
+    _get_forensic_dump_dir,
+    _mapping_fields_present,
+    _mapping_summary,
+)
 
-FORENSIC_DUMP_ENABLED = os.environ.get("K9B_P4C_FORENSIC_DUMP", "0") == "1"
-FORENSIC_DUMP_DIR_ENV = os.environ.get("K9B_FORENSIC_DUMP_DIR", "")
-
-
-# =============================================================================
-# Mapping Summary Helpers (shared between forensic dump modules)
-# =============================================================================
-
-
-def _mapping_fields_present(value: object) -> list[str]:
-    """Return sorted list of field names for Mapping values, [] otherwise.
-
-    Args:
-        value: Any Python object
-
-    Returns:
-        Sorted list of string keys if value is a Mapping, empty list otherwise
-    """
-    if not isinstance(value, Mapping):
-        return []
-    return sorted(str(key) for key in value.keys())
-
-
-def _mapping_summary(
-    value: object,
-    *,
-    fields_key: str = "fields_present",
-) -> dict[str, Any]:
-    """Create a stable summary dict for any value, mapping or not.
-
-    This ensures forensic artifacts have stable JSON schemas even when
-    the source value is malformed/non-mapping.
-
-    Args:
-        value: Any Python object (dict, None, list, str, int, etc.)
-        fields_key: Key name for the fields_present list (default "fields_present")
-
-    Returns:
-        Dict with is_mapping, value_type, and fields_present keys
-    """
-    return {
-        "is_mapping": isinstance(value, Mapping),
-        "value_type": type(value).__name__,
-        fields_key: _mapping_fields_present(value),
-    }
-
-
-def _get_forensic_dump_dir(artifact_dir: Path) -> Path:
-    """Get the forensic dump directory path.
-
-    Args:
-        artifact_dir: Root artifact directory
-
-    Returns:
-        Path to forensic dump directory
-    """
-    if FORENSIC_DUMP_DIR_ENV:
-        dump_dir = Path(FORENSIC_DUMP_DIR_ENV)
-    else:
-        dump_dir = artifact_dir / "phase4-diagnosis" / "p4c-debug"
-    dump_dir.mkdir(parents=True, exist_ok=True)
-    return dump_dir
-
+# Re-export write_forensic_summary from writers module
+from scripts.k9b_otel_demo_lab_p4c_forensic_dump_writers import (  # noqa: F401
+    write_forensic_summary,
+)
 
 # =============================================================================
 # Dump 5: Backend Review Artifact Files After Each Pass
@@ -168,8 +112,6 @@ def dump_review_artifact_files(
         }
 
         try:
-            # Use kubectl exec to read file from backend container
-            # This is the correct approach for files inside the container
             result = subprocess.run(
                 kubectl_base
                 + [
@@ -274,8 +216,6 @@ def dump_p4c_outcome_input(
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
     # Stable schema: get evidence summary using _mapping_summary
-    # This ensures forensic artifacts have stable JSON schemas even when
-    # the source value is malformed/non-mapping (None, list, str, etc.)
     evidence_summary = _mapping_summary(evidence)
 
     provenance: dict[str, Any] = {
@@ -293,7 +233,8 @@ def dump_p4c_outcome_input(
     }
 
     # Extract key fields if evidence was a valid mapping
-    if isinstance(evidence, Mapping):
+    from collections.abc import Mapping as MappingABC
+    if isinstance(evidence, MappingABC):
         provenance["scheduling_evidence"] = evidence.get("scheduling_evidence")
         provenance["p4c_verdict"] = evidence.get("p4c_verdict")
         provenance["root_cause_summary"] = evidence.get("root_cause_summary")
@@ -315,83 +256,6 @@ def dump_p4c_outcome_input(
 
 
 # =============================================================================
-# Composite Forensics Report
-# =============================================================================
-
-
-def write_forensic_summary(
-    artifact_dir: Path,
-    incident_id: str,
-    classification: str | None,
-    dumps: list[str],
-    provenance: dict[str, Any],
-) -> Path:
-    """Write a forensic summary report.
-
-    Args:
-        artifact_dir: Root artifact directory
-        incident_id: The incident ID
-        classification: Classification bucket (A-F) if determined
-        dumps: List of dump files created (concrete file paths)
-        provenance: Summary provenance data
-
-    Returns:
-        Path to the summary file
-    """
-    dump_dir = _get_forensic_dump_dir(artifact_dir)
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-
-    # Nil-safe extraction of scheduling_evidence
-    raw_scheduling_evidence = provenance.get("scheduling_evidence")
-    
-    # Guard against malformed scheduling_evidence (string, list, None, etc.)
-    if isinstance(raw_scheduling_evidence, dict) and raw_scheduling_evidence:
-        scheduling_evidence: dict[str, Any] = raw_scheduling_evidence
-        scheduling_evidence_keys: list[str] = list(scheduling_evidence.keys())
-        scheduling_evidence_type: str = "dict"
-    else:
-        scheduling_evidence = {}
-        scheduling_evidence_keys = []
-        scheduling_evidence_type = type(raw_scheduling_evidence).__name__ if raw_scheduling_evidence is not None else "NoneType"
-
-    summary: dict[str, Any] = {
-        "timestamp": timestamp,
-        "incident_id": incident_id,
-        "classification": classification,
-        "dumps_created": dumps,
-        "provenance_summary": {
-            "has_backend_provenance": "backend" in provenance,
-            "has_p4c_script_provenance": "p4c_script" in provenance,
-            "has_p4c_input": "p4c_input" in provenance,
-            "scheduling_evidence_keys": scheduling_evidence_keys,
-            "scheduling_evidence_type": scheduling_evidence_type,
-        },
-        "failure_symptoms": {
-            "matching_signals_count": scheduling_evidence.get("matching_signals_count", "N/A"),
-            "selector_key": scheduling_evidence.get("selector_key"),
-            "selector_value": scheduling_evidence.get("selector_value"),
-            "failed_scheduling": scheduling_evidence.get("failed_scheduling"),
-            "unschedulable": scheduling_evidence.get("unschedulable"),
-            "completeness": scheduling_evidence.get("root_cause_summary") is not None,
-        },
-        "classification_buckets": {
-            "A": "Backend image is stale",
-            "B": "Backend artifact is stale",
-            "C": "Backend case file lacks scheduling evidence",
-            "D": "Backend has scheduling evidence, host verifier reads wrong artifact",
-            "E": "Live input shape mismatch",
-            "F": "Event-message marker guard too strict",
-        },
-    }
-
-    output_path = dump_dir / f"forensic-summary-{incident_id[:8]}-{timestamp}.json"
-    with open(output_path, "w") as f:
-        json.dump(summary, f, indent=2, default=str)
-
-    return output_path
-
-
-# =============================================================================
 # Integration with Phase
 # =============================================================================
 
@@ -399,53 +263,7 @@ def write_forensic_summary(
 def integrate_with_phase(phase_module_path: str | None = None) -> str:
     """Return code snippet for integrating forensic dumps into phase.py.
 
-    This is the code to add to phase_p4c_verify_k8s_mult_pass_diagnosis():
-
-    ```python
-    from scripts.k9b_otel_demo_lab_p4c_forensic_dump import (
-        dump_backend_runtime_provenance,
-        dump_p4c_runtime_provenance,
-        dump_backend_incident_detail_before_loop,
-        dump_diagnosis_loop_pass,
-    )
-    from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence import (
-        dump_review_artifact_files,
-        dump_p4c_outcome_input,
-        write_forensic_summary,
-        FORENSIC_DUMP_ENABLED,
-    )
-
-    # Add near the start of phase_p4c_verify_k8s_mult_pass_diagnosis():
-    if FORENSIC_DUMP_ENABLED:
-        provenance = {}
-        provenance["backend"] = dump_backend_runtime_provenance(
-            artifact_dir, kubeconfig=config.kubeconfig
-        )
-        provenance["p4c_script"] = dump_p4c_runtime_provenance(artifact_dir)
-
-    # After triggering diagnosis loop (after run_diagnosis_loop call):
-    if FORENSIC_DUMP_ENABLED and diagnosis_result.get("backend_incident_detail"):
-        dump_backend_incident_detail_before_loop(
-            artifact_dir,
-            diagnosis_result.get("backend_incident_detail"),
-            incident_id,
-        )
-
-    # After each diagnosis pass:
-    if FORENSIC_DUMP_ENABLED:
-        dump_diagnosis_loop_pass(
-            artifact_dir, incident_id, pass_num,
-            request_body=..., http_status=..., response_body=...,
-            loop_summary=..., review_packet_metadata=...,
-        )
-
-    # Before compute_p4c_outcome():
-    if FORENSIC_DUMP_ENABLED:
-        provenance["p4c_input"] = dump_p4c_outcome_input(
-            artifact_dir, evidence, incident_id
-        )
-        write_forensic_summary(artifact_dir, incident_id, None, [...], provenance)
-    ```
+    This is the code to add to phase_p4c_verify_k8s_mult_pass_diagnosis().
 
     Returns:
         Integration instructions as string
