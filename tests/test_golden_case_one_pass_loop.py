@@ -9,9 +9,22 @@ import json
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
+
+
+def _json_object(value: Any) -> dict[str, Any]:
+    """Cast a JSON-loaded value to dict[str, Any], asserting it is a dict.
+
+    This helper explicitly bridges the untyped JSON loading boundary,
+    satisfying mypy's warn_return_any check while documenting the
+    expected shape of golden-case fixture data.
+    """
+    assert isinstance(value, dict), f"Expected dict, got {type(value).__name__}"
+    return cast(dict[str, Any], value)
+
 
 from k8s_diag_agent.collect.golden_case_evidence_provider import (
     GoldenCaseEvidenceProvider,
@@ -53,38 +66,38 @@ def case_file(
     case_dir: Path,
     manifest: dict,
     evidence_provider: GoldenCaseEvidenceProvider,
-) -> dict:
+) -> dict[str, Any]:
     """Module-scoped case file to avoid repeated build_golden_case_case_file calls."""
-    return build_golden_case_case_file(
+    return _json_object(build_golden_case_case_file(
         case_dir=case_dir,
         manifest=manifest,
         evidence_provider=evidence_provider,
-    )
+    ))
 
 
 @pytest.fixture(scope="module")
 def production_diagnosis_result(
-    case_file: dict,
+    case_file: dict[str, Any],
     manifest: dict,
     expected: dict,
     evidence_provider: GoldenCaseEvidenceProvider,
     tmp_path_factory: pytest.TempPathFactory,
-) -> dict:
+) -> dict[str, Any]:
     """Module-scoped production loop result to avoid repeated expensive calls.
-    
+
     This fixture runs the production diagnosis loop once per module and shares
     the result across tests that need to assert on the output. This is safe
     because the result is read-only and deterministic given the same inputs.
     Uses tmp_path_factory so pytest owns cleanup.
     """
     output_dir = tmp_path_factory.mktemp("golden-case-production-loop")
-    return run_production_diagnosis_loop(
+    return _json_object(run_production_diagnosis_loop(
         case_file=case_file,
         manifest=manifest,
         expected=expected,
         evidence_provider=evidence_provider,
         output_dir=output_dir,
-    )
+    ))
 
 
 def test_build_golden_case_case_file_structure(
