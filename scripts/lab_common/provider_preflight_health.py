@@ -96,12 +96,21 @@ def _extract_provider_health_payload(raw_output: str) -> ProviderHealthPayload:
 
     Invalid or failed curl metadata (non-zero exit, non-200 HTTP code) is NOT
     accepted as envelope - it falls through to contamination detection.
+
+    Note: The curl wrapper in provider_curl_helpers.py emits:
+      - STDOUT_BLOCK prefix marker (---CURL_START--- in stdout stream)
+      - Provider health JSON body
+      - STDERR_BLOCK marker
+      - CURL_EXIT=<code>
+      - HTTP_CODE=<code>
+
+    The marker-based parsing in _curl_service_pod/_curl_exec_pod already
+    extracts body and metadata separately. The remaining envelope handling here
+    processes the post-extraction output where:
+      - STDERR_BLOCK appears AFTER the JSON body (not before)
+      - CURL_EXIT and HTTP_CODE follow STDERR_BLOCK
     """
     text = raw_output.strip()
-
-    # Strip known wrapper prefix if present
-    if text.startswith("STDOUT_BLOCK\n"):
-        text = text.removeprefix("STDOUT_BLOCK\n").lstrip()
 
     decoder = json.JSONDecoder()
 
