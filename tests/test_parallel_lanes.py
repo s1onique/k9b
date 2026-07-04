@@ -160,8 +160,8 @@ class TestParallelLanes(unittest.TestCase):
                 f'''
                 source "{self.STEP_RUNNER}"
                 START=$(date +%s.%N)
-                step_run "tp1" "Timing 1" sleep 1 &
-                step_run "tp2" "Timing 2" sleep 1 &
+                step_run "tp1" "Timing 1" sleep 0.05 &
+                step_run "tp2" "Timing 2" sleep 0.05 &
                 wait
                 END=$(date +%s.%N)
                 echo "DURATION: $(echo "$END - $START" | bc)"
@@ -176,7 +176,7 @@ class TestParallelLanes(unittest.TestCase):
         output = result.stdout + result.stderr
         self.assertIn("[tp1]", output)
         self.assertIn("[tp2]", output)
-        # Duration should be close to 1 second (parallel), not 2 (sequential)
+        # Duration should be close to 0.05s (parallel), not 0.1s (sequential)
 
     def test_parallel_steps_output_interleaving(self) -> None:
         """Parallel steps should not corrupt each other's output."""
@@ -300,7 +300,7 @@ class TestParallelLanes(unittest.TestCase):
                 "-c",
                 f'''
                 source "{self.STEP_RUNNER}"
-                step_run "to1" "Timeout 1" timeout 1 sleep 5 &
+                step_run "to1" "Timeout 1" timeout 0.1 sleep 5 &
                 step_run "to2" "Timeout 2" echo "ok" &
                 wait
                 ''',

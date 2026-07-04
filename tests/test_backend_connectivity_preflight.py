@@ -262,15 +262,15 @@ class TestBackendConnectivityRetriesTransientFailure:
                 stderr="",
             )
 
-        # Use very short timeout to make test fast
-        monkeypatch.setattr("time.sleep", lambda s: None)  # No actual sleep
+        # No actual sleep and reduced subprocess timeout for speed
+        monkeypatch.setattr("time.sleep", lambda s: None)
         monkeypatch.setattr("subprocess.run", fake_run)
 
         result = run_backend_connectivity_preflight(
             kubeconfig="/tmp/kubeconfig",
             namespace="k9b",
             artifact_dir=tmp_path,
-            timeout_seconds=2,  # Very short timeout
+            timeout_seconds=1,  # Reduced from 2s - retry loop is fast with no-op sleep
         )
 
         assert result.passed is False

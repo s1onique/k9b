@@ -71,7 +71,7 @@ class TestParallelFailureCoordination(unittest.TestCase):
         env["STEP_LOG_DIR"] = self._log_dir
         env["STEP_DATA_DIR"] = self._data_dir
         env["STEP_RUN_TIMESTAMP"] = "test-running-step"
-        script = f'source "{str(self.STEP_RUNNER)}"; step_run_continue "step-b1" "Running step" bash -c "sleep 0.3; echo ok"'
+        script = f'source "{str(self.STEP_RUNNER)}"; step_run_continue "step-b1" "Running step" bash -c "sleep 0.05; echo ok"'
         result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=10, env=env)
         self.assertIn("[step-b1] PASS", result.stdout + result.stderr)
 
@@ -153,7 +153,8 @@ sleep 0.05
 _record_step "python" "step-a1" "FAIL" "50"
 
 # step-a2: would run after a1, should SKIP due to global failure
-sleep 0.1
+# First set the flag (step-a1 already did), then check
+sleep 0.15
 if _is_global_failed; then
     _record_step "python" "step-a2" "SKIP" "0"
 else
@@ -169,11 +170,13 @@ fi
 set -uo pipefail
 source "{helper_script}"
 
-# step-b1: runs longer (200ms), succeeds
-sleep 0.2
-_record_step "frontend" "step-b1" "PASS" "200"
+# step-b1: runs longer (100ms), succeeds
+sleep 0.1
+_record_step "frontend" "step-b1" "PASS" "100"
 
 # step-b2: should SKIP due to global failure from a1
+# Wait for lane A to have time to set the flag
+sleep 0.1
 if _is_global_failed; then
     _record_step "frontend" "step-b2" "SKIP" "0"
 else

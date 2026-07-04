@@ -230,17 +230,20 @@ class TestK8sInjectionCleanupKeyHandling:
             })
             return make_kubectl_result(success=True)
 
-        with patch.multiple(
-            "scripts.k9b_otel_demo_lab_k8s_injection_cleanup",
-            _kubectl_scale=mock_scale,
-            kubectl_patch=mock_patch,
-        ):
-            cleanup_unschedulable_shipping_rollout(
-                kubeconfig="/fake/kubeconfig",
-                namespace="otel-demo",
-                previous_node_selector=None,
-                original_replicas=1,
-            )
+        # Patch time.sleep to no-op so test doesn't wait real 10s (2x 5s sleeps)
+        import scripts.k9b_otel_demo_lab_k8s_injection_cleanup as cleanup_module
+        with patch.object(cleanup_module.time, "sleep", lambda s: None):
+            with patch.multiple(
+                cleanup_module,
+                _kubectl_scale=mock_scale,
+                kubectl_patch=mock_patch,
+            ):
+                cleanup_unschedulable_shipping_rollout(
+                    kubeconfig="/fake/kubeconfig",
+                    namespace="otel-demo",
+                    previous_node_selector=None,
+                    original_replicas=1,
+                )
 
         assert len(patch_calls) == 1
         assert patch_calls[0]["resource_type"] == "deployment", "Must patch deployment, not pod"

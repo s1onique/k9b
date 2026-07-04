@@ -278,12 +278,16 @@ class TestDefaultPaths:
 # =============================================================================
 
 
-# Module-level cache for oasdiff availability (computed once per session)
+# Session-level oasdiff availability cache (computed once per session)
 _oasdiff_available: bool | None = None
 
 
 def _get_oasdiff_available() -> bool:
-    """Check if oasdiff is available via go run (cached)."""
+    """Check if oasdiff is available via go run (cached at module level).
+    
+    Session-level caching: avoids redundant 'go run @latest --help' calls
+    across 3 oasdiff tests. Each invocation costs ~2s for module download.
+    """
     global _oasdiff_available
     if _oasdiff_available is None:
         import subprocess
@@ -293,7 +297,7 @@ def _get_oasdiff_available() -> bool:
                 ["go", "run", "github.com/oasdiff/oasdiff@latest", "--help"],
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=60,  # Reduced from 120s - oasdiff is already downloaded
             )
             _oasdiff_available = result.returncode == 0
         except Exception:
