@@ -14,6 +14,9 @@ def classname_to_nodeid(classname: str, name: str) -> str:
     if not classname:
         return name
     if "/" in classname:
+        # Avoid duplicate names when classname already contains full nodeid
+        if "::" in classname and (not name or classname.endswith(f"::{name}")):
+            return classname
         return f"{classname}::{name}"
     parts = classname.split(".")
     if len(parts) > 1 and parts[-1][0].isupper():

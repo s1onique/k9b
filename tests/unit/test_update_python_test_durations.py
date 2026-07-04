@@ -27,9 +27,15 @@ class TestClassnameToNodeid:
         assert result == "tests/test_foo.py::test_method"
 
     def test_handles_path_format_classname(self) -> None:
-        """Path-format classname is preserved."""
+        """Path-format classname with full nodeid avoids duplicate names."""
+        # When classname already contains full nodeid, don't duplicate
         result = updater.classname_to_nodeid("tests/unit/test_foo.py::test_bar", "test_bar")
-        assert result == "tests/unit/test_foo.py::test_bar::test_bar"
+        assert result == "tests/unit/test_foo.py::test_bar"
+
+    def test_handles_path_format_classname_no_match(self) -> None:
+        """Path-format classname without matching name appends name."""
+        result = updater.classname_to_nodeid("tests/unit/test_foo.py::SomeClass", "test_bar")
+        assert result == "tests/unit/test_foo.py::SomeClass::test_bar"
 
     def test_handles_empty_classname(self) -> None:
         """Empty classname returns just the name."""
@@ -97,7 +103,8 @@ class TestParseJunitXml:
 
         result = updater.parse_junit_xml(xml_file)
         assert len(result) == 1
-        assert result[0] == ("tests/unit/test_foo.py::test_bar::test_bar", 0.5)
+        # classname already contains full nodeid, so name is not duplicated
+        assert result[0] == ("tests/unit/test_foo.py::test_bar", 0.5)
 
     def test_parses_multiple_testcases(self, tmp_path: Path) -> None:
         """Multiple testcases are all parsed."""
