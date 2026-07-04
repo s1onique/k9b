@@ -25,6 +25,9 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
     MIN_REQUIRED_PASSES,
     PHASE_NAME,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_phase_p4c_structured_validation import (
+    _validate_p4c_root_cause_structured,
+)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_render import (
     log as _log,
 )
@@ -194,11 +197,11 @@ def extract_scheduling_evidence_p4c(
     Returns:
         Updated evidence dict
     """
-    # P4c DIAGNOSTIC: Log the raw signals structure to understand live artifact shape
-    matching_signals_raw = detection_evidence_local.get("matching_signals", [])
-    sample = matching_signals_raw[0] if matching_signals_raw else None
+    # P4c DIAGNOSTIC: Log the case-file signals structure for debugging
+    case_file_signals = detection_evidence_local.get("matching_signals", [])
+    sample = case_file_signals[0] if case_file_signals else None
     sample_info = f"keys={list(sample.keys())}" if isinstance(sample, dict) else "N/A"
-    _log(f"  DIAGNOSTIC: matching_signals count={len(matching_signals_raw)}, first_signal={sample_info}")
+    _log(f"  DIAGNOSTIC: case_file_signals count={len(case_file_signals)}, first_signal={sample_info}")
 
     # CRITICAL FIX: Get backend_incident_detail and detection selector_literal
     # to join FailedScheduling evidence from backend with selector from P3c
@@ -300,7 +303,7 @@ def extract_scheduling_evidence_p4c(
         "namespace": evidence.get("target_namespace", detection_evidence_local.get("target_namespace", "otel-demo")),
         "object_kind": "deployment",
         "object_name": "shipping",
-        "signals": matching_signals_raw,
+        "signals": case_file_signals,
     }
 
     # Extract scheduling evidence with backend incident detail and selector literal
@@ -311,7 +314,7 @@ def extract_scheduling_evidence_p4c(
         )
         scheduling_evidence_obj = extract_scheduling_root_cause(
             incident=incident_for_extraction,
-            case_file={"events": matching_signals_raw},
+            case_file={"events": case_file_signals},
             backend_incident_detail=backend_incident_detail,
             detection_evidence_selector_literal=detection_selector_literal,
         )
@@ -335,20 +338,34 @@ def extract_scheduling_evidence_p4c(
 def validate_p4c_root_cause(evidence: dict[str, Any]) -> dict[str, Any]:
     """Validate P4c root-cause evidence.
 
+    Uses structured scheduling evidence as the canonical validation path.
+    Prose-only validation is legacy fallback only.
+
     Args:
         evidence: Evidence dict
 
     Returns:
-        P4c verdict dict
+        P4c verdict dict with validation_source for diagnostics
     """
-    root_cause_verdict = validate_unschedulable_shipping_root_cause(evidence)
-    evidence["p4c_verdict"] = root_cause_verdict.to_dict()
+    success, validation_source, reason = _validate_p4c_root_cause_structured(evidence)
 
-    if root_cause_verdict.success:
-        _log(f"  P4c root-cause validation PASSED: scheduling markers found: {list(root_cause_verdict.matched_evidence)}")
+    # Build verdict using the actual validation result (not legacy prose-only)
+    root_cause_verdict = validate_unschedulable_shipping_root_cause(evidence)
+    verdict_dict = root_cause_verdict.to_dict()
+
+    # Override success based on structured validation result
+    verdict_dict["success"] = success
+    verdict_dict["validation_source"] = validation_source
+
+    evidence["p4c_verdict"] = verdict_dict
+
+    if success:
+        _log(f"  P4c root-cause validation PASSED: {validation_source}")
+        _log(f"    {reason}")
     else:
         _log("  P4c root-cause validation FAILED: missing scheduling root-cause evidence")
-        _log(f"  Required markers: {list(SCHEDULING_ROOT_CAUSE_MARKERS)}")
+        _log(f"    validation_source={validation_source}, reason={reason}")
+        _log(f"    Required markers: {list(SCHEDULING_ROOT_CAUSE_MARKERS)}")
         if not evidence.get("failure_reason"):
             evidence["failure_reason"] = "missing_scheduling_root_cause_evidence"
         else:
