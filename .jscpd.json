@@ -36,6 +36,7 @@
     "**/provider-smoke/**",
     "**/podman/**",
     "**/node_modules/**",
-    "**/scripts/**"
+    "**/scripts/**",
+    "**/python_test_durations.json"
   ]
 }
