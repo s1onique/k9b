@@ -26,6 +26,13 @@ from .k9b_lab_common_helpers import (
 )
 from .k9b_otel_demo_lab_constants import OTEL_DEMO_NAMESPACE
 
+# Sanitizer: redacts sensitive values from K8s artifacts
+try:
+    from .lab_common.artifact_sanitizer import sanitize_artifact
+except ImportError:
+    def sanitize_artifact(data: Any, max_depth: int = 20) -> Any:
+        return data
+
 
 class TelemetryAvailability:
     """Telemetry availability status."""
@@ -141,13 +148,17 @@ def _collect_kubernetes_evidence(
     # Pods
     pods_result = kubectl_json(kubeconfig, "pods", namespace)
     if pods_result.success and pods_result.data:
-        pods_path = write_json_artifact(telemetry_dir, "pods.json", pods_result.data)
+        # Sanitize pods to redact sensitive values (passwords, tokens, kubeconfig refs)
+        sanitized_pods = sanitize_artifact(pods_result.data)
+        pods_path = write_json_artifact(telemetry_dir, "pods.json", sanitized_pods)
         artifacts["pods"] = pods_path
     
     # Deployments
     deploy_result = kubectl_json(kubeconfig, "deployments", namespace)
     if deploy_result.success and deploy_result.data:
-        deploy_path = write_json_artifact(telemetry_dir, "deployments.json", deploy_result.data)
+        # Sanitize deployments to redact sensitive values (passwords, tokens, kubeconfig refs)
+        sanitized_deployments = sanitize_artifact(deploy_result.data)
+        deploy_path = write_json_artifact(telemetry_dir, "deployments.json", sanitized_deployments)
         artifacts["deployments"] = deploy_path
     
     # Services

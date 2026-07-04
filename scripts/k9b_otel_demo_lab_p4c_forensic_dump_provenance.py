@@ -21,6 +21,14 @@ from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence import (
     is_forensic_dump_enabled,
 )
 
+# For sanitization
+try:
+    from scripts.lab_common.artifact_sanitizer import sanitize_artifact
+except ImportError:
+    # Fallback if sanitizer not available
+    def sanitize_artifact(data: Any, max_depth: int = 20) -> Any:
+        return data
+
 # =============================================================================
 # Live-Lab Freshness Guard
 # =============================================================================
@@ -189,7 +197,8 @@ def dump_backend_runtime_provenance(
         "timestamp": timestamp,
         "namespace": backend_namespace,
         "deployment": backend_name,
-        "kubeconfig": kubeconfig,
+        # Sanitize kubeconfig to avoid leaking paths in artifacts
+        "kubeconfig": "[REDACTED:kubeconfig-path]" if kubeconfig else None,
         "kubectl_outputs": {},
         "errors": [],
     }

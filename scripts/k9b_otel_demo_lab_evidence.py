@@ -5,9 +5,17 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from .k9b_lab_common_helpers import kubectl_describe, kubectl_json, log, write_json_artifact, write_text_artifact
 from .k9b_otel_demo_lab_constants import OTEL_DEMO_NAMESPACE
+
+# Sanitizer: redacts sensitive values from K8s artifacts
+try:
+    from .lab_common.artifact_sanitizer import sanitize_artifact
+except ImportError:
+    def sanitize_artifact(data: Any, max_depth: int = 20) -> Any:
+        return data
 
 
 def collect_injection_evidence(
@@ -39,7 +47,9 @@ def collect_injection_evidence(
     # Collect all pods
     pods_result = kubectl_json(kubeconfig, "pods", OTEL_DEMO_NAMESPACE)
     if pods_result.success and pods_result.data:
-        pods_path = write_json_artifact(injection_dir, "pods.json", pods_result.data)
+        # Sanitize pods to redact sensitive values (passwords, tokens, kubeconfig refs)
+        sanitized_pods = sanitize_artifact(pods_result.data)
+        pods_path = write_json_artifact(injection_dir, "pods.json", sanitized_pods)
         artifacts["pods"] = pods_path
         
         # Collect recommendation service specific info
@@ -109,7 +119,9 @@ def collect_injection_evidence(
         # Deployments
         deploy_result = kubectl_json(kubeconfig, "deployments", OTEL_DEMO_NAMESPACE)
         if deploy_result.success and deploy_result.data:
-            deploy_path = write_json_artifact(injection_dir, "deployments.json", deploy_result.data)
+            # Sanitize deployments to redact sensitive values (passwords, tokens, kubeconfig refs)
+            sanitized_deployments = sanitize_artifact(deploy_result.data)
+            deploy_path = write_json_artifact(injection_dir, "deployments.json", sanitized_deployments)
             artifacts["deployments"] = deploy_path
         
         # Services

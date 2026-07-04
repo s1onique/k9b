@@ -26,6 +26,19 @@ from .k9b_lab_common_helpers import (
     write_text_artifact,
 )
 
+# For artifact sanitization
+try:
+    from .lab_common.artifact_sanitizer import sanitize_deployments_artifact, sanitize_pods_artifact
+except ImportError:
+
+    def sanitize_pods_artifact(x: Any) -> Any:  # type: ignore[misc]
+        return x
+
+    def sanitize_deployments_artifact(x: Any) -> Any:  # type: ignore[misc]
+        return x
+
+
+
 # =============================================================================
 # Readiness helpers
 # =============================================================================
@@ -211,10 +224,11 @@ def collect_namespace_snapshot(
     
     log(f"Collecting namespace snapshot for {namespace}")
     
-    # Collect pods
+    # Collect pods (sanitize before writing to remove sensitive data)
     pods_result = kubectl_json(kubeconfig, "pods", namespace)
     if pods_result.success:
-        pods_path = write_json_artifact(snapshot_dir, "pods.json", pods_result.data or {})
+        sanitized_pods = sanitize_pods_artifact(pods_result.data)
+        pods_path = write_json_artifact(snapshot_dir, "pods.json", sanitized_pods)
         artifacts["pods"] = pods_path
         log(f"  - Collected pods: {len(pods_result.data.get('items', []) if pods_result.data else [])} items")
     else:
@@ -231,10 +245,11 @@ def collect_namespace_snapshot(
         write_text_artifact(snapshot_dir, "services-error.txt", svc_result.stderr)
         artifacts["services_error"] = snapshot_dir / "services-error.txt"
     
-    # Collect deployments
+    # Collect deployments (sanitize before writing to remove sensitive data)
     deploy_result = kubectl_json(kubeconfig, "deployments", namespace)
     if deploy_result.success:
-        deploy_path = write_json_artifact(snapshot_dir, "deployments.json", deploy_result.data or {})
+        sanitized_deployments = sanitize_deployments_artifact(deploy_result.data)
+        deploy_path = write_json_artifact(snapshot_dir, "deployments.json", sanitized_deployments)
         artifacts["deployments"] = deploy_path
         log(f"  - Collected deployments: {len(deploy_result.data.get('items', []) if deploy_result.data else [])} items")
     else:

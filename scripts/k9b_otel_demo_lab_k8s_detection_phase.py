@@ -33,6 +33,12 @@ from scripts.k9b_otel_demo_lab_k8s_detection_match import (
     _validate_namespace,
     _validate_shipping_reference,
 )
+from scripts.k9b_otel_demo_lab_k8s_verdicts import (
+    P3C_REASON_INCIDENT_DISCOVERED_WITHOUT_RCA,
+    P3C_REASON_INCIDENT_NOT_FOUND,
+    P3C_REASON_WRONG_CANDIDATE_CLASS,
+    P3C_REASON_WRONG_INCIDENT_IDENTITY,
+)
 from scripts.k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
 
 
@@ -244,20 +250,26 @@ def phase_p3c_verify_k8s_incident_discovery(
         if discovery_validations_passed:
             log(f"P3c discovery PASSED: {candidate_class} incident found for {SHIPPING_DEPLOYMENT}")
             log("NOTE: Root-cause evidence will be validated in P4c")
+            # Set phase_result_reason for verifier
+            evidence["phase_result_reason"] = P3C_REASON_INCIDENT_DISCOVERED_WITHOUT_RCA
         else:
             if not namespace_matches:
                 evidence["failure_reason"] = "namespace_mismatch"
+                evidence["phase_result_reason"] = P3C_REASON_WRONG_INCIDENT_IDENTITY
                 log("Validation FAILED: namespace does not match")
             elif not shipping_match:
                 evidence["failure_reason"] = "no_shipping_reference"
+                evidence["phase_result_reason"] = P3C_REASON_WRONG_INCIDENT_IDENTITY
                 log("Validation FAILED: no shipping reference found")
             else:
                 evidence["failure_reason"] = f"candidate_class_rejected:{candidate_class}"
+                evidence["phase_result_reason"] = P3C_REASON_WRONG_CANDIDATE_CLASS
                 log(f"Validation FAILED: candidate class '{candidate_class}' not accepted")
         
     else:
         log("ERROR: No incident discovered within timeout - fail-closed")
         evidence["failure_reason"] = discovery_result.get("failure_reason", "no_incident_found")
+        evidence["phase_result_reason"] = P3C_REASON_INCIDENT_NOT_FOUND
         evidence["discovery_success"] = False
         evidence["validation_success"] = False
         

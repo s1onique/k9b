@@ -88,20 +88,46 @@ __all__ = [
 ]
 
 
+def _mirror_loop_pass_artifacts(external_analysis_dir: Path, diagnosis_dir: Path) -> None:
+    """Mirror pass artifacts from external-analysis/diagnosis-loop-passes/ to canonical location.
+
+    The verifier (runtime_passes.py) expects pass artifacts at:
+        phase4-diagnosis/p4c-k8s-multipass-diagnosis/loop-passes/*.json
+
+    But the runner writes them to:
+        external-analysis/diagnosis-loop-passes/*.json
+
+    This function mirrors pass artifacts to the canonical location so the verifier finds them.
+    """
+    source_dir = external_analysis_dir / "diagnosis-loop-passes"
+    if not source_dir.exists():
+        return
+
+    # Canonical location: phase4-diagnosis/p4c-k8s-multipass-diagnosis/loop-passes/
+    canonical_dir = diagnosis_dir / "loop-passes"
+    canonical_dir.mkdir(parents=True, exist_ok=True)
+
+    for pass_file in source_dir.glob("*.json"):
+        dest = canonical_dir / pass_file.name
+        # Copy if destination doesn't exist or source is newer
+        if not dest.exists() or pass_file.stat().st_mtime > dest.stat().st_mtime:
+            dest.write_bytes(pass_file.read_bytes())
+
+
 def phase_p4c_verify_k8s_mult_pass_diagnosis(
     config: LabConfig,
     artifact_dir: Path,
     detection_artifacts: dict[str, Any] | None = None,
 ) -> LabPhaseResult:
     """Phase P4c: Multi-pass automatic diagnosis for K8s incident.
-    
+
     After P3c discovery succeeds, this phase:
     1. Reads P3c detection evidence
     2. Triggers k9b automatic diagnosis loop
     3. Requires at least 2 diagnosis passes
     4. Validates root-cause terms in final diagnosis
     5. Writes diagnosis evidence artifact
-    
+
     Phase success requires ALL of:
     - P3c evidence is valid and present
     - Incident ID is available
@@ -114,14 +140,14 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     """
     start = time.time()
     diagnosis_dir = get_diagnosis_dir(artifact_dir)
-    
+
     # FRESHNESS GUARD: Print tested revision before P4c starts
     freshness_result, is_fresh = check_live_lab_and_log(config, artifact_dir)
     evidence = create_initial_evidence(config.namespace)
-    
+
     # Record freshness check in evidence
     evidence["freshness_check"] = freshness_result
-    
+
     if not is_fresh:
         # Fail early - stale code detected
         _log("FATAL: Live-lab freshness check failed - running stale code")
@@ -131,7 +157,7 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         evidence["validation_success"] = False
         write_diagnosis_evidence(diagnosis_dir, evidence)
         return build_phase_result(evidence, start, diagnosis_dir, success=False)
-    
+
     # FORENSIC DUMP: Capture backend and p4c runtime provenance at phase start
     provenance: dict[str, Any] = {}
     if FORENSIC_DUMP_ENABLED:
@@ -140,36 +166,36 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
             artifact_dir, kubeconfig=config.kubeconfig
         )
         provenance["p4c_script"] = dump_p4c_runtime_provenance(artifact_dir)
-    
+
     # Step 1: Read P3c detection evidence
     log_step(1, "Reading P3c detection evidence")
     detection_evidence = load_detection_evidence(artifact_dir, detection_artifacts, evidence)
     if detection_evidence is None:
         write_diagnosis_evidence(diagnosis_dir, evidence)
         return build_phase_result(evidence, start, diagnosis_dir, success=False)
-    
+
     # Store detection_evidence in evidence dict so scheduling extraction can access it
     evidence["detection_evidence"] = detection_evidence
-    
+
     # Step 2: Validate P3c evidence
     log_step(2, "Validating P3c evidence")
     incident_id, candidate_class = validate_and_extract(detection_evidence, evidence, diagnosis_dir)
     if incident_id is None:
         return build_phase_result(evidence, start, diagnosis_dir, success=False)
-    
+
     _log(f"  Valid P3c evidence: incident_id={incident_id}, candidate_class={candidate_class}")
-    
+
     # Step 3: Trigger diagnosis loop
     log_step(3, "Triggering k9b automatic diagnosis loop")
     evidence["diagnosis_started"] = time.time()
-    
+
     # Use k9b backend namespace for backend-targeted diagnosis, not the incident namespace.
     # The backend runs in k9b namespace, but incidents may be in otel-demo namespace.
     # kubectl exec against deploy/k9b-backend must use -n k9b to find the deployment.
     # NOTE: This uses run_diagnosis_loop directly so that tests can patch at the facade level.
     external_analysis_dir = artifact_dir / "external-analysis"
     external_analysis_dir.mkdir(parents=True, exist_ok=True)
-    
+
     diagnosis_result = run_diagnosis_loop(
         incident_id=incident_id,
         external_analysis_dir=external_analysis_dir,
@@ -179,9 +205,15 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         namespace=DEFAULT_K9B_NAMESPACE,
         artifact_dir=artifact_dir,
     )
-    
+
     evidence = merge_diagnosis_result(evidence, diagnosis_result)
-    
+
+    # Loop-pass artifact path mirroring for contract verification.
+    # The runner writes pass artifacts to external-analysis/diagnosis-loop-passes/
+    # but the verifier (runtime_passes.py) expects phase4-diagnosis/loop-passes/.
+    # Mirror pass artifacts to the canonical location so the verifier finds them.
+    _mirror_loop_pass_artifacts(external_analysis_dir, diagnosis_dir)
+
     # FORENSIC DUMP: Dump backend incident detail after diagnosis loop
     if FORENSIC_DUMP_ENABLED and evidence.get("backend_incident_detail"):
         dump_backend_incident_detail_before_loop(
@@ -189,7 +221,7 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
             evidence.get("backend_incident_detail"),
             incident_id,
         )
-    
+
     # Step 3b: Fail immediately if real loop was not invoked
     # This is the most common P4c failure - the diagnosis loop never ran.
     # Fail fast with a clear message instead of cascading through term checks.
@@ -203,7 +235,7 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
         duration = time.time() - start
         log_phase_footer(duration)
         return build_phase_result(evidence, start, diagnosis_dir, success=False, term_checks={})
-    
+
     # Step 4: Check root-cause terms
     log_step(4, "Checking root-cause terms in diagnosis")
     term_checks = _check_root_cause_terms(evidence["root_cause_summary"])
@@ -211,26 +243,26 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     evidence.update(term_checks)
     for term, found in term_checks.items():
         log_term_check(term, found)
-    
+
     # Step 5: Validate success criteria
     log_step(5, "Validating diagnosis success criteria")
     failures = _collect_failures(evidence, term_checks)
     evidence["validation_success"] = len(failures) == 0
-    
+
     if evidence["validation_success"]:
         log_validation_result(True, "diagnosis meets all success criteria")
     else:
         evidence["failure_reason"] = "; ".join(failures)
         log_validation_result(False, evidence["failure_reason"])
-    
+
     # Step 6: Extract structured scheduling_evidence (must come before Step 6b validation)
     log_step(6, "Extracting structured scheduling evidence (P4c)")
     evidence = extract_scheduling_evidence_p4c(detection_evidence, evidence)
-    
+
     # Step 6b: P4c root-cause validation - check scheduling markers using extracted evidence
     log_step("6b", "Validating scheduling root-cause evidence (P4c)")
     evidence = validate_p4c_root_cause(evidence)
-    
+
     # Step 7: Compute normalized P4c outcome
     # FORENSIC DUMP: Dump raw P4c outcome input immediately before compute_p4c_outcome
     if FORENSIC_DUMP_ENABLED:
@@ -246,7 +278,7 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
             artifact_dir, incident_id, None,
             ["backend", "p4c_script", "p4c_input"], provenance,
         )
-    
+
     p4c_outcome, evidence = compute_p4c_outcome_for_phase(evidence)
 
     write_diagnosis_evidence(diagnosis_dir, evidence)

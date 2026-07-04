@@ -45,6 +45,14 @@ from .k9b_otel_demo_lab_deployment_helm import (
 )
 from .k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
 
+# Sanitizer: redacts sensitive values from K8s artifacts
+try:
+    from .lab_common.artifact_sanitizer import sanitize_artifact
+except ImportError:
+
+    def sanitize_artifact(data: Any, max_depth: int = 20) -> Any:  # type: ignore[misc]
+        return data
+
 
 def phase0_cluster_baseline(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
     """Phase 0: Collect cluster and k9b baseline.
@@ -265,12 +273,7 @@ def phase1_deploy_otel_demo(config: LabConfig, artifact_dir: Path) -> LabPhaseRe
 
 
 def phase1b_baseline_readiness(config: LabConfig, artifact_dir: Path) -> LabPhaseResult:
-    """Wait for OTel Demo baseline to be ready and collect artifacts.
-    
-    Enhanced with:
-    - Baseline purity guard for unschedulable-shipping scenario
-    - Failure classification for actionable diagnostics
-    """
+    """Wait for OTel Demo baseline to be ready and collect artifacts."""
     start = time.time()
     phase_dir = artifact_dir / PHASE_OTEL_BASELINE
     phase_dir.mkdir(parents=True, exist_ok=True)
@@ -363,75 +366,38 @@ def phase1b_baseline_readiness(config: LabConfig, artifact_dir: Path) -> LabPhas
         )
 
     log("Baseline deployments are ready")
-    
-    # =====================================================================
-    # Baseline Purity Guard for unschedulable-shipping
-    # Check that shipping deployment has no scheduling constraints before
-    # the scenario injection phase. This prevents contamination from
-    # previous runs or stale release state.
-    # =====================================================================
+
+    # Baseline Purity Guard: check shipping has no scheduling constraints before injection
     if config.incident_scenario == "unschedulable-shipping":
         log("Running baseline purity check for unschedulable-shipping scenario...")
-        
         shipping_result = kubectl_json(
-            config.kubeconfig,
-            "deployment",
-            config.namespace,
+            config.kubeconfig, "deployment", config.namespace,
             extra_args=[SHIPPING_DEPLOYMENT, "-o", "json"],
         )
-        
         if shipping_result.success and shipping_result.data:
-            # Get live pods for contamination check
-            pods_result = kubectl_json(
-                config.kubeconfig,
-                "pods",
-                config.namespace,
-            )
-            
-            # For unschedulable-shipping, fail closed if pod listing fails
-            # We need to check live pods to detect contamination from previous runs
-            if config.incident_scenario == "unschedulable-shipping" and not pods_result.success:
+            pods_result = kubectl_json(config.kubeconfig, "pods", config.namespace)
+            if not pods_result.success:
                 log("BASELINE PURITY CHECK FAILED: Cannot list pods for contamination check")
-                
-                # Write purity failure artifact
                 purity_failure = {
                     "failure_class": "baseline_contamination_check_failed",
                     "phase": "phase1-baseline-purity-check",
                     "scenario": config.incident_scenario,
                     "deployment": SHIPPING_DEPLOYMENT,
-                    "message": (
-                        "Failed to list pods for baseline contamination check: "
-                        f"{pods_result.stderr or pods_result.stdout}"
-                    ),
+                    "message": f"Failed to list pods: {pods_result.stderr or pods_result.stdout}",
                     "timestamp": datetime.now(UTC).isoformat(),
                 }
-                purity_path = write_json_artifact(
-                    phase_dir,
-                    "baseline-purity-failure.json",
-                    purity_failure,
-                )
+                purity_path = write_json_artifact(phase_dir, "baseline-purity-failure.json", purity_failure)
                 artifacts["baseline_purity_failure"] = str(purity_path)
-                
                 return LabPhaseResult(
-                    phase="phase1-baseline",
-                    success=False,
-                    message=f"Baseline contamination check failed: cannot list pods: {pods_result.stderr or pods_result.stdout}",
-                    artifacts=artifacts,
-                    duration_seconds=time.time() - start,
+                    phase="phase1-baseline", success=False,
+                    message="Baseline contamination check failed: cannot list pods",
+                    artifacts=artifacts, duration_seconds=time.time() - start,
                 )
-            
-            pods_data = pods_result.data if pods_result.success else None
-            
             is_pure, purity_msg = check_baseline_purity(
-                shipping_result.data,
-                scenario=config.incident_scenario,
-                pods_data=pods_data,
+                shipping_result.data, scenario=config.incident_scenario, pods_data=pods_result.data,
             )
-            
             if not is_pure:
                 log(f"BASELINE PURITY CHECK FAILED: {purity_msg}")
-                
-                # Write purity failure artifact
                 purity_failure = {
                     "failure_class": "baseline_contamination_scheduling",
                     "phase": "phase1-baseline-purity-check",
@@ -440,32 +406,26 @@ def phase1b_baseline_readiness(config: LabConfig, artifact_dir: Path) -> LabPhas
                     "message": purity_msg,
                     "timestamp": datetime.now(UTC).isoformat(),
                 }
-                purity_path = write_json_artifact(
-                    phase_dir,
-                    "baseline-purity-failure.json",
-                    purity_failure,
-                )
+                purity_path = write_json_artifact(phase_dir, "baseline-purity-failure.json", purity_failure)
                 artifacts["baseline_purity_failure"] = str(purity_path)
-                
                 return LabPhaseResult(
-                    phase="phase1-baseline",
-                    success=False,
+                    phase="phase1-baseline", success=False,
                     message=f"Baseline contaminated before scenario injection: {purity_msg}",
-                    artifacts=artifacts,
-                    duration_seconds=time.time() - start,
+                    artifacts=artifacts, duration_seconds=time.time() - start,
                 )
-            
             log("Baseline purity check PASSED: no scheduling constraints found")
     
     # Collect baseline artifacts
     pods_result = kubectl_json(config.kubeconfig, "pods", config.namespace)
     if pods_result.success and pods_result.data:
-        pods_path = write_json_artifact(phase_dir, "pods.json", pods_result.data)
+        sanitized_pods = sanitize_artifact(pods_result.data)
+        pods_path = write_json_artifact(phase_dir, "pods.json", sanitized_pods)
         artifacts["pods"] = str(pods_path)
 
     deploy_result = kubectl_json(config.kubeconfig, "deployments", config.namespace)
     if deploy_result.success and deploy_result.data:
-        deploy_path = write_json_artifact(phase_dir, "deployments.json", deploy_result.data)
+        sanitized_deployments = sanitize_artifact(deploy_result.data)
+        deploy_path = write_json_artifact(phase_dir, "deployments.json", sanitized_deployments)
         artifacts["deployments"] = str(deploy_path)
 
     svc_result = kubectl_json(config.kubeconfig, "services", config.namespace)

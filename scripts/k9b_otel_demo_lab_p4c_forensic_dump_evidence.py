@@ -92,8 +92,9 @@ def dump_review_artifact_files(
         "host_files": {},
         "comparison": {},
         "backend_read_method": "kubectl_exec",
+        # Sanitize kubeconfig to avoid leaking paths in artifacts
         "kubectl_config": {
-            "kubeconfig": kubeconfig,
+            "kubeconfig": "[REDACTED:kubeconfig-path]" if kubeconfig else None,
             "namespace": backend_namespace,
             "deployment": backend_deployment,
             "container": backend_container,
@@ -243,10 +244,15 @@ def dump_p4c_outcome_input(
         provenance["pass_run_ids"] = evidence.get("pass_run_ids")
         provenance["evidence_size"] = len(json.dumps(dict(evidence), default=str))
 
-    # Write full evidence to separate file
+    # Write sanitized evidence to separate file (sanitize to avoid leaking sensitive data)
+    try:
+        from scripts.lab_common.artifact_sanitizer import sanitize_artifact
+        sanitized_evidence = sanitize_artifact(evidence)
+    except ImportError:
+        sanitized_evidence = evidence
     output_path = dump_dir / f"p4c-outcome-input-{incident_id[:8]}-{timestamp}.json"
     with open(output_path, "w") as f:
-        json.dump(evidence, f, indent=2, default=str)
+        json.dump(sanitized_evidence, f, indent=2, default=str)
 
     # Write provenance summary
     provenance_path = dump_dir / f"p4c-outcome-input-provenance-{incident_id[:8]}-{timestamp}.json"
