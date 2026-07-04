@@ -31,6 +31,7 @@ LIST_FILES_MODE=false
 SHARD_N=0
 SHARD_TOTAL=1
 VERIFY_TOTAL=0
+JUNIT_XML=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -80,12 +81,21 @@ while [[ $# -gt 0 ]]; do
             LIST_FILES_MODE=true
             shift
             ;;
+        --junitxml)
+            JUNIT_XML="${2:-}"
+            if [[ -z "$JUNIT_XML" ]]; then
+                echo "ERROR: --junitxml requires a path argument" >&2
+                exit 2
+            fi
+            shift 2
+            ;;
         -h|--help)
-            echo "Usage: $0 [--profile] [--shard N K] [--verify-shards K] [--list-files]"
+            echo "Usage: $0 [--profile] [--shard N K] [--verify-shards K] [--list-files] [--junitxml PATH]"
             echo "  --profile           Enable pytest --durations profiling"
             echo "  --shard N K         Run shard N of K parallel shards (duration-weighted)"
             echo "  --verify-shards K   Verify K-way shard partition correctness"
             echo "  --list-files        List all test files (or shard files if combined with --shard)"
+            echo "  --junitxml PATH     Write JUnit XML report to PATH (for CI aggregation)"
             echo ""
             echo "Examples:"
             echo "  $0                          # Run all tests"
@@ -94,6 +104,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --shard 1 4             # Run second quarter of tests (duration-weighted)"
             echo "  $0 --verify-shards 4       # Verify 4-way sharding is correct"
             echo "  $0 --shard 0 4 --list-files # List tests in shard 0 of 4"
+            echo "  $0 --shard 0 2 --junitxml artifacts/junit/shard-0.xml"
             exit 0
             ;;
         *)
@@ -213,6 +224,13 @@ if [[ "$SHARD_MODE" == true ]]; then
     echo "[unit-tests] command=\"python -m pytest @\$NODEID_FILE --durations=50 --durations-min=0.25\""
 fi
 
+# Build pytest extra args array (safer than string concatenation for paths with spaces)
+PYTEST_EXTRA_ARGS=()
+if [[ -n "$JUNIT_XML" ]]; then
+    mkdir -p "$(dirname "$JUNIT_XML")"
+    PYTEST_EXTRA_ARGS+=("--junitxml=$JUNIT_XML")
+fi
+
 # Build pytest command
 if [[ "$PROFILE_MODE" == true || "$SHARD_MODE" == true ]]; then
     # Profile or shard mode: use pytest with durations reporting
@@ -227,12 +245,12 @@ if [[ "$PROFILE_MODE" == true || "$SHARD_MODE" == true ]]; then
         fi
         
         "$PYTHON" -m pytest @"$NODEID_FILE" \
-            --durations=50 --durations-min=0.25 -v --tb=short 2>&1 | tee "$TIMING_LOG"
+            "${PYTEST_EXTRA_ARGS[@]}" --durations=50 --durations-min=0.25 -v --tb=short 2>&1 | tee "$TIMING_LOG"
     else
         echo "[unit-tests] mode=pytest"
         echo "[unit-tests] suite=tests/"
         "$PYTHON" -m pytest tests/ \
-            --durations=50 --durations-min=0.25 -v --tb=short 2>&1 | tee "$TIMING_LOG"
+            "${PYTEST_EXTRA_ARGS[@]}" --durations=50 --durations-min=0.25 -v --tb=short 2>&1 | tee "$TIMING_LOG"
     fi
     PYTEST_EXIT=$?
     

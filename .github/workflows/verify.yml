@@ -155,7 +155,9 @@ jobs:
       - name: Run Python unit test shard
         run: |
           echo "Running Python unit tests shard ${{ matrix.shard_index }}/${{ matrix.shard_total }}"
-          scripts/run_unit_tests.sh --shard "${{ matrix.shard_index }}" "${{ matrix.shard_total }}"
+          mkdir -p artifacts/junit
+          scripts/run_unit_tests.sh --shard "${{ matrix.shard_index }}" "${{ matrix.shard_total }}" \
+            --junitxml "artifacts/junit/unit-shard-${{ matrix.shard_index }}.xml"
 
       - name: Upload test timing artifacts
         if: always()

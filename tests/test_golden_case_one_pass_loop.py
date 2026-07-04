@@ -26,26 +26,65 @@ from k8s_diag_agent.collect.golden_case_one_pass_diagnosis_loop import (
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def case_dir() -> Path:
     return FIXTURES_DIR
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def manifest(case_dir: Path) -> dict:
     with open(case_dir / "manifest.json") as f:
         return json.load(f)  # type: ignore[no-any-return]
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def expected(case_dir: Path) -> dict:
     with open(case_dir / "expected.json") as f:
         return json.load(f)  # type: ignore[no-any-return]
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def evidence_provider(case_dir: Path) -> GoldenCaseEvidenceProvider:
     return GoldenCaseEvidenceProvider(case_dir)
+
+
+@pytest.fixture(scope="module")
+def case_file(
+    case_dir: Path,
+    manifest: dict,
+    evidence_provider: GoldenCaseEvidenceProvider,
+) -> dict:
+    """Module-scoped case file to avoid repeated build_golden_case_case_file calls."""
+    return build_golden_case_case_file(
+        case_dir=case_dir,
+        manifest=manifest,
+        evidence_provider=evidence_provider,
+    )
+
+
+@pytest.fixture(scope="module")
+def production_diagnosis_result(
+    case_file: dict,
+    manifest: dict,
+    expected: dict,
+    evidence_provider: GoldenCaseEvidenceProvider,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> dict:
+    """Module-scoped production loop result to avoid repeated expensive calls.
+    
+    This fixture runs the production diagnosis loop once per module and shares
+    the result across tests that need to assert on the output. This is safe
+    because the result is read-only and deterministic given the same inputs.
+    Uses tmp_path_factory so pytest owns cleanup.
+    """
+    output_dir = tmp_path_factory.mktemp("golden-case-production-loop")
+    return run_production_diagnosis_loop(
+        case_file=case_file,
+        manifest=manifest,
+        expected=expected,
+        evidence_provider=evidence_provider,
+        output_dir=output_dir,
+    )
 
 
 def test_build_golden_case_case_file_structure(
@@ -164,25 +203,10 @@ def test_fake_handlers_provided_to_orchestrator(
 
 
 def test_production_loop_returns_handler_invocation_evidence(
-    case_dir: Path,
-    manifest: dict,
-    expected: dict,
-    evidence_provider: GoldenCaseEvidenceProvider,
+    production_diagnosis_result: dict,
 ) -> None:
     """Production loop returns evidence of handler invocations."""
-    case_file = build_golden_case_case_file(
-        case_dir=case_dir,
-        manifest=manifest,
-        evidence_provider=evidence_provider,
-    )
-
-    result = run_production_diagnosis_loop(
-        case_file=case_file,
-        manifest=manifest,
-        expected=expected,
-        evidence_provider=evidence_provider,
-        output_dir=Path(tempfile.mkdtemp()),
-    )
+    result = production_diagnosis_result
 
     assert "_internal" in result
     assert "read_only_checks_sidecar" in result["_internal"]
@@ -232,24 +256,10 @@ def test_enforce_safety_rejects_forbidden_conclusions() -> None:
 
 
 def test_enforce_safety_accepts_correct_diagnosis(
-    case_dir: Path,
-    manifest: dict,
-    expected: dict,
-    evidence_provider: GoldenCaseEvidenceProvider,
+    production_diagnosis_result: dict,
 ) -> None:
     """Safety enforcement accepts correct golden-case diagnosis."""
-    case_file = build_golden_case_case_file(
-        case_dir=case_dir,
-        manifest=manifest,
-        evidence_provider=evidence_provider,
-    )
-    result = run_production_diagnosis_loop(
-        case_file=case_file,
-        manifest=manifest,
-        expected=expected,
-        evidence_provider=evidence_provider,
-        output_dir=Path(tempfile.mkdtemp()),
-    )
+    result = production_diagnosis_result
     is_safe, errors = enforce_safety(result)
     assert is_safe is True, f"Safety errors: {errors}"
 
@@ -277,24 +287,10 @@ def test_deterministic_llm_provider_returns_correct_diagnosis(
 
 
 def test_diagnosis_output_contract(
-    case_dir: Path,
-    manifest: dict,
-    expected: dict,
-    evidence_provider: GoldenCaseEvidenceProvider,
+    production_diagnosis_result: dict,
 ) -> None:
     """Diagnosis output matches required contract."""
-    case_file = build_golden_case_case_file(
-        case_dir=case_dir,
-        manifest=manifest,
-        evidence_provider=evidence_provider,
-    )
-    result = run_production_diagnosis_loop(
-        case_file=case_file,
-        manifest=manifest,
-        expected=expected,
-        evidence_provider=evidence_provider,
-        output_dir=Path(tempfile.mkdtemp()),
-    )
+    result = production_diagnosis_result
 
     required_fields = [
         "case_id", "category", "root_cause", "confidence", "description",
@@ -313,47 +309,20 @@ def test_diagnosis_output_contract(
 
 
 def test_diagnosis_output_includes_evidence_refs(
-    case_dir: Path,
+    production_diagnosis_result: dict,
     manifest: dict,
-    expected: dict,
-    evidence_provider: GoldenCaseEvidenceProvider,
 ) -> None:
     """Diagnosis output includes all expected evidence refs."""
-    case_file = build_golden_case_case_file(
-        case_dir=case_dir,
-        manifest=manifest,
-        evidence_provider=evidence_provider,
-    )
-    result = run_production_diagnosis_loop(
-        case_file=case_file,
-        manifest=manifest,
-        expected=expected,
-        evidence_provider=evidence_provider,
-        output_dir=Path(tempfile.mkdtemp()),
-    )
+    result = production_diagnosis_result
     expected_files = manifest["expected_evidence_files"]
     assert result["evidence_refs"] == expected_files
 
 
 def test_diagnosis_output_next_checks_are_read_only(
-    case_dir: Path,
-    manifest: dict,
-    expected: dict,
-    evidence_provider: GoldenCaseEvidenceProvider,
+    production_diagnosis_result: dict,
 ) -> None:
     """Next checks use only read-only kubectl commands."""
-    case_file = build_golden_case_case_file(
-        case_dir=case_dir,
-        manifest=manifest,
-        evidence_provider=evidence_provider,
-    )
-    result = run_production_diagnosis_loop(
-        case_file=case_file,
-        manifest=manifest,
-        expected=expected,
-        evidence_provider=evidence_provider,
-        output_dir=Path(tempfile.mkdtemp()),
-    )
+    result = production_diagnosis_result
     allowed_prefixes = ["kubectl get", "kubectl describe", "kubectl logs", "kubectl top"]
     for check in result.get("next_checks", []):
         method = check.get("method", "")
