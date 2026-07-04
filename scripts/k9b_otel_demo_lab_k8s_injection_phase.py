@@ -249,6 +249,12 @@ def phase_p2b_inject_unschedulable_shipping_rollout(
     evidence["cleanup_command_path"] = str(injection_dir / "cleanup-command.json")
     write_json_artifact(injection_dir, "cleanup-command.json", cleanup_cmd)
     
+    # CRITICAL FIX: Write injection-evidence.json on SUCCESS (not just failure)
+    # P3c reads this file to populate selector_literal for P4c root-cause extraction.
+    # Without this artifact, P3c cannot pass selector evidence to P4c, causing
+    # missing_scheduling_root_cause_evidence failures in the live lab.
+    _write_injection_artifacts(injection_dir, evidence, previous_template)
+    
     duration = time.time() - start
     
     log("=" * 60)
