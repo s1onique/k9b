@@ -22,6 +22,10 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_artifacts import (
     get_diagnosis_dir,
     write_diagnosis_evidence,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_constants import (
+    DEFAULT_MAX_CHECKS_PER_PASS,
+    DEFAULT_MAX_PASSES,
+)
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_contract import create_initial_evidence
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_match import (
     _check_root_cause_terms,
@@ -39,9 +43,17 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_phase_p4c import (
     compute_p4c_outcome_for_phase,
     extract_scheduling_evidence_p4c,
     merge_diagnosis_result,
-    run_diagnosis_loop_for_phase,
     validate_p4c_root_cause,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner_config import (
+    DEFAULT_K9B_NAMESPACE,
+)
+
+# Backward compatibility alias for tests and downstream contracts that import
+# _merge_diagnosis_result from the facade. The function lives in the p4c module
+# but must remain importable from scripts.k9b_otel_demo_lab_k8s_diagnosis_phase
+# to preserve the facade contract.
+_merge_diagnosis_result = merge_diagnosis_result
 from scripts.k9b_otel_demo_lab_k8s_diagnosis_render import (
     log as _log,
 )
@@ -151,10 +163,21 @@ def phase_p4c_verify_k8s_mult_pass_diagnosis(
     log_step(3, "Triggering k9b automatic diagnosis loop")
     evidence["diagnosis_started"] = time.time()
     
-    diagnosis_result = run_diagnosis_loop_for_phase(
+    # Use k9b backend namespace for backend-targeted diagnosis, not the incident namespace.
+    # The backend runs in k9b namespace, but incidents may be in otel-demo namespace.
+    # kubectl exec against deploy/k9b-backend must use -n k9b to find the deployment.
+    # NOTE: This uses run_diagnosis_loop directly so that tests can patch at the facade level.
+    external_analysis_dir = artifact_dir / "external-analysis"
+    external_analysis_dir.mkdir(parents=True, exist_ok=True)
+    
+    diagnosis_result = run_diagnosis_loop(
         incident_id=incident_id,
-        artifact_dir=artifact_dir,
+        external_analysis_dir=external_analysis_dir,
+        max_passes=DEFAULT_MAX_PASSES,
+        max_checks_per_pass=DEFAULT_MAX_CHECKS_PER_PASS,
         kubeconfig=config.kubeconfig,
+        namespace=DEFAULT_K9B_NAMESPACE,
+        artifact_dir=artifact_dir,
     )
     
     evidence = merge_diagnosis_result(evidence, diagnosis_result)
