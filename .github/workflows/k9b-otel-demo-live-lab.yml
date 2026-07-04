@@ -372,14 +372,17 @@ jobs:
       - name: Verify Live Lab
         run: |
           echo "=== Verifying Live Lab Results ==="
-          .venv/bin/python -m scripts.k9b_otel_demo_lab_verify \
-            --artifact-dir ./lab-artifacts/otel-demo \
-            --mode live \
-            --json
+
           if [[ "${{ inputs.incident_scenario }}" == "unschedulable-shipping" ]]; then
-            echo "Running K8s-native bundle verification..."
+            echo "Running K8s-native live-lab verification..."
             .venv/bin/python -m scripts.k9b_otel_demo_lab_k8s_artifacts \
               --artifact-dir ./lab-artifacts/otel-demo
+          else
+            echo "Running legacy live-lab verification..."
+            .venv/bin/python -m scripts.k9b_otel_demo_lab_verify \
+              --artifact-dir ./lab-artifacts/otel-demo \
+              --mode live \
+              --json
           fi
 
       - name: Verify Live Lab Contracts
