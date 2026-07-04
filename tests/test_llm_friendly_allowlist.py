@@ -42,3 +42,22 @@ class TestAllowlistEntriesExist:
         """Allowlist should not contain duplicate paths."""
         paths = [path for path, _ in ALLOWLIST]
         assert len(paths) == len(set(paths)), "Allowlist contains duplicate paths"
+
+    def test_python_test_durations_is_generated_allowlisted(self) -> None:
+        """python_test_durations.json is allowlisted as [GENERATED] data.
+
+        Regression test: This file is auto-generated from CI JUnit XML and must
+        not be subject to LLM-friendly line-count limits.
+        """
+        manifest_path = "scripts/python_test_durations.json"
+        entry = next((p, r) for p, r in ALLOWLIST if p == manifest_path)
+        assert entry is not None, f"{manifest_path} must be in allowlist"
+        path, reason = entry
+        assert "[GENERATED]" in reason, f"Expected [GENERATED] category in: {reason}"
+        assert Path(path).exists(), f"Allowlist entry must exist: {path}"
+
+    def test_generated_category_entries_exist(self) -> None:
+        """All [GENERATED] entries must point to existing files."""
+        for path, reason in ALLOWLIST:
+            if "[GENERATED]" in reason:
+                assert Path(path).exists(), f"[GENERATED] entry does not exist: {path}"

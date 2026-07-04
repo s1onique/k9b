@@ -35,6 +35,6 @@
     "**/.dirac-symbol-index/**",
     "**/provider-smoke/**",
     "**/podman/**",
-    "**/scripts/**"
+    "**/scripts/python_test_durations.json"
   ]
 }
