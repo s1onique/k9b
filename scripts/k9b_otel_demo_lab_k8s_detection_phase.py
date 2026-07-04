@@ -7,12 +7,18 @@ the P3c detection workflow.
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import Any
 
 from scripts.k9b_lab_common_helpers import log, write_json_artifact
-from scripts.k9b_otel_demo_lab_constants import SHIPPING_DEPLOYMENT
+from scripts.k9b_otel_demo_lab_constants import (
+    K8S_INJECTION_NODE_SELECTOR_KEY,
+    K8S_INJECTION_NODE_SELECTOR_VALUE,
+    PHASE_INJECTED,
+    SHIPPING_DEPLOYMENT,
+)
 from scripts.k9b_otel_demo_lab_k8s_detection_api import (
     _poll_k9b_incident_discovery,
     _trigger_k9b_snapshot,
@@ -28,6 +34,64 @@ from scripts.k9b_otel_demo_lab_k8s_detection_match import (
     _validate_shipping_reference,
 )
 from scripts.k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
+
+
+def _populate_selector_literal_from_p2b(
+    artifact_dir: Path,
+    evidence: dict[str, Any],
+) -> None:
+    """Populate selector_literal from P2b injection evidence for P4c.
+
+    P2b writes the injected nodeSelector to injection-evidence.json.
+    P3c reads this and populates the detection evidence with the known
+    selector_literal so P4c can use it without relying on lossy K8s event prose.
+
+    This fixes the contract leak where P4c receives generic scheduler messages
+    but cannot prove the exact injected selector key/value.
+
+    Args:
+        artifact_dir: Root artifact directory
+        evidence: Detection evidence dict to update
+    """
+    injection_evidence_path = artifact_dir / PHASE_INJECTED / "p2b-k8s-injection" / "injection-evidence.json"
+
+    if not injection_evidence_path.exists():
+        log("  NOTE: P2b injection evidence not found - selector_literal not populated")
+        evidence["selector_literal"] = None
+        evidence["selector_key"] = None
+        evidence["selector_value"] = None
+        evidence["selector_source"] = None
+        return
+
+    try:
+        injection_evidence = json.loads(injection_evidence_path.read_text())
+
+        # Extract selector from P2b evidence
+        node_selector = injection_evidence.get("node_selector", {})
+        if not node_selector:
+            # Fallback: construct from constants if P2b used them
+            node_selector = {
+                K8S_INJECTION_NODE_SELECTOR_KEY: K8S_INJECTION_NODE_SELECTOR_VALUE,
+            }
+
+        # Build selector_literal in P2b's format (key=value)
+        selector_key = K8S_INJECTION_NODE_SELECTOR_KEY
+        selector_value = node_selector.get(selector_key, K8S_INJECTION_NODE_SELECTOR_VALUE)
+        selector_literal = f"{selector_key}={selector_value}"
+
+        # Populate evidence for P4c
+        evidence["selector_literal"] = selector_literal
+        evidence["selector_key"] = selector_key
+        evidence["selector_value"] = selector_value
+        evidence["selector_source"] = "p2b_injection"
+
+        log(f"  Populated selector_literal from P2b: {selector_literal}")
+    except (json.JSONDecodeError, OSError) as e:
+        log(f"  WARNING: Could not read P2b injection evidence: {e}")
+        evidence["selector_literal"] = None
+        evidence["selector_key"] = None
+        evidence["selector_value"] = None
+        evidence["selector_source"] = None
 
 
 def phase_p3c_verify_k8s_incident_discovery(
@@ -104,7 +168,8 @@ def phase_p3c_verify_k8s_incident_discovery(
         "timeout_seconds": DEFAULT_DETECTION_TIMEOUT_SECONDS,
     }
     
-    # Step 1: Read injection evidence if provided
+    # Step 1: Read injection evidence and populate selector_literal for P4c
+    _populate_selector_literal_from_p2b(artifact_dir, evidence)
     if injection_artifacts:
         evidence["injection_artifacts"] = injection_artifacts
         log("Using injection artifacts from P2b")
