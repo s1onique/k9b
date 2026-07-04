@@ -100,7 +100,9 @@ def phase1_confirm_incident(
     # Success - store incident detail
     incident_detail = fetch_result.incident
     if incident_detail:
-        result["backend_incident_detail"] = incident_detail.to_compact_log()
+        # CRITICAL FIX: Preserve structured dict for P4c scheduling evidence extraction.
+        # to_dict() keeps raw.signals intact; to_compact_log() only produces a debug string.
+        result["backend_incident_detail"] = incident_detail.to_dict()
         log(f"  Backend incident: {incident_detail.to_compact_log()}")
         # P4c debug: dump bounded incident detail snippet
         dump_backend_incident_detail(incident_detail.to_dict(), incident_id)
@@ -251,7 +253,9 @@ def phase2_invoke_and_poll_pass(
     terminal_decision_reached = False
 
     if current_detail:
-        result["backend_incident_detail"] = current_detail.to_compact_log()
+        # CRITICAL FIX: Preserve structured dict for P4c scheduling evidence extraction.
+        # to_dict() keeps raw.signals intact; to_compact_log() only produces a debug string.
+        result["backend_incident_detail"] = current_detail.to_dict()
         result["status"] = current_detail.status
 
         # Use the new helper to count observable passes

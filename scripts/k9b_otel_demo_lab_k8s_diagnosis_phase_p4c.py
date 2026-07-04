@@ -6,7 +6,9 @@ and outcome handling. Extracted to support LLM-friendly file sizes.
 
 from __future__ import annotations
 
+import re
 import time
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +72,54 @@ def run_diagnosis_loop_for_phase(
         namespace=DEFAULT_K9B_NAMESPACE,
         artifact_dir=artifact_dir,
     )
+
+
+def _extract_selector_literal_from_failed_scheduling_signal(sig: object) -> str | None:
+    """Extract selector_literal from a FailedScheduling signal.
+
+    Parses selector constraints from FailedScheduling messages which contain
+    node affinity/selector mismatch details. Supports multiple formats:
+
+    - "node(s) didn't match Pod's node affinity/selector"
+    - "node(s) didn't satisfy Pod's node affinity"
+    - node affinity expressions with key=value constraints
+
+    Args:
+        sig: FailedScheduling signal (Mapping with 'message'/'reason' fields)
+
+    Returns:
+        Selector literal string (e.g., "k9b.dev/otel-lab-node=missing") or None
+    """
+    # Nil-safe: handle non-mapping inputs gracefully
+    if not isinstance(sig, Mapping):
+        return None
+
+    message = str(sig.get("message", ""))
+    reason = str(sig.get("reason", ""))
+
+    # Check for FailedScheduling
+    if reason != "FailedScheduling" and "failedscheduling" not in message.lower():
+        return None
+
+    # Extract selector key=value from common patterns in FailedScheduling messages
+    # Pattern 1: "constraint key=value" or "constraint key=value, ..."
+    constraint_pattern = r"\b([a-zA-Z0-9._/-]+)=([a-zA-Z0-9._-]+)\b"
+    matches = re.findall(constraint_pattern, message)
+
+    for key, value in matches:
+        # Look for the specific lab label or any structured label constraint
+        if "k9b.dev/otel-lab-node" in key or key.startswith("k9b.dev/"):
+            return f"{key}={value}"
+
+    # Pattern 2: nodeSelector/affinity expressions with the label
+    # e.g., "pod has node selector or affinity that no node satisfies"
+    if "node affinity/selector" in message.lower() or "nodeSelector" in message:
+        # Try to find the label mentioned
+        lab_label_match = re.search(r"([a-zA-Z0-9._/-]+\.[a-zA-Z0-9._/-]+)=([a-zA-Z0-9._-]+)", message)
+        if lab_label_match:
+            return f"{lab_label_match.group(1)}={lab_label_match.group(2)}"
+
+    return None
 
 
 def merge_diagnosis_result(evidence: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -153,11 +203,32 @@ def extract_scheduling_evidence_p4c(
     # CRITICAL FIX: Get backend_incident_detail and detection selector_literal
     # to join FailedScheduling evidence from backend with selector from P3c
     backend_incident_detail = evidence.get("backend_incident_detail")
+    
+    # Try to get selector_literal from P3c detection evidence first
     detection_selector_literal = detection_evidence_local.get("selector_literal") or (
         f"{detection_evidence_local.get('selector_key')}={detection_evidence_local.get('selector_value')}"
         if detection_evidence_local.get("selector_key") and detection_evidence_local.get("selector_value")
         else None
     )
+    
+    # If still None, extract selector_literal from backend FailedScheduling signals
+    # This handles the case where P3c detection doesn't populate selector evidence
+    # but the backend signals contain the scheduling failure with nodeSelector mismatch
+    if detection_selector_literal is None and backend_incident_detail is not None:
+        # Use Mapping for nil-safe boundary checking (handles dict subclasses, etc.)
+        if isinstance(backend_incident_detail, Mapping):
+            raw = backend_incident_detail.get("raw", {})
+            # raw can be a Mapping (dict) or Sequence (list) - only process if Mapping
+            if isinstance(raw, Mapping):
+                signals = raw.get("signals", [])
+                if isinstance(signals, Sequence) and not isinstance(signals, str):
+                    for sig in signals:
+                        if isinstance(sig, Mapping):
+                            selector = _extract_selector_literal_from_failed_scheduling_signal(sig)
+                            if selector:
+                                detection_selector_literal = selector
+                                _log(f"  Extracted selector_literal from backend signal: {detection_selector_literal}")
+                                break
 
     # =================================================================
     # P4c CALL-SITE INVARIANT LOGGING (freshness guard for live lab)
