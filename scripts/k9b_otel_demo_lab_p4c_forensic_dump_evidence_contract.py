@@ -15,8 +15,20 @@ from typing import Any
 # Environment and Configuration
 # =============================================================================
 
-FORENSIC_DUMP_ENABLED = os.environ.get("K9B_P4C_FORENSIC_DUMP", "0") == "1"
-FORENSIC_DUMP_DIR_ENV = os.environ.get("K9B_FORENSIC_DUMP_DIR", "")
+FORENSIC_DUMP_ENABLED: bool = os.environ.get("K9B_P4C_FORENSIC_DUMP", "0") == "1"
+FORENSIC_DUMP_DIR_ENV: str = os.environ.get("K9B_FORENSIC_DUMP_DIR", "")
+
+
+def is_forensic_dump_enabled() -> bool:
+    """Check if forensic dump is enabled by reading env var at call time.
+
+    This function checks the environment variable at call time rather than
+    module import time, allowing tests to enable forensic dumps after import.
+
+    Returns:
+        True if K9B_P4C_FORENSIC_DUMP=1, False otherwise
+    """
+    return os.environ.get("K9B_P4C_FORENSIC_DUMP", "0") == "1"
 
 
 # =============================================================================

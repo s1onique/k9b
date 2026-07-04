@@ -17,9 +17,9 @@ from typing import Any
 
 # Re-export from evidence module for internal use
 from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence import (
-    FORENSIC_DUMP_ENABLED,
     _get_forensic_dump_dir,
     _mapping_summary,
+    is_forensic_dump_enabled,
 )
 
 # =============================================================================
@@ -49,7 +49,7 @@ def dump_backend_incident_detail_before_loop(
     Returns:
         The provenance dict or None if dump disabled
     """
-    if not FORENSIC_DUMP_ENABLED:
+    if not is_forensic_dump_enabled():
         return None
 
     dump_dir = _get_forensic_dump_dir(artifact_dir)
@@ -121,7 +121,7 @@ def dump_diagnosis_loop_pass(
     Returns:
         Dict with pass provenance data
     """
-    if not FORENSIC_DUMP_ENABLED:
+    if not is_forensic_dump_enabled():
         return {}
 
     dump_dir = _get_forensic_dump_dir(artifact_dir)

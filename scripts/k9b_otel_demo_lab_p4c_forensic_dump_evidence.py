@@ -31,6 +31,7 @@ from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence_contract import (  # n
     _get_forensic_dump_dir,
     _mapping_fields_present,
     _mapping_summary,
+    is_forensic_dump_enabled,
 )
 
 # Re-export write_forensic_summary from writers module
@@ -74,7 +75,7 @@ def dump_review_artifact_files(
     Returns:
         Dict with artifact comparison data including backend_file_path field
     """
-    if not FORENSIC_DUMP_ENABLED:
+    if not is_forensic_dump_enabled():
         return {}
 
     dump_dir = _get_forensic_dump_dir(artifact_dir)
@@ -209,7 +210,7 @@ def dump_p4c_outcome_input(
     Returns:
         Dict with the captured input
     """
-    if not FORENSIC_DUMP_ENABLED:
+    if not is_forensic_dump_enabled():
         return {}
 
     dump_dir = _get_forensic_dump_dir(artifact_dir)

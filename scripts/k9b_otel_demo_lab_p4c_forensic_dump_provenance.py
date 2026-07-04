@@ -17,8 +17,8 @@ from typing import Any
 
 # Re-export from contract module for internal use
 from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence import (
-    FORENSIC_DUMP_ENABLED,
     _get_forensic_dump_dir,
+    is_forensic_dump_enabled,
 )
 
 # =============================================================================
@@ -179,7 +179,7 @@ def dump_backend_runtime_provenance(
     Returns:
         Dict with provenance data or None if dump failed
     """
-    if not FORENSIC_DUMP_ENABLED:
+    if not is_forensic_dump_enabled():
         return None
 
     dump_dir = _get_forensic_dump_dir(artifact_dir)
@@ -323,7 +323,7 @@ def dump_p4c_runtime_provenance(
     Returns:
         Dict with runtime provenance data
     """
-    if not FORENSIC_DUMP_ENABLED:
+    if not is_forensic_dump_enabled():
         return {}
 
     dump_dir = _get_forensic_dump_dir(artifact_dir)

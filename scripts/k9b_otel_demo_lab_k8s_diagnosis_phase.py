@@ -52,6 +52,9 @@ from scripts.k9b_otel_demo_lab_k8s_diagnosis_render import (
     log_term_check,
     log_validation_result,
 )
+from scripts.k9b_otel_demo_lab_k8s_diagnosis_runner import (
+    run_diagnosis_loop,
+)
 from scripts.k9b_otel_demo_lab_p4c_forensic_dump import (
     FORENSIC_DUMP_ENABLED,
     dump_backend_incident_detail_before_loop,
@@ -67,6 +70,9 @@ from scripts.k9b_otel_demo_lab_types import LabConfig, LabPhaseResult
 __all__ = [
     "phase_p4c_verify_k8s_mult_pass_diagnosis",
     "create_initial_evidence",
+    "get_diagnosis_dir",
+    "write_diagnosis_evidence",
+    "run_diagnosis_loop",
 ]
 
 
