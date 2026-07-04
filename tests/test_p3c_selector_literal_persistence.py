@@ -13,8 +13,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from scripts.k9b_otel_demo_lab_k8s_detection_phase import (
     _populate_selector_literal_from_p2b,
 )
