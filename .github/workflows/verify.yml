@@ -181,6 +181,16 @@ jobs:
           retention-days: 7
           compression-level: 9
 
+      - name: Upload JUnit XML artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-xml-shard-${{ matrix.shard_index }}-${{ github.run_id }}
+          path: |
+            artifacts/junit/
+          retention-days: 7
+          compression-level: 9
+
   # Verify shard union completeness
   python-unit-shard-union:
     needs: python-unit-tests
