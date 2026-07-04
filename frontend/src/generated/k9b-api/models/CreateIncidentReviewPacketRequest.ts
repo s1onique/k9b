@@ -21,10 +21,10 @@ import { mapValues } from '../runtime';
 export interface CreateIncidentReviewPacketRequest {
     /**
      * Incident evidence bundle
-     * @type {object}
+     * @type {{ [key: string]: any; }}
      * @memberof CreateIncidentReviewPacketRequest
      */
-    bundle: object;
+    bundle: { [key: string]: any; };
     /**
      * Output format (default: markdown)
      * @type {string}

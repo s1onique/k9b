@@ -7,7 +7,7 @@ Incident review packet generation request
 
 Name | Type
 ------------ | -------------
-`bundle` | object
+`bundle` | { [key: string]: any; }
 `format` | string
 
 ## Example

@@ -52,7 +52,7 @@ export function CaptureIncidentSnapshotRequestFromJSONTyped(json: any, ignoreDis
     return {
         
         'namespace': json['namespace'],
-        'sinceHours': json['since_hours'] == null ? undefined : json['since_hours'],
+        'sinceHours': json['sinceHours'] == null ? undefined : json['sinceHours'],
     };
 }
 
@@ -68,7 +68,7 @@ export function CaptureIncidentSnapshotRequestToJSONTyped(value?: CaptureInciden
     return {
         
         'namespace': value['namespace'],
-        'since_hours': value['sinceHours'],
+        'sinceHours': value['sinceHours'],
     };
 }
 

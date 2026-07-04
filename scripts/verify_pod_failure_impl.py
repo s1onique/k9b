@@ -225,6 +225,7 @@ def verify_pod_failure_symptom(
     deadline: int = 120,
     poll_interval: int = 5,
     artifact_dir: Path | None = None,
+    wait_timeout: int = 60,
 ) -> SymptomVerificationResult:
     """Verify pod-failure symptom with state-aware polling.
 
@@ -235,6 +236,7 @@ def verify_pod_failure_symptom(
         deadline: Maximum seconds to wait
         poll_interval: Seconds between polls
         artifact_dir: Optional directory for artifacts
+        wait_timeout: Maximum seconds to wait for pod to exist (default 60s)
 
     Returns:
         SymptomVerificationResult with classification
@@ -250,7 +252,6 @@ def verify_pod_failure_symptom(
 
     # First, wait for pod to exist
     wait_start = time.time()
-    wait_timeout = 60
     while time.time() - wait_start < wait_timeout:
         rc, _, _ = run_kubectl(kubeconfig, namespace, ["get", "pod", pod_name])
         if rc == 0:

@@ -37,8 +37,17 @@ def _curl_service_pod(
     namespace: str,
     target_url: str,
     timeout_seconds: int = 30,
+    poll_interval: int = 5,
 ) -> CurlResult:
     """Curl a URL from a temporary curlimages/curl pod.
+    
+    Args:
+        kubeconfig: Path to kubeconfig
+        namespace: Namespace to create pod in
+        target_url: URL to curl
+        timeout_seconds: Maximum time to wait for curl (default 30s)
+        poll_interval: Seconds between pod status checks (default 5s, can be
+            reduced for faster testing when using mocks
     
     Returns:
         CurlResult with detailed diagnostics
@@ -122,8 +131,8 @@ spec:
                 elif pod_phase == "Failed":
                     break
             
-            time.sleep(5)
-            elapsed += 5
+            time.sleep(poll_interval)
+            elapsed += poll_interval
         
         # Get pod logs
         logs_result = subprocess.run(

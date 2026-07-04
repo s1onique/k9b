@@ -3,11 +3,21 @@
 These tests verify:
 1. Host-only extraction from URL (strip http://, https://, :port, and path)
 2. DNS resolution receives host-only, not host:port
+
+OPTIMIZED: Tests that call _curl_service_pod mock time.sleep to avoid 35s waits.
 """
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
+
+
+# Use fast poll_interval in tests and patch time.sleep for pod-wait loops
+def _mock_time_sleep() -> MagicMock:
+    """Return a mock that makes time.sleep instant."""
+    mock = MagicMock()
+    mock.return_value = None
+    return mock
 
 
 class TestHostExtractionFromUrl:
@@ -75,7 +85,8 @@ class TestHostExtractionFromUrl:
         assert host == "k9b-backend.k9b.svc.cluster.local"
         # Should NOT be k9b-backend.k9b.svc.cluster.local:8080
 
-    def test_curl_pod_receives_correct_host(self) -> None:
+    @patch("scripts.lab_common.provider_curl_helpers.time.sleep")
+    def test_curl_pod_receives_correct_host(self, mock_sleep: MagicMock) -> None:
         """Verify _curl_service_pod extracts host-only for nslookup."""
         from scripts.lab_common.provider_curl_helpers import _curl_service_pod
         
@@ -115,7 +126,8 @@ class TestHostExtractionFromUrl:
 class TestDiagnosticOutputIsolation:
     """Tests for diagnostic output isolation (RESOLVING_HOST vs JSON body)."""
 
-    def test_resolving_host_marker_exists(self) -> None:
+    @patch("scripts.lab_common.provider_curl_helpers.time.sleep")
+    def test_resolving_host_marker_exists(self, mock_sleep: MagicMock) -> None:
         """RESOLVING_HOST marker should exist in pod manifest for diagnostics."""
         from scripts.lab_common.provider_curl_helpers import _curl_service_pod
         

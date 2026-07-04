@@ -39,7 +39,10 @@ class TestVerifyPodFailureSymptomIntegration(unittest.TestCase):
         self, mock_sleep: MagicMock, mock_kubectl: MagicMock
     ) -> None:
         """Should return timeout when pod not found."""
+        # Always return failure (pod not found)
         mock_kubectl.return_value = (1, "", "not found")
+        # Make sleep instant
+        mock_sleep.return_value = None
 
         with tempfile.TemporaryDirectory() as tmpdir:
             result = verify_pod_failure_symptom(
@@ -49,6 +52,7 @@ class TestVerifyPodFailureSymptomIntegration(unittest.TestCase):
                 deadline=10,
                 poll_interval=1,
                 artifact_dir=Path(tmpdir),
+                wait_timeout=1,  # Fast timeout instead of 60s
             )
 
         self.assertEqual(result.symptom_class, SymptomClass.TIMEOUT)
@@ -61,6 +65,9 @@ class TestVerifyPodFailureSymptomIntegration(unittest.TestCase):
         self, mock_sleep: MagicMock, mock_kubectl: MagicMock
     ) -> None:
         """Should continue polling during Pending/ContainerCreating."""
+        # Make sleep instant to avoid slow polling
+        mock_sleep.return_value = None
+
         call_count = 0
 
         def kubectl_side_effect(*args: str, **kwargs: int) -> tuple[int, str, str]:
@@ -115,6 +122,9 @@ class TestVerifyPodFailureSymptomIntegration(unittest.TestCase):
         self, mock_sleep: MagicMock, mock_kubectl: MagicMock
     ) -> None:
         """Should return fatal result for ImagePullBackOff."""
+        # Make sleep instant
+        mock_sleep.return_value = None
+
         call_count = 0
 
         def kubectl_side_effect(*args: str, **kwargs: int) -> tuple[int, str, str]:
