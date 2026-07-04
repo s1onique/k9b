@@ -315,3 +315,43 @@ class TestStreamSeparationRegression:
         assert payload.envelope_detected is False
         assert payload.json_body == raw
         assert payload.raw_suffix == "NOT_A_CURL_ENVELOPE"
+
+    def test_stdout_block_with_concatenated_json_extracted_for_classification(self) -> None:
+        """STDOUT_BLOCK with concatenated JSON should extract stdout for downstream classification.
+
+        The extractor handles the transport envelope (STDOUT_BLOCK, STDERR_BLOCK, curl metadata)
+        and passes the stdout content to classification. Concatenated JSON is a classification
+        failure (invalid_json), not an extraction failure.
+
+        The extractor preserves trailing newline to signal end of first JSON document.
+        """
+        raw = (
+            "STDOUT_BLOCK\n"
+            '{"available": true}\n'
+            '{"provider": "test"}\n'
+            "STDERR_BLOCK\n"
+            "CURL_EXIT=0\n"
+            "HTTP_CODE=200\n"
+        )
+        payload = _extract_provider_health_payload(raw)
+
+        # Envelope is detected
+        assert payload.envelope_detected is True
+        assert payload.curl_exit == 0
+        assert payload.http_code == 200
+        assert payload.stderr_block == ""
+
+        # The stdout part contains concatenated JSON - classification will reject this
+        # as invalid_json (not extraction contamination)
+        # Trailing newline is preserved to signal end of first JSON document
+        assert payload.json_body == '{"available": true}\n{"provider": "test"}\n'
+
+        # Classification via _classify_provider_health_body should detect concatenated JSON
+        # Note: _extract_clean_or_contaminated_json uses json.loads which only parses first object
+        from scripts.lab_common.provider_preflight_health import (
+            _classify_provider_health_body,
+        )
+
+        failure_class, parsed, detail = _classify_provider_health_body(payload.json_body)
+        assert failure_class == "provider_health_invalid_json"
+        assert parsed is None

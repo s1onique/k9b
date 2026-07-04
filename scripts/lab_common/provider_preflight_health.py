@@ -86,6 +86,25 @@ def _debug_dump_provider_health_raw(raw_output: str) -> None:
     print("::endgroup::")
 
 
+STDOUT_MARKER = "STDOUT_BLOCK\n"
+STDERR_MARKER = "\nSTDERR_BLOCK\n"
+
+
+def _parse_stderr_curl_suffix(suffix: str) -> tuple[str, int | None, int | None]:
+    """Parse stderr and curl metadata from known successful envelope."""
+    stderr_lines: list[str] = []
+    curl_exit: int | None = None
+    http_code: int | None = None
+    for line in suffix.splitlines():
+        if line.startswith("CURL_EXIT="):
+            curl_exit = int(line.removeprefix("CURL_EXIT="))
+        elif line.startswith("HTTP_CODE="):
+            http_code = int(line.removeprefix("HTTP_CODE="))
+        elif line:
+            stderr_lines.append(line)
+    return "\n".join(stderr_lines), curl_exit, http_code
+
+
 def _extract_provider_health_payload(raw_output: str) -> ProviderHealthPayload:
     """Extract provider health JSON from raw curl output with known envelope.
 
@@ -104,12 +123,43 @@ def _extract_provider_health_payload(raw_output: str) -> ProviderHealthPayload:
       - CURL_EXIT=<code>
       - HTTP_CODE=<code>
 
-    The marker-based parsing in _curl_service_pod/_curl_exec_pod already
-    extracts body and metadata separately. The remaining envelope handling here
-    processes the post-extraction output where:
-      - STDERR_BLOCK appears AFTER the JSON body (not before)
-      - CURL_EXIT and HTTP_CODE follow STDERR_BLOCK
+    This function handles both forms:
+      - Clean JSON without envelope
+      - JSON with STDOUT_BLOCK prefix and optional stderr/curl metadata
+      - JSON with STDERR_BLOCK suffix and optional curl metadata
     """
+    # Handle STDOUT_BLOCK prefix envelope
+    if raw_output.startswith(STDOUT_MARKER):
+        body = raw_output.removeprefix(STDOUT_MARKER)
+
+        if STDERR_MARKER in body:
+            stdout_part, suffix = body.split(STDERR_MARKER, 1)
+            stderr_block, curl_exit, http_code = _parse_stderr_curl_suffix(suffix)
+
+            # Preserve trailing newline in json_body to signal end of first JSON document
+            # for downstream classification (concatenated JSON detection)
+            json_body = stdout_part.strip()
+            if not json_body.endswith("\n"):
+                json_body = json_body + "\n"
+
+            return ProviderHealthPayload(
+                json_body=json_body,
+                stderr_block=stderr_block,
+                curl_exit=curl_exit,
+                http_code=http_code,
+                envelope_detected=True,
+                raw_suffix=suffix,
+            )
+
+        return ProviderHealthPayload(
+            json_body=body.strip(),
+            stderr_block="",
+            curl_exit=None,
+            http_code=None,
+            envelope_detected=True,
+            raw_suffix="",
+        )
+
     text = raw_output.strip()
 
     decoder = json.JSONDecoder()
