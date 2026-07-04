@@ -343,10 +343,10 @@ class TestP4cLiveLabFailingLogRegression:
             _iter_backend_incident_signals,
         )
 
-        all_signals = (
-            incident_for_extraction.get("signals", [])
-            + _iter_backend_incident_signals(backend_incident_detail)
-        )
+        all_signals = [
+            *incident_for_extraction.get("signals", []),
+            *_iter_backend_incident_signals(backend_incident_detail),
+        ]
         matching_signals_count = len([s for s in all_signals if isinstance(s, dict) and _is_failed_scheduling_signal(s)])
         assert matching_signals_count > 0, f"matching_signals must be > 0, got {matching_signals_count}"
 
