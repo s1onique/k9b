@@ -1,14 +1,42 @@
-"""Tests for CLI argument parsing, subprocess behavior, and integration workflows."""
+"""Tests for CLI argument parsing, subprocess behavior, and integration workflows.
+
+Optimization: Use module-scoped collected nodeids fixture to avoid repeated
+pytest --collect-only subprocess calls. Keep CLI smoke tests for real wiring.
+"""
 from __future__ import annotations
 
 import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 # Import the sharding module
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
 import shard_tests
+
+
+class CollectedNodeids(NamedTuple):
+    """Cached collection result for use across tests."""
+    nodeids: list[str]
+    returncode: int
+
+
+# Module-scoped fixture for collected nodeids (computed once per test session)
+_collected_nodeids: CollectedNodeids | None = None
+
+
+def _get_collected_nodeids() -> CollectedNodeids:
+    """Get cached collection results or collect fresh."""
+    global _collected_nodeids
+    if _collected_nodeids is None:
+        import test_collection
+        result = test_collection.collect_test_nodeids()
+        _collected_nodeids = CollectedNodeids(
+            nodeids=list(result.nodeids),
+            returncode=result.returncode,
+        )
+    return _collected_nodeids
 
 
 class TestCLIParsing:
@@ -48,7 +76,7 @@ class TestCLIParsing:
         assert result.returncode == 1
 
     def test_collect_only_outputs_nodeids(self) -> None:
-        """--collect-only outputs nodeids without sharding."""
+        """--collect-only outputs nodeids without sharding (CLI smoke test)."""
         result = subprocess.run(
             [
                 sys.executable,
@@ -67,7 +95,7 @@ class TestCLIParsing:
         assert len(lines) > 0
 
     def test_metrics_json_output(self) -> None:
-        """--metrics outputs valid JSON."""
+        """--metrics outputs valid JSON (CLI smoke test)."""
         result = subprocess.run(
             [
                 sys.executable,
@@ -89,23 +117,17 @@ class TestCLIParsing:
 
 
 class TestIntegration:
-    """Integration tests for the full sharding workflow."""
+    """Integration tests for the full sharding workflow.
+
+    Uses cached collection results to avoid repeated pytest --collect-only calls.
+    """
 
     def test_four_shard_completeness(self) -> None:
         """4-shard assignment covers all nodeids exactly once."""
-        import test_collection
+        collected = _get_collected_nodeids()
+        assert len(collected.nodeids) > 0, "Should collect some nodeids"
 
-        # Collect all nodeids using the shared collection helper
-        # (tests/ is appended automatically by build_collection_command)
-        # Note: pytest may return non-zero rc if some files have import errors,
-        # but the collection helper is lenient and returns success if nodeids were collected.
-        collection_result = test_collection.collect_test_nodeids()
-
-        # The lenient collection returns success if nodeids were collected
-        assert len(collection_result.nodeids) > 0, "Should collect some nodeids despite partial errors"
-
-        all_nodeids = list(collection_result.nodeids)
-        assert len(all_nodeids) > 0
+        all_nodeids = collected.nodeids
 
         # Assign to 4 shards
         shards = shard_tests.assign_shards_lpt(all_nodeids, {}, 4)
@@ -120,18 +142,8 @@ class TestIntegration:
 
     def test_shard_union_matches_collection(self) -> None:
         """Union of all shards equals collected nodeids."""
-        import test_collection
-
-        # Collect using the shared collection helper
-        # (tests/ is appended automatically by build_collection_command)
-        cmd = test_collection.build_collection_command(include_allowed_ignores=False)
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=Path(__file__).parent.parent.parent)
-
-        all_nodeids = set()
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("tests/") and "::" in line:
-                all_nodeids.add(line)
+        collected = _get_collected_nodeids()
+        all_nodeids = set(collected.nodeids)
 
         # Shard into 4
         shards = shard_tests.assign_shards_lpt(list(all_nodeids), {}, 4)
@@ -142,6 +154,42 @@ class TestIntegration:
             union.update(shard.nodeids)
 
         assert union == all_nodeids
+
+    def test_no_duplicate_nodeids_across_shards(self) -> None:
+        """No nodeid appears in more than one shard."""
+        collected = _get_collected_nodeids()
+        all_nodeids = collected.nodeids
+
+        # Shard into 4
+        shards = shard_tests.assign_shards_lpt(all_nodeids, {}, 4)
+
+        # Check for duplicates
+        seen: dict[str, int] = {}
+        for shard in shards:
+            for nodeid in shard.nodeids:
+                seen[nodeid] = seen.get(nodeid, 0) + 1
+
+        duplicates = {nid: count for nid, count in seen.items() if count > 1}
+        assert len(duplicates) == 0, f"Found duplicate nodeids: {duplicates}"
+
+    def test_metrics_reflect_shard_distribution(self) -> None:
+        """Metrics JSON correctly reflects shard weights and counts."""
+        collected = _get_collected_nodeids()
+        all_nodeids = collected.nodeids
+
+        # Assign to 4 shards
+        shards = shard_tests.assign_shards_lpt(all_nodeids, {}, 4)
+
+        # Compute metrics directly
+        metrics = shard_tests.compute_shard_metrics(shards)
+
+        assert metrics["num_shards"] == 4
+        assert metrics["total_tests"] == len(all_nodeids)
+        assert len(metrics["shard_weights"]) == 4
+        assert len(metrics["shard_counts"]) == 4
+
+        # Sum of shard counts should equal total
+        assert sum(metrics["shard_counts"]) == len(all_nodeids)
 
     def test_missing_duration_file_falls_back_to_round_robin(self, tmp_path: Path) -> None:
         """Missing duration file should use fallback weights, not fail."""

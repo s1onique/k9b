@@ -278,12 +278,14 @@ class TestDefaultPaths:
 # =============================================================================
 
 
-class TestOasdiffIntegration:
-    """Integration tests requiring oasdiff availability."""
+# Module-level cache for oasdiff availability (computed once per session)
+_oasdiff_available: bool | None = None
 
-    @pytest.fixture
-    def oasdiff_available(self) -> bool:
-        """Check if oasdiff is available via go run."""
+
+def _get_oasdiff_available() -> bool:
+    """Check if oasdiff is available via go run (cached)."""
+    global _oasdiff_available
+    if _oasdiff_available is None:
         import subprocess
 
         try:
@@ -291,15 +293,24 @@ class TestOasdiffIntegration:
                 ["go", "run", "github.com/oasdiff/oasdiff@latest", "--help"],
                 capture_output=True,
                 text=True,
-                timeout=60,
+                timeout=120,
             )
-            return result.returncode == 0
+            _oasdiff_available = result.returncode == 0
         except Exception:
-            return False
+            _oasdiff_available = False
+    return _oasdiff_available
 
-    def test_identical_schemas_passes_oasdiff(self, tmp_path: Path, oasdiff_available: bool) -> None:
+
+class TestOasdiffIntegration:
+    """Integration tests requiring oasdiff availability.
+
+    Keep ONE end-to-end smoke test proving real oasdiff wiring works.
+    Convert repeated schema cases to helper-level tests or mock output parsing.
+    """
+
+    def test_identical_schemas_passes_oasdiff(self, tmp_path: Path) -> None:
         """Test that identical schemas pass oasdiff breaking check."""
-        if not oasdiff_available:
+        if not _get_oasdiff_available():
             pytest.skip("oasdiff not available")
 
         from scripts.verify_openapi_breaking_changes import run_oasdiff_breaking
@@ -317,9 +328,9 @@ class TestOasdiffIntegration:
         assert returncode == 0
         assert "report.txt" in str(report)  # report should exist
 
-    def test_removed_path_fails_oasdiff(self, tmp_path: Path, oasdiff_available: bool) -> None:
+    def test_removed_path_fails_oasdiff(self, tmp_path: Path) -> None:
         """Test that removing a path is detected by oasdiff with --fail-on ERR."""
-        if not oasdiff_available:
+        if not _get_oasdiff_available():
             pytest.skip("oasdiff not available")
 
         from scripts.verify_openapi_breaking_changes import run_oasdiff_breaking
@@ -353,10 +364,31 @@ class TestOasdiffIntegration:
 
         # oasdiff with --fail-on ERR exits non-zero on breaking changes
         assert returncode != 0, f"Expected non-zero exit code for breaking changes, got {returncode}"
-        
+
         report_content = report.read_text()
         assert "api-path-removed" in report_content or "api/test" in report_content, \
             f"Expected path removal detected in report: {report_content}"
+
+    def test_oasdiff_error_output_surfaced(self, tmp_path: Path) -> None:
+        """Test that oasdiff error output is surfaced in report."""
+        if not _get_oasdiff_available():
+            pytest.skip("oasdiff not available")
+
+        from scripts.verify_openapi_breaking_changes import run_oasdiff_breaking
+
+        baseline = tmp_path / "baseline.json"
+        current = tmp_path / "current.json"
+        report = tmp_path / "report.txt"
+
+        # Invalid JSON should cause oasdiff to report an error
+        baseline.write_text('{"openapi": "3.1.0", "info": {"title": "Test", "version": "1.0"}, "paths": {}}')
+        current.write_text('invalid json content')
+
+        returncode, stdout = run_oasdiff_breaking(baseline, current, report)
+
+        report_content = report.read_text()
+        # Should have some error indication
+        assert len(report_content) > 0
 
 
 # =============================================================================

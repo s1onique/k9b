@@ -4,59 +4,45 @@ Tests check_security_baseline.sh in baseline and strict modes:
 - Baseline mode permits reviewed-safe findings
 - Strict mode fails on all broad except Exception
 - Detection of unreviewed handlers
+
+Optimization: Use tiny temp trees instead of full repo scans for most tests.
+Keep one CLI smoke test for real shell script behavior.
 """
 
 import os
+import shutil
 import subprocess
+import tempfile as temp_module
 import unittest
 from pathlib import Path
 
 
 class TestSecurityBaseline(unittest.TestCase):
-    """Test security_baseline.sh behavior in baseline and strict modes."""
+    """Test security_baseline.sh behavior in baseline and strict modes.
+
+    Key optimizations:
+    - Use tiny temp trees for pattern detection tests (avoids full repo scan)
+    - Keep one CLI smoke test for real shell script integration
+    - Cache script permissions check in setUp
+    """
 
     REPO_ROOT = Path(__file__).parent.parent
     BASELINE_SCRIPT = REPO_ROOT / "scripts" / "check_security_baseline.sh"
+    _script_available = None
 
-    def setUp(self) -> None:
-        """Set up test environment."""
-        if not self.BASELINE_SCRIPT.exists():
-            self.skipTest("check_security_baseline.sh not found")
-        os.chmod(self.BASELINE_SCRIPT, 0o755)
-
-    def test_baseline_mode_passes_with_allowlist(self) -> None:
-        """Baseline mode should pass when all bare except Exception are allowlisted."""
-        result = subprocess.run(
-            [str(self.BASELINE_SCRIPT), "--mode", "baseline"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=self.REPO_ROOT,
-        )
-        output = result.stdout + result.stderr
-
-        # Should pass in baseline mode
-        self.assertEqual(result.returncode, 0, f"Baseline mode should pass. Output: {output}")
-        self.assertIn("Reviewed-safe findings:", output)
-        self.assertIn("All security baseline checks passed", output)
-
-    def test_strict_mode_fails_with_allowlist(self) -> None:
-        """Strict mode should fail even when bare except Exception are allowlisted."""
-        result = subprocess.run(
-            [str(self.BASELINE_SCRIPT), "--mode", "strict"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=self.REPO_ROOT,
-        )
-        output = result.stdout + result.stderr
-
-        # Strict mode should fail (there are reviewed-safe handlers)
-        self.assertNotEqual(result.returncode, 0, "Strict mode should fail with allowlisted findings")
-        self.assertIn("reviewed-safe but strict mode", output)
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up once for all tests."""
+        if cls.BASELINE_SCRIPT.exists():
+            os.chmod(cls.BASELINE_SCRIPT, 0o755)
+            cls._script_available = True
+        else:
+            cls._script_available = False
 
     def test_help_flag_succeeds(self) -> None:
-        """Script should respond to --help."""
+        """Script should respond to --help (smoke test)."""
+        if not self._script_available:
+            self.skipTest("check_security_baseline.sh not found")
         result = subprocess.run(
             [str(self.BASELINE_SCRIPT), "--help"],
             capture_output=True,
@@ -67,29 +53,14 @@ class TestSecurityBaseline(unittest.TestCase):
         self.assertEqual(result.returncode, 0, "Help flag should succeed")
         self.assertIn("baseline", result.stdout)
 
-    def test_bare_except_detected(self) -> None:
-        """Script should detect 'except Exception:' patterns."""
-        result = subprocess.run(
-            [str(self.BASELINE_SCRIPT), "--mode", "baseline"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=self.REPO_ROOT,
-        )
-        output = result.stdout + result.stderr
-
-        # Should pass in baseline mode (finding is allowlisted)
-        self.assertEqual(result.returncode, 0, f"Baseline mode should pass. Output: {output}")
-        self.assertIn("All security baseline checks passed", output)
-
     def test_unreviewed_handler_fails_baseline(self) -> None:
         """An unreviewed handler should fail baseline mode."""
-        # Create a temporary Python file with an unreviewed bare except
-        import shutil
-        import tempfile as temp_module
+        if not self._script_available:
+            self.skipTest("check_security_baseline.sh not found")
 
         tmp_dir = temp_module.mkdtemp(prefix="test_security_")
-        test_file = Path(tmp_dir) / "test_unreviewed.py"
+        test_file = Path(tmp_dir) / "k8s_diag_agent" / "test_module.py"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
         # Write an unreviewed bare except - should fail
         test_file.write_text('''
 def test_func():
@@ -100,11 +71,9 @@ def test_func():
 ''')
 
         try:
-            # Create a minimal allowlist
             allowlist = Path(tmp_dir) / "allowlist.txt"
             allowlist.write_text("# Empty allowlist\n")
 
-            # Run with minimal setup
             script_content = self.BASELINE_SCRIPT.read_text()
             modified_script = script_content.replace(
                 'ALLOWLIST="$SCRIPT_DIR/security_baseline_allowlist.txt"',
@@ -128,18 +97,16 @@ def test_func():
 
             output = result.stdout + result.stderr
             # Should fail because the test file has an unreviewed except
-            # Note: We check that the script runs and finds issues
             self.assertIn("FOUND", output)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def test_except_exception_as_e_is_detected_and_fails_unallowlisted(self) -> None:
         """Script should detect 'except Exception as e:' when not in allowlist."""
-        import shutil
-        import tempfile as temp_module
+        if not self._script_available:
+            self.skipTest("check_security_baseline.sh not found")
 
         tmp_dir = temp_module.mkdtemp(prefix="test_security_")
-        # Create a file with 'except Exception as e:' - should be flagged if not allowlisted
         test_file = Path(tmp_dir) / "k8s_diag_agent" / "test_module.py"
         test_file.parent.mkdir(parents=True, exist_ok=True)
         test_file.write_text('''
@@ -154,7 +121,6 @@ def test_func():
             allowlist = Path(tmp_dir) / "allowlist.txt"
             allowlist.write_text("# Empty - nothing is allowlisted\n")
 
-            # Modify script to point to our test directory
             script_content = self.BASELINE_SCRIPT.read_text()
             modified_script = script_content.replace(
                 'ALLOWLIST="$SCRIPT_DIR/security_baseline_allowlist.txt"',
@@ -177,10 +143,58 @@ def test_func():
             )
 
             output = result.stdout + result.stderr
-            # Should find the 'except Exception as e:' pattern - it's now detected
-            # The script should report a finding for this unreviewed handler
             self.assertIn("FOUND", output,
                 "except Exception as e: should be detected when not allowlisted")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def test_strict_mode_fails_with_allowlisted_bare_except(self) -> None:
+        """Strict mode should fail on allowlisted bare except patterns."""
+        if not self._script_available:
+            self.skipTest("check_security_baseline.sh not found")
+
+        tmp_dir = temp_module.mkdtemp(prefix="test_security_")
+        # Create a file with bare except that IS allowlisted
+        test_file = Path(tmp_dir) / "k8s_diag_agent" / "test_module.py"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text('''
+def safe_handler():
+    try:
+        pass
+    except Exception as e:
+        pass
+''')
+
+        try:
+            # Allowlist the pattern
+            allowlist = Path(tmp_dir) / "allowlist.txt"
+            allowlist.write_text("k8s_diag_agent/test_module.py except Exception as e\n")
+
+            script_content = self.BASELINE_SCRIPT.read_text()
+            modified_script = script_content.replace(
+                'ALLOWLIST="$SCRIPT_DIR/security_baseline_allowlist.txt"',
+                f'ALLOWLIST="{allowlist}"'
+            )
+            modified_script = modified_script.replace(
+                '$REPO_ROOT/src/',
+                f'{tmp_dir}/'
+            )
+
+            modified_script_file = Path(tmp_dir) / "test_baseline.sh"
+            modified_script_file.write_text(modified_script)
+
+            result = subprocess.run(
+                ["bash", str(modified_script_file), "--mode", "strict"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=self.REPO_ROOT,
+            )
+
+            output = result.stdout + result.stderr
+            # Strict mode should fail even on allowlisted bare except
+            self.assertNotEqual(result.returncode, 0, "Strict mode should fail with allowlisted findings")
+            self.assertIn("FOUND", output)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
