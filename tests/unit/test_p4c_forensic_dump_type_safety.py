@@ -214,3 +214,53 @@ class TestDumpDiagnosisLoopPassTypeSafety:
 
         assert isinstance(result, dict)
         assert "response_fields_present" in result
+
+
+class TestP4cForensicDumpFacadeExportContract:
+    """Regression tests for P4c forensic dump facade import contract.
+
+    These tests ensure that callers (like k9b_otel_demo_lab_k8s_diagnosis_phase.py)
+    can import the required symbols from the facade module.
+    """
+
+    def test_facade_exports_required_live_lab_imports(self) -> None:
+        """Regression: facade must export all symbols imported by diagnosis_phase.
+
+        This test ensures that when the forensic dump module was split into
+        focused siblings, the facade preserved the public import contract.
+        """
+        import scripts.k9b_otel_demo_lab_p4c_forensic_dump as facade
+
+        # Symbols required by k9b_otel_demo_lab_k8s_diagnosis_phase.py
+        required_exports = [
+            "FORENSIC_DUMP_ENABLED",
+            "check_live_lab_freshness",
+            "dump_backend_incident_detail_before_loop",
+            "dump_backend_runtime_provenance",
+            "dump_p4c_runtime_provenance",
+            "dump_p4c_outcome_input",
+            "write_forensic_summary",
+        ]
+
+        missing = [name for name in required_exports if not hasattr(facade, name)]
+
+        assert missing == [], f"Facade missing required exports: {missing}"
+
+    def test_diagnosis_phase_can_import_facade_symbols(self) -> None:
+        """Regression: diagnosis_phase imports must succeed from facade.
+
+        This is the actual import statement from k9b_otel_demo_lab_k8s_diagnosis_phase.py:
+            from scripts.k9b_otel_demo_lab_p4c_forensic_dump import (
+                FORENSIC_DUMP_ENABLED,
+                dump_backend_incident_detail_before_loop,
+                dump_p4c_outcome_input,
+            )
+        """
+        # This import exercises the exact import pattern used in diagnosis_phase
+        from scripts.k9b_otel_demo_lab_p4c_forensic_dump import (  # noqa: F401
+            FORENSIC_DUMP_ENABLED,
+            dump_backend_incident_detail_before_loop,
+            dump_p4c_outcome_input,
+        )
+
+        # If we reach here, all imports succeeded

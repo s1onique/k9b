@@ -28,6 +28,8 @@ from scripts.k9b_otel_demo_lab_p4c_forensic_dump_evidence import (  # noqa: F401
     FORENSIC_DUMP_ENABLED,
     _get_forensic_dump_dir,
     _mapping_summary,
+    dump_p4c_outcome_input,
+    write_forensic_summary,
 )
 
 # Re-export provenance functions
