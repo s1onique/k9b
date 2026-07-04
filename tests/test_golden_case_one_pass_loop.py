@@ -14,6 +14,16 @@ from unittest.mock import patch
 
 import pytest
 
+from k8s_diag_agent.collect.golden_case_evidence_provider import (
+    GoldenCaseEvidenceProvider,
+)
+from k8s_diag_agent.collect.golden_case_one_pass_diagnosis_loop import (
+    GoldenCaseDeterministicLLMProvider,
+    build_golden_case_case_file,
+    enforce_safety,
+    run_production_diagnosis_loop,
+)
+
 
 def _json_object(value: Any) -> dict[str, Any]:
     """Cast a JSON-loaded value to dict[str, Any], asserting it is a dict.
@@ -25,16 +35,6 @@ def _json_object(value: Any) -> dict[str, Any]:
     assert isinstance(value, dict), f"Expected dict, got {type(value).__name__}"
     return cast(dict[str, Any], value)
 
-
-from k8s_diag_agent.collect.golden_case_evidence_provider import (
-    GoldenCaseEvidenceProvider,
-)
-from k8s_diag_agent.collect.golden_case_one_pass_diagnosis_loop import (
-    GoldenCaseDeterministicLLMProvider,
-    build_golden_case_case_file,
-    enforce_safety,
-    run_production_diagnosis_loop,
-)
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "diagnosis-golden-cases" / "pod-failure-readiness"
 
