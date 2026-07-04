@@ -190,7 +190,7 @@ class TestVerifyPodFailureSymptomIntegration(unittest.TestCase):
             return (0, "{}", "")
 
         mock_kubectl.side_effect = kubectl_side_effect
-        # Make sleep very fast to speed up test
+        # Make sleep instant: eliminates both 2s wait loop and poll delays
         mock_sleep.return_value = None
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -201,6 +201,7 @@ class TestVerifyPodFailureSymptomIntegration(unittest.TestCase):
                 deadline=2,  # Very short deadline
                 poll_interval=0.1,
                 artifact_dir=Path(tmpdir),
+                wait_timeout=0,  # Skip the 2s pod-exists wait loop (pod always found by mock)
             )
 
         # Should eventually timeout

@@ -141,14 +141,20 @@ class TestCurlRcClassification:
         dns_fail_result.body_prefix = ""
         dns_fail_result.stderr_prefix = "Could not resolve host"
 
-        # Reduce deadline for faster test
+        # Mock time.time to advance by a small increment each call, so the retry loop
+        # exhausts quickly instead of waiting the full 60s deadline
+        call_count = [0]
+
+        def fake_time() -> float:
+            call_count[0] += 1
+            # First call: 0, then add enough per call to exhaust deadline in ~5 calls
+            return call_count[0] * 20.0
+
         with patch(
             "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.fetch_backend_incident_detail_result",
             return_value=dns_fail_result,
-        ), patch(
-            "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.P4C_BACKEND_RETRY_DEADLINE_SECONDS",
-            1,  # 1 second deadline for faster test
-        ):
+        ), patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.time.sleep", lambda *args, **kwargs: None), \
+             patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.time.time", fake_time):
             result = fetch_backend_incident_detail_with_retry(
                 kubeconfig="/fake/kubeconfig",
                 namespace="k9b",
@@ -160,6 +166,15 @@ class TestCurlRcClassification:
 
     def test_classify_endpoint_not_ready_after_retries(self) -> None:
         """After retries exhausted, connection refused (curl_rc=7) should be classified as endpoint_not_ready."""
+        # Patch time.time in the retry module so the deadline loop exhausts in ~4 iterations
+        # instead of waiting 60s of real time.
+        call_count = [0]
+
+        def fake_time() -> float:
+            call_count[0] += 1
+            # Advance time by 25s per call: after 4 calls deadline is exhausted
+            return call_count[0] * 25.0
+
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
             FAILURE_BACKEND_ENDPOINT_NOT_READY,
         )
@@ -182,10 +197,8 @@ class TestCurlRcClassification:
         with patch(
             "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.fetch_backend_incident_detail_result",
             return_value=conn_fail_result,
-        ), patch(
-            "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.P4C_BACKEND_RETRY_DEADLINE_SECONDS",
-            1,
-        ):
+        ), patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.time.sleep", lambda *args, **kwargs: None), \
+             patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.time.time", fake_time):
             result = fetch_backend_incident_detail_with_retry(
                 kubeconfig="/fake/kubeconfig",
                 namespace="k9b",
@@ -197,6 +210,15 @@ class TestCurlRcClassification:
 
     def test_classify_http_0_as_endpoint_not_ready(self) -> None:
         """HTTP 0 (no response) should be classified as endpoint_not_ready after retries."""
+        # Patch time.time in the retry module so the deadline loop exhausts in ~4 iterations
+        # instead of waiting 60s of real time.
+        call_count = [0]
+
+        def fake_time() -> float:
+            call_count[0] += 1
+            # Advance time by 25s per call: after 4 calls deadline is exhausted
+            return call_count[0] * 25.0
+
         from scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_contracts import (
             FAILURE_BACKEND_ENDPOINT_NOT_READY,
         )
@@ -219,10 +241,8 @@ class TestCurlRcClassification:
         with patch(
             "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_http.fetch_backend_incident_detail_result",
             return_value=http_0_result,
-        ), patch(
-            "scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.P4C_BACKEND_RETRY_DEADLINE_SECONDS",
-            1,
-        ):
+        ), patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.time.sleep", lambda *args, **kwargs: None), \
+             patch("scripts.k9b_otel_demo_lab_k8s_diagnosis_backend_retry.time.time", fake_time):
             result = fetch_backend_incident_detail_with_retry(
                 kubeconfig="/fake/kubeconfig",
                 namespace="k9b",

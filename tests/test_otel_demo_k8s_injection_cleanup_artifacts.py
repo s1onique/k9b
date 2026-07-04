@@ -48,8 +48,12 @@ class TestK8sInjectionCleanupRecovery:
             return make_kubectl_result(success=True)
 
         import scripts.k9b_otel_demo_lab_k8s_injection_cleanup as cleanup_module
+
+        # Patch kubectl calls and time.sleep (rollout waits are unit-test irrelevant)
         monkeypatch.setattr(cleanup_module, "_kubectl_scale", mock_scale)
         monkeypatch.setattr(cleanup_module, "kubectl_patch", mock_patch)
+        # time.sleep(5) calls simulate Kubernetes rollout waits; not needed for unit test
+        monkeypatch.setattr(cleanup_module.time, "sleep", lambda *args, **kwargs: None)
 
         result = cleanup_unschedulable_shipping_rollout(
             kubeconfig="/fake/kubeconfig",

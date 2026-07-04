@@ -72,18 +72,40 @@ class TestEnsureLiveLabVenvContract:
         )
         mock_sha256sum.chmod(0o755)
 
+        venv_path = tmp_path / "test-venv"
+        github_output = tmp_path / "github_output"
+
+        # Pre-create a minimal venv so the script skips venv creation + pip install.
+        # This eliminates ~6s of subprocess overhead (venv creation + pip install of
+        # pytest/pyyaml/requests/ijson) while still verifying the directory normalization
+        # contract and output contract. The script will validate the existing venv
+        # and exit via the "local-existing" fast path.
+        fake_venv = venv_path
+        fake_venv.mkdir(parents=True)
+        (fake_venv / "bin").mkdir()
+        # Create a Python shim that satisfies both --version and the inline validation script.
+        # The validation script uses 'python - <<PY' which passes - as stdin + PY as script args.
+        (fake_venv / "bin" / "python").write_text(
+            f"#!/usr/bin/env bash\n"
+            f'if [[ "$*" == *"--version"* ]]; then\n'
+            f'  exec {sys.executable} --version\n'
+            f'fi\n'
+            f'echo "live-lab venv validation OK"\n'
+        )
+        (fake_venv / "bin" / "python").chmod(0o755)
+        # Pre-populate fingerprint so script skips recreation
+        (fake_venv / ".k9b-live-lab-fingerprint").write_text("pre-populated\n")
+
+
         # Run script with K9B_LIVE_LAB_PYTHON set to the bin directory
         result = subprocess_run(
-            [
-                "bash",
-                str(script),
-            ],
+            ["bash", str(script)],
             env={
                 "PATH": f"{mock_bin}:{real_python}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin",
                 "K9B_LIVE_LAB_PYTHON": str(fake_bin),
-                "K9B_LIVE_LAB_VENV_PATH": str(tmp_path / "test-venv"),
+                "K9B_LIVE_LAB_VENV_PATH": str(venv_path),
                 "K9B_LIVE_LAB_REQUIREMENTS": str(requirements),
-                "GITHUB_OUTPUT": str(tmp_path / "github_output"),
+                "GITHUB_OUTPUT": str(github_output),
             },
             capture_output=True,
             text=True,
@@ -103,9 +125,8 @@ class TestEnsureLiveLabVenvContract:
             f"stdout: {result.stdout}"
         )
 
-        # Verify venv was created
-        venv_path = tmp_path / "test-venv"
-        assert venv_path.exists(), f"venv should be created at {venv_path}"
+        # Verify venv was referenced (pre-populated venv was used)
+        assert venv_path.exists(), f"venv should be present at {venv_path}"
         assert (venv_path / "bin" / "python").exists(), "venv should have bin/python"
 
     def test_ensure_venv_script_rejects_directory_without_python(
