@@ -143,7 +143,6 @@ class TestForbiddenActions:
             # Known-bad examples that MUST be flagged
             ("actions/setup-python@v6", True),
             ("actions/setup-node@v5", True),
-            ("actions/setup-go@v5", True),
             ("azure/setup-helm@v4", True),
             ("docker/setup-buildx-action@v3", True),
             ("docker/login-action@v4", True),
@@ -153,6 +152,8 @@ class TestForbiddenActions:
             ("actions/cache@v4", False),
             ("docker/build-push-action@v5", False),
             ("./my-local-action", False),
+            # setup-go is allowlisted (tool installer with caching, not setup action)
+            ("actions/setup-go@v5", False),
         ],
     )
     def test_known_bad_examples(self, action: str, violates: bool) -> None:

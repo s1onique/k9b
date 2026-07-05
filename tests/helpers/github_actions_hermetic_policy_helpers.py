@@ -27,21 +27,28 @@ FORBIDDEN_ACTION_PREFIXES = (
     "docker/login-",
 )
 
-# Prefix-based allowlist - these are KNOWN EXCEPTIONS, not preferred patterns
-_ALLOWLIST_PREFIXES = (
+# Prefix-based allowlist for tool installers that use version pinning and caching,
+# and for repo-local actions. These are KNOWN EXCEPTIONS, not preferred patterns.
+#
+# Tool installers (actions/setup-go) differ from forbidden setup-* actions
+# (setup-python, setup-node) because they use built-in Go module caching
+# and install pinned tool versions once per job.
+_ALLOWLIST_PREFIXES: tuple[str, ...] = (
     # Repo-local actions
     "./",
+    # Tool installer action - installs pinned Go tool with built-in caching.
+    "actions/setup-go",
 )
 
 # Exact-match allowlist for unversioned actions
-_ALLOWLIST_EXACT = {
+_ALLOWLIST_EXACT: frozenset[str] = frozenset({
     "actions/checkout",
     "actions/cache",
     "actions/download-artifact",
     "actions/upload-artifact",
     "actions/github-script",
     "github/script",
-}
+})
 
 
 def _is_allowlisted(action: str) -> bool:
