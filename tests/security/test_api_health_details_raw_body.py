@@ -6,8 +6,7 @@ with no trailing data. This catches:
 - Extra data after JSON document
 - HTML or text corruption in response body
 
-Tests use a real HTTP server (HTTPServerTestHarness) to validate the
-actual wire protocol response, not just the handler's _send_json mock.
+Tests use a module-scoped HTTP server to reduce repeated setup overhead.
 """
 
 from __future__ import annotations
@@ -16,14 +15,14 @@ import json
 
 import pytest
 
-pytest_plugins = ("tests.security.server_http_test_support",)
+pytest_plugins = ("tests.security.conftest_http_shared",)
 
 
 class TestHealthDetailsRawBodyContract:
     """Regression tests proving /api/health/details returns exactly one JSON object."""
 
     def test_health_details_returns_single_json_object_no_trailing_data(
-        self, http_harness_no_auth: list
+        self, http_harness_no_auth_module: list
     ) -> None:
         """Raw HTTP response must be exactly one JSON object, no trailing data.
 
@@ -35,7 +34,7 @@ class TestHealthDetailsRawBodyContract:
         Note: The health endpoint may return 200 (healthy) or 503 (unhealthy)
         depending on provider availability in the test harness. We accept both.
         """
-        harness, port, _ = http_harness_no_auth
+        harness, port, _ = http_harness_no_auth_module
 
         # Make actual HTTP request
         status, body, _ = harness.request("GET", "/api/health/details")
@@ -66,14 +65,14 @@ class TestHealthDetailsRawBodyContract:
             )
 
     def test_health_details_json_has_required_fields(
-        self, http_harness_no_auth: list
+        self, http_harness_no_auth_module: list
     ) -> None:
         """Raw HTTP response must contain all required fields for provider preflight.
 
         Note: Accept both 200 and 503 status codes as the test harness may not
         have a fully configured provider.
         """
-        harness, port, _ = http_harness_no_auth
+        harness, port, _ = http_harness_no_auth_module
 
         status, body, headers = harness.request("GET", "/api/health/details")
 
@@ -90,10 +89,10 @@ class TestHealthDetailsRawBodyContract:
         assert isinstance(parsed["dependencies"], list), "'dependencies' must be a list"
 
     def test_health_details_content_type_is_json(
-        self, http_harness_no_auth: list
+        self, http_harness_no_auth_module: list
     ) -> None:
         """Response Content-Type must be application/json."""
-        harness, port, _ = http_harness_no_auth
+        harness, port, _ = http_harness_no_auth_module
 
         _, body, headers = harness.request("GET", "/api/health/details")
 

@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import tempfile
 import unittest
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
@@ -64,17 +65,28 @@ from k8s_diag_agent.health.loop import (
     determine_pair_trigger_reasons,
 )
 
+# Module-scoped fixtures loaded once per test module (shared across all test instances)
+_MODULE_PATTERN_SNAPSHOTS: dict[str, ClusterSnapshot] | None = None
+
+
+def _get_pattern_snapshots() -> dict[str, ClusterSnapshot]:
+    """Load pattern snapshots once at module level."""
+    global _MODULE_PATTERN_SNAPSHOTS
+    if _MODULE_PATTERN_SNAPSHOTS is None:
+        path = Path("tests/fixtures/snapshots/deterministic-patterns.json")
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        snapshots = extract_cluster_snapshots(raw)
+        _MODULE_PATTERN_SNAPSHOTS = {s.metadata.cluster_id: s for s in snapshots}
+    return _MODULE_PATTERN_SNAPSHOTS
+
 
 class HealthLoopTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.tmp_dir = Path("tests/tmp-health")
-        if self.tmp_dir.exists():
-            shutil.rmtree(self.tmp_dir)
-        self.pattern_snapshots = self._load_pattern_snapshots()
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="test-health-"))
+        self.pattern_snapshots = _get_pattern_snapshots()
 
     def tearDown(self) -> None:
-        if self.tmp_dir.exists():
-            shutil.rmtree(self.tmp_dir)
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     class _StubDrilldownCollector(DrilldownCollector):
         def __init__(self, non_running_pods: Sequence[DrilldownPod] | None = None) -> None:

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest_plugins = ("tests.security.server_http_test_support",)
+pytest_plugins = ("tests.security.conftest_http_shared",)
 
 # =============================================================================
 # TESTS: SYMLINK ESCAPE VIA HTTP
@@ -28,11 +28,11 @@ class TestSymlinkEscapeViaHTTP:
     HTTP behavior (response status/body) rather than the full escape.
     """
 
-    def test_symlink_final_target_not_accessible_via_http(self, http_harness: list) -> None:
+    def test_symlink_final_target_not_accessible_via_http(self, http_harness_module: list) -> None:
         """Symlink pointing to canary must not be accessible via HTTP."""
         import os
 
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_module
         runs_dir = canary.allowed_root
 
         # Create a symlink inside runs_dir pointing to a canary file
@@ -56,11 +56,11 @@ class TestSymlinkEscapeViaHTTP:
             "Symlink escape via HTTP: canary content was served"
         )
 
-    def test_intermediate_symlink_not_followed_via_http(self, http_harness: list) -> None:
+    def test_intermediate_symlink_not_followed_via_http(self, http_harness_module: list) -> None:
         """Symlink directory in intermediate path must not enable escape via HTTP."""
         import os
 
-        harness, port, canary = http_harness
+        harness, port, canary = http_harness_module
         runs_dir = canary.allowed_root
 
         # Create a symlink directory pointing to canary parent
