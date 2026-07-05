@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -309,11 +311,14 @@ class TestOasdiffIntegration:
     """Integration tests requiring oasdiff availability.
 
     Keep ONE end-to-end smoke test proving real oasdiff wiring works.
-    Convert repeated schema cases to helper-level tests or mock output parsing.
+    Convert repeated schema cases to helper-level tests with fake subprocess.
     """
 
     def test_identical_schemas_passes_oasdiff(self, tmp_path: Path) -> None:
-        """Test that identical schemas pass oasdiff breaking check."""
+        """Test that identical schemas pass oasdiff breaking check.
+        
+        This is the ONE real oasdiff smoke test proving the external-tool wiring.
+        """
         if not _get_oasdiff_available():
             pytest.skip("oasdiff not available")
 
@@ -333,12 +338,11 @@ class TestOasdiffIntegration:
         assert "report.txt" in str(report)  # report should exist
 
     def test_removed_path_fails_oasdiff(self, tmp_path: Path) -> None:
-        """Test that removing a path is detected by oasdiff with --fail-on ERR."""
-        if not _get_oasdiff_available():
-            pytest.skip("oasdiff not available")
-
-        from scripts.verify_openapi_breaking_changes import run_oasdiff_breaking
-
+        """Test that removing a path is detected by oasdiff with --fail-on ERR.
+        
+        Uses fake subprocess to avoid repeated real 'go run' invocations.
+        Verifies the contract: non-zero exit + breaking-change report content.
+        """
         baseline = tmp_path / "baseline.json"
         current = tmp_path / "current.json"
         report = tmp_path / "report.txt"
@@ -364,7 +368,16 @@ class TestOasdiffIntegration:
         }
         current.write_text(json.dumps(current_data, indent=2))
 
-        returncode, stdout = run_oasdiff_breaking(baseline, current, report)
+        # Fake oasdiff output: non-zero exit + breaking change report
+        fake_report = '[{"id":"api-path-removed","path":"/api/test"}]'
+        with patch("scripts.verify_openapi_breaking_changes.subprocess.run") as mock_run:
+            mock_run.return_value = SimpleNamespace(
+                returncode=1,
+                stdout=f"Breaking changes found:\n{fake_report}",
+                stderr="",
+            )
+            from scripts.verify_openapi_breaking_changes import run_oasdiff_breaking
+            returncode, stdout = run_oasdiff_breaking(baseline, current, report)
 
         # oasdiff with --fail-on ERR exits non-zero on breaking changes
         assert returncode != 0, f"Expected non-zero exit code for breaking changes, got {returncode}"
@@ -374,12 +387,11 @@ class TestOasdiffIntegration:
             f"Expected path removal detected in report: {report_content}"
 
     def test_oasdiff_error_output_surfaced(self, tmp_path: Path) -> None:
-        """Test that oasdiff error output is surfaced in report."""
-        if not _get_oasdiff_available():
-            pytest.skip("oasdiff not available")
-
-        from scripts.verify_openapi_breaking_changes import run_oasdiff_breaking
-
+        """Test that oasdiff error output is surfaced in report.
+        
+        Uses fake subprocess to avoid repeated real 'go run' invocations.
+        Verifies the contract: error output is written to report file.
+        """
         baseline = tmp_path / "baseline.json"
         current = tmp_path / "current.json"
         report = tmp_path / "report.txt"
@@ -388,11 +400,21 @@ class TestOasdiffIntegration:
         baseline.write_text('{"openapi": "3.1.0", "info": {"title": "Test", "version": "1.0"}, "paths": {}}')
         current.write_text('invalid json content')
 
-        returncode, stdout = run_oasdiff_breaking(baseline, current, report)
+        # Fake oasdiff error output
+        with patch("scripts.verify_openapi_breaking_changes.subprocess.run") as mock_run:
+            mock_run.return_value = SimpleNamespace(
+                returncode=1,
+                stdout="",
+                stderr="Error: failed to read OpenAPI spec: invalid JSON",
+            )
+            from scripts.verify_openapi_breaking_changes import run_oasdiff_breaking
+            returncode, stdout = run_oasdiff_breaking(baseline, current, report)
 
         report_content = report.read_text()
         # Should have some error indication
         assert len(report_content) > 0
+        # Stderr should be included in report
+        assert "Error" in report_content or "invalid" in report_content.lower()
 
 
 # =============================================================================
