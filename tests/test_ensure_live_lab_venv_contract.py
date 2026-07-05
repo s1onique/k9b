@@ -10,6 +10,7 @@ Split from test_k9b_live_lab_toolchain_action.py to keep files under 500 lines.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -83,18 +84,71 @@ class TestEnsureLiveLabVenvContract:
         fake_venv = venv_path
         fake_venv.mkdir(parents=True)
         (fake_venv / "bin").mkdir()
-        # Create a Python shim that satisfies both --version and the inline validation script.
-        # The validation script uses 'python - <<PY' which passes - as stdin + PY as script args.
+        # Create a Python shim that handles all invocation shapes used by the script:
+        # - python --version (for validation)
+        # - python -VV (for fingerprint calculation)
+        # - python - <<'PY' (heredoc validation via stdin)
+        # - python -c '...' (inline script execution)
+        # The shim passes stdin through to the real Python, enabling the validation
+        # importlib checks to succeed against the system Python's installed packages.
         (fake_venv / "bin" / "python").write_text(
             f"#!/usr/bin/env bash\n"
-            f'if [[ "$*" == *"--version"* ]]; then\n'
+            f'if [[ " $*" == *" -VV"* ]]; then\n'
+            f'  exec {sys.executable} -VV\n'
+            f'elif [[ " $* " == *" --version "* ]] || [[ "$*" == "--version" ]]; then\n'
             f'  exec {sys.executable} --version\n'
+            f'elif [[ "$1" == "-" ]]; then\n'
+            f'  exec {sys.executable} "$@"\n'
+            f'elif [[ "$1" == "-c" ]]; then\n'
+            f'  exec {sys.executable} "$@"\n'
             f'fi\n'
-            f'echo "live-lab venv validation OK"\n'
+            f'exec {sys.executable} "$@"\n'
         )
         (fake_venv / "bin" / "python").chmod(0o755)
-        # Pre-populate fingerprint so script skips recreation
-        (fake_venv / ".k9b-live-lab-fingerprint").write_text("pre-populated\n")
+
+        # Compute the expected fingerprint the script calculates, so the script
+        # takes the existing-venv fast path instead of recreating.
+        # This replicates venv_fingerprint() from the script:
+        #   { python -VV; sha256sum requirements; sha256sum pyproject.toml; } | sha256sum
+        # The mock sha256sum in PATH returns a fixed hash regardless of input.
+        pyproj = project_root / "pyproject.toml"
+        pyproj_exists = pyproj.exists()
+        pyproj_arg = str(pyproj) if pyproj_exists else "/dev/null"
+
+        pyver_result = subprocess_run(
+            [str(sys.executable), "-VV"],
+            capture_output=True,
+            text=True,
+        )
+        pyver_hash = subprocess_run(
+            ["sha256sum"],
+            input=pyver_result.stdout,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PATH": f"{mock_bin}:{os.environ.get('PATH', '')}"},
+        )
+        req_hash = subprocess_run(
+            ["sha256sum", str(requirements)],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PATH": f"{mock_bin}:{os.environ.get('PATH', '')}"},
+        )
+        pyproj_hash = subprocess_run(
+            ["sha256sum", pyproj_arg],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PATH": f"{mock_bin}:{os.environ.get('PATH', '')}"},
+        )
+        combined = f"{pyver_hash.stdout.strip()}\n{req_hash.stdout.strip()}\n{pyproj_hash.stdout.strip()}\n"
+        fp_result = subprocess_run(
+            ["sha256sum"],
+            input=combined,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PATH": f"{mock_bin}:{os.environ.get('PATH', '')}"},
+        )
+        expected_fingerprint = fp_result.stdout.split()[0]
+        (fake_venv / ".k9b-live-lab-fingerprint").write_text(expected_fingerprint + "\n")
 
 
         # Run script with K9B_LIVE_LAB_PYTHON set to the bin directory
@@ -122,6 +176,21 @@ class TestEnsureLiveLabVenvContract:
         # Verify the script normalized the directory to executable path
         assert f"python_bin={fake_bin}/python" in result.stdout, (
             f"Script should normalize directory to executable path.\n"
+            f"stdout: {result.stdout}"
+        )
+
+        # Regression guard: verify the script took the existing-venv fast path,
+        # not the slow create-fresh path (which involves real pip install).
+        # The script writes venv-source=local-existing to GITHUB_OUTPUT on the fast path.
+        assert github_output.exists(), f"GITHUB_OUTPUT file should exist at {github_output}"
+        github_output_content = github_output.read_text()
+        assert "venv-source=local-existing" in github_output_content, (
+            f"Script should use existing venv fast path (writes venv-source=local-existing).\n"
+            f"GITHUB_OUTPUT contents: {github_output_content}"
+        )
+        # Negative guards: no fresh-create messages
+        assert "Creating fresh" not in result.stdout, (
+            f"Script should NOT create fresh venv in this test.\n"
             f"stdout: {result.stdout}"
         )
 
