@@ -6,6 +6,7 @@ to keep the main server module below size thresholds. These handlers manage:
 - Path matching and route delegation
 - Authentication validation for mutation endpoints
 - Exception boundaries at the route level
+- OpenTelemetry HTTP request span instrumentation (when enabled)
 
 All functions are designed to work with HealthUIRequestHandler instances.
 """
@@ -48,6 +49,25 @@ def handle_get_request(handler: HealthUIRequestHandler) -> None:
     handler._request_query = query
     handler._is_static = not route.startswith("/api/") and route != "/artifact"
 
+    # Wrap with OpenTelemetry tracing if enabled
+    from ..observability import trace_http_request
+
+    trace_http_request(
+        method="GET",
+        path=route,
+        handler_name="handle_get_request",
+        call=lambda: _handle_get_request_impl(handler, route, query),
+    )
+
+
+def _handle_get_request_impl(handler: HealthUIRequestHandler, route: str, query: str) -> None:
+    """Internal implementation of GET request handling (traced).
+
+    Args:
+        handler: The HTTP request handler instance
+        route: The request path
+        query: The query string
+    """
     try:
         # AUTH-06: Check authentication for protected routes (API and artifact serving)
         # Note: /artifact requires auth as it may expose sensitive cluster data
@@ -103,6 +123,24 @@ def handle_post_request(handler: HealthUIRequestHandler) -> None:
     handler._request_query = ""
     handler._is_static = False
 
+    # Wrap with OpenTelemetry tracing if enabled
+    from ..observability import trace_http_request
+
+    trace_http_request(
+        method="POST",
+        path=route,
+        handler_name="handle_post_request",
+        call=lambda: _handle_post_request_impl(handler, route),
+    )
+
+
+def _handle_post_request_impl(handler: HealthUIRequestHandler, route: str) -> None:
+    """Internal implementation of POST request handling (traced).
+
+    Args:
+        handler: The HTTP request handler instance
+        route: The request path
+    """
     # AUTH-06: Check authentication for protected routes (includes POST mutations)
     # NOTE: require_auth(), via check_route_auth(), has already sent JSON 401 on auth failure.
     # We only need to log completion and return.
