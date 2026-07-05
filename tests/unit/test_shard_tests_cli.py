@@ -34,14 +34,21 @@ class CLIMetricsResult(NamedTuple):
     returncode: int
 
 
+class CLIAllShardsMetricsResult(NamedTuple):
+    """Cached CLI --metrics result with --total 4 for use across tests."""
+    stdout: str
+    returncode: int
+
+
 # Module-scoped fixtures (computed once per test session)
 _collected_nodeids: CollectedNodeids | None = None
 _cli_collect_result: CLICollectResult | None = None
 _cli_metrics_result: CLIMetricsResult | None = None
+_cli_all_shards_metrics_result: CLIAllShardsMetricsResult | None = None
 
 
 def _get_collected_nodeids() -> CollectedNodeids:
-    """Get cached collection results or collect fresh."""
+    """Get cached collection results or collect fresh (once per session)."""
     global _collected_nodeids
     if _collected_nodeids is None:
         import test_collection
@@ -76,7 +83,7 @@ def _get_cli_collect_result() -> CLICollectResult:
 
 
 def _get_cli_metrics_result() -> CLIMetricsResult:
-    """Get cached CLI --metrics result or run fresh (once per session)."""
+    """Get cached CLI --metrics (4 shards) result or run fresh (once per session)."""
     global _cli_metrics_result
     if _cli_metrics_result is None:
         result = subprocess.run(
@@ -98,7 +105,11 @@ def _get_cli_metrics_result() -> CLIMetricsResult:
 
 
 class TestCLIParsing:
-    """Tests for CLI argument parsing via main()."""
+    """Tests for CLI argument parsing and end-to-end CLI behavior.
+
+    Preserves CLI subprocess smoke tests for wiring verification.
+    Algorithm correctness is tested via direct function calls (faster, deterministic).
+    """
 
     def test_invalid_shard_index_rejected(self) -> None:
         """Shard index outside valid range exits with error."""
@@ -133,31 +144,24 @@ class TestCLIParsing:
 
         assert result.returncode == 1
 
-    def test_collect_only_outputs_nodeids(self) -> None:
-        """--collect-only outputs nodeids without sharding (CLI smoke test).
-        
-        Uses cached CLI result to avoid repeated subprocess invocation.
-        """
-        result = _get_cli_collect_result()
+    def test_cli_smoke_end_to_end(self) -> None:
+        """End-to-end CLI smoke: --collect-only and --metrics wiring.
 
-        assert result.returncode == 0
-        # Should output some nodeids
-        lines = [line for line in result.stdout.strip().split("\n") if line]
+        Verifies both CLI entry points produce correct output using cached
+        subprocess results to avoid repeated CLI invocation overhead.
+        """
+        collect_result = _get_cli_collect_result()
+        assert collect_result.returncode == 0
+        lines = [line for line in collect_result.stdout.strip().split("\n") if line]
         assert len(lines) > 0
 
-    def test_metrics_json_output(self) -> None:
-        """--metrics outputs valid JSON (CLI smoke test).
-        
-        Uses cached CLI result to avoid repeated subprocess invocation.
-        """
-        result = _get_cli_metrics_result()
-
-        assert result.returncode == 0
-
-        # Should be valid JSON
-        data = json.loads(result.stdout)
-        assert "num_shards" in data
+        metrics_result = _get_cli_metrics_result()
+        assert metrics_result.returncode == 0
+        data = json.loads(metrics_result.stdout)
         assert data["num_shards"] == 4
+        assert "total_tests" in data
+        assert "shard_counts" in data
+        assert "shard_weights" in data
 
 
 class TestIntegration:
@@ -166,73 +170,48 @@ class TestIntegration:
     Uses cached collection results to avoid repeated pytest --collect-only calls.
     """
 
-    def test_four_shard_completeness(self) -> None:
-        """4-shard assignment covers all nodeids exactly once."""
+    def test_four_shard_properties(self) -> None:
+        """Verify all shard correctness properties in one pass.
+
+        Combines completeness, union, duplicate, and metrics checks into one
+        algorithm test. This avoids repeated collection calls across multiple
+        test methods while preserving all meaningful assertions.
+        """
         collected = _get_collected_nodeids()
         assert len(collected.nodeids) > 0, "Should collect some nodeids"
 
         all_nodeids = collected.nodeids
+        all_nodeids_set = set(all_nodeids)
 
-        # Assign to 4 shards
+        # Assign to 4 shards (one computation shared by all assertions)
         shards = shard_tests.assign_shards_lpt(all_nodeids, {}, 4)
 
-        # Verify completeness
+        # Property 1: completeness - all nodeids assigned exactly once
         success = shard_tests.verify_shard_completeness(all_nodeids, shards)
         assert success is True
-
-        # Verify all shards have some work
         for shard in shards:
             assert len(shard.nodeids) > 0
 
-    def test_shard_union_matches_collection(self) -> None:
-        """Union of all shards equals collected nodeids."""
-        collected = _get_collected_nodeids()
-        all_nodeids = set(collected.nodeids)
-
-        # Shard into 4
-        shards = shard_tests.assign_shards_lpt(list(all_nodeids), {}, 4)
-
-        # Collect union
+        # Property 2: union of shards equals collected nodeids
         union = set()
         for shard in shards:
             union.update(shard.nodeids)
+        assert union == all_nodeids_set
 
-        assert union == all_nodeids
-
-    def test_no_duplicate_nodeids_across_shards(self) -> None:
-        """No nodeid appears in more than one shard."""
-        collected = _get_collected_nodeids()
-        all_nodeids = collected.nodeids
-
-        # Shard into 4
-        shards = shard_tests.assign_shards_lpt(all_nodeids, {}, 4)
-
-        # Check for duplicates
+        # Property 3: no duplicate nodeids across shards
         seen: dict[str, int] = {}
         for shard in shards:
             for nodeid in shard.nodeids:
                 seen[nodeid] = seen.get(nodeid, 0) + 1
-
         duplicates = {nid: count for nid, count in seen.items() if count > 1}
         assert len(duplicates) == 0, f"Found duplicate nodeids: {duplicates}"
 
-    def test_metrics_reflect_shard_distribution(self) -> None:
-        """Metrics JSON correctly reflects shard weights and counts."""
-        collected = _get_collected_nodeids()
-        all_nodeids = collected.nodeids
-
-        # Assign to 4 shards
-        shards = shard_tests.assign_shards_lpt(all_nodeids, {}, 4)
-
-        # Compute metrics directly
+        # Property 4: metrics reflect shard distribution
         metrics = shard_tests.compute_shard_metrics(shards)
-
         assert metrics["num_shards"] == 4
         assert metrics["total_tests"] == len(all_nodeids)
         assert len(metrics["shard_weights"]) == 4
         assert len(metrics["shard_counts"]) == 4
-
-        # Sum of shard counts should equal total
         assert sum(metrics["shard_counts"]) == len(all_nodeids)
 
     def test_missing_duration_file_falls_back_to_round_robin(self, tmp_path: Path) -> None:
