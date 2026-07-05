@@ -13,10 +13,9 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
-
 from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
 from k8s_diag_agent.external_analysis.artifact import ExternalAnalysisStatus
+from k8s_diag_agent.external_analysis.openai_compatible_adapter import OpenAICompatibleAdapter
 
 
 class TestOpenaiCompatibleHttpOnly:
@@ -24,7 +23,7 @@ class TestOpenaiCompatibleHttpOnly:
 
     def test_openai_compatible_adapter_http_only_flag(self) -> None:
         """Verify openai_compatible adapter is created with http_only=True."""
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         assert adapter._http_only is True
         # Without env vars, should not have HTTP provider
         assert adapter._http_provider is None
@@ -39,7 +38,7 @@ class TestOpenaiCompatibleHttpOnly:
         monkeypatch.delenv("LLAMA_CPP_BASE_URL", raising=False)
         monkeypatch.delenv("LLAMA_CPP_MODEL", raising=False)
 
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         result = adapter.preflight_check(provider_requested="openai_compatible")
 
         assert result.ok is False
@@ -53,7 +52,7 @@ class TestOpenaiCompatibleHttpOnly:
         monkeypatch.delenv("K9B_EXTERNAL_ANALYSIS_BASE_URL", raising=False)
         monkeypatch.delenv("LLAMA_CPP_BASE_URL", raising=False)
 
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         result = adapter.preflight_check(provider_requested="openai_compatible")
 
         assert result.ok is False
@@ -65,7 +64,7 @@ class TestOpenaiCompatibleHttpOnly:
         monkeypatch.delenv("K9B_EXTERNAL_ANALYSIS_MODEL", raising=False)
         monkeypatch.delenv("LLAMA_CPP_MODEL", raising=False)
 
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         result = adapter.preflight_check(provider_requested="openai_compatible")
 
         assert result.ok is False
@@ -81,7 +80,7 @@ class TestOpenaiCompatibleHttpOnly:
         monkeypatch.delenv("LLAMA_CPP_BASE_URL", raising=False)
         monkeypatch.delenv("LLAMA_CPP_MODEL", raising=False)
 
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         review_path = tmp_path / "review.json"
         review_path.write_text('{"run_id": "test"}')
 
@@ -101,9 +100,9 @@ class TestOpenaiCompatibleHttpOnly:
         assert artifact.duration_ms is not None
         assert artifact.duration_ms >= 0
         # tool_name should be "llamacpp" (adapter instance name)
-        assert artifact.tool_name == "llamacpp"
+        assert artifact.tool_name == "openai_compatible"
         # provider should reflect the normalized name
-        assert artifact.provider == "llamacpp"
+        assert artifact.provider == "openai_compatible"
 
     def test_openai_compatible_does_not_invoke_subprocess(self, monkeypatch: Any, tmp_path: Path) -> None:
         """openai_compatible should never invoke subprocess llamacpp binary."""
@@ -119,10 +118,10 @@ class TestOpenaiCompatibleHttpOnly:
             return "fake output"
 
         with patch(
-            "k8s_diag_agent.external_analysis.llamacpp_adapter._run_subprocess",
+            "k8s_diag_agent.external_analysis.openai_compatible_adapter._run_subprocess",
             fake_run_subprocess
         ):
-            adapter = LlamaCppAdapter(http_only=True)
+            adapter = OpenAICompatibleAdapter(http_only=True)
             review_path = tmp_path / "review.json"
             review_path.write_text('{"run_id": "test"}')
 
@@ -144,7 +143,7 @@ class TestLegacyLlamacppAdapter:
 
     def test_legacy_llamacpp_adapter_http_only_false(self) -> None:
         """Legacy llamacpp adapter should have http_only=False by default."""
-        adapter = LlamaCppAdapter()
+        adapter = OpenAICompatibleAdapter()
         assert adapter._http_only is False
 
     def test_legacy_llamacpp_with_empty_command_skips(self, monkeypatch: Any) -> None:
@@ -154,7 +153,7 @@ class TestLegacyLlamacppAdapter:
         monkeypatch.delenv("LLAMA_CPP_BASE_URL", raising=False)
         monkeypatch.delenv("LLAMA_CPP_MODEL", raising=False)
 
-        adapter = LlamaCppAdapter(command=())
+        adapter = OpenAICompatibleAdapter(command=())
         request = ExternalAnalysisRequest(
             run_id="test-run",
             cluster_label="test-cluster",
@@ -177,10 +176,10 @@ class TestLegacyLlamacppAdapter:
             return "fake analysis output"
 
         with patch(
-            "k8s_diag_agent.external_analysis.llamacpp_adapter._run_subprocess",
+            "k8s_diag_agent.external_analysis.openai_compatible_adapter._run_subprocess",
             fake_run_subprocess
         ):
-            adapter = LlamaCppAdapter(command=("llamacpp", "analysis"))
+            adapter = OpenAICompatibleAdapter(command=("llamacpp", "analysis"))
             review_path = tmp_path / "review.json"
             review_path.write_text('{"run_id": "test"}')
 
@@ -206,7 +205,7 @@ class TestArtifactFieldsForProviderFailures:
         monkeypatch.delenv("LLAMA_CPP_BASE_URL", raising=False)
         monkeypatch.delenv("LLAMA_CPP_MODEL", raising=False)
 
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         review_path = tmp_path / "review.json"
         review_path.write_text('{"run_id": "test"}')
 
@@ -228,7 +227,7 @@ class TestArtifactFieldsForProviderFailures:
         monkeypatch.delenv("LLAMA_CPP_BASE_URL", raising=False)
         monkeypatch.delenv("LLAMA_CPP_MODEL", raising=False)
 
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         review_path = tmp_path / "review.json"
         review_path.write_text('{"run_id": "test"}')
 
@@ -249,7 +248,7 @@ class TestArtifactFieldsForProviderFailures:
         monkeypatch.delenv("LLAMA_CPP_BASE_URL", raising=False)
         monkeypatch.delenv("LLAMA_CPP_MODEL", raising=False)
 
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         review_path = tmp_path / "review.json"
         review_path.write_text('{"run_id": "test"}')
 
@@ -261,7 +260,7 @@ class TestArtifactFieldsForProviderFailures:
         artifact = adapter.run(request)
 
         # tool_name is the adapter instance name, not the provider name
-        assert artifact.tool_name == "llamacpp"
+        assert artifact.tool_name == "openai_compatible"
 
     def test_failure_artifact_payload_is_null(self, monkeypatch: Any, tmp_path: Path) -> None:
         """Provider failure artifact payload should be None (not empty dict)."""
@@ -270,7 +269,7 @@ class TestArtifactFieldsForProviderFailures:
         monkeypatch.delenv("LLAMA_CPP_BASE_URL", raising=False)
         monkeypatch.delenv("LLAMA_CPP_MODEL", raising=False)
 
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         review_path = tmp_path / "review.json"
         review_path.write_text('{"run_id": "test"}')
 
@@ -294,7 +293,7 @@ class TestHelmEnvWiring:
         monkeypatch.setenv("K9B_EXTERNAL_ANALYSIS_MODEL", "test-model")
 
         # Should not raise
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         result = adapter.preflight_check(provider_requested="openai_compatible")
 
         assert result.ok is True
@@ -306,7 +305,7 @@ class TestHelmEnvWiring:
         monkeypatch.setenv("LLAMA_CPP_BASE_URL", "http://llm:8080")
         monkeypatch.setenv("LLAMA_CPP_MODEL", "legacy-model")
 
-        adapter = LlamaCppAdapter(http_only=True)
+        adapter = OpenAICompatibleAdapter(http_only=True)
         result = adapter.preflight_check(provider_requested="openai_compatible")
 
         assert result.ok is True

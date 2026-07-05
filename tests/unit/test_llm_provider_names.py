@@ -13,7 +13,7 @@ from k8s_diag_agent.llm.base import LLMProvider
 from k8s_diag_agent.llm.provider import (
     AVAILABLE_PROVIDERS,
     DEFAULT_PROVIDER_NAME,
-    LEGACY_OPENAI_COMPATIBLE_PROVIDER_NAME,
+    LEGACY_LLAMACPP_PROVIDER_NAME,
     OPENAI_COMPATIBLE_PROVIDER_NAME,
     PROVIDERS,
     get_provider,
@@ -31,11 +31,11 @@ class TestProviderNameConstants(TestCase):
 
     def test_llamacpp_legacy_name(self) -> None:
         """Legacy provider name should be 'llamacpp'."""
-        self.assertEqual(LEGACY_OPENAI_COMPATIBLE_PROVIDER_NAME, "llamacpp")
+        self.assertEqual(LEGACY_LLAMACPP_PROVIDER_NAME, "llamacpp")
 
     def test_canonical_and_legacy_differ(self) -> None:
         """Canonical and legacy names should be different."""
-        self.assertNotEqual(OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_OPENAI_COMPATIBLE_PROVIDER_NAME)
+        self.assertNotEqual(OPENAI_COMPATIBLE_PROVIDER_NAME, LEGACY_LLAMACPP_PROVIDER_NAME)
 
 
 class TestProviderRegistry(TestCase):
@@ -48,13 +48,13 @@ class TestProviderRegistry(TestCase):
 
     def test_llamacpp_alias_registered(self) -> None:
         """Legacy 'llamacpp' alias should be registered for compatibility."""
-        self.assertIn(LEGACY_OPENAI_COMPATIBLE_PROVIDER_NAME, PROVIDERS)
-        self.assertIsInstance(PROVIDERS[LEGACY_OPENAI_COMPATIBLE_PROVIDER_NAME], LLMProvider)
+        self.assertIn(LEGACY_LLAMACPP_PROVIDER_NAME, PROVIDERS)
+        self.assertIsInstance(PROVIDERS[LEGACY_LLAMACPP_PROVIDER_NAME], LLMProvider)
 
     def test_both_names_point_to_same_provider(self) -> None:
         """Both canonical and legacy names should return the same provider instance."""
         canonical = PROVIDERS[OPENAI_COMPATIBLE_PROVIDER_NAME]
-        legacy = PROVIDERS[LEGACY_OPENAI_COMPATIBLE_PROVIDER_NAME]
+        legacy = PROVIDERS[LEGACY_LLAMACPP_PROVIDER_NAME]
         self.assertIs(canonical, legacy)
 
     def test_default_provider_still_available(self) -> None:

@@ -1,10 +1,10 @@
 """Tests that review-enrichment prompts pass through sanitize_prompt().
 
-These tests verify the GAP-P1 mitigation: _build_prompt() in llamacpp_adapter.py
+These tests verify the GAP-P1 mitigation: _build_prompt() in openai_compatible_adapter.py
 MUST call sanitize_prompt() before returning to prevent credential leakage to
 external LLM providers.
 
-REM-P1: Add sanitize_prompt() to _build_prompt() in llamacpp_adapter.
+REM-P1: Add sanitize_prompt() to _build_prompt() in openai_compatible_adapter.
 REM-P3: Add integration test verifying all prompts pass through sanitizer.
 
 Related: docs/security/llm-prompt-security-audit.md GAP-P1
@@ -18,9 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from k8s_diag_agent.external_analysis.llamacpp_adapter import LlamaCppAdapter
-
 from k8s_diag_agent.external_analysis.adapter import ExternalAnalysisRequest
+from k8s_diag_agent.external_analysis.openai_compatible_adapter import OpenAICompatibleAdapter
 from k8s_diag_agent.external_analysis.review_input import (
     AlertmanagerContext,
     ReviewEnrichmentInput,
@@ -45,7 +44,7 @@ class ReviewEnrichmentPromptSanitizationTest(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        self._adapter = LlamaCppAdapter()
+        self._adapter = OpenAICompatibleAdapter()
 
     def _build_context(
         self,
