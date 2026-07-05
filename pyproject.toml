@@ -14,6 +14,11 @@ classifiers = [
     "Topic :: System :: Monitoring",
 ]
 [project.optional-dependencies]
+otel = [
+    "opentelemetry-api>=1.20",
+    "opentelemetry-sdk>=1.20",
+    "opentelemetry-exporter-otlp>=1.20",
+]
 dev = [
     "mypy>=1.9",
     "types-requests>=2.31.0",

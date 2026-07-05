@@ -31,6 +31,40 @@ _SLOW_REQUEST_THRESHOLD_MS = 1000
 _SAFE_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
+def _init_otel_at_startup() -> None:
+    """Initialize OpenTelemetry tracing at server startup.
+
+    This function is called during server startup to configure OpenTelemetry
+    tracing based on environment variables. It logs initialization status.
+
+    The tracing is disabled by default and only activates when
+    K9B_OTEL_ENABLED is explicitly set to a truthy value.
+
+    Tracer provider is optional - server runs without tracing if not configured.
+    """
+    from ..observability import configure_otel, load_otel_config_from_env
+
+    try:
+        config = load_otel_config_from_env()
+    except Exception as exc:
+        print(f"OpenTelemetry: config load error (non-fatal): {exc}", file=sys.stderr)
+        return
+
+    if not config.enabled:
+        return  # Silent - tracing disabled by default is expected
+
+    try:
+        configure_otel(config)
+        print(
+            f"OpenTelemetry: configured (service={config.service_name}, "
+            f"endpoint={config.endpoint}, sample_ratio={config.sample_ratio})",
+            file=sys.stderr,
+        )
+    except Exception as exc:
+        # Log but don't fail startup - tracing is optional
+        print(f"OpenTelemetry: configuration error (non-fatal): {exc}", file=sys.stderr)
+
+
 def _init_diagnosis_provider_at_startup() -> None:
     """Initialize production diagnosis provider at server startup.
 
@@ -168,6 +202,9 @@ def start_ui_server_impl(
     # Normalize and validate runs_dir
     normalized_runs_dir = _normalize_runs_dir(runs_dir)
     _validate_runs_dir(normalized_runs_dir)
+
+    # Initialize OpenTelemetry tracing if configured (disabled by default)
+    _init_otel_at_startup()
 
     # Initialize production diagnosis provider if configured
     _init_diagnosis_provider_at_startup()
