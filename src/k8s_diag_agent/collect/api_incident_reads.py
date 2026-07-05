@@ -21,12 +21,16 @@ import logging
 from collections.abc import Mapping
 from pathlib import Path
 
+from ..observability import (
+    trace_incident_store_get,
+    trace_incident_store_list,
+)
 from ..ui.api_incident_reads import (
     build_incident_detail_payload,
     build_incident_summary_payload,
 )
 from ..ui.api_payloads import IncidentDetailPayload, IncidentSummaryPayload
-from .incident_lifecycle import IncidentStatus
+from .incident_lifecycle import Incident, IncidentStatus
 from .incident_next_check_artifacts import load_next_check_plan_payloads_for_incident
 from .incident_store_provider import get_incident_store
 
@@ -55,10 +59,24 @@ def handle_list_incidents(
             # Invalid status value - return empty list
             return {"incidents": [], "total": 0}
 
-    incidents = store.list_incidents(status=status_filter)
+    def _list_incidents() -> tuple:
+        return store.list_incidents(status=status_filter)
+
+    incidents = trace_incident_store_list(
+        _list_incidents,
+        attributes={"k9b.item.kind": "incident"},
+    )
+
+    def _project_incidents() -> list:
+        return [build_incident_summary_payload(inc) for inc in incidents]
+
+    projected = trace_incident_store_list(
+        _project_incidents,
+        attributes={"k9b.projection_kind": "incident_summary"},
+    )
 
     return {
-        "incidents": [build_incident_summary_payload(inc) for inc in incidents],
+        "incidents": projected,
         "total": len(incidents),
     }
 
@@ -86,7 +104,14 @@ def handle_get_incident(
         Missing or malformed artifacts do not cause errors - they are skipped.
     """
     store = get_incident_store()
-    incident = store.get_incident(incident_id)
+
+    def _get_incident() -> Incident | None:
+        return store.get_incident(incident_id)
+
+    incident = trace_incident_store_get(
+        _get_incident,
+        attributes={"k9b.item.kind": "incident"},
+    )
 
     if incident is None:
         return None
@@ -99,10 +124,16 @@ def handle_get_incident(
             external_analysis_dir,
         )
 
-    return build_incident_detail_payload(
-        incident,
-        external_analysis_dir=external_analysis_dir,
-        next_check_plan_payloads=plan_payloads,
+    def _build_payload() -> IncidentDetailPayload:
+        return build_incident_detail_payload(
+            incident,
+            external_analysis_dir=external_analysis_dir,
+            next_check_plan_payloads=plan_payloads,
+        )
+
+    return trace_incident_store_get(  # type: ignore[no-any-return]
+        _build_payload,
+        attributes={"k9b.projection_kind": "incident_detail"},
     )
 
 

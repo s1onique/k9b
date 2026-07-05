@@ -18,6 +18,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..observability import (
+    trace_artifact_scan,
+    trace_review_packet_load,
+)
 from .incident_diagnosis_review_packet_exceptions import (
     AutomaticDiagnosisReviewPacketUnavailable,
 )
@@ -423,46 +427,56 @@ def find_latest_review_packet(
     if not external_analysis_dir.exists():
         return None
 
-    # Search for packets matching this incident
-    # Pattern: auto-{incident_id}-*-diagnosis-review-packet.json
-    prefix = f"auto-{incident_id}-"
-    suffix = f"-{REVIEW_PACKET_SUFFIX}"
+    def _scan_directory() -> dict[str, Any] | None:
+        # Search for packets matching this incident
+        # Pattern: auto-{incident_id}-*-diagnosis-review-packet.json
+        prefix = f"auto-{incident_id}-"
+        suffix = f"-{REVIEW_PACKET_SUFFIX}"
 
-    candidates: list[tuple[datetime, Path]] = []
+        candidates: list[tuple[datetime, Path]] = []
 
-    try:
-        for path in external_analysis_dir.iterdir():
-            if not path.is_file():
-                continue
-            name = path.name
-            if name.startswith(prefix) and name.endswith(suffix):
-                # Extract timestamp from filename for ordering
-                # Format: auto-{incident_id}-{timestamp}-{uuid}-diagnosis-review-packet.json
-                try:
-                    parts = name[len(prefix):-len(suffix)].rsplit("-", 1)
-                    if parts:
-                        timestamp_str = parts[0]
-                        # Try to parse timestamp
-                        dt = datetime.strptime(timestamp_str[:14], "%Y%m%d%H%M%S")
-                        candidates.append((dt, path))
-                except (ValueError, IndexError):
-                    # Fallback: use file modification time
-                    candidates.append((datetime.fromtimestamp(path.stat().st_mtime), path))
-    except OSError:
-        return None
+        try:
+            for path in external_analysis_dir.iterdir():
+                if not path.is_file():
+                    continue
+                name = path.name
+                if name.startswith(prefix) and name.endswith(suffix):
+                    # Extract timestamp from filename for ordering
+                    # Format: auto-{incident_id}-{timestamp}-{uuid}-diagnosis-review-packet.json
+                    try:
+                        parts = name[len(prefix):-len(suffix)].rsplit("-", 1)
+                        if parts:
+                            timestamp_str = parts[0]
+                            # Try to parse timestamp
+                            dt = datetime.strptime(timestamp_str[:14], "%Y%m%d%H%M%S")
+                            candidates.append((dt, path))
+                    except (ValueError, IndexError):
+                        # Fallback: use file modification time
+                        candidates.append((datetime.fromtimestamp(path.stat().st_mtime), path))
+        except OSError:
+            return None
 
-    if not candidates:
-        return None
+        if not candidates:
+            return None
 
-    # Return the most recent
-    candidates.sort(key=lambda x: x[0], reverse=True)
-    latest_path = candidates[0][1]
+        # Return the most recent
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        latest_path = candidates[0][1]
 
-    return {
-        "path": str(latest_path),
-        "name": latest_path.name,
-        "incident_id": incident_id,
-    }
+        return {
+            "path": str(latest_path),
+            "name": latest_path.name,
+            "incident_id": incident_id,
+            "file_count": len(candidates),
+        }
+
+    return trace_artifact_scan(  # type: ignore[no-any-return]
+        _scan_directory,
+        attributes={
+            "k9b.path.kind": "artifact_dir",
+            "k9b.artifact_kind": "review_packet",
+        },
+    )
 
 
 def load_review_packet_summary(
@@ -480,35 +494,43 @@ def load_review_packet_summary(
     Returns:
         Bounded summary dict, or None if no packet exists for this incident
     """
-    packet_info = find_latest_review_packet(external_analysis_dir, incident_id)
-    if packet_info is None:
-        # No packet found for this incident - not an error, just unavailable
-        return None
+    def _load() -> dict[str, Any] | None:
+        packet_info = find_latest_review_packet(external_analysis_dir, incident_id)
+        if packet_info is None:
+            # No packet found for this incident - not an error, just unavailable
+            return None
 
-    try:
-        content = Path(packet_info["path"]).read_text(encoding="utf-8")
-        data = json.loads(content)
+        try:
+            content = Path(packet_info["path"]).read_text(encoding="utf-8")
+            data = json.loads(content)
 
-        # Return only bounded summary fields
-        return {
-            "incident_id": data.get("incident_id"),
-            "run_id": data.get("run_id"),
-            "collector_run_id": data.get("collector_run_id"),
-            "decision": data.get("loop_result", {}).get("decision"),
-            "checks_requested": data.get("loop_result", {}).get("checks_requested", 0),
-            "checks_run": data.get("loop_result", {}).get("checks_run", 0),
-            "checks_rejected": data.get("loop_result", {}).get("checks_rejected", 0),
-            "generated_at": data.get("generated_at"),
-            "artifact_name": data.get("run_id") + "-diagnosis-review-packet.json",
-            "eligible": data.get("eligibility", {}).get("eligible"),
-            "eligibility_reason": data.get("eligibility", {}).get("reason"),
-            # Provider status - for Phase 4 contract verification
-            "provider_status": data.get("provider_status", {}),
-        }
-    except (OSError, json.JSONDecodeError, KeyError) as exc:
-        raise AutomaticDiagnosisReviewPacketUnavailable(
-            f"Failed to load review packet for incident {incident_id!r}: {exc}"
-        ) from exc
+            # Return only bounded summary fields
+            return {
+                "incident_id": data.get("incident_id"),
+                "run_id": data.get("run_id"),
+                "collector_run_id": data.get("collector_run_id"),
+                "decision": data.get("loop_result", {}).get("decision"),
+                "checks_requested": data.get("loop_result", {}).get("checks_requested", 0),
+                "checks_run": data.get("loop_result", {}).get("checks_run", 0),
+                "checks_rejected": data.get("loop_result", {}).get("checks_rejected", 0),
+                "generated_at": data.get("generated_at"),
+                "artifact_name": data.get("run_id") + "-diagnosis-review-packet.json",
+                "eligible": data.get("eligibility", {}).get("eligible"),
+                "eligibility_reason": data.get("eligibility", {}).get("reason"),
+                # Provider status - for Phase 4 contract verification
+                "provider_status": data.get("provider_status", {}),
+            }
+        except (OSError, json.JSONDecodeError, KeyError) as exc:
+            raise AutomaticDiagnosisReviewPacketUnavailable(
+                f"Failed to load review packet for incident {incident_id!r}: {exc}"
+            ) from exc
+
+    return trace_review_packet_load(  # type: ignore[no-any-return]
+        _load,
+        attributes={
+            "k9b.artifact_kind": "review_packet",
+        },
+    )
 
 
 def load_review_packet_for_handoff(
@@ -528,27 +550,35 @@ def load_review_packet_for_handoff(
     Returns:
         Dict with packet fields needed for handoff, or None if no packet exists
     """
-    packet_info = find_latest_review_packet(external_analysis_dir, incident_id)
-    if packet_info is None:
-        return None
+    def _load() -> dict[str, Any] | None:
+        packet_info = find_latest_review_packet(external_analysis_dir, incident_id)
+        if packet_info is None:
+            return None
 
-    try:
-        content = Path(packet_info["path"]).read_text(encoding="utf-8")
-        data = json.loads(content)
+        try:
+            content = Path(packet_info["path"]).read_text(encoding="utf-8")
+            data = json.loads(content)
 
-        # Return fields needed for handoff generation
-        return {
-            "run_id": data.get("run_id"),
-            "collector_run_id": data.get("collector_run_id"),
-            "decision": data.get("loop_result", {}).get("decision"),
-            "checks_requested": data.get("loop_result", {}).get("checks_requested", 0),
-            "checks_run": data.get("loop_result", {}).get("checks_run", 0),
-            "checks_rejected": data.get("loop_result", {}).get("checks_rejected", 0),
-            "generated_at": data.get("generated_at"),
-            "eligible": data.get("eligibility", {}).get("eligible"),
-            "eligibility_reason": data.get("eligibility", {}).get("reason"),
-        }
-    except (OSError, json.JSONDecodeError, KeyError) as exc:
-        raise AutomaticDiagnosisReviewPacketUnavailable(
-            f"Failed to load review packet for incident {incident_id!r}: {exc}"
-        ) from exc
+            # Return fields needed for handoff generation
+            return {
+                "run_id": data.get("run_id"),
+                "collector_run_id": data.get("collector_run_id"),
+                "decision": data.get("loop_result", {}).get("decision"),
+                "checks_requested": data.get("loop_result", {}).get("checks_requested", 0),
+                "checks_run": data.get("loop_result", {}).get("checks_run", 0),
+                "checks_rejected": data.get("loop_result", {}).get("checks_rejected", 0),
+                "generated_at": data.get("generated_at"),
+                "eligible": data.get("eligibility", {}).get("eligible"),
+                "eligibility_reason": data.get("eligibility", {}).get("reason"),
+            }
+        except (OSError, json.JSONDecodeError, KeyError) as exc:
+            raise AutomaticDiagnosisReviewPacketUnavailable(
+                f"Failed to load review packet for incident {incident_id!r}: {exc}"
+            ) from exc
+
+    return trace_review_packet_load(  # type: ignore[no-any-return]
+        _load,
+        attributes={
+            "k9b.artifact_kind": "review_packet",
+        },
+    )
