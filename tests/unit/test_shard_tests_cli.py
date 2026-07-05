@@ -22,8 +22,22 @@ class CollectedNodeids(NamedTuple):
     returncode: int
 
 
-# Module-scoped fixture for collected nodeids (computed once per test session)
+class CLICollectResult(NamedTuple):
+    """Cached CLI --collect-only result for use across tests."""
+    stdout: str
+    returncode: int
+
+
+class CLIMetricsResult(NamedTuple):
+    """Cached CLI --metrics result for use across tests."""
+    stdout: str
+    returncode: int
+
+
+# Module-scoped fixtures (computed once per test session)
 _collected_nodeids: CollectedNodeids | None = None
+_cli_collect_result: CLICollectResult | None = None
+_cli_metrics_result: CLIMetricsResult | None = None
 
 
 def _get_collected_nodeids() -> CollectedNodeids:
@@ -37,6 +51,50 @@ def _get_collected_nodeids() -> CollectedNodeids:
             returncode=result.returncode,
         )
     return _collected_nodeids
+
+
+def _get_cli_collect_result() -> CLICollectResult:
+    """Get cached CLI --collect-only result or run fresh (once per session)."""
+    global _cli_collect_result
+    if _cli_collect_result is None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).parent.parent.parent / "scripts" / "shard_tests.py"),
+                "--total", "2",
+                "--collect-only",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+        _cli_collect_result = CLICollectResult(
+            stdout=result.stdout,
+            returncode=result.returncode,
+        )
+    return _cli_collect_result
+
+
+def _get_cli_metrics_result() -> CLIMetricsResult:
+    """Get cached CLI --metrics result or run fresh (once per session)."""
+    global _cli_metrics_result
+    if _cli_metrics_result is None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).parent.parent.parent / "scripts" / "shard_tests.py"),
+                "--total", "4",
+                "--metrics",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+        _cli_metrics_result = CLIMetricsResult(
+            stdout=result.stdout,
+            returncode=result.returncode,
+        )
+    return _cli_metrics_result
 
 
 class TestCLIParsing:
@@ -76,18 +134,11 @@ class TestCLIParsing:
         assert result.returncode == 1
 
     def test_collect_only_outputs_nodeids(self) -> None:
-        """--collect-only outputs nodeids without sharding (CLI smoke test)."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(Path(__file__).parent.parent.parent / "scripts" / "shard_tests.py"),
-                "--total", "2",
-                "--collect-only",
-            ],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent.parent.parent,
-        )
+        """--collect-only outputs nodeids without sharding (CLI smoke test).
+        
+        Uses cached CLI result to avoid repeated subprocess invocation.
+        """
+        result = _get_cli_collect_result()
 
         assert result.returncode == 0
         # Should output some nodeids
@@ -95,18 +146,11 @@ class TestCLIParsing:
         assert len(lines) > 0
 
     def test_metrics_json_output(self) -> None:
-        """--metrics outputs valid JSON (CLI smoke test)."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(Path(__file__).parent.parent.parent / "scripts" / "shard_tests.py"),
-                "--total", "4",
-                "--metrics",
-            ],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent.parent.parent,
-        )
+        """--metrics outputs valid JSON (CLI smoke test).
+        
+        Uses cached CLI result to avoid repeated subprocess invocation.
+        """
+        result = _get_cli_metrics_result()
 
         assert result.returncode == 0
 

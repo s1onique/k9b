@@ -35,6 +35,46 @@ from pathlib import Path
 # OASDIFF_VERSION pins the tool to a reproducible release
 OASDIFF_VERSION = "v1.21.0"
 
+# OASDIFF_BIN allows overriding oasdiff with a pre-installed binary (for CI caching).
+# When set, skip go run and use the binary directly.
+# This avoids the ~28s go module download cost in CI environments.
+_OASDIFF_BIN: str | None = None
+
+
+def _resolve_oasdiff_binary() -> str | None:
+    """Resolve oasdiff binary path from OASDIFF_BIN env var or PATH.
+    
+    Returns:
+        Absolute path to oasdiff binary if found, None otherwise.
+    """
+    global _OASDIFF_BIN
+    if _OASDIFF_BIN is not None:
+        return _OASDIFF_BIN
+    
+    import os
+    env_bin = os.environ.get("OASDIFF_BIN", "").strip()
+    if env_bin:
+        if os.path.isfile(env_bin) and os.access(env_bin, os.X_OK):
+            _OASDIFF_BIN = env_bin
+            return _OASDIFF_BIN
+        # Check if it's just "oasdiff" and resolve from PATH
+        if env_bin == "oasdiff":
+            import shutil
+            resolved = shutil.which("oasdiff")
+            if resolved:
+                _OASDIFF_BIN = resolved
+                return _OASDIFF_BIN
+        return None
+    
+    # Check PATH for oasdiff
+    import shutil
+    resolved = shutil.which("oasdiff")
+    if resolved:
+        _OASDIFF_BIN = resolved
+        return _OASDIFF_BIN
+    
+    return None
+
 # Default paths
 DEFAULT_BASELINE = Path("docs/api/openapi/k9b-openapi-baseline.json")
 DEFAULT_CURRENT = Path("build/openapi/k9b-openapi.json")
@@ -45,8 +85,16 @@ DEFAULT_OPERATION_IDS_CURRENT = Path("build/openapi/operation-ids-current.txt")
 
 
 def _run_oasdiff(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
-    """Run oasdiff using go run for reproducible versioning."""
-    cmd = ["go", "run", f"github.com/oasdiff/oasdiff@{OASDIFF_VERSION}"] + args
+    """Run oasdiff using binary or go run for reproducible versioning.
+    
+    Prefers OASDIFF_BIN environment variable or PATH-resolved oasdiff to avoid
+    the ~28s go module download cost in CI environments.
+    """
+    binary = _resolve_oasdiff_binary()
+    if binary:
+        cmd = [binary] + args
+    else:
+        cmd = ["go", "run", f"github.com/oasdiff/oasdiff@{OASDIFF_VERSION}"] + args
     return subprocess.run(
         cmd,
         capture_output=True,
@@ -56,7 +104,10 @@ def _run_oasdiff(args: list[str], check: bool = True) -> subprocess.CompletedPro
 
 
 def _check_oasdiff_available() -> bool:
-    """Check if oasdiff is available via go run."""
+    """Check if oasdiff is available via binary or go run."""
+    binary = _resolve_oasdiff_binary()
+    if binary:
+        return True
     try:
         _run_oasdiff(["--help"], check=False)
         return True

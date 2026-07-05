@@ -6,6 +6,7 @@ Run with: .venv/bin/python -m pytest tests/test_openapi_breaking_change_gate.py 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -442,3 +443,53 @@ class TestModuleInterface:
 
         sig = inspect.signature(main)
         assert "argv" in [p.name for p in sig.parameters.values()]
+
+
+class TestOasdiffBinaryResolution:
+    """Tests for OASDIFF_BIN binary resolution (CI optimization)."""
+
+    def test_resolves_oasdiff_bin_env_var(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """OASDIFF_BIN env var takes precedence over go run."""
+        # Create a fake oasdiff binary
+        fake_bin = tmp_path / "oasdiff"
+        fake_bin.write_text("#!/bin/bash\necho 'fake-oasdiff'\n", encoding="utf-8")
+        fake_bin.chmod(0o755)
+        
+        # Reset the module-level cache
+        import scripts.verify_openapi_breaking_changes as verify_mod
+        verify_mod._OASDIFF_BIN = None
+        
+        monkeypatch.setenv("OASDIFF_BIN", str(fake_bin))
+        
+        resolved = verify_mod._resolve_oasdiff_binary()
+        assert resolved == str(fake_bin)
+
+    def test_resolves_oasdiff_from_path(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """PATH-resolved oasdiff is used when OASDIFF_BIN is not set."""
+        # Reset the module-level cache
+        import scripts.verify_openapi_breaking_changes as verify_mod
+        verify_mod._OASDIFF_BIN = None
+        
+        monkeypatch.setenv("PATH", str(tmp_path) + ":" + os.environ.get("PATH", ""))
+        monkeypatch.delenv("OASDIFF_BIN", raising=False)
+        
+        # Create a fake oasdiff in PATH
+        fake_bin = tmp_path / "oasdiff"
+        fake_bin.write_text("#!/bin/bash\necho 'fake-oasdiff'\n", encoding="utf-8")
+        fake_bin.chmod(0o755)
+        
+        resolved = verify_mod._resolve_oasdiff_binary()
+        assert resolved is not None
+        assert "oasdiff" in resolved
+
+    def test_falls_back_to_go_run_when_no_binary(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Falls back to go run when no binary is available."""
+        # Reset the module-level cache
+        import scripts.verify_openapi_breaking_changes as verify_mod
+        verify_mod._OASDIFF_BIN = None
+        
+        monkeypatch.delenv("OASDIFF_BIN", raising=False)
+        monkeypatch.setattr("shutil.which", lambda x: None)
+        
+        resolved = verify_mod._resolve_oasdiff_binary()
+        assert resolved is None
