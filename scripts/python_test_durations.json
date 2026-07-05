@@ -1,11 +1,12 @@
 {
   "version": 1,
   "description": "Python unit test duration manifest for duration-weighted sharding",
-  "generated_at": "2026-07-05T03:18:46.029036+00:00",
+  "generated_at": "2026-07-05T04:02:34.009339+00:00",
   "source": [
-    "artifacts/ci-timing-first-green/coverage-reports-28727803138/backend/coverage.xml",
-    "artifacts/ci-timing-first-green/junit-xml-shard-0-28727803138/unit-shard-0.xml",
-    "artifacts/ci-timing-first-green/junit-xml-shard-1-28727803138/unit-shard-1.xml"
+    "artifacts/ci-timing-post-oasdiff-bin/test-timing-shard-0-28728665229/",
+    "artifacts/ci-timing-post-oasdiff-bin/test-timing-shard-1-28728665229/",
+    "artifacts/ci-timing-post-oasdiff-bin/test-timing-shard-2-28728665229/",
+    "artifacts/ci-timing-post-oasdiff-bin/test-timing-shard-3-28728665229/"
   ],
   "test_count": 10388,
   "aggregate_method": "max",
@@ -10660,7 +10661,7 @@
     },
     {
       "nodeid": "tests/test_openapi_breaking_change_gate.py::TestOasdiffIntegration::test_identical_schemas_passes_oasdiff",
-      "duration_s": 28.163
+      "duration_s": 25.54
     },
     {
       "nodeid": "tests/test_openapi_breaking_change_gate.py::TestOasdiffIntegration::test_oasdiff_error_output_surfaced",
