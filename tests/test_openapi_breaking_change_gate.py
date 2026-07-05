@@ -20,6 +20,7 @@ from scripts.verify_openapi_breaking_changes import (
     DEFAULT_CURRENT,
     DEFAULT_OPERATION_IDS_BASELINE,
     DEFAULT_OPERATION_IDS_CURRENT,
+    OASDIFF_VERSION,
     _parse_operation_ids,
     compare_operation_id_snapshots,
     update_baseline,
@@ -286,25 +287,29 @@ _oasdiff_available: bool | None = None
 
 
 def _get_oasdiff_available() -> bool:
-    """Check if oasdiff is available via go run (cached at module level).
+    """Check if oasdiff is available (cached at module level).
     
-    Session-level caching: avoids redundant 'go run @latest --help' calls
-    across 3 oasdiff tests. Each invocation costs ~2s for module download.
+    Resolution order: OASDIFF_BIN env var > PATH binary > pinned go run.
     """
     global _oasdiff_available
     if _oasdiff_available is None:
+        import os
+        import shutil
         import subprocess
-
-        try:
-            result = subprocess.run(
-                ["go", "run", "github.com/oasdiff/oasdiff@latest", "--help"],
-                capture_output=True,
-                text=True,
-                timeout=60,  # Reduced from 120s - oasdiff is already downloaded
-            )
-            _oasdiff_available = result.returncode == 0
-        except Exception:
-            _oasdiff_available = False
+        env_bin = os.environ.get("OASDIFF_BIN", "").strip()
+        if env_bin and os.path.isfile(env_bin) and os.access(env_bin, os.X_OK):
+            _oasdiff_available = True
+        elif shutil.which("oasdiff"):
+            _oasdiff_available = True
+        else:
+            try:
+                result = subprocess.run(
+                    ["go", "run", f"github.com/oasdiff/oasdiff@{OASDIFF_VERSION}", "--help"],
+                    capture_output=True, text=True, timeout=60,
+                )
+                _oasdiff_available = result.returncode == 0
+            except Exception:
+                _oasdiff_available = False
     return _oasdiff_available
 
 
