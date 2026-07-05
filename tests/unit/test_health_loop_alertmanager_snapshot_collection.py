@@ -1071,8 +1071,17 @@ class TestAlertmanagerSnapshotClusterAttribution:
             mock_response.__exit__ = MagicMock(return_value=False)
             return mock_response
 
+        # Mock port-forward machinery: the FQDN endpoint triggers needs_port_forward=True
+        # so we must mock subprocess.Popen, _choose_free_local_port, and _wait_for_port_ready
+        # to prevent real (non-existent) kubectl invocation and real TCP port polling.
+        mock_process = MagicMock()
+        mock_process.poll.return_value = None
+
         with patch("urllib.request.urlopen", side_effect=urlopen_mock):
-            runner._run_alertmanager_snapshot_collection({"root": temp_dir})
+            with patch("subprocess.Popen", return_value=mock_process):
+                with patch.object(runner, "_choose_free_local_port", return_value=18457):
+                    with patch.object(runner, "_wait_for_port_ready", return_value=True):
+                        runner._run_alertmanager_snapshot_collection({"root": temp_dir})
 
         # Verify snapshot artifact was written
         snapshot_files = list(temp_dir.glob("*-alertmanager-snapshot.json"))
