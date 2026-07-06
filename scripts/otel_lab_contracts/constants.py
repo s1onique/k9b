@@ -109,17 +109,34 @@ EXPECTED_OTEL_EVENTS = frozenset(
 
 # Forbidden sensitive payload patterns (hard fail)
 # Note: Patterns match keys in JSON serialization where field names are quoted
+#
+# Policy: The word "kubeconfig" alone is NOT forbidden (it's a technical term).
+# Only specific credential-bearing patterns are forbidden.
+#
+# Allowed patterns:
+# - Bare word "kubeconfig" in explanatory text or field names
+# - Safe patterns like "sensitive_read_denied"
+#
+# Forbidden patterns (real credential material):
+# - Bearer JWT tokens (Authorization headers)
+# - Private key PEM blocks
+# - K8s credential fields: client-certificate-data, client-key-data, certificate-authority-data
+# - Password fields and values
+# - Token fields and values
+# - Secret value fields
 FORBIDDEN_SENSITIVE_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r'"kubeconfig"'),  # JSON key
-    re.compile(r"Bearer\s+eyJ", re.IGNORECASE),  # Bearer JWT pattern
-    re.compile(r"BEGIN\s+PRIVATE\s+KEY", re.IGNORECASE),
-    re.compile(r'"client-certificate-data"'),
-    re.compile(r'"client-key-data"'),
-    re.compile(r'"password"'),
-    re.compile(r"password\s*=", re.IGNORECASE),
-    re.compile(r"secret_value", re.IGNORECASE),
-    re.compile(r'"access_token"'),
-    re.compile(r'"refresh_token"'),
+    re.compile(r"Bearer\s+eyJ", re.IGNORECASE),  # Bearer JWT pattern (real token)
+    re.compile(r"BEGIN\s+PRIVATE\s+KEY", re.IGNORECASE),  # Private key PEM block
+    re.compile(r"BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE\s+KEY", re.IGNORECASE),  # All private key variants
+    re.compile(r'"client-certificate-data"'),  # K8s credential field
+    re.compile(r'"client-key-data"'),  # K8s credential field
+    re.compile(r'"certificate-authority-data"'),  # K8s credential field
+    re.compile(r'"password"'),  # Password field (JSON key)
+    re.compile(r'"token"'),  # Token field (JSON key)
+    re.compile(r'"access_token"'),  # OAuth token field
+    re.compile(r'"refresh_token"'),  # OAuth token field
+    re.compile(r"password\s*=", re.IGNORECASE),  # Password in CLI args
+    re.compile(r"secret_value", re.IGNORECASE),  # Generic secret value field
 ]
 
 # Allowed safe patterns (do NOT fail on these)

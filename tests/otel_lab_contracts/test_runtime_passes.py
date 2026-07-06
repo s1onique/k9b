@@ -7,6 +7,138 @@ import tempfile
 from pathlib import Path
 
 
+class TestLoopPassPathDiscovery:
+    """Tests for loop-pass artifact path discovery."""
+
+    def test_finds_artifacts_at_new_canonical_path(self) -> None:
+        """Discovery finds artifacts at current canonical path: external-analysis/diagnosis-loop-passes/."""
+        from scripts.otel_lab_contracts.runtime_passes import find_loop_pass_artifacts
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Create artifacts at new canonical path
+            loop_dir = artifact_dir / "external-analysis" / "diagnosis-loop-passes"
+            loop_dir.mkdir(parents=True)
+
+            artifact = self._make_valid_pass_artifact(1)
+            (loop_dir / "pass-1.json").write_text(json.dumps(artifact))
+
+            artifacts, path_desc = find_loop_pass_artifacts(artifact_dir)
+
+            assert len(artifacts) == 1
+            assert "external-analysis" in path_desc
+            assert "diagnosis-loop-passes" in path_desc
+
+    def test_falls_back_to_legacy_path(self) -> None:
+        """Discovery falls back to legacy path: phase4-diagnosis/p4c-k8s-multipass-diagnosis/loop-passes/."""
+        from scripts.otel_lab_contracts.runtime_passes import find_loop_pass_artifacts
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Create artifacts at legacy path (no canonical path exists)
+            loop_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "loop-passes"
+            loop_dir.mkdir(parents=True)
+
+            artifact = self._make_valid_pass_artifact(1)
+            (loop_dir / "pass-1.json").write_text(json.dumps(artifact))
+
+            artifacts, path_desc = find_loop_pass_artifacts(artifact_dir)
+
+            assert len(artifacts) == 1
+            assert "phase4-diagnosis" in path_desc
+            assert "loop-passes" in path_desc
+
+    def test_prefers_canonical_over_legacy_path(self) -> None:
+        """Discovery prefers canonical path when both exist."""
+        from scripts.otel_lab_contracts.runtime_passes import find_loop_pass_artifacts
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Create artifacts at BOTH paths
+            canonical_dir = artifact_dir / "external-analysis" / "diagnosis-loop-passes"
+            canonical_dir.mkdir(parents=True)
+            canonical_artifact = self._make_valid_pass_artifact(1)
+            (canonical_dir / "pass-1.json").write_text(json.dumps(canonical_artifact))
+
+            legacy_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "loop-passes"
+            legacy_dir.mkdir(parents=True)
+            legacy_artifact = self._make_valid_pass_artifact(2)
+            (legacy_dir / "pass-2.json").write_text(json.dumps(legacy_artifact))
+
+            artifacts, path_desc = find_loop_pass_artifacts(artifact_dir)
+
+            # Should prefer canonical path
+            assert len(artifacts) == 1
+            assert "external-analysis" in path_desc
+
+    def test_returns_empty_when_no_path_exists(self) -> None:
+        """Discovery returns empty when no loop-pass path exists."""
+        from scripts.otel_lab_contracts.runtime_passes import find_loop_pass_artifacts
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            artifacts, path_desc = find_loop_pass_artifacts(artifact_dir)
+
+            assert artifacts == []
+            assert path_desc == "none"
+
+    def test_loads_embedded_in_diagnosis_evidence(self) -> None:
+        """Discovery loads embedded pass_artifacts from diagnosis-evidence.json."""
+        from scripts.otel_lab_contracts.runtime_passes import find_loop_pass_artifacts
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+
+            # Create embedded evidence at canonical path
+            evidence_dir = artifact_dir / "external-analysis"
+            evidence_dir.mkdir(parents=True)
+
+            evidence = {
+                "pass_artifacts": [
+                    self._make_valid_pass_artifact(1),
+                    self._make_valid_pass_artifact(2),
+                ]
+            }
+            (evidence_dir / "diagnosis-evidence.json").write_text(json.dumps(evidence))
+
+            artifacts, path_desc = find_loop_pass_artifacts(artifact_dir)
+
+            # Should find the embedded evidence
+            assert len(artifacts) == 1  # One evidence file marker
+            assert "embedded" in path_desc
+
+    @staticmethod
+    def _make_valid_pass_artifact(pass_index: int) -> dict:
+        """Create a valid pass artifact for testing."""
+        return {
+            "loop_run_id": f"run-{pass_index}",
+            "incident_id": "inc-123",
+            "pass_index": pass_index,
+            "case_file_hash": f"hash{pass_index}",
+            "proposed_checks": [],
+            "accepted_checks": [],
+            "rejected_checks": [],
+            "check_fingerprints": [],
+            "new_evidence_hashes": [],
+            "duplicate_check_count": 0,
+            "unsafe_check_count": 0,
+            "root_cause_summary": "Test",
+            "confidence": "high",
+            "should_continue": pass_index < 2,
+            "stop_reason": "max_passes_reached" if pass_index == 2 else None,
+            "safety_metadata": {
+                "policy_enforced": True,
+                "mutating_checks_executed_count": 0,
+                "sensitive_reads_executed_count": 0,
+            },
+            "gate_summary": {"rejected_checks": []},
+        }
+
+
 class TestRuntimeLoopPassVerification:
     """Tests for runtime loop-pass artifact verification."""
 

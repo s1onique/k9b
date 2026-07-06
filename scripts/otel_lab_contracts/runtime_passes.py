@@ -15,23 +15,54 @@ from scripts.otel_lab_contracts.constants import (
 from scripts.otel_lab_contracts.models import ContractCheck, VerificationReport
 
 
-def find_loop_pass_artifacts(artifact_dir: Path) -> list[Path]:
-    """Find loop pass artifacts."""
-    loop_passes_dir = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "loop-passes"
-    if loop_passes_dir.exists():
-        return list(loop_passes_dir.glob("*.json"))
+def find_loop_pass_artifacts(artifact_dir: Path) -> tuple[list[Path], str]:
+    """Find loop pass artifacts.
 
-    # Fall back to embedded in diagnosis-evidence
-    diagnosis_evidence_path = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "diagnosis-evidence.json"
-    if diagnosis_evidence_path.exists():
-        try:
-            evidence = json.loads(diagnosis_evidence_path.read_text())
-            if "pass_artifacts" in evidence:
-                return [diagnosis_evidence_path]  # Marker to use embedded
-        except json.JSONDecodeError:
-            pass
+    Returns:
+        Tuple of (list of artifact paths, path description string for logging)
 
-    return []
+    Searches in priority order:
+    1. Current canonical path: external-analysis/diagnosis-loop-passes/*.json
+    2. Legacy path: phase4-diagnosis/p4c-k8s-multipass-diagnosis/loop-passes/*.json
+    3. Embedded in diagnosis-evidence.json (either location)
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Priority 1: Current canonical path
+    canonical_path = artifact_dir / "external-analysis" / "diagnosis-loop-passes"
+    if canonical_path.exists():
+        artifacts = list(canonical_path.glob("*.json"))
+        if artifacts:
+            logger.info(f"Found {len(artifacts)} loop-pass artifacts at canonical path: {canonical_path}")
+            return artifacts, str(canonical_path)
+
+    # Priority 2: Legacy path (backward compatibility)
+    legacy_path = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "loop-passes"
+    if legacy_path.exists():
+        artifacts = list(legacy_path.glob("*.json"))
+        if artifacts:
+            logger.info(f"Found {len(artifacts)} loop-pass artifacts at legacy path: {legacy_path}")
+            return artifacts, str(legacy_path)
+
+    # Priority 3: Embedded in diagnosis-evidence.json (check both locations)
+    for evidence_path in [
+        artifact_dir / "external-analysis" / "diagnosis-evidence.json",
+        artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "diagnosis-evidence.json",
+    ]:
+        if evidence_path.exists():
+            try:
+                evidence = json.loads(evidence_path.read_text())
+                if "pass_artifacts" in evidence and evidence["pass_artifacts"]:
+                    logger.info(f"Found {len(evidence['pass_artifacts'])} embedded pass artifacts in: {evidence_path}")
+                    return [evidence_path], f"embedded in {evidence_path}"
+            except json.JSONDecodeError:
+                pass
+
+    # No artifacts found
+    logger.warning("No loop-pass artifacts found in any expected location")
+    return [], "none"
 
 
 def verify_runtime_loop_passes(artifact_dir: Path, report: VerificationReport) -> bool:
@@ -47,7 +78,11 @@ def verify_runtime_loop_passes(artifact_dir: Path, report: VerificationReport) -
     - gate_summary.rejected_checks exists
     - stop_reason present on final pass
     """
-    loop_pass_artifacts = find_loop_pass_artifacts(artifact_dir)
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    loop_pass_artifacts, path_desc = find_loop_pass_artifacts(artifact_dir)
 
     if not loop_pass_artifacts:
         report.add_error("No loop-pass artifacts found")
@@ -67,19 +102,28 @@ def verify_runtime_loop_passes(artifact_dir: Path, report: VerificationReport) -
             report.add_warning(f"Failed to parse {artifact_path}: {e}")
             continue
 
-    # Try embedded pass artifacts
+    # Try embedded pass artifacts if no standalone files found
     if not pass_artifacts:
-        diagnosis_evidence_path = artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "diagnosis-evidence.json"
-        if diagnosis_evidence_path.exists():
-            try:
-                evidence = json.loads(diagnosis_evidence_path.read_text())
-                pass_artifacts = evidence.get("pass_artifacts", [])
-            except json.JSONDecodeError:
-                pass
+        for evidence_path in [
+            artifact_dir / "external-analysis" / "diagnosis-evidence.json",
+            artifact_dir / "phase4-diagnosis" / "p4c-k8s-multipass-diagnosis" / "diagnosis-evidence.json",
+        ]:
+            if evidence_path.exists():
+                try:
+                    evidence = json.loads(evidence_path.read_text())
+                    pass_artifacts = evidence.get("pass_artifacts", [])
+                    if pass_artifacts:
+                        logger.info(f"Loaded {len(pass_artifacts)} embedded pass artifacts from: {evidence_path}")
+                        break
+                except json.JSONDecodeError:
+                    pass
 
     if not pass_artifacts:
         report.add_error("No parseable pass artifacts found")
         return False
+
+    # Log artifact source
+    logger.info(f"Verified loop-pass artifacts from: {path_desc}")
 
     # Verify each pass artifact and track failures
     schema_valid = True
