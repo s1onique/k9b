@@ -1,0 +1,281 @@
+# Reusable workflow for vmalert/Alertmanager live lab execution.
+#
+# This workflow:
+# - Runs on an existing K3s cluster with preinstalled VictoriaMetrics operator
+# - Uses protected environment kubeconfig (NOT ARC runner SA credentials)
+# - Creates a unique lab namespace from GITHUB_RUN_ID
+# - Deploys k9b via Helm chart with Alertmanager webhook enabled
+# - Injects synthetic alert via Alertmanager webhook
+# - Verifies incident creation
+#
+# THIS WORKFLOW MUST NOT INCLUDE:
+# - docker build / docker push / docker save
+# - /var/run/docker.sock
+# - buildctl
+# - curl -sfL https://get.k3s.io
+# - /etc/rancher/k3s/k3s.yaml
+# - kubectl apply for vmalert/Alertmanager CRDs
+# - vmalert/Alertmanager CRD creation
+# - Ambient in-cluster credentials (must use protected kubeconfig)
+
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first. Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+
+name: vmalert/Alertmanager Lab - Live
+
+on:
+  workflow_call:
+    inputs:
+      artifact_retention_days:
+        description: 'Artifact retention days'
+        required: true
+        type: string
+      backend_image_repository:
+        description: 'Backend image repository from image-builder'
+        required: true
+        type: string
+      backend_image_tag:
+        description: 'Backend image tag from image-builder'
+        required: true
+        type: string
+      backend_image_ref:
+        description: 'Backend image reference (repository:tag)'
+        required: true
+        type: string
+      backend_image_digest:
+        description: 'Backend image digest (sha256:...)'
+        required: false
+        type: string
+        default: ''
+      frontend_image_repository:
+        description: 'Frontend image repository from image-builder'
+        required: false
+        type: string
+        default: ''
+      frontend_image_tag:
+        description: 'Frontend image tag from image-builder'
+        required: false
+        type: string
+        default: ''
+      frontend_image_ref:
+        description: 'Frontend image reference (repository:tag)'
+        required: false
+        type: string
+        default: ''
+
+env:
+  PYTHON_VERSION: '3.13'
+  # kubectl version (pinned for cache key stability)
+  KUBECTL_VERSION: 'v1.31.0'
+  HELM_VERSION: 'v3.16.3'
+  # Lab namespace derived from run ID
+  LAB_NAMESPACE: k9b-vmalert-lab-${{ github.run_id }}
+  # Use ConfigMap driver to avoid Secret read permissions for Helm release metadata
+  HELM_DRIVER: configmap
+  # Artifact directory (set before bootstrap)
+  ARTIFACT_DIR: ./lab-artifacts/vmalert-alertmanager
+  # Image tag for summary
+  IMAGE_TAG: ${{ inputs.backend_image_tag }}
+
+jobs:
+  live-vmalert-alertmanager-lab:
+    name: Live vmalert/Alertmanager Lab
+    # Run on ARC runner scale set spbnix-k8s (cluster access, no Docker)
+    # Protected environment provides kubeconfig and requires approval
+    runs-on: spbnix-k8s
+    # Protected environment for kubeconfig secret
+    environment: k9b-live-lab-admin
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      # =======================================================================
+      # Setup
+      # =======================================================================
+      - uses: actions/checkout@v5
+
+      # =======================================================================
+      # Setup lab toolchain (uses local runner tool cache)
+      # Wires Python, kubectl, and Helm from local runner tool cache.
+      # =======================================================================
+      - name: Setup lab toolchain
+        id: toolchain
+        uses: ./.github/actions/k9b-live-lab-toolchain
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          kubectl-version: ${{ env.KUBECTL_VERSION }}
+          helm-version: ${{ env.HELM_VERSION }}
+          allow-tool-download: ${{ vars.K9B_LIVE_LAB_ALLOW_TOOL_DOWNLOAD || 'false' }}
+
+      - name: Emit toolchain provenance
+        env:
+          TOOLCHAIN_COMPONENTS: python,helm,kubectl
+        run: scripts/ci/emit_toolchain_provenance.sh "$TOOLCHAIN_COMPONENTS"
+
+      # =======================================================================
+      # Install Python dependencies (deterministic, no remote cache)
+      # Uses pre-baked venv if available, otherwise creates fresh from requirements.
+      # =======================================================================
+      - name: Install Python dependencies
+        id: install-python-deps
+        shell: bash
+        env:
+          K9B_LIVE_LAB_PYTHON: ${{ steps.toolchain.outputs.K9B_LIVE_LAB_PYTHON }}
+          K9B_LIVE_LAB_PREBAKED_VENV: ${{ vars.K9B_LIVE_LAB_PREBAKED_VENV || '' }}
+        run: scripts/ci/ensure_live_lab_venv.sh
+
+      # =======================================================================
+      # Initialize artifact directory
+      # =======================================================================
+      - name: Initialize artifact directory
+        run: |
+          mkdir -p \
+            ./lab-artifacts/vmalert-alertmanager/logs \
+            ./lab-artifacts/vmalert-alertmanager/artifacts \
+            ./lab-artifacts/vmalert-alertmanager/contracts
+
+      # =======================================================================
+      # Bootstrap protected kubeconfig and validate credential source
+      # This step fails closed if wrong identity (ARC runner SA) is detected
+      # =======================================================================
+      - name: Bootstrap protected kubeconfig and validate credentials
+        env:
+          K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64: ${{ secrets.K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          
+          ARTIFACT_DIR="./lab-artifacts/vmalert-alertmanager" scripts/k9b_cnpg_live_lab_bootstrap.sh \
+            K9B_LIVE_LAB_ADMIN_KUBECONFIG_B64 KUBECONFIG "$LAB_NAMESPACE"
+          
+          # Source GITHUB_ENV to get KUBECONFIG
+          source "${GITHUB_ENV}"
+          
+          echo "KUBECONFIG bootstrapped: ${KUBECONFIG}"
+          echo "Bootstrap complete, credential source validated"
+
+      # =======================================================================
+      # Source KUBECONFIG from bootstrap step
+      # =======================================================================
+      - name: Verify kubectl with protected kubeconfig
+        run: |
+          source "${GITHUB_ENV}"
+          kubectl --kubeconfig="${KUBECONFIG}" version --client
+          kubectl --kubeconfig="${KUBECONFIG}" cluster-info
+          echo "kubectl verified with protected kubeconfig"
+
+      # =======================================================================
+      # Preflight: Verify existing cluster access
+      # =======================================================================
+      - name: Verify cluster access
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Verifying cluster access ==="
+          kubectl --kubeconfig="${KUBECONFIG}" version --client
+          kubectl --kubeconfig="${KUBECONFIG}" auth can-i get pods --all-namespaces
+          kubectl --kubeconfig="${KUBECONFIG}" get nodes -o wide
+          echo "Cluster access verified"
+
+      # =======================================================================
+      # Preflight: Verify VictoriaMetrics operator CRDs
+      # =======================================================================
+      - name: Verify VictoriaMetrics operator preflight
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Verifying VictoriaMetrics operator CRDs ==="
+          
+          echo "Checking vmalert CRD..."
+          if ! kubectl --kubeconfig="${KUBECONFIG}" get crd vmalerts.operator.victoriametrics.com > /dev/null 2>&1; then
+            echo "ERROR: vmalert CRD not found. VictoriaMetrics operator must be preinstalled."
+            exit 1
+          fi
+          echo "vmalert CRD found"
+          
+          echo "Checking Alertmanager CRD..."
+          if ! kubectl --kubeconfig="${KUBECONFIG}" get crd alertmanagers.monitoring.coreos.com > /dev/null 2>&1; then
+            echo "ERROR: Alertmanager CRD not found. Prometheus operator must be preinstalled."
+            exit 1
+          fi
+          echo "Alertmanager CRD found"
+          
+          echo "VictoriaMetrics operator preflight PASSED"
+
+      # =======================================================================
+      # Create unique lab namespace
+      # =======================================================================
+      - name: Create lab namespace
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Creating lab namespace: $LAB_NAMESPACE ==="
+          kubectl --kubeconfig="${KUBECONFIG}" create namespace "$LAB_NAMESPACE" --dry-run=client -o yaml | kubectl --kubeconfig="${KUBECONFIG}" apply -f -
+          kubectl --kubeconfig="${KUBECONFIG}" label namespace "$LAB_NAMESPACE" \
+            lab.k9b.io/name=vmalert-alertmanager \
+            lab.k9b.io/run-id="${{ github.run_id }}" \
+            lab.k9b.io/managed=true \
+            --overwrite
+          echo "Lab namespace created and labeled"
+          kubectl --kubeconfig="${KUBECONFIG}" get namespace "$LAB_NAMESPACE"
+
+      # =======================================================================
+      # Run vmalert/Alertmanager live lab orchestrator
+      # =======================================================================
+      - name: Run vmalert/Alertmanager live lab
+        id: run-lab
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Running vmalert/Alertmanager live lab ==="
+          
+          set -euo pipefail
+          
+          # Run the lab orchestrator
+          .venv/bin/python scripts/k9b_vmalert_alertmanager_lab.py run \
+            --kubeconfig "${KUBECONFIG}" \
+            --artifact-dir ./lab-artifacts/vmalert-alertmanager \
+            --timeout 30m
+          
+          echo "Lab execution completed"
+          
+          # List artifact directory contents
+          echo "Artifact directory contents:"
+          find ./lab-artifacts/vmalert-alertmanager -type f | head -50
+
+      # =======================================================================
+      # Verify lab artifacts
+      # =======================================================================
+      - name: Verify lab artifacts
+        id: verify
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Verifying lab artifacts ==="
+          
+          set -euo pipefail
+          
+          # Run contract verification
+          .venv/bin/python scripts/k9b_vmalert_alertmanager_lab_contract.py \
+            --artifact-dir ./lab-artifacts/vmalert-alertmanager
+          
+          echo "Contract verification completed"
+
+      # =======================================================================
+      # Upload artifacts
+      # =======================================================================
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vmalert-alertmanager-lab-artifacts-${{ github.run_id }}
+          path: ./lab-artifacts/vmalert-alertmanager/**
+          retention-days: ${{ inputs.artifact_retention_days }}
+
+      # =======================================================================
+      # Cleanup: Delete lab namespace
+      # =======================================================================
+      - name: Cleanup lab namespace
+        if: always()
+        run: |
+          source "${GITHUB_ENV}"
+          echo "=== Cleaning up lab namespace ==="
+          kubectl --kubeconfig="${KUBECONFIG}" delete namespace "$LAB_NAMESPACE" --ignore-not-found=true || true
+          echo "Lab namespace deleted"

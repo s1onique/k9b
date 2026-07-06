@@ -117,3 +117,11 @@ healthConfig:
       review_enrichment:
         enabled: true
         provider: openai_compatible
+
+# =============================================================================
+# Alertmanager Webhook Integration: Enable for vmalert Alertmanager lab
+# =============================================================================
+alertmanagerWebhook:
+  enabled: true
+  autoPromote: true
+  sourceInstance: lab-alertmanager

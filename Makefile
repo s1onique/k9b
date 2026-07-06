@@ -137,3 +137,33 @@ ifndef ARTIFACT_DIR
 endif
 	@echo "Verifying live lab artifacts at $(ARTIFACT_DIR)..."
 	$(PYTHON) scripts/verify_k3s_cnpg_incident_lab_artifact.py --artifact-dir $(ARTIFACT_DIR) --verbose
+
+# =============================================================================
+# vmalert/Alertmanager Live Lab Targets
+# =============================================================================
+
+# Run vmalert/Alertmanager live lab
+# Usage: make lab-k9b-vmalert-alertmanager-live KUBECONFIG=/path/to/kubeconfig
+.PHONY: lab-k9b-vmalert-alertmanager-live
+lab-k9b-vmalert-alertmanager-live:
+ifndef KUBECONFIG
+	$(error KUBECONFIG is undefined - point to kubeconfig file)
+endif
+	@echo "Running vmalert/Alertmanager live lab..."
+	@echo "KUBECONFIG=$(KUBECONFIG)"
+	@echo "ARTIFACT_DIR=$(or $(ARTIFACT_DIR),./lab-artifacts/vmalert-alertmanager)"
+	@mkdir -p $(or $(ARTIFACT_DIR),./lab-artifacts/vmalert-alertmanager)
+	$(PYTHON) scripts/k9b_vmalert_alertmanager_lab.py run \
+		--kubeconfig $(KUBECONFIG) \
+		--artifact-dir $(or $(ARTIFACT_DIR),./lab-artifacts/vmalert-alertmanager) \
+		--timeout 20m
+
+# Verify vmalert/Alertmanager live lab artifacts
+# Usage: make verify-lab-k9b-vmalert-alertmanager-live ARTIFACT_DIR=./lab-artifacts/vmalert-alertmanager
+.PHONY: verify-lab-k9b-vmalert-alertmanager-live
+verify-lab-k9b-vmalert-alertmanager-live:
+ifndef ARTIFACT_DIR
+	$(error ARTIFACT_DIR is undefined - point to artifact directory)
+endif
+	@echo "Verifying vmalert/Alertmanager live lab artifacts at $(ARTIFACT_DIR)..."
+	$(PYTHON) scripts/k9b_vmalert_alertmanager_lab_contract.py --artifact-dir $(ARTIFACT_DIR)
