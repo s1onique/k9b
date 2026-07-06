@@ -107,3 +107,10 @@ lab-artifacts/
 
 # GitHub Actions runtime environment
 .github_env
+
+# Trace capture generated artifacts
+trace-capture/trace-summary.json
+trace-capture/backend-api-traces.json
+trace-capture/collector-output.jsonl
+trace-capture/collector-output.log
+trace-capture/trace-ids.txt

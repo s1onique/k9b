@@ -1,0 +1,46 @@
+# OpenTelemetry Collector configuration for k9b backend trace capture lab.
+#
+# This minimal config provides:
+# - OTLP receiver on gRPC 4317
+# - Batch processor for efficient export
+# - Debug exporter for local trace proof
+#
+# No external vendor dependencies required.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        # Allow unauthenticated local connections for lab purposes
+        auth: null
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+exporters:
+  debug:
+    verbosity: detailed
+    # Limit output to prevent unbounded log growth
+    sampling_initial: 100
+    sampling_thereafter: 100
+
+  # File exporter for structured trace output (optional, for JSON parsing)
+  file:
+    path: ./trace-capture/collector-output.jsonl
+    format: json
+    rotation:
+      max_size_mib: 10
+      max_backups: 3
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, file]
+  telemetry:
+    logs:
+      level: info
