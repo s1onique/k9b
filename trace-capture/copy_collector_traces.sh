@@ -150,6 +150,46 @@ get_trace_file_size() {
     kubectl exec -n "$NAMESPACE" "$pod" -- stat -c%s "$path" 2>/dev/null || echo "0"
 }
 
+# Extract traces from debug exporter logs (fallback for distroless images)
+extract_from_logs() {
+    local pod="$1"
+    local output_file="$2"
+    log "Using logs-based extraction fallback for distroless image..."
+    
+    # Create a temporary file for logs
+    local log_file
+    log_file=$(mktemp)
+    
+    # Get recent logs with debug exporter output
+    kubectl logs -n "$NAMESPACE" "$pod" --tail=500 > "$log_file" 2>/dev/null || true
+    
+    if [[ ! -s "$log_file" ]]; then
+        warn "No logs available from pod $pod"
+        rm -f "$log_file"
+        return 1
+    fi
+    
+    # Use Python script to parse logs if available
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "$script_dir/parse_debug_logs.py" ]]; then
+        log "Using Python parser: $script_dir/parse_debug_logs.py"
+        "$script_dir/../../../.venv/bin/python" "$script_dir/parse_debug_logs.py" "$log_file" > "$output_file" 2>/dev/null || {
+            warn "Python parser failed, falling back to basic extraction"
+            kubectl logs -n "$NAMESPACE" "$pod" --tail=500 > "$output_file" 2>/dev/null || true
+        }
+    else
+        warn "Python parser not found, using raw logs"
+        cat "$log_file" > "$output_file"
+    fi
+    
+    rm -f "$log_file"
+    
+    local line_count
+    line_count=$(wc -l < "$output_file" 2>/dev/null || echo "0")
+    log "Extracted $line_count spans from logs"
+}
+
 # Main logic
 main() {
     log "Namespace: $NAMESPACE"
@@ -167,24 +207,6 @@ main() {
 
     log "Found Collector pod: $collector_pod"
 
-    # Check if trace file exists
-    if ! check_trace_file "$collector_pod" "$TRACE_PATH"; then
-        warn "Trace file not found at $TRACE_PATH in pod $collector_pod"
-        warn "Ensure the Collector is configured with file exporter pointing to this path."
-        warn "See: collector-config-k8s.yaml"
-        exit 1
-    fi
-
-    local file_size
-    file_size=$(get_trace_file_size "$collector_pod" "$TRACE_PATH")
-    log "Trace file size: $file_size bytes"
-
-    if [[ "$file_size" == "0" ]]; then
-        warn "Trace file is empty. No traces captured yet."
-        warn "Make sure the k9b backend is sending traces to the Collector."
-        exit 0
-    fi
-
     # Create output directory
     mkdir -p "$OUTPUT_DIR"
 
@@ -193,12 +215,39 @@ main() {
     timestamp=$(date +%Y%m%d-%H%M%S)
     local output_file="$OUTPUT_DIR/collector-traces-$timestamp.jsonl"
 
-    log "Copying traces to $output_file..."
+    # Try file copy first
+    local use_logs_fallback=false
+    if check_trace_file "$collector_pod" "$TRACE_PATH"; then
+        local file_size
+        file_size=$(get_trace_file_size "$collector_pod" "$TRACE_PATH")
+        log "Trace file size: $file_size bytes"
 
-    # Copy the file
-    kubectl cp "${NAMESPACE}/${collector_pod}:${TRACE_PATH}" "$output_file"
+        if [[ "$file_size" == "0" ]]; then
+            warn "Trace file is empty. Falling back to logs extraction."
+            use_logs_fallback=true
+        else
+            log "Copying traces from file to $output_file..."
+            if kubectl cp "${NAMESPACE}/${collector_pod}:${TRACE_PATH}" "$output_file" 2>/dev/null; then
+                log "Successfully copied traces from file to $output_file"
+            else
+                warn "File copy failed. Falling back to logs extraction."
+                use_logs_fallback=true
+            fi
+        fi
+    else
+        warn "Trace file not found at $TRACE_PATH in pod $collector_pod"
+        warn "Using logs-based extraction fallback."
+        use_logs_fallback=true
+    fi
 
-    log "Successfully copied traces to $output_file"
+    # Use logs fallback if needed
+    if [[ "$use_logs_fallback" == "true" ]]; then
+        if extract_from_logs "$collector_pod" "$output_file"; then
+            log "Successfully extracted traces from logs"
+        else
+            error "Failed to extract traces from logs. Ensure Collector is running and sending spans."
+        fi
+    fi
 
     # Also copy as latest
     local latest_file="$OUTPUT_DIR/collector-traces-latest.jsonl"
@@ -207,12 +256,14 @@ main() {
 
     # Print summary
     local line_count
-    line_count=$(wc -l < "$output_file")
+    line_count=$(wc -l < "$output_file" 2>/dev/null || echo "0")
+    local output_size
+    output_size=$(wc -c < "$output_file" 2>/dev/null || echo "0")
     echo ""
     echo "Trace extraction complete:"
     echo "  Pod: $collector_pod"
     echo "  Source: $TRACE_PATH"
-    echo "  Size: $file_size bytes"
+    echo "  Size: $output_size bytes"
     echo "  Lines: $line_count"
     echo "  Output: $output_file"
     echo "  Latest: $latest_file"
