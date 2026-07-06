@@ -48,6 +48,7 @@ extend-exclude = [
     "snapshots",
     "artifacts",
     "exports",
+    "scripts",
 ]
 exclude = ["__pycache__", "dist", "build"]
 
