@@ -27,18 +27,24 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ..content_index import (
     ContentIndexConfig,
-    FallbackReason,
     load_content_index_config_from_env,
+)
+from ..content_index.readpath import (
+    FallbackReason as ReadpathFallbackReason,
 )
 from ..content_index.readpath import (
     get_incident_from_index,
     list_incidents_from_index,
     record_fallback_span,
     record_success_span,
+)
+from ..content_index.readpath_projection import (
+    safe_index_detail_to_api_payload,
+    safe_index_summary_to_api_payload,
 )
 from ..observability import (
     trace_incident_store_get,
@@ -92,24 +98,65 @@ def handle_list_incidents(
     if config.enabled:
         index_result = list_incidents_from_index(config)
         if index_result.index_available and index_result.data is not None:
-            # Success from index
+            # Success from index - convert projections to API payloads
             record_success_span(
                 "k9b.content_index.project_response",
                 enabled=True,
                 schema_version=index_result.schema_version or "unknown",
                 count=index_result.count,
             )
-            return index_result.data
+            # Convert raw projections to typed API payloads
+            raw_incidents = index_result.data.get("incidents", [])
+            api_incidents: list[IncidentSummaryPayload] = []
+            for raw_incident in raw_incidents:
+                api_incident = safe_index_summary_to_api_payload(
+                    raw_incident,
+                    ReadpathFallbackReason.PROJECTION_ERROR,
+                )
+                if api_incident is not None:
+                    api_incidents.append(api_incident)
+                else:
+                    # Malformed projection - fall back to direct read
+                    _logger.debug(
+                        "Malformed summary projection, falling back to direct read"
+                    )
+                    record_fallback_span(
+                        "k9b.content_index.fallback",
+                        reason=ReadpathFallbackReason.PROJECTION_ERROR,
+                        enabled=True,
+                        schema_version=index_result.schema_version,
+                    )
+                    # Fall through to direct read
+                    return _direct_list_incidents(status)
+
+            return {
+                "incidents": api_incidents,
+                "total": len(api_incidents),
+            }
         else:
             # Fallback to direct read
             record_fallback_span(
                 "k9b.content_index.fallback",
-                reason=index_result.fallback_reason or FallbackReason.INDEX_NOT_AVAILABLE,
+                reason=index_result.fallback_reason or ReadpathFallbackReason.INDEX_NOT_AVAILABLE,
                 enabled=True,
                 schema_version=index_result.schema_version,
             )
 
     # Direct incident store read (default path)
+    return _direct_list_incidents(status)
+
+
+def _direct_list_incidents(
+    status: str | None,
+) -> dict[str, list[IncidentSummaryPayload] | int]:
+    """Direct incident store read for list operations.
+
+    Args:
+        status: Optional status filter.
+
+    Returns:
+        Dict with "incidents" list and "total" count.
+    """
     store = get_incident_store()
 
     # Parse status filter if provided
@@ -180,19 +227,37 @@ def handle_get_incident(
         index_result = get_incident_from_index(config, incident_id)
         if index_result.index_available:
             if index_result.data is not None:
-                # Success from index
+                # Success from index - convert projection to API payload
                 record_success_span(
                     "k9b.content_index.project_response",
                     enabled=True,
                     schema_version=index_result.schema_version or "unknown",
                     count=index_result.count,
                 )
-                return index_result.data  # type: ignore[return-value]
+                # Convert raw projection to typed API payload
+                api_incident = safe_index_detail_to_api_payload(
+                    index_result.data,
+                    ReadpathFallbackReason.PROJECTION_ERROR,
+                )
+                if api_incident is not None:
+                    return api_incident
+                else:
+                    # Malformed projection - fall back to direct read
+                    _logger.debug(
+                        "Malformed detail projection for %s, falling back to direct read",
+                        incident_id,
+                    )
+                    record_fallback_span(
+                        "k9b.content_index.fallback",
+                        reason=ReadpathFallbackReason.PROJECTION_ERROR,
+                        enabled=True,
+                        schema_version=index_result.schema_version,
+                    )
             else:
                 # Not in index, but index is valid - try direct read
                 record_fallback_span(
                     "k9b.content_index.fallback",
-                    reason=FallbackReason.INDEX_NOT_AVAILABLE,
+                    reason=ReadpathFallbackReason.INDEX_NOT_AVAILABLE,
                     enabled=True,
                     schema_version=index_result.schema_version,
                 )
@@ -200,12 +265,28 @@ def handle_get_incident(
             # Fallback to direct read
             record_fallback_span(
                 "k9b.content_index.fallback",
-                reason=index_result.fallback_reason or FallbackReason.INDEX_NOT_AVAILABLE,
+                reason=index_result.fallback_reason or ReadpathFallbackReason.INDEX_NOT_AVAILABLE,
                 enabled=True,
                 schema_version=index_result.schema_version,
             )
 
     # Direct incident store read (default path or when extras needed)
+    return _direct_get_incident(incident_id, external_analysis_dir)
+
+
+def _direct_get_incident(
+    incident_id: str,
+    external_analysis_dir: Path | None,
+) -> IncidentDetailPayload | None:
+    """Direct incident store read for get operations.
+
+    Args:
+        incident_id: The incident ID to look up.
+        external_analysis_dir: Optional path to external-analysis directory.
+
+    Returns:
+        IncidentDetailPayload if found, None otherwise.
+    """
     store = get_incident_store()
 
     def _get_incident() -> Incident | None:
@@ -234,9 +315,12 @@ def handle_get_incident(
             next_check_plan_payloads=plan_payloads,
         )
 
-    return trace_incident_store_get(  # type: ignore[no-any-return]
-        _build_payload,
-        attributes={"k9b.projection_kind": "incident_detail"},
+    return cast(
+        IncidentDetailPayload | None,
+        trace_incident_store_get(
+            _build_payload,
+            attributes={"k9b.projection_kind": "incident_detail"},
+        ),
     )
 
 
