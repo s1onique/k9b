@@ -62,7 +62,6 @@ class IncidentStore:
     - No side effects on Kubernetes, LLMs, or external systems
     """
 
-    # Internal mutable storage - private to enforce snapshot discipline
     _incidents: dict[str, Incident] = field(default_factory=dict)
 
     def promote_candidates(
@@ -89,7 +88,6 @@ class IncidentStore:
             observed_at: When these candidates were observed
             snapshot_bundle_id: Optional ID of the snapshot bundle containing evidence.
                 When provided, new incidents start in COLLECTING_EVIDENCE state.
-
         Returns:
             Tuple of all incidents (both new and updated), sorted by incident_id
         """
@@ -138,7 +136,6 @@ class IncidentStore:
             bundle_id: ID of the snapshot bundle containing evidence
             candidates: Sequence of incident candidates to promote
             observed_at: When these candidates were observed
-
         Returns:
             Tuple of all incidents (both new and updated), sorted by incident_id
         """
@@ -151,10 +148,8 @@ class IncidentStore:
         """List incidents, optionally filtered by status.
 
         Returns a tuple (snapshot) of incidents sorted by incident_id.
-
         Args:
             status: Optional status filter. If None, returns all incidents.
-
         Returns:
             Tuple of incidents sorted by incident_id
         """
@@ -175,7 +170,6 @@ class IncidentStore:
 
         Args:
             incident_id: The incident ID to look up
-
         Returns:
             Snapshot copy of the incident, or None if not found
         """
@@ -186,12 +180,16 @@ class IncidentStore:
         # Return a snapshot copy
         return self._snapshot_incident(incident)
 
+    def add_incident(self, incident: Incident) -> None:
+        """Add an incident directly to the store (public seam for alert promotion)."""
+        snapshot = self._snapshot_incident(incident)
+        self._incidents[snapshot.incident_id] = snapshot
+
     def get_incident_timeline(self, incident_id: str) -> list[IncidentEvent]:
         """Get the timeline for a specific incident.
 
         Args:
             incident_id: The incident ID to look up
-
         Returns:
             List of timeline events sorted by occurrence time, or empty list if not found
         """
@@ -205,7 +203,6 @@ class IncidentStore:
 
         Args:
             incident_id: The incident ID to look up
-
         Returns:
             List of evidence links, or empty list if not found
         """
@@ -225,7 +222,6 @@ class IncidentStore:
         Args:
             incident_id: ID of the incident to transition
             bundle_id: ID of the snapshot bundle being collected
-
         Returns:
             Updated incident snapshot, or None if not found
         """
@@ -249,7 +245,6 @@ class IncidentStore:
         Args:
             incident_id: ID of the incident to transition
             review_packet_id: Optional ID of the review packet
-
         Returns:
             Updated incident snapshot, or None if not found
         """
@@ -276,7 +271,6 @@ class IncidentStore:
 
         Args:
             snapshot_bundle_id: The bundle ID to search for
-
         Returns:
             Tuple of matching incidents (excluding protected statuses)
         """
@@ -310,7 +304,6 @@ class IncidentStore:
         Args:
             snapshot_bundle_id: The bundle ID to match
             review_packet_id: Optional ID of the review packet
-
         Returns:
             Tuple of updated incidents
         """
@@ -338,7 +331,6 @@ class IncidentStore:
         Args:
             incident_id: ID of the incident to suppress
             reason: Human-readable reason for suppression
-
         Returns:
             Updated incident snapshot, or None if not found
         """
@@ -358,7 +350,6 @@ class IncidentStore:
         Args:
             incident_id: ID of the incident to mark as duplicate
             duplicate_of: incident_id of the primary incident
-
         Returns:
             Updated incident snapshot, or None if not found
         """
@@ -384,7 +375,6 @@ class IncidentStore:
             incident_id: ID of the incident to attach evidence to
             artifact_id: ID of the evidence artifact
             role: Role of the evidence
-
         Returns:
             Updated incident snapshot, or None if not found
         """
@@ -412,7 +402,6 @@ class IncidentStore:
             incident_id: ID of the incident
             run_id: The run_id for this diagnosis loop pass
             collector_run_id: The batch collector run ID
-
         Returns:
             Updated incident snapshot, or None if not found
         """
@@ -446,7 +435,6 @@ class IncidentStore:
             checks_rejected: Number of checks rejected
             decision: The terminal decision from the policy-enforced loop pass
                 (e.g., "stop_no_checks_proposed", "stop_root_cause_found")
-
         Returns:
             Updated incident snapshot, or None if not found
         """
@@ -475,7 +463,6 @@ class IncidentStore:
             run_id: Optional run_id for the failed pass
             collector_run_id: Optional batch collector run ID
             unavailable_reason: Safe reason code
-
         Returns:
             Updated incident snapshot, or None if not found
         """

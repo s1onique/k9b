@@ -1,0 +1,497 @@
+"""Alert signal to incident promotion service.
+
+This module promotes persisted alert signals into K9B incidents.
+
+Promotion rules:
+- Firing alert signals open or update incidents
+- Resolved alert signals attach to existing incidents without auto-resolving
+- Classification is deterministic
+- Correlation keys are deterministic
+- No auto-resolution of incidents
+- No new incidents from resolved alerts alone
+
+Suggested by: ACT-K9B-ALERT-INCIDENT-PROMOTION01
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from .collect.incident_candidates import (
+    CandidateClass,
+    CandidateSignal,
+    IncidentCandidate,
+    ObjectKind,
+    Severity,
+)
+from .collect.incident_lifecycle import (
+    Incident,
+    IncidentEvent,
+    IncidentEventActor,
+    IncidentEventType,
+    IncidentSignal,
+    IncidentStatus,
+    make_event_id,
+)
+from .collect.incident_store import IncidentStore
+from .incident_alert_classifier import (
+    AlertIncidentClass,
+    EntityKind,
+    classify_alert_signal,
+)
+from .incident_alert_correlation import build_alert_incident_correlation_key
+from .incident_alert_signal import AlertSignal, AlertStatus
+from .incident_alert_signal_reader import scan_alert_signal_artifacts
+
+if TYPE_CHECKING:
+    pass
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Promotion Result Model
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class AlertIncidentPromotionResult:
+    """Result of an alert-to-incident promotion scan."""
+
+    scanned_signal_count: int = 0
+    firing_signal_count: int = 0
+    resolved_signal_count: int = 0
+    opened_incident_count: int = 0
+    updated_incident_count: int = 0
+    skipped_duplicate_count: int = 0
+    skipped_resolved_without_open_incident_count: int = 0
+    malformed_artifact_count: int = 0
+    error_count: int = 0
+    errors: tuple[str, ...] = field(default_factory=tuple)
+
+    def to_dict(self) -> dict:
+        """Convert to dict for serialization."""
+        return {
+            "scanned_signal_count": self.scanned_signal_count,
+            "firing_signal_count": self.firing_signal_count,
+            "resolved_signal_count": self.resolved_signal_count,
+            "opened_incident_count": self.opened_incident_count,
+            "updated_incident_count": self.updated_incident_count,
+            "skipped_duplicate_count": self.skipped_duplicate_count,
+            "skipped_resolved_without_open_incident_count": (
+                self.skipped_resolved_without_open_incident_count
+            ),
+            "malformed_artifact_count": self.malformed_artifact_count,
+            "error_count": self.error_count,
+            "errors": list(self.errors),
+        }
+
+
+# =============================================================================
+# Alert Incident Candidate Projection
+# =============================================================================
+
+
+def alert_signal_to_incident_candidate(
+    signal: AlertSignal,
+    correlation_key: str,
+) -> IncidentCandidate:
+    """Project an alert signal to an incident candidate.
+
+    Args:
+        signal: The alert signal
+        correlation_key: The correlation key for this signal
+
+    Returns:
+        IncidentCandidate suitable for promotion
+    """
+    classification = classify_alert_signal(signal)
+
+    # Map alert class to candidate class
+    candidate_class = _map_alert_class_to_candidate_class(classification.class_)
+
+    # Map alert severity to candidate severity
+    severity = _map_severity(signal.severity)
+
+    # Determine object kind
+    object_kind = _map_entity_kind_to_object_kind(classification.entity_kind)
+
+    # Build signals
+    signals = [
+        CandidateSignal(
+            source="alert",
+            reason=signal.alertname,
+            message=_build_alert_message(signal),
+        )
+    ]
+
+    return IncidentCandidate(
+        candidate_id=correlation_key,
+        namespace=classification.namespace,
+        object_kind=object_kind,
+        object_name=classification.entity_name,
+        candidate_class=candidate_class,
+        severity=severity,
+        signals=tuple(signals),
+        evidence_needed=("alert_evidence",),
+        raw_object_kind=None,
+    )
+
+
+def _map_alert_class_to_candidate_class(alert_class: AlertIncidentClass) -> CandidateClass:
+    """Map alert incident class to candidate class."""
+    mapping = {
+        AlertIncidentClass.CRASH_LOOP: CandidateClass.CRASH_LOOP,
+        AlertIncidentClass.IMAGE_PULL_ERROR: CandidateClass.IMAGE_PULL_ERROR,
+        AlertIncidentClass.PENDING_POD: CandidateClass.PENDING_POD,
+        AlertIncidentClass.DEPLOYMENT_UNAVAILABLE: CandidateClass.DEPLOYMENT_UNAVAILABLE,
+        AlertIncidentClass.NODE_UNAVAILABLE: CandidateClass.UNKNOWN,
+        AlertIncidentClass.TARGET_UNREACHABLE: CandidateClass.UNKNOWN,
+        AlertIncidentClass.EXTERNAL_ALERT: CandidateClass.UNKNOWN,
+    }
+    return mapping.get(alert_class, CandidateClass.UNKNOWN)
+
+
+def _map_severity(severity: str | None) -> Severity:
+    """Map alert severity to candidate severity."""
+    if severity is None:
+        return Severity.WARNING
+
+    sev = severity.lower()
+    if sev in ("critical", "error", "err"):
+        return Severity.ERROR
+    return Severity.WARNING
+
+
+def _map_entity_kind_to_object_kind(entity_kind: EntityKind) -> ObjectKind:
+    """Map alert entity kind to candidate object kind."""
+    mapping = {
+        EntityKind.POD: ObjectKind.POD,
+        EntityKind.DEPLOYMENT: ObjectKind.DEPLOYMENT,
+        EntityKind.NODE: ObjectKind.NODE,
+        EntityKind.JOB: ObjectKind.UNKNOWN,
+        EntityKind.SERVICE: ObjectKind.UNKNOWN,
+        EntityKind.CONTAINER: ObjectKind.POD,
+        EntityKind.INSTANCE: ObjectKind.UNKNOWN,
+        EntityKind.ALERT: ObjectKind.UNKNOWN,
+    }
+    return mapping.get(entity_kind, ObjectKind.UNKNOWN)
+
+
+def _build_alert_message(signal: AlertSignal) -> str:
+    """Build a message from alert signal."""
+    parts = [f"Alert: {signal.alertname}"]
+    if signal.severity:
+        parts.append(f"Severity: {signal.severity}")
+    if signal.status:
+        parts.append(f"Status: {signal.status.value}")
+    return " | ".join(parts)
+
+
+# =============================================================================
+# Incident Promotion Functions
+# =============================================================================
+
+
+def open_incident_from_alert_signal(
+    signal: AlertSignal,
+    candidate: IncidentCandidate,
+    correlation_key: str,
+    observed_at: datetime,
+) -> Incident:
+    """Open a new incident from an alert signal.
+
+    Args:
+        signal: The alert signal
+        candidate: The incident candidate
+        correlation_key: The correlation key
+        observed_at: When the signal was observed
+
+    Returns:
+        New Incident in OPEN state
+    """
+    incident_id = correlation_key
+
+    # Create incident signal
+    incident_signals = [
+        IncidentSignal(
+            source="alert",
+            reason=signal.alertname,
+            message=_build_alert_message(signal),
+            captured_at=observed_at,
+            fingerprint=signal.signal_id,
+        )
+    ]
+
+    # Create OPENED event
+    opened_event = IncidentEvent(
+        event_id=make_event_id(incident_id, "alert_opened", observed_at),
+        incident_id=incident_id,
+        event_type=IncidentEventType.OPENED,
+        actor=IncidentEventActor.SYSTEM,
+        occurred_at=observed_at,
+        message=f"Incident opened from alert signal: {signal.alertname}",
+        data={
+            "alert_signal_id": signal.signal_id,
+            "correlation_key": correlation_key,
+            "severity": signal.severity or "unknown",
+        },
+    )
+
+    return Incident(
+        incident_id=incident_id,
+        source_candidate_id=candidate.candidate_id,
+        namespace=candidate.namespace,
+        object_kind=candidate.object_kind.value,
+        object_name=candidate.object_name,
+        raw_object_kind=candidate.raw_object_kind,
+        candidate_class=candidate.candidate_class.value,
+        severity=candidate.severity.value,
+        status=IncidentStatus.OPEN,
+        first_observed_at=observed_at,
+        last_observed_at=observed_at,
+        signals=incident_signals,
+        evidence_needed=list(candidate.evidence_needed),
+        evidence_links=[],
+        signal_count=len(incident_signals),
+        events=[opened_event],
+    )
+
+
+def attach_alert_signal_to_incident(
+    incident: Incident,
+    signal: AlertSignal,
+    correlation_key: str,
+    observed_at: datetime,
+) -> Incident:
+    """Attach an alert signal to an existing incident.
+
+    This function does NOT change incident status or resolve the incident.
+
+    Args:
+        incident: The existing incident
+        signal: The alert signal to attach
+        correlation_key: The correlation key
+        observed_at: When the signal was observed
+
+    Returns:
+        Updated Incident with attached signal
+    """
+    # Check for duplicate attachment
+    if any(s.fingerprint == signal.signal_id for s in incident.signals):
+        return incident
+
+    # Create new signal
+    new_signal = IncidentSignal(
+        source="alert",
+        reason=signal.alertname,
+        message=_build_alert_message(signal),
+        captured_at=observed_at,
+        fingerprint=signal.signal_id,
+    )
+
+    # Create timeline event
+    event_data = {
+        "alert_signal_id": signal.signal_id,
+        "correlation_key": correlation_key,
+        "status": signal.status.value,
+    }
+    signal_event = IncidentEvent(
+        event_id=make_event_id(incident.incident_id, "alert_signal_attached", observed_at, event_data),
+        incident_id=incident.incident_id,
+        event_type=IncidentEventType.SIGNAL_MERGED,
+        actor=IncidentEventActor.SYSTEM,
+        occurred_at=observed_at,
+        message=f"Alert signal attached: {signal.alertname} ({signal.status.value})",
+        data=event_data,
+    )
+
+    return replace(
+        incident,
+        last_observed_at=observed_at,
+        signals=incident.signals + [new_signal],
+        signal_count=incident.signal_count + 1,
+        events=incident.events + [signal_event],
+    )
+
+
+# =============================================================================
+# Promotion Service
+# =============================================================================
+
+
+def promote_alert_signals_to_incidents(
+    *,
+    incident_store: IncidentStore,
+    runs_dir: Path,
+    now: datetime | None = None,
+) -> AlertIncidentPromotionResult:
+    """Promote alert signals to incidents.
+
+    This service:
+    - Scans persisted alert signal artifacts
+    - Classifies each signal
+    - Builds correlation keys
+    - Firing alerts: open new incident or update existing
+    - Resolved alerts: attach to existing incident (no auto-resolve)
+
+    Args:
+        incident_store: The incident store to write to
+        runs_dir: The runs directory containing alert signal artifacts
+        now: Current timestamp (defaults to now)
+
+    Returns:
+        AlertIncidentPromotionResult with promotion statistics
+    """
+    if now is None:
+        now = datetime.now(UTC)
+
+    errors: list[str] = []
+    scanned = 0
+    firing_count = 0
+    resolved_count = 0
+    opened_count = 0
+    updated_count = 0
+    skipped_dup = 0
+    skipped_resolved = 0
+    malformed_count = 0
+
+    # Scan alert signal artifacts
+    artifacts = scan_alert_signal_artifacts(runs_dir)
+
+    for artifact in artifacts:
+        try:
+            if artifact.signal is None:
+                malformed_count += 1
+                continue
+
+            signal = artifact.signal
+            scanned += 1
+
+            # Classify the signal
+            classification = classify_alert_signal(signal)
+
+            # Build correlation key
+            correlation_key = build_alert_incident_correlation_key(signal, classification)
+
+            if signal.status == AlertStatus.FIRING:
+                firing_count += 1
+                opened_count, updated_count, skipped_dup = _handle_firing_alert(
+                    incident_store=incident_store,
+                    signal=signal,
+                    correlation_key=correlation_key,
+                    observed_at=signal.received_at,
+                    errors=errors,
+                    opened_count=opened_count,
+                    updated_count=updated_count,
+                    skipped_dup=skipped_dup,
+                )
+            elif signal.status == AlertStatus.RESOLVED:
+                resolved_count += 1
+                skipped_resolved = _handle_resolved_alert(
+                    incident_store=incident_store,
+                    signal=signal,
+                    correlation_key=correlation_key,
+                    observed_at=signal.received_at,
+                    errors=errors,
+                    skipped_resolved=skipped_resolved,
+                )
+
+        except Exception as e:
+            error_msg = f"Error processing artifact {artifact.identity}: {e}"
+            logger.exception(error_msg)
+            errors.append(error_msg)
+
+    return AlertIncidentPromotionResult(
+        scanned_signal_count=scanned,
+        firing_signal_count=firing_count,
+        resolved_signal_count=resolved_count,
+        opened_incident_count=opened_count,
+        updated_incident_count=updated_count,
+        skipped_duplicate_count=skipped_dup,
+        skipped_resolved_without_open_incident_count=skipped_resolved,
+        malformed_artifact_count=malformed_count,
+        error_count=len(errors),
+        errors=tuple(errors),
+    )
+
+
+def _handle_firing_alert(
+    incident_store: IncidentStore,
+    signal: AlertSignal,
+    correlation_key: str,
+    observed_at: datetime,
+    errors: list[str],
+    opened_count: int,
+    updated_count: int,
+    skipped_dup: int,
+) -> tuple[int, int, int]:
+    """Handle a firing alert - open or update incident. Returns (opened, updated, skipped_dup)."""
+    # Check if incident already exists
+    existing = incident_store.get_incident(correlation_key)
+
+    if existing is None:
+        # Open new incident
+        candidate = alert_signal_to_incident_candidate(signal, correlation_key)
+        new_incident = open_incident_from_alert_signal(
+            signal=signal,
+            candidate=candidate,
+            correlation_key=correlation_key,
+            observed_at=observed_at,
+        )
+        incident_store.add_incident(new_incident)
+        opened_count += 1
+    else:
+        # Check if this is a duplicate signal
+        if any(s.fingerprint == signal.signal_id for s in existing.signals):
+            skipped_dup += 1
+            return opened_count, updated_count, skipped_dup
+
+        # Update existing incident
+        updated = attach_alert_signal_to_incident(
+            incident=existing,
+            signal=signal,
+            correlation_key=correlation_key,
+            observed_at=observed_at,
+        )
+        incident_store.add_incident(updated)
+        updated_count += 1
+    return opened_count, updated_count, skipped_dup
+
+
+def _handle_resolved_alert(
+    incident_store: IncidentStore,
+    signal: AlertSignal,
+    correlation_key: str,
+    observed_at: datetime,
+    errors: list[str],
+    skipped_resolved: int,
+) -> int:
+    """Handle a resolved alert - attach to existing incident only. Returns updated skipped_resolved."""
+    # Find existing incident by correlation key
+    existing = incident_store.get_incident(correlation_key)
+
+    if existing is None:
+        # No matching incident - skip
+        skipped_resolved += 1
+        return skipped_resolved
+
+    # Check if this is a duplicate signal
+    if any(s.fingerprint == signal.signal_id for s in existing.signals):
+        return skipped_resolved
+
+    # Attach resolved alert to existing incident
+    updated = attach_alert_signal_to_incident(
+        incident=existing,
+        signal=signal,
+        correlation_key=correlation_key,
+        observed_at=observed_at,
+    )
+    incident_store.add_incident(updated)
+    return skipped_resolved
+
+
