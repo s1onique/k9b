@@ -36,6 +36,11 @@ _INCIDENT_AUTOMATIC_DIAGNOSIS_LOOP_PATTERN = re.compile(
     r"^/api/incidents/([^/]+)/automatic-diagnosis-loop/one-pass$"
 )
 
+# Alertmanager webhook integration endpoint
+_ALERTMANAGER_WEBHOOK_PATTERN = re.compile(
+    r"^/api/integrations/alertmanager/webhook$"
+)
+
 
 def handle_get_request(handler: HealthUIRequestHandler) -> None:
     """Handle GET requests by routing to appropriate handlers.
@@ -316,6 +321,14 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
 
         incident_id = incident_auto_dl_match.group(1)
         handle_incident_automatic_diagnosis_loop_one_pass_api(handler, incident_id)
+        return
+
+    # Alertmanager webhook integration endpoint
+    # POST /api/integrations/alertmanager/webhook
+    if route == "/api/integrations/alertmanager/webhook":
+        from .server_alertmanager_webhook import handle_alertmanager_webhook_api
+
+        handle_alertmanager_webhook_api(handler)
         return
 
     handler._status_code = 404
