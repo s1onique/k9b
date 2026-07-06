@@ -14,14 +14,11 @@ Tests cover:
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
 
-import pytest
-
 # Import from trace-capture module
-import sys
-
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "trace-capture"))
 
 from trace_summary import (
@@ -35,7 +32,6 @@ from trace_summary import (
     is_internal_span,
     validate_trace_summary,
 )
-
 
 # =============================================================================
 # Test TraceSummary Dataclass
