@@ -32,13 +32,14 @@ _src_path = _repo_root / "src"
 sys.path.insert(0, str(_src_path))
 
 # noqa: E402 - required for script to find package
-from k8s_diag_agent.llm.base import LLMAssessmentInput
 from k8s_diag_agent.llm.llamacpp_provider import (  # noqa: E402
     LlamaCppProvider,
     LlamaCppProviderConfig,
     LLMResponseParseError,
     classify_llm_failure,
 )
+
+from k8s_diag_agent.llm.base import LLMAssessmentInput  # noqa: E402
 
 
 def run_smoke_test() -> dict[str, Any]:
