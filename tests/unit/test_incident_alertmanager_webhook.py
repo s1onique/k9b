@@ -315,11 +315,11 @@ class TestHandleAlertmanagerWebhook:
             AlertmanagerWebhookConfig,
         )
 
-        config = AlertmanagerWebhookConfig(enabled=True)
+        config = AlertmanagerWebhookConfig(enabled=True, bearer_token="test-token")
 
         with pytest.raises(WebhookPayloadError, match="Invalid JSON"):
             handle_alertmanager_webhook(
-                auth_header=None,
+                auth_header="Bearer test-token",
                 raw_body=b"not valid json",
                 config=config,
                 root=self.root,

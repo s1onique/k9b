@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from ..collect.incident_store_provider import get_incident_store
 from ..incident_alertmanager_webhook import (
     WebhookAuthError,
     WebhookDisabledError,
@@ -89,6 +90,11 @@ def handle_alertmanager_webhook_api(handler: HealthUIRequestHandler) -> None:
     if content_length > 0:
         raw_body = handler.rfile.read(content_length)
 
+    # Get incident store for auto-promotion (if enabled)
+    incident_store = None
+    if config.auto_promote:
+        incident_store = get_incident_store()
+
     # Handle the webhook request
     try:
         response, status_code = handle_alertmanager_webhook(
@@ -96,6 +102,7 @@ def handle_alertmanager_webhook_api(handler: HealthUIRequestHandler) -> None:
             raw_body=raw_body,
             config=config,
             root=root,
+            incident_store=incident_store,
         )
 
         if status_code == 200:

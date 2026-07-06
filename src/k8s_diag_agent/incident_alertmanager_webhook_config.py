@@ -12,6 +12,7 @@ from pathlib import Path
 
 # Default constants
 DEFAULT_ENABLED = False
+DEFAULT_AUTO_PROMOTE = False
 DEFAULT_SOURCE_INSTANCE = "alertmanager-main"
 DEFAULT_MAX_PAYLOAD_BYTES = 262144  # 256 KiB
 
@@ -25,14 +26,19 @@ class AlertmanagerWebhookConfig:
     - Bearer token authentication (required when enabled)
     - Source instance identifier
     - Payload size limits
+    - Auto-promotion of alert signals to incidents
 
     Design principles:
     - Fail-closed by default (disabled unless explicitly enabled)
     - Token file takes precedence over inline token
     - Never log or persist token values
+    - Auto-promotion disabled by default (opt-in)
     """
     # Whether the webhook endpoint is enabled
     enabled: bool = DEFAULT_ENABLED
+
+    # Whether to auto-promote alert signals to incidents after successful ingestion
+    auto_promote: bool = DEFAULT_AUTO_PROMOTE
 
     # Bearer token for authentication (if enabled)
     bearer_token: str | None = None
@@ -66,6 +72,7 @@ def parse_alertmanager_webhook_config(
 
     Environment variables:
         K9B_ALERTMANAGER_WEBHOOK_ENABLED: "true" or "false" (default: false)
+        K9B_ALERTMANAGER_WEBHOOK_AUTO_PROMOTE: "true" or "false" (default: false)
         K9B_ALERTMANAGER_WEBHOOK_TOKEN: Inline bearer token
         K9B_ALERTMANAGER_WEBHOOK_TOKEN_FILE: Path to file containing bearer token
         K9B_ALERTMANAGER_WEBHOOK_SOURCE_INSTANCE: Source instance identifier
@@ -82,6 +89,10 @@ def parse_alertmanager_webhook_config(
     # Parse enabled
     enabled_raw = os.environ.get(f"{env_prefix}ENABLED", "").lower()
     enabled = enabled_raw in ("true", "1", "yes")
+
+    # Parse auto_promote
+    auto_promote_raw = os.environ.get(f"{env_prefix}AUTO_PROMOTE", "").lower()
+    auto_promote = auto_promote_raw in ("true", "1", "yes")
 
     # Parse token - file wins over inline
     bearer_token: str | None = None
@@ -120,6 +131,7 @@ def parse_alertmanager_webhook_config(
 
     return AlertmanagerWebhookConfig(
         enabled=enabled,
+        auto_promote=auto_promote,
         bearer_token=bearer_token,
         source_instance=source_instance,
         max_payload_bytes=max_payload_bytes,
@@ -171,6 +183,7 @@ __all__ = [
     "reset_alertmanager_webhook_config",
     "set_alertmanager_webhook_config",
     "DEFAULT_ENABLED",
+    "DEFAULT_AUTO_PROMOTE",
     "DEFAULT_SOURCE_INSTANCE",
     "DEFAULT_MAX_PAYLOAD_BYTES",
 ]
