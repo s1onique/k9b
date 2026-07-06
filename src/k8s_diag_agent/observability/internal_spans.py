@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
@@ -48,7 +48,7 @@ def _get_tracer() -> object | None:
         try:
             from opentelemetry import trace
 
-            _tracer = trace.get_tracer(__name__)
+            _tracer = cast(object | None, trace.get_tracer(__name__))
         except ImportError:
             # OTel not installed - return None to indicate tracing unavailable
             return None
