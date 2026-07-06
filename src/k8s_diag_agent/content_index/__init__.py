@@ -5,6 +5,14 @@
 # projections from source artifacts.
 
 # Import freshness module
+# Import readpath module (disabled-by-default index-backed read path)
+from k8s_diag_agent.content_index.config import (
+    CONTENT_INDEX_DB_PATH_ENV_VAR,
+    CONTENT_INDEX_ENABLED_ENV_VAR,
+    ContentIndexConfig,
+    get_default_content_index_db_path,
+    load_content_index_config_from_env,
+)
 from k8s_diag_agent.content_index.freshness import (
     HASH_CHUNK_SIZE,
     FingerprintResult,
@@ -51,6 +59,15 @@ from k8s_diag_agent.content_index.projections import (
     strip_forbidden_fields,
     truncate_string,
     validate_projection_safety,
+)
+from k8s_diag_agent.content_index.readpath import (
+    ContentIndexReader,
+    FallbackReason,
+    IndexReadResult,
+    get_incident_from_index,
+    list_incidents_from_index,
+    record_fallback_span,
+    record_success_span,
 )
 
 # Import schema module
@@ -168,4 +185,17 @@ __all__ = [
     "rebuild_index",
     "update_index",
     "validate_index",
+    # Readpath (disabled-by-default index-backed read path)
+    "ContentIndexConfig",
+    "ContentIndexReader",
+    "FallbackReason",
+    "IndexReadResult",
+    "CONTENT_INDEX_ENABLED_ENV_VAR",
+    "CONTENT_INDEX_DB_PATH_ENV_VAR",
+    "get_default_content_index_db_path",
+    "load_content_index_config_from_env",
+    "get_incident_from_index",
+    "list_incidents_from_index",
+    "record_fallback_span",
+    "record_success_span",
 ]
