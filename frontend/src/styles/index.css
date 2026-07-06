@@ -101,6 +101,10 @@
 @import url('./components/runtime-status.css');
 @import url('./components/incident-snapshot.css');
 @import url('./components/incident-report-card.css');
+@import url('./components/incident-panel.css');
+@import url('./components/incident-panel-badges.css');
+@import url('./components/incident-panel-timeline.css');
+@import url('./components/incident-panel-theme.css');
 @import url('./components/operator-worklist-card.css');
 @import url('./components/command-text.css');
 @import url('./components/expandable-text.css');

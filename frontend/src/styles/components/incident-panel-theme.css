@@ -1,0 +1,220 @@
+/**
+ * Incident Panel Theme Overrides
+ *
+ * Phase: Incident-first UI redesign
+ * Purpose: Theme-specific overrides for incident panels
+ *
+ * Extracted to incident-panel-theme.css for LLM-friendly file sizing.
+ * Import alongside incident-panel.css for full theme support.
+ */
+
+/* ==========================================================================
+   Solarized Light Theme Overrides
+   ========================================================================== */
+
+[data-theme="solarized-light"] .incident-card {
+  background: rgba(238, 242, 244, 0.5);
+  border-color: rgba(147, 161, 161, 0.25);
+}
+
+[data-theme="solarized-light"] .incident-card:hover {
+  border-color: rgba(147, 161, 161, 0.4);
+}
+
+[data-theme="solarized-light"] .incident-card-title {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .incident-card-entity {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .incident-war-room-header {
+  background: rgba(238, 242, 244, 0.6);
+  border-color: rgba(147, 161, 161, 0.25);
+}
+
+[data-theme="solarized-light"] .incident-war-room-summary-value {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .incident-section {
+  background: rgba(238, 242, 244, 0.4);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .incident-section-title {
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .signal-item {
+  background: rgba(238, 242, 244, 0.5);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .signal-source {
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .signal-reason {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .signal-message {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .evidence-item {
+  background: rgba(238, 242, 244, 0.5);
+  border-color: rgba(147, 161, 161, 0.2);
+}
+
+[data-theme="solarized-light"] .evidence-kind {
+  color: #6c71c4;
+}
+
+[data-theme="solarized-light"] .timeline-event-type {
+  color: var(--color-text-primary, #002b36);
+}
+
+[data-theme="solarized-light"] .timeline-event-message {
+  color: #586e75;
+}
+
+[data-theme="solarized-light"] .severity-error {
+  background: rgba(220, 50, 47, 0.12);
+  color: #dc2626;
+  border-color: rgba(220, 50, 47, 0.3);
+}
+
+[data-theme="solarized-light"] .severity-warning {
+  background: rgba(181, 137, 0, 0.12);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.35);
+}
+
+[data-theme="solarized-light"] .severity-info {
+  background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.3);
+}
+
+[data-theme="solarized-light"] .status-open {
+  background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.3);
+}
+
+[data-theme="solarized-light"] .status-collecting {
+  background: rgba(108, 113, 196, 0.1);
+  color: #6c71c4;
+  border-color: rgba(108, 113, 196, 0.3);
+}
+
+[data-theme="solarized-light"] .status-review {
+  background: rgba(33, 132, 62, 0.12);
+  color: #2aa198;
+  border-color: rgba(33, 132, 62, 0.3);
+}
+
+[data-theme="solarized-light"] .status-investigating {
+  background: rgba(181, 137, 0, 0.12);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.35);
+}
+
+[data-theme="solarized-light"] .status-suppressed,
+[data-theme="solarized-light"] .status-duplicate,
+[data-theme="solarized-light"] .status-unknown {
+  background: rgba(147, 161, 161, 0.12);
+  color: #657b83;
+  border-color: rgba(147, 161, 161, 0.3);
+}
+
+[data-theme="solarized-light"] .status-resolved {
+  background: rgba(33, 132, 62, 0.12);
+  color: #2aa198;
+  border-color: rgba(33, 132, 62, 0.3);
+}
+
+[data-theme="solarized-light"] .source-k8s {
+  background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+  border-color: rgba(38, 139, 210, 0.3);
+}
+
+[data-theme="solarized-light"] .source-alertmanager {
+  background: rgba(203, 75, 22, 0.12);
+  color: #cb4b16;
+  border-color: rgba(203, 75, 22, 0.3);
+}
+
+[data-theme="solarized-light"] .source-vmalert {
+  background: rgba(33, 132, 62, 0.12);
+  color: #2aa198;
+  border-color: rgba(33, 132, 62, 0.3);
+}
+
+[data-theme="solarized-light"] .source-manual {
+  background: rgba(108, 113, 196, 0.1);
+  color: #6c71c4;
+  border-color: rgba(108, 113, 196, 0.3);
+}
+
+[data-theme="solarized-light"] .diagnosis-status-running {
+  background: rgba(181, 137, 0, 0.12);
+  color: #b58900;
+  border-color: rgba(181, 137, 0, 0.35);
+}
+
+[data-theme="solarized-light"] .diagnosis-status-completed {
+  background: rgba(33, 132, 62, 0.12);
+  color: #2aa198;
+  border-color: rgba(33, 132, 62, 0.3);
+}
+
+[data-theme="solarized-light"] .diagnosis-status-failed {
+  background: rgba(220, 50, 47, 0.12);
+  color: #dc2626;
+  border-color: rgba(220, 50, 47, 0.3);
+}
+
+[data-theme="solarized-light"] .review-packet-badge {
+  background: rgba(33, 132, 62, 0.12);
+  color: #2aa198;
+  border-color: rgba(33, 132, 62, 0.3);
+}
+
+[data-theme="solarized-light"] .review-packet-error-text {
+  color: #dc2626;
+}
+
+[data-theme="solarized-light"] .timeline-event-category.category-lifecycle {
+  background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .timeline-event-category.category-signals {
+  background: rgba(38, 139, 210, 0.12);
+  color: #268bd2;
+}
+
+[data-theme="solarized-light"] .timeline-event-category.category-status {
+  background: rgba(181, 137, 0, 0.12);
+  color: #b58900;
+}
+
+[data-theme="solarized-light"] .timeline-event-category.category-evidence {
+  background: rgba(108, 113, 196, 0.1);
+  color: #6c71c4;
+}
+
+[data-theme="solarized-light"] .timeline-event-category.category-review {
+  background: rgba(33, 132, 62, 0.12);
+  color: #2aa198;
+}
+
+[data-theme="solarized-light"] .timeline-event-category.category-diagnosis {
+  background: rgba(203, 75, 22, 0.12);
+  color: #cb4b16;
+}

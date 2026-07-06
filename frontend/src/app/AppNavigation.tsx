@@ -2,6 +2,7 @@
  * AppNavigation Component
  *
  * Navigation bar for the K8s Operator Advisor application.
+ * Redesigned to prioritize incidents as the primary operational object.
  * Extracted from App.tsx to reduce component size.
  */
 
@@ -14,6 +15,8 @@ export interface AppNavigationProps {
 export function AppNavigation({ run }: AppNavigationProps) {
   return (
     <nav className="cockpit-nav" aria-label="Fleet cockpit sections">
+      {/* Incident-first navigation - primary operational object */}
+      <a className="cockpit-nav__item" href="#incident-list">Incidents</a>
       <a className="cockpit-nav__item" href="#recent-runs">Recent runs</a>
       <a className="cockpit-nav__item" href="#run-detail">Run summary</a>
       <a className="cockpit-nav__item" href="#review-enrichment">Provider advisory</a>

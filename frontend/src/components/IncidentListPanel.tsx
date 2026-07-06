@@ -2,7 +2,8 @@
  * IncidentListPanel Component
  *
  * Read-only UI for displaying promoted incidents from snapshot captures.
- * 
+ * Redesigned to make Incidents the primary operational object.
+ *
  * Hard constraints enforced:
  * - NO remediation actions
  * - NO Kubernetes mutation
@@ -16,6 +17,24 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { IncidentSummaryPayload, IncidentDetailPayload } from "../api";
 import { listIncidents, getIncident } from "../api";
 import { IncidentDetailPanel } from "./IncidentDetailPanel";
+import {
+  incidentDisplayTitle,
+  incidentPrimaryEntity,
+  incidentStatusLabel,
+  incidentSeverityClass,
+  incidentStatusClass,
+  incidentClassLabel,
+  incidentSourceBadges,
+  incidentSignalCountLabel,
+  incidentEvidenceCountLabel,
+  incidentDiagnosisSummary,
+  incidentDiagnosisLoopClass,
+  incidentDiagnosisLoopLabel,
+  formatIncidentTimestamp,
+  getSignalSourceLabel,
+  getSignalSourceClass,
+  type SignalSource,
+} from "./incident-view-model";
 
 // Incident status filter type - union of valid status values
 type IncidentStatusFilter = "" | "open" | "collecting_evidence" | "ready_for_review" | "investigating" | "suppressed" | "duplicate" | "resolved";
@@ -39,64 +58,28 @@ const isIncidentStatusFilter = (value: string): value is IncidentStatusFilter =>
   INCIDENT_STATUSES.some((status) => status.value === value);
 
 /**
- * Maps backend status to display label.
+ * Renders source badges for an incident.
  */
-const getStatusLabel = (status: string): string => {
-  const found = INCIDENT_STATUSES.find(s => s.value === status);
-  return found?.label ?? status;
-};
+const SourceBadges: React.FC<{ sources: SignalSource[] }> = ({ sources }) => (
+  <div className="incident-card-badges">
+    {sources.map((source) => (
+      <span key={source} className={getSignalSourceClass(source)}>
+        {getSignalSourceLabel(source)}
+      </span>
+    ))}
+  </div>
+);
 
 /**
- * Returns CSS class for severity badge.
+ * Renders a compact diagnosis status indicator.
  */
-const getSeverityClass = (severity: string): string => {
-  switch (severity.toLowerCase()) {
-    case "error":
-      return "severity-error";
-    case "warning":
-      return "severity-warning";
-    default:
-      return "severity-info";
-  }
-};
+const DiagnosisStatus: React.FC<{ status: "not_run" | "running_or_started" | "completed" | "failed_or_unavailable" }> = ({ status }) => (
+  <span className={incidentDiagnosisLoopClass(status)}>
+    {incidentDiagnosisLoopLabel(status)}
+  </span>
+);
 
-/**
- * Returns CSS class for status badge.
- */
-const getStatusClass = (status: string): string => {
-  switch (status.toLowerCase()) {
-    case "open":
-      return "status-open";
-    case "collecting_evidence":
-      return "status-collecting";
-    case "ready_for_review":
-      return "status-review";
-    case "investigating":
-      return "status-investigating";
-    case "suppressed":
-      return "status-suppressed";
-    case "duplicate":
-      return "status-duplicate";
-    case "resolved":
-      return "status-resolved";
-    default:
-      return "status-unknown";
-  }
-};
-
-/**
- * Formats a timestamp for display.
- */
-const formatTimestamp = (timestamp: string): string => {
-  try {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
-  } catch {
-    return timestamp;
-  }
-};
-
-interface IncidentRowProps {
+interface IncidentCardProps {
   incident: IncidentSummaryPayload;
   isExpanded: boolean;
   isLoading: boolean;
@@ -107,10 +90,10 @@ interface IncidentRowProps {
 }
 
 /**
- * Renders a single incident row with read-only evidence and review packet info.
- * Uses latest_snapshot_bundle_id and review_packet state object.
+ * Renders a single incident card with incident-first design.
+ * Shows: title, entity, status, severity, class, counts, diagnosis state, source badges.
  */
-const IncidentRow: React.FC<IncidentRowProps> = ({
+const IncidentCard: React.FC<IncidentCardProps> = ({
   incident,
   isExpanded,
   isLoading,
@@ -119,102 +102,69 @@ const IncidentRow: React.FC<IncidentRowProps> = ({
   onRetry,
   detailId,
 }) => {
-  const displayKind = incident.raw_object_kind || incident.object_kind;
+  const sources = incidentSourceBadges(incident);
+  const title = incidentDisplayTitle(incident);
+  const entity = incidentPrimaryEntity(incident);
 
   return (
-    <div className="incident-row">
-      <div className="incident-header">
-        <div className="incident-badges">
-          <span className={`severity-badge ${getSeverityClass(incident.severity)}`}>
+    <div className="incident-card">
+      <div className="incident-card-header">
+        <div className="incident-card-badges">
+          <span className={incidentSeverityClass(incident.severity)}>
             {incident.severity}
           </span>
-          <span className={`status-badge ${getStatusClass(incident.status)}`}>
-            {getStatusLabel(incident.status)}
+          <span className={incidentStatusClass(incident.status)}>
+            {incidentStatusLabel(incident)}
           </span>
+          <SourceBadges sources={sources} />
         </div>
-        <span className="incident-id muted small">{incident.incident_id}</span>
+        <span className="incident-card-id">{incident.incident_id}</span>
       </div>
-      <div className="incident-body">
-        <div className="incident-object">
-          <span className="object-kind">{displayKind}</span>
-          <span className="object-name">{incident.object_name}</span>
-          <span className="muted">in</span>
-          <span className="namespace">{incident.namespace}</span>
-        </div>
-        <div className="incident-class">
-          <span className="muted small">Class:</span>
-          <span>{incident.candidate_class.replace(/_/g, " ")}</span>
-        </div>
-        <div className="incident-timestamp">
-          <span className="muted small">Last observed:</span>
-          <span>{formatTimestamp(incident.last_observed_at)}</span>
-        </div>
-        {/* Signal and evidence counts */}
-        <div className="incident-counts">
-          <span className="muted small">Signals:</span>
+
+      <h3 className="incident-card-title">{title}</h3>
+
+      <div className="incident-card-entity">
+        <span className="object-kind">{incident.raw_object_kind || incident.object_kind}</span>
+        <span className="object-name">{incident.object_name}</span>
+        <span>in</span>
+        <span className="namespace">{incident.namespace}</span>
+      </div>
+
+      <div className="incident-card-meta">
+        <span className="muted small">Class: {incidentClassLabel(incident)}</span>
+        <span className="muted small">Last observed: {formatIncidentTimestamp(incident.last_observed_at)}</span>
+      </div>
+
+      <div className="incident-card-counts">
+        <div className="incident-card-count">
+          <span className="incident-card-count-label">Signals:</span>
           <span>{incident.signal_count}</span>
-          <span className="muted small">Evidence:</span>
+        </div>
+        <div className="incident-card-count">
+          <span className="incident-card-count-label">Evidence:</span>
           <span>{incident.evidence_count}</span>
         </div>
-        {incident.latest_snapshot_bundle_id && (
-          <div className="incident-bundle-id">
-            <span className="muted small">Bundle:</span>
-            <code>{incident.latest_snapshot_bundle_id}</code>
-          </div>
-        )}
-        {/* Review packet state section - uses review_packet object */}
-        <div className="incident-review-section">
-          {incident.review_packet.status === "available" ? (
-            <div className="review-packet-info">
-              <span className="muted small">Review Packet:</span>
-              <span className="review-packet-badge">Available</span>
-              {incident.review_packet.id && (
-                <code className="review-packet-id">{incident.review_packet.id}</code>
-              )}
-            </div>
-          ) : incident.review_packet.status === "generating" ? (
-            <div className="review-packet-pending">
-              <span className="muted small">Review Packet:</span>
-              <span className="review-packet-generating-text">Generating...</span>
-            </div>
-          ) : incident.review_packet.status === "failed" ? (
-            <div className="review-packet-pending">
-              <span className="muted small">Review Packet:</span>
-              <span className="review-packet-error-text">Failed: {incident.review_packet.error_message || "Unknown error"}</span>
-            </div>
-          ) : (
-            <div className="review-packet-pending">
-              <span className="muted small">Review Packet:</span>
-              <span className="review-packet-pending-text">Not generated yet</span>
-            </div>
-          )}
-        </div>
-        {/* View/Hide details control */}
-        <div className="incident-detail-control">
-          {isLoading ? (
-            <span className="incident-detail-loading muted small">Loading incident details...</span>
-          ) : hasError ? (
-            <>
-              <span className="incident-detail-error muted small">Unable to load incident details.</span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-small"
-                onClick={onRetry}
-                aria-label="Retry details"
-              >
-                Retry details
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-small"
-                onClick={onToggle}
-                aria-expanded={isExpanded}
-                aria-controls={detailId}
-              >
-                Hide details
-              </button>
-            </>
-          ) : (
+      </div>
+
+      <div className="incident-card-diagnosis">
+        <span className="muted small">Diagnosis:</span>
+        <DiagnosisStatus status="not_run" />
+      </div>
+
+      <div className="incident-card-actions">
+        {isLoading ? (
+          <span className="muted small">Loading incident details...</span>
+        ) : hasError ? (
+          <>
+            <span className="muted small">Unable to load incident details.</span>
+            <button
+              type="button"
+              className="btn btn-ghost btn-small"
+              onClick={onRetry}
+              aria-label="Retry details"
+            >
+              Retry details
+            </button>
             <button
               type="button"
               className="btn btn-ghost btn-small"
@@ -222,10 +172,20 @@ const IncidentRow: React.FC<IncidentRowProps> = ({
               aria-expanded={isExpanded}
               aria-controls={detailId}
             >
-              {isExpanded ? "Hide details" : "View details"}
+              Hide details
             </button>
-          )}
-        </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-ghost btn-small"
+            onClick={onToggle}
+            aria-expanded={isExpanded}
+            aria-controls={detailId}
+          >
+            {isExpanded ? "Hide details" : "View details"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -237,7 +197,7 @@ export interface IncidentListPanelProps {
 
 /**
  * Read-only incident list panel.
- * Displays incidents promoted from snapshot captures.
+ * Redesigned to prioritize incidents as the primary operational object.
  */
 export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
   const [incidents, setIncidents] = useState<IncidentSummaryPayload[]>([]);
@@ -321,11 +281,13 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
   }, [loadIncidents, statusFilter]);
 
   return (
-    <section className="panel" id="incident-list">
-      <div className="section-head">
-        <h2>Incidents</h2>
-        <p className="muted small">
-          Read-only view of incidents promoted from snapshot captures
+    <section className="panel incident-panel" id="incident-list">
+      <div className="incident-panel-header">
+        <h2 className="incident-panel-title">
+          <span>Incidents</span>
+        </h2>
+        <p className="incident-panel-subtitle">
+          Read-only view of incidents promoted from operational signals
         </p>
       </div>
 
@@ -375,13 +337,14 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty state - incident-first messaging */}
       {!isLoading && !error && (!incidents || incidents.length === 0) && (
-        <div className="incident-empty">
-          <p className="muted small">
-            {statusFilter
-              ? `No incidents with status "${getStatusLabel(statusFilter)}"`
-              : "No incidents recorded"}
+        <div className="incident-empty-state">
+          <div className="incident-empty-state-icon">📋</div>
+          <h3 className="incident-empty-state-title">No incidents yet.</h3>
+          <p className="incident-empty-state-description">
+            K9B opens incidents from detected operational signals. Today this includes
+            Kubernetes candidates; future integrations can add Alertmanager and vmalert signals.
           </p>
         </div>
       )}
@@ -395,7 +358,7 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
           <div className="incident-items">
             {incidents!.map((incident) => (
               <div key={incident.incident_id}>
-                <IncidentRow
+                <IncidentCard
                   incident={incident}
                   isExpanded={expandedIncidentId === incident.incident_id}
                   isLoading={expandedIncidentId === incident.incident_id && detailLoading}

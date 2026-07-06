@@ -1,0 +1,89 @@
+/**
+ * Incident Panel Timeline Styles
+ *
+ * Phase: Incident-first UI redesign
+ * Extracted from incident-panel.css for LLM-friendly file sizing.
+ */
+
+/* ==========================================================================
+   Timeline Section
+   ========================================================================== */
+
+.incident-timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.timeline-event-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.4rem 0.6rem;
+  border-left: 2px solid var(--color-border-subtle, rgba(148, 163, 184, 0.15));
+  margin-left: 0.5rem;
+}
+
+.timeline-event-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.timeline-event-category {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 0.05rem 0.25rem;
+  border-radius: 0.15rem;
+}
+
+.timeline-event-category.category-lifecycle {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.timeline-event-category.category-signals {
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+}
+
+.timeline-event-category.category-status {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fde047;
+}
+
+.timeline-event-category.category-evidence {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c4b5fd;
+}
+
+.timeline-event-category.category-review {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+}
+
+.timeline-event-category.category-diagnosis {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fdba74;
+}
+
+.timeline-event-type {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-primary, #f8fafc);
+}
+
+.timeline-event-message {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #cbd5e1);
+}
+
+.timeline-event-time {
+  font-size: 0.7rem;
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.7));
+}

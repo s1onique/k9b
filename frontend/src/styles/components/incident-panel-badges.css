@@ -1,0 +1,190 @@
+/**
+ * Incident Panel Badge Styles
+ *
+ * Phase: Incident-first UI redesign
+ * Extracted from incident-panel.css for LLM-friendly file sizing.
+ */
+
+/* ==========================================================================
+   Severity Badges
+   ========================================================================== */
+
+.severity-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.severity-error {
+  background: var(--color-state-danger-bg, rgba(220, 53, 69, 0.2));
+  color: var(--color-state-danger-text, #f87171);
+  border: 1px solid var(--color-state-danger-border, rgba(220, 53, 69, 0.35));
+}
+
+.severity-warning {
+  background: var(--color-state-warning-bg, rgba(251, 191, 36, 0.15));
+  color: var(--color-state-warning-text, #fde047);
+  border: 1px solid var(--color-state-warning-border, rgba(251, 191, 36, 0.35));
+}
+
+.severity-info {
+  background: var(--color-state-info-bg, rgba(23, 162, 184, 0.2));
+  color: var(--color-state-info-text, #67e8f9);
+  border: 1px solid var(--color-state-info-border, rgba(23, 162, 184, 0.35));
+}
+
+/* ==========================================================================
+   Status Badges
+   ========================================================================== */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-open {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+.status-collecting {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c4b5fd;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
+.status-review {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.status-investigating {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fde047;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+.status-suppressed {
+  background: var(--color-state-neutral-bg, rgba(148, 163, 184, 0.15));
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.25));
+}
+
+.status-duplicate {
+  background: var(--color-state-neutral-bg, rgba(148, 163, 184, 0.15));
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.25));
+}
+
+.status-resolved {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.status-unknown {
+  background: var(--color-state-neutral-bg, rgba(148, 163, 184, 0.15));
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.25));
+}
+
+/* ==========================================================================
+   Source Badges (Signal Sources)
+   ========================================================================== */
+
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.2rem;
+  font-size: 0.6rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.source-k8s {
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+.source-alertmanager {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fdba74;
+  border: 1px solid rgba(251, 146, 60, 0.35);
+}
+
+.source-vmalert {
+  background: rgba(52, 211, 153, 0.2);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.source-manual {
+  background: rgba(167, 139, 250, 0.2);
+  color: #c4b5fd;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+}
+
+/* ==========================================================================
+   Diagnosis Loop Status Badges
+   ========================================================================== */
+
+.diagnosis-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.2rem;
+  font-size: 0.6rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.diagnosis-status-not-run {
+  background: var(--color-state-neutral-bg, rgba(148, 163, 184, 0.15));
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.25));
+}
+
+.diagnosis-status-running {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fde047;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  animation: pulse-diagnosis 2s infinite;
+}
+
+@keyframes pulse-diagnosis {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.diagnosis-status-completed {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.diagnosis-status-failed {
+  background: var(--color-state-danger-bg, rgba(220, 53, 69, 0.2));
+  color: #f87171;
+  border: 1px solid var(--color-state-danger-border, rgba(220, 53, 69, 0.35));
+}
+
+.diagnosis-status-unknown {
+  background: var(--color-state-neutral-bg, rgba(148, 163, 184, 0.15));
+  color: var(--color-text-muted, rgba(148, 163, 184, 0.8));
+  border: 1px solid var(--color-border-subtle, rgba(148, 163, 184, 0.25));
+}
