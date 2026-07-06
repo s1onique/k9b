@@ -9,9 +9,8 @@ from pathlib import Path
 
 from k8s_diag_agent.incident_alert_signal import AlertSignal
 from k8s_diag_agent.incident_alert_signal_store import (
-    ALERT_SIGNALS_SUBDIR,
-    EXTERNAL_ANALYSIS_SUBDIR,
     ALERT_SIGNAL_SCHEMA_VERSION,
+    ALERT_SIGNALS_SUBDIR,
     RAW_PAYLOAD_SCHEMA_VERSION,
     AlertSignalArtifact,
     RawPayloadArtifact,
