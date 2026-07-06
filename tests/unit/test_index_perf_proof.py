@@ -12,28 +12,32 @@ Tests for:
 
 from __future__ import annotations
 
-# Import from verify_index_perf_proof module
+# Import from verify_index_perf_proof modules
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "trace-capture"))
 
-from verify_index_perf_proof import (
-    CONTENT_INDEX_FALLBACK_SPAN_NAMES,
-    CONTENT_INDEX_QUERY_SPAN_NAMES,
+from verify_index_perf_proof_contract import (
     INDEXED_ENDPOINT_ROUTES,
     LatencyDelta,
     PerfProofSummary,
     VerificationResult,
-    check_artifact_payload,
+)
+from verify_index_perf_proof_latency import (
     check_no_regression,
-    check_privacy_in_file,
-    check_raw_incident_id,
     compute_improvement_percent,
     compute_latency_delta,
+)
+from verify_index_perf_proof_logic import verify_index_db
+from verify_index_perf_proof_spans import (
+    CONTENT_INDEX_FALLBACK_SPAN_NAMES,
+    CONTENT_INDEX_QUERY_SPAN_NAMES,
+    check_artifact_payload,
+    check_privacy_in_file,
+    check_raw_incident_id,
     count_content_index_spans,
-    verify_index_db,
 )
 
 
