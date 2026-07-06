@@ -197,6 +197,13 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [TEST] CNPG live lab rollout classifier tests - comprehensive coverage for VolumeBinding conflict detection
     ("tests/test_rollout_classifier_volume_binding.py", "[TEST] Rollout classifier VolumeBinding tests - comprehensive coverage"),
 
+    # [TEST] Trace capture LAB01 - comprehensive trace summary tests
+    ("tests/unit/test_trace_capture_summary.py", "[TEST] Trace capture summary tests - comprehensive coverage for trace verification"),
+    ("tests/unit/test_internal_spans.py", "[TEST] Internal spans tests - comprehensive instrumentation test coverage"),
+
+    # [SCRIPT] Trace capture LAB01 - trace capture scripts and utilities
+    ("trace-capture/trace_summary.py", "[SCRIPT] Trace summary generator - trace capture lab scaffolding"),
+
     # [SCRIPT] Incident discovery gate - Phase 2c snapshot trigger enhancement
     ("scripts/incident_discovery_gate/collect.py", "[SCRIPT] Incident gate collection - kubectl and API helpers"),
     ("scripts/incident_discovery_gate/main.py", "[SCRIPT] Incident gate orchestration - Phase 2a-2e orchestration"),
