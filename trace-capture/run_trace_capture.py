@@ -34,164 +34,31 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import sys
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 # Add trace-capture to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from trace_summary import (
-    SCHEMA_VERSION,
-    TraceSummary,
-    generate_trace_summary,
-    validate_trace_summary,
+# Re-export config for backward compatibility
+from run_trace_capture_artifacts import (
+    write_backend_api_traces,
+    write_trace_ids,
+    write_trace_summary,
 )
+from run_trace_capture_config import TraceCaptureConfig, get_backend_env
+from trace_summary import SCHEMA_VERSION, TraceSummary, validate_trace_summary
 
 logger = logging.getLogger(__name__)
 
-
-# =============================================================================
-# Configuration
-# =============================================================================
-
-
-@dataclass
-class TraceCaptureConfig:
-    """Configuration for trace capture run."""
-
-    # Artifact directory
-    artifact_dir: Path = field(default_factory=lambda: Path(__file__).parent)
-
-    # Backend configuration
-    backend_url: str = "http://localhost:8080"
-    backend_startup_timeout: float = 30.0
-
-    # OTel configuration
-    otel_enabled: bool = True
-    service_name: str = "k9b-backend"
-    otel_endpoint: str = "http://localhost:4317"
-    sample_ratio: float = 1.0
-
-    # Collector configuration
-    collector_config_path: Path | None = None
-    collector_startup_timeout: float = 10.0
-
-    # Exercise configuration
-    api_timeout: float = 10.0
-    exercise_iterations: int = 1
-    warmup_iterations: int = 0
-    incident_id: str | None = None
-
-    # Perf baseline configuration
-    perf_baseline: bool = False
-    baseline_output_dir: Path | None = None
-
-    # Output control
-    dry_run: bool = False
-    verbose: bool = False
-
-
-# =============================================================================
-# Environment Helpers
-# =============================================================================
-
-
-def get_backend_env(config: TraceCaptureConfig) -> dict[str, str]:
-    """Build environment for backend with OTel enabled.
-
-    Args:
-        config: Trace capture configuration
-
-    Returns:
-        Environment dictionary for backend process
-    """
-    env = dict(os.environ)
-
-    if config.otel_enabled:
-        env["K9B_OTEL_ENABLED"] = "true"
-        env["K9B_OTEL_SERVICE_NAME"] = config.service_name
-        env["K9B_OTEL_EXPORTER_OTLP_ENDPOINT"] = config.otel_endpoint
-        env["K9B_OTEL_SAMPLE_RATIO"] = str(config.sample_ratio)
-    else:
-        env["K9B_OTEL_ENABLED"] = "false"
-
-    return env
-
-
-# =============================================================================
-# Artifact Writing
-# =============================================================================
-
-
-def write_trace_ids(trace_ids: list[str], artifact_dir: Path) -> Path:
-    """Write trace IDs to file.
-
-    Args:
-        trace_ids: List of trace ID strings
-        artifact_dir: Directory to write to
-
-    Returns:
-        Path to written file
-    """
-    trace_ids_path = artifact_dir / "trace-ids.txt"
-    content = "\n".join(trace_ids)
-    trace_ids_path.write_text(content)
-    return trace_ids_path
-
-
-def write_backend_api_traces(
-    exercise_results: list[dict[str, Any]],
-    artifact_dir: Path,
-) -> Path:
-    """Write API exercise results to file.
-
-    Args:
-        exercise_results: List of API exercise results
-        artifact_dir: Directory to write to
-
-    Returns:
-        Path to written file
-    """
-    output_path = artifact_dir / "backend-api-traces.json"
-    # Sanitize results - remove any raw content
-    sanitized: list[dict[str, Any]] = []
-    for result in exercise_results:
-        sanitized_result: dict[str, Any] = {
-            "endpoint": result.get("endpoint", ""),
-            "method": result.get("method", ""),
-            "status_code": result.get("status_code"),
-            "success": result.get("success", False),
-        }
-        if "error" in result:
-            sanitized_result["error"] = result["error"]
-        sanitized.append(sanitized_result)
-
-    output_path.write_text(json.dumps(sanitized, indent=2))
-    return output_path
-
-
-def write_trace_summary(
-    summary: TraceSummary,
-    artifact_dir: Path,
-) -> Path:
-    """Write trace summary to file.
-
-    Args:
-        summary: Trace summary to write
-        artifact_dir: Directory to write to
-
-    Returns:
-        Path to written file
-    """
-    summary_path = artifact_dir / "trace-summary.json"
-    summary_path.write_text(json.dumps(summary.to_dict(), indent=2))
-    return summary_path
+__all__ = [
+    "TraceCaptureConfig",
+    "get_backend_env",
+    "run_trace_capture",
+    "main",
+]
 
 
 # =============================================================================
@@ -199,7 +66,9 @@ def write_trace_summary(
 # =============================================================================
 
 
-def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary, list[dict[str, Any]]]:
+def run_trace_capture(
+    config: TraceCaptureConfig,
+) -> tuple[bool, TraceSummary, list[dict[str, Any]]]:
     """Run the full trace capture flow.
 
     Args:
@@ -208,6 +77,8 @@ def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary, l
     Returns:
         Tuple of (success, trace_summary, api_results_with_latency)
     """
+    from trace_capture_api import APIExerciseConfig, exercise_all_endpoints
+
     artifact_dir = Path(config.artifact_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
@@ -219,9 +90,6 @@ def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary, l
     print(f"Service name: {config.service_name}")
     print(f"OTel endpoint: {config.otel_endpoint}")
     print()
-
-    # Import here to avoid circular imports
-    from trace_capture_api import APIExerciseConfig, exercise_all_endpoints
 
     # Configure API exerciser
     api_config = APIExerciseConfig(
@@ -244,6 +112,8 @@ def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary, l
                 print(f"  Copied collector config to: {collector_config}")
 
         # Generate empty trace summary for dry run
+        from datetime import UTC, datetime
+
         summary = TraceSummary(
             schema_version=SCHEMA_VERSION,
             generated_at=datetime.now(UTC).isoformat(),
@@ -311,6 +181,8 @@ def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary, l
     trace_jsonl = artifact_dir / "collector-output.jsonl"
     collector_output = artifact_dir / "collector-output.log"
 
+    from trace_summary import generate_trace_summary
+
     summary = generate_trace_summary(
         collector_output_path=collector_output if collector_output.exists() else None,
         trace_json_path=trace_jsonl if trace_jsonl.exists() else None,
@@ -375,6 +247,7 @@ def _correlate_traces_with_results(
 def main() -> int:
     """CLI entry point."""
     import argparse
+    from pathlib import Path
 
     parser = argparse.ArgumentParser(
         description="Run k9b backend trace capture lab",
@@ -515,11 +388,6 @@ Examples:
 
     # Generate perf baseline if requested
     if config.perf_baseline and config.baseline_output_dir and api_results:
-        print()
-        print("=" * 70)
-        print("Generating Performance Baseline")
-        print("=" * 70)
-
         from perf_baseline import (
             generate_baseline_summary,
             group_spans_by_trace,
@@ -548,6 +416,10 @@ Examples:
         baseline_dir = Path(config.baseline_output_dir)
         artifact_paths = write_baseline_artifacts(perf_summary, spans_jsonl, baseline_dir)
 
+        print()
+        print("=" * 70)
+        print("Generating Performance Baseline")
+        print("=" * 70)
         print(f"  Benchmark endpoints: {len(perf_summary.benchmarked_endpoints)}")
         print(f"  Total traces: {perf_summary.total_traces}")
         print(f"  Total spans: {perf_summary.total_spans}")
