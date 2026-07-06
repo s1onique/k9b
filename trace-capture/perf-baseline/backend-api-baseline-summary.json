@@ -1,0 +1,12 @@
+{
+  "schema_version": "k9b.perf_baseline.v1",
+  "generated_at": "2026-07-06T06:25:23.840863+00:00",
+  "total_traces": 5,
+  "total_spans": 10,
+  "http_span_count": 5,
+  "internal_span_count": 5,
+  "slowest_endpoint": "GET /api/health/details",
+  "iteration_count": 10,
+  "warmup_count": 2,
+  "endpoint_count": 4
+}

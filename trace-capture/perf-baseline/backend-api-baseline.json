@@ -1,0 +1,154 @@
+{
+  "schema_version": "k9b.perf_baseline.v1",
+  "generated_at": "2026-07-06T06:25:23.840863+00:00",
+  "benchmarked_endpoints": [
+    {
+      "method": "GET",
+      "route": "/api/health/details",
+      "normalized_route": "GET /api/health/details",
+      "attempt_count": 10,
+      "success_count": 10,
+      "failure_count": 0,
+      "status_codes": {
+        "200": 10
+      },
+      "latency_ms": {
+        "min": 586.25,
+        "p50": 693.75,
+        "p90": 756.88,
+        "p95": 783.92,
+        "p99": 805.56,
+        "max": 810.97
+      },
+      "trace_ids": [
+        "d2e2f68762c40b02a72b6a97dec0666c",
+        "58b6a61e89634a8d9659285c5cd9cb2f"
+      ],
+      "span_breakdown": {
+        "http_span_count": 2,
+        "internal_span_count": 2,
+        "dominant_internal_spans": [
+          {
+            "name": "k9b.health_check.runtime",
+            "total_duration_ms": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "route": "/api/incidents",
+      "normalized_route": "GET /api/incidents",
+      "attempt_count": 10,
+      "success_count": 10,
+      "failure_count": 0,
+      "status_codes": {
+        "200": 10
+      },
+      "latency_ms": {
+        "min": 18.38,
+        "p50": 225.16,
+        "p90": 299.14,
+        "p95": 303.05,
+        "p99": 306.18,
+        "max": 306.97
+      },
+      "trace_ids": [
+        "11a8a7918db0bd20b8d3cd840b367fbb"
+      ],
+      "span_breakdown": {
+        "http_span_count": 1,
+        "internal_span_count": 1,
+        "dominant_internal_spans": [
+          {
+            "name": "k9b.health_check.runtime",
+            "total_duration_ms": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "route": "/api/incidents/{incident_id}",
+      "normalized_route": "GET /api/incidents/{incident_id}",
+      "attempt_count": 10,
+      "success_count": 0,
+      "failure_count": 10,
+      "status_codes": {
+        "error": 10
+      },
+      "latency_ms": {
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "trace_ids": [
+        "d227edb5991fef2a8089460d991712ee"
+      ],
+      "span_breakdown": {
+        "http_span_count": 1,
+        "internal_span_count": 1,
+        "dominant_internal_spans": [
+          {
+            "name": "k9b.incident_store.list",
+            "total_duration_ms": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "route": "/api/incidents/{incident_id}/automatic-diagnosis-review/handoff",
+      "normalized_route": "POST /api/incidents/{incident_id}/automatic-diagnosis-review/handoff",
+      "attempt_count": 10,
+      "success_count": 0,
+      "failure_count": 10,
+      "status_codes": {
+        "error": 10
+      },
+      "latency_ms": {
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0
+      },
+      "trace_ids": [
+        "5ac736836b00ba4764a526411aed68b7"
+      ],
+      "span_breakdown": {
+        "http_span_count": 1,
+        "internal_span_count": 1,
+        "dominant_internal_spans": [
+          {
+            "name": "k9b.incident_store.list",
+            "total_duration_ms": 0.0
+          }
+        ]
+      }
+    }
+  ],
+  "skipped_endpoints": [],
+  "slowest_endpoint": "GET /api/health/details",
+  "dominant_internal_spans": [
+    {
+      "name": "k9b.health_check.runtime",
+      "total_duration_ms": 0.0
+    },
+    {
+      "name": "k9b.incident_store.list",
+      "total_duration_ms": 0.0
+    }
+  ],
+  "total_traces": 5,
+  "total_spans": 10,
+  "http_span_count": 5,
+  "internal_span_count": 5,
+  "iteration_count": 10,
+  "warmup_count": 2,
+  "incident_id_source": "auto"
+}

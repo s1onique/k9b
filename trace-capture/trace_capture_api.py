@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
@@ -46,8 +47,8 @@ def _make_request(
     headers: dict[str, str] | None = None,
     body: bytes | None = None,
     timeout: float = 10.0,
-) -> tuple[int, bytes]:
-    """Make an HTTP request.
+) -> tuple[int, bytes, float]:
+    """Make an HTTP request with latency timing.
 
     Args:
         method: HTTP method
@@ -57,7 +58,7 @@ def _make_request(
         timeout: Request timeout in seconds
 
     Returns:
-        Tuple of (status_code, response_body)
+        Tuple of (status_code, response_body, latency_ms)
     """
     req_headers = headers or {}
     req_headers.setdefault("Accept", "application/json")
@@ -70,14 +71,18 @@ def _make_request(
         data=body,
     )
 
+    start_time = time.perf_counter()
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return (response.status, response.read())
+            latency_ms = (time.perf_counter() - start_time) * 1000.0
+            return (response.status, response.read(), latency_ms)
     except urllib.error.HTTPError as e:
-        return (e.code, e.read() if e.fp else b"")
+        latency_ms = (time.perf_counter() - start_time) * 1000.0
+        return (e.code, e.read() if e.fp else b"", latency_ms)
     except urllib.error.URLError as e:
         logger.warning("Request failed: %s", e.reason)
-        return (0, str(e.reason).encode())
+        latency_ms = (time.perf_counter() - start_time) * 1000.0
+        return (0, str(e.reason).encode(), latency_ms)
 
 
 # =============================================================================
@@ -92,16 +97,17 @@ def exercise_health_details(config: APIExerciseConfig) -> dict[str, Any]:
         config: API exercise configuration
 
     Returns:
-        Result dictionary with status and response
+        Result dictionary with status, response, and latency_ms
     """
     url = f"{config.base_url}/api/health/details"
-    status, body = _make_request("GET", url, timeout=config.timeout_seconds)
+    status, body, latency_ms = _make_request("GET", url, timeout=config.timeout_seconds)
 
     result: dict[str, Any] = {
         "endpoint": "/api/health/details",
         "method": "GET",
         "status_code": status,
         "success": status == 200,
+        "latency_ms": latency_ms,
     }
 
     if body:
@@ -120,16 +126,17 @@ def exercise_incident_list(config: APIExerciseConfig) -> dict[str, Any]:
         config: API exercise configuration
 
     Returns:
-        Result dictionary with status and response
+        Result dictionary with status, response, and latency_ms
     """
     url = f"{config.base_url}/api/incidents"
-    status, body = _make_request("GET", url, timeout=config.timeout_seconds)
+    status, body, latency_ms = _make_request("GET", url, timeout=config.timeout_seconds)
 
     result: dict[str, Any] = {
         "endpoint": "/api/incidents",
         "method": "GET",
         "status_code": status,
         "success": status == 200,
+        "latency_ms": latency_ms,
     }
 
     if body:
@@ -156,7 +163,7 @@ def exercise_incident_detail(config: APIExerciseConfig) -> dict[str, Any]:
         config: API exercise configuration (may have incident_id pre-set)
 
     Returns:
-        Result dictionary with status and response
+        Result dictionary with status, response, and latency_ms
     """
     if not config.incident_id:
         return {
@@ -165,16 +172,18 @@ def exercise_incident_detail(config: APIExerciseConfig) -> dict[str, Any]:
             "status_code": None,
             "success": False,
             "error": "No incident_id available",
+            "latency_ms": 0.0,
         }
 
     url = f"{config.base_url}/api/incidents/{config.incident_id}"
-    status, body = _make_request("GET", url, timeout=config.timeout_seconds)
+    status, body, latency_ms = _make_request("GET", url, timeout=config.timeout_seconds)
 
     result: dict[str, Any] = {
         "endpoint": f"/api/incidents/{config.incident_id}",
         "method": "GET",
         "status_code": status,
         "success": status == 200,
+        "latency_ms": latency_ms,
     }
 
     if body:
@@ -196,7 +205,7 @@ def exercise_diagnosis_handoff(config: APIExerciseConfig) -> dict[str, Any]:
         config: API exercise configuration
 
     Returns:
-        Result dictionary with status and response
+        Result dictionary with status, response, and latency_ms
     """
     if not config.incident_id:
         return {
@@ -205,11 +214,12 @@ def exercise_diagnosis_handoff(config: APIExerciseConfig) -> dict[str, Any]:
             "status_code": None,
             "success": False,
             "error": "No incident_id available",
+            "latency_ms": 0.0,
         }
 
     url = f"{config.base_url}/api/incidents/{config.incident_id}/automatic-diagnosis-review/handoff"
     body = json.dumps({}).encode()
-    status, response_body = _make_request(
+    status, response_body, latency_ms = _make_request(
         "POST", url, body=body, timeout=config.timeout_seconds
     )
 
@@ -218,6 +228,7 @@ def exercise_diagnosis_handoff(config: APIExerciseConfig) -> dict[str, Any]:
         "method": "POST",
         "status_code": status,
         "success": status in (200, 201, 204),
+        "latency_ms": latency_ms,
     }
 
     if response_body:

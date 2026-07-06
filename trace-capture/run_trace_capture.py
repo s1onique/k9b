@@ -8,6 +8,7 @@ This script orchestrates the full trace capture flow:
 4. Parse collector output
 5. Generate trace summary
 6. Write trace artifacts
+7. Generate performance baseline (with --perf-baseline flag)
 
 Usage:
     # Full trace capture run:
@@ -21,6 +22,14 @@ Usage:
 
     # Dry run (collector config generation only):
     python run_trace_capture.py --dry-run
+
+    # Performance baseline run:
+    python run_trace_capture.py \
+        --perf-baseline \
+        --iterations 10 \
+        --warmup 2 \
+        --incident-id <id> \
+        --output-dir trace-capture/perf-baseline
 """
 
 from __future__ import annotations
@@ -76,6 +85,12 @@ class TraceCaptureConfig:
     # Exercise configuration
     api_timeout: float = 10.0
     exercise_iterations: int = 1
+    warmup_iterations: int = 0
+    incident_id: str | None = None
+
+    # Perf baseline configuration
+    perf_baseline: bool = False
+    baseline_output_dir: Path | None = None
 
     # Output control
     dry_run: bool = False
@@ -184,14 +199,14 @@ def write_trace_summary(
 # =============================================================================
 
 
-def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary]:
+def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary, list[dict[str, Any]]]:
     """Run the full trace capture flow.
 
     Args:
         config: Trace capture configuration
 
     Returns:
-        Tuple of (success, trace_summary)
+        Tuple of (success, trace_summary, api_results_with_latency)
     """
     artifact_dir = Path(config.artifact_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -212,6 +227,7 @@ def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary]:
     api_config = APIExerciseConfig(
         base_url=config.backend_url,
         timeout_seconds=config.api_timeout,
+        incident_id=config.incident_id,
     )
 
     all_results: list[dict[str, Any]] = []
@@ -238,7 +254,19 @@ def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary]:
         write_trace_summary(summary, artifact_dir)
         print()
         print("DRY RUN complete. No traces captured.")
-        return True, summary
+        return True, summary, []
+
+    # Run warmup iterations first (discard results)
+    if config.warmup_iterations > 0:
+        print(f"Running {config.warmup_iterations} warmup iteration(s)...")
+        for i in range(config.warmup_iterations):
+            if config.verbose:
+                print(f"  Warmup {i + 1}/{config.warmup_iterations}...")
+            try:
+                exercise_all_endpoints(api_config)
+            except Exception:
+                pass  # Ignore warmup failures
+        print()
 
     # Run API exercises (assumes backend is already running with OTel enabled)
     print("Exercising API endpoints...")
@@ -250,11 +278,21 @@ def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary]:
 
         try:
             results = exercise_all_endpoints(api_config)
+
+            # Add latency measurement to each result
+            for result in results:
+                # Latency is already recorded in result if available from API
+                # Otherwise, we'll use current time for the iteration
+                result["iteration"] = i + 1
+                result["trace_id"] = ""  # Will be filled from trace JSONL if available
+
             all_results.extend(results)
 
             for result in results:
                 status = "✓" if result["success"] else "✗"
-                print(f"  {status} {result['method']} {result['endpoint']} -> {result.get('status_code', 'N/A')}")
+                latency = result.get("latency_ms", 0)
+                latency_str = f" ({latency:.1f}ms)" if latency else ""
+                print(f"  {status} {result['method']} {result['endpoint']} -> {result.get('status_code', 'N/A')}{latency_str}")
         except Exception as e:
             print(f"  ✗ API exercise failed: {e}")
 
@@ -288,6 +326,10 @@ def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary]:
         write_trace_ids(list(summary.trace_ids), artifact_dir)
         print(f"Wrote {len(summary.trace_ids)} trace IDs to: {artifact_dir / 'trace-ids.txt'}")
 
+        # Correlate trace IDs with API results if in perf-baseline mode
+        if config.perf_baseline and summary.trace_ids:
+            _correlate_traces_with_results(all_results, list(summary.trace_ids))
+
     # Validate summary
     failures = validate_trace_summary(summary)
     print()
@@ -298,7 +340,31 @@ def run_trace_capture(config: TraceCaptureConfig) -> tuple[bool, TraceSummary]:
     else:
         print("✓ Trace summary meets all requirements")
 
-    return len(failures) == 0, summary
+    return len(failures) == 0, summary, all_results
+
+
+def _correlate_traces_with_results(
+    results: list[dict[str, Any]],
+    trace_ids: list[str],
+) -> None:
+    """Correlate API results with trace IDs using route/timing heuristics.
+
+    This is a best-effort correlation based on:
+    - Normalized route matching
+    - Timestamp ordering
+
+    Args:
+        results: API exercise results
+        trace_ids: List of available trace IDs
+    """
+    if not trace_ids or not results:
+        return
+
+    # Simple round-robin correlation based on order
+    # More sophisticated correlation would need timestamp matching
+    for i, result in enumerate(results):
+        if i < len(trace_ids):
+            result["trace_id"] = trace_ids[i]
 
 
 # =============================================================================
@@ -329,6 +395,10 @@ Examples:
 
   # Point to running backend:
   python run_trace_capture.py --backend-url http://my-backend:8080
+
+  # Performance baseline:
+  python run_trace_capture.py --perf-baseline --iterations 10 --warmup 2 \\
+      --output-dir trace-capture/perf-baseline
         """,
     )
 
@@ -360,6 +430,29 @@ Examples:
         help="Number of API exercise iterations (default: 1)",
     )
     parser.add_argument(
+        "--warmup",
+        type=int,
+        default=0,
+        help="Number of warmup iterations (default: 0)",
+    )
+    parser.add_argument(
+        "--incident-id",
+        type=str,
+        default=None,
+        help="Use specific incident ID for API exercises",
+    )
+    parser.add_argument(
+        "--perf-baseline",
+        action="store_true",
+        help="Generate performance baseline artifacts",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Output directory for perf baseline (default: artifact-dir/perf-baseline/)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Generate config only, don't capture traces",
@@ -380,18 +473,26 @@ Examples:
     )
 
     # Build config
+    baseline_output_dir = args.output_dir
+    if baseline_output_dir is None and args.perf_baseline:
+        baseline_output_dir = (args.artifact_dir or Path(__file__).parent) / "perf-baseline"
+
     config = TraceCaptureConfig(
         artifact_dir=args.artifact_dir or Path(__file__).parent,
         backend_url=args.backend_url,
         otel_endpoint=args.otel_endpoint,
         service_name=args.service_name,
         exercise_iterations=args.iterations,
+        warmup_iterations=args.warmup,
+        incident_id=args.incident_id,
+        perf_baseline=args.perf_baseline,
+        baseline_output_dir=baseline_output_dir,
         dry_run=args.dry_run,
         verbose=args.verbose,
     )
 
     # Run trace capture
-    success, summary = run_trace_capture(config)
+    success, summary, api_results = run_trace_capture(config)
 
     print()
     print("=" * 70)
@@ -411,6 +512,67 @@ Examples:
     print(f"  Raw incident IDs in spans: {summary.raw_incident_ids_in_span_names}")
     print(f"  Raw payload detected: {summary.raw_artifact_payload_detected}")
     print("=" * 70)
+
+    # Generate perf baseline if requested
+    if config.perf_baseline and config.baseline_output_dir and api_results:
+        print()
+        print("=" * 70)
+        print("Generating Performance Baseline")
+        print("=" * 70)
+
+        from perf_baseline import (
+            generate_baseline_summary,
+            group_spans_by_trace,
+            write_baseline_artifacts,
+        )
+
+        trace_jsonl = Path(config.artifact_dir) / "collector-output.jsonl"
+        trace_path = trace_jsonl if trace_jsonl.exists() else None
+
+        # Generate summary
+        perf_summary = generate_baseline_summary(
+            api_results=api_results,
+            trace_jsonl_path=trace_path,
+            iterations=config.exercise_iterations,
+            warmup=config.warmup_iterations,
+            incident_id_source="provided" if config.incident_id else "auto",
+        )
+
+        # Generate span breakdowns
+        spans_jsonl: list[dict[str, Any]] = []
+        if trace_path and trace_path.exists():
+            breakdowns = group_spans_by_trace(trace_path)
+            spans_jsonl = [bd.to_dict() for bd in breakdowns.values()]
+
+        # Write artifacts
+        baseline_dir = Path(config.baseline_output_dir)
+        artifact_paths = write_baseline_artifacts(perf_summary, spans_jsonl, baseline_dir)
+
+        print(f"  Benchmark endpoints: {len(perf_summary.benchmarked_endpoints)}")
+        print(f"  Total traces: {perf_summary.total_traces}")
+        print(f"  Total spans: {perf_summary.total_spans}")
+        print(f"  HTTP spans: {perf_summary.http_span_count}")
+        print(f"  Internal spans: {perf_summary.internal_span_count}")
+        print(f"  Slowest endpoint: {perf_summary.slowest_endpoint or 'N/A'}")
+        print(f"  Iteration count: {perf_summary.iteration_count}")
+        print(f"  Warmup count: {perf_summary.warmup_count}")
+        print()
+        print("  Artifacts written:")
+        for name, path in artifact_paths.items():
+            print(f"    - {name}: {path}")
+
+        # Print endpoint latencies
+        if perf_summary.benchmarked_endpoints:
+            print()
+            print("  Endpoint Latencies (p50/p90/p99):")
+            for ep in perf_summary.benchmarked_endpoints:
+                latency = ep.get("latency_ms", {})
+                p50 = latency.get("p50", 0)
+                p90 = latency.get("p90", 0)
+                p99 = latency.get("p99", 0)
+                print(f"    {ep['normalized_route']}: {p50:.1f}/{p90:.1f}/{p99:.1f} ms")
+
+        print("=" * 70)
 
     return 0 if success else 1
 
