@@ -220,10 +220,10 @@ def handle_get_incident(
         When provided, both fields are populated from linked artifacts.
         Missing or malformed artifacts do not cause errors - they are skipped.
     """
-    # Try content index first if enabled AND no external_analysis_dir needed
-    # Note: Index doesn't have suggested_checks or automatic_diagnosis_review
+    # Try content index first if enabled
+    # Note: Index doesn't have suggested_checks or automatic_diagnosis_review fields
     config = _get_content_index_config()
-    if config.enabled and external_analysis_dir is None:
+    if config.enabled:
         index_result = get_incident_from_index(config, incident_id)
         if index_result.index_available:
             if index_result.data is not None:
