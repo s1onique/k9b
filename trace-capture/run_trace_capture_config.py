@@ -33,6 +33,13 @@ class TraceCaptureConfig:
     collector_config_path: Path | None = None
     collector_startup_timeout: float = 10.0
 
+    # Kubernetes collector copy mode
+    # When True, copies traces from in-cluster Collector instead of running local Collector
+    k8s_collector_mode: bool = False
+    k8s_namespace: str = "k9b"
+    k8s_collector_pod: str | None = None
+    k8s_trace_path: str = "/var/lib/k9b-traces/collector-traces.jsonl"
+
     # Exercise configuration
     api_timeout: float = 10.0
     exercise_iterations: int = 1
