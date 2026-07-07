@@ -121,8 +121,10 @@ def collect_incident_snapshot(
     errors.extend(deploy_errors)
 
     # Collect events
-    events, event_errors = collect_events(namespace, context, since_hours)
+    events, event_errors, event_projection_metadata = collect_events(namespace, context, since_hours)
     errors.extend(event_errors)
+    if event_projection_metadata:
+        tool_output_projection["events"] = event_projection_metadata
 
     # Identify failing pods
     failing_pods = [p for p in pods if p.is_failing]

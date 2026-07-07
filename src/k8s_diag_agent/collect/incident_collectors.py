@@ -167,9 +167,22 @@ def collect_events(
     namespace: str,
     context: str | None,
     since_hours: int,
-) -> tuple[list[EventSummary], list[str]]:
-    """Collect event evidence for namespace."""
+    artifact_dir: Path | None = None,
+) -> tuple[list[EventSummary], list[str], dict[str, Any]]:
+    """Collect event evidence for namespace.
+
+    Args:
+        namespace: Kubernetes namespace
+        context: Kubernetes context (None for default)
+        since_hours: Lookback window for events
+        artifact_dir: Optional directory for tool output artifacts
+
+    Returns:
+        Tuple of (events, errors, projection_metadata).
+        The projection_metadata contains spill/budget info for observability.
+    """
     errors: list[str] = []
+    projection_metadata: dict[str, Any] = {}
     try:
         output = kubectl(
             context,
@@ -188,13 +201,22 @@ def collect_events(
             output = kubectl(context, "get", "events", "-n", namespace, "-o", "json")
         except RuntimeError as exc:
             errors.append(f"events_collection: {exc}")
-            return [], errors
+            return [], errors, projection_metadata
 
     try:
         payload = json.loads(output)
     except json.JSONDecodeError as exc:
         errors.append(f"events_parse: {exc}")
-        return [], errors
+        return [], errors, projection_metadata
+
+    # Project output through budget and spill infrastructure
+    spill_result = project_read_only_tool_output(
+        source_tool="kubectl_events",
+        raw_output=payload,
+        artifact_dir=artifact_dir,
+        provenance={"namespace": namespace, "resource": "events"},
+    )
+    projection_metadata = _build_projection_metadata(spill_result, "kubectl_events")
 
     items = _extract_items(payload)
     events: list[EventSummary] = []
@@ -203,7 +225,7 @@ def collect_events(
         event_summary = parse_event_summary(item)
         events.append(event_summary)
 
-    return events, errors
+    return events, errors, projection_metadata
 
 
 __all__ = [

@@ -13,9 +13,10 @@ from pathlib import Path
 
 from k8s_diag_agent.collect.incident_collectors import (
     _build_projection_metadata,
+    collect_events,
     collect_pods,
 )
-from k8s_diag_agent.collect.tool_budget_defaults import KUBECTL_GET_BUDGET
+from k8s_diag_agent.collect.tool_budget_defaults import KUBECTL_EVENTS_BUDGET, KUBECTL_GET_BUDGET
 from k8s_diag_agent.collect.tool_budget_registry import get_tool_budget_registry
 from k8s_diag_agent.collect.tool_budget_types import ToolBudget
 from k8s_diag_agent.collect.tool_output_projection import (
