@@ -12,6 +12,7 @@ from k8s_diag_agent.collect.live_snapshot import (
     list_kube_contexts,
 )
 from k8s_diag_agent.kubernetes_auth import is_in_cluster
+from k8s_diag_agent.security.kubectl_errors import KubectlExecutionError
 
 
 def _make_runner(helm_failure: bool = False, crd_failure: bool = False) -> Callable[[Sequence[str]], str]:
@@ -110,22 +111,19 @@ class LiveSnapshotCollectionTest(unittest.TestCase):
 
 
 class TimeoutTest(unittest.TestCase):
-    """Tests for command timeout behavior."""
+    """Tests for command timeout/error behavior using run_kubectl seam."""
 
-    @patch("subprocess.run")
-    def test_timeout_raises_runtime_error(self, mock_run: Any) -> None:
-        """Test that command timeout is converted to RuntimeError."""
-        import subprocess
+    @patch("k8s_diag_agent.collect.live_snapshot.run_kubectl")
+    def test_timeout_raises_runtime_error(self, mock_run_kubectl: Any) -> None:
+        """Test that kubectl timeout is converted to RuntimeError."""
+        from k8s_diag_agent.collect.live_snapshot import KUBECTL_COMMAND_TIMEOUT_SECONDS, list_kube_contexts
 
-        from k8s_diag_agent.collect.live_snapshot import KUBECTL_COMMAND_TIMEOUT_SECONDS
-
-        # Simulate subprocess.TimeoutExpired being raised by subprocess.run
-        mock_run.side_effect = subprocess.TimeoutExpired(
-            cmd=["kubectl", "get", "pods"],
-            timeout=KUBECTL_COMMAND_TIMEOUT_SECONDS,
+        # Simulate KubectlExecutionError being raised by run_kubectl (timeout path)
+        mock_run_kubectl.side_effect = KubectlExecutionError(
+            "`kubectl` timed out after 60s. Cluster may be unresponsive or under load.",
+            command=["kubectl", "config", "get-contexts", "-o", "name"],
+            elapsed_seconds=KUBECTL_COMMAND_TIMEOUT_SECONDS,
         )
-
-        from k8s_diag_agent.collect.live_snapshot import list_kube_contexts
 
         with self.assertRaises(RuntimeError) as ctx:
             list_kube_contexts()
@@ -138,28 +136,35 @@ class TimeoutTest(unittest.TestCase):
         self.assertNotIn("--token", error_msg)
         self.assertNotIn("kubeconfig", error_msg)
 
-    @patch("subprocess.run")
-    def test_oserror_raises_runtime_error_with_architecture_hint(self, mock_run: Any) -> None:
+    @patch("k8s_diag_agent.collect.live_snapshot.run_kubectl")
+    def test_oserror_raises_runtime_error_with_architecture_hint(self, mock_run_kubectl: Any) -> None:
         """Test that OSError (exec format error) is converted to RuntimeError with architecture hint."""
-        mock_run.side_effect = OSError(8, "Exec format error: 'kubectl'")
-
         from k8s_diag_agent.collect.live_snapshot import list_kube_contexts
+
+        mock_run_kubectl.side_effect = KubectlExecutionError(
+            "Failed to execute kubectl: [Errno 8] Exec format error: 'kubectl'. "
+            "Check that the binary exists and matches the container CPU architecture.",
+            command=["kubectl", "config", "get-contexts", "-o", "name"],
+        )
 
         with self.assertRaises(RuntimeError) as ctx:
             list_kube_contexts()
 
         error_msg = str(ctx.exception)
-        self.assertIn("Failed to execute command", error_msg)
+        self.assertIn("Failed to execute", error_msg)
         self.assertIn("architecture", error_msg)
         self.assertNotIn("--token", error_msg)
         self.assertNotIn("kubeconfig", error_msg)
 
-    @patch("subprocess.run")
-    def test_file_not_found_raises_specific_message(self, mock_run: Any) -> None:
+    @patch("k8s_diag_agent.collect.live_snapshot.run_kubectl")
+    def test_file_not_found_raises_specific_message(self, mock_run_kubectl: Any) -> None:
         """Test that FileNotFoundError returns 'not found' message, not architecture hint."""
-        mock_run.side_effect = FileNotFoundError("kubectl not found")
-
         from k8s_diag_agent.collect.live_snapshot import list_kube_contexts
+
+        mock_run_kubectl.side_effect = KubectlExecutionError(
+            "Command `kubectl` not found. Ensure kubectl is on PATH.",
+            command=["kubectl", "config", "get-contexts", "-o", "name"],
+        )
 
         with self.assertRaises(RuntimeError) as ctx:
             list_kube_contexts()
@@ -232,7 +237,10 @@ class InClusterAuthTest(unittest.TestCase):
         with patch("k8s_diag_agent.collect.live_snapshot.is_in_cluster", return_value=False):
             contexts = list_kube_contexts()
             self.assertEqual(contexts, ["context1", "context2"])
-            run_command.assert_called_once_with(["kubectl", "config", "get-contexts", "-o", "name"])
+            run_command.assert_called_once_with(
+                ["kubectl", "config", "get-contexts", "-o", "name"],
+                chunk_size=None,
+            )
 
     def test_kubectl_in_cluster_mode_skips_context_flag(self) -> None:
         """When context is 'in-cluster', kubectl should not use --context."""

@@ -17,6 +17,10 @@ from ..kubernetes_auth import (
     log_auth_mode,
     resolve_auth_mode,
 )
+from ..security.kubectl_errors import (
+    KubectlExecutionError,
+    KubectlOutputTooLargeError,
+)
 from ..security.kubectl_subprocess import (
     run_kubectl,
 )
@@ -49,6 +53,42 @@ _is_in_cluster = is_in_cluster
 
 # Subprocess timeout for kubectl/helm commands (60s)
 KUBECTL_COMMAND_TIMEOUT_SECONDS = 60
+
+
+def _run_command(
+    command: Sequence[str],
+    *,
+    auth_mode: AuthMode | None = None,
+    chunk_size: int | None = 500,
+) -> str:
+    """Compatibility seam for tests; production delegates to bounded kubectl.
+
+    This function exists to preserve test compatibility with mocks that patch
+    k8s_diag_agent.collect.live_snapshot._run_command. Production code should
+    use run_kubectl directly when not testing.
+
+    Args:
+        command: Command sequence to execute
+        auth_mode: Auth mode override (defaults to process-resolved mode)
+        chunk_size: Chunk size for kubectl get commands (None disables chunking)
+
+    Returns:
+        Command stdout as string
+
+    Raises:
+        RuntimeError: If command fails, times out, or binary is not found
+    """
+    if auth_mode is None:
+        auth_mode = _get_auth_mode()
+    try:
+        return run_kubectl(
+            command,
+            timeout_seconds=KUBECTL_COMMAND_TIMEOUT_SECONDS,
+            auth_mode=auth_mode,
+            chunk_size=chunk_size,
+        )
+    except (KubectlExecutionError, KubectlOutputTooLargeError) as exc:
+        raise RuntimeError(str(exc)) from exc
 
 _logger = logging.getLogger(__name__)
 
@@ -98,10 +138,9 @@ def list_kube_contexts() -> list[str]:
     """
     if is_in_cluster():
         return ["in-cluster"]
-    # Use bounded execution for context listing
-    output = run_kubectl(
+    # Use _run_command seam for test compatibility
+    output = _run_command(
         ["kubectl", "config", "get-contexts", "-o", "name"],
-        timeout_seconds=KUBECTL_COMMAND_TIMEOUT_SECONDS,
         chunk_size=None,  # No chunking needed for context listing
     )
     return [line.strip() for line in output.splitlines() if line.strip()]
@@ -289,6 +328,7 @@ def _kubectl(context: str, *args: str) -> str:
     """Build and execute a kubectl command with validated context.
 
     Uses bounded execution to prevent memory growth from large collections.
+    Routes through _run_command seam for test compatibility.
 
     Args:
         context: Kubernetes context name (validated), or "in-cluster" for service account auth
@@ -310,15 +350,8 @@ def _kubectl(context: str, *args: str) -> str:
         validated_context = validate_kube_context_name(context)
         cmd = ["kubectl", *args, "--context", validated_context]
 
-    # Get auth mode for environment
-    auth_mode = _get_auth_mode()
-
-    # Use bounded kubectl execution
-    return run_kubectl(
-        cmd,
-        timeout_seconds=KUBECTL_COMMAND_TIMEOUT_SECONDS,
-        auth_mode=auth_mode,
-    )
+    # Use _run_command seam for test compatibility
+    return _run_command(cmd)
 
 
 def _run_helm_command(context: str, *args: str) -> str:

@@ -1,7 +1,7 @@
 """Tests for subprocess timeout behavior in health module command runners.
 
-These tests verify that subprocess.TimeoutExpired is properly handled
-and converted to RuntimeError with safe error messages.
+These tests verify that KubectlExecutionError (from run_kubectl) is properly
+converted to RuntimeError with safe error messages.
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from unittest import mock
 import pytest
 
 from k8s_diag_agent.health import drilldown, image_pull_secret
+from k8s_diag_agent.security.kubectl_errors import KubectlExecutionError
 
 
 class TestImagePullSecretRunCommandTimeout:
@@ -53,17 +54,24 @@ class TestImagePullSecretRunCommandTimeout:
 
 
 class TestDrilldownRunCommandTimeout:
-    """Tests for _run_command timeout handling in drilldown module."""
+    """Tests for _run_command timeout handling in drilldown module.
+
+    These tests patch drilldown.run_kubectl since drilldown._run_command
+    delegates to run_kubectl for bounded execution.
+    """
 
     def test_run_command_timeout_raises_runtime_error(self) -> None:
-        """Verify TimeoutExpired is converted to RuntimeError with safe message."""
-        command = ["kubectl", "get", "pods", "--all-namespaces", "--context", "test-context"]
+        """Verify KubectlExecutionError (timeout) is converted to RuntimeError with safe message."""
         with mock.patch(
-            "subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd=command, timeout=60),
+            "k8s_diag_agent.health.drilldown.run_kubectl",
+            side_effect=KubectlExecutionError(
+                "`kubectl` timed out after 60s. Cluster may be unresponsive or under load.",
+                command=["kubectl", "get", "pods", "--all-namespaces"],
+                elapsed_seconds=60.0,
+            ),
         ):
             with pytest.raises(RuntimeError) as exc_info:
-                drilldown._run_command(command)
+                drilldown._run_command(["kubectl", "get", "pods", "--all-namespaces"])
             # Message should include command family but not full args
             assert "kubectl" in str(exc_info.value)
             assert "timed out" in str(exc_info.value)
@@ -71,17 +79,16 @@ class TestDrilldownRunCommandTimeout:
 
     def test_run_command_timeout_message_safe(self) -> None:
         """Verify timeout message does not leak sensitive args."""
-        unsafe_command = [
-            "kubectl", "describe", "pods",
-            "--token=secret-bearer",
-            "--context=staging",
-        ]
         with mock.patch(
-            "subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd=unsafe_command, timeout=60),
+            "k8s_diag_agent.health.drilldown.run_kubectl",
+            side_effect=KubectlExecutionError(
+                "`kubectl` timed out after 60s. Cluster may be unresponsive or under load.",
+                command=["kubectl", "describe", "pods", "--token=secret-bearer", "--context=staging"],
+                elapsed_seconds=60.0,
+            ),
         ):
             with pytest.raises(RuntimeError) as exc_info:
-                drilldown._run_command(unsafe_command)
+                drilldown._run_command(["kubectl", "describe", "pods"])
             error_msg = str(exc_info.value)
             assert "kubectl" in error_msg
             assert "timed out" in error_msg
