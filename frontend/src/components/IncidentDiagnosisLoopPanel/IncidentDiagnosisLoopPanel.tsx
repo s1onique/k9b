@@ -22,7 +22,7 @@
  * - NO raw artifact content display
  */
 
-import React, { useReducer, useEffect, useMemo } from "react";
+import React, { useReducer, useEffect, useMemo, useRef } from "react";
 import type { IncidentSuggestedCheck } from "../../api";
 import type { DiagnosisLoopOnePassResponse } from "../../api/incidentDiagnosisLoop";
 
@@ -240,6 +240,9 @@ export const IncidentDiagnosisLoopPanel: React.FC<IncidentDiagnosisLoopPanelProp
     [suggestedChecks]
   );
 
+  // Track started runIds to prevent duplicate API calls (e.g., from React StrictMode)
+  const startedRunIdsRef = useRef(new Set<string>());
+
   // Derive view data from state
   const isRunning = state.tag === "running";
   const isSuccess = state.tag === "success";
@@ -278,9 +281,14 @@ export const IncidentDiagnosisLoopPanel: React.FC<IncidentDiagnosisLoopPanelProp
   };
 
   // Effect: trigger API call when state transitions to running
-  // Passes state.runId so effect can include it in completion messages
+  // Uses startedRunIdsRef to prevent duplicate calls (React StrictMode may fire cleanup/setup)
   useEffect(() => {
-    if (state.tag === "running") {
+    if (state.tag === "running" && state.runId) {
+      // Skip if this runId already triggered the effect
+      if (startedRunIdsRef.current.has(state.runId)) {
+        return;
+      }
+      startedRunIdsRef.current.add(state.runId);
       runDiagnosisLoopEffect(state, validSuggestedChecks, dispatch);
     }
   }, [state, validSuggestedChecks]);
