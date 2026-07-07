@@ -8,6 +8,9 @@ Functions here accept the request handler instance as the first argument.
 Architecture: This module imports from server.py for shared helpers (which are
 safe to import at module level as they don't depend on handler instance state).
 server.py imports this module, so we must avoid circular imports at module load.
+
+Review packet, debug packet, and promotion review handlers are in:
+- server_alertmanager_handlers.py
 """
 
 from __future__ import annotations
@@ -22,6 +25,13 @@ from ..security import sanitize_exception_message
 
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
+
+# Re-export handlers from new modules for backwards compatibility
+from .server_alertmanager_handlers import (  # noqa: E402
+    handle_alertmanager_source_debug_packet,
+    handle_alertmanager_source_promotion_review,
+    handle_alertmanager_sources_review_packet,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -381,3 +391,11 @@ def handle_alertmanager_source_action(
             )
 
     handler._send_json(response)
+
+
+__all__ = [
+    "handle_alertmanager_source_action",
+    "handle_alertmanager_sources_review_packet",
+    "handle_alertmanager_source_debug_packet",
+    "handle_alertmanager_source_promotion_review",
+]
