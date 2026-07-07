@@ -25,6 +25,7 @@ from .loop_vmalert_rule_state import run_vmalert_rule_state_collection as _run_v
 if TYPE_CHECKING:
     import subprocess
 
+    from ..collect.incident_store import IncidentStore
     from ..external_analysis.alertmanager_discovery import AlertmanagerSourceInventory
     from ..external_analysis.vmalert_discovery import VmalertSourceInventory
 
@@ -135,6 +136,7 @@ def run_alertmanager_snapshot_collection(
     directories: dict[str, Path],
     start_port_forward: Callable[..., tuple[subprocess.Popen[str], int]],
     stop_port_forward: Callable[..., None],
+    incident_store: IncidentStore | None = None,
 ) -> None:
     """Collect Alertmanager snapshot and compact artifacts for tracked sources.
 
@@ -148,6 +150,7 @@ def run_alertmanager_snapshot_collection(
         directories=directories,
         start_port_forward=start_port_forward,
         stop_port_forward=stop_port_forward,
+        incident_store=incident_store,
     )
 
 

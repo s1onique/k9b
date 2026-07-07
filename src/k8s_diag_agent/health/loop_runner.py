@@ -278,6 +278,7 @@ class HealthLoopRunner:
         directories: dict[str, Path],
     ) -> None:
         """Run Alertmanager and vmalert discovery and collection."""
+        from ..collect.incident_store_provider import get_incident_store
         from .loop_runner_monitoring import (
             run_alertmanager_discovery,
             run_alertmanager_snapshot_collection,
@@ -291,6 +292,8 @@ class HealthLoopRunner:
             log_event=self._log_event,
             run_id=self.run_id,
         )
+        # Get incident store for alert-to-incident promotion
+        incident_store = get_incident_store()
         run_alertmanager_snapshot_collection(
             inventory=self._alertmanager_inventory,
             run_id=self.run_id,
@@ -299,6 +302,7 @@ class HealthLoopRunner:
             directories=directories,
             start_port_forward=self._start_alertmanager_port_forward,
             stop_port_forward=self._stop_alertmanager_port_forward,
+            incident_store=incident_store,
         )
         self._vmalert_inventory = run_vmalert_discovery(
             records=records,
