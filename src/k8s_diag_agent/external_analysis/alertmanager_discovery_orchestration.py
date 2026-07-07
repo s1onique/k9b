@@ -166,6 +166,8 @@ def verify_and_update_inventory(
                 cluster_context=source.cluster_context,
                 cluster_uid=source.cluster_uid,
                 object_uid=source.object_uid,
+                aliases=source.aliases,
+                manual_source_mode=source.manual_source_mode,
             )
         else:
             # Source failed verification
@@ -187,6 +189,8 @@ def verify_and_update_inventory(
                 cluster_context=source.cluster_context,
                 cluster_uid=source.cluster_uid,
                 object_uid=source.object_uid,
+                aliases=source.aliases,
+                manual_source_mode=source.manual_source_mode,
             )
 
     return AlertmanagerSourceInventory(

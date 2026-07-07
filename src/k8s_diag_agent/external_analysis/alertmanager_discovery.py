@@ -34,7 +34,6 @@ from .alertmanager_discovery_dedup_helpers import (
 )
 
 # Import models from dedicated module
-# Import DiscoveryResult
 from .alertmanager_discovery_models import (
     _ORIGIN_PRIORITY,
     AlertmanagerSource,
@@ -44,6 +43,7 @@ from .alertmanager_discovery_models import (
     AlertmanagerSourceOrigin,
     AlertmanagerSourceState,
     DiscoveryResult,
+    _parse_datetime,
 )
 
 # Import orchestration functions
@@ -55,13 +55,16 @@ from .alertmanager_discovery_orchestration import (
 # Import sources/strategies from dedicated modules
 from .alertmanager_discovery_sources import (
     _IN_CLUSTER_CONTEXT,
+    _kubectl_context_args,
     _resolve_prometheus_operator_alias,
+    _should_add_context_flag,
     build_endpoint_for_manual,
 )
 
 # Import strategies for re-export
 from .alertmanager_discovery_strategies import (
     CRDDiscoveryStrategy,
+    DiscoveryStrategy,
     PrometheusCRDConfigDiscoveryStrategy,
     ServiceHeuristicDiscoveryStrategy,
 )
@@ -291,22 +294,27 @@ __all__ = [
     # Constants
     "_ORIGIN_PRIORITY",
     "_IN_CLUSTER_CONTEXT",
+    # Utility
+    "_parse_datetime",
     # Orchestration functions
     "discover_alertmanagers",
     "verify_and_update_inventory",
     # Verification
     "VerificationResult",
     "verify_alertmanager_endpoint",
-    # Strategies (re-exported for backward compatibility)
+    # Strategies
+    "DiscoveryStrategy",
     "CRDDiscoveryStrategy",
     "PrometheusCRDConfigDiscoveryStrategy",
     "ServiceHeuristicDiscoveryStrategy",
     # Sources
+    "_should_add_context_flag",
+    "_kubectl_context_args",
     "build_endpoint_for_manual",
     "_resolve_prometheus_operator_alias",
     # Deduplication
     "merge_deduplicate_inventory",
-    # Dedup helpers (re-exported for backward compatibility)
+    # Dedup helpers
     "ServiceHeuristicDedupGroup",
     "_is_chart_alertmanager_service",
     "_is_headless_operated_service",
