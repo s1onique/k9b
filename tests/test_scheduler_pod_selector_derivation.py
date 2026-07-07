@@ -9,6 +9,7 @@ These tests verify that:
 from __future__ import annotations
 
 import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 
@@ -154,9 +155,45 @@ class TestSchedulerSelectorUsage:
         """_collect_scheduler_diagnostics handles missing selector gracefully."""
         from scripts.backend_health_gate.k8s_diagnostics import _collect_scheduler_diagnostics
 
+        def fake_subprocess_run(cmd, **kwargs):
+            """Fake subprocess.run that handles kubectl pod lookup calls."""
+            # Check if this is a kubectl get pods command (semantic matcher)
+            # Handles both positional and option-order variants:
+            #   kubectl --kubeconfig X get pods -n Y -l Z
+            #   kubectl get pods -n Y -l Z --kubeconfig X
+            try:
+                get_index = cmd.index("get")
+            except ValueError:
+                get_index = -1
+
+            if (
+                cmd
+                and cmd[0] == "kubectl"
+                and get_index >= 0
+                and get_index + 1 < len(cmd)
+                and cmd[get_index + 1] == "pods"
+            ):
+                # Return empty pod list for all selectors (simulating no pods found)
+                return subprocess.CompletedProcess(
+                    args=cmd,
+                    returncode=0,
+                    stdout='{"items":[]}',
+                    stderr="",
+                )
+            # Return non-zero for any other kubectl commands to fail fast
+            return subprocess.CompletedProcess(
+                args=cmd,
+                returncode=1,
+                stdout="",
+                stderr="unexpected command",
+            )
+
         with patch(
             "scripts.incident_discovery_gate.collect.get_scheduler_pod_selector",
             return_value=None,
+        ), patch(
+            "scripts.backend_health_gate.k8s_diagnostics.subprocess.run",
+            side_effect=fake_subprocess_run,
         ):
             result = _collect_scheduler_diagnostics("/tmp/kubeconfig", "k9b")
 
