@@ -149,18 +149,39 @@ def test_role_alertmanager_discovery_rbac():
         ["get", "list", "watch"]
     ))
     
-    # Check monitoring CRDs
-    errors.extend(check_api_group_rules(
-        rules, "monitoring.coreos.com",
-        ["alertmanagers", "prometheuses", "alertmanagerconfigs"],
-        ["get", "list", "watch"]
-    ))
+    # Note: monitoring.coreos.com CRDs are intentionally excluded from the
+    # namespace-scoped Role. K9B's operator-CRD discovery path is modeled as
+    # cluster-wide / cross-namespace discovery and is granted only via ClusterRole.
     
     # Security checks
     errors.extend(check_no_secrets(rules))
     errors.extend(check_readonly_verbs(rules))
     
     assert not errors, f"Role RBAC errors: {errors}"
+
+
+def test_namespace_role_excludes_cluster_wide_discovery_api_groups():
+    """Verify namespace-scoped Role does not include cluster-wide discovery API groups."""
+    rules = get_rbac_rules(cluster_scoped=False)
+    errors = []
+    
+    # These API groups are modeled as cluster-wide / cross-namespace discovery
+    # and are granted only via ClusterRole, not namespace-scoped Role.
+    cluster_wide_api_groups = [
+        "monitoring.coreos.com",
+        "operator.victoriametrics.com",
+    ]
+    
+    for rule in rules:
+        api_groups = rule.get("apiGroups", [])
+        for api_group in api_groups:
+            if api_group in cluster_wide_api_groups:
+                errors.append(
+                    f"Found cluster-wide apiGroup '{api_group}' in namespace Role - "
+                    f"resources: {rule.get('resources', [])}"
+                )
+    
+    assert not errors, f"Namespace Role should not include cluster-wide discovery API groups: {errors}"
 
 
 if __name__ == "__main__":
