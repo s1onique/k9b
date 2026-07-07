@@ -97,6 +97,59 @@ def _is_chart_alertmanager_service(name: str) -> bool:
     return True
 
 
+def _count_crd_sources_in_namespace(
+    source: AlertmanagerSource,
+    all_sources: list[AlertmanagerSource],
+) -> int:
+    """Count CRD-sourced Alertmanager sources in the same namespace.
+    
+    Args:
+        source: The source whose namespace to check
+        all_sources: All sources to search through
+        
+    Returns:
+        Number of AlertmanagerSourceOrigin.ALERTMANAGER_CRD sources in the same namespace
+    """
+    from k8s_diag_agent.external_analysis.alertmanager_discovery_models import (
+        AlertmanagerSourceOrigin,
+    )
+    return sum(
+        1 for s in all_sources
+        if s.namespace == source.namespace
+        and s.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+    )
+
+
+def _is_ambiguous_operated_service(
+    source: AlertmanagerSource,
+    all_sources: list[AlertmanagerSource],
+) -> bool:
+    """Check if an -operated service has ambiguous CRD mapping.
+    
+    When a service ends with '-operated' (Prometheus Operator pattern), aliasing
+    it to a CRD is only ambiguous when there are MULTIPLE CRDs in the namespace.
+    
+    Returns True only when:
+    - The source is an -operated service
+    - There are MULTIPLE (>1) Alertmanager CRDs in the same namespace
+    
+    When 0 CRDs: not ambiguous, allow reconciliation collapse by backing identity
+    When 1 CRD: not ambiguous, clear mapping to that CRD
+    When 2+ CRDs: ambiguous, cannot determine which CRD the service belongs to
+    
+    Args:
+        source: The source to check
+        all_sources: All sources in the inventory
+        
+    Returns:
+        True if this is an -operated service with ambiguous CRD mapping
+    """
+    if not _is_headless_operated_service(source.name or ""):
+        return False
+    crd_count = _count_crd_sources_in_namespace(source, all_sources)
+    return crd_count > 1
+
+
 def _normalize_endpoint(ep: str) -> str:
     """Normalize endpoint for comparison.
     

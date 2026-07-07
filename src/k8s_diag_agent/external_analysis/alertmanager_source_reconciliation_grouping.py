@@ -19,10 +19,14 @@ if TYPE_CHECKING:
 
 from .alertmanager_discovery_backing_identity import get_service_backing_identity
 from .alertmanager_discovery_dedup_helpers import (
+    _is_ambiguous_operated_service,
     _is_chart_alertmanager_service,
     _is_headless_operated_service,
 )
-from .alertmanager_source_reconciliation_keys import compute_logical_source_key
+from .alertmanager_source_reconciliation_keys import (
+    LogicalSourceKey,
+    compute_logical_source_key,
+)
 
 # Module logger
 _logger = logging.getLogger(__name__)
@@ -129,6 +133,18 @@ def group_sources_by_backing_identity(
 
         # Compute logical key
         log_key = compute_logical_source_key(source, backing, kube_context)
+        
+        # For ambiguous -operated services, add service name to key to prevent
+        # grouping with CRDs that share the same endpoint
+        if _is_ambiguous_operated_service(source, sources):
+            # Create a unique key that includes the service name to prevent merging
+            # with CRDs that have the same endpoint
+            log_key = LogicalSourceKey(
+                cluster_context=log_key.cluster_context,
+                namespace=log_key.namespace,
+                identity_kind="ambiguous_operated_service",
+                identity_value=(f"{source.namespace}/{source.name}",) + log_key.identity_value,
+            )
 
         if log_key not in groups:
             groups[log_key] = ReconciliationGroup(

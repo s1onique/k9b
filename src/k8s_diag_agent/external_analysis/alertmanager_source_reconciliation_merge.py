@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 # Import models for runtime use
 from .alertmanager_discovery_dedup_helpers import (
+    _is_ambiguous_operated_service,
     _is_chart_alertmanager_service,
     _is_headless_operated_service,
 )
@@ -27,16 +28,43 @@ from .alertmanager_source_reconciliation_grouping import (
 _logger = logging.getLogger(__name__)
 
 
-def _build_alias_records(source: AlertmanagerSource) -> tuple:
+def _is_ambiguous_operator_alias(
+    alias_source: AlertmanagerSource,
+    all_sources: list[AlertmanagerSource],
+) -> bool:
+    """Check if aliasing an -operated service would be ambiguous.
+    
+    Delegates to the centralized _is_ambiguous_operated_service predicate
+    for consistent behavior across grouping and alias-record creation.
+    
+    Args:
+        alias_source: The service source being aliased
+        all_sources: All sources in the inventory
+        
+    Returns:
+        True if aliasing would be ambiguous (should NOT alias)
+    """
+    return _is_ambiguous_operated_service(alias_source, all_sources)
+
+
+def _build_alias_records(
+    source: AlertmanagerSource,
+    all_sources: list[AlertmanagerSource],
+) -> tuple:
     """Build AlertmanagerSourceAlias records from source data.
 
     Args:
         source: Source to create alias from
+        all_sources: All sources in the inventory (for ambiguity checking)
 
     Returns:
-        Tuple of AlertmanagerSourceAlias records
+        Tuple of AlertmanagerSourceAlias records (empty if aliasing would be ambiguous)
     """
     from .alertmanager_discovery_models import AlertmanagerSourceAlias
+
+    # Check for ambiguous aliasing (only applies to -operated services)
+    if _is_ambiguous_operator_alias(source, all_sources):
+        return ()
 
     name = source.name or ""
     if _is_headless_operated_service(name):
@@ -134,7 +162,7 @@ def reconcile_alertmanager_sources(
         # Add aliases that aren't already tracked in canonical
         existing_alias_names = {a.alias_name for a in canonical.aliases}
         for alias_source in group.aliases:
-            alias_record = _build_alias_records(alias_source)
+            alias_record = _build_alias_records(alias_source, sources_list)
             for rec in alias_record:
                 if rec.alias_name and rec.alias_name not in existing_alias_names:
                     all_aliases.append(rec)

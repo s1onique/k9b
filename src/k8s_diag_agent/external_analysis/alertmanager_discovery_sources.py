@@ -110,19 +110,29 @@ def _resolve_prometheus_operator_alias(
     - The operator creates a headless service 'alertmanager-operated' (conventional suffix)
     - The Helm chart may create a user-facing service 'alertmanager-main' or similar
     
-    When service heuristics find services like 'alertmanager-operated' or 
-    'alertmanager-main' in the same namespace as a CRD Alertmanager, they should
-    share the same canonical identity as the CRD Alertmanager if there's an
-    unambiguous mapping (only one CRD Alertmanager in that namespace).
+    When service heuristics find services like 'alertmanager-operated' in the same 
+    namespace as a CRD Alertmanager, they should share the same canonical identity 
+    as the CRD Alertmanager if there's an unambiguous mapping (only one CRD 
+    Alertmanager in that namespace).
+    
+    If there are multiple CRDs in the namespace, the service is NOT aliased to 
+    prevent ambiguous mappings. The service keeps its own canonical identity.
     
     This function:
-    1. Identifies if the source is an alias candidate (ends with '-operated' or matches chart patterns)
+    1. Identifies if the source is an alias candidate (-operated suffix)
     2. Finds the CRD Alertmanager in the same namespace
-    3. Returns a new source with CRD's namespace/name but original endpoint preserved
-    4. Tracks the alias in the source's aliases field
+    3. Only aliases if there's exactly one CRD in the namespace
+    4. Returns the aliased source with CRD's namespace/name, or unchanged source
     """
     # Only apply alias resolution for service heuristic sources
     if source.origin != AlertmanagerSourceOrigin.SERVICE_HEURISTIC:
+        return source
+    
+    name = source.name or ''
+    
+    # Only alias -operated services (operator-governing services)
+    # These are headless services created by Prometheus Operator
+    if not name.endswith('-operated'):
         return source
     
     # Find CRD sources in the same namespace
@@ -132,28 +142,12 @@ def _resolve_prometheus_operator_alias(
         and s.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
     ]
     
-    # Only apply when there's exactly one CRD Alertmanager in this namespace
-    # (unambiguous mapping)
+    # CRITICAL: Only alias when there's exactly one CRD Alertmanager
+    # When multiple CRDs exist, we cannot determine which one the service belongs to
     if len(crd_in_namespace) != 1:
         return source
     
     crd_source = crd_in_namespace[0]
-    name = source.name or ''
-    
-    # Determine if this source is an alias candidate
-    # Both '-operated' services and chart services in the same namespace are aliases
-    # if they point to the same backing pods (we check if the CRD exists, implying
-    # they share the same StatefulSet/pods)
-    crd_name = crd_source.name or ''
-    is_alias_candidate = (
-        name.endswith('-operated') or  # Operator-created headless service
-        name == crd_name or  # Chart service matching CRD name
-        name in crd_name or  # CRD name contains service name (partial match)
-        crd_name in name  # Service name contains CRD name (partial match)
-    )
-    
-    if not is_alias_candidate:
-        return source
     
     # Infer management type
     management_type = _infer_management_type(name, source.endpoint)
