@@ -102,6 +102,16 @@ def normalize_adapter_name(name: str) -> str:
                 provider=LEGACY_LLAMACPP_ADAPTER_NAME,
                 replacement=OPENAI_COMPATIBLE_ADAPTER_NAME,
             )
+            # Also emit Python standard logging for testability
+            # The structured log above goes to JSONL stdout; this goes to logger
+            _logger.warning(
+                "deprecated provider alias",
+                extra={
+                    "event": "deprecated-provider-alias",
+                    "provider": LEGACY_LLAMACPP_ADAPTER_NAME,
+                    "replacement": OPENAI_COMPATIBLE_ADAPTER_NAME,
+                },
+            )
             _DEPRECATION_WARNING_LOGGED.add(normalized)
         return OPENAI_COMPATIBLE_ADAPTER_NAME
     return normalized
