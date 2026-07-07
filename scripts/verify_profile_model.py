@@ -75,6 +75,13 @@ STEPS: dict[str, dict] = {
         "description": "Shell containment policy enforcement",
         "is_expensive": False,
     },
+    "kubectl-exec-bounds": {
+        "command": "python scripts/verify_kubectl_exec_bounds.py",
+        "lane": "python",
+        "category": StepCategory.POLICY,
+        "description": "kubectl exec bounds policy enforcement",
+        "is_expensive": False,
+    },
     "doctrine": {
         "command": "bash scripts/verify_factory_doctrine.sh",
         "lane": "python",

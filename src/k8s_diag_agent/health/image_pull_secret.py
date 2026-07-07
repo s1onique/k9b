@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
-import subprocess
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..collect.cluster_snapshot import WarningEventSummary
 from ..security.kubectl_context import render_kubectl_context_args
+from ..security.kubectl_subprocess import run_kubectl
 from ..security.path_validation import (
     validate_kubernetes_namespace,
     validate_kubernetes_resource_name,
@@ -17,6 +18,11 @@ from ..security.path_validation import (
 from ..security.subprocess_helpers import (
     sanitize_subprocess_error,
 )
+
+if TYPE_CHECKING:
+    pass
+
+_logger = logging.getLogger(__name__)
 
 CommandRunner = Callable[[Sequence[str]], str]
 
@@ -30,28 +36,25 @@ BROKEN_IMAGE_PULL_SECRET_REASON = "broken_image_pull_secret_path"
 
 
 def _run_command(command: Sequence[str]) -> str:
+    """Execute a kubectl command with bounded execution.
+    
+    Uses run_kubectl() for memory-safe bounded execution.
+    """
     try:
-        result = subprocess.run(
+        return run_kubectl(
             list(command),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS,
+            timeout_seconds=KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS,
         )
     except FileNotFoundError as exc:
         raise RuntimeError(f"Command `{command[0]}` not found.") from exc
-    except subprocess.CalledProcessError as exc:
+    except Exception as exc:
         # Sanitize stderr to prevent credential leakage in error messages
-        stderr_output = exc.stderr if exc.stderr else exc.stdout
         message = sanitize_subprocess_error(
             f"`{command[0]}` failed",
-            stderr_output,
+            str(exc),
             max_length=1000,
         )
         raise RuntimeError(message) from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"`{command[0]}` timed out after {KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS}s") from exc
-    return result.stdout
 
 
 def _kubectl(context: str, *args: str, runner: CommandRunner) -> str:

@@ -21,6 +21,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from ..security.kubectl_subprocess import run_kubectl
 from .incident_diagnosis_loop_constants import (
     _AUTOMATIC_LOOP_ENV_VAR,
     _K9B_NAMESPACE_ENV_VAR,
@@ -115,22 +116,9 @@ def _read_deployment_env_value(
     ])
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        output = run_kubectl(cmd, timeout_seconds=30)
 
-        if result.returncode != 0:
-            error = DeploymentReadError(
-                message=f"Failed to read deployment {deployment} in namespace {namespace}: kubectl exited with code {result.returncode}",
-                returncode=result.returncode,
-                stderr=result.stderr,
-            )
-            return None, error
-
-        deployment_obj = json.loads(result.stdout)
+        deployment_obj = json.loads(output)
         containers = deployment_obj.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
 
         for container in containers:

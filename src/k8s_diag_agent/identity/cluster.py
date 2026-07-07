@@ -8,6 +8,7 @@ import subprocess
 from typing import Any
 
 from ..security.kubectl_context import render_kubectl_context_args
+from ..security.kubectl_subprocess import run_kubectl
 
 _logger = logging.getLogger(__name__)
 
@@ -40,23 +41,13 @@ def derive_cluster_uid(
         # Use render_kubectl_context_args() to safely handle in-cluster mode
         cmd.extend(render_kubectl_context_args(kube_context))
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        output = run_kubectl(cmd, timeout_seconds=10)
+        data = json.loads(output)
+        uid = data.get("metadata", {}).get("uid")
+        if uid:
+            return str(uid)
 
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            uid = data.get("metadata", {}).get("uid")
-            if uid:
-                return str(uid)
-
-        _logger.debug(
-            "Failed to get kube-system namespace UID: %s",
-            result.stderr[:200] if result.stderr else "non-zero exit",
-        )
+        _logger.debug("Failed to get kube-system namespace UID")
 
     except FileNotFoundError:
         _logger.debug("kubectl not found in PATH")
