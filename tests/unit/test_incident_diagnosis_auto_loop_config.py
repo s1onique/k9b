@@ -8,13 +8,17 @@ These tests do NOT:
 - Execute real Kubernetes collectors
 - Call kubectl/helm/subprocess/shell (properly mocked)
 - Perform remediation or mutation
+
+Architecture note:
+    After ACT-K9B-K8S-CLIENT-TEST-HARNESS-UPDATE01, these tests mock
+    get_cached_kubernetes_client() instead of subprocess.run since production
+    code now uses the Kubernetes Python client boundary.
 """
 
 from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from unittest.mock import patch
 
 import pytest
 
@@ -28,6 +32,7 @@ from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
 from k8s_diag_agent.collect.incident_lifecycle import Incident, IncidentStatus
 from k8s_diag_agent.collect.incident_store import IncidentStore
 from k8s_diag_agent.collect.incident_store_provider import set_incident_store
+from tests.unit.k8s_fake_client import FakeKubernetesReadClient
 
 # =============================================================================
 # Test Fixtures
@@ -88,29 +93,39 @@ def sample_open_incident(clean_store) -> Incident:
 class TestActivationConfig:
     """Tests for automatic diagnosis loop activation."""
 
-    def test_collector_disabled_by_default(self):
+    def test_collector_disabled_by_default(self, monkeypatch: pytest.MonkeyPatch):
         """Prove automatic collector is disabled by default when cluster read fails and env not set."""
         env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
         try:
             if "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
                 del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
 
-            # Mock kubectl to fail (simulating no cluster access)
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = type(
-                    "MockResult",
-                    (),
-                    {"returncode": 1, "stderr": "connection refused"},
-                )()
-                assert is_automatic_diagnosis_loop_enabled() is False
+            # Mock k8s client to raise error (simulating no cluster access)
+            fake_client = FakeKubernetesReadClient()  # Returns None for all reads
+
+            monkeypatch.setattr(
+                "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+                lambda **kwargs: fake_client,
+            )
+            assert is_automatic_diagnosis_loop_enabled() is False
         finally:
             if env_backup is not None:
                 os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
+            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
+                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
 
-    def test_collector_enabled_when_env_set(self):
+    def test_collector_enabled_when_env_set(self, monkeypatch: pytest.MonkeyPatch):
         """Prove automatic collector is enabled when env is true."""
         env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
         try:
+            # Mock k8s client to return None (env var not in deployment)
+            fake_client = FakeKubernetesReadClient()  # Returns None for all reads
+
+            monkeypatch.setattr(
+                "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+                lambda **kwargs: fake_client,
+            )
+
             os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "true"
             assert is_automatic_diagnosis_loop_enabled() is True
         finally:
@@ -119,10 +134,18 @@ class TestActivationConfig:
             elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
                 del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
 
-    def test_collector_enabled_case_insensitive(self):
+    def test_collector_enabled_case_insensitive(self, monkeypatch: pytest.MonkeyPatch):
         """Prove collector enabled is case insensitive."""
         env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
         try:
+            # Mock k8s client to return None (env var not in deployment)
+            fake_client = FakeKubernetesReadClient()
+
+            monkeypatch.setattr(
+                "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+                lambda **kwargs: fake_client,
+            )
+
             os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "TRUE"
             assert is_automatic_diagnosis_loop_enabled() is True
 
@@ -134,30 +157,23 @@ class TestActivationConfig:
             elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
                 del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
 
-    def test_collector_disabled_when_env_false(self):
+    def test_collector_disabled_when_env_false(self, monkeypatch: pytest.MonkeyPatch):
         """Prove collector disabled when env is false."""
         env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
         try:
-            os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "false"
+            # Mock k8s client to return None (env var not in deployment)
+            fake_client = FakeKubernetesReadClient()
 
-            # Mock kubectl to fail (simulating no cluster access)
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = type(
-                    "MockResult",
-                    (),
-                    {"returncode": 1, "stderr": "connection refused"},
-                )()
-                assert is_automatic_diagnosis_loop_enabled() is False
+            monkeypatch.setattr(
+                "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+                lambda **kwargs: fake_client,
+            )
+
+            os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "false"
+            assert is_automatic_diagnosis_loop_enabled() is False
 
             os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "0"
-
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = type(
-                    "MockResult",
-                    (),
-                    {"returncode": 1, "stderr": "connection refused"},
-                )()
-                assert is_automatic_diagnosis_loop_enabled() is False
+            assert is_automatic_diagnosis_loop_enabled() is False
         finally:
             if env_backup is not None:
                 os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup

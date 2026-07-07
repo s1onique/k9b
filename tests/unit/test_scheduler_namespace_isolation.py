@@ -13,77 +13,69 @@ This is critical for provider smoke tests where:
 Bug scenario: If someone passes incident_namespace="otel-demo" to
 is_automatic_diagnosis_loop_enabled(), the function should NOT try to
 read deployment/k9b-scheduler from namespace "otel-demo".
+
+Architecture note:
+    After ACT-K9B-K8S-CLIENT-TEST-HARNESS-UPDATE01, these tests mock
+    get_cached_kubernetes_client() instead of subprocess.run since production
+    code now uses the Kubernetes Python client boundary.
 """
 
 from __future__ import annotations
 
-import json
 import os
-from unittest.mock import patch
 
+import pytest
 
-def _make_deployment_spec(env_var_name: str, env_var_value: str) -> dict:
-    """Create a deployment spec with the given env var."""
-    return {
-        "spec": {
-            "template": {
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "scheduler",
-                            "env": [
-                                {
-                                    "name": env_var_name,
-                                    "value": env_var_value,
-                                }
-                            ],
-                        }
-                    ]
-                }
-            }
-        }
-    }
+from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
+    get_automatic_loop_enabled_with_reason,
+    get_default_k9b_namespace,
+    is_automatic_diagnosis_loop_enabled,
+)
+from tests.unit.k8s_fake_client import FakeKubernetesReadClient
 
 
 class TestSchedulerNamespaceIsolation:
     """Regression tests for namespace isolation in scheduler deployment lookup."""
 
-    def test_uses_explicit_namespace_parameter_for_scheduler_lookup(self) -> None:
+    def test_uses_explicit_namespace_parameter_for_scheduler_lookup(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Prove the namespace parameter is used for scheduler deployment lookup."""
-        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
-            is_automatic_diagnosis_loop_enabled,
+        # Track what namespaces were requested
+        namespaces_requested: list[str] = []
+
+        class TrackingFakeClient(FakeKubernetesReadClient):
+            def read_deployment_env_value(
+                self,
+                *,
+                namespace: str,
+                deployment: str,
+                container: str | None = None,
+                env_name: str,
+            ) -> str | None:
+                namespaces_requested.append(namespace)
+                return "true"
+
+        fake_client = TrackingFakeClient()
+
+        monkeypatch.setattr(
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
         )
 
-        deployment_spec = _make_deployment_spec(
-            "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED", "true"
+        # Call with explicit namespace "k9b"
+        result = is_automatic_diagnosis_loop_enabled(
+            kubeconfig="/tmp/kubeconfig",
+            namespace="k9b",
         )
 
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = type(
-                "MockResult",
-                (),
-                {"returncode": 0, "stdout": json.dumps(deployment_spec)},
-            )()
+        assert result is True
+        # Verify the namespace was k9b, not otel-demo
+        assert namespaces_requested == ["k9b"]
 
-            # Call with explicit namespace "k9b"
-            result = is_automatic_diagnosis_loop_enabled(
-                kubeconfig="/tmp/kubeconfig",
-                namespace="k9b",
-            )
-
-            assert result is True
-            # Verify exact kubectl argv - prove namespace is k9b, not otel-demo
-            cmd = mock_run.call_args.args[0]
-            assert cmd == [
-                "kubectl",
-                "--kubeconfig", "/tmp/kubeconfig",
-                "-n", "k9b",
-                "get", "deployment",
-                "k9b-scheduler",
-                "-o", "json",
-            ]
-
-    def test_fails_gracefully_when_scheduler_not_in_wrong_namespace(self) -> None:
+    def test_fails_gracefully_when_scheduler_not_in_wrong_namespace(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Prove lookup fails with useful error when scheduler not in target namespace.
 
         This is the exact failure mode from the live lab:
@@ -93,81 +85,75 @@ class TestSchedulerNamespaceIsolation:
         the function should fail gracefully (fall back to env or return False)
         rather than crash.
         """
-        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
-            get_automatic_loop_enabled_with_reason,
+        # Ensure env var is NOT set (so fallback would return False)
+        monkeypatch.delenv("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED", raising=False)
+
+        # Fake client that raises not found (scheduler doesn't exist in otel-demo)
+        fake_client = FakeKubernetesReadClient.with_not_found(
+            namespace="otel-demo",
+            deployment="k9b-scheduler",
         )
 
-        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
-        try:
-            # Ensure env var is NOT set (so fallback would return False)
-            if "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
+        monkeypatch.setattr(
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
+        )
 
-            with patch("subprocess.run") as mock_run:
-                # kubectl returns "not found" because scheduler doesn't exist in otel-demo
-                mock_run.return_value = type(
-                    "MockResult",
-                    (),
-                    {
-                        "returncode": 1,
-                        "stderr": 'error: deployments.apps "k9b-scheduler" not found',
-                    },
-                )()
+        # Call with wrong namespace (otel-demo) - this is the bug scenario
+        enabled, result = get_automatic_loop_enabled_with_reason(
+            kubeconfig="/tmp/kubeconfig",
+            namespace="otel-demo",  # Wrong namespace - scheduler is in k9b
+            allow_env_fallback=False,  # Fail-closed
+        )
 
-                # Call with wrong namespace (otel-demo) - this is the bug scenario
-                enabled, result = get_automatic_loop_enabled_with_reason(
-                    kubeconfig="/tmp/kubeconfig",
-                    namespace="otel-demo",  # Wrong namespace - scheduler is in k9b
-                    allow_env_fallback=False,  # Fail-closed
-                )
+        # Should fail gracefully
+        assert enabled is False
+        assert result.source == "error"
+        # Should indicate the lookup failed
+        assert result.reason in (
+            "automatic_loop_env_read_failed",
+            "automatic_loop_env_rbac_denied",
+        )
 
-                # Should fail gracefully
-                assert enabled is False
-                assert result.source == "error"
-                # Should indicate the lookup failed
-                assert result.reason in (
-                    "automatic_loop_env_read_failed",
-                    "automatic_loop_env_rbac_denied",
-                )
-        finally:
-            if env_backup is not None:
-                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
-            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
-
-    def test_k9b_namespace_can_be_overridden_via_parameter(self) -> None:
+    def test_k9b_namespace_can_be_overridden_via_parameter(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Prove namespace parameter allows overriding the default 'k9b' namespace.
 
         This is useful for testing or unusual deployments where k9b runs in
         a different namespace.
         """
-        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
-            is_automatic_diagnosis_loop_enabled,
+        # Track what namespaces were requested
+        namespaces_requested: list[str] = []
+
+        class TrackingFakeClient(FakeKubernetesReadClient):
+            def read_deployment_env_value(
+                self,
+                *,
+                namespace: str,
+                deployment: str,
+                container: str | None = None,
+                env_name: str,
+            ) -> str | None:
+                namespaces_requested.append(namespace)
+                return "true"
+
+        fake_client = TrackingFakeClient()
+
+        monkeypatch.setattr(
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
         )
 
-        deployment_spec = _make_deployment_spec(
-            "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED", "true"
+        # Call with custom namespace
+        result = is_automatic_diagnosis_loop_enabled(
+            kubeconfig="/tmp/kubeconfig",
+            namespace="k9b-custom",  # Custom namespace
         )
 
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = type(
-                "MockResult",
-                (),
-                {"returncode": 0, "stdout": json.dumps(deployment_spec)},
-            )()
-
-            # Call with custom namespace
-            result = is_automatic_diagnosis_loop_enabled(
-                kubeconfig="/tmp/kubeconfig",
-                namespace="k9b-custom",  # Custom namespace
-            )
-
-            assert result is True
-            # Verify exact kubectl argv
-            cmd = mock_run.call_args.args[0]
-            assert "-n" in cmd
-            ns_idx = cmd.index("-n") + 1
-            assert cmd[ns_idx] == "k9b-custom"
+        assert result is True
+        # Verify the namespace was k9b-custom
+        assert "k9b-custom" in namespaces_requested
 
 
 class TestDefaultNamespaceResolution:
@@ -175,10 +161,6 @@ class TestDefaultNamespaceResolution:
 
     def test_get_default_k9b_namespace_returns_default_when_env_not_set(self) -> None:
         """Prove default namespace is 'k9b' when K9B_NAMESPACE is not set."""
-        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
-            get_default_k9b_namespace,
-        )
-
         env_backup = os.environ.get("K9B_NAMESPACE")
         try:
             # Ensure env var is not set
@@ -193,10 +175,6 @@ class TestDefaultNamespaceResolution:
 
     def test_get_default_k9b_namespace_respects_env_var(self) -> None:
         """Prove K9B_NAMESPACE env var overrides the default."""
-        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
-            get_default_k9b_namespace,
-        )
-
         env_backup = os.environ.get("K9B_NAMESPACE")
         try:
             os.environ["K9B_NAMESPACE"] = "k9b-custom-ns"
@@ -211,10 +189,6 @@ class TestDefaultNamespaceResolution:
 
     def test_get_default_k9b_namespace_guards_against_blank_values(self) -> None:
         """Prove blank K9B_NAMESPACE falls back to default 'k9b'."""
-        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
-            get_default_k9b_namespace,
-        )
-
         env_backup = os.environ.get("K9B_NAMESPACE")
         try:
             os.environ["K9B_NAMESPACE"] = "   "  # blank with whitespace
@@ -241,7 +215,7 @@ class TestP4cCallerPattern:
     """
 
     def test_p4c_caller_uses_k9b_namespace_for_scheduler_gate_not_incident_namespace(
-        self,
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Prove P4c-style caller uses k9b namespace for scheduler, not incident namespace.
 
@@ -251,46 +225,50 @@ class TestP4cCallerPattern:
         - Caller should use get_default_k9b_namespace() to resolve "k9b"
         - NOT pass the incident namespace "otel-demo" to the gate
         """
-        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
-            get_automatic_loop_enabled_with_reason,
-            get_default_k9b_namespace,
+        # Track what namespaces were requested
+        namespaces_requested: list[str] = []
+
+        class TrackingFakeClient(FakeKubernetesReadClient):
+            def read_deployment_env_value(
+                self,
+                *,
+                namespace: str,
+                deployment: str,
+                container: str | None = None,
+                env_name: str,
+            ) -> str | None:
+                namespaces_requested.append(namespace)
+                return "true"
+
+        fake_client = TrackingFakeClient()
+
+        monkeypatch.setattr(
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
         )
 
-        deployment_spec = _make_deployment_spec(
-            "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED", "true"
+        # Simulate P4c-style caller:
+        # - incident_namespace = "otel-demo" (for context)
+        # - k9b_namespace = get_default_k9b_namespace() -> "k9b"
+        # - Pass k9b_namespace to gate, NOT incident_namespace
+        _incident_namespace = "otel-demo"  # noqa: F841 - documented for context
+        k9b_namespace = get_default_k9b_namespace()
+
+        # This is the correct pattern:
+        # Use k9b_namespace for scheduler lookup, not incident_namespace
+        result = get_automatic_loop_enabled_with_reason(
+            kubeconfig="/tmp/kubeconfig",
+            namespace=k9b_namespace,  # Correct: use k9b namespace
         )
 
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = type(
-                "MockResult",
-                (),
-                {"returncode": 0, "stdout": json.dumps(deployment_spec)},
-            )()
+        assert result[0] is True
+        # Verify the namespace was k9b, not otel-demo
+        assert namespaces_requested == ["k9b"]
+        assert "otel-demo" not in namespaces_requested
 
-            # Simulate P4c-style caller:
-            # - incident_namespace = "otel-demo" (for context)
-            # - k9b_namespace = get_default_k9b_namespace() -> "k9b"
-            # - Pass k9b_namespace to gate, NOT incident_namespace
-            _incident_namespace = "otel-demo"  # noqa: F841 - documented for context
-            k9b_namespace = get_default_k9b_namespace()
-
-            # This is the correct pattern:
-            # Use k9b_namespace for scheduler lookup, not incident_namespace
-            result = get_automatic_loop_enabled_with_reason(
-                kubeconfig="/tmp/kubeconfig",
-                namespace=k9b_namespace,  # Correct: use k9b namespace
-            )
-
-            assert result[0] is True
-            # Inspect actual kubectl command - prove namespace is k9b, not otel-demo
-            cmd = mock_run.call_args.args[0]
-            assert "-n" in cmd
-            ns_idx = cmd.index("-n") + 1
-            assert cmd[ns_idx] == "k9b"
-            # Verify otel-demo is NOT in the command at all
-            assert "otel-demo" not in cmd
-
-    def test_incorrect_p4c_caller_pattern_fails_gracefully(self) -> None:
+    def test_incorrect_p4c_caller_pattern_fails_gracefully(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Prove incorrect pattern (passing incident namespace) fails gracefully.
 
         This documents the bug that should NOT be used:
@@ -298,48 +276,31 @@ class TestP4cCallerPattern:
         - When scheduler is actually in "k9b" namespace
         - Should fail-closed (return False) rather than crash
         """
-        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
-            get_automatic_loop_enabled_with_reason,
+        # Ensure env var is NOT set
+        monkeypatch.delenv("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED", raising=False)
+
+        # Fake client that raises not found for the wrong namespace
+        fake_client = FakeKubernetesReadClient.with_not_found(
+            namespace="otel-demo",
+            deployment="k9b-scheduler",
         )
 
-        env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
-        try:
-            # Ensure env var is NOT set
-            if "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
+        monkeypatch.setattr(
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
+        )
 
-            with patch("subprocess.run") as mock_run:
-                # kubectl returns "not found" because scheduler doesn't exist in otel-demo
-                mock_run.return_value = type(
-                    "MockResult",
-                    (),
-                    {
-                        "returncode": 1,
-                        "stderr": 'error: deployments.apps "k9b-scheduler" not found',
-                    },
-                )()
+        # INCORRECT pattern: passing incident namespace
+        enabled, check_result = get_automatic_loop_enabled_with_reason(
+            kubeconfig="/tmp/kubeconfig",
+            namespace="otel-demo",  # Wrong: incident namespace
+            allow_env_fallback=False,  # Fail-closed
+        )
 
-                # INCORRECT pattern: passing incident namespace
-                enabled, check_result = get_automatic_loop_enabled_with_reason(
-                    kubeconfig="/tmp/kubeconfig",
-                    namespace="otel-demo",  # Wrong: incident namespace
-                    allow_env_fallback=False,  # Fail-closed
-                )
-
-                # Should fail gracefully
-                assert enabled is False
-                assert check_result.source == "error"
-                assert check_result.reason in (
-                    "automatic_loop_env_read_failed",
-                    "automatic_loop_env_rbac_denied",
-                )
-                # Verify the wrong namespace was actually used in the command
-                cmd = mock_run.call_args.args[0]
-                assert "-n" in cmd
-                ns_idx = cmd.index("-n") + 1
-                assert cmd[ns_idx] == "otel-demo"
-        finally:
-            if env_backup is not None:
-                os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
-            elif "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED" in os.environ:
-                del os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"]
+        # Should fail gracefully
+        assert enabled is False
+        assert check_result.source == "error"
+        assert check_result.reason in (
+            "automatic_loop_env_read_failed",
+            "automatic_loop_env_rbac_denied",
+        )

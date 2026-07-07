@@ -8,6 +8,9 @@ These tests verify that:
 Architecture note:
     The loop check runs from the GitHub runner, not the scheduler pod.
     The runner uses k9b-live-lab-admin kubeconfig which should have RBAC to read deployments.
+    
+    After ACT-K9B-K8S-CLIENT-TEST-HARNESS-UPDATE01, tests use the new
+    DeploymentReadError constructor with is_permission_error/is_not_found_error flags.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
     LoopEnabledCheckResult,
     get_automatic_loop_enabled_with_reason,
 )
+from tests.unit.k8s_fake_client import FakeKubernetesReadClient
 
 
 class TestDeploymentReadErrorClassification:
@@ -28,8 +32,7 @@ class TestDeploymentReadErrorClassification:
         """RBAC Forbidden errors should be detected."""
         error = DeploymentReadError(
             message='deployments.apps "k9b-scheduler" is forbidden',
-            returncode=1,
-            stderr='Error from server (Forbidden): deployments.apps "k9b-scheduler" is forbidden: User "system:serviceaccount:github:runner" cannot get resource "deployments"',
+            is_permission_error=True,
         )
         assert error.is_rbac_denied() is True
         assert error.is_not_found() is False
@@ -38,8 +41,7 @@ class TestDeploymentReadErrorClassification:
         """RBAC Unauthorized errors should be detected."""
         error = DeploymentReadError(
             message="Unauthorized access",
-            returncode=1,
-            stderr="Unauthorized: the server does not have the resource",
+            is_permission_error=True,
         )
         assert error.is_rbac_denied() is True
 
@@ -47,8 +49,7 @@ class TestDeploymentReadErrorClassification:
         """RBAC 'denied' keyword should be detected."""
         error = DeploymentReadError(
             message="Access denied",
-            returncode=1,
-            stderr="Error: access denied to read deployment",
+            is_permission_error=True,
         )
         assert error.is_rbac_denied() is True
 
@@ -56,8 +57,7 @@ class TestDeploymentReadErrorClassification:
         """RBAC 'cannot get' phrase should be detected."""
         error = DeploymentReadError(
             message="Cannot get deployment",
-            returncode=1,
-            stderr="error: the server could not find the requested resource, User cannot get deployment",
+            is_permission_error=True,
         )
         assert error.is_rbac_denied() is True
 
@@ -65,8 +65,7 @@ class TestDeploymentReadErrorClassification:
         """Not found errors should be detected."""
         error = DeploymentReadError(
             message="Deployment not found",
-            returncode=1,
-            stderr='error: deployments.apps "k9b-scheduler" not found',
+            is_not_found_error=True,
         )
         assert error.is_rbac_denied() is False
         assert error.is_not_found() is True
@@ -75,18 +74,14 @@ class TestDeploymentReadErrorClassification:
         """'No resources found' should be detected as not found."""
         error = DeploymentReadError(
             message="No resources found",
-            returncode=0,
-            stderr="No resources found in k9b namespace.",
+            is_not_found_error=True,
         )
-        # returncode 0 but still detected as not found
         assert error.is_not_found() is True
 
     def test_network_timeout_not_rbac(self) -> None:
         """Network/timeout errors should NOT be classified as RBAC."""
         error = DeploymentReadError(
             message="Timeout reading deployment",
-            returncode=None,
-            stderr="Command timed out after 30 seconds",
         )
         assert error.is_rbac_denied() is False
         assert error.is_not_found() is False
@@ -102,19 +97,15 @@ class TestLoopEnabledCheckResultReasonCodes:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Env var found and enabled in deployment returns correct reason."""
-
-        def fake_read_deployment(
-            kubeconfig: str | None,
-            namespace: str,
-            deployment: str,
-            env_var: str,
-        ) -> tuple[str | None, DeploymentReadError | None]:
-            # Simulate deployment with K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true
-            return "true", None
+        fake_client = FakeKubernetesReadClient.with_deployment_env(
+            namespace="k9b",
+            deployment="k9b-scheduler",
+            env_vars={"K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED": "true"},
+        )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
-            fake_read_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -131,19 +122,15 @@ class TestLoopEnabledCheckResultReasonCodes:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Env var found but set to false returns correct reason."""
-
-        def fake_read_deployment(
-            kubeconfig: str | None,
-            namespace: str,
-            deployment: str,
-            env_var: str,
-        ) -> tuple[str | None, DeploymentReadError | None]:
-            # Simulate deployment with K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=false
-            return "false", None
+        fake_client = FakeKubernetesReadClient.with_deployment_env(
+            namespace="k9b",
+            deployment="k9b-scheduler",
+            env_vars={"K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED": "false"},
+        )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
-            fake_read_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -160,19 +147,15 @@ class TestLoopEnabledCheckResultReasonCodes:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Env var not in deployment returns correct reason."""
-
-        def fake_read_deployment(
-            kubeconfig: str | None,
-            namespace: str,
-            deployment: str,
-            env_var: str,
-        ) -> tuple[str | None, DeploymentReadError | None]:
-            # Simulate deployment exists but env var is not set
-            return None, None
+        fake_client = FakeKubernetesReadClient.with_deployment_env(
+            namespace="k9b",
+            deployment="k9b-scheduler",
+            env_vars={},  # No env vars
+        )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
-            fake_read_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -189,23 +172,14 @@ class TestLoopEnabledCheckResultReasonCodes:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """RBAC denied returns 'automatic_loop_env_rbac_denied' reason."""
-
-        def fake_read_deployment(
-            kubeconfig: str | None,
-            namespace: str,
-            deployment: str,
-            env_var: str,
-        ) -> tuple[str | None, DeploymentReadError | None]:
-            # Simulate RBAC denial
-            return None, DeploymentReadError(
-                message="forbidden",
-                returncode=1,
-                stderr='Error from server (Forbidden): deployments.apps "k9b-scheduler" is forbidden: User "system:serviceaccount:github:runner" cannot get resource "deployments"',
-            )
+        fake_client = FakeKubernetesReadClient.with_permission_error(
+            namespace="k9b",
+            deployment="k9b-scheduler",
+        )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
-            fake_read_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -224,23 +198,26 @@ class TestLoopEnabledCheckResultReasonCodes:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Network/timeout error returns 'automatic_loop_env_read_failed' reason."""
+        from k8s_diag_agent.security.kubernetes_client_errors import (
+            KubernetesClientUnavailableError,
+        )
 
-        def fake_read_deployment(
-            kubeconfig: str | None,
-            namespace: str,
-            deployment: str,
-            env_var: str,
-        ) -> tuple[str | None, DeploymentReadError | None]:
-            # Simulate network timeout
-            return None, DeploymentReadError(
-                message="Timeout reading deployment",
-                returncode=None,
-                stderr="Command timed out after 30 seconds",
-            )
+        class TimeoutFakeClient(FakeKubernetesReadClient):
+            def read_deployment_env_value(
+                self,
+                *,
+                namespace: str,
+                deployment: str,
+                container: str | None = None,
+                env_name: str,
+            ) -> str | None:
+                raise KubernetesClientUnavailableError("Connection timeout")
+
+        fake_client = TimeoutFakeClient()
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
-            fake_read_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -258,23 +235,14 @@ class TestLoopEnabledCheckResultReasonCodes:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Not found error returns 'automatic_loop_env_read_failed' reason."""
-
-        def fake_read_deployment(
-            kubeconfig: str | None,
-            namespace: str,
-            deployment: str,
-            env_var: str,
-        ) -> tuple[str | None, DeploymentReadError | None]:
-            # Simulate not found (not RBAC denial)
-            return None, DeploymentReadError(
-                message="Deployment not found",
-                returncode=1,
-                stderr='error: deployments.apps "k9b-scheduler" not found',
-            )
+        fake_client = FakeKubernetesReadClient.with_not_found(
+            namespace="k9b",
+            deployment="k9b-scheduler",
+        )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
-            fake_read_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
         )
 
         enabled, result = get_automatic_loop_enabled_with_reason(
@@ -292,19 +260,15 @@ class TestLoopEnabledCheckResultReasonCodes:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Env var not set with allow_env_fallback=True uses os.environ."""
-
-        def fake_read_deployment(
-            kubeconfig: str | None,
-            namespace: str,
-            deployment: str,
-            env_var: str,
-        ) -> tuple[str | None, DeploymentReadError | None]:
-            # Simulate deployment exists but env var is not set
-            return None, None
+        fake_client = FakeKubernetesReadClient.with_deployment_env(
+            namespace="k9b",
+            deployment="k9b-scheduler",
+            env_vars={},  # No env vars
+        )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_loop_gate._read_deployment_env_value",
-            fake_read_deployment,
+            "k8s_diag_agent.collect.incident_diagnosis_loop_gate.get_cached_kubernetes_client",
+            lambda **kwargs: fake_client,
         )
         monkeypatch.setenv("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED", "true")
 
