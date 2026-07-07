@@ -212,6 +212,12 @@ def _convert_normalized_alert(
 ) -> AlertSignal:
     """Convert a NormalizedAlert to an AlertSignal.
 
+    Extended in ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R1 to preserve:
+    - generator_url from NormalizedAlert.generator_url
+    - full annotations from NormalizedAlert.annotations
+    - ends_at from NormalizedAlert.ends_at
+    - receiver from NormalizedAlert.receiver
+
     Args:
         alert: The normalized alert from Alertmanager snapshot
         source_instance: Canonical Alertmanager source ID
@@ -233,9 +239,9 @@ def _convert_normalized_alert(
         # Unknown state - default to FIRING (conservative)
         status = AlertStatus.FIRING
 
-    # Parse timestamps
+    # Parse timestamps (ACT-R1: also parse ends_at)
     starts_at = _parse_datetime(alert.starts_at) if alert.starts_at else None
-    ends_at = None  # NormalizedAlert doesn't have ends_at
+    ends_at = _parse_datetime(alert.ends_at) if alert.ends_at else None
 
     # Extract severity
     severity = alert.severity if alert.severity else None
@@ -243,9 +249,13 @@ def _convert_normalized_alert(
     # Use labels directly (already sorted in NormalizedAlert)
     labels = alert.labels
 
-    # Build annotations from summary if present
+    # Build annotations from full NormalizedAlert.annotations (ACT-R1)
+    # Use full annotations if present, otherwise fall back to summary
     annotations: tuple[tuple[str, str], ...] = ()
-    if alert.summary:
+    if alert.annotations:
+        annotations = alert.annotations
+    elif alert.summary:
+        # Legacy fallback: build annotations from summary only
         annotations = (("summary", alert.summary),)
 
     # Generate signal_id (UUID-based)
@@ -265,7 +275,8 @@ def _convert_normalized_alert(
         starts_at=starts_at,
         ends_at=ends_at,
         received_at=received_at,
-        generator_url=None,  # NormalizedAlert doesn't have generatorURL
+        generator_url=alert.generator_url,  # ACT-R1: preserve generator_url
+        receiver=alert.receiver,  # ACT-R1: preserve receiver
         raw_payload_artifact_id=raw_payload_artifact_id,
         truncation=None,
     )

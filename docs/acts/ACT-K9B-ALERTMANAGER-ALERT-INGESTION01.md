@@ -134,3 +134,123 @@ After a live health run against k3s-infra-prod:
 ```
 ACT-K9B-ALERTMANAGER-ALERT-INGESTION01 ingest alertmanager alerts into incidents
 ```
+
+---
+
+# ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R1
+
+## Status: Completed
+
+## Date: 2026-07-07
+
+## Goal
+
+Preserve richer Alertmanager alert evidence in K9B AlertSignal artifacts and Incident projections so real incidents contain useful diagnosis context, not only alertname/severity/summary.
+
+## What Was Done
+
+### 1. Extended NormalizedAlert Model
+
+**File**: `src/k8s_diag_agent/external_analysis/alertmanager_snapshot.py`
+
+Extended `NormalizedAlert` to preserve:
+- `annotations: tuple[tuple[str, str], ...]` - Full annotation key-value pairs
+- `generator_url: str | None` - Link to alert source in Prometheus/Grafana
+- `ends_at: str | None` - When alert is expected to end
+- `updated_at: str | None` - When alert was last updated
+- `receiver: str | None` - Alertmanager receiver that received this alert
+
+### 2. Extended normalize_alertmanager_payload()
+
+Updated the normalizer to extract and preserve:
+- Full annotations from `alert["annotations"]`
+- `generatorURL` from `alert["generatorURL"]` or `alert["generator_url"]`
+- `endsAt` from `alert["endsAt"]` or `alert["ends_at"]`
+- `updatedAt` from `alert["updatedAt"]` or `alert["updated_at"]`
+- `receiver` from `alert["receiver"]`
+
+**Security**: Added `_is_sensitive_key()` helper to redact sensitive annotation values (passwords, secrets, tokens, API keys, etc.)
+
+**Determinism**: Annotations are sorted alphabetically for consistent ordering across runs.
+
+### 3. Extended Snapshot Adapter Mapping
+
+**File**: `src/k8s_diag_agent/incident_alert_signal_snapshot_adapter.py`
+
+Updated `_convert_normalized_alert()` to map:
+- `NormalizedAlert.generator_url` → `AlertSignal.generator_url`
+- `NormalizedAlert.annotations` → `AlertSignal.annotations` (full annotations, not just summary)
+- `NormalizedAlert.ends_at` → `AlertSignal.ends_at` (parsed to datetime)
+- `NormalizedAlert.receiver` → `AlertSignal.receiver`
+
+**Backward Compatibility**: Legacy alerts without extended fields still work - falls back to summary-only annotations.
+
+### 4. Added Unit Tests
+
+**File**: `tests/unit/test_alertmanager_snapshot_evidence_preservation.py`
+
+33 tests covering:
+- NormalizedAlert extended fields
+- `normalize_alertmanager_payload()` evidence preservation
+- Sensitive key detection and redaction
+- Deterministic annotation ordering
+- Snapshot adapter mapping
+- Backward compatibility with legacy snapshots
+
+## Fields Preserved
+
+| Field | Source | Destination |
+|-------|--------|-------------|
+| annotations | `alert["annotations"]` | `AlertSignal.annotations` |
+| generator_url | `alert["generatorURL"]` | `AlertSignal.generator_url` |
+| ends_at | `alert["endsAt"]` | `AlertSignal.ends_at` |
+| updated_at | `alert["updatedAt"]` | (stored in snapshot, not signal) |
+| receiver | `alert["receiver"]` | `AlertSignal.receiver` |
+| summary | `alert["annotations"]["summary"]` | Already preserved |
+
+## Fields Still Unavailable
+
+The following fields are not available in the Alertmanager `/api/v2/alerts` response:
+- `description` - Only available in webhook payloads, not snapshot API
+- `runbook_url` - Available as annotation, preserved in annotations tuple
+- `dashboard_url` - Available as annotation, preserved in annotations tuple
+- `external_url` - Only available in webhook payloads, not snapshot API
+
+## Verification
+
+- **ruff**: ✅ Pass
+- **mypy**: ✅ Pass (no issues in 2 source files)
+- **Unit tests**: ✅ 33/33 pass
+- **Existing adapter tests**: ✅ 15/15 pass (no regression)
+- **ACT-local gate**: ✅ Pass
+
+## Files Changed
+
+- `src/k8s_diag_agent/external_analysis/alertmanager_snapshot.py` (MODIFIED)
+- `src/k8s_diag_agent/incident_alert_signal_snapshot_adapter.py` (MODIFIED)
+- `tests/unit/test_alertmanager_snapshot_evidence_preservation.py` (NEW)
+
+## Non-Goals (Not Implemented)
+
+- Alertmanager webhook receiver (separate work)
+- New Alertmanager client (existing fetch path sufficient)
+- Alert silence management
+- Alertmanager config mutation
+- Prometheus rule file ingestion
+- Automatic diagnosis loop
+- Remediation
+- Broad UI redesign
+
+## Live Acceptance
+
+To verify live smoke against k3s-infra-prod:
+1. Run health loop with Alertmanager snapshot collection
+2. Verify AlertSignal artifacts contain `generator_url` and `annotations` when present
+3. Verify Incidents panel shows richer alert context
+4. Verify re-running does not duplicate incidents
+
+## Commit Message
+
+```
+ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R1 preserve alert evidence
+```

@@ -71,7 +71,15 @@ class AlertmanagerStatus(StrEnum):
 
 @dataclass(frozen=True)
 class NormalizedAlert:
-    """Normalized alert fields suitable for storage and debugging."""
+    """Normalized alert fields suitable for storage and debugging.
+    
+    Extended in ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R1 to preserve:
+    - annotations: full annotation key-value pairs
+    - generator_url: link to alert source
+    - ends_at: when alert is expected to end
+    - updated_at: when alert was last updated
+    - receiver: Alertmanager receiver that received this alert
+    """
     fingerprint: str
     alertname: str
     state: str
@@ -83,6 +91,12 @@ class NormalizedAlert:
     starts_at: str | None = None
     summary: str | None = None
     labels: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    # Extended fields for richer evidence preservation
+    annotations: tuple[tuple[str, str], ...] = field(default_factory=tuple)  # ACT-R1
+    generator_url: str | None = None  # ACT-R1
+    ends_at: str | None = None  # ACT-R1
+    updated_at: str | None = None  # ACT-R1
+    receiver: str | None = None  # ACT-R1
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -105,6 +119,17 @@ class NormalizedAlert:
             result["summary"] = self.summary
         if self.labels:
             result["labels"] = {k: v for k, v in self.labels}
+        # Extended fields - only serialize if non-empty/non-None for backward compat
+        if self.annotations:
+            result["annotations"] = {k: v for k, v in self.annotations}
+        if self.generator_url is not None:
+            result["generator_url"] = self.generator_url
+        if self.ends_at is not None:
+            result["ends_at"] = self.ends_at
+        if self.updated_at is not None:
+            result["updated_at"] = self.updated_at
+        if self.receiver is not None:
+            result["receiver"] = self.receiver
         return result
 
 
@@ -136,6 +161,15 @@ class AlertmanagerSnapshot:
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> AlertmanagerSnapshot:
+        """Deserialize from dict with backward compatibility for legacy artifacts.
+        
+        Extended in ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R1 to handle:
+        - annotations field (may be absent in legacy snapshots)
+        - generator_url field (may be absent in legacy snapshots)
+        - ends_at field (may be absent in legacy snapshots)
+        - updated_at field (may be absent in legacy snapshots)
+        - receiver field (may be absent in legacy snapshots)
+        """
         status_raw = str(raw.get("status") or AlertmanagerStatus.INVALID_RESPONSE.value)
         try:
             status = AlertmanagerStatus(status_raw)
@@ -157,6 +191,17 @@ class AlertmanagerSnapshot:
                     labels: list[tuple[str, str]] = []
                     if isinstance(labels_raw, dict):
                         labels = [(k, str(v)) for k, v in sorted(labels_raw.items())]
+                    # Parse annotations - backward compat: may be absent in legacy
+                    annotations_raw = alert_raw.get("annotations")
+                    annotations: list[tuple[str, str]] = []
+                    if isinstance(annotations_raw, dict):
+                        annotations = [(str(k), str(v)) for k, v in sorted(annotations_raw.items())]
+                    elif isinstance(annotations_raw, list):
+                        # Handle list format if present
+                        for item in annotations_raw:
+                            if isinstance(item, (list, tuple)) and len(item) == 2:
+                                annotations.append((str(item[0]), str(item[1])))
+                        annotations.sort()
                     alerts.append(NormalizedAlert(
                         fingerprint=fingerprint,
                         alertname=alertname,
@@ -169,6 +214,12 @@ class AlertmanagerSnapshot:
                         starts_at=alert_raw.get("starts_at"),
                         summary=alert_raw.get("summary"),
                         labels=tuple(labels),
+                        # Extended fields (ACT-R1) - backward compat: may be absent
+                        annotations=tuple(annotations) if annotations else (),
+                        generator_url=alert_raw.get("generator_url"),
+                        ends_at=alert_raw.get("ends_at"),
+                        updated_at=alert_raw.get("updated_at"),
+                        receiver=alert_raw.get("receiver"),
                     ))
         errors_raw = raw.get("errors") or []
         errors: list[str] = []
@@ -266,6 +317,35 @@ def _truncate_string(s: str | None, max_len: int) -> str | None:
     return s[:max_len - 3] + "..."
 
 
+# Sensitive key patterns for annotation redaction (ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R1)
+_SENSITIVE_KEY_PATTERNS = (
+    "password",
+    "secret",
+    "token",
+    "bearer",
+    "auth",
+    "credential",
+    "private",
+    "key",
+    "api_key",
+    "apikey",
+    "access_key",
+    "aws_access",
+    "gcp_",
+    "azure_",
+)
+
+
+def _is_sensitive_key(key: str) -> bool:
+    """Check if an annotation key is sensitive and should be redacted.
+    
+    Redacts keys containing patterns like password, secret, token, etc.
+    to prevent leaking credentials through alert artifacts.
+    """
+    key_lower = key.lower()
+    return any(pattern in key_lower for pattern in _SENSITIVE_KEY_PATTERNS)
+
+
 def normalize_alertmanager_payload(
     raw: Any,
     config_max_alerts: int = 200,
@@ -356,6 +436,27 @@ def normalize_alertmanager_payload(
         fingerprint = _truncate_string(labels_raw.get("fingerprint"), 64)
         if not fingerprint:
             fingerprint = _compute_deterministic_fingerprint(labels_sorted)
+        
+        # Extract full annotations (ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R1)
+        annotations_raw = alert_raw.get("annotations", {})
+        annotations_sorted: tuple[tuple[str, str], ...] = ()
+        if isinstance(annotations_raw, Mapping):
+            # Bound annotations to prevent unbounded growth
+            annotations_list: list[tuple[str, str]] = []
+            for k, v in sorted(annotations_raw.items()):
+                k_str = str(k)
+                v_str = str(v)
+                # Skip empty keys and secret-like values
+                if not k_str:
+                    continue
+                if _is_sensitive_key(k_str):
+                    v_str = "[REDACTED]"
+                # Bound value length
+                if len(v_str) > config_max_string_length:
+                    v_str = v_str[:config_max_string_length - 3] + "..."
+                annotations_list.append((k_str, v_str))
+            annotations_sorted = tuple(annotations_list)
+        
         alert = NormalizedAlert(
             fingerprint=fingerprint,
             alertname=_truncate_string(labels_raw.get("alertname"), config_max_string_length) or "unknown",
@@ -366,8 +467,14 @@ def normalize_alertmanager_payload(
             service=labels_raw.get("service"),
             instance=labels_raw.get("instance"),
             starts_at=alert_raw.get("startsAt") or alert_raw.get("starts_at"),
-            summary=_truncate_string(alert_raw.get("annotations", {}).get("summary", labels_raw.get("summary")), config_max_string_length),
+            summary=_truncate_string(annotations_raw.get("summary", labels_raw.get("summary")) if isinstance(annotations_raw, Mapping) else labels_raw.get("summary"), config_max_string_length),
             labels=labels_sorted,
+            # Extended fields (ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R1)
+            annotations=annotations_sorted,
+            generator_url=_truncate_string(alert_raw.get("generatorURL") or alert_raw.get("generator_url"), 512),
+            ends_at=alert_raw.get("endsAt") or alert_raw.get("ends_at"),
+            updated_at=alert_raw.get("updatedAt") or alert_raw.get("updated_at"),
+            receiver=alert_raw.get("receiver"),
         )
         alerts.append(alert)
     status = AlertmanagerStatus.OK
