@@ -2182,3 +2182,275 @@ def test_prometheus_operator_alias_with_chart_service() -> None:
     
     # Should be resolved to CRD name
     assert resolved.name == "main"
+
+
+def test_merge_deduplicate_two_service_heuristics_same_endpoint() -> None:
+    """Test deduplication of two SERVICE_HEURISTIC sources pointing to the same endpoint.
+    
+    This is the core bug scenario:
+    - alertmanager-operated (headless, clusterIP: None) - operator governing service
+    - kube-prometheus-stack-alertmanager (chart service) - user-facing service
+    
+    Both point to the same Alertmanager pod but have different names.
+    In the real scenario, both services resolve to the same pod, so they share
+    the same endpoint URL (e.g., via pod DNS or headless service).
+    
+    Without the fix, they'd be 2 separate sources.
+    With the fix, they should be collapsed into 1 source.
+    
+    Expected:
+    - TOTAL 1 (not 2)
+    - Chart service preferred as canonical endpoint
+    - alertmanager-operated added as alias
+    """
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    # Two SERVICE_HEURISTIC sources pointing to the SAME endpoint
+    # In real Kubernetes, both services resolve to the same pod IP
+    # We simulate this by using the same endpoint URL
+    operated_service = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-operated",
+        endpoint="http://alertmanager-main.monitoring:9093",  # Same endpoint as chart service
+        namespace="monitoring",
+        name="alertmanager-operated",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    chart_service = AlertmanagerSource(
+        source_id="service:monitoring/kube-prometheus-stack-alertmanager",
+        endpoint="http://alertmanager-main.monitoring:9093",  # Same endpoint as operated service
+        namespace="monitoring",
+        name="kube-prometheus-stack-alertmanager",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    inventory = AlertmanagerSourceInventory()
+    inventory.add_source(operated_service)
+    inventory.add_source(chart_service)
+    
+    # Before dedup: 2 sources
+    assert len(inventory.sources) == 2
+    
+    # Dedup
+    result = merge_deduplicate_inventory(inventory)
+    
+    # After dedup: 1 source (not 2!)
+    assert len(result.sources) == 1, f"Expected 1 source after dedup, got {len(result.sources)}"
+    
+    # The canonical endpoint should be the chart service (preferred over -operated)
+    merged = next(iter(result.sources.values()))
+    assert merged.endpoint == "http://alertmanager-main.monitoring:9093"
+    assert merged.name == "kube-prometheus-stack-alertmanager"
+    
+    # The -operated service should be recorded as an alias
+    assert len(merged.aliases) == 1
+    alias = merged.aliases[0]
+    assert alias.alias_name == "alertmanager-operated"
+    assert alias.alias_endpoint == "http://alertmanager-main.monitoring:9093"
+    assert alias.management_type == "operator-managed"
+    
+    # Provenance should be SERVICE_HEURISTIC (since both were)
+    assert merged.origin == AlertmanagerSourceOrigin.SERVICE_HEURISTIC
+
+
+def test_merge_deduplicate_service_heuristics_different_endpoints_not_merged() -> None:
+    """Test that SERVICE_HEURISTIC sources with different endpoints are NOT merged.
+    
+    This is important: only sources pointing to the SAME endpoint should be merged.
+    Different endpoints = different Alertmanagers = should remain separate.
+    """
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    # Two SERVICE_HEURISTIC sources pointing to DIFFERENT endpoints
+    am1 = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-1",
+        endpoint="http://alertmanager-1.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-1",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    am2 = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-2",
+        endpoint="http://alertmanager-2.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-2",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    inventory = AlertmanagerSourceInventory()
+    inventory.add_source(am1)
+    inventory.add_source(am2)
+    
+    # Dedup
+    result = merge_deduplicate_inventory(inventory)
+    
+    # After dedup: 2 sources (different endpoints = different Alertmanagers)
+    assert len(result.sources) == 2
+
+
+def test_merge_deduplicate_service_with_crd_prefers_crd() -> None:
+    """Test that CRD source wins over SERVICE_HEURISTIC source when names match.
+    
+    When there's a CRD Alertmanager + service heuristic with the SAME name,
+    they share the same canonical identity and should merge.
+    The CRD should be preferred as the canonical source (higher priority).
+    """
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    # CRD source
+    crd_source = AlertmanagerSource(
+        source_id="crd:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-main.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    
+    # Service heuristic with SAME name as CRD (shares canonical identity)
+    service_source = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-main",
+        endpoint="http://alertmanager-main.monitoring:9093",
+        namespace="monitoring",
+        name="alertmanager-main",  # Same name as CRD!
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    inventory = AlertmanagerSourceInventory()
+    inventory.add_source(crd_source)
+    inventory.add_source(service_source)
+    
+    # Dedup
+    result = merge_deduplicate_inventory(inventory)
+    
+    # CRD should win (higher priority origin)
+    assert len(result.sources) == 1
+    merged = next(iter(result.sources.values()))
+    assert merged.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
+    assert merged.name == "alertmanager-main"
+
+
+def test_is_headless_operated_service() -> None:
+    """Test the _is_headless_operated_service helper."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import _is_headless_operated_service
+    
+    # Should return True
+    assert _is_headless_operated_service("alertmanager-operated") is True
+    assert _is_headless_operated_service("prometheus-operated") is True
+    assert _is_headless_operated_service("custom-alertmanager-operated") is True
+    assert _is_headless_operated_service("ALERTMANAGER-OPERATED") is True  # case insensitive
+    
+    # Should return False
+    assert _is_headless_operated_service("kube-prometheus-stack-alertmanager") is False
+    assert _is_headless_operated_service("alertmanager-main") is False
+    assert _is_headless_operated_service("alertmanager") is False
+    assert _is_headless_operated_service("") is False
+    assert _is_headless_operated_service(None) is False
+
+
+def test_is_chart_alertmanager_service() -> None:
+    """Test the _is_chart_alertmanager_service helper."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import _is_chart_alertmanager_service
+    
+    # Should return True
+    assert _is_chart_alertmanager_service("alertmanager") is True
+    assert _is_chart_alertmanager_service("kube-prometheus-stack-alertmanager") is True
+    assert _is_chart_alertmanager_service("prometheus-operator-alertmanager") is True
+    assert _is_chart_alertmanager_service("grafana-alertmanager") is True
+    assert _is_chart_alertmanager_service("ALERTMANAGER") is True  # case insensitive
+    
+    # Should return False (ends with -operated)
+    assert _is_chart_alertmanager_service("alertmanager-operated") is False
+    assert _is_chart_alertmanager_service("prometheus-operated") is False
+    
+    # Should return False (no alertmanager in name)
+    assert _is_chart_alertmanager_service("nginx") is False
+    assert _is_chart_alertmanager_service("") is False
+    assert _is_chart_alertmanager_service(None) is False
+
+
+def test_merge_deduplicate_mixed_inventory_two_groups_two_sources() -> None:
+    """Test mixed inventory: 2 SERVICE_HEURISTIC pairs = 2 separate logical Alertmanagers.
+    
+    This is the regression test for the reviewer's concern:
+    "The dangerous part is that the test proves 'same endpoint string dedup,'
+    while the original bug is 'different Service names/URLs, same logical Alertmanager.'"
+    
+    Scenario:
+    - Group A: alertmanager-operated + kube-prometheus-stack-alertmanager
+      (same endpoint AM-A, same logical Alertmanager)
+      → Should collapse to 1 source
+    - Group B: another-standalone-alertmanager
+      (different endpoint AM-B, different logical Alertmanager)
+      → Should remain as separate source
+    
+    Expected: TOTAL 2 sources (NOT 1, NOT 3)
+    
+    The original bug showed "TOTAL 2" because both services weren't deduped.
+    But if we incorrectly return a SINGLE preferred source globally,
+    we'd lose Group B and show "TOTAL 1".
+    """
+    from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
+    
+    # Group A: AM-A (alertmanager-operated + kube-prometheus-stack-alertmanager)
+    # Both resolve to the same endpoint (same pod in Kubernetes)
+    am_a_operated = AlertmanagerSource(
+        source_id="service:monitoring/alertmanager-operated",
+        endpoint="http://alertmanager-main.monitoring:9093",  # AM-A endpoint
+        namespace="monitoring",
+        name="alertmanager-operated",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    am_a_chart = AlertmanagerSource(
+        source_id="service:monitoring/kube-prometheus-stack-alertmanager",
+        endpoint="http://alertmanager-main.monitoring:9093",  # AM-A endpoint (same!)
+        namespace="monitoring",
+        name="kube-prometheus-stack-alertmanager",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    # Group B: AM-B (standalone, different endpoint)
+    am_b_standalone = AlertmanagerSource(
+        source_id="service:monitoring/another-standalone-alertmanager",
+        endpoint="http://alertmanager-backup.monitoring:9093",  # AM-B endpoint (different!)
+        namespace="monitoring",
+        name="another-standalone-alertmanager",
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    inventory = AlertmanagerSourceInventory()
+    inventory.add_source(am_a_operated)
+    inventory.add_source(am_a_chart)
+    inventory.add_source(am_b_standalone)
+    
+    # Before dedup: 3 sources
+    assert len(inventory.sources) == 3
+    
+    # Dedup
+    result = merge_deduplicate_inventory(inventory)
+    
+    # After dedup: 2 sources
+    # - AM-A: collapsed from 2 (operated + chart) to 1
+    # - AM-B: kept as 1 (different endpoint)
+    assert len(result.sources) == 2, (
+        f"Expected 2 sources after dedup (AM-A collapsed + AM-B kept), got {len(result.sources)}. "
+        f"Source IDs: {list(result.sources.keys())}"
+    )
+    
+    # Verify AM-A is present (should be chart service as preferred)
+    am_a_sources = [
+        s for s in result.sources.values()
+        if s.endpoint == "http://alertmanager-main.monitoring:9093"
+    ]
+    assert len(am_a_sources) == 1, f"Expected exactly 1 AM-A source, got {len(am_a_sources)}"
+    assert am_a_sources[0].name == "kube-prometheus-stack-alertmanager"  # Chart preferred
+    assert len(am_a_sources[0].aliases) == 1  # Has alias for -operated
+    
+    # Verify AM-B is present
+    am_b_sources = [
+        s for s in result.sources.values()
+        if s.endpoint == "http://alertmanager-backup.monitoring:9093"
+    ]
+    assert len(am_b_sources) == 1, f"Expected exactly 1 AM-B source, got {len(am_b_sources)}"
+    assert am_b_sources[0].name == "another-standalone-alertmanager"
