@@ -5,7 +5,6 @@ Reference: ACT-K9B-HOLMESGPT-TOOL-INFRA-SPLIT01
 """
 from __future__ import annotations
 
-import pytest
 
 from k8s_diag_agent.collect.tool_budget_defaults import (
     FORBIDDEN_TOOL_BUDGET,

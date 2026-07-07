@@ -11,16 +11,3 @@ Note: Full tests are in:
 """
 
 # Import from the facade module to verify backward compatibility
-from k8s_diag_agent.collect.tool_spill_artifact import (
-    SPILL_SCHEMA_VERSION,
-    RawToolOutputArtifact,
-    SpillReason,
-    ToolOutputContentType,
-    ToolOutputSpillResult,
-    compute_size_bytes,
-    create_tool_output_result,
-    detect_content_type,
-    should_spill,
-    spill_tool_output,
-    write_raw_tool_artifact,
-)

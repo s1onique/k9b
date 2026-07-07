@@ -10,9 +10,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any
 
-import pytest
 
 from k8s_diag_agent.collect.incident_collectors import (
     _build_projection_metadata,

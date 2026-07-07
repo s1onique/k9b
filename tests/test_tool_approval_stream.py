@@ -11,18 +11,3 @@ Note: Full tests are in:
 """
 
 # Import from the facade module to verify backward compatibility
-from k8s_diag_agent.collect.tool_approval_stream import (
-    APPROVAL_SCHEMA_VERSION,
-    ApprovalDecision,
-    ApprovalRequest,
-    ApprovalState,
-    add_decision_to_stream,
-    add_request_to_stream,
-    check_approval_deadline,
-    create_approval_request,
-    create_decision,
-    create_stream,
-    new_request_id,
-    new_stream_id,
-    requires_approval,
-)
