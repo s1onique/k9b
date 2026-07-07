@@ -10,6 +10,21 @@ Ownership:
 Extraction rationale:
     - Separating Alertmanager contracts makes the API boundary easier to audit.
     - Allows focused testing and documentation for Alertmanager payloads.
+
+CANONICAL WIRE SCHEMAS:
+    - k9b.alertmanager_sources.review_packet.v1 (AlertmanagerSourcesReviewPacketPayload)
+    - k9b.alertmanager_source.debug_packet.v1 (AlertmanagerSourceDebugPacketPayload)
+    - k9b.alertmanager_source.promotion_review.v1 (AlertmanagerSourcePromotionReviewPayload)
+
+These TypedDicts mirror the canonical dataclasses in external_analysis modules:
+    - alertmanager_sources_review_packet.py
+    - alertmanager_source_debug_packet.py
+    - alertmanager_source_promotion_review.py
+
+BACKWARD COMPATIBILITY:
+    - Some wire-level fields are aliased for UI compatibility.
+    - Legacy aliases are explicitly documented as "UI compatibility alias".
+    - Schema versions are frozen; breaking changes require a new version.
 """
 
 from __future__ import annotations
@@ -22,11 +37,23 @@ __all__ = [
     "AlertmanagerSourceAliasPayload",
     "AlertmanagerSourcePayload",
     "AlertmanagerSourcesPayload",
-    # Review packet payloads
+    # Review packet payloads (canonical: k9b.alertmanager_sources.review_packet.v1)
     "AlertmanagerSourcesReviewPacketPayload",
+    "AlertmanagerSourcesSummaryPayload",
     "AlertmanagerSourceReviewEntryPayload",
+    "RuntimeIdentityPayload",
+    "KubernetesIdentityPayload",
+    "EndpointIdentityPayload",
+    # Debug packet payloads (canonical: k9b.alertmanager_source.debug_packet.v1)
     "AlertmanagerSourceDebugPacketPayload",
+    "HttpProbeResultPayload",
+    "HttpProbeResultsPayload",
+    "KubernetesProbeDataPayload",
+    "DiscoveryReasonPayload",
+    # Promotion review payloads (canonical: k9b.alertmanager_source.promotion_review.v1)
     "AlertmanagerSourcePromotionReviewPayload",
+    "PromotionRiskPayload",
+    "TrackedSourceSpecPayload",
 ]
 
 
