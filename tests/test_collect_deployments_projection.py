@@ -384,7 +384,7 @@ class TestCollectDeploymentsBundlePropagation:
         })
 
         # Mock kubectl for all collectors
-        def mock_kubectl(context, *args):
+        def mock_kubectl(context, *args, **kwargs: object):
             if "deployments" in args:
                 return mock_output
             elif "pods" in args:
@@ -439,7 +439,7 @@ class TestCollectDeploymentsBundlePropagation:
             "items": [],
         })
 
-        def mock_kubectl(context, *args):
+        def mock_kubectl(context, *args, **kwargs: object):
             if "pods" in args:
                 return pods_output
             elif "events" in args:

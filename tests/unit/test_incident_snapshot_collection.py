@@ -209,7 +209,7 @@ class TestIncidentBundleCollection(unittest.TestCase):
     ) -> None:
         """Test that all evidence types are collected and bundled correctly."""
         # Configure mock to return different responses based on command
-        def kubectl_side_effect(*args: str) -> str:
+        def kubectl_side_effect(*args: str, **kwargs: object) -> str:
             if "pods" in args and "-o" in args:
                 return json.dumps(FAKE_PODS_RESPONSE)
             if "deployments" in args and "-o" in args:
@@ -247,7 +247,7 @@ class TestIncidentBundleCollection(unittest.TestCase):
         self, mock_kubectl: unittest.mock.MagicMock
     ) -> None:
         """Test that collected bundle includes incident candidates."""
-        def kubectl_side_effect(*args: str) -> str:
+        def kubectl_side_effect(*args: str, **kwargs: object) -> str:
             if "pods" in args and "-o" in args:
                 return json.dumps(FAKE_PODS_RESPONSE)
             if "deployments" in args and "-o" in args:
@@ -270,7 +270,7 @@ class TestIncidentBundleCollection(unittest.TestCase):
         self, mock_kubectl: unittest.mock.MagicMock
     ) -> None:
         """Test that metadata includes candidates_count matching actual candidates."""
-        def kubectl_side_effect(*args: str) -> str:
+        def kubectl_side_effect(*args: str, **kwargs: object) -> str:
             if "pods" in args and "-o" in args:
                 return json.dumps(FAKE_PODS_RESPONSE)
             if "deployments" in args and "-o" in args:

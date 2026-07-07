@@ -262,7 +262,7 @@ class TestEndToEndBundleSerialization:
         self, mock_kubectl: unittest.mock.MagicMock
     ) -> None:
         """Bundle from collect_incident_snapshot has projection metadata."""
-        def kubectl_side_effect(*args: str) -> str:
+        def kubectl_side_effect(*args: str, **kwargs: object) -> str:
             if "pods" in args and "-o" in args:
                 return json.dumps(FAKE_SMALL_PODS_RESPONSE)
             if "deployments" in args and "-o" in args:
@@ -306,7 +306,7 @@ class TestEndToEndBundleSerialization:
         from k8s_diag_agent.collect.incident_snapshot import _detect_symptoms
         from k8s_diag_agent.datetime_utils import now_utc
 
-        def kubectl_side_effect(*args: str) -> str:
+        def kubectl_side_effect(*args: str, **kwargs: object) -> str:
             if "pods" in args and "-o" in args:
                 return json.dumps(FAKE_LARGE_PODS_RESPONSE)
             if "deployments" in args and "-o" in args:
