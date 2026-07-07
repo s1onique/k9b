@@ -123,9 +123,16 @@ class TestMainExitCodes:
         def mock_get_deployment(kubeconfig: str, namespace: str) -> dict[str, Any]:
             return missing_deployment_response
 
+        def mock_get_events(kubeconfig: str, namespace: str, limit: int = 50) -> list[dict[str, Any]]:
+            return []
+
         monkeypatch.setattr(
             "scripts.scheduler_health_gate.cli.get_scheduler_deployment_status",
             mock_get_deployment,
+        )
+        monkeypatch.setattr(
+            "scripts.scheduler_health_gate.cli.get_namespace_events",
+            mock_get_events,
         )
 
         exit_code = main([

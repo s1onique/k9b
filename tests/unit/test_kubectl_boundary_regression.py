@@ -73,11 +73,30 @@ class TestCallSiteSeamPatching:
         assert callable(kubectl)
         assert kubectl.__name__ == "kubectl"
 
-    def test_identity_cluster_run_kubectl_exists(self) -> None:
-        """Verify run_kubectl is accessible in identity.cluster module."""
-        from k8s_diag_agent.identity.cluster import run_kubectl
-        
-        assert callable(run_kubectl)
+    def test_identity_cluster_uses_kubernetes_client_boundary(self) -> None:
+        """Verify identity.cluster uses KubernetesReadClient boundary, not kubectl."""
+        from k8s_diag_agent.identity.cluster import derive_cluster_uid
+
+        # Verify derive_cluster_uid exists and is callable
+        assert callable(derive_cluster_uid)
+
+        # Verify get_cached_kubernetes_client exists and is callable
+        from k8s_diag_agent.security.kubernetes_client import get_cached_kubernetes_client
+
+        assert callable(get_cached_kubernetes_client)
+
+        # Verify KubernetesReadClient exists for behavioral testing
+        from k8s_diag_agent.security.kubernetes_client import KubernetesReadClient
+
+        assert KubernetesReadClient.__name__ == "KubernetesReadClient"
+
+        # Verify derive_cluster_uid's implementation uses the client boundary
+        # by checking the source code
+        import inspect
+
+        source = inspect.getsource(derive_cluster_uid)
+        assert "get_cached_kubernetes_client" in source
+        assert "run_kubectl" not in source.lower()
 
     def test_live_snapshot_run_command_exists(self) -> None:
         """Verify _run_command exists in live_snapshot as a test compatibility seam."""

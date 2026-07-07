@@ -202,10 +202,36 @@ class TestAlertmanagerSnapshotCollectionErrors:
         inventory.add_source(source)
         runner._alertmanager_inventory = inventory
 
-        error = urllib.error.URLError("Name or service not known")
+        # Create a fake port-forward process
+        class FakePortForwardProcess:
+            returncode = None
 
-        with patch("urllib.request.urlopen", side_effect=error):
-            runner._run_alertmanager_snapshot_collection({"root": temp_dir})
+            def poll(self):
+                return None
+
+            def terminate(self):
+                self.returncode = -15
+
+            def wait(self, timeout=None):
+                return self.returncode
+
+            def kill(self):
+                self.returncode = -9
+
+        def fake_start_port_forward(*args, **kwargs):
+            return (FakePortForwardProcess(), 53899)
+
+        # Patch the port-forward at the runner method level
+        with patch.object(runner, "_start_alertmanager_port_forward", fake_start_port_forward):
+            # Allow port-forward to succeed (wait_for_port_ready=True)
+            # so the actual DNS failure is tested via urlopen
+            with patch(
+                "k8s_diag_agent.health.loop_port_forward_helpers._wait_for_port_ready",
+                return_value=True,
+            ):
+                error = urllib.error.URLError("Name or service not known")
+                with patch("urllib.request.urlopen", side_effect=error):
+                    runner._run_alertmanager_snapshot_collection({"root": temp_dir})
 
         snapshot_files = list(temp_dir.glob("*-alertmanager-snapshot.json"))
         assert len(snapshot_files) == 1

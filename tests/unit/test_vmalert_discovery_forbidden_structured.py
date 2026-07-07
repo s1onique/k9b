@@ -79,28 +79,40 @@ class TestVMAlertDiscoveryOrchestratorStructuredLogs:
             emitted_logs.append(kwargs)
             return {}
 
-        # Mock the strategy to return a Forbidden error
+        # Mock the CRD strategy to return a Forbidden error
         with patch(
             "k8s_diag_agent.external_analysis.vmalert_discovery.VMAlertCRDDiscoveryStrategy"
-        ) as MockStrategy:
-            mock_instance = MagicMock()
-            mock_instance.discover.return_value = DiscoveryResult(
+        ) as MockCRDStrategy:
+            mock_crd_instance = MagicMock()
+            mock_crd_instance.discover.return_value = DiscoveryResult(
                 sources=(),
                 errors=("kubectl failed: Forbidden - Error from server (Forbidden): ...",),
                 strategy="vmalert-crd",
             )
-            MockStrategy.return_value = mock_instance
+            MockCRDStrategy.return_value = mock_crd_instance
 
-            # Patch the shared emit_discovery_strategy_failure
+            # Mock the service heuristic strategy to return empty (fallback behavior)
             with patch(
-                "k8s_diag_agent.external_analysis.discovery_structured_logging._get_emit_fn",
-                return_value=mock_emit_fn,
-            ):
-                from k8s_diag_agent.external_analysis.vmalert_discovery import (
-                    discover_vmalerts,
+                "k8s_diag_agent.external_analysis.vmalert_discovery.ServiceHeuristicDiscoveryStrategy"
+            ) as MockServiceStrategy:
+                mock_service_instance = MagicMock()
+                mock_service_instance.discover.return_value = DiscoveryResult(
+                    sources=(),
+                    errors=(),
+                    strategy="service-heuristic",
                 )
+                MockServiceStrategy.return_value = mock_service_instance
 
-                discover_vmalerts(context="test-context")
+                # Patch the shared emit_discovery_strategy_failure
+                with patch(
+                    "k8s_diag_agent.external_analysis.discovery_structured_logging._get_emit_fn",
+                    return_value=mock_emit_fn,
+                ):
+                    from k8s_diag_agent.external_analysis.vmalert_discovery import (
+                        discover_vmalerts,
+                    )
+
+                    discover_vmalerts(context="test-context")
 
         # Verify structured log was emitted
         assert len(emitted_logs) >= 1

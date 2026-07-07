@@ -285,7 +285,7 @@ class TestHealthLoopRunnerIntegration:
         self, temp_external_dir, mock_log_fn
     ):
         """Prove HealthLoopRunner.execute() invokes integration with external_analysis_dir."""
-        from unittest.mock import patch
+        from unittest.mock import MagicMock, patch
 
         from k8s_diag_agent.health.loop import HealthLoopRunner, HealthRunConfig
         from k8s_diag_agent.health.loop_baseline_helpers import BaselinePolicy
@@ -331,32 +331,109 @@ class TestHealthLoopRunnerIntegration:
             quiet=True,
         )
 
-        # Patch the automatic diagnosis function to capture call arguments
-        # The runner method looks up run_automatic_diagnosis_loop from loop_runner.py's namespace,
-        # so we need to patch where it's imported (loop_runner), not where it's defined
+        # Create a fake run_kubectl that returns appropriate fake responses
+        # Note: run_kubectl returns str (stdout), not CompletedProcess
+        def fake_run_kubectl(cmd, *args, **kwargs):
+            """Fake kubectl that returns appropriate fake responses."""
+            if isinstance(cmd, (list, tuple)):
+                cmd_list = list(cmd)
+            else:
+                cmd_list = [cmd]
+
+            if "version" in cmd_list:
+                return '{"serverVersion": {"major": "1", "minor": "28", "gitVersion": "v1.28.0"}}'
+            elif "get" in cmd_list and "namespace" in cmd_list:
+                return '{"apiVersion": "v1", "items": [], "metadata": {"resourceVersion": "1"}}'
+            elif "get" in cmd_list:
+                return '{"apiVersion": "v1", "kind": "List", "items": []}'
+            else:
+                return "{}"
+
+        # Create fake port-forward process
+        class FakePopen:
+            returncode = None
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                self.returncode = -15
+
+            def wait(self, timeout=None):
+                return self.returncode
+
+            def kill(self):
+                self.returncode = -9
+
+        def fake_start_port_forward(*args, **kwargs):
+            return (FakePopen(), 53899)
+
+        # Create empty inventory for patching
+        from k8s_diag_agent.external_analysis.alertmanager_discovery import (
+            AlertmanagerSourceInventory,
+        )
+
+        empty_alertmanager_inventory = AlertmanagerSourceInventory()
+
+        # Create a fake subprocess result for CRD strategy
+        def fake_subprocess_run(*args, **kwargs):
+            return MagicMock(
+                returncode=1,
+                stderr="error: no resources found",
+                stdout="",
+            )
+
+        # Patch run_kubectl seam in live_snapshot to block kubectl calls
         with patch(
-            "k8s_diag_agent.health.loop_runner.run_automatic_diagnosis_loop"
-        ) as mock_auto_diag:
-            mock_auto_diag.return_value = {
-                "automatic_diagnosis_enabled": False,
-                "collector_run_id": None,
-                "incidents_processed": 0,
-                "incidents_eligible": 0,
-                "incidents_skipped": 0,
-                "incidents_with_errors": 0,
-                "total_review_packets_written": 0,
-            }
+            "k8s_diag_agent.collect.live_snapshot.run_kubectl",
+            side_effect=fake_run_kubectl,
+        ):
+            # Patch subprocess.run in alertmanager CRD strategy at module level
+            with patch(
+                "k8s_diag_agent.external_analysis.alertmanager_discovery_crd_strategy.subprocess.run",
+                side_effect=fake_subprocess_run,
+            ):
+                # Patch port-forward start
+                with patch.object(runner, "_start_alertmanager_port_forward", fake_start_port_forward):
+                    # Patch wait_for_port_ready
+                    with patch(
+                        "k8s_diag_agent.health.loop_port_forward_helpers._wait_for_port_ready",
+                        return_value=True,
+                    ):
+                        # Patch alertmanager discovery to return empty inventory
+                        with patch(
+                            "k8s_diag_agent.external_analysis.alertmanager_discovery_orchestration.discover_alertmanagers",
+                            return_value=empty_alertmanager_inventory,
+                        ):
+                            # Patch vmalert discovery
+                            with patch(
+                                "k8s_diag_agent.health.loop_runner_monitoring._run_vmalert_discovery_impl",
+                                return_value=MagicMock(),
+                            ):
+                                # Patch the automatic diagnosis function to capture call arguments
+                                with patch(
+                                    "k8s_diag_agent.health.loop_runner.run_automatic_diagnosis_loop"
+                                ) as mock_auto_diag:
+                                    mock_auto_diag.return_value = {
+                                        "automatic_diagnosis_enabled": False,
+                                        "collector_run_id": None,
+                                        "incidents_processed": 0,
+                                        "incidents_eligible": 0,
+                                        "incidents_skipped": 0,
+                                        "incidents_with_errors": 0,
+                                        "total_review_packets_written": 0,
+                                    }
 
-            # Execute the health loop
-            runner.execute()
+                                    # Execute the health loop
+                                    runner.execute()
 
-            # Verify automatic diagnosis was called
-            mock_auto_diag.assert_called_once()
+                                    # Verify automatic diagnosis was called
+                                    mock_auto_diag.assert_called_once()
 
-            # Verify it was called with external_analysis_dir
-            call_kwargs = mock_auto_diag.call_args.kwargs
-            assert "external_analysis_dir" in call_kwargs
-            # Verify it's a path under external-analysis
-            external_dir = call_kwargs["external_analysis_dir"]
-            assert "external-analysis" in str(external_dir)
-            assert external_dir.is_dir()
+                                    # Verify it was called with external_analysis_dir
+                                    call_kwargs = mock_auto_diag.call_args.kwargs
+                                    assert "external_analysis_dir" in call_kwargs
+                                    # Verify it's a path under external-analysis
+                                    external_dir = call_kwargs["external_analysis_dir"]
+                                    assert "external-analysis" in str(external_dir)
+                                    assert external_dir.is_dir()
