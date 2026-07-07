@@ -115,7 +115,9 @@ describe("IncidentDetailPanel Timeline - Unknown Event Types", () => {
     render(<IncidentDetailPanel incident={incident} />);
 
     expect(screen.getByText("Lifecycle")).toBeInTheDocument();
-    expect(screen.getByText("Status")).toBeInTheDocument();
+    // Use timeline-specific selector to avoid matching incident status label
+    const statusCategory = document.querySelector(".timeline-event-category.category-status");
+    expect(statusCategory?.textContent).toBe("Status");
     expect(screen.getByText("unknown_type")).toBeInTheDocument();
   });
 

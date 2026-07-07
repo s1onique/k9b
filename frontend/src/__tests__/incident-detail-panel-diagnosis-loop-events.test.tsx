@@ -101,7 +101,7 @@ describe("IncidentDetailPanel Timeline - Diagnosis Loop Events", () => {
       });
       render(<IncidentDetailPanel incident={incident} />);
 
-      expect(screen.getByText("Diagnosis Loop")).toBeInTheDocument();
+      expect(screen.getByText("Diagnosis")).toBeInTheDocument();
       expect(screen.getByText("diagnosis_loop_started")).toBeInTheDocument();
     });
 
@@ -128,7 +128,7 @@ describe("IncidentDetailPanel Timeline - Diagnosis Loop Events", () => {
       });
       render(<IncidentDetailPanel incident={incident} />);
 
-      expect(screen.getByText("Diagnosis Loop")).toBeInTheDocument();
+      expect(screen.getByText("Diagnosis")).toBeInTheDocument();
       expect(screen.getByText("diagnosis_loop_completed")).toBeInTheDocument();
     });
 
@@ -151,7 +151,7 @@ describe("IncidentDetailPanel Timeline - Diagnosis Loop Events", () => {
       });
       render(<IncidentDetailPanel incident={incident} />);
 
-      expect(screen.getByText("Diagnosis Loop")).toBeInTheDocument();
+      expect(screen.getByText("Diagnosis")).toBeInTheDocument();
       expect(screen.getByText("diagnosis_loop_failed")).toBeInTheDocument();
     });
   });

@@ -71,17 +71,31 @@ const createIncidentFixture = (overrides: Partial<IncidentDetailPayload> = {}): 
 
 describe("IncidentDetailPanel suggested_checks", () => {
   describe("Renders suggested_checks empty state", () => {
-    it("shows 'No suggested checks linked to this incident yet.' when empty", () => {
+    it("does not render section when empty (returns null)", () => {
       const incident = createIncidentFixture({ suggested_checks: [] });
       render(<IncidentDetailPanel incident={incident} />);
-      expect(screen.getByText("Suggested checks")).toBeInTheDocument();
-      expect(screen.getByText("No suggested checks linked to this incident yet.")).toBeInTheDocument();
+      // SuggestedChecksSection returns null when empty - no header or empty message rendered
+      expect(screen.queryByText("Suggested Checks")).not.toBeInTheDocument();
+      expect(screen.queryByText("No suggested checks linked to this incident yet.")).not.toBeInTheDocument();
     });
 
-    it("renders Suggested checks section by default (empty list)", () => {
-      const incident = createIncidentFixture();
+    it("renders Suggested checks section when list is non-empty", () => {
+      const incident = createIncidentFixture({
+        suggested_checks: [
+          {
+            check_id: "check-001",
+            title: "Check pod logs",
+            rationale: "First diagnostic step",
+            source: "next-check-planning",
+            risk_level: "LOW",
+            status: "suggested" as const,
+            artifact_id: null,
+            run_id: null,
+          },
+        ],
+      });
       render(<IncidentDetailPanel incident={incident} />);
-      expect(screen.getByText("Suggested checks")).toBeInTheDocument();
+      expect(screen.getByText("Suggested Checks")).toBeInTheDocument();
     });
   });
 
@@ -103,7 +117,7 @@ describe("IncidentDetailPanel suggested_checks", () => {
       });
       render(<IncidentDetailPanel incident={incident} />);
 
-      expect(screen.getByText("Suggested checks")).toBeInTheDocument();
+      expect(screen.getByText("Suggested Checks")).toBeInTheDocument();
       // Title appears twice: once in read-only SuggestedChecksSection, once in diagnosis-loop selection
       expect(screen.getAllByText("Inspect pod logs for test-pod")).toHaveLength(2);
       expect(screen.getByText("CrashLoopBackOff typically leaves informative logs")).toBeInTheDocument();

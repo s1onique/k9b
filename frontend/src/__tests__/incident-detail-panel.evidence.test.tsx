@@ -73,12 +73,12 @@ describe("IncidentDetailPanel - Evidence", () => {
       expect(screen.getAllByText("source-2")).toHaveLength(1);
     });
 
-    it("shows 'No signals recorded.' when signals array is empty", () => {
+    it("shows empty state when signals array is empty", () => {
       const incident = createIncidentFixture({ signals: [] });
       render(<IncidentDetailPanel incident={incident} />);
 
       expect(screen.getByText("Signals")).toBeInTheDocument();
-      expect(screen.getByText("No signals recorded.")).toBeInTheDocument();
+      expect(screen.getByText("No signals are attached to this incident yet.")).toBeInTheDocument();
     });
   });
 
@@ -96,7 +96,7 @@ describe("IncidentDetailPanel - Evidence", () => {
       });
       render(<IncidentDetailPanel incident={incident} />);
 
-      expect(screen.getByText("Evidence links")).toBeInTheDocument();
+      expect(screen.getByText("Evidence Links")).toBeInTheDocument();
       expect(screen.getByText("artifact-abc-123")).toBeInTheDocument();
       expect(screen.getByText("snapshot")).toBeInTheDocument();
       expect(screen.getByText(/Attached:/i)).toBeInTheDocument();
@@ -115,12 +115,13 @@ describe("IncidentDetailPanel - Evidence", () => {
       expect(screen.getAllByText("art-2")).toHaveLength(1);
     });
 
-    it("shows 'No evidence links attached.' when evidence_links array is empty", () => {
+    it("shows empty state when evidence_links array is empty", () => {
       const incident = createIncidentFixture({ evidence_links: [] });
       render(<IncidentDetailPanel incident={incident} />);
 
-      expect(screen.getByText("Evidence links")).toBeInTheDocument();
-      expect(screen.getByText("No evidence links attached.")).toBeInTheDocument();
+      // When empty, component shows "Evidence" (not "Evidence Links") with empty state
+      expect(screen.getByText("Evidence")).toBeInTheDocument();
+      expect(screen.getByText("No evidence artifacts are attached to this incident yet.")).toBeInTheDocument();
     });
   });
 
@@ -134,7 +135,8 @@ describe("IncidentDetailPanel - Evidence", () => {
       });
       render(<IncidentDetailPanel incident={incident} />);
 
-      expect(screen.getByText("Evidence needed")).toBeInTheDocument();
+      // Section header is "Evidence Needed"
+      expect(screen.getByText("Evidence Needed")).toBeInTheDocument();
       expect(screen.getByText("kubectl logs for test-pod")).toBeInTheDocument();
       expect(screen.getByText("describe output for test-deployment")).toBeInTheDocument();
     });

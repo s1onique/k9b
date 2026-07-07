@@ -182,8 +182,8 @@ describe("IncidentDetailPanel diagnosis loop integration", () => {
 
       render(<IncidentDetailPanel incident={incident} />);
 
-      // The Suggested checks section in incident detail should still render
-      expect(screen.getByText("Suggested checks")).toBeInTheDocument();
+      // The Suggested Checks section in incident detail should still render
+      expect(screen.getByText("Suggested Checks")).toBeInTheDocument();
       expect(screen.getByText("Read-only view. No execution, promotion, or remediation available.")).toBeInTheDocument();
       expect(screen.getByText("CrashLoopBackOff logs are useful")).toBeInTheDocument();
 
@@ -198,8 +198,9 @@ describe("IncidentDetailPanel diagnosis loop integration", () => {
 
       render(<IncidentDetailPanel incident={incident} />);
 
-      expect(screen.getByText("Suggested checks")).toBeInTheDocument();
-      expect(screen.getByText("No suggested checks linked to this incident yet.")).toBeInTheDocument();
+      // SuggestedChecksSection returns null when list is empty, so neither header nor empty message is rendered
+      expect(screen.queryByText("Suggested Checks")).not.toBeInTheDocument();
+      expect(screen.queryByText("No suggested checks linked to this incident yet.")).not.toBeInTheDocument();
     });
   });
 
@@ -402,10 +403,12 @@ describe("IncidentDetailPanel diagnosis loop integration", () => {
 
       expect(screen.getByText("my-incident")).toBeInTheDocument();
       expect(screen.getByText("production")).toBeInTheDocument();
-      expect(screen.getByText("Deployment")).toBeInTheDocument();
-      expect(screen.getByText("api-server")).toBeInTheDocument();
-      expect(screen.getByText("warning")).toBeInTheDocument();
-      expect(screen.getByText("investigating")).toBeInTheDocument();
+      // Component renders "Deployment api-server" twice: in title and Primary Entity
+      expect(screen.getAllByText(/Deployment api-server/i)).toHaveLength(2);
+      // Severity appears twice: in badge and in summary
+      expect(screen.getAllByText("warning")).toHaveLength(2);
+      // Status appears twice: in badge and in summary (capitalized: "Investigating")
+      expect(screen.getAllByText("Investigating")).toHaveLength(2);
     });
 
     test("renders read-only notice", () => {

@@ -138,8 +138,9 @@ describe("IncidentDetailPanel Timeline - Event Categories", () => {
     });
     render(<IncidentDetailPanel incident={incident} />);
 
-    expect(screen.getByText("Status")).toBeInTheDocument();
     expect(screen.getByText("status_changed")).toBeInTheDocument();
+    const statusCategory = document.querySelector(".timeline-event-category");
+    expect(statusCategory?.textContent).toBe("Status");
   });
 
   it("renders 'Status' category for severity_changed event", () => {
@@ -157,8 +158,9 @@ describe("IncidentDetailPanel Timeline - Event Categories", () => {
     });
     render(<IncidentDetailPanel incident={incident} />);
 
-    expect(screen.getByText("Status")).toBeInTheDocument();
     expect(screen.getByText("severity_changed")).toBeInTheDocument();
+    const statusCategory = document.querySelector(".timeline-event-category");
+    expect(statusCategory?.textContent).toBe("Status");
   });
 
   it("renders 'Evidence' category for evidence_collection_started event", () => {
@@ -176,8 +178,9 @@ describe("IncidentDetailPanel Timeline - Event Categories", () => {
     });
     render(<IncidentDetailPanel incident={incident} />);
 
-    expect(screen.getByText("Evidence")).toBeInTheDocument();
     expect(screen.getByText("evidence_collection_started")).toBeInTheDocument();
+    const evidenceCategory = document.querySelector(".timeline-event-category");
+    expect(evidenceCategory?.textContent).toBe("Evidence");
   });
 
   it("renders 'Evidence' category for snapshot_bundle_attached event", () => {
@@ -195,8 +198,9 @@ describe("IncidentDetailPanel Timeline - Event Categories", () => {
     });
     render(<IncidentDetailPanel incident={incident} />);
 
-    expect(screen.getByText("Evidence")).toBeInTheDocument();
     expect(screen.getByText("snapshot_bundle_attached")).toBeInTheDocument();
+    const evidenceCategory = document.querySelector(".timeline-event-category");
+    expect(evidenceCategory?.textContent).toBe("Evidence");
   });
 
   it("renders 'Evidence' category for evidence_artifact_attached event", () => {
@@ -214,8 +218,9 @@ describe("IncidentDetailPanel Timeline - Event Categories", () => {
     });
     render(<IncidentDetailPanel incident={incident} />);
 
-    expect(screen.getByText("Evidence")).toBeInTheDocument();
     expect(screen.getByText("evidence_artifact_attached")).toBeInTheDocument();
+    const evidenceCategory = document.querySelector(".timeline-event-category");
+    expect(evidenceCategory?.textContent).toBe("Evidence");
   });
 
   it("renders 'Review' category for review_packet_generated event", () => {
@@ -252,8 +257,9 @@ describe("IncidentDetailPanel Timeline - Event Categories", () => {
     });
     render(<IncidentDetailPanel incident={incident} />);
 
-    expect(screen.getByText("Status")).toBeInTheDocument();
     expect(screen.getByText("suppressed")).toBeInTheDocument();
+    const statusCategory = document.querySelector(".timeline-event-category");
+    expect(statusCategory?.textContent).toBe("Status");
   });
 
   it("renders 'Status' category for marked_duplicate event", () => {
@@ -271,7 +277,8 @@ describe("IncidentDetailPanel Timeline - Event Categories", () => {
     });
     render(<IncidentDetailPanel incident={incident} />);
 
-    expect(screen.getByText("Status")).toBeInTheDocument();
     expect(screen.getByText("marked_duplicate")).toBeInTheDocument();
+    const statusCategory = document.querySelector(".timeline-event-category");
+    expect(statusCategory?.textContent).toBe("Status");
   });
 });

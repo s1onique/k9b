@@ -68,7 +68,7 @@ describe("IncidentDetailPanel Timeline - Empty State", () => {
     render(<IncidentDetailPanel incident={incident} />);
 
     expect(screen.getByText("Timeline")).toBeInTheDocument();
-    expect(screen.getByText("No timeline events recorded.")).toBeInTheDocument();
+    expect(screen.getByText("No timeline events yet.")).toBeInTheDocument();
   });
 
   it("renders timeline section header even with empty events", () => {
@@ -78,7 +78,7 @@ describe("IncidentDetailPanel Timeline - Empty State", () => {
     const timelineSection = document.querySelector(".incident-timeline-list");
     expect(timelineSection).toBeNull();
 
-    const emptyState = screen.getByText("No timeline events recorded.");
+    const emptyState = screen.getByText("No timeline events yet.");
     expect(emptyState).toBeInTheDocument();
   });
 });

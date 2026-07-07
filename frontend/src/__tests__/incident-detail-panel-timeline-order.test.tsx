@@ -189,7 +189,9 @@ describe("IncidentDetailPanel Timeline - Review Events", () => {
     });
     render(<IncidentDetailPanel incident={incident} />);
 
-    expect(screen.getByText("Status")).toBeInTheDocument();
+    // Use timeline-specific selector to avoid matching incident status label
+    const statusCategory = document.querySelector(".timeline-event-category.category-status");
+    expect(statusCategory?.textContent).toBe("Status");
     expect(screen.getByText("Status changed from open to investigating")).toBeInTheDocument();
   });
 });
