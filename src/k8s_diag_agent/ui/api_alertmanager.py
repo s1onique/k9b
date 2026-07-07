@@ -18,12 +18,14 @@ from __future__ import annotations
 
 from .api_payloads import (
     AlertmanagerCompactPayload,
+    AlertmanagerSourceAliasPayload,
     AlertmanagerSourcePayload,
     AlertmanagerSourcesPayload,
     ClusterAlertSummaryPayload,
 )
 from .model import (
     AlertmanagerCompactView,
+    AlertmanagerSourceAliasView,
     AlertmanagerSourcesView,
     AlertmanagerSourceView,
 )
@@ -59,6 +61,17 @@ def _serialize_alertmanager_compact(
         "truncated": view.truncated,
         "captured_at": view.captured_at,
         "by_cluster": by_cluster_payload,
+    }
+
+
+def _serialize_alertmanager_alias(view: AlertmanagerSourceAliasView) -> AlertmanagerSourceAliasPayload:
+    """Serialize an Alertmanager source alias to payload dict."""
+    return {
+        "alias_name": view.alias_name,
+        "alias_namespace": view.alias_namespace,
+        "alias_endpoint": view.alias_endpoint,
+        "discovery_method": view.discovery_method,
+        "management_type": view.management_type,
     }
 
 
@@ -98,6 +111,8 @@ def _serialize_alertmanager_source(view: AlertmanagerSourceView) -> Alertmanager
         # Identity anchors for cross-cluster disambiguation
         "cluster_uid": view.cluster_uid,
         "object_uid": view.object_uid,
+        # Discovered aliases: Kubernetes services that are aliases of this logical source
+        "aliases": [_serialize_alertmanager_alias(a) for a in view.aliases],
     }
 
 

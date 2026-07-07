@@ -17,6 +17,7 @@ It does NOT include:
 from __future__ import annotations
 
 import logging
+from dataclasses import replace as _replace
 
 from .alertmanager_discovery_crd_strategy import (
     _IN_CLUSTER_CONTEXT,
@@ -25,6 +26,7 @@ from .alertmanager_discovery_crd_strategy import (
 )
 from .alertmanager_discovery_models import (
     AlertmanagerSource,
+    AlertmanagerSourceAlias,
     AlertmanagerSourceMode,
     AlertmanagerSourceOrigin,
     AlertmanagerSourceState,
@@ -68,33 +70,59 @@ def build_endpoint_for_manual(
 # --- Prometheus Operator Alias Resolution ---
 
 
+def _infer_management_type(name: str, endpoint: str) -> str:
+    """Infer the management type of a service alias.
+    
+    Returns:
+        - "operator-managed": service ends with '-operated' (Prometheus Operator pattern)
+        - "chart-managed": service name matches a known Helm chart pattern
+        - "unknown": cannot determine management type
+    """
+    name_lower = name.lower()
+    
+    # Operator-managed services follow Prometheus Operator naming convention
+    if name_lower.endswith('-operated'):
+        return "operator-managed"
+    
+    # Chart-managed: service name matches common Alertmanager Helm chart patterns
+    # Examples: alertmanager, kube-prometheus-stack-alertmanager, prometheus-operator-alertmanager
+    chart_patterns = [
+        'alertmanager',
+        'prometheus-operator-alertmanager',
+        'kube-prometheus-stack-alertmanager',
+        'grafana-alertmanager',
+    ]
+    for pattern in chart_patterns:
+        if pattern in name_lower:
+            return "chart-managed"
+    
+    return "unknown"
+
+
 def _resolve_prometheus_operator_alias(
     source: AlertmanagerSource,
     all_sources: dict[str, AlertmanagerSource],
 ) -> AlertmanagerSource:
-    """Resolve Prometheus Operator alias: alertmanager-operated -> CRD-backed AM.
+    """Resolve Prometheus Operator aliases for service heuristic sources.
     
     In Prometheus Operator deployments:
-    - CRD is named 'alertmanager-main' (or similar)
-    - The actual service is 'alertmanager-operated' (conventional suffix)
+    - The CRD is named 'alertmanager-main' (or similar)
+    - The operator creates a headless service 'alertmanager-operated' (conventional suffix)
+    - The Helm chart may create a user-facing service 'alertmanager-main' or similar
     
-    When a service heuristic finds 'alertmanager-operated', it should share the
-    same canonical identity as the CRD-backed Alertmanager in the same namespace
-    IF there's an unambiguous mapping (only one CRD Alertmanager in that namespace).
+    When service heuristics find services like 'alertmanager-operated' or 
+    'alertmanager-main' in the same namespace as a CRD Alertmanager, they should
+    share the same canonical identity as the CRD Alertmanager if there's an
+    unambiguous mapping (only one CRD Alertmanager in that namespace).
     
-    This ensures that:
-    - CRD source: monitoring/alertmanager-main (points to alertmanager-operated.monitoring:9093)
-    - Service source: monitoring/alertmanager-operated (same endpoint)
-    
-    Both resolve to canonical identity 'monitoring/alertmanager-main' (the CRD's name).
+    This function:
+    1. Identifies if the source is an alias candidate (ends with '-operated' or matches chart patterns)
+    2. Finds the CRD Alertmanager in the same namespace
+    3. Returns a new source with CRD's namespace/name but original endpoint preserved
+    4. Tracks the alias in the source's aliases field
     """
     # Only apply alias resolution for service heuristic sources
     if source.origin != AlertmanagerSourceOrigin.SERVICE_HEURISTIC:
-        return source
-    
-    # Check if this is the alertmanager-operated pattern
-    name = source.name or ''
-    if not name.endswith('-operated'):
         return source
     
     # Find CRD sources in the same namespace
@@ -110,37 +138,64 @@ def _resolve_prometheus_operator_alias(
         return source
     
     crd_source = crd_in_namespace[0]
+    name = source.name or ''
+    
+    # Determine if this source is an alias candidate
+    # Both '-operated' services and chart services in the same namespace are aliases
+    # if they point to the same backing pods (we check if the CRD exists, implying
+    # they share the same StatefulSet/pods)
+    crd_name = crd_source.name or ''
+    is_alias_candidate = (
+        name.endswith('-operated') or  # Operator-created headless service
+        name == crd_name or  # Chart service matching CRD name
+        name in crd_name or  # CRD name contains service name (partial match)
+        crd_name in name  # Service name contains CRD name (partial match)
+    )
+    
+    if not is_alias_candidate:
+        return source
+    
+    # Infer management type
+    management_type = _infer_management_type(name, source.endpoint)
+    
+    # Create alias record
+    alias = AlertmanagerSourceAlias(
+        alias_name=name,
+        alias_namespace=source.namespace or '',
+        alias_endpoint=source.endpoint,
+        discovery_method=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+        management_type=management_type,
+    )
+    
+    # Check if this alias is already recorded in the CRD source
+    existing_aliases = list(crd_source.aliases)
+    # Avoid duplicate aliases with same name/endpoint
+    if not any(a.alias_name == alias.alias_name and a.alias_endpoint == alias.alias_endpoint 
+               for a in existing_aliases):
+        existing_aliases.append(alias)
     
     # Create aliased source with CRD's namespace/name but keep service's endpoint
     # (since they both point to the same endpoint: alertmanager-operated.svc:9093)
     # Preserve identity anchors from the source (cluster_uid/object_uid)
-    aliased_source = AlertmanagerSource(
+    aliased_source = _replace(
+        source,
         source_id=f'service:{source.namespace}/{crd_source.name}',  # Use CRD name
         endpoint=source.endpoint,  # Keep the actual endpoint
         namespace=source.namespace,
         name=crd_source.name,  # Use CRD name for canonical identity
-        origin=source.origin,
-        state=source.state,
-        discovered_at=source.discovered_at,
-        verified_at=source.verified_at,
-        last_check=source.last_check,
-        last_error=source.last_error,
-        verified_version=source.verified_version,
         confidence_hints=source.confidence_hints + ('prometheus-operator-alias',),
-        merged_provenances=source.merged_provenances,
-        cluster_label=source.cluster_label,
-        cluster_context=source.cluster_context,
-        cluster_uid=source.cluster_uid,
-        object_uid=source.object_uid,
+        # Add the alias to the CRD source's aliases
+        aliases=tuple(existing_aliases),
     )
     
     _logger.debug(
-        'Resolved Prometheus Operator alias: %s/%s -> %s/%s (endpoint %s)',
+        'Resolved Prometheus Operator alias: %s/%s -> %s/%s (endpoint %s, management: %s)',
         source.namespace,
-        source.name,
+        name,
         source.namespace,
         crd_source.name,
         source.endpoint,
+        management_type,
     )
     
     return aliased_source

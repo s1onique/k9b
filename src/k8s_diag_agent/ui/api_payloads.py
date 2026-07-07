@@ -89,6 +89,7 @@ __all__ = [
     # Alertmanager contracts (moved to api_payloads_alertmanager.py)
     "ClusterAlertSummaryPayload",  # noqa: F401 - re-exported
     "AlertmanagerCompactPayload",  # noqa: F401 - re-exported
+    "AlertmanagerSourceAliasPayload",  # noqa: F401 - re-exported
     "AlertmanagerSourcePayload",  # noqa: F401 - re-exported
     "AlertmanagerSourcesPayload",  # noqa: F401 - re-exported
     # Proposal/lifecycle contracts (moved to api_payloads_proposals.py)
@@ -143,6 +144,7 @@ __all__ = [
 # Next-check contracts (moved to api_payloads_next_checks.py)
 from .api_payloads_alertmanager import (  # noqa: F401 - re-exported for backward compatibility
     AlertmanagerCompactPayload,
+    AlertmanagerSourceAliasPayload,
     AlertmanagerSourcePayload,
     AlertmanagerSourcesPayload,
     ClusterAlertSummaryPayload,

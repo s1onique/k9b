@@ -90,6 +90,39 @@ class AlertmanagerSourceMode(StrEnum):
     OPERATOR_PROMOTED = "operator-promoted"  # User promoted from auto-discovery
 
 
+@dataclass(frozen=True)
+class AlertmanagerSourceAlias:
+    """A discovered alias of a canonical Alertmanager source.
+
+    This tracks the Kubernetes services/pods that were discovered as aliases
+    of a logical Alertmanager source, preserving provenance for UI display.
+    """
+    alias_name: str
+    alias_namespace: str
+    alias_endpoint: str
+    discovery_method: AlertmanagerSourceOrigin
+    management_type: str  # "operator-managed", "chart-managed", "unknown"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            'alias_name': self.alias_name,
+            'alias_namespace': self.alias_namespace,
+            'alias_endpoint': self.alias_endpoint,
+            'discovery_method': self.discovery_method.value,
+            'management_type': self.management_type,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AlertmanagerSourceAlias:
+        return cls(
+            alias_name=str(data['alias_name']),
+            alias_namespace=str(data['alias_namespace']),
+            alias_endpoint=str(data['alias_endpoint']),
+            discovery_method=AlertmanagerSourceOrigin(data['discovery_method']),
+            management_type=str(data['management_type']),
+        )
+
+
 # --- Core Models ---
 
 
@@ -121,6 +154,10 @@ class AlertmanagerSource:
     # Manual provenance: distinguishes operator-configured vs operator-promoted sources
     # Not serialized for discovered sources (defaults to NOT_MANUAL)
     manual_source_mode: AlertmanagerSourceMode = AlertmanagerSourceMode.NOT_MANUAL
+    # Discovered aliases: tracks Kubernetes services/pods that are aliases of this logical source
+    # Used to preserve provenance when multiple services (e.g., alertmanager-operated + chart service)
+    # are collapsed into one logical Alertmanager source
+    aliases: tuple[AlertmanagerSourceAlias, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         # Ensure endpoint has no trailing slash for consistency
@@ -260,6 +297,9 @@ class AlertmanagerSource:
         # Include manual_source_mode only when not NOT_MANUAL (backward compatibility)
         if self.manual_source_mode != AlertmanagerSourceMode.NOT_MANUAL:
             result['manual_source_mode'] = self.manual_source_mode.value
+        # Include aliases when present
+        if self.aliases:
+            result['aliases'] = [a.to_dict() for a in self.aliases]  # type: ignore[misc]
         return result
 
     @classmethod
@@ -278,6 +318,11 @@ class AlertmanagerSource:
             manual_source_mode = AlertmanagerSourceMode(manual_source_mode_raw)
         else:
             manual_source_mode = AlertmanagerSourceMode.NOT_MANUAL
+        # Parse aliases if present
+        aliases_raw = data.get('aliases')
+        aliases: tuple[AlertmanagerSourceAlias, ...] = ()
+        if aliases_raw and isinstance(aliases_raw, list):
+            aliases = tuple(AlertmanagerSourceAlias.from_dict(a) for a in aliases_raw)
         return cls(
             source_id=str(data['source_id']),
             endpoint=str(data['endpoint']),
@@ -298,6 +343,7 @@ class AlertmanagerSource:
             cluster_uid=data.get('cluster_uid'),
             object_uid=data.get('object_uid'),
             manual_source_mode=manual_source_mode,
+            aliases=aliases,
         )
 
 

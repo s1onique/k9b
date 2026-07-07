@@ -12,6 +12,7 @@ from .model_alertmanager import (  # noqa: F401 - re-exported for import compati
     AlertmanagerCompactView,
     AlertmanagerEvidenceReferenceView,
     AlertmanagerProvenanceView,
+    AlertmanagerSourceAliasView,
     AlertmanagerSourcesView,
     AlertmanagerSourceView,
     ClusterAlertSummaryView,

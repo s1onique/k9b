@@ -71,6 +71,16 @@ class AlertmanagerProvenanceView:
 
 
 @dataclass(frozen=True)
+class AlertmanagerSourceAliasView:
+    """View model for an Alertmanager source alias."""
+    alias_name: str
+    alias_namespace: str
+    alias_endpoint: str
+    discovery_method: str
+    management_type: str
+
+
+@dataclass(frozen=True)
 class AlertmanagerSourceView:
     """View model for a single Alertmanager source in the inventory."""
     source_id: str
@@ -114,6 +124,9 @@ class AlertmanagerSourceView:
     # object_uid: Native Kubernetes object UID (optional, highest confidence anchor)
     cluster_uid: str | None
     object_uid: str | None
+    # Discovered aliases: Kubernetes services that are aliases of this logical source
+    # Used to preserve provenance when multiple services are collapsed into one source
+    aliases: tuple[AlertmanagerSourceAliasView, ...]
 
 
 @dataclass(frozen=True)
@@ -318,6 +331,24 @@ def _build_alertmanager_sources_view(
             # (for backwards compatibility with older artifacts)
             canonical_identity = matching_key
 
+        # Build aliases from raw data
+        aliases_raw = src.get("aliases")
+        aliases: tuple[AlertmanagerSourceAliasView, ...] = ()
+        if isinstance(aliases_raw, Sequence) and not isinstance(aliases_raw, str | bytes):
+            alias_views: list[AlertmanagerSourceAliasView] = []
+            for alias_data in aliases_raw:
+                if isinstance(alias_data, Mapping):
+                    alias_views.append(
+                        AlertmanagerSourceAliasView(
+                            alias_name=_coerce_str(alias_data.get("alias_name")),
+                            alias_namespace=_coerce_str(alias_data.get("alias_namespace")),
+                            alias_endpoint=_coerce_str(alias_data.get("alias_endpoint")),
+                            discovery_method=_coerce_str(alias_data.get("discovery_method")),
+                            management_type=_coerce_str(alias_data.get("management_type")),
+                        )
+                    )
+            aliases = tuple(alias_views)
+
         sources.append(
             AlertmanagerSourceView(
                 source_id=_coerce_str(src.get("source_id")),
@@ -349,6 +380,8 @@ def _build_alertmanager_sources_view(
                 canonical_entity_id=_coerce_optional_str(src.get("canonicalEntityId")),
                 cluster_uid=_coerce_optional_str(src.get("cluster_uid")),
                 object_uid=_coerce_optional_str(src.get("object_uid")),
+                # Aliases: tracked Kubernetes services that are aliases of this source
+                aliases=aliases,
             )
         )
 

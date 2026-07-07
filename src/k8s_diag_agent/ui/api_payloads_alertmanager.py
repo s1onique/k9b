@@ -19,6 +19,7 @@ from typing import TypedDict
 __all__ = [
     "ClusterAlertSummaryPayload",
     "AlertmanagerCompactPayload",
+    "AlertmanagerSourceAliasPayload",
     "AlertmanagerSourcePayload",
     "AlertmanagerSourcesPayload",
 ]
@@ -50,6 +51,16 @@ class AlertmanagerCompactPayload(TypedDict, total=False):
     truncated: bool
     captured_at: str
     by_cluster: list[ClusterAlertSummaryPayload]
+
+
+class AlertmanagerSourceAliasPayload(TypedDict, total=False):
+    """Payload for an Alertmanager source alias (tracked Kubernetes service alias)."""
+
+    alias_name: str
+    alias_namespace: str
+    alias_endpoint: str
+    discovery_method: str
+    management_type: str
 
 
 class AlertmanagerSourcePayload(TypedDict, total=False):
@@ -86,6 +97,9 @@ class AlertmanagerSourcePayload(TypedDict, total=False):
     canonicalEntityId: str | None
     cluster_uid: str | None
     object_uid: str | None
+    # Discovered aliases: Kubernetes services that are aliases of this logical source
+    # Used to preserve provenance when multiple services are collapsed into one source
+    aliases: list[AlertmanagerSourceAliasPayload]
 
 
 class AlertmanagerSourcesPayload(TypedDict, total=False):

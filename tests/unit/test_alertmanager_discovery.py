@@ -1986,3 +1986,199 @@ def test_roundtrip_operator_promoted_source() -> None:
     assert restored.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD  # Origin preserved!
     assert restored.state == AlertmanagerSourceState.MANUAL
     assert restored.manual_source_mode == AlertmanagerSourceMode.OPERATOR_PROMOTED
+
+
+# --- Alias Tests ---
+
+def test_source_alias_creation() -> None:
+    """Test AlertmanagerSourceAlias creation and serialization."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery_models import (
+        AlertmanagerSourceAlias,
+    )
+    
+    alias = AlertmanagerSourceAlias(
+        alias_name="alertmanager-operated",
+        alias_namespace="monitoring",
+        alias_endpoint="http://alertmanager-operated.monitoring.svc:9093",
+        discovery_method=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+        management_type="operator-managed",
+    )
+    
+    assert alias.alias_name == "alertmanager-operated"
+    assert alias.alias_namespace == "monitoring"
+    assert alias.alias_endpoint == "http://alertmanager-operated.monitoring.svc:9093"
+    assert alias.discovery_method == AlertmanagerSourceOrigin.SERVICE_HEURISTIC
+    assert alias.management_type == "operator-managed"
+
+
+def test_source_alias_to_dict_roundtrip() -> None:
+    """Test AlertmanagerSourceAlias serialization roundtrip."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery_models import (
+        AlertmanagerSourceAlias,
+    )
+    
+    original = AlertmanagerSourceAlias(
+        alias_name="alertmanager-main",
+        alias_namespace="monitoring",
+        alias_endpoint="http://alertmanager-main.monitoring.svc:9093",
+        discovery_method=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+        management_type="chart-managed",
+    )
+    
+    serialized = original.to_dict()
+    restored = AlertmanagerSourceAlias.from_dict(serialized)
+    
+    assert restored.alias_name == original.alias_name
+    assert restored.alias_namespace == original.alias_namespace
+    assert restored.alias_endpoint == original.alias_endpoint
+    assert restored.discovery_method == original.discovery_method
+    assert restored.management_type == original.management_type
+
+
+def test_source_with_aliases() -> None:
+    """Test AlertmanagerSource with aliases field."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery_models import (
+        AlertmanagerSourceAlias,
+    )
+    
+    alias1 = AlertmanagerSourceAlias(
+        alias_name="alertmanager-operated",
+        alias_namespace="monitoring",
+        alias_endpoint="http://alertmanager-operated.monitoring.svc:9093",
+        discovery_method=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+        management_type="operator-managed",
+    )
+    alias2 = AlertmanagerSourceAlias(
+        alias_name="alertmanager-main",
+        alias_namespace="monitoring",
+        alias_endpoint="http://alertmanager-main.monitoring.svc:9093",
+        discovery_method=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+        management_type="chart-managed",
+    )
+    
+    source = AlertmanagerSource(
+        source_id="crd:monitoring/main",
+        endpoint="http://alertmanager-main.monitoring.svc:9093",
+        namespace="monitoring",
+        name="main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+        aliases=(alias1, alias2),
+    )
+    
+    assert len(source.aliases) == 2
+    assert source.aliases[0].alias_name == "alertmanager-operated"
+    assert source.aliases[1].alias_name == "alertmanager-main"
+
+
+def test_source_aliases_to_dict_roundtrip() -> None:
+    """Test that AlertmanagerSource aliases survive serialization roundtrip."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery_models import (
+        AlertmanagerSourceAlias,
+    )
+    
+    alias = AlertmanagerSourceAlias(
+        alias_name="alertmanager-operated",
+        alias_namespace="monitoring",
+        alias_endpoint="http://alertmanager-operated.monitoring.svc:9093",
+        discovery_method=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+        management_type="operator-managed",
+    )
+    
+    original = AlertmanagerSource(
+        source_id="crd:monitoring/main",
+        endpoint="http://alertmanager-main.monitoring.svc:9093",
+        namespace="monitoring",
+        name="main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+        aliases=(alias,),
+    )
+    
+    serialized = original.to_dict()
+    assert "aliases" in serialized
+    assert len(serialized["aliases"]) == 1
+    
+    restored = AlertmanagerSource.from_dict(serialized)
+    assert len(restored.aliases) == 1
+    assert restored.aliases[0].alias_name == "alertmanager-operated"
+
+
+def test_source_without_aliases_serialization() -> None:
+    """Test that AlertmanagerSource without aliases doesn't include aliases in dict."""
+    source = AlertmanagerSource(
+        source_id="crd:monitoring/main",
+        endpoint="http://alertmanager:9093",
+        namespace="monitoring",
+        name="main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    
+    serialized = source.to_dict()
+    # Aliases should not be present when empty (backward compatibility)
+    assert "aliases" not in serialized
+    
+    # But roundtrip should still work
+    restored = AlertmanagerSource.from_dict(serialized)
+    assert len(restored.aliases) == 0
+
+
+def test_infer_management_type_operator_managed() -> None:
+    """Test _infer_management_type returns operator-managed for -operated services."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery_sources import (
+        _infer_management_type,
+    )
+    
+    assert _infer_management_type("alertmanager-operated", "http://test:9093") == "operator-managed"
+    assert _infer_management_type("prometheus-operated", "http://test:9093") == "operator-managed"
+
+
+def test_infer_management_type_chart_managed() -> None:
+    """Test _infer_management_type returns chart-managed for known chart patterns."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery_sources import (
+        _infer_management_type,
+    )
+    
+    assert _infer_management_type("alertmanager", "http://test:9093") == "chart-managed"
+    assert _infer_management_type("kube-prometheus-stack-alertmanager", "http://test:9093") == "chart-managed"
+    assert _infer_management_type("prometheus-operator-alertmanager", "http://test:9093") == "chart-managed"
+
+
+def test_infer_management_type_unknown() -> None:
+    """Test _infer_management_type returns unknown for unrecognized patterns."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery_sources import (
+        _infer_management_type,
+    )
+    
+    assert _infer_management_type("my-custom-service", "http://test:9093") == "unknown"
+
+
+def test_prometheus_operator_alias_with_chart_service() -> None:
+    """Test that chart services matching CRD name are detected as aliases."""
+    from k8s_diag_agent.external_analysis.alertmanager_discovery_sources import (
+        _resolve_prometheus_operator_alias,
+    )
+    
+    # CRD source
+    crd_source = AlertmanagerSource(
+        source_id="crd:monitoring/main",
+        endpoint="http://alertmanager-main.monitoring.svc:9093",
+        namespace="monitoring",
+        name="main",
+        origin=AlertmanagerSourceOrigin.ALERTMANAGER_CRD,
+    )
+    
+    # Chart service with same name as CRD
+    chart_service = AlertmanagerSource(
+        source_id="service:monitoring/main",
+        endpoint="http://alertmanager-main.monitoring.svc:9093",
+        namespace="monitoring",
+        name="main",  # Same as CRD name
+        origin=AlertmanagerSourceOrigin.SERVICE_HEURISTIC,
+    )
+    
+    all_sources = {crd_source.source_id: crd_source, chart_service.source_id: chart_service}
+    
+    # The alias resolution should identify this as an alias candidate
+    resolved = _resolve_prometheus_operator_alias(chart_service, all_sources)
+    
+    # Should be resolved to CRD name
+    assert resolved.name == "main"
