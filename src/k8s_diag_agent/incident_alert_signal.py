@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum
+from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -37,6 +37,28 @@ MAX_KEY_LENGTH = 128
 MAX_VALUE_LENGTH = 512
 MAX_TOTAL_LABEL_BYTES = 16 * 1024  # 16 KB
 MAX_TOTAL_ANNOTATION_BYTES = 32 * 1024  # 32 KB
+
+
+# =============================================================================
+# Serialization Helpers
+# =============================================================================
+
+def _enum_value(value: str | Enum) -> str:
+    """Coerce an enum member or string to a plain string for serialization.
+
+    This handles the case where the value might already be a plain string
+    (e.g., from deserialization or test fixtures) or an enum member that
+    requires .value extraction.
+
+    Args:
+        value: Either an Enum member or a plain string
+
+    Returns:
+        Plain string representation suitable for JSON serialization
+    """
+    if isinstance(value, Enum):
+        return str(value.value)
+    return str(value)
 
 
 # =============================================================================
@@ -137,12 +159,12 @@ class AlertSignal:
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
             "signal_id": self.signal_id,
-            "source_type": self.source_type.value,
+            "source_type": _enum_value(self.source_type),
             "source_instance": self.source_instance,
             "external_fingerprint": self.external_fingerprint,
             "group_key": self.group_key,
             "receiver": self.receiver,
-            "status": self.status.value,
+            "status": _enum_value(self.status),
             "alertname": self.alertname,
             "severity": self.severity,
             "labels": dict(self.labels),

@@ -19,9 +19,14 @@ Non-goals:
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING
 
-from .incident_alert_signal import AlertCorrelationHints, AlertSignal
+from .incident_alert_signal import (
+    AlertCorrelationHints,
+    AlertSignal,
+    _enum_value,
+)
 
 if TYPE_CHECKING:
     pass
@@ -79,7 +84,7 @@ def alert_signal_identity(signal: AlertSignal) -> str:
     parts: list[str] = [
         str(signal.source_instance),
         str(signal.alertname),
-        str(signal.status.value),
+        _enum_value(signal.status),
     ]
 
     # Add fingerprint if available
@@ -104,6 +109,19 @@ def alert_signal_identity(signal: AlertSignal) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
+def _iter_labels(
+    labels: Mapping[object, object] | Iterable[tuple[object, object]],
+) -> Iterable[tuple[str, str]]:
+    """Iterate over labels as (key, value) tuples.
+
+    Handles both Mapping (dict) and tuple[tuple[str, str]] formats.
+    Normalizes keys and values to strings.
+    """
+    items = labels.items() if isinstance(labels, Mapping) else labels
+    for key, value in items:
+        yield str(key), str(value)
+
+
 def alert_signal_correlation_hints(signal: AlertSignal) -> AlertCorrelationHints:
     """Compute correlation hints for an alert signal.
 
@@ -126,7 +144,7 @@ def alert_signal_correlation_hints(signal: AlertSignal) -> AlertCorrelationHints
     """
     # Extract stable labels for fuzzy matching
     stable_labels: list[tuple[str, str]] = []
-    for key, value in signal.labels:
+    for key, value in _iter_labels(signal.labels):
         if key in STABLE_IDENTITY_LABELS:
             stable_labels.append((key, value))
 
@@ -312,7 +330,7 @@ def select_signals_for_incident(
     sorted_signals = sorted(
         signals,
         key=lambda s: (
-            0 if s.status.value == "firing" else 1,  # firing first
+            0 if _enum_value(s.status) == "firing" else 1,  # firing first
             -s.received_at.timestamp(),  # most recent first
         ),
     )

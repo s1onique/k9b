@@ -11,6 +11,7 @@ from k8s_diag_agent.incident_alert_signal import AlertSignal
 from k8s_diag_agent.incident_alert_signal_store import (
     ALERT_SIGNAL_SCHEMA_VERSION,
     ALERT_SIGNALS_SUBDIR,
+    EXTERNAL_ANALYSIS_SUBDIR,
     RAW_PAYLOAD_SCHEMA_VERSION,
     AlertSignalArtifact,
     RawPayloadArtifact,
@@ -200,8 +201,8 @@ class TestWriteRawPayloadArtifact:
         )
 
         assert write_result.success is True
-        # Subdirectory should exist
-        subdir = self.root / ALERT_SIGNALS_SUBDIR
+        # Subdirectory should exist at external-analysis/alert-signals
+        subdir = self.root / EXTERNAL_ANALYSIS_SUBDIR / ALERT_SIGNALS_SUBDIR
         assert subdir.exists()
         assert subdir.is_dir()
 
@@ -382,7 +383,7 @@ class TestWriteAlertSignalArtifact:
         assert result2.artifact_path == original_path
 
         # Only one file should exist
-        files = list((self.root / ALERT_SIGNALS_SUBDIR).glob("*.json"))
+        files = list((self.root / EXTERNAL_ANALYSIS_SUBDIR / ALERT_SIGNALS_SUBDIR).glob("*.json"))
         assert len(files) == 1
 
     def test_different_signals_different_files(self):
