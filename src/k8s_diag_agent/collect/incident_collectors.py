@@ -132,20 +132,41 @@ def collect_pods(
 def collect_deployments(
     namespace: str,
     context: str | None,
-) -> tuple[list[DeploymentSummary], list[str]]:
-    """Collect deployment evidence for namespace."""
+    artifact_dir: Path | None = None,
+) -> tuple[list[DeploymentSummary], list[str], dict[str, Any]]:
+    """Collect deployment evidence for namespace.
+
+    Args:
+        namespace: Kubernetes namespace
+        context: Kubernetes context (None for default)
+        artifact_dir: Optional directory for tool output artifacts
+
+    Returns:
+        Tuple of (deployments, errors, projection_metadata).
+        The projection_metadata contains spill/budget info for observability.
+    """
     errors: list[str] = []
+    projection_metadata: dict[str, Any] = {}
     try:
         output = kubectl(context, "get", "deployments", "-n", namespace, "-o", "json")
     except RuntimeError as exc:
         errors.append(f"deployments_collection: {exc}")
-        return [], errors
+        return [], errors, projection_metadata
 
     try:
         payload = json.loads(output)
     except json.JSONDecodeError as exc:
         errors.append(f"deployments_parse: {exc}")
-        return [], errors
+        return [], errors, projection_metadata
+
+    # Project output through budget and spill infrastructure
+    spill_result = project_read_only_tool_output(
+        source_tool="kubectl_get",
+        raw_output=payload,
+        artifact_dir=artifact_dir,
+        provenance={"namespace": namespace, "resource": "deployments"},
+    )
+    projection_metadata = _build_projection_metadata(spill_result, "kubectl_get")
 
     items = _extract_items(payload)
     deployments: list[DeploymentSummary] = []
@@ -154,7 +175,7 @@ def collect_deployments(
         deployment_summary = parse_deployment_summary(item)
         deployments.append(deployment_summary)
 
-    return deployments, errors
+    return deployments, errors, projection_metadata
 
 
 def collect_events(

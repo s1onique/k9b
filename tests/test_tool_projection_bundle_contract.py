@@ -10,10 +10,11 @@ Required coverage:
 1. serialized IncidentEvidenceBundle contains tool_output_projection
 2. serialized bundle has tool_output_projection["pods"]
 3. serialized bundle has tool_output_projection["events"]
-4. pods/events projection metadata have identical key sets
-5. raw_artifact_path is absent everywhere in serialized bundle JSON
-6. raw_output is absent everywhere in serialized bundle JSON
-7. llm_visible is absent everywhere in serialized bundle JSON
+4. serialized bundle has tool_output_projection["deployments"]
+5. pods/events/deployments projection metadata have identical key sets
+6. raw_artifact_path is absent everywhere in serialized bundle JSON
+7. raw_output is absent everywhere in serialized bundle JSON
+8. llm_visible is absent everywhere in serialized bundle JSON
 """
 
 from __future__ import annotations

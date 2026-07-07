@@ -117,8 +117,10 @@ def collect_incident_snapshot(
         tool_output_projection["pods"] = pod_projection_metadata
 
     # Collect deployments
-    deployments, deploy_errors = collect_deployments(namespace, context)
+    deployments, deploy_errors, deploy_projection_metadata = collect_deployments(namespace, context)
     errors.extend(deploy_errors)
+    if deploy_projection_metadata:
+        tool_output_projection["deployments"] = deploy_projection_metadata
 
     # Collect events
     events, event_errors, event_projection_metadata = collect_events(namespace, context, since_hours)
