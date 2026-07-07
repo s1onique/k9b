@@ -8,26 +8,43 @@ Prometheus Operator pattern where:
 
 Both point to the same Alertmanager pod but should be collapsed into one source.
 
-Deduplication is done by comparing backing pod IPs from Kubernetes endpoint slices.
-This ensures services with different DNS names but same backing pods are correctly
-identified as aliases.
+Deduplication is done by comparing backing pod UIDs from Kubernetes EndpointSlices.
+Pod UIDs are preferred over pod IPs because IPs can change when pods restart,
+while UIDs are stable identifiers for the pod's logical identity.
+
+The backing pod identity extraction is handled by alertmanager_discovery_backing_identity.py.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from k8s_diag_agent.external_analysis.alertmanager_discovery_backing_identity import (
+        BackingPodIdentity,
+    )
     from k8s_diag_agent.external_analysis.alertmanager_discovery_models import (
         AlertmanagerSource,
     )
 
+# Import the backing identity module for the main entry point
+from k8s_diag_agent.external_analysis.alertmanager_discovery_backing_identity import (
+    BackingPodIdentity as _BackingPodIdentity,
+)
+from k8s_diag_agent.external_analysis.alertmanager_discovery_backing_identity import (
+    get_service_backing_identity as _get_service_backing_identity,
+)
+
 # Module logger
 _logger = logging.getLogger(__name__)
+
+
+# Re-export for backwards compatibility with existing imports
+# TODO: Update imports to use alertmanager_discovery_backing_identity directly
+BackingPodIdentity = _BackingPodIdentity
+_get_service_backing_pods = _get_service_backing_identity  # Alias for backwards compat
 
 
 @dataclass(frozen=True)
@@ -37,9 +54,13 @@ class ServiceHeuristicDedupGroup:
     Attributes:
         preferred: The preferred source (chart service > -operated > other)
         aliases: Other sources that are aliases of the preferred one
+        raw_candidate_count: Number of raw candidates that collapsed into this group
+        deduplicated_service_names: All service names in this dedup group
     """
     preferred: AlertmanagerSource
     aliases: tuple[AlertmanagerSource, ...]
+    raw_candidate_count: int = 1
+    deduplicated_service_names: tuple[str, ...] = field(default_factory=tuple)
 
 
 def _is_headless_operated_service(name: str) -> bool:
@@ -105,92 +126,26 @@ def _get_preference_score(source: AlertmanagerSource) -> int:
     return 1
 
 
-def _get_service_backing_pods(
-    namespace: str,
-    service_name: str,
-    context: str | None = None,
-) -> frozenset[str] | None:
-    """Get the pod IPs backing a service via endpoint slices.
-    
-    This uses kubectl to query endpoint slices for the service and extracts
-    all pod IPs. Returns None on error (non-fatal).
-    
-    Args:
-        namespace: Kubernetes namespace
-        service_name: Name of the service
-        context: Kubernetes context (optional)
-        
-    Returns:
-        Frozen set of pod IP strings, or None if query failed
-    """
-    context_args = []
-    if context:
-        context_args = ["--context", context]
-    
-    try:
-        # Get endpoint slices for this service
-        cmd = [
-            "kubectl", "get", "endpointslices",
-            "-n", namespace,
-            "-l", f"kubernetes.io/service-name={service_name}",
-            "-o", "json",
-        ] + context_args
-        
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        
-        if result.returncode != 0:
-            _logger.debug(
-                "Failed to get endpoint slices for %s/%s: %s",
-                namespace, service_name, result.stderr[:200],
-            )
-            return None
-        
-        data = json.loads(result.stdout)
-        pod_ips: set[str] = set()
-        
-        for item in data.get("items", []):
-            for endpoint in item.get("endpoints", []):
-                for address in endpoint.get("addresses", []):
-                    if address:
-                        pod_ips.add(address)
-        
-        if pod_ips:
-            return frozenset(pod_ips)
-        return None
-        
-    except subprocess.TimeoutExpired:
-        _logger.debug("Endpoint slice query timed out for %s/%s", namespace, service_name)
-        return None
-    except (json.JSONDecodeError, OSError) as exc:
-        _logger.debug("Error querying endpoint slices for %s/%s: %s", namespace, service_name, exc)
-        return None
-
-
 def _build_backing_pod_cache(
     sources: list[AlertmanagerSource],
     context: str | None = None,
-) -> dict[str, frozenset[str] | None]:
-    """Build a cache of service backing pod IPs.
+) -> dict[str, BackingPodIdentity | None]:
+    """Build a cache of service backing pod identities.
     
     Args:
         sources: List of AlertmanagerSource objects
         context: Kubernetes context for kubectl
         
     Returns:
-        Dict mapping "namespace/name" to frozenset of pod IPs (or None if unavailable)
+        Dict mapping "namespace/name" to BackingPodIdentity (or None if unavailable)
     """
-    cache: dict[str, frozenset[str] | None] = {}
+    cache: dict[str, BackingPodIdentity | None] = {}
     
     for source in sources:
         if source.namespace and source.name:
             key = f"{source.namespace}/{source.name}"
             if key not in cache:
-                cache[key] = _get_service_backing_pods(
+                cache[key] = _get_service_backing_identity(
                     source.namespace,
                     source.name,
                     context=context,
@@ -204,45 +159,60 @@ def _build_backing_pod_cache(
 DedupKey = tuple[str, str | tuple[str, ...]]
 
 
+def _get_identity_key(identity: BackingPodIdentity | None) -> DedupKey:
+    """Build a dedup key from a BackingPodIdentity.
+    
+    Priority:
+    1. Pod UIDs (most stable)
+    2. Pod namespace/name (fallback)
+    3. Service endpoint (last resort)
+    """
+    if identity is not None and identity.uid_set:
+        # Use pod UIDs for identity
+        return ("pods", tuple(sorted(identity.uid_set)))
+    elif identity is not None and identity.name_set:
+        # Use pod namespace/name as fallback
+        return ("pods", tuple(sorted(identity.name_set)))
+    else:
+        # Service endpoint fallback
+        return ("endpoint", "")
+
+
 def _group_by_backing_pods(
     sources: list[AlertmanagerSource],
-    backing_pod_cache: dict[str, frozenset[str] | None],
-) -> dict[DedupKey, list[AlertmanagerSource]]:
-    """Group sources by their backing pod IPs.
+    backing_pod_cache: dict[str, BackingPodIdentity | None],
+) -> dict[DedupKey, tuple[BackingPodIdentity | None, list[AlertmanagerSource]]]:
+    """Group sources by their backing pod identities.
     
-    Sources that share the same backing pod IPs (even with different service names)
+    Sources that share the same backing pod UIDs (even with different service names)
     are grouped together as aliases.
     
     Sources with unavailable backing pod info (None) are grouped by endpoint URL.
     
-    Key model (prevents collisions between pod-backed and endpoint fallback):
-    - Pod-backed identity: ("pods", tuple(sorted(pod_ips)))
-    - Endpoint fallback: ("endpoint", normalized_endpoint)
-    
     Args:
         sources: List of AlertmanagerSource objects
-        backing_pod_cache: Cache of service backing pods
+        backing_pod_cache: Cache of service backing pod identities
         
     Returns:
-        Dict mapping dedup key to list of sources in that group
+        Dict mapping dedup key to (BackingPodIdentity, list of sources) tuples
     """
     # Group by backing pods where available
-    by_pods: dict[DedupKey, list[AlertmanagerSource]] = {}
+    by_pods: dict[DedupKey, tuple[BackingPodIdentity | None, list[AlertmanagerSource]]] = {}
     no_pod_info: list[AlertmanagerSource] = []
     
     for source in sources:
         if source.namespace and source.name:
             key = f"{source.namespace}/{source.name}"
-            pods = backing_pod_cache.get(key)
+            identity = backing_pod_cache.get(key)
         else:
-            pods = None
+            identity = None
         
-        if pods is not None:
-            # Use namespaced key: ("pods", tuple of sorted IPs)
-            pod_key: DedupKey = ("pods", tuple(sorted(pods)))
-            if pod_key not in by_pods:
-                by_pods[pod_key] = []
-            by_pods[pod_key].append(source)
+        if identity is not None and (identity.uid_set or identity.name_set):
+            # Use pod UID-based key
+            dedup_key = _get_identity_key(identity)
+            if dedup_key not in by_pods:
+                by_pods[dedup_key] = (identity, [])
+            by_pods[dedup_key][1].append(source)
         else:
             no_pod_info.append(source)
     
@@ -258,11 +228,10 @@ def _group_by_backing_pods(
         # Add endpoint fallback groups with namespaced key
         for norm_ep, sources_list in by_endpoint.items():
             # Use namespaced key: ("endpoint", normalized_endpoint)
-            # This prevents collision with pod-backed keys
             endpoint_key: DedupKey = ("endpoint", norm_ep)
             if endpoint_key not in by_pods:
-                by_pods[endpoint_key] = []
-            by_pods[endpoint_key].extend(sources_list)
+                by_pods[endpoint_key] = (None, [])
+            by_pods[endpoint_key][1].extend(sources_list)
     
     return by_pods
 
@@ -276,20 +245,18 @@ def deduplicate_service_heuristic_sources(
     When multiple SERVICE_HEURISTIC sources point to the same backing pods,
     this function groups them and identifies a preferred source for each group.
     
-    Priority for preferred source:
-    1. Chart services (kube-prometheus-stack-alertmanager) - user-facing
-    2. Non-operated services
-    3. -operated services (operator-governed backing services)
+    Priority for preferred source (lower score = preferred):
+    1. Non-headless ClusterIP (vs clusterIP: None)
+    2. Non-*-operated service (vs alertmanager-operated)
+    3. HTTP data-plane port (http-web/9093 wins over mesh/reloader ports)
+    4. More specific selector (e.g., alertmanager=kube-prometheus-stack-alertmanager)
+    5. Chart-facing labels (vs operator-internal labels)
     
     This handles the common Prometheus Operator pattern where:
     - alertmanager-operated (headless, clusterIP: None) - operator governing service
     - kube-prometheus-stack-alertmanager (chart service) - user-facing service
     
     Both point to the same Alertmanager pod but should be collapsed into one source.
-    
-    Deduplication is done by comparing backing pod IPs from Kubernetes endpoint slices.
-    This ensures services with different DNS names but same backing pods are correctly
-    identified as aliases.
     
     Importantly, this function handles MULTIPLE groups:
     - Group A: alertmanager-operated + kube-prometheus-stack-alertmanager (same pods)
@@ -307,7 +274,7 @@ def deduplicate_service_heuristic_sources(
     if not sources:
         return ()
     
-    # Build cache of backing pod IPs for each service
+    # Build cache of backing pod identities for each service
     backing_pod_cache = _build_backing_pod_cache(sources, context=kube_context)
     
     _logger.debug(
@@ -320,26 +287,42 @@ def deduplicate_service_heuristic_sources(
     for source in sources:
         if source.namespace and source.name:
             key = f"{source.namespace}/{source.name}"
-            pods = backing_pod_cache.get(key)
-            _logger.debug(
-                "Service %s/%s backs pods: %s",
-                source.namespace,
-                source.name,
-                pods if pods else "unavailable",
-            )
+            identity = backing_pod_cache.get(key)
+            if identity:
+                _logger.debug(
+                    "Service %s/%s backs pods: uids=%s, names=%s",
+                    source.namespace,
+                    source.name,
+                    identity.uid_set if identity.uid_set else "none",
+                    identity.name_set if identity.name_set else "none",
+                )
+            else:
+                _logger.debug(
+                    "Service %s/%s backing pod identity: unavailable",
+                    source.namespace,
+                    source.name,
+                )
     
-    # Group sources by backing pods
+    # Group sources by backing pod identity
     by_pods = _group_by_backing_pods(sources, backing_pod_cache)
     
     # Create dedup groups
     groups: list[ServiceHeuristicDedupGroup] = []
     
-    for pod_set, pod_sources in by_pods.items():
+    for dedup_key, (identity, pod_sources) in by_pods.items():
+        # Collect all service names in this group
+        all_service_names: list[str] = []
+        for source in pod_sources:
+            if source.name:
+                all_service_names.append(source.name)
+        
         if len(pod_sources) == 1:
             # Only one source for this pod set - it's its own group
             groups.append(ServiceHeuristicDedupGroup(
                 preferred=pod_sources[0],
                 aliases=(),
+                raw_candidate_count=1,
+                deduplicated_service_names=tuple(all_service_names),
             ))
             continue
         
@@ -349,17 +332,27 @@ def deduplicate_service_heuristic_sources(
         preferred = sorted_sources[0]
         alias_sources = tuple(sorted_sources[1:])
         
+        identity_desc = "unknown"
+        if identity and identity.uid_set:
+            identity_desc = f"uids={len(identity.uid_set)}"
+        elif identity and identity.name_set:
+            identity_desc = f"names={len(identity.name_set)}"
+        else:
+            identity_desc = "endpoint-based"
+        
         _logger.debug(
-            "Deduplicated %d sources to preferred=%s, aliases=%s (backing pods: %s)",
+            "Deduplicated %d sources to preferred=%s, aliases=%s (backing: %s)",
             len(pod_sources),
             f"{preferred.namespace}/{preferred.name}",
             [f"{s.namespace}/{s.name}" for s in alias_sources],
-            pod_set if pod_set else "endpoint-based",
+            identity_desc,
         )
         
         groups.append(ServiceHeuristicDedupGroup(
             preferred=preferred,
             aliases=alias_sources,
+            raw_candidate_count=len(pod_sources),
+            deduplicated_service_names=tuple(all_service_names),
         ))
     
     return tuple(groups)

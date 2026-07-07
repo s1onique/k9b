@@ -123,6 +123,36 @@ class AlertmanagerSourceAlias:
         )
 
 
+@dataclass(frozen=True)
+class AlertmanagerDedupProvenance:
+    """Provenance metadata from the deduplication stage.
+    
+    This tracks how raw candidates were collapsed into logical sources,
+    preserving diagnostic information without affecting UI correctness.
+    """
+    raw_candidate_count: int = 1  # Number of raw candidates collapsed into this source
+    deduplicated_service_names: tuple[str, ...] = ()  # All service names that were deduplicated
+    dedup_identity_kind: str | None = None  # "backing_pods", "service_endpoint", None
+    dedup_identity_value: tuple[str, ...] = ()  # The dedup key values (pod UIDs or endpoint)
+    
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            'raw_candidate_count': self.raw_candidate_count,
+            'deduplicated_service_names': list(self.deduplicated_service_names),
+            'dedup_identity_kind': self.dedup_identity_kind,
+            'dedup_identity_value': list(self.dedup_identity_value),
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AlertmanagerDedupProvenance:
+        return cls(
+            raw_candidate_count=int(data.get('raw_candidate_count', 1)),
+            deduplicated_service_names=tuple(data.get('deduplicated_service_names', [])),
+            dedup_identity_kind=data.get('dedup_identity_kind'),
+            dedup_identity_value=tuple(data.get('dedup_identity_value', [])),
+        )
+
+
 # --- Core Models ---
 
 

@@ -1,21 +1,23 @@
 """Unit tests for Alertmanager service heuristic deduplication by backing pods.
 
 Tests cover:
-- Deduplication using backing pod IPs from endpoint slices
-- Fallback to endpoint-based grouping when endpoint slices unavailable
+- Grouping sources by backing pod UIDs from EndpointSlices
+- Fallback to endpoint-based grouping when EndpointSlices unavailable
 - Mocking kubectl calls for controlled test scenarios
+
+Note: Backing pod identity extraction tests are in test_alertmanager_backing_identity.py.
 """
 
 from __future__ import annotations
 
-import json
-import subprocess
 from unittest.mock import patch
 
+from k8s_diag_agent.external_analysis.alertmanager_discovery_backing_identity import (
+    BackingPodIdentity,
+)
 from k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers import (
     DedupKey,
     _build_backing_pod_cache,
-    _get_service_backing_pods,
     _group_by_backing_pods,
     deduplicate_service_heuristic_sources,
 )
@@ -23,77 +25,6 @@ from k8s_diag_agent.external_analysis.alertmanager_discovery_models import (
     AlertmanagerSource,
     AlertmanagerSourceOrigin,
 )
-
-
-class TestGetServiceBackingPods:
-    """Tests for _get_service_backing_pods function."""
-
-    def test_returns_none_when_kubectl_fails(self) -> None:
-        """Should return None when kubectl command fails."""
-        with patch('subprocess.run') as mock_run:
-            mock_run.return_value.returncode = 1
-            mock_run.return_value.stderr = "context not found"
-            
-            result = _get_service_backing_pods(
-                namespace="monitoring",
-                service_name="alertmanager-operated",
-            )
-            
-            assert result is None
-
-    def test_returns_none_on_timeout(self) -> None:
-        """Should return None when kubectl command times out."""
-        with patch(
-            'subprocess.run',
-            side_effect=subprocess.TimeoutExpired("cmd", 10)
-        ):
-            result = _get_service_backing_pods(
-                namespace="monitoring",
-                service_name="alertmanager-operated",
-            )
-            
-            assert result is None
-
-    def test_parses_endpoint_slice_response(self) -> None:
-        """Should correctly parse endpoint slice JSON response."""
-        mock_response = {
-            "items": [
-                {
-                    "endpoints": [
-                        {
-                            "addresses": ["10.48.3.1", "10.48.5.168"]
-                        }
-                    ]
-                }
-            ]
-        }
-        
-        with patch('subprocess.run') as mock_run:
-            mock_run.return_value.returncode = 0
-            mock_run.return_value.stdout = json.dumps(mock_response)
-            
-            result = _get_service_backing_pods(
-                namespace="monitoring",
-                service_name="alertmanager-operated",
-            )
-            
-            assert result == frozenset({"10.48.3.1", "10.48.5.168"})
-
-    def test_returns_none_when_no_addresses(self) -> None:
-        """Should return None when no addresses found in endpoint slices."""
-        mock_response = {"items": [{"endpoints": []}]}
-        
-        with patch('subprocess.run') as mock_run:
-            mock_run.return_value.returncode = 0
-            mock_run.return_value.stdout = json.dumps(mock_response)
-            
-            result = _get_service_backing_pods(
-                namespace="monitoring",
-                service_name="alertmanager-operated",
-            )
-            
-            # Empty addresses should return None (no pods found)
-            assert result is None
 
 
 class TestBuildBackingPodCache:
@@ -118,10 +49,17 @@ class TestBuildBackingPodCache:
             ),
         ]
         
+        mock_identity = BackingPodIdentity(
+            kind="backing_pods",
+            uid_set=frozenset({"pod-uid-0", "pod-uid-1"}),
+            name_set=frozenset({"monitoring/alertmanager-0", "monitoring/alertmanager-1"}),
+            service_names=("alertmanager-operated",),
+        )
+        
         with patch(
-            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_pods',
-            return_value=frozenset({"10.48.3.1", "10.48.5.168"})
-        ) as mock_get_pods:
+            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_identity',
+            return_value=mock_identity
+        ) as mock_get_identity:
             cache = _build_backing_pod_cache(sources)
             
             # Should have 2 entries (one per unique namespace/name)
@@ -129,9 +67,8 @@ class TestBuildBackingPodCache:
             assert "monitoring/alertmanager-operated" in cache
             assert "monitoring/kube-prometheus-stack-alertmanager" in cache
         
-        # Should call _get_service_backing_pods for each unique namespace/name pair
-        assert mock_get_pods.call_count == 2
-        assert cache == {"monitoring/alertmanager-operated": frozenset({"10.48.3.1", "10.48.5.168"}), "monitoring/kube-prometheus-stack-alertmanager": frozenset({"10.48.3.1", "10.48.5.168"})}
+        # Should call _get_service_backing_identity for each unique namespace/name pair
+        assert mock_get_identity.call_count == 2
 
     def test_deduplicates_cache_keys(self) -> None:
         """Should not query same namespace/name pair twice."""
@@ -152,23 +89,29 @@ class TestBuildBackingPodCache:
             ),
         ]
         
+        mock_identity = BackingPodIdentity(
+            kind="backing_pods",
+            uid_set=frozenset({"pod-uid-0"}),
+            service_names=("svc-a",),
+        )
+        
         with patch(
-            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_pods',
-            return_value=frozenset({"10.48.3.1"})
-        ) as mock_get_pods:
+            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_identity',
+            return_value=mock_identity
+        ) as mock_get_identity:
             cache = _build_backing_pod_cache(sources)
             
             # Should only have 1 entry (same namespace/name)
             assert len(cache) == 1
-            # Should only call _get_service_backing_pods once
-            assert mock_get_pods.call_count == 1
+            # Should only call _get_service_backing_identity once
+            assert mock_get_identity.call_count == 1
 
 
 class TestGroupByBackingPods:
     """Tests for _group_by_backing_pods function."""
 
-    def test_groups_sources_by_same_pod_ips(self) -> None:
-        """Should group sources that share the same backing pod IPs."""
+    def test_groups_sources_by_same_pod_uids(self) -> None:
+        """Should group sources that share the same backing pod UIDs."""
         source_a = AlertmanagerSource(
             source_id="service:monitoring/alertmanager-operated",
             endpoint="http://alertmanager-operated.monitoring:9093",
@@ -186,23 +129,28 @@ class TestGroupByBackingPods:
         )
         
         sources = [source_a, source_b]
-        pod_ips = frozenset({"10.48.3.1", "10.48.5.168"})
+        pod_uids = frozenset({"pod-uid-0", "pod-uid-1"})
+        mock_identity = BackingPodIdentity(
+            kind="backing_pods",
+            uid_set=pod_uids,
+            service_names=("alertmanager-operated",),
+        )
         backing_pod_cache = {
-            "monitoring/alertmanager-operated": pod_ips,
-            "monitoring/kube-prometheus-stack-alertmanager": pod_ips,
+            "monitoring/alertmanager-operated": mock_identity,
+            "monitoring/kube-prometheus-stack-alertmanager": mock_identity,
         }
         
         groups = _group_by_backing_pods(sources, backing_pod_cache)
         
         # Should have 1 group with 2 sources (same backing pods)
         assert len(groups) == 1
-        # Key is now namespaced: ("pods", tuple of sorted IPs)
-        pod_key: DedupKey = ("pods", tuple(sorted(pod_ips)))
+        # Key is namespaced: ("pods", tuple of sorted UIDs)
+        pod_key: DedupKey = ("pods", tuple(sorted(pod_uids)))
         assert pod_key in groups
-        assert len(groups[pod_key]) == 2
+        assert len(groups[pod_key][1]) == 2
 
     def test_separates_sources_with_different_pods(self) -> None:
-        """Should separate sources with different backing pod IPs."""
+        """Should separate sources with different backing pod UIDs."""
         source_a = AlertmanagerSource(
             source_id="service:monitoring/alertmanager-a",
             endpoint="http://alertmanager-a.monitoring:9093",
@@ -221,8 +169,16 @@ class TestGroupByBackingPods:
         
         sources = [source_a, source_b]
         backing_pod_cache = {
-            "monitoring/alertmanager-a": frozenset({"10.48.3.1"}),
-            "monitoring/alertmanager-b": frozenset({"10.48.5.168"}),
+            "monitoring/alertmanager-a": BackingPodIdentity(
+                kind="backing_pods",
+                uid_set=frozenset({"pod-uid-a"}),
+                service_names=("alertmanager-a",),
+            ),
+            "monitoring/alertmanager-b": BackingPodIdentity(
+                kind="backing_pods",
+                uid_set=frozenset({"pod-uid-b"}),
+                service_names=("alertmanager-b",),
+            ),
         }
         
         groups = _group_by_backing_pods(sources, backing_pod_cache)
@@ -261,7 +217,7 @@ class TestGroupByBackingPods:
         # The key should be ("endpoint", "alertmanager-a.monitoring:9093")
         endpoint_key: DedupKey = ("endpoint", "alertmanager-a.monitoring:9093")
         assert endpoint_key in groups
-        assert len(groups[endpoint_key]) == 2
+        assert len(groups[endpoint_key][1]) == 2
 
     def test_fallback_keeps_different_endpoints_separate_when_pod_info_unavailable(self) -> None:
         """Regression test: Different endpoints should remain separate when pod info unavailable.
@@ -300,8 +256,8 @@ class TestGroupByBackingPods:
         key_b: DedupKey = ("endpoint", "alertmanager-b.monitoring:9093")
         assert key_a in groups
         assert key_b in groups
-        assert len(groups[key_a]) == 1
-        assert len(groups[key_b]) == 1
+        assert len(groups[key_a][1]) == 1
+        assert len(groups[key_b][1]) == 1
 
 
 class TestDeduplicateServiceHeuristicSources:
@@ -314,7 +270,7 @@ class TestDeduplicateServiceHeuristicSources:
         - alertmanager-operated (headless, clusterIP: None)
         - kube-prometheus-stack-alertmanager (chart service)
         
-        Both point to the same Alertmanager pod IPs but have different DNS names.
+        Both point to the same Alertmanager pod UIDs but have different DNS names.
         They should be deduplicated into one logical Alertmanager.
         """
         source_operated = AlertmanagerSource(
@@ -334,11 +290,16 @@ class TestDeduplicateServiceHeuristicSources:
         )
         
         sources = [source_operated, source_chart]
-        pod_ips = frozenset({"10.48.3.1", "10.48.5.168"})
+        pod_uids = frozenset({"pod-uid-0", "pod-uid-1"})
+        mock_identity = BackingPodIdentity(
+            kind="backing_pods",
+            uid_set=pod_uids,
+            service_names=("alertmanager-operated",),
+        )
         
         with patch(
-            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_pods',
-            return_value=pod_ips
+            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_identity',
+            return_value=mock_identity
         ):
             groups = deduplicate_service_heuristic_sources(sources)
         
@@ -351,6 +312,8 @@ class TestDeduplicateServiceHeuristicSources:
         # -operated should be an alias
         assert len(group.aliases) == 1
         assert group.aliases[0].name == "alertmanager-operated"
+        # Should track dedup metadata
+        assert group.raw_candidate_count == 2
 
     def test_keeps_separate_when_different_pods(self) -> None:
         """Sources with different backing pods should remain separate."""
@@ -373,11 +336,19 @@ class TestDeduplicateServiceHeuristicSources:
         sources = [source_a, source_b]
         
         with patch(
-            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_pods'
-        ) as mock_get_pods:
-            mock_get_pods.side_effect = [
-                frozenset({"10.48.3.1"}),  # alertmanager-a pods
-                frozenset({"10.48.5.168"}),  # alertmanager-b pods
+            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_identity'
+        ) as mock_get_identity:
+            mock_get_identity.side_effect = [
+                BackingPodIdentity(
+                    kind="backing_pods",
+                    uid_set=frozenset({"pod-uid-a"}),
+                    service_names=("alertmanager-a",),
+                ),
+                BackingPodIdentity(
+                    kind="backing_pods",
+                    uid_set=frozenset({"pod-uid-b"}),
+                    service_names=("alertmanager-b",),
+                ),
             ]
             
             groups = deduplicate_service_heuristic_sources(sources)
@@ -416,12 +387,24 @@ class TestDeduplicateServiceHeuristicSources:
         sources = [source_a_operated, source_a_chart, source_b]
         
         with patch(
-            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_pods'
-        ) as mock_get_pods:
-            mock_get_pods.side_effect = [
-                frozenset({"10.48.3.1", "10.48.5.168"}),  # AM-A pods
-                frozenset({"10.48.3.1", "10.48.5.168"}),  # AM-A pods (same!)
-                frozenset({"10.48.7.1"}),  # AM-B pods (different)
+            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_identity'
+        ) as mock_get_identity:
+            mock_get_identity.side_effect = [
+                BackingPodIdentity(
+                    kind="backing_pods",
+                    uid_set=frozenset({"pod-uid-0", "pod-uid-1"}),
+                    service_names=("alertmanager-operated",),
+                ),
+                BackingPodIdentity(
+                    kind="backing_pods",
+                    uid_set=frozenset({"pod-uid-0", "pod-uid-1"}),  # Same UIDs
+                    service_names=("kube-prometheus-stack-alertmanager",),
+                ),
+                BackingPodIdentity(
+                    kind="backing_pods",
+                    uid_set=frozenset({"pod-uid-2"}),  # Different UIDs
+                    service_names=("alertmanager-backup",),
+                ),
             ]
             
             groups = deduplicate_service_heuristic_sources(sources)
@@ -435,11 +418,13 @@ class TestDeduplicateServiceHeuristicSources:
         am_a_groups = [g for g in groups if g.preferred.name == "kube-prometheus-stack-alertmanager"]
         assert len(am_a_groups) == 1
         assert len(am_a_groups[0].aliases) == 1  # Should have 1 alias
+        assert am_a_groups[0].raw_candidate_count == 2
         
         # Find the AM-B group
         am_b_groups = [g for g in groups if g.preferred.name == "alertmanager-backup"]
         assert len(am_b_groups) == 1
         assert len(am_b_groups[0].aliases) == 0  # No aliases
+        assert am_b_groups[0].raw_candidate_count == 1
 
     def test_fallback_when_kubectl_unavailable(self) -> None:
         """Should fall back to endpoint-based grouping when kubectl fails."""
@@ -463,7 +448,7 @@ class TestDeduplicateServiceHeuristicSources:
         
         # kubectl fails -> returns None for both
         with patch(
-            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_pods',
+            'k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers._get_service_backing_identity',
             return_value=None
         ):
             groups = deduplicate_service_heuristic_sources(sources)
