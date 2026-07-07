@@ -1,7 +1,10 @@
-"""Helpers for detecting broken image pull secret supply chains."""
+"""Helpers for detecting broken image pull secret supply chains.
+
+This module has been migrated to use the Kubernetes Python client for critical reads.
+kubectl subprocess calls remain in the bounded fallback seam for debugging.
+"""
 from __future__ import annotations
 
-import json
 import logging
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -9,14 +12,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ..collect.cluster_snapshot import WarningEventSummary
-from ..security.kubectl_context import render_kubectl_context_args
-from ..security.kubectl_subprocess import run_kubectl
-from ..security.path_validation import (
-    validate_kubernetes_namespace,
-    validate_kubernetes_resource_name,
-)
-from ..security.subprocess_helpers import (
-    sanitize_subprocess_error,
+from ..security.kubernetes_client import (
+    KubernetesReadClient,
+    get_cached_kubernetes_client,
 )
 
 if TYPE_CHECKING:
@@ -24,117 +22,31 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-CommandRunner = Callable[[Sequence[str]], str]
-
-# Subprocess timeout for kubectl health commands (60s)
-KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS = 60
-
 _SECRET_MESSAGE_PATTERN = re.compile(r'image pull secret "(?P<secret>[^"]+)"', re.IGNORECASE)
 _FAILED_REASON = "UpdateFailed"
 _MISSING_SECRET_MESSAGE = "Secret does not exist"
 BROKEN_IMAGE_PULL_SECRET_REASON = "broken_image_pull_secret_path"
+KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS = 30
+
+# Module-level client for reuse
+_kubernetes_client: KubernetesReadClient | None = None
 
 
-def _run_command(command: Sequence[str]) -> str:
-    """Execute a kubectl command with bounded execution.
-    
-    Uses run_kubectl() for memory-safe bounded execution.
-    """
-    try:
-        return run_kubectl(
-            list(command),
-            timeout_seconds=KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS,
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Command `{command[0]}` not found.") from exc
-    except Exception as exc:
-        # Sanitize stderr to prevent credential leakage in error messages
-        message = sanitize_subprocess_error(
-            f"`{command[0]}` failed",
-            str(exc),
-            max_length=1000,
-        )
-        raise RuntimeError(message) from exc
+def _get_kubernetes_client() -> KubernetesReadClient:
+    """Get or create the Kubernetes client (lazy initialization)."""
+    global _kubernetes_client
+    if _kubernetes_client is None:
+        _kubernetes_client = get_cached_kubernetes_client()
+    return _kubernetes_client
 
 
-def _kubectl(context: str, *args: str, runner: CommandRunner) -> str:
-    """Build and execute a kubectl command with validated arguments.
-
-    Args:
-        context: Kubernetes context name (validated), or "in-cluster" for service account auth
-        *args: kubectl arguments
-        runner: Command runner function
-
-    Returns:
-        Command output
-
-    Raises:
-        SecurityError: If context/namespace/resource names are invalid
-    """
-    # Use render_kubectl_context_args() to safely handle in-cluster mode
-    context_args = render_kubectl_context_args(context)
-    return runner(("kubectl", *args, *context_args))
-
-
-def _kubectl_with_namespace(
-    context: str, namespace: str, *args: str, runner: CommandRunner
-) -> str:
-    """Build and execute a kubectl command with validated context and namespace.
-
-    Args:
-        context: Kubernetes context name (validated), or "in-cluster" for service account auth
-        namespace: Kubernetes namespace name (validated)
-        *args: kubectl arguments
-        runner: Command runner function
-
-    Returns:
-        Command output
-
-    Raises:
-        SecurityError: If context/namespace/resource names are invalid
-    """
-    # Validate namespace before constructing command
-    validated_namespace = validate_kubernetes_namespace(namespace)
-    # Use render_kubectl_context_args() to safely handle in-cluster mode
-    context_args = render_kubectl_context_args(context)
-    return runner(("kubectl", *args, *context_args, "-n", validated_namespace))
-
-
-def _kubectl_with_resource(
-    context: str, namespace: str, resource: str, *args: str, runner: CommandRunner
-) -> str:
-    """Build and execute a kubectl command with validated context, namespace, and resource.
-
-    Args:
-        context: Kubernetes context name (validated), or "in-cluster" for service account auth
-        namespace: Kubernetes namespace name (validated)
-        resource: Kubernetes resource name (validated)
-        *args: kubectl arguments
-        runner: Command runner function
-
-    Returns:
-        Command output
-
-    Raises:
-        SecurityError: If context/namespace/resource names are invalid
-    """
-    # Validate namespace and resource before constructing command
-    validated_namespace = validate_kubernetes_namespace(namespace)
-    validated_resource = validate_kubernetes_resource_name(resource)
-    # Use render_kubectl_context_args() to safely handle in-cluster mode
-    context_args = render_kubectl_context_args(context)
-    return runner(
-        ("kubectl", *args, *context_args, "-n", validated_namespace, validated_resource)
-    )
-
-
-def _extract_items(payload: Any) -> list[Mapping[str, Any]]:
+def _extract_items(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, Mapping):
         items = payload.get("items")
         if isinstance(items, list):
-            return [item for item in items if isinstance(item, Mapping)]
+            return [dict(item) for item in items if isinstance(item, Mapping)]
     if isinstance(payload, list):
-        return [item for item in payload if isinstance(item, Mapping)]
+        return [dict(item) for item in payload if isinstance(item, Mapping)]
     return []
 
 
@@ -286,8 +198,20 @@ class ImagePullSecretInsight:
 
 
 class ImagePullSecretInspector:
-    def __init__(self, command_runner: CommandRunner | None = None):
-        self._runner = command_runner or _run_command
+    """Inspector for image pull secret issues.
+
+    This class uses the Kubernetes Python client for critical reads.
+    """
+
+    def __init__(self, command_runner: Callable[[Sequence[str]], str] | None = None):
+        self._runner = command_runner
+        self._client: KubernetesReadClient | None = None
+
+    def _get_client(self) -> KubernetesReadClient:
+        """Get or create the Kubernetes client."""
+        if self._client is None:
+            self._client = _get_kubernetes_client()
+        return self._client
 
     def inspect(
         self,
@@ -308,10 +232,10 @@ class ImagePullSecretInspector:
                 continue
             candidates.append((namespace, secret_name, [event]))
         for namespace, secret_name, events in candidates:
-            deployments = self._deployments_using_secret(context, namespace, secret_name)
+            deployments = self._deployments_using_secret(namespace, secret_name)
             if not deployments:
                 continue
-            external_secrets = self._external_secrets(context, namespace)
+            external_secrets = self._external_secrets(namespace)
             matches = tuple(
                 secret
                 for secret in external_secrets
@@ -322,7 +246,7 @@ class ImagePullSecretInspector:
             )
             if not matches:
                 continue
-            target_status = self._target_secret_status(context, namespace, secret_name)
+            target_status = self._target_secret_status(namespace, secret_name)
             if target_status.exists:
                 continue
             store_refs = self._unique_store_refs(matches)
@@ -338,54 +262,50 @@ class ImagePullSecretInspector:
         return None
 
     def _deployments_using_secret(
-        self, context: str, namespace: str, secret_name: str
+        self, namespace: str, secret_name: str
     ) -> list[dict[str, str]]:
+        """Find deployments using a specific image pull secret.
+
+        This checks spec.template.spec.imagePullSecrets[].name == secret_name
+        directly on the deployment resource, matching the original kubectl behavior.
+
+        Uses Kubernetes Python client with pagination.
+        """
         try:
-            output = _kubectl_with_namespace(
-                context, namespace, "get", "deployments", "-o", "json", runner=self._runner
+            client = self._get_client()
+            deployments, _metadata = client.list_namespaced_deployments_projected(
+                namespace=namespace,
+                max_items=200,
             )
-        except RuntimeError:
+        except Exception:
             return []
-        try:
-            payload = json.loads(output)
-        except json.JSONDecodeError:
-            return []
-        deployments: list[dict[str, str]] = []
-        for entry in _extract_items(payload):
-            spec = entry.get("spec", {})
-            template = spec.get("template", {}).get("spec", {})
-            image_pull_secrets = template.get("imagePullSecrets") or []
-            if any(
-                isinstance(secret_entry, Mapping)
-                and str(secret_entry.get("name")) == secret_name
-                for secret_entry in image_pull_secrets
-            ):
-                metadata = entry.get("metadata") or {}
-                name = str(metadata.get("name") or "")
-                deployments.append({"namespace": namespace, "name": name})
-        return deployments
+
+        # Filter deployments that have the secret in their pod template
+        deployments_using_secret: list[dict[str, str]] = []
+        for deploy in deployments:
+            if secret_name in deploy.image_pull_secrets:
+                deployments_using_secret.append({
+                    "namespace": namespace,
+                    "name": deploy.name,
+                })
+
+        return deployments_using_secret
 
     def _external_secrets(
-        self, context: str, namespace: str
+        self, namespace: str
     ) -> tuple[ExternalSecretStatus, ...]:
-        try:
-            output = _kubectl_with_namespace(
-                context,
-                namespace,
-                "get",
-                "externalsecrets.external-secrets.io",
-                "-o",
-                "json",
-                runner=self._runner,
-            )
-        except RuntimeError:
-            return ()
-        try:
-            payload = json.loads(output)
-        except json.JSONDecodeError:
-            return ()
+        """Get ExternalSecret resources in a namespace.
+
+        Uses CustomObjectsApi for the ExternalSecret CRD from external-secrets.io.
+        Falls back to kubectl if the CRD is not available.
+        """
+        # ExternalSecret CRD from external-secrets.io
+        # group: external-secrets.io
+        # version: typically v1 (check cluster for exact version)
+        external_secret_items = self._list_external_secrets(namespace)
+
         secrets: list[ExternalSecretStatus] = []
-        for entry in _extract_items(payload):
+        for entry in external_secret_items:
             metadata = entry.get("metadata") or {}
             spec = entry.get("spec") or {}
             status = entry.get("status") or {}
@@ -422,38 +342,82 @@ class ImagePullSecretInspector:
             )
         return tuple(secrets)
 
-    def _target_secret_status(
-        self, context: str, namespace: str, secret_name: str
-    ) -> TargetSecretStatus:
+    def _list_external_secrets(self, namespace: str) -> list[dict[str, Any]]:
+        """List ExternalSecret resources using CustomObjectsApi.
+
+        Tries multiple API versions for external-secrets.io CRD.
+        Falls back to kubectl if CustomObjectsApi fails.
+        Uses bounded pagination (max_items=200) to prevent unbounded memory growth.
+        """
+        # Try CustomObjectsApi first (preferred approach)
         try:
-            output = _kubectl_with_resource(
-                context,
-                namespace,
-                secret_name,
-                "get",
-                "secret",
-                "-o",
-                "json",
-                runner=self._runner,
+            client = self._get_client()
+            # Try v1 first (common version)
+            items, _metadata = client.list_namespaced_custom_objects(
+                group="external-secrets.io",
+                version="v1",
+                plural="externalsecrets",
+                namespace=namespace,
+                max_items=200,
             )
-        except RuntimeError as exc:
-            return TargetSecretStatus.missing(namespace, secret_name, str(exc))
+            return items
+        except Exception:
+            pass
+
+        # Try v1beta1 (older versions of external-secrets operator)
         try:
-            payload = json.loads(output)
-        except json.JSONDecodeError as exc:
-            return TargetSecretStatus.missing(namespace, secret_name, f"invalid secret payload: {exc}")
-        metadata = payload.get("metadata") or {}
-        secret_type = str(payload.get("type") or "")
-        return TargetSecretStatus(
-            namespace=str(metadata.get("namespace") or namespace),
-            name=str(metadata.get("name") or secret_name),
-            exists=True,
-            details={
-                "type": secret_type,
-                "creationTimestamp": str(metadata.get("creationTimestamp") or ""),
-                "uid": str(metadata.get("uid") or ""),
-            },
-        )
+            client = self._get_client()
+            items, _metadata = client.list_namespaced_custom_objects(
+                group="external-secrets.io",
+                version="v1beta1",
+                plural="externalsecrets",
+                namespace=namespace,
+                max_items=200,
+            )
+            return items
+        except Exception:
+            pass
+
+        # Fall back to kubectl if CustomObjectsApi fails (e.g., CRD not installed)
+        if self._runner:
+            try:
+                import json
+                output = self._runner([
+                    "kubectl", "get", "externalsecrets.external-secrets.io",
+                    "-n", namespace, "-o", "json"
+                ])
+                payload = json.loads(output)
+                return _extract_items(payload)
+            except Exception:
+                return []
+        return []
+
+    def _target_secret_status(
+        self, namespace: str, secret_name: str
+    ) -> TargetSecretStatus:
+        """Check if a target secret exists.
+
+        Uses Kubernetes Python client.
+        """
+        try:
+            client = self._get_client()
+            secret = client.read_namespaced_secret_projected(
+                namespace=namespace,
+                name=secret_name,
+            )
+            if secret:
+                return TargetSecretStatus(
+                    namespace=namespace,
+                    name=secret_name,
+                    exists=True,
+                    details={
+                        "type": secret.secret_type,
+                        "uid": secret.uid,
+                    },
+                )
+            return TargetSecretStatus.missing(namespace, secret_name, "Secret not found")
+        except Exception as exc:
+            return TargetSecretStatus.missing(namespace, secret_name, str(exc))
 
     def _unique_store_refs(
         self, secrets: Iterable[ExternalSecretStatus]

@@ -1,0 +1,355 @@
+"""Typed projection models for Kubernetes API responses.
+
+These models are small projections of Kubernetes objects, used to prevent
+raw Kubernetes object graph leakage into downstream artifacts.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+
+
+@dataclass(frozen=True)
+class NamespaceProjection:
+    """Minimal projection of a Kubernetes Namespace."""
+    name: str
+    uid: str
+    creation_timestamp: datetime | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> NamespaceProjection:
+        """Create from a Kubernetes Namespace dict."""
+        metadata = data.get("metadata") or {}
+        ts = metadata.get("creationTimestamp")
+        creation_ts: datetime | None = None
+        if ts:
+            try:
+                creation_ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+        return cls(
+            name=str(metadata.get("name") or ""),
+            uid=str(metadata.get("uid") or ""),
+            creation_timestamp=creation_ts,
+        )
+
+
+@dataclass(frozen=True)
+class PodProjection:
+    """Minimal projection of a Kubernetes Pod."""
+    namespace: str
+    name: str
+    uid: str
+    node_name: str | None = None
+    phase: str | None = None
+    ip: str | None = None
+    host_ip: str | None = None
+    creation_timestamp: datetime | None = None
+    labels: dict[str, str] = field(default_factory=dict)
+    restart_count: int = 0
+    container_statuses: tuple[ContainerStatusProjection, ...] = field(default_factory=tuple)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> PodProjection:
+        """Create from a Kubernetes Pod dict."""
+        metadata = data.get("metadata") or {}
+        spec = data.get("spec") or {}
+        status = data.get("status") or {}
+
+        ts = metadata.get("creationTimestamp")
+        creation_ts: datetime | None = None
+        if ts:
+            try:
+                creation_ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+
+        container_statuses_list: list[ContainerStatusProjection] = []
+        container_statuses_data = status.get("containerStatuses") or []
+        for cs_data in container_statuses_data:
+            container_statuses_list.append(ContainerStatusProjection.from_dict(cs_data))
+
+        return cls(
+            namespace=str(metadata.get("namespace") or ""),
+            name=str(metadata.get("name") or ""),
+            uid=str(metadata.get("uid") or ""),
+            node_name=spec.get("nodeName"),
+            phase=status.get("phase"),
+            ip=status.get("podIP"),
+            host_ip=status.get("hostIP"),
+            creation_timestamp=creation_ts,
+            labels=dict(metadata.get("labels") or {}),
+            restart_count=sum(
+                cs.get("restartCount", 0)
+                for cs in container_statuses_data
+            ),
+            container_statuses=tuple(container_statuses_list),
+        )
+
+
+@dataclass(frozen=True)
+class ContainerStatusProjection:
+    """Minimal projection of a ContainerStatus."""
+    name: str
+    ready: bool
+    restart_count: int
+    state: str | None = None
+    image: str | None = None
+    image_id: str | None = None
+    container_id: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ContainerStatusProjection:
+        """Create from a ContainerStatus dict."""
+        state_data = data.get("state") or {}
+        state_str: str | None = None
+        if "running" in state_data:
+            state_str = "running"
+        elif "waiting" in state_data:
+            state_str = "waiting"
+        elif "terminated" in state_data:
+            state_str = "terminated"
+
+        return cls(
+            name=str(data.get("name") or ""),
+            ready=bool(data.get("ready", False)),
+            restart_count=int(data.get("restartCount") or 0),
+            state=state_str,
+            image=data.get("image"),
+            image_id=data.get("imageID"),
+            container_id=data.get("containerID"),
+        )
+
+
+@dataclass(frozen=True)
+class EventProjection:
+    """Minimal projection of a Kubernetes Event."""
+    namespace: str
+    name: str
+    event_type: str | None
+    reason: str
+    message: str
+    involved_object_kind: str
+    involved_object_name: str
+    creation_timestamp: datetime | None = None
+    count: int = 1
+    first_timestamp: datetime | None = None
+    last_timestamp: datetime | None = None
+    source_component: str | None = None
+    source_host: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EventProjection:
+        """Create from a Kubernetes Event dict."""
+        metadata = data.get("metadata") or {}
+        involved = data.get("involvedObject") or {}
+        source = data.get("source") or {}
+
+        ts = metadata.get("creationTimestamp")
+        creation_ts: datetime | None = None
+        if ts:
+            try:
+                creation_ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+
+        first_ts = data.get("firstTimestamp")
+        first_timestamp: datetime | None = None
+        if first_ts:
+            try:
+                first_timestamp = datetime.fromisoformat(first_ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+
+        last_ts = data.get("lastTimestamp")
+        last_timestamp: datetime | None = None
+        if last_ts:
+            try:
+                last_timestamp = datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+
+        return cls(
+            namespace=str(metadata.get("namespace") or ""),
+            name=str(metadata.get("name") or ""),
+            event_type=data.get("type"),
+            reason=str(data.get("reason") or ""),
+            message=str(data.get("message") or ""),
+            involved_object_kind=str(involved.get("kind") or ""),
+            involved_object_name=str(involved.get("name") or ""),
+            creation_timestamp=creation_ts,
+            count=int(data.get("count") or 1),
+            first_timestamp=first_timestamp,
+            last_timestamp=last_timestamp,
+            source_component=source.get("component"),
+            source_host=source.get("host"),
+        )
+
+
+@dataclass(frozen=True)
+class DeploymentProjection:
+    """Minimal projection of a Kubernetes Deployment."""
+    namespace: str
+    name: str
+    uid: str
+    replicas: int = 0
+    ready_replicas: int = 0
+    available_replicas: int = 0
+    unavailable_replicas: int = 0
+    creation_timestamp: datetime | None = None
+    labels: dict[str, str] = field(default_factory=dict)
+    env_vars: dict[str, str] = field(default_factory=dict)
+    image_pull_secrets: tuple[str, ...] = field(default_factory=tuple)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DeploymentProjection:
+        """Create from a Kubernetes Deployment dict."""
+        metadata = data.get("metadata") or {}
+        spec = data.get("spec") or {}
+        status = data.get("status") or {}
+
+        ts = metadata.get("creationTimestamp")
+        creation_ts: datetime | None = None
+        if ts:
+            try:
+                creation_ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+
+        # Extract env vars from first container
+        env_vars: dict[str, str] = {}
+        containers = spec.get("template", {}).get("spec", {}).get("containers", [])
+        if containers:
+            for env_entry in containers[0].get("env") or []:
+                name = env_entry.get("name")
+                value = env_entry.get("value")
+                if name and value is not None:
+                    env_vars[str(name)] = str(value)
+
+        # Extract image pull secrets from pod template
+        pod_spec = spec.get("template", {}).get("spec", {})
+        pull_secrets = [
+            str(s.get("name") or "")
+            for s in pod_spec.get("imagePullSecrets", [])
+            if s.get("name")
+        ]
+
+        return cls(
+            namespace=str(metadata.get("namespace") or ""),
+            name=str(metadata.get("name") or ""),
+            uid=str(metadata.get("uid") or ""),
+            replicas=int(spec.get("replicas") or 0),
+            ready_replicas=int(status.get("readyReplicas") or 0),
+            available_replicas=int(status.get("availableReplicas") or 0),
+            unavailable_replicas=int(status.get("unavailableReplicas") or 0),
+            creation_timestamp=creation_ts,
+            labels=dict(metadata.get("labels") or {}),
+            env_vars=env_vars,
+            image_pull_secrets=tuple(pull_secrets),
+        )
+
+
+@dataclass(frozen=True)
+class SecretProjection:
+    """Minimal projection of a Kubernetes Secret."""
+    namespace: str
+    name: str
+    uid: str
+    secret_type: str
+    creation_timestamp: datetime | None = None
+    # Omit data/byte_content for memory safety - only expose metadata
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SecretProjection:
+        """Create from a Kubernetes Secret dict (metadata only, no data)."""
+        metadata = data.get("metadata") or {}
+
+        ts = metadata.get("creationTimestamp")
+        creation_ts: datetime | None = None
+        if ts:
+            try:
+                creation_ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+
+        return cls(
+            namespace=str(metadata.get("namespace") or ""),
+            name=str(metadata.get("name") or ""),
+            uid=str(metadata.get("uid") or ""),
+            secret_type=str(data.get("type") or ""),
+            creation_timestamp=creation_ts,
+        )
+
+
+@dataclass(frozen=True)
+class ServiceAccountProjection:
+    """Minimal projection of a Kubernetes ServiceAccount."""
+    namespace: str
+    name: str
+    uid: str
+    creation_timestamp: datetime | None = None
+    image_pull_secrets: tuple[str, ...] = field(default_factory=tuple)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ServiceAccountProjection:
+        """Create from a Kubernetes ServiceAccount dict."""
+        metadata = data.get("metadata") or {}
+
+        ts = metadata.get("creationTimestamp")
+        creation_ts: datetime | None = None
+        if ts:
+            try:
+                creation_ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+
+        pull_secrets = [
+            str(s.get("name") or "")
+            for s in data.get("imagePullSecrets") or []
+            if s.get("name")
+        ]
+
+        return cls(
+            namespace=str(metadata.get("namespace") or ""),
+            name=str(metadata.get("name") or ""),
+            uid=str(metadata.get("uid") or ""),
+            creation_timestamp=creation_ts,
+            image_pull_secrets=tuple(pull_secrets),
+        )
+
+
+@dataclass(frozen=True)
+class PaginationMetadata:
+    """Metadata about pagination results."""
+    total: int | None = None
+    remaining: int = 0
+    truncated: bool = False
+    continuation_token: str | None = None
+    items_returned: int = 0
+
+
+@dataclass(frozen=True)
+class BoundedPodLogResult:
+    """Result from bounded pod log collection."""
+    logs: str
+    truncated: bool
+    truncation_reason: str | None = None
+    bytes_read: int = 0
+    bytes_limit: int = 0
+    tail_lines: int | None = None
+    duration_seconds: float = 0.0
+
+
+__all__ = [
+    "NamespaceProjection",
+    "PodProjection",
+    "ContainerStatusProjection",
+    "EventProjection",
+    "DeploymentProjection",
+    "SecretProjection",
+    "ServiceAccountProjection",
+    "PaginationMetadata",
+    "BoundedPodLogResult",
+]

@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import subprocess
 from typing import Any
 
-from ..security.kubectl_context import render_kubectl_context_args
-from ..security.kubectl_errors import KubectlExecutionError
-from ..security.kubectl_subprocess import run_kubectl
+from ..security.kubernetes_client import get_cached_kubernetes_client
 
 _logger = logging.getLogger(__name__)
 
@@ -20,13 +16,13 @@ def derive_cluster_uid(
 ) -> str | None:
     """Derive the canonical cluster UID from the kube-system namespace UID.
 
-    This uses the Kubernetes API to get the kube-system namespace's metadata.uid,
-    which serves as the durable cluster identity anchor. This UID persists
-    across cluster upgrades/rebuilds and is independent of operator-chosen
+    This uses the Kubernetes Python client to get the kube-system namespace's
+    metadata.uid, which serves as the durable cluster identity anchor. This UID
+    persists across cluster upgrades/rebuilds and is independent of operator-chosen
     labels or context names.
 
     Args:
-        kube_context: Kubernetes context name for kubectl --context flag.
+        kube_context: Kubernetes context name (passed to client for future use).
         cluster_label: Fallback label if kubectl is unavailable.
 
     Returns:
@@ -38,25 +34,16 @@ def derive_cluster_uid(
         - Canonical identity is ONLY the real kube-system UID; no synthetic fallbacks
     """
     try:
-        cmd = ["kubectl", "get", "namespace", "kube-system", "-o", "json"]
-        # Use render_kubectl_context_args() to safely handle in-cluster mode
-        cmd.extend(render_kubectl_context_args(kube_context))
-
-        output = run_kubectl(cmd, timeout_seconds=10)
-        data = json.loads(output)
-        uid = data.get("metadata", {}).get("uid")
+        # Use cached client with context propagation
+        client = get_cached_kubernetes_client(context=kube_context)
+        uid = client.read_namespace_uid("kube-system")
         if uid:
             return str(uid)
 
         _logger.debug("Failed to get kube-system namespace UID")
 
-    except (FileNotFoundError, KubectlExecutionError) as exc:
-        # KubectlExecutionError covers: not found, timeout, permission denied, etc.
-        _logger.debug("kubectl get namespace failed: %s", type(exc).__name__)
-    except subprocess.TimeoutExpired:
-        _logger.debug("kubectl get namespace timed out")
-    except json.JSONDecodeError as exc:
-        _logger.debug("Failed to parse kubectl output: %s", exc)
+    except Exception as exc:
+        _logger.debug("Kubernetes client read namespace failed: %s", type(exc).__name__)
 
     # Return None - do NOT fall back to cluster_label or "unknown"
     # Canonical identity is ONLY the real kube-system namespace UID

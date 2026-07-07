@@ -9,19 +9,26 @@ Architecture note:
     for the loop to run. The backend does NOT need this env var.
 
     When running in a Kubernetes context (kubeconfig available), this function
-    checks the scheduler deployment's env vars via kubectl. When running in
-    a local/test context without cluster access, it falls back to os.environ.
+    checks the scheduler deployment's env vars via the Kubernetes Python client.
+    When running in a local/test context without cluster access, it falls back to os.environ.
+
+Critical path note:
+    This is a CRITICAL scheduler/health-loop/incident-evidence path that MUST use
+    the Kubernetes Python client instead of kubectl subprocess calls.
 """
 
 from __future__ import annotations
 
-import json
 import os
-import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from ..security.kubectl_subprocess import run_kubectl
+from ..security.kubernetes_client import (
+    KubernetesApiNotFoundError,
+    KubernetesApiPermissionError,
+    KubernetesClientError,
+    get_cached_kubernetes_client,
+)
 from .incident_diagnosis_loop_constants import (
     _AUTOMATIC_LOOP_ENV_VAR,
     _K9B_NAMESPACE_ENV_VAR,
@@ -57,27 +64,18 @@ __all__ = [
 class DeploymentReadError(Exception):
     """Raised when deployment env var read fails due to RBAC or network issues."""
 
-    def __init__(self, message: str, returncode: int | None = None, stderr: str = ""):
+    def __init__(self, message: str, is_permission_error: bool = False, is_not_found_error: bool = False):
         super().__init__(message)
-        self.returncode = returncode
-        self.stderr = stderr
+        self.is_permission_error = is_permission_error
+        self.is_not_found_error = is_not_found_error
 
     def is_rbac_denied(self) -> bool:
         """Check if the error was caused by RBAC denial."""
-        if self.returncode is None:
-            return False
-        # kubectl returns exit code 1 for RBAC denials and exit code 1 for "not found"
-        # but RBAC denials typically include "Forbidden" or "Unauthorized" in stderr
-        denied_patterns = ["Forbidden", "Unauthorized", "denied", "cannot get"]
-        stderr_lower = self.stderr.lower()
-        return any(pattern.lower() in stderr_lower for pattern in denied_patterns)
+        return self.is_permission_error
 
     def is_not_found(self) -> bool:
         """Check if the error was caused by resource not found."""
-        if self.returncode is None:
-            return False
-        not_found_patterns = ["not found", "No resources found"]
-        return any(p.lower() in self.stderr.lower() for p in not_found_patterns)
+        return self.is_not_found_error
 
 
 def _read_deployment_env_value(
@@ -88,12 +86,11 @@ def _read_deployment_env_value(
 ) -> tuple[str | None, DeploymentReadError | None]:
     """Get environment variable value from a Kubernetes Deployment.
 
-    This reads the deployment spec directly, not runtime container env.
-    Suitable for checking if the env var is CONFIGURED in the deployment.
+    This reads the deployment spec directly using the Kubernetes Python client,
+    not runtime container env. Suitable for checking if the env var is
+    CONFIGURED in the deployment.
 
-    Note: Only includes --kubeconfig flag when kubeconfig is non-empty.
-    When kubeconfig is None/empty, kubectl falls back to in-cluster config
-    or $HOME/.kube/config as per Kubernetes behavior.
+    Note: This is a CRITICAL path that uses the Kubernetes Python client.
 
     Args:
         kubeconfig: Path to kubeconfig file (None for in-cluster)
@@ -105,49 +102,37 @@ def _read_deployment_env_value(
         Tuple of (env_var_value, error). If error is not None, the value is None
         and the error contains details about why the read failed.
     """
-    cmd: list[str] = ["kubectl"]
-    if kubeconfig:
-        cmd.extend(["--kubeconfig", kubeconfig])
-    cmd.extend([
-        "-n", namespace,
-        "get", "deployment",
-        deployment,
-        "-o", "json",
-    ])
-
     try:
-        output = run_kubectl(cmd, timeout_seconds=30)
-
-        deployment_obj = json.loads(output)
-        containers = deployment_obj.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
-
-        for container in containers:
-            env_list = container.get("env", [])
-            for env_entry in env_list:
-                if env_entry.get("name") == env_var:
-                    return str(env_entry.get("value")) if env_entry.get("value") is not None else None, None
-
-        return None, None
-
-    except subprocess.TimeoutExpired:
-        error = DeploymentReadError(
-            message=f"Timeout reading deployment {deployment} in namespace {namespace}",
-            returncode=None,
-            stderr="Command timed out after 30 seconds",
+        # Use cached client with kubeconfig propagation
+        client = get_cached_kubernetes_client(kubeconfig=kubeconfig)
+        value = client.read_deployment_env_value(
+            namespace=namespace,
+            deployment=deployment,
+            env_name=env_var,
         )
-        return None, error
-    except json.JSONDecodeError as e:
-        error = DeploymentReadError(
-            message=f"Invalid JSON response from deployment {deployment}: {e}",
-            returncode=None,
-            stderr=str(e),
+        return value, None
+
+    except KubernetesApiPermissionError as exc:
+        return None, DeploymentReadError(
+            message=str(exc),
+            is_permission_error=True,
         )
-        return None, error
-    except OSError as e:
+
+    except KubernetesApiNotFoundError as exc:
+        return None, DeploymentReadError(
+            message=str(exc),
+            is_not_found_error=True,
+        )
+
+    except KubernetesClientError as exc:
+        return None, DeploymentReadError(
+            message=str(exc),
+        )
+
+    except Exception as exc:
+        # Fallback for unexpected exceptions - should not happen normally
         error = DeploymentReadError(
-            message=f"OS error reading deployment {deployment}: {e}",
-            returncode=None,
-            stderr=str(e),
+            message=f"Unexpected error reading deployment {deployment} in namespace {namespace}: {exc}",
         )
         return None, error
 

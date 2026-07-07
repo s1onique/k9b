@@ -82,6 +82,13 @@ STEPS: dict[str, dict] = {
         "description": "kubectl exec bounds policy enforcement",
         "is_expensive": False,
     },
+    "kubernetes-client-critical-paths": {
+        "command": "python scripts/verify_kubernetes_client_critical_paths.py",
+        "lane": "python",
+        "category": StepCategory.POLICY,
+        "description": "Kubernetes Python client critical paths enforcement",
+        "is_expensive": False,
+    },
     "doctrine": {
         "command": "bash scripts/verify_factory_doctrine.sh",
         "lane": "python",

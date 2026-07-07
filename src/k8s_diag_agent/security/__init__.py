@@ -35,6 +35,16 @@ from .kubectl_subprocess import (
     run_kubectl,
     set_run_id_context,
 )
+from .kubernetes_client import (
+    KubernetesApiNotFoundError,
+    KubernetesApiPermissionError,
+    KubernetesApiResponseTooLargeError,
+    KubernetesApiTimeoutError,
+    KubernetesClientError,
+    KubernetesClientUnavailableError,
+    KubernetesReadClient,
+    create_kubernetes_read_client,
+)
 from .path_validation import (
     SecurityError,
     safe_child_path,
@@ -54,6 +64,14 @@ from .sanitizer import (
 __all__ = [
     "ALIAS_PATTERN",
     "SecurityError",
+    "KubernetesReadClient",
+    "KubernetesClientError",
+    "KubernetesClientUnavailableError",
+    "KubernetesApiPermissionError",
+    "KubernetesApiNotFoundError",
+    "KubernetesApiTimeoutError",
+    "KubernetesApiResponseTooLargeError",
+    "create_kubernetes_read_client",
     "assert_no_provider_aliases",
     "deanonymize_command",
     "deanonymize_next_check_candidate",
