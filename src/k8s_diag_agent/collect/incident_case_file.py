@@ -16,6 +16,12 @@ The packet is structured for:
 - Operator review (human-readable)
 - LLM prompting (structured, bounded)
 - Audit trail (immutable timestamps)
+
+Case-file safety boundary:
+- tool_output_projection includes only bounded metadata (schema_version, source_tool,
+  spill_occurred, raw_artifact_id, sizes, content_type, error, provenance)
+- Forbidden fields are stripped: raw_artifact_path, raw_output, llm_visible (standalone)
+- Raw Kubernetes list payloads are not included in projection metadata
 """
 
 from __future__ import annotations
@@ -87,6 +93,7 @@ def build_incident_case_file(
     max_prior_analysis: int = DEFAULT_MAX_PRIOR_ANALYSIS,
     read_only_check_result_run_ids: Sequence[str] | None = None,
     diagnosis_loop_pass_run_ids: Sequence[str] | None = None,
+    tool_output_projection: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, object] | None:
     """Build a read-only incident case-file packet for LLM-assisted diagnosis.
 
@@ -98,6 +105,7 @@ def build_incident_case_file(
     - Prior analysis from linked analysis artifacts (bounded)
     - Diagnosis loop passes from loop-pass artifacts (bounded)
     - Timeline/events (bounded count)
+    - Tool output projection metadata (bounded)
     - Safety boundary metadata
 
     Args:
@@ -119,6 +127,11 @@ def build_incident_case_file(
             diagnosis loop pass artifacts for. These are validated with
             is_safe_run_id() and checked for incident_id match. Use this to include
             artifacts written in the current orchestrator pass.
+        tool_output_projection: Optional projection metadata from tool output
+            budget/spill infrastructure. Contains bounded metadata for pods, events,
+            and deployments collections (schema_version, source_tool, spill_occurred,
+            raw_artifact_id, sizes, content_type, error, provenance). This field
+            does NOT include raw tool output, raw_artifact_path, or llm_visible.
 
     Returns:
         Case-file packet dict if incident found, None otherwise.
@@ -135,6 +148,8 @@ def build_incident_case_file(
         - disallowed_actions: [execute, promote, apply, remediate, delete, mutate_cluster]
         - prior_analysis entries contain no action-control fields
         - diagnosis_loop_passes entries contain no action-control fields
+        - tool_output_projection contains only bounded metadata (forbidden fields
+          raw_artifact_path, raw_output, llm_visible are stripped if present)
     """
     # Use provided now or current time (timezone-aware UTC)
     generated_at = now if now is not None else datetime.now(UTC)
@@ -261,7 +276,98 @@ def build_incident_case_file(
     if scheduling_evidence.root_cause_summary:
         packet["scheduling_evidence"] = scheduling_evidence.to_dict()
 
+    # Include tool output projection metadata if provided
+    # This is bounded metadata from tool output budget/spill infrastructure
+    if tool_output_projection:
+        # Sanitize projection metadata to ensure no forbidden fields slip through
+        sanitized_projection = _sanitize_tool_output_projection(tool_output_projection)
+        if sanitized_projection:
+            packet["tool_output_projection"] = sanitized_projection
+
     return packet
+
+
+# =============================================================================
+# Tool Output Projection Helpers
+# =============================================================================
+
+# Forbidden keys that must not appear in LLM-facing case-file projection metadata
+_FORBIDDEN_PROJECTION_KEYS = frozenset({
+    "raw_artifact_path",
+    "raw_output",
+    "llm_visible",  # standalone llm_visible - we allow llm_visible_size_bytes
+})
+
+
+def _sanitize_tool_output_projection(
+    projection: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Sanitize tool output projection metadata for LLM-facing case files.
+
+    This function removes forbidden fields that must not appear in the
+    LLM-facing case file:
+    - raw_artifact_path: local absolute filesystem paths
+    - raw_output: raw tool output payloads
+    - llm_visible: standalone llm_visible objects (llm_visible_size_bytes is allowed)
+
+    Args:
+        projection: The tool output projection metadata dict from IncidentEvidenceBundle
+
+    Returns:
+        Sanitized projection dict safe for LLM-facing case files
+    """
+    sanitized: dict[str, dict[str, Any]] = {}
+
+    for source, metadata in projection.items():
+        if not isinstance(metadata, dict):
+            continue
+
+        # Create a copy with forbidden keys stripped
+        safe_metadata: dict[str, Any] = {}
+        for key, value in metadata.items():
+            if key in _FORBIDDEN_PROJECTION_KEYS:
+                # Skip forbidden keys
+                continue
+            # Recursively sanitize nested dicts
+            if isinstance(value, dict):
+                safe_metadata[key] = _sanitize_dict_recursive(value)
+            elif isinstance(value, list):
+                safe_metadata[key] = _sanitize_list_recursive(value)
+            else:
+                safe_metadata[key] = value
+
+        if safe_metadata:
+            sanitized[source] = safe_metadata
+
+    return sanitized
+
+
+def _sanitize_dict_recursive(data: dict[str, Any]) -> dict[str, Any]:
+    """Recursively sanitize a dict, removing forbidden keys."""
+    result: dict[str, Any] = {}
+    for key, value in data.items():
+        if key in _FORBIDDEN_PROJECTION_KEYS:
+            continue
+        if isinstance(value, dict):
+            result[key] = _sanitize_dict_recursive(value)
+        elif isinstance(value, list):
+            result[key] = _sanitize_list_recursive(value)
+        else:
+            result[key] = value
+    return result
+
+
+def _sanitize_list_recursive(data: list[Any]) -> list[Any]:
+    """Recursively sanitize a list, removing forbidden keys from nested dicts."""
+    result: list[Any] = []
+    for item in data:
+        if isinstance(item, dict):
+            result.append(_sanitize_dict_recursive(item))
+        elif isinstance(item, list):
+            result.append(_sanitize_list_recursive(item))
+        else:
+            result.append(item)
+    return result
 
 
 # =============================================================================

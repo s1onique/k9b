@@ -27,9 +27,13 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 # Import constants from contracts module to keep file sizes LLM-friendly
+from .incident_llm_diagnosis_response import (
+    bound_raw_output,
+    parse_model_output,
+)
 from .incident_llm_diagnosis_scheduling_evidence import (
     build_scheduling_evidence_for_prompt,
 )
@@ -263,6 +267,11 @@ def build_diagnosis_prompt(
                 "entries": loop_pass_summaries,
             }
 
+    # Include tool_output_projection (already sanitized in build_incident_case_file)
+    tool_output_projection = case_file.get("tool_output_projection")
+    if tool_output_projection and isinstance(tool_output_projection, dict):
+        incident_summary["tool_output_projection"] = tool_output_projection
+
     # Serialize with bounds
     incident_json = json.dumps(incident_summary, default=str)
     if len(incident_json) > max_incident_json_chars:
@@ -287,74 +296,6 @@ Case File Data:
         prompt = prompt[:max_prompt_chars] + "\n\n[PROMPT TRUNCATED]"
 
     return prompt
-
-
-# =============================================================================
-# Diagnosis Response Builder
-# =============================================================================
-
-
-def _parse_model_output(raw_output: str) -> dict[str, Any]:
-    """Parse model output into structured diagnosis components.
-
-    Attempts JSON parsing first, falls back to plain text wrapping.
-
-    Args:
-        raw_output: Raw model output string
-
-    Returns:
-        Structured diagnosis components dict
-    """
-    # Try JSON parsing
-    raw_output = raw_output.strip()
-    try:
-        # Handle markdown code blocks if present
-        if raw_output.startswith("```"):
-            # Strip triple backtick blocks
-            lines = raw_output.split("\n")
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            raw_output = "\n".join(lines).strip()
-
-        parsed = json.loads(raw_output)
-        if isinstance(parsed, dict):
-            return {
-                "summary": parsed.get("summary", ""),
-                "likely_causes": parsed.get("likely_causes", []),
-                "supporting_evidence": parsed.get("supporting_evidence", []),
-                "recommended_investigations": parsed.get("recommended_investigations", []),
-                "uncertainties": parsed.get("uncertainties", []),
-                "confidence": parsed.get("confidence", "unknown"),
-            }
-    except (json.JSONDecodeError, ValueError):
-        pass
-
-    # Fallback: wrap plain text
-    return {
-        "summary": raw_output[:500] if len(raw_output) > 500 else raw_output,
-        "likely_causes": [],
-        "supporting_evidence": [],
-        "recommended_investigations": [],
-        "uncertainties": ["Model output was not in expected JSON format"],
-        "confidence": "unknown",
-    }
-
-
-def _bound_raw_output(raw_output: str, max_chars: int) -> str:
-    """Bound raw model output for safety.
-
-    Args:
-        raw_output: Raw model output
-        max_chars: Maximum allowed length
-
-    Returns:
-        Bounded output string
-    """
-    if len(raw_output) > max_chars:
-        return raw_output[:max_chars] + "\n\n[OUTPUT TRUNCATED]"
-    return raw_output
 
 
 # =============================================================================
@@ -430,10 +371,10 @@ def build_incident_diagnosis(
     raw_output = llm.complete(prompt)
 
     # Bound raw output
-    bounded_output = _bound_raw_output(raw_output, max_raw_output_chars)
+    bounded_output = bound_raw_output(raw_output, max_raw_output_chars)
 
     # Parse model output
-    diagnosis_components = _parse_model_output(bounded_output)
+    diagnosis_components = parse_model_output(bounded_output)
 
     # Build safety notes
     safety_notes: list[str] = [
