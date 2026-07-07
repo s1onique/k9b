@@ -765,6 +765,12 @@ const App = ({ clock }: AppProps = {}) => {
           <AppHeader {...appHeaderProps} />
           <AppNavigation run={run} />
           {error && <div className="alert">{error}</div>}
+          {/* Runtime status summary - shows log counts and PVC usage */}
+          <RuntimeStatusSummary
+            runtimeStatus={runtimeStatus}
+            isLoading={runtimeStatusLoading}
+            isError={runtimeStatusError}
+          />
           <RecentRunsPanel {...recentRunsPanelProps} />
           <AppRunSummarySection
             run={run}
@@ -786,12 +792,6 @@ const App = ({ clock }: AppProps = {}) => {
             onClusterSelect={handleClusterSelection}
           />
           <ClusterDetailSection {...clusterDetailSectionProps} />
-          {/* Runtime status summary - shows log counts and PVC usage */}
-          <RuntimeStatusSummary
-            runtimeStatus={runtimeStatus}
-            isLoading={runtimeStatusLoading}
-            isError={runtimeStatusError}
-          />
           <WorkflowLaneHeader type="improve" />
           <AppProposalsSection {...proposalSectionProps} />
           <AppImprovePanels run={run} />

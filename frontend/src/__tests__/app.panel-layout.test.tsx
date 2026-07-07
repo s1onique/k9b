@@ -307,6 +307,87 @@ describe("App panel order regression", () => {
   });
 });
 
+describe("Runtime status panel placement", () => {
+  test("Runtime Status appears below navigation and above Recent runs", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    // Wait for runtime status to appear
+    await waitFor(() => {
+      const runtimeStatus = document.querySelector(".runtime-status-summary");
+      expect(runtimeStatus).not.toBeNull();
+    });
+
+    // Get references to the key elements
+    const runtimeStatusHeading = screen.getByRole("heading", { name: /Runtime Status/i });
+    const recentRunsHeading = screen.getByRole("heading", { name: /Recent runs/i });
+
+    expect(runtimeStatusHeading).toBeInTheDocument();
+    expect(recentRunsHeading).toBeInTheDocument();
+
+    // Verify Runtime Status appears BEFORE Recent runs using DOM position
+    expect(
+      runtimeStatusHeading.compareDocumentPosition(recentRunsHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    // Also verify using TreeWalker for more robust position checking
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+    let posRuntime = -1;
+    let posRecentRuns = -1;
+    let count = 0;
+    let node: Node | null = walker.currentNode;
+    while (node) {
+      if (node === runtimeStatusHeading) posRuntime = count;
+      if (node === recentRunsHeading) posRecentRuns = count;
+      if (posRuntime !== -1 && posRecentRuns !== -1) break;
+      count++;
+      node = walker.nextNode();
+    }
+
+    expect(posRuntime).toBeGreaterThanOrEqual(0);
+    expect(posRecentRuns).toBeGreaterThanOrEqual(0);
+    expect(posRuntime).toBeLessThan(posRecentRuns);
+  });
+
+  test("Runtime Status appears only once on the page", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    await waitFor(() => {
+      const runtimeStatusElements = document.querySelectorAll(".runtime-status-summary");
+      expect(runtimeStatusElements.length).toBe(1);
+    });
+  });
+
+  test("Runtime Status and Recent runs panels both render in the main page flow", async () => {
+    vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /Fleet overview/i });
+
+    await waitFor(() => {
+      const runtimeStatus = document.querySelector(".runtime-status-summary");
+      expect(runtimeStatus).not.toBeNull();
+    });
+
+    // Both Runtime Status and Recent runs should be present
+    // and share the same parent container (app-shell) indicating they
+    // render in the main page flow at the same level
+    const runtimeStatus = document.querySelector(".runtime-status-summary");
+    const recentRunsPanel = document.querySelector(".recent-runs");
+
+    expect(runtimeStatus).not.toBeNull();
+    expect(recentRunsPanel).not.toBeNull();
+
+    // Both panels should be siblings under the same parent
+    expect(runtimeStatus?.parentElement).toBe(recentRunsPanel?.parentElement);
+  });
+});
+
 describe("Cockpit refresh regression", () => {
   test("manual refresh button is clickable and updates page freshness indicator", async () => {
     vi.stubGlobal("fetch", createFetchMock(defaultPayloads));
