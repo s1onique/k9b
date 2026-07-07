@@ -128,8 +128,11 @@ class TestAlertmanagerDiscoveryOrchestratorStructuredLogs:
             return {}
 
         # Mock the strategy to return a Forbidden error
+        # Patch where the name is used in the orchestration module, not where the class is defined.
+        # The orchestration does: from .alertmanager_discovery_strategies import CRDDiscoveryStrategy
+        # So we need to patch alertmanager_discovery_orchestration.CRDDiscoveryStrategy
         with patch(
-            "k8s_diag_agent.external_analysis.alertmanager_discovery.CRDDiscoveryStrategy"
+            "k8s_diag_agent.external_analysis.alertmanager_discovery_orchestration.CRDDiscoveryStrategy"
         ) as MockStrategy:
             mock_instance = MagicMock()
             mock_instance.discover.return_value = DiscoveryResult(
@@ -188,8 +191,9 @@ class TestNoUnstructuredLogsInAlertmanagerDiscovery:
         caplog.set_level(logging.WARNING)
 
         # Mock the CRD strategy to return a Forbidden error
+        # Patch where the name is used in the orchestration module.
         with patch(
-            "k8s_diag_agent.external_analysis.alertmanager_discovery.CRDDiscoveryStrategy"
+            "k8s_diag_agent.external_analysis.alertmanager_discovery_orchestration.CRDDiscoveryStrategy"
         ) as MockCRD:
             mock_crd_instance = MagicMock()
             mock_crd_instance.discover.return_value = DiscoveryResult(
@@ -201,7 +205,7 @@ class TestNoUnstructuredLogsInAlertmanagerDiscovery:
 
             # Mock PrometheusCRDConfigDiscoveryStrategy to return empty
             with patch(
-                "k8s_diag_agent.external_analysis.alertmanager_discovery.PrometheusCRDConfigDiscoveryStrategy"
+                "k8s_diag_agent.external_analysis.alertmanager_discovery_orchestration.PrometheusCRDConfigDiscoveryStrategy"
             ) as MockProm:
                 mock_prom_instance = MagicMock()
                 mock_prom_instance.discover.return_value = DiscoveryResult(
@@ -211,7 +215,7 @@ class TestNoUnstructuredLogsInAlertmanagerDiscovery:
 
                 # Mock ServiceHeuristicDiscoveryStrategy to return empty
                 with patch(
-                    "k8s_diag_agent.external_analysis.alertmanager_discovery.ServiceHeuristicDiscoveryStrategy"
+                    "k8s_diag_agent.external_analysis.alertmanager_discovery_orchestration.ServiceHeuristicDiscoveryStrategy"
                 ) as MockService:
                     mock_service_instance = MagicMock()
                     mock_service_instance.discover.return_value = DiscoveryResult(
@@ -253,8 +257,9 @@ class TestNoUnstructuredLogsInAlertmanagerDiscovery:
         caplog.set_level(logging.DEBUG)
 
         # Mock the CRD strategy to return a Forbidden error
+        # Patch where the name is used in the orchestration module.
         with patch(
-            "k8s_diag_agent.external_analysis.alertmanager_discovery.CRDDiscoveryStrategy"
+            "k8s_diag_agent.external_analysis.alertmanager_discovery_orchestration.CRDDiscoveryStrategy"
         ) as MockCRD:
             mock_crd_instance = MagicMock()
             mock_crd_instance.discover.return_value = DiscoveryResult(
@@ -266,7 +271,7 @@ class TestNoUnstructuredLogsInAlertmanagerDiscovery:
 
             # Mock other strategies to return empty
             with patch(
-                "k8s_diag_agent.external_analysis.alertmanager_discovery.PrometheusCRDConfigDiscoveryStrategy"
+                "k8s_diag_agent.external_analysis.alertmanager_discovery_orchestration.PrometheusCRDConfigDiscoveryStrategy"
             ) as MockProm:
                 mock_prom_instance = MagicMock()
                 mock_prom_instance.discover.return_value = DiscoveryResult(
@@ -275,7 +280,7 @@ class TestNoUnstructuredLogsInAlertmanagerDiscovery:
                 MockProm.return_value = mock_prom_instance
 
                 with patch(
-                    "k8s_diag_agent.external_analysis.alertmanager_discovery.ServiceHeuristicDiscoveryStrategy"
+                    "k8s_diag_agent.external_analysis.alertmanager_discovery_orchestration.ServiceHeuristicDiscoveryStrategy"
                 ) as MockService:
                     mock_service_instance = MagicMock()
                     mock_service_instance.discover.return_value = DiscoveryResult(
