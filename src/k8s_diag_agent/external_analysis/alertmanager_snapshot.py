@@ -346,6 +346,35 @@ def _is_sensitive_key(key: str) -> bool:
     return any(pattern in key_lower for pattern in _SENSITIVE_KEY_PATTERNS)
 
 
+def _extract_receiver(alert_raw: Mapping[str, Any]) -> str | None:
+    """Extract receiver name from alert.
+    
+    Handles both:
+    - Scalar receiver field (from webhook payloads): alert_raw["receiver"]
+    - Array receivers field (from /api/v2/alerts): alert_raw["receivers"]
+    
+    Returns the first receiver name deterministically, or None if not present.
+    """
+    # First check scalar receiver (from webhook payloads)
+    receiver = alert_raw.get("receiver")
+    if isinstance(receiver, str) and receiver:
+        return receiver
+    
+    # Then check receivers array (from /api/v2/alerts API)
+    receivers = alert_raw.get("receivers")
+    if isinstance(receivers, (list, tuple)) and receivers:
+        # Receivers can be strings or dicts with "name" field
+        first = receivers[0]
+        if isinstance(first, str):
+            return first
+        if isinstance(first, Mapping):
+            name = first.get("name")
+            if isinstance(name, str) and name:
+                return name
+    
+    return None
+
+
 def normalize_alertmanager_payload(
     raw: Any,
     config_max_alerts: int = 200,
@@ -474,7 +503,7 @@ def normalize_alertmanager_payload(
             generator_url=_truncate_string(alert_raw.get("generatorURL") or alert_raw.get("generator_url"), 512),
             ends_at=alert_raw.get("endsAt") or alert_raw.get("ends_at"),
             updated_at=alert_raw.get("updatedAt") or alert_raw.get("updated_at"),
-            receiver=alert_raw.get("receiver"),
+            receiver=_extract_receiver(alert_raw),  # Handles both scalar and array format
         )
         alerts.append(alert)
     status = AlertmanagerStatus.OK

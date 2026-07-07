@@ -254,3 +254,100 @@ To verify live smoke against k3s-infra-prod:
 ```
 ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R1 preserve alert evidence
 ```
+
+---
+
+# ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R2
+
+## Status: Completed
+
+## Date: 2026-07-07
+
+## Goal
+
+Fix `_extract_receiver()` to handle both scalar `receiver` field (from webhook payloads) and array `receivers` field (from Alertmanager `/api/v2/alerts` API).
+
+## Problem
+
+The R1 implementation only handled scalar `receiver` field. However, the Alertmanager `/api/v2/alerts` API returns alerts with a `receivers` array in the format `[{"name": "team-a"}, ...]`, not a scalar `receiver` field.
+
+## What Was Done
+
+### 1. Added `_extract_receiver()` Helper Function
+
+**File**: `src/k8s_diag_agent/external_analysis/alertmanager_snapshot.py`
+
+Added a new helper function that handles both formats:
+
+```python
+def _extract_receiver(alert_raw: Mapping[str, Any]) -> str | None:
+    """Extract receiver name from alert.
+    
+    Handles both:
+    - Scalar receiver field (from webhook payloads): alert_raw["receiver"]
+    - Array receivers field (from /api/v2/alerts): alert_raw["receivers"]
+    
+    Returns the first receiver name deterministically, or None if not present.
+    """
+    # First check scalar receiver (from webhook payloads)
+    receiver = alert_raw.get("receiver")
+    if isinstance(receiver, str) and receiver:
+        return receiver
+    
+    # Then check receivers array (from /api/v2/alerts API)
+    receivers = alert_raw.get("receivers")
+    if isinstance(receivers, (list, tuple)) and receivers:
+        first = receivers[0]
+        if isinstance(first, str):
+            return first
+        if isinstance(first, Mapping):
+            name = first.get("name")
+            if isinstance(name, str) and name:
+                return name
+    
+    return None
+```
+
+**Precedence**: Scalar `receiver` takes priority over array `receivers` for backward compatibility.
+
+**Edge cases handled**:
+- Empty receivers array → `None`
+- Receivers array with empty names → `None`
+- Mixed types in receivers array → first valid receiver
+
+### 2. Updated normalize_alertmanager_payload()
+
+Updated to use `_extract_receiver()` instead of direct `alert_raw.get("receiver")`.
+
+### 3. Added Unit Tests
+
+**File**: `tests/unit/test_alertmanager_snapshot_evidence_preservation.py`
+
+12 new tests covering:
+- Scalar receiver (webhook format)
+- Receivers array with strings
+- Receivers array with dicts `[{"name": "team-a"}, ...]`
+- Mixed types in receivers array
+- Scalar takes precedence over array
+- Empty receivers array
+- No receiver field
+- `/api/v2/alerts` format integration
+- Webhook format backward compatibility
+
+## Verification
+
+- **ruff**: ✅ Pass (unused import removed)
+- **mypy**: ✅ Pass (type annotation added)
+- **Unit tests**: ✅ 45/45 pass (33 original + 12 new R2 tests)
+- **ACT-local gate**: ✅ Pass (ruff, mypy, llm-friendly pre-existing size issue)
+
+## Files Changed
+
+- `src/k8s_diag_agent/external_analysis/alertmanager_snapshot.py` (MODIFIED)
+- `tests/unit/test_alertmanager_snapshot_evidence_preservation.py` (MODIFIED)
+
+## Commit Message
+
+```
+ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R2 fix receiver handling for /api/v2/alerts array format
+```
