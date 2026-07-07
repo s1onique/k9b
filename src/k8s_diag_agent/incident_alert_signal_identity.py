@@ -25,8 +25,8 @@ from typing import TYPE_CHECKING
 from .incident_alert_signal import (
     AlertCorrelationHints,
     AlertSignal,
-    _enum_value,
 )
+from .incident_alert_signal_helpers import _enum_value
 
 if TYPE_CHECKING:
     pass
