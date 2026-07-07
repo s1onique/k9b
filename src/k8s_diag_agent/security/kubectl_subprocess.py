@@ -86,7 +86,10 @@ def run_kubectl(
         run_id = _run_id_context
 
     invocation = KubectlInvocation.from_command(command, timeout_seconds, run_id)
-    cmd_list = _inject_timeout(command, timeout_seconds)
+    cmd_list = list(command)
+
+    if _should_inject_request_timeout(cmd_list, auth_mode):
+        cmd_list = _inject_timeout(cmd_list, timeout_seconds)
 
     if chunk_size is not None:
         cmd_list = _maybe_inject_chunk_size(cmd_list)
@@ -200,8 +203,38 @@ def run_kubectl(
         ) from exc
 
 
+def _should_inject_request_timeout(
+    command: Sequence[str],
+    auth_mode: AuthMode | None,
+) -> bool:
+    """Determine if --request-timeout should be injected.
+
+    Returns False for IN_CLUSTER auth mode to avoid a known kubectl bug
+    where --request-timeout prevents use of in-cluster configuration,
+    causing in-pod kubectl calls to fall back to localhost:8080.
+
+    See: https://github.com/kubernetes/kubernetes/issues/93474
+    """
+    # Import here to avoid circular imports with kubernetes_auth
+    from ..kubernetes_auth import AuthMode
+
+    # Never inject for in-cluster auth - avoids kubectl bug #93474
+    if auth_mode is AuthMode.IN_CLUSTER:
+        return False
+
+    # Only inject for kubectl commands
+    if len(command) < 2 or command[0] != "kubectl":
+        return False
+
+    return True
+
+
 def _inject_timeout(command: Sequence[str], timeout_seconds: int) -> list[str]:
-    """Inject --request-timeout if not present in command."""
+    """Inject --request-timeout if not present in command.
+
+    Uses documented duration syntax (e.g., "60s") as required by kubectl.
+    See: https://kubernetes.io/docs/reference/kubectl/kubectl/
+    """
     cmd_list = list(command)
 
     has_timeout = any(
@@ -211,7 +244,7 @@ def _inject_timeout(command: Sequence[str], timeout_seconds: int) -> list[str]:
 
     if not has_timeout:
         cmd_list.append("--request-timeout")
-        cmd_list.append(str(timeout_seconds))
+        cmd_list.append(f"{timeout_seconds}s")
 
     return cmd_list
 

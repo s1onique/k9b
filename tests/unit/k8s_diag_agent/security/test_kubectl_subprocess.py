@@ -8,8 +8,11 @@ These tests verify that:
 
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 
+from k8s_diag_agent.kubernetes_auth import AuthMode
 from k8s_diag_agent.security.kubectl_subprocess import (
     KubectlExecutionError,
     KubectlInvocation,
@@ -17,6 +20,7 @@ from k8s_diag_agent.security.kubectl_subprocess import (
     _inject_timeout,
     _maybe_inject_chunk_size,
     _run_bounded,
+    _should_inject_request_timeout,
     build_bounded_kubectl_get,
     run_kubectl,
 )
@@ -79,7 +83,7 @@ class TestTimeoutInjection:
         cmd = ["kubectl", "get", "pods", "-n", "default"]
         result = _inject_timeout(cmd, 30)
         assert "--request-timeout" in result
-        assert "30" in result
+        assert "30s" in result
 
     def test_no_injection_when_present(self):
         """Test that timeout is not injected when already present."""
@@ -333,3 +337,150 @@ class TestBackwardCompatibility:
         assert exc.returncode == 1
         assert exc.elapsed_seconds == 5.0
         assert exc.max_rss_kb == 102400
+
+
+
+
+class TestInclusterRequestTimeoutFix:
+    """Regression tests for kubectl in-cluster auth --request-timeout bug.
+
+    See: https://github.com/kubernetes/kubernetes/issues/93474
+    """
+
+    def test_run_kubectl_incluster_final_argv_has_no_request_timeout(self, monkeypatch):
+        """Integration-seam test: final argv has no --request-timeout under AuthMode.IN_CLUSTER.
+
+        This protects against future refactors bypassing the helper function.
+        """
+        captured = {}
+
+        def fake_run_bounded(command: list[str], *args: object, **kwargs: object) -> subprocess.CompletedProcess:
+            captured["command"] = command
+            return subprocess.CompletedProcess(command, 0, b"{}", b"")
+
+        monkeypatch.setattr(
+            "k8s_diag_agent.security.kubectl_subprocess._run_bounded",
+            fake_run_bounded,
+        )
+
+        from k8s_diag_agent.security.kubectl_subprocess import run_kubectl
+
+        run_kubectl(
+            ["kubectl", "version", "--output", "json"],
+            timeout_seconds=60,
+            auth_mode=AuthMode.IN_CLUSTER,
+            chunk_size=None,
+        )
+
+        assert "--request-timeout" not in captured["command"]
+
+    def test_run_kubectl_incluster_with_chunk_size_no_request_timeout(self, monkeypatch):
+        """IN_CLUSTER mode should inject chunk-size but not request-timeout."""
+        captured = {}
+
+        def fake_run_bounded(command: list[str], *args: object, **kwargs: object) -> subprocess.CompletedProcess:
+            captured["command"] = command
+            return subprocess.CompletedProcess(command, 0, b"{}", b"")
+
+        monkeypatch.setattr(
+            "k8s_diag_agent.security.kubectl_subprocess._run_bounded",
+            fake_run_bounded,
+        )
+
+        from k8s_diag_agent.security.kubectl_subprocess import run_kubectl
+
+        run_kubectl(
+            ["kubectl", "get", "pods", "-o", "json"],
+            timeout_seconds=60,
+            auth_mode=AuthMode.IN_CLUSTER,
+            chunk_size=500,
+        )
+
+        assert "--request-timeout" not in captured["command"]
+        assert "--chunk-size" in captured["command"]
+
+    def test_run_kubectl_kubeconfig_injects_request_timeout(self, monkeypatch):
+        """KUBECONFIG mode should inject --request-timeout."""
+        captured = {}
+
+        def fake_run_bounded(command: list[str], *args: object, **kwargs: object) -> subprocess.CompletedProcess:
+            captured["command"] = command
+            return subprocess.CompletedProcess(command, 0, b"{}", b"")
+
+        monkeypatch.setattr(
+            "k8s_diag_agent.security.kubectl_subprocess._run_bounded",
+            fake_run_bounded,
+        )
+
+        from k8s_diag_agent.security.kubectl_subprocess import run_kubectl
+
+        run_kubectl(
+            ["kubectl", "get", "pods", "-o", "json"],
+            timeout_seconds=60,
+            auth_mode=AuthMode.KUBECONFIG,
+            chunk_size=None,
+        )
+
+        assert "--request-timeout" in captured["command"]
+        assert "60s" in captured["command"]
+
+    def test_incluster_does_not_inject_request_timeout_for_version(self):
+        """IN_CLUSTER auth should not inject --request-timeout for version command.
+
+        This prevents kubectl from falling back to localhost:8080 when
+        --request-timeout is present in in-cluster environments.
+        """
+        cmd = ["kubectl", "version", "--output", "json"]
+        assert not _should_inject_request_timeout(cmd, AuthMode.IN_CLUSTER)
+
+    def test_incluster_does_not_inject_request_timeout_for_get(self):
+        """IN_CLUSTER auth should not inject --request-timeout for get command."""
+        cmd = ["kubectl", "get", "pods", "-o", "json"]
+        assert not _should_inject_request_timeout(cmd, AuthMode.IN_CLUSTER)
+
+    def test_incluster_does_not_inject_request_timeout_for_describe(self):
+        """IN_CLUSTER auth should not inject --request-timeout for describe command."""
+        cmd = ["kubectl", "describe", "pod", "my-pod"]
+        assert not _should_inject_request_timeout(cmd, AuthMode.IN_CLUSTER)
+
+    def test_kubeconfig_injects_request_timeout_for_get(self):
+        """KUBECONFIG auth should inject --request-timeout for get command."""
+        cmd = ["kubectl", "get", "pods", "-o", "json"]
+        assert _should_inject_request_timeout(cmd, AuthMode.KUBECONFIG)
+
+    def test_kubeconfig_injects_request_timeout_for_version(self):
+        """KUBECONFIG auth should inject --request-timeout for version command."""
+        cmd = ["kubectl", "version", "--output", "json"]
+        assert _should_inject_request_timeout(cmd, AuthMode.KUBECONFIG)
+
+    def test_none_auth_injects_request_timeout(self):
+        """None auth should inject --request-timeout."""
+        cmd = ["kubectl", "get", "pods", "-o", "json"]
+        assert _should_inject_request_timeout(cmd, None)
+
+    def test_non_kubectl_command_no_injection(self):
+        """Non-kubectl commands should not get --request-timeout injection."""
+        cmd = ["helm", "list"]
+        assert not _should_inject_request_timeout(cmd, AuthMode.KUBECONFIG)
+
+    def test_inject_timeout_uses_duration_syntax(self):
+        """_inject_timeout should use documented duration syntax (e.g., 60s)."""
+        cmd = ["kubectl", "get", "pods"]
+        result = _inject_timeout(cmd, 60)
+        assert "--request-timeout" in result
+        assert "60s" in result
+
+    def test_inject_timeout_preserves_original_with_equals(self):
+        """_inject_timeout should preserve existing --request-timeout=value."""
+        cmd = ["kubectl", "get", "pods", "--request-timeout=120"]
+        result = _inject_timeout(cmd, 60)
+        assert "--request-timeout=120" in result
+        assert "60s" not in result
+
+    def test_inject_timeout_preserves_original_with_space(self):
+        """_inject_timeout should preserve existing --request-timeout value."""
+        cmd = ["kubectl", "get", "pods", "--request-timeout", "120"]
+        result = _inject_timeout(cmd, 60)
+        assert "--request-timeout" in result
+        assert "120" in result
+        assert "60s" not in result
