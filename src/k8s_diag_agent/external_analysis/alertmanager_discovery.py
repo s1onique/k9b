@@ -129,11 +129,16 @@ def merge_deduplicate_inventory(
         else:
             other_sources.append(source)
 
-    # Step 2: Deduplicate SERVICE_HEURISTIC sources by endpoint
+    # Step 2: Deduplicate SERVICE_HEURISTIC sources by backing pod identity
     merged_service_heuristic: dict[str, AlertmanagerSource] = {}
 
     if service_heuristic_sources:
-        dedup_groups = deduplicate_service_heuristic_sources(service_heuristic_sources)
+        # Pass cluster_context to enable endpoint slice queries for accurate
+        # backing pod detection (handles same-pod different-service-name case)
+        dedup_groups = deduplicate_service_heuristic_sources(
+            service_heuristic_sources,
+            kube_context=inventory.cluster_context,
+        )
 
         # Create lookup dict of all sources for alias resolution
         all_sources_for_alias: dict[str, AlertmanagerSource] = {}
