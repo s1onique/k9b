@@ -22,10 +22,25 @@ from tests.test_incident_diagnosis_service_fixtures import (  # noqa: F401
     manifest,  # noqa: F401
 )
 
+# =============================================================================
+# kubectl guard hooks (must be in conftest.py for pytest to discover)
+# =============================================================================
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Register custom markers for the test suite."""
+    """Register custom markers."""
     config.addinivalue_line(
         "markers",
         "live_kubernetes: mark test as requiring real Kubernetes cluster (skips kubectl guard)",
     )
+    config.addinivalue_line(
+        "markers",
+        "mock_kubectl: mark test as providing its own kubectl mock (auto-installs mock fixture)",
+    )
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Auto-add mock_kubectl_subprocess fixture to tests marked with mock_kubectl."""
+    for item in items:
+        if item.get_closest_marker("mock_kubectl"):
+            # Ensure the mock_kubectl_subprocess fixture is available
+            item.add_marker(pytest.mark.usefixtures("mock_kubectl_subprocess"))

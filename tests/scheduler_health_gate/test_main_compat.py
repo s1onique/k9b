@@ -213,9 +213,18 @@ class TestRunSchedulerHealthGateIntegration:
         def mock_get_deployment(kubeconfig: str, namespace: str) -> dict[str, Any]:
             return missing_deployment_response
 
+        def mock_get_events(kubeconfig: str, namespace: str, limit: int = 50) -> list[dict[str, Any]]:
+            return []
+
         monkeypatch.setattr(
             "scripts.scheduler_health_gate.cli.get_scheduler_deployment_status",
             mock_get_deployment,
+        )
+        # Patch get_namespace_events directly (not _get_namespace_events) because
+        # _init_compat_stubs() overwrites _get_namespace_events at call time
+        monkeypatch.setattr(
+            "scripts.scheduler_health_gate.cli.get_namespace_events",
+            mock_get_events,
         )
 
         result = run_scheduler_health_gate(
@@ -295,9 +304,18 @@ class TestMainEntryPoint:
         def mock_get_deployment(kubeconfig: str, namespace: str) -> dict[str, Any]:
             return missing_deployment_response
 
+        def mock_get_events(kubeconfig: str, namespace: str, limit: int = 50) -> list[dict[str, Any]]:
+            return []
+
         monkeypatch.setattr(
             "scripts.scheduler_health_gate.cli.get_scheduler_deployment_status",
             mock_get_deployment,
+        )
+        # Patch get_namespace_events directly (not _get_namespace_events) because
+        # _init_compat_stubs() overwrites _get_namespace_events at call time
+        monkeypatch.setattr(
+            "scripts.scheduler_health_gate.cli.get_namespace_events",
+            mock_get_events,
         )
 
         exit_code = main([
@@ -387,8 +405,12 @@ def test_old_main_helper_monkeypatches_still_affect_run_scheduler_health_gate(
     
     This verifies backward compatibility for the orchestration path where helpers
     on main module are patched and run_scheduler_health_gate is called.
+    
+    NOTE: We patch the public cli.get_* functions directly because cli stubs
+    are implemented as functions that delegate to _get_* variables, which are
+    overwritten by _init_compat_stubs() at call time.
     """
-    from scripts.scheduler_health_gate import main as scheduler_main
+    from scripts.scheduler_health_gate import cli as scheduler_cli
 
     def mock_get_deployment(kubeconfig: str, namespace: str) -> dict[str, Any]:
         return healthy_deployment_response
@@ -403,12 +425,19 @@ def test_old_main_helper_monkeypatches_still_affect_run_scheduler_health_gate(
     def mock_get_events(kubeconfig: str, namespace: str, limit: int = 50) -> list[dict[str, Any]]:
         return []
 
-    monkeypatch.setattr(scheduler_main, "_get_scheduler_deployment_status", mock_get_deployment)
-    monkeypatch.setattr(scheduler_main, "_get_scheduler_pod_selector", mock_get_selector)
-    monkeypatch.setattr(scheduler_main, "_get_scheduler_pods", mock_get_pods)
-    monkeypatch.setattr(scheduler_main, "_get_namespace_events", mock_get_events)
+    def mock_collect_logs(
+        kubeconfig: str, namespace: str, selector: str, tail_lines: int = 100
+    ) -> dict[str, str]:
+        return {}
 
-    result = scheduler_main.run_scheduler_health_gate(
+    # Patch the public functions in cli module (not _get_* which are overwritten by _init_compat_stubs)
+    monkeypatch.setattr(scheduler_cli, "get_scheduler_deployment_status", mock_get_deployment)
+    monkeypatch.setattr(scheduler_cli, "get_scheduler_pod_selector", mock_get_selector)
+    monkeypatch.setattr(scheduler_cli, "get_scheduler_pods", mock_get_pods)
+    monkeypatch.setattr(scheduler_cli, "get_namespace_events", mock_get_events)
+    monkeypatch.setattr(scheduler_cli, "collect_scheduler_logs", mock_collect_logs)
+
+    result = scheduler_cli.run_scheduler_health_gate(
         kubeconfig="/fake/kubeconfig",
         namespace="test-ns",
         artifact_dir=temp_artifact_dir,

@@ -24,6 +24,8 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot, ClusterSnapshotMetadata
 from k8s_diag_agent.external_analysis.alertmanager_discovery import (
     AlertmanagerSource,
@@ -188,6 +190,7 @@ class TestHealthLoopRegistryCountingWithoutContainerLevelClusterLabel(unittest.T
     The fix: use lookup_registry_state() helper which correctly uses source.cluster_label.
     """
 
+    @pytest.mark.mock_kubectl
     def test_registry_counting_uses_source_level_cluster_label(self) -> None:
         """Registry counting must work when inventory has no cluster_label attribute.
 

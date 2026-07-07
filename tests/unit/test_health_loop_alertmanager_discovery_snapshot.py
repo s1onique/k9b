@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from k8s_diag_agent.collect.cluster_snapshot import ClusterSnapshot, ClusterSnapshotMetadata
 from k8s_diag_agent.external_analysis.alertmanager_discovery import (
     AlertmanagerSource,
@@ -88,6 +90,7 @@ class TestHealthLoopAlertmanagerDiscoverySnapshot(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
+    @pytest.mark.mock_kubectl
     def test_writes_alertmanager_sources_artifact(self) -> None:
         """Test that discovery writes {run_id}-alertmanager-sources.json artifact."""
         runner = HealthLoopRunner(

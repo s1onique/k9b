@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
 
+import pytest
+
 from k8s_diag_agent.collect.cluster_snapshot import (
     ClusterSnapshot,
     WarningEventSummary,
@@ -80,6 +82,7 @@ def _get_pattern_snapshots() -> dict[str, ClusterSnapshot]:
     return _MODULE_PATTERN_SNAPSHOTS
 
 
+@pytest.mark.mock_kubectl
 class HealthLoopTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp_dir = Path(tempfile.mkdtemp(prefix="test-health-"))

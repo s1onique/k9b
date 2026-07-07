@@ -13,12 +13,11 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .collect import (
-    collect_scheduler_logs,
-    get_namespace_events,
-    get_scheduler_deployment_status,
-    get_scheduler_pod_selector,
-    get_scheduler_pods,
+from .collect import collect_scheduler_logs
+from .evaluate import (
+    check_crash_loop,
+    check_terminated_pods,
+    check_waiting_pods,
 )
 from .contracts import (
     FAILURE_SCHEDULER_CRASH_LOOP,
@@ -27,16 +26,69 @@ from .contracts import (
     SCHEDULER_DEPLOYMENT_NAME,
     SchedulerHealthResult,
 )
-from .evaluate import (
-    check_crash_loop,
-    check_terminated_pods,
-    check_waiting_pods,
-)
 from .render import (
     render_deployment_status,
     render_partial_readiness_warning,
     write_all_artifacts,
 )
+
+
+# =============================================================================
+# Compatibility stubs for monkeypatching support
+# =============================================================================
+# These are initialized lazily to avoid circular imports.
+# Tests patch these module-level symbols, and run_scheduler_health_gate
+# uses the current values at call time.
+
+_get_scheduler_deployment_status = None
+_get_scheduler_pod_selector = None
+_get_scheduler_pods = None
+_get_namespace_events = None
+
+
+def _init_compat_stubs() -> None:
+    """Initialize the compatibility stubs from main module.
+    
+    Called lazily from run_scheduler_health_gate to avoid circular import.
+    """
+    global _get_scheduler_deployment_status, _get_scheduler_pod_selector
+    global _get_scheduler_pods, _get_namespace_events
+    
+    from . import main as m
+    _get_scheduler_deployment_status = m._get_scheduler_deployment_status
+    _get_scheduler_pod_selector = m._get_scheduler_pod_selector
+    _get_scheduler_pods = m._get_scheduler_pods
+    _get_namespace_events = m._get_namespace_events
+
+
+# Aliases that tests can patch - these delegate to the stubs
+def get_scheduler_deployment_status(kubeconfig: str, namespace: str) -> dict:
+    """Get scheduler deployment status (compat stub)."""
+    if _get_scheduler_deployment_status is None:
+        _init_compat_stubs()
+    return _get_scheduler_deployment_status(kubeconfig, namespace)
+
+
+def get_scheduler_pod_selector(kubeconfig: str, namespace: str, deployment_name: str) -> str:
+    """Get scheduler pod selector (compat stub)."""
+    if _get_scheduler_pod_selector is None:
+        _init_compat_stubs()
+    return _get_scheduler_pod_selector(kubeconfig, namespace, deployment_name)
+
+
+def get_scheduler_pods(kubeconfig: str, namespace: str, selector: str) -> dict:
+    """Get scheduler pods (compat stub)."""
+    if _get_scheduler_pods is None:
+        _init_compat_stubs()
+    return _get_scheduler_pods(kubeconfig, namespace, selector)
+
+
+def get_namespace_events(kubeconfig: str, namespace: str, limit: int = 50) -> list:
+    """Get namespace events (compat stub)."""
+    if _get_namespace_events is None:
+        _init_compat_stubs()
+    return _get_namespace_events(kubeconfig, namespace, limit)
+
 
 # =============================================================================
 # Argument parsing
@@ -100,6 +152,9 @@ def run_scheduler_health_gate(
     Returns:
         SchedulerHealthResult with classification and diagnostics
     """
+    # Ensure compatibility stubs are initialized (supports monkeypatching)
+    _init_compat_stubs()
+    
     result = SchedulerHealthResult()
     result.scheduler_diagnosis["timestamp"] = datetime.now(UTC).isoformat()
     

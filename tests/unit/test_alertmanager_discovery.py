@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from k8s_diag_agent.external_analysis.alertmanager_discovery import (
     AlertmanagerSource,
     AlertmanagerSourceInventory,
@@ -1034,6 +1036,7 @@ def test_inventory_large_source_count() -> None:
     assert len(manual_sources) == 0
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_inventory_different_origins_same_endpoint() -> None:
     """Test that merge_deduplicate_inventory merges CRD + Config sources with same namespace/name.
     
@@ -1096,6 +1099,7 @@ def test_merge_deduplicate_inventory_different_origins_same_endpoint() -> None:
     assert AlertmanagerSourceOrigin.SERVICE_HEURISTIC in merged.merged_provenances
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_inventory_manual_preserved() -> None:
     """Test that merge_deduplicate_inventory preserves manual source (same source_id)."""
     from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
@@ -1137,6 +1141,7 @@ def test_merge_deduplicate_inventory_manual_preserved() -> None:
     assert AlertmanagerSourceOrigin.MANUAL in merged.merged_provenances
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_inventory_different_endpoints_not_merged() -> None:
     """Test that sources with different endpoints are not merged."""
     from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
@@ -1214,6 +1219,7 @@ def test_canonical_identity_tiered_approach() -> None:
     assert service_source.canonical_identity == "monitoring/alertmanager-operated"
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_inventory_prometheus_operator_case() -> None:
     """Test Prometheus Operator duplicate: CRD + Config sources merge when namespace/name matches.
     
@@ -1309,6 +1315,7 @@ def test_display_provenance_merged_origins() -> None:
     assert "Service Heuristic" in source.display_provenance
 
 
+@pytest.mark.mock_kubectl
 def test_prometheus_operator_alias_real_scenario() -> None:
     """Regression test: Real Prometheus Operator duplicate pattern.
     
@@ -1371,6 +1378,7 @@ def test_prometheus_operator_alias_real_scenario() -> None:
     assert "Service Heuristic" in merged.display_provenance
 
 
+@pytest.mark.mock_kubectl
 def test_prometheus_operator_alias_ambiguous_no_alias() -> None:
     """Test that alias is NOT applied when mapping is ambiguous (multiple CRDs in namespace).
     
@@ -1420,6 +1428,7 @@ def test_prometheus_operator_alias_ambiguous_no_alias() -> None:
     assert service_key in result.sources
 
 
+@pytest.mark.mock_kubectl
 def test_prometheus_operator_alias_single_crd_unambiguous() -> None:
     """Test that alias IS applied when there's exactly one CRD in namespace.
     
@@ -1531,6 +1540,7 @@ def test_verify_and_update_inventory_preserves_cluster_label_degraded() -> None:
     assert verified.sources["crd:monitoring/main"].state == AlertmanagerSourceState.DEGRADED
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_inventory_preserves_cluster_label() -> None:
     """Regression test: merge_deduplicate_inventory must preserve cluster_label.
     
@@ -1581,6 +1591,7 @@ def test_merge_deduplicate_inventory_preserves_cluster_label() -> None:
     assert AlertmanagerSourceOrigin.PROMETHEUS_CRD_CONFIG in merged.merged_provenances
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_inventory_preserves_cluster_label_manual_wins() -> None:
     """Regression test: merge_deduplicate_inventory preserves cluster_label when manual wins.
     
@@ -1626,6 +1637,7 @@ def test_merge_deduplicate_inventory_preserves_cluster_label_manual_wins() -> No
     assert merged.cluster_context == "manual-context-x"
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_inventory_single_source_preserves_cluster_label() -> None:
     """Regression test: single source (no merge) preserves cluster_label."""
     from k8s_diag_agent.external_analysis.alertmanager_discovery import merge_deduplicate_inventory
@@ -1724,6 +1736,7 @@ def test_prometheus_operator_alias_no_alias_preserves_cluster_label() -> None:
     assert result.origin == AlertmanagerSourceOrigin.ALERTMANAGER_CRD
 
 
+@pytest.mark.mock_kubectl
 def test_cluster_label_roundtrip_through_all_transforms() -> None:
     """End-to-end regression test: cluster_label survives through all transforms.
     
@@ -2191,6 +2204,7 @@ def test_prometheus_operator_alias_with_chart_service() -> None:
     assert resolved.name == "main"
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_two_service_heuristics_same_endpoint() -> None:
     """Test deduplication of two SERVICE_HEURISTIC sources pointing to the same endpoint.
     
@@ -2260,6 +2274,7 @@ def test_merge_deduplicate_two_service_heuristics_same_endpoint() -> None:
     assert merged.origin == AlertmanagerSourceOrigin.SERVICE_HEURISTIC
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_service_heuristics_different_endpoints_not_merged() -> None:
     """Test that SERVICE_HEURISTIC sources with different endpoints are NOT merged.
     
@@ -2296,6 +2311,7 @@ def test_merge_deduplicate_service_heuristics_different_endpoints_not_merged() -
     assert len(result.sources) == 2
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_service_with_crd_prefers_crd() -> None:
     """Test that CRD source wins over SERVICE_HEURISTIC source when names match.
     
@@ -2376,6 +2392,7 @@ def test_is_chart_alertmanager_service() -> None:
     assert _is_chart_alertmanager_service(None) is False
 
 
+@pytest.mark.mock_kubectl
 def test_merge_deduplicate_mixed_inventory_two_groups_two_sources() -> None:
     """Test mixed inventory: 2 SERVICE_HEURISTIC pairs = 2 separate logical Alertmanagers.
     

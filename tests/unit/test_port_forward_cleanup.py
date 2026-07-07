@@ -38,9 +38,19 @@ class TestStopAlertmanagerPortForward(unittest.TestCase):
     SECRET_KEYWORDS = ["secret", "password", "token", "bearer", "/var/run/secrets"]
 
     def _make_mock_process(self, poll_result: int | None = None) -> MagicMock:
-        """Create a mock Popen process."""
-        mock = MagicMock(spec=subprocess.Popen)
+        """Create a mock Popen process.
+        
+        Note: We don't use spec=subprocess.Popen because the guard fixture
+        in conftest_kubectl_guard.py patches subprocess.Popen with a blocking
+        function during test execution. Instead, we manually set the required
+        methods that stop_alertmanager_port_forward uses: poll, terminate,
+        wait, kill.
+        """
+        mock = MagicMock()
         mock.poll.return_value = poll_result
+        mock.terminate = MagicMock()
+        mock.wait = MagicMock()
+        mock.kill = MagicMock()
         return mock
 
     def _make_log_event(self) -> tuple[list, MagicMock]:

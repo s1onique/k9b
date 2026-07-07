@@ -269,6 +269,7 @@ class TestGetBackendPodInfo:
         assert len(result["attempted_selectors"]) > 0
         assert "diagnostics" in result
 
+    @patch("scripts.incident_discovery_gate.collect._collect_namespace_diagnostics")
     @patch("scripts.incident_discovery_gate.collect._find_pods_with_selector")
     @patch("scripts.incident_discovery_gate.collect._get_deployment_selector")
     @patch("scripts.incident_discovery_gate.collect._get_service_selector")
@@ -277,10 +278,12 @@ class TestGetBackendPodInfo:
         mock_get_svc_selector: MagicMock,
         mock_get_deploy_selector: MagicMock,
         mock_find_pods: MagicMock,
+        mock_collect_diagnostics: MagicMock,
     ) -> None:
         """Each attempted selector includes its source."""
         mock_get_deploy_selector.return_value = "app=k9b,component=backend"
         mock_find_pods.return_value = {"found": False, "error": "No pods"}
+        mock_collect_diagnostics.return_value = {"namespace": "namespace", "deployments": [], "services": [], "pods": []}
 
         result = get_backend_pod_info("kubeconfig", "namespace", "k9b-backend")
 

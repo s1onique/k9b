@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from k8s_diag_agent.collect.cluster_snapshot import (
     ClusterHealthSignals,
     ClusterSnapshot,
@@ -30,6 +32,7 @@ from scripts import run_health_scheduler
 
 
 class LoggingWorkflowTest(unittest.TestCase):
+    @pytest.mark.mock_kubectl
     def test_health_loop_writes_structured_events(self) -> None:
         tmp_dir = Path(tempfile.mkdtemp())
         baseline = BaselinePolicy.load_from_file(Path("runs/health-baseline.example.json"))

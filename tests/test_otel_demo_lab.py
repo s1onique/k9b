@@ -355,6 +355,7 @@ class TestTrafficTargetFQDN:
         finally:
             traffic.kubectl_json = original
 
+    @pytest.mark.mock_kubectl
     def test_generate_live_traffic_succeeds_when_frontend_proxy_found(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

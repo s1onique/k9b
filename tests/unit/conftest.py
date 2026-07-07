@@ -6,6 +6,7 @@ can be imported by sibling test modules.
 
 from __future__ import annotations
 
+import subprocess as subprocess_module
 import sys
 import tempfile
 from datetime import UTC, datetime
@@ -18,6 +19,9 @@ from k8s_diag_agent.collect.incident_diagnosis_review_packet import (
 )
 from k8s_diag_agent.collect.incident_store import IncidentStore
 from k8s_diag_agent.collect.incident_store_provider import reset_incident_store, set_incident_store
+
+# Import kubectl guard to enforce unit test boundaries
+from tests.conftest_kubectl_guard import forbid_real_kubectl  # noqa: F401
 
 # Add this directory to sys.path so fixtures can be imported
 _tests_unit = Path(__file__).parent
@@ -142,3 +146,52 @@ def write_review_packet(
         },
         now=now,
     )
+
+
+# =============================================================================
+# External-analysis subprocess compatibility (kubectl-boundary hardening)
+# =============================================================================
+
+# External analysis modules that need subprocess attribute for patch() to work
+_EXTERNAL_ANALYSIS_MODULES = [
+    "k8s_diag_agent.external_analysis.alertmanager_discovery",
+    "k8s_diag_agent.external_analysis.alertmanager_discovery_crd_strategy",
+    "k8s_diag_agent.external_analysis.alertmanager_discovery_service_strategy",
+    "k8s_diag_agent.external_analysis.alertmanager_discovery_backing_identity",
+    "k8s_diag_agent.external_analysis.vmalert_discovery_crd_strategy",
+    "k8s_diag_agent.external_analysis.vmalert_discovery_service_strategy",
+]
+
+
+def pytest_configure(config) -> None:
+    """Pre-import external_analysis modules and add subprocess attribute.
+    
+    Some modules import subprocess locally inside functions, which means they don't
+    have a module-level subprocess attribute. This breaks tests that use
+    patch("module.subprocess.run", ...). We fix this by:
+    1. Force-importing these modules
+    2. Adding subprocess to their namespace
+    """
+    import importlib
+    
+    for _module_path in _EXTERNAL_ANALYSIS_MODULES:
+        try:
+            # Force import the module
+            _mod = importlib.import_module(_module_path)
+            # Add subprocess attribute if not present
+            if not hasattr(_mod, "subprocess"):
+                _mod.subprocess = subprocess_module
+        except ImportError:
+            pass
+
+
+# NOTE: The autouse kubectl mock was removed.
+# 
+# The kubectl-boundary guard in conftest_kubectl_guard.py blocks real kubectl
+# in unit tests. Tests must patch at the correct call-site seam:
+#
+#   monkeypatch.setattr("k8s_diag_agent.collect.incident_collectors.kubectl", fake_kubectl)
+#
+# NOT at subprocess.run or other internal paths.
+#
+# For tests that truly need kubectl, use @pytest.mark.live_kubernetes.
