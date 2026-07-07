@@ -117,7 +117,11 @@ The Role provides read-only access to namespaced resources:
 
 ## Alertmanager Discovery RBAC Verification
 
-After deployment, verify K9B has read-only access to Alertmanager discovery resources:
+After deployment, verify K9B has read-only access to Alertmanager discovery resources.
+
+### Cluster-Scoped RBAC (Default)
+
+For `rbac.clusterScoped=true` (or `rbac.clusterWide=true`):
 
 ```bash
 # Get the backend service account name (handles custom names)
@@ -129,19 +133,52 @@ kubectl auth can-i list endpointslices.discovery.k8s.io --as="system:serviceacco
 kubectl auth can-i get endpointslices.discovery.k8s.io --as="system:serviceaccount:k9b:${SA}"
 kubectl auth can-i watch endpointslices.discovery.k8s.io --as="system:serviceaccount:k9b:${SA}"
 
-# Verify Prometheus Operator CRD access
+# Verify Prometheus Operator CRD access (cluster-wide)
 kubectl auth can-i list alertmanagers.monitoring.coreos.com --as="system:serviceaccount:k9b:${SA}"
 kubectl auth can-i list prometheuses.monitoring.coreos.com --as="system:serviceaccount:k9b:${SA}"
 kubectl auth can-i list alertmanagerconfigs.monitoring.coreos.com --as="system:serviceaccount:k9b:${SA}"
 
-# Verify StatefulSet access (Alertmanager StatefulSets)
+# Verify StatefulSet access
 kubectl auth can-i list statefulsets.apps --as="system:serviceaccount:k9b:${SA}"
 kubectl auth can-i get statefulsets.apps --as="system:serviceaccount:k9b:${SA}"
+```
 
-# Verify Pod access in monitoring namespace
+### Namespace-Scoped RBAC
+
+For `rbac.clusterScoped=false` (namespace-scoped), verify with `-n k9b` (or relevant namespace):
+
+```bash
+SA="$(kubectl -n k9b get deploy k9b-backend -o jsonpath='{.spec.template.spec.serviceAccountName}')"
+SA="${SA:-default}"
+
+# EndpointSlice access (requires namespace where Alertmanager runs)
+kubectl auth can-i list endpointslices.discovery.k8s.io \
+  -n monitoring \
+  --as="system:serviceaccount:k9b:${SA}"
+
+# StatefulSet access
+kubectl auth can-i list statefulsets.apps \
+  -n monitoring \
+  --as="system:serviceaccount:k9b:${SA}"
+
+# Pod access in monitoring namespace
 kubectl auth can-i list pods -n monitoring --as="system:serviceaccount:k9b:${SA}"
-kubectl auth can-i get pods -n monitoring --as="system:serviceaccount:k9b:${SA}"
 
+# Prometheus Operator CRD access (namespace-scoped)
+kubectl auth can-i list alertmanagers.monitoring.coreos.com \
+  -n monitoring \
+  --as="system:serviceaccount:k9b:${SA}"
+kubectl auth can-i list prometheuses.monitoring.coreos.com \
+  -n monitoring \
+  --as="system:serviceaccount:k9b:${SA}"
+kubectl auth can-i list alertmanagerconfigs.monitoring.coreos.com \
+  -n monitoring \
+  --as="system:serviceaccount:k9b:${SA}"
+```
+
+### Security Verification (Both Modes)
+
+```bash
 # Verify no secrets access (security requirement)
 kubectl auth can-i list secrets --as="system:serviceaccount:k9b:${SA}"
 # Expected: no
@@ -155,7 +192,7 @@ kubectl auth can-i delete alertmanagers.monitoring.coreos.com --as="system:servi
 # Expected: no
 ```
 
-All commands above should return `yes` for read access and `no` for secrets and write operations.
+All read access commands should return `yes`, and secrets/write commands should return `no`.
 
 
 ## Troubleshooting
