@@ -15,8 +15,6 @@ Architecture note:
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
