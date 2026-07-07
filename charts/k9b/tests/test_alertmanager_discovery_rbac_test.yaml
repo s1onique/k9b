@@ -1,0 +1,95 @@
+# Helm test assertions for k9b Alertmanager discovery RBAC.
+# Verifies read-only permissions required for:
+# - EndpointSlice discovery (Service backend identity)
+# - Prometheus Operator CRDs (Alertmanager provenance and routing)
+suite: Alertmanager discovery RBAC
+
+templates:
+  - rbac.yaml
+
+tests:
+  # ===== Cluster-scoped RBAC (default) =====
+
+  - it: ClusterRole should exist with kind check
+    set:
+      rbac.create: true
+      rbac.clusterScoped: true
+    asserts:
+      - documentIndex: 1
+        equal:
+          path: kind
+          value: ClusterRole
+
+  - it: ClusterRole should have rules for discovery and monitoring
+    set:
+      rbac.create: true
+      rbac.clusterScoped: true
+    asserts:
+      - documentIndex: 1
+        isNotNull:
+          path: rules
+
+  - it: ClusterRoleBinding should bind to k9b ServiceAccount
+    set:
+      rbac.create: true
+      rbac.clusterScoped: true
+    asserts:
+      - documentIndex: 2
+        equal:
+          path: kind
+          value: ClusterRoleBinding
+      - documentIndex: 2
+        equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+
+  # ===== Namespace-scoped RBAC =====
+
+  - it: Role should exist when clusterScoped=false
+    set:
+      rbac.create: true
+      rbac.clusterScoped: false
+    asserts:
+      - documentIndex: 1
+        equal:
+          path: kind
+          value: Role
+      - documentIndex: 1
+        isNotNull:
+          path: rules
+
+  - it: RoleBinding should exist when clusterScoped=false
+    set:
+      rbac.create: true
+      rbac.clusterScoped: false
+    asserts:
+      - documentIndex: 2
+        equal:
+          path: kind
+          value: RoleBinding
+      - documentIndex: 2
+        equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+
+  # ===== Backward compatibility with deprecated clusterWide =====
+
+  - it: ClusterRole should exist when using deprecated clusterWide=true
+    set:
+      rbac.create: true
+      rbac.clusterWide: true
+    asserts:
+      - documentIndex: 1
+        equal:
+          path: kind
+          value: ClusterRole
+
+  - it: ClusterRoleBinding should exist when using deprecated clusterWide=true
+    set:
+      rbac.create: true
+      rbac.clusterWide: true
+    asserts:
+      - documentIndex: 2
+        equal:
+          path: kind
+          value: ClusterRoleBinding

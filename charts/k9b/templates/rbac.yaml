@@ -112,6 +112,22 @@ rules:
       - get
       - list
       - watch
+  # Discovery API resources (EndpointSlice for Service backend identity)
+  - apiGroups: ["discovery.k8s.io"]
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+  # Monitoring CRDs - additional resources for Alertmanager discovery
+  - apiGroups: ["monitoring.coreos.com"]
+    resources:
+      - alertmanagerconfigs
+    verbs:
+      - get
+      - list
+      - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -202,6 +218,27 @@ rules:
     verbs:
       - get
       - list
+  # Discovery API resources (EndpointSlice for Service backend identity)
+  - apiGroups: ["discovery.k8s.io"]
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+  # Monitoring CRDs (Prometheus Operator) - read-only
+  - apiGroups: ["monitoring.coreos.com"]
+    resources:
+      - alertmanagers
+      - prometheuses
+      - alertmanagerconfigs
+      - prometheusrules
+      - servicemonitors
+      - podmonitors
+    verbs:
+      - get
+      - list
+      - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
