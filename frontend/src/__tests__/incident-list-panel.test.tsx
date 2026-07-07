@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { IncidentListPanel } from "../components/IncidentListPanel";
 
@@ -717,10 +717,13 @@ describe("IncidentListPanel", () => {
       });
 
       await waitFor(() => {
-        // Detail wrapper should be rendered when expanded
-        const detailWrapper = document.querySelector(".incident-detail-wrapper");
-        expect(detailWrapper).not.toBeNull();
+        // Detail panel should be rendered when expanded - use heading for semantic query
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
       });
+
+      // Verify detail panel is visible by checking the detail panel testid
+      const detailPanel = screen.getByTestId("incident-detail-panel");
+      expect(detailPanel).toBeInTheDocument();
 
       // Button should now say "Hide details"
       expect(screen.getByRole("button", { name: /hide details/i })).toBeInTheDocument();
@@ -747,8 +750,8 @@ describe("IncidentListPanel", () => {
       });
 
       await waitFor(() => {
-        // Detail wrapper should be present when expanded
-        expect(document.querySelector(".incident-detail-wrapper")).not.toBeNull();
+        // Detail panel should be present when expanded - verify by heading presence
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
       });
 
       // Collapse
@@ -758,8 +761,8 @@ describe("IncidentListPanel", () => {
       });
 
       await waitFor(() => {
-        // Detail panel should be gone
-        expect(document.querySelector(".incident-detail-wrapper")).toBeNull();
+        // Detail panel should be gone - heading should not be visible
+        expect(screen.queryByRole("heading", { name: /Review Packet/i })).not.toBeInTheDocument();
         // View details button should be back
         expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
       });
@@ -944,13 +947,13 @@ describe("IncidentListPanel", () => {
       });
 
       await waitFor(() => {
-        // Detail wrapper should be present
-        expect(document.querySelector(".incident-detail-wrapper")).not.toBeNull();
+        // Detail panel should be present - verify by heading
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
       });
 
-      // Check detail panel for forbidden buttons
-      const detailPanel = document.querySelector(".incident-detail-panel");
-      const buttons = detailPanel?.querySelectorAll("button") || [];
+      // Check detail panel for forbidden buttons - scope to detail panel
+      const detailPanel = screen.getByTestId("incident-detail-panel");
+      const buttons = detailPanel.querySelectorAll("button");
       const buttonTexts = Array.from(buttons).map(b => b.textContent?.toLowerCase() || "");
 
       const forbiddenActions = [
@@ -994,9 +997,266 @@ describe("IncidentListPanel", () => {
       });
 
       await waitFor(() => {
-        // Detail wrapper should render without errors
-        expect(document.querySelector(".incident-detail-wrapper")).not.toBeNull();
+        // Detail panel should render without errors - verify by heading
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
       });
+    });
+  });
+
+  // =============================================================================
+  // Review Packet visible-state coverage in detail panel
+  // =============================================================================
+
+  describe("Review Packet visible-state in detail panel", () => {
+    it("renders 'Not generated yet' when review_packet.status is not_generated", async () => {
+      const user = userEvent.setup();
+      const incidentWithNoPacket = {
+        ...mockIncident,
+        review_packet: {
+          status: "not_generated" as const,
+          id: null,
+          generated_at: null,
+          error_message: null,
+        },
+      };
+      const detailNoPacket: IncidentDetailPayload = {
+        ...mockIncidentDetail,
+        review_packet: incidentWithNoPacket.review_packet,
+      };
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [incidentWithNoPacket],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(detailNoPacket);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        // Verify detail panel is visible
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
+      });
+
+      // Verify 'Not generated yet' state is rendered - scope to detail panel
+      const detailPanel = screen.getByTestId("incident-detail-panel");
+      expect(within(detailPanel).getByText(/Not generated yet/i)).toBeInTheDocument();
+    });
+
+    it("renders 'Available' with packet ID when review_packet.status is available", async () => {
+      const user = userEvent.setup();
+      const incidentWithPacket = {
+        ...mockIncident,
+        review_packet: {
+          status: "available" as const,
+          id: "review-packet-abc123",
+          generated_at: "2026-01-01T12:00:00Z",
+          error_message: null,
+        },
+      };
+      const detailWithPacket: IncidentDetailPayload = {
+        ...mockIncidentDetail,
+        review_packet: incidentWithPacket.review_packet,
+      };
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [incidentWithPacket],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(detailWithPacket);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        // Verify detail panel is visible
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
+      });
+
+      // Verify 'Available' state and packet ID are rendered - scope to detail panel
+      // Use more specific query for "Available" badge (case-sensitive to avoid matches elsewhere)
+      const detailPanel = screen.getByTestId("incident-detail-panel");
+      expect(within(detailPanel).getByText("Available")).toBeInTheDocument();
+      expect(within(detailPanel).getByText(/review-packet-abc123/i)).toBeInTheDocument();
+    });
+
+    it("renders 'Failed' with error message when review_packet.status is failed", async () => {
+      const user = userEvent.setup();
+      const incidentFailed = {
+        ...mockIncident,
+        review_packet: {
+          status: "failed" as const,
+          id: null,
+          generated_at: null,
+          error_message: "LLM unavailable",
+        },
+      };
+      const detailFailed: IncidentDetailPayload = {
+        ...mockIncidentDetail,
+        review_packet: incidentFailed.review_packet,
+      };
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [incidentFailed],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(detailFailed);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        // Verify detail panel is visible
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
+      });
+
+      // Verify 'Failed' state and error message are rendered - scope to detail panel
+      const detailPanel = screen.getByTestId("incident-detail-panel");
+      expect(within(detailPanel).getByText(/Failed: LLM unavailable/i)).toBeInTheDocument();
+    });
+
+    it("renders 'Generating…' when review_packet.status is generating", async () => {
+      const user = userEvent.setup();
+      const incidentGenerating = {
+        ...mockIncident,
+        review_packet: {
+          status: "generating" as const,
+          id: null,
+          generated_at: null,
+          error_message: null,
+        },
+      };
+      const detailGenerating: IncidentDetailPayload = {
+        ...mockIncidentDetail,
+        review_packet: incidentGenerating.review_packet,
+      };
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [incidentGenerating],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(detailGenerating);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        // Verify detail panel is visible
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
+      });
+
+      // Verify 'Generating…' state is rendered - scope to detail panel
+      const detailPanel = screen.getByTestId("incident-detail-panel");
+      expect(within(detailPanel).getByText(/Generating…/i)).toBeInTheDocument();
+    });
+  });
+
+  // =============================================================================
+  // Snapshot Bundle presence/absence coverage in detail panel
+  // =============================================================================
+
+  describe("Snapshot Bundle presence/absence in detail panel", () => {
+    it("renders snapshot bundle ID when latest_snapshot_bundle_id is present", async () => {
+      const user = userEvent.setup();
+      const incidentWithBundle = {
+        ...mockIncident,
+        latest_snapshot_bundle_id: "default-20260101-140000",
+      };
+      const detailWithBundle: IncidentDetailPayload = {
+        ...mockIncidentDetail,
+        latest_snapshot_bundle_id: incidentWithBundle.latest_snapshot_bundle_id,
+      };
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [incidentWithBundle],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(detailWithBundle);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        // Verify detail panel is visible
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
+      });
+
+      // Verify Snapshot Bundle label and bundle ID are rendered - scope to detail panel
+      const detailPanel = screen.getByTestId("incident-detail-panel");
+      expect(within(detailPanel).getByText(/Snapshot Bundle/i)).toBeInTheDocument();
+      expect(within(detailPanel).getByText(/default-20260101-140000/i)).toBeInTheDocument();
+    });
+
+    it("does not render snapshot bundle section when latest_snapshot_bundle_id is null", async () => {
+      const user = userEvent.setup();
+      const incidentWithoutBundle = {
+        ...mockIncident,
+        latest_snapshot_bundle_id: null,
+      };
+      const detailWithoutBundle: IncidentDetailPayload = {
+        ...mockIncidentDetail,
+        latest_snapshot_bundle_id: null,
+      };
+      vi.mocked(listIncidents).mockResolvedValueOnce({
+        incidents: [incidentWithoutBundle],
+        total: 1,
+      });
+      vi.mocked(getIncident).mockResolvedValueOnce(detailWithoutBundle);
+
+      render(<IncidentListPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view details/i })).toBeInTheDocument();
+      });
+
+      const viewButton = screen.getByRole("button", { name: /view details/i });
+      await act(async () => {
+        await user.click(viewButton);
+      });
+
+      await waitFor(() => {
+        // Verify detail panel is visible
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
+      });
+
+      // Verify Snapshot Bundle label is NOT rendered when bundle ID is null - scope to detail panel
+      const detailPanel = screen.getByTestId("incident-detail-panel");
+      expect(within(detailPanel).queryByText(/Snapshot Bundle/i)).not.toBeInTheDocument();
     });
   });
 
@@ -1078,9 +1338,9 @@ describe("IncidentListPanel", () => {
       expect(getIncident).toHaveBeenCalledTimes(2);
       expect(getIncident).toHaveBeenLastCalledWith("default-pod-test-pod-crash_loop");
 
-      // Verify IncidentDetailPanel is rendered on success - check detail wrapper
+      // Verify IncidentDetailPanel is rendered on success - check for detail content
       await waitFor(() => {
-        expect(document.querySelector(".incident-detail-wrapper")).not.toBeNull();
+        expect(screen.getByRole("heading", { name: /Review Packet/i })).toBeInTheDocument();
       });
 
       // Button should now say "Hide details"

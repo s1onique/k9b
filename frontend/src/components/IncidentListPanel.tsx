@@ -372,6 +372,7 @@ export const IncidentListPanel: React.FC<IncidentListPanelProps> = () => {
                   <div
                     id={`incident-detail-${incident.incident_id}`}
                     className="incident-detail-wrapper"
+                    data-testid="incident-detail-panel"
                   >
                     <IncidentDetailPanel incident={detail} />
                   </div>
