@@ -61,7 +61,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("tests/unit/test_diagnostic_pack.py", "[TEST] Diagnostic pack tests"),
     ("tests/unit/test_external_analysis_deterministic_next_check_promotion.py", "[TEST] Promotion tests"),
     ("tests/unit/test_feedback_validators.py", "[TEST] Validator tests - complex scenarios"),
-    ("tests/unit/test_health_loop_alertmanager_discovery.py", "[TEST] Discovery tests - complex"),
     ("tests/unit/test_health_notifications.py", "[TEST] Notification tests - complex scenarios"),
     ("tests/unit/test_health_scheduler.py", "[TEST] Scheduler tests - complex scenarios"),
     ("tests/unit/test_llm_assessor.py", "[TEST] LLM assessor tests - complex scenarios"),
