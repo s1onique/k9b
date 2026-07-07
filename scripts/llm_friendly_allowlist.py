@@ -30,8 +30,16 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [CONTRACT] Review packet - bounded artifact writer with lookup functions
     ("src/k8s_diag_agent/collect/incident_diagnosis_review_packet.py", "[CONTRACT] Review packet - artifact writer with bounded output; all functions related"),
 
-    # [TEST] Test fixtures - need split by behavior
-    ("tests/unit/test_health_loop_alertmanager_snapshot_collection.py", "[TEST] Snapshot tests - split by scenario"),
+    # [TEST] Test fixtures - split by behavior (2026-07-07)
+    # NOTE: tests/unit/test_health_loop_alertmanager_snapshot_collection.py was split into:
+    #   - health_loop_snapshot_collection_support.py (274 lines)
+    #   - test_health_loop_alertmanager_snapshot_collection_basic.py (250 lines)
+    #   - test_health_loop_alertmanager_snapshot_collection_errors.py (214 lines)
+    #   - test_health_loop_alertmanager_snapshot_collection_portforward_basic.py (229 lines)
+    #   - test_health_loop_alertmanager_snapshot_collection_portforward_cleanup.py (211 lines)
+    #   - test_health_loop_alertmanager_snapshot_collection_portforward_targets.py (189 lines)
+    #   - test_health_loop_alertmanager_snapshot_collection_attribution.py (206 lines)
+    # Old monolithic file removed.
     ("tests/unit/test_health_ui.py", "[TEST] Health UI tests - complex fixtures"),
     ("tests/unit/test_ui_server_api.py", "[TEST] UI server API tests - complex fixtures"),
     ("tests/unit/test_alertmanager_discovery.py", "[TEST] Alertmanager discovery tests"),
