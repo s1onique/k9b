@@ -1,0 +1,70 @@
+{
+  "_fixture_type": "large_collection_regression",
+  "_purpose": "Test kubectl subprocess memory bounds for large cluster collection",
+  "_description": "Regression fixture for large Kubernetes collection OOM prevention. This fixture simulates a cluster with extreme amounts of resources to test that kubectl subprocess execution correctly handles large outputs without causing OOM in the scheduler.",
+  "_usage": "Load this fixture to test bounded kubectl execution: from k8s_diag_agent.collect.fixture_loader import load_fixture; large_cluster = load_fixture('lab/large_kubernetes_collection_regression.json')",
+  "_test_scenarios": [
+    "Large pods list (10,000+ pods across all namespaces)",
+    "Large events list (50,000+ events)",
+    "Large combined output exceeding 50MiB"
+  ],
+  "_expected_behavior": {
+    "max_stdout_bytes": 52428800,
+    "max_stderr_bytes": 1048576,
+    "max_rss_kb": 1048576,
+    "timeout_seconds": 60,
+    "chunk_size": 500,
+    "streaming_enforcement": true,
+    "note": "Output exceeding 50MiB should raise KubectlOutputTooLargeError. Scheduler retained output should stay bounded; child kubectl RSS is not hard-capped by this fixture alone. --chunk-size and --request-timeout should be automatically applied."
+  },
+  "cluster_summary": {
+    "total_namespaces": 500,
+    "total_pods": 15000,
+    "total_events": 75000,
+    "estimated_pods_json_bytes": 15728640,
+    "estimated_events_json_bytes": 47185920,
+    "total_estimated_bytes": 73400320,
+    "exceeds_50mb_limit": true
+  },
+  "test_scenarios": [
+    {
+      "name": "large_pods_all_namespaces",
+      "description": "kubectl get pods --all-namespaces -o json with 15,000 pods",
+      "command": ["kubectl", "get", "pods", "--all-namespaces", "-o", "json"],
+      "estimated_bytes": 15728640,
+      "expected_chunk_size": 500,
+      "should_use_selector": true,
+      "selector_recommendation": "--field-selector=status.phase!=Running"
+    },
+    {
+      "name": "large_events_all_namespaces",
+      "description": "kubectl get events -A -o json with 75,000 events",
+      "command": ["kubectl", "get", "events", "-A", "-o", "json"],
+      "estimated_bytes": 47185920,
+      "expected_chunk_size": 500,
+      "should_use_selector": true,
+      "selector_recommendation": "--field-selector=type=Warning"
+    },
+    {
+      "name": "small_targeted_collection",
+      "description": "kubectl get pods -n kube-system -o json with 50 pods",
+      "command": ["kubectl", "get", "pods", "-n", "kube-system", "-o", "json"],
+      "estimated_bytes": 512000,
+      "should_pass": true,
+      "expected_chunk_size": 500
+    }
+  ],
+  "mitigation_recommendations": [
+    "Use namespace-scoped queries instead of --all-namespaces",
+    "Apply label selectors to filter results",
+    "Use --chunk-size to paginate large collections",
+    "Use --field-selector for events (type=Warning)",
+    "Set reasonable --request-timeout values",
+    "Implement streaming output size limits in subprocess execution",
+    "Prefer metadata/table/custom-columns for inventory over full JSON",
+    "Collect full JSON only for selected suspicious objects"
+  ],
+  "related_issues": [
+    "ACT-K9B-KUBECTL-SUBPROCESS-MEMORY-BOUND01"
+  ]
+}

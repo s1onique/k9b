@@ -2,15 +2,19 @@
 
 This module contains functions for executing kubectl commands
 and collecting Kubernetes resources for incident evidence.
+
+All kubectl invocations use bounded execution to prevent memory growth
+from large collections.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import subprocess
-from collections.abc import Sequence
 
+from ..security.kubectl_subprocess import (
+    run_kubectl,
+)
 from .incident_models import DeploymentSummary, EventSummary, PodSummary
 from .incident_parsers import (
     parse_deployment_summary,
@@ -29,34 +33,18 @@ DEFAULT_SINCE_HOURS = 2
 
 
 def kubectl(context: str | None, *args: str) -> str:
-    """Execute a kubectl command with optional context."""
+    """Execute a kubectl command with optional context.
+
+    Uses bounded execution to prevent memory growth from large collections.
+    """
     command = ["kubectl"]
     if context:
         command.extend(["--context", context])
     command.extend(args)
-    return _run_command(command)
-
-
-def _run_command(command: Sequence[str]) -> str:
-    """Execute a command with timeout."""
-    try:
-        result = subprocess.run(
-            command,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=KUBECTL_COMMAND_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            f"`{command[0]}` timed out after {KUBECTL_COMMAND_TIMEOUT_SECONDS}s"
-        ) from exc
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Command `{command[0]}` not found") from exc
-    except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr if exc.stderr else exc.stdout
-        raise RuntimeError(f"`{command[0]}` failed: {stderr[:200]}") from exc
-    return result.stdout
+    return run_kubectl(
+        command,
+        timeout_seconds=KUBECTL_COMMAND_TIMEOUT_SECONDS,
+    )
 
 
 def collect_pods(

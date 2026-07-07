@@ -17,11 +17,11 @@ from ..kubernetes_auth import (
     log_auth_mode,
     resolve_auth_mode,
 )
+from ..security.kubectl_subprocess import (
+    run_kubectl,
+)
 from ..security.path_validation import (
     validate_kube_context_name,
-)
-from ..security.subprocess_helpers import (
-    sanitize_subprocess_error,
 )
 from .cluster_snapshot import (
     ClusterHealthSignals,
@@ -98,7 +98,12 @@ def list_kube_contexts() -> list[str]:
     """
     if is_in_cluster():
         return ["in-cluster"]
-    output = _run_command(["kubectl", "config", "get-contexts", "-o", "name"])
+    # Use bounded execution for context listing
+    output = run_kubectl(
+        ["kubectl", "config", "get-contexts", "-o", "name"],
+        timeout_seconds=KUBECTL_COMMAND_TIMEOUT_SECONDS,
+        chunk_size=None,  # No chunking needed for context listing
+    )
     return [line.strip() for line in output.splitlines() if line.strip()]
 
 
@@ -283,6 +288,8 @@ def _collect_warning_events(
 def _kubectl(context: str, *args: str) -> str:
     """Build and execute a kubectl command with validated context.
 
+    Uses bounded execution to prevent memory growth from large collections.
+
     Args:
         context: Kubernetes context name (validated), or "in-cluster" for service account auth
         *args: kubectl arguments
@@ -292,17 +299,33 @@ def _kubectl(context: str, *args: str) -> str:
 
     Raises:
         SecurityError: If context name is invalid
+        KubectlOutputTooLargeError: If output exceeds configured limits
+        KubectlExecutionError: If command fails
     """
-    # In-cluster mode: rely on service account auth without --context
+    # Build the command
     if context == "in-cluster":
-        return _run_command(["kubectl", *args])
-    # Validate context before constructing command
-    validated_context = validate_kube_context_name(context)
-    return _run_command(["kubectl", *args, "--context", validated_context])
+        cmd = ["kubectl", *args]
+    else:
+        # Validate context before constructing command
+        validated_context = validate_kube_context_name(context)
+        cmd = ["kubectl", *args, "--context", validated_context]
+
+    # Get auth mode for environment
+    auth_mode = _get_auth_mode()
+
+    # Use bounded kubectl execution
+    return run_kubectl(
+        cmd,
+        timeout_seconds=KUBECTL_COMMAND_TIMEOUT_SECONDS,
+        auth_mode=auth_mode,
+    )
 
 
 def _run_helm_command(context: str, *args: str) -> str:
     """Build and execute a helm command with validated context.
+
+    Note: Helm commands don't use bounded execution since they're typically
+    small outputs. This function preserves the existing subprocess behavior.
 
     Args:
         context: Kubernetes context name (validated)
@@ -316,14 +339,14 @@ def _run_helm_command(context: str, *args: str) -> str:
     """
     # Validate context before constructing command
     validated_context = validate_kube_context_name(context)
-    return _run_command(["helm", *args, "--kube-context", validated_context])
+    return _run_helm_subprocess(["helm", *args, "--kube-context", validated_context])
 
 
-def _run_command(command: Sequence[str]) -> str:
-    """Execute a command with auth-mode-aware environment.
+def _run_helm_subprocess(command: Sequence[str]) -> str:
+    """Execute a helm command with auth-mode-aware environment.
 
-    Ensures that inCluster mode unsets KUBECONFIG to prevent inherited
-    kubeconfig from overriding the in-cluster service account credentials.
+    This is used for helm commands which don't need bounded execution
+    (helm list typically returns small outputs).
     """
     # Get resolved auth mode (resolves once per process)
     auth_mode = _get_auth_mode()
@@ -363,6 +386,8 @@ def _run_command(command: Sequence[str]) -> str:
     except subprocess.CalledProcessError as exc:
         # Sanitize stderr to prevent credential leakage in error messages
         stderr_output = exc.stderr if exc.stderr else exc.stdout
+        from ..security.subprocess_helpers import sanitize_subprocess_error
+
         message = sanitize_subprocess_error(
             f"`{command[0]}` failed",
             stderr_output,

@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from textwrap import shorten
 from typing import ClassVar
 
 from ..collect.cluster_snapshot import WarningEventSummary
+from ..security.kubectl_subprocess import (
+    run_kubectl,
+)
 from .drilldown_models import (
     DrilldownArtifact,
     DrilldownEvidence,
@@ -400,27 +402,13 @@ class DrilldownCollector:
 
 
 def _run_command(command: Sequence[str]) -> str:
-    from ..security.subprocess_helpers import sanitize_subprocess_error
+    """Execute a kubectl command with bounded output and memory safety.
 
-    try:
-        result = subprocess.run(
-            list(command),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS,
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Command `{command[0]}` not found.") from exc
-    except subprocess.CalledProcessError as exc:
-        # Sanitize stderr to prevent credential leakage in error messages
-        stderr_output = exc.stderr if exc.stderr else exc.stdout
-        message = sanitize_subprocess_error(
-            f"`{command[0]}` failed",
-            stderr_output,
-            max_length=1000,
-        )
-        raise RuntimeError(message) from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"`{command[0]}` timed out after {KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS}s") from exc
-    return result.stdout
+    This is the default command runner for DrilldownCollector when no
+    custom runner is provided. It uses bounded kubectl execution to
+    prevent memory growth from large collections.
+    """
+    return run_kubectl(
+        command,
+        timeout_seconds=KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS,
+    )
