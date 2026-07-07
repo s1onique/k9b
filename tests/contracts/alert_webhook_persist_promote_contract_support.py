@@ -56,6 +56,51 @@ def read_artifact(artifact_path: Path) -> dict[str, object]:
     return result
 
 
+def read_first_alert_signal_artifact(root: Path) -> dict[str, object]:
+    """Read the first alert-signal artifact from root (asserts >= 1 exists)."""
+    artifact_path = assert_any_alert_signal_artifact_exists(root)
+    return read_artifact(artifact_path)
+
+
+def write_alert_signal_artifact(
+    signals_dir: Path,
+    artifact: dict[str, object],
+    *,
+    identity: str,
+) -> Path:
+    """Write an alert-signal artifact to the signals directory.
+
+    Does not mutate the input artifact dict.
+    """
+    signals_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = signals_dir / f"alert-signal-{identity}.json"
+    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+    return artifact_path
+
+
+def make_artifact_stale(
+    artifact: dict[str, object],
+    *,
+    received_at: datetime,
+    signal_id: str,
+) -> dict[str, object]:
+    """Create a stale copy of a production-produced artifact.
+
+    Copies the artifact structure but replaces time-sensitive fields:
+    - top-level and nested received_at timestamps
+    - signal_id (to avoid duplicate-signal semantics)
+
+    Preserves the production-computed identity.
+    """
+    import copy
+    from typing import Any
+    stale: dict[str, Any] = copy.deepcopy(artifact)
+    stale["received_at"] = received_at.isoformat()
+    stale["signal"]["received_at"] = received_at.isoformat()
+    stale["signal"]["signal_id"] = signal_id
+    return stale
+
+
 # =============================================================================
 # Payload builders
 # =============================================================================

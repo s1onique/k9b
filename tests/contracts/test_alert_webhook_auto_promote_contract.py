@@ -22,6 +22,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus
+from k8s_diag_agent.incident_alertmanager_webhook import (
+    handle_alertmanager_webhook,
+)
 from tests.contracts.alert_webhook_persist_promote_contract_support import (
     AlertWebhookContractTest,
     assert_any_alert_signal_artifact_exists,
@@ -29,11 +32,12 @@ from tests.contracts.alert_webhook_persist_promote_contract_support import (
     assert_incident_open,
     assert_promotion_summary,
     assert_stored_signal_count,
-    handle_alertmanager_webhook,
+    make_artifact_stale,
     make_firing_payload,
     make_incident_store,
     make_webhook_config,
     read_artifact,
+    write_alert_signal_artifact,
     write_stale_artifact,
 )
 
@@ -292,3 +296,96 @@ class TestAutoPromoteStaleArtifactGuard(AlertWebhookContractTest):
             opened_incident_count=2,
             updated_incident_count=0,
         )
+
+
+class TestAutoPromoteSameIdentityArtifactReplacement(AlertWebhookContractTest):
+    """Contract: same production identity replaces stale artifact before promotion.
+
+    This test proves that:
+    1. A stale artifact with a production-computed identity is replaced by a fresh
+       webhook for the same identity.
+    2. The artifact identity comes from production output, not a hardcoded fake key.
+    3. Promotion results in exactly one incident (not two).
+
+    NOTE: This tests "artifact replacement" semantics, not "two artifacts scanned and
+    deduplicated in one pass." The fresh webhook overwrites the stale artifact file
+    (same identity-derived path) before promotion scans, so only one artifact is scanned.
+    This is the intended identity-keyed storage contract.
+    """
+
+    def test_same_production_identity_replaces_stale_artifact_before_promotion(self) -> None:
+        payload = make_firing_payload(
+            alertname="DuplicateTestAlert",
+            namespace="prod",
+            pod="duplicate-test-pod",
+            severity="critical",
+        )
+
+        # Step 1: ask production webhook path to compute and persist identity.
+        seed_config = make_webhook_config(auto_promote=False)
+        seed_store = make_incident_store()
+
+        seed_response, seed_status = handle_alertmanager_webhook(
+            auth_header="Bearer test-token",
+            raw_body=payload,
+            config=seed_config,
+            root=self.root,
+            incident_store=seed_store,
+        )
+
+        assert seed_status == 200, f"Expected 200, got {seed_status}"
+        assert seed_response.accepted is True
+        assert_stored_signal_count(seed_response, 1)
+        assert_incident_count(seed_store, 0)
+
+        produced_artifact_path = assert_any_alert_signal_artifact_exists(self.root)
+        produced_artifact = read_artifact(produced_artifact_path)
+
+        identity = produced_artifact["identity"]
+        assert isinstance(identity, str)
+        assert identity
+
+        # Step 2: replace production artifact with a stale artifact that keeps
+        # the production-computed identity but has a distinct signal_id.
+        stale_time = datetime.now(UTC) - timedelta(days=30)
+
+        stale_artifact = make_artifact_stale(
+            produced_artifact,
+            received_at=stale_time,
+            signal_id=f"stale-signal-{identity}",
+        )
+
+        produced_artifact_path.unlink()
+        write_alert_signal_artifact(
+            signals_dir=self.signals_dir,
+            artifact=stale_artifact,
+            identity=identity,
+        )
+
+        # Step 3: send same logical alert through the real webhook path again.
+        config = make_webhook_config(auto_promote=True)
+        store = make_incident_store()
+
+        response, status_code = handle_alertmanager_webhook(
+            auth_header="Bearer test-token",
+            raw_body=payload,
+            config=config,
+            root=self.root,
+            incident_store=store,
+        )
+
+        assert status_code == 200, f"Expected 200, got {status_code}"
+        assert response.accepted is True
+
+        # Same-identity alert artifacts are keyed by identity path, so the fresh
+        # webhook replaces the stale artifact before promotion scans signals.
+        assert_promotion_summary(
+            response,
+            scanned_signal_count=1,
+            firing_signal_count=1,
+            opened_incident_count=1,
+        )
+
+        # Assert exactly one OPEN incident exists
+        assert_incident_open(store)
+        assert_incident_count(store, 1)

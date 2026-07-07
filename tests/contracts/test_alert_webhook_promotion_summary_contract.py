@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import pytest
 
+from k8s_diag_agent.incident_alertmanager_webhook import (
+    handle_alertmanager_webhook,
+)
 from tests.contracts.alert_webhook_persist_promote_contract_support import (
     AlertWebhookContractTest,
     assert_promotion_summary,
-    handle_alertmanager_webhook,
     make_firing_payload,
     make_incident_store,
     make_webhook_config,

@@ -18,13 +18,15 @@ Test contracts:
 from __future__ import annotations
 
 from k8s_diag_agent.incident_alert_signal_store import ALERT_SIGNAL_SCHEMA_VERSION
+from k8s_diag_agent.incident_alertmanager_webhook import (
+    handle_alertmanager_webhook,
+)
 from tests.contracts.alert_webhook_persist_promote_contract_support import (
     AlertWebhookContractTest,
     assert_any_alert_signal_artifact_exists,
     assert_incident_count,
     assert_promotion_summary,
     assert_stored_signal_count,
-    handle_alertmanager_webhook,
     make_firing_payload,
     make_incident_store,
     make_resolved_payload,
