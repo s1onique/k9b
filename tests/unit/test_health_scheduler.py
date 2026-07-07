@@ -515,6 +515,10 @@ class HealthSchedulerTests(unittest.TestCase):
     def test_maybe_build_diagnostic_pack_respects_env_gate(self) -> None:
         scheduler = self._make_scheduler(interval_seconds=1, max_runs=1, run_once=False)
         with patch.dict(os.environ, {"HEALTH_BUILD_DIAGNOSTIC_PACK": "0"}):
+            # PATCH NOTE: This test is checking that subprocess.run is NOT called
+            # when the env gate is off. We use subprocess.run directly since this
+            # is health loop behavior, not kubectl. The forbid_real_kubectl
+            # fixture only blocks kubectl paths.
             with patch("k8s_diag_agent.health.loop.subprocess.run") as run_mock:
                 scheduler._maybe_build_diagnostic_pack("run-123")
         run_mock.assert_not_called()
@@ -526,6 +530,10 @@ class HealthSchedulerTests(unittest.TestCase):
         build_script = health_loop._SCRIPTS_DIR / "build_diagnostic_pack.py"
         update_script = health_loop._SCRIPTS_DIR / "update_ui_index.py"
         with patch.dict(os.environ, {"HEALTH_BUILD_DIAGNOSTIC_PACK": "1"}):
+            # PATCH NOTE: This test invokes build/update scripts via subprocess.run.
+            # These are Python script invocations, not kubectl. The forbid_real_kubectl
+            # fixture only blocks kubectl paths. subprocess.run for non-kubectl commands
+            # is still patched at the health.loop.subprocess.run seam.
             with patch("k8s_diag_agent.health.loop.subprocess.run") as run_mock:
                 run_mock.return_value = None
                 scheduler._maybe_build_diagnostic_pack(run_id)

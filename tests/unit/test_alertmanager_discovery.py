@@ -313,7 +313,12 @@ def test_inventory_empty_state() -> None:
 # --- CRD Discovery Tests ---
 
 def test_crd_discovery_success() -> None:
-    """Test CRD discovery successfully finds Alertmanager CRDs."""
+    """Test CRD discovery successfully finds Alertmanager CRDs.
+    
+    PATCH NOTE: The CRD strategy uses subprocess.run directly for kubectl commands.
+    We patch subprocess.run at the correct seam where it's looked up.
+    See ACT-K9B-KUBECTL-BOUNDARY-REGRESSION01.
+    """
     strategy = CRDDiscoveryStrategy()
     
     # Mock kubectl output
@@ -338,14 +343,16 @@ def test_crd_discovery_success() -> None:
         ],
     }
     
-    with patch("subprocess.run") as mock_run:
-        # Mock get alertmanagers
-        mock_alertmanagers = MagicMock()
-        mock_alertmanagers.returncode = 0
-        mock_alertmanagers.stdout = json.dumps(kubectl_output)
-        
-        mock_run.return_value = mock_alertmanagers
-        
+    # Patch at the correct seam: where subprocess.run is looked up in the CRD strategy module
+    # The CRD strategy imports subprocess inside its discover method
+    with patch(
+        "k8s_diag_agent.external_analysis.alertmanager_discovery_crd_strategy.subprocess.run",
+        return_value=MagicMock(
+            returncode=0,
+            stdout=json.dumps(kubectl_output),
+            stderr="",
+        ),
+    ):
         result = strategy.discover()
     
     assert result.strategy == "alertmanager-crd"

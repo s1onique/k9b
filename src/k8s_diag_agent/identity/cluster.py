@@ -8,6 +8,7 @@ import subprocess
 from typing import Any
 
 from ..security.kubectl_context import render_kubectl_context_args
+from ..security.kubectl_errors import KubectlExecutionError
 from ..security.kubectl_subprocess import run_kubectl
 
 _logger = logging.getLogger(__name__)
@@ -49,8 +50,9 @@ def derive_cluster_uid(
 
         _logger.debug("Failed to get kube-system namespace UID")
 
-    except FileNotFoundError:
-        _logger.debug("kubectl not found in PATH")
+    except (FileNotFoundError, KubectlExecutionError) as exc:
+        # KubectlExecutionError covers: not found, timeout, permission denied, etc.
+        _logger.debug("kubectl get namespace failed: %s", type(exc).__name__)
     except subprocess.TimeoutExpired:
         _logger.debug("kubectl get namespace timed out")
     except json.JSONDecodeError as exc:
