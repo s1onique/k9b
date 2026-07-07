@@ -70,7 +70,7 @@ class TestVerifyPodFailureSymptomIntegration(unittest.TestCase):
 
         call_count = 0
 
-        def kubectl_side_effect(*args: str, **kwargs: int) -> tuple[int, str, str]:
+        def kubectl_side_effect(*args: str, **kwargs: object) -> tuple[int, str, str]:
             nonlocal call_count
             call_count += 1
             # First few calls return Pending/ContainerCreating
@@ -127,7 +127,7 @@ class TestVerifyPodFailureSymptomIntegration(unittest.TestCase):
 
         call_count = 0
 
-        def kubectl_side_effect(*args: str, **kwargs: int) -> tuple[int, str, str]:
+        def kubectl_side_effect(*args: str, **kwargs: object) -> tuple[int, str, str]:
             nonlocal call_count
             call_count += 1
             if "get" in args[2] and "pod" in args[2]:
@@ -169,7 +169,7 @@ class TestVerifyPodFailureSymptomIntegration(unittest.TestCase):
         """Should return TIMEOUT when deadline exceeded."""
         call_count = 0
 
-        def kubectl_side_effect(*args: str, **kwargs: int) -> tuple[int, str, str]:
+        def kubectl_side_effect(*args: str, **kwargs: object) -> tuple[int, str, str]:
             nonlocal call_count
             call_count += 1
             if "get" in args[2] and "pod" in args[2]:
