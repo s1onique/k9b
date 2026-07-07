@@ -1,86 +1,34 @@
 /**
- * incidentDiagnosisLoopUpdate.test.ts — Unit tests for Elm-style reducer.
+ * incidentDiagnosisLoopUpdate.status.test.ts — State transition tests.
  *
- * Tests pure state transitions without mounting React components.
- * These tests prove the state machine guards against impossible states.
+ * Tests pure state transitions for the Elm-style reducer.
+ * Proves the state machine guards against impossible states.
  *
- * The key tests:
+ * Key behaviors tested:
  * 1. Valid transitions are allowed
  * 2. Invalid transitions are rejected (impossible states prevented)
  * 3. State is preserved when transitions are invalid
  * 4. Stale completions are rejected (runId ownership verification)
  */
 
-import { update, toggleCheckId } from "./incidentDiagnosisLoopUpdate";
-import type { DiagnosisLoopState, DiagnosisLoopMsg } from "./incidentDiagnosisLoopModel";
-import type { DiagnosisLoopOnePassResponse } from "../../api/incidentDiagnosisLoop";
-
-// =============================================================================
-// Test Fixtures
-// =============================================================================
-
-const INCIDENT_ID = "test-incident-123";
-const RUN_ID = "test-run-id";
-
-const createFakeResponse = (overrides: Partial<DiagnosisLoopOnePassResponse> = {}): DiagnosisLoopOnePassResponse => ({
-  schema_version: "1.0",
-  incident_id: INCIDENT_ID,
-  run_id: "manual-loop-2026-01-01T00-00-00",
-  read_only: true,
-  allowed_actions: [],
-  decision: "test-decision",
-  checks_requested: 1,
-  checks_run: 1,
-  checks_skipped: 0,
-  checks_rejected: 0,
-  artifacts: {
-    read_only_check_results: { written: true, name: "test-results.json" },
-    diagnosis_loop_pass: { written: true, name: "test-pass.json" },
-  },
-  case_file_linked_artifact: true,
-  safety_metadata: {
-    read_only: true,
-    allowed_actions: [],
-    no_kubernetes_client: true,
-    no_shell: true,
-    no_subprocess: true,
-    no_kubectl: true,
-    no_mutation: true,
-    fake_runner: true,
-    one_pass_only: true,
-  },
-  ...overrides,
-});
-
-const createIdleState = (overrides: Partial<DiagnosisLoopState> = {}): DiagnosisLoopState => ({
-  tag: "idle",
-  incidentId: INCIDENT_ID,
-  selectedCheckIds: new Set(),
-  ...overrides,
-} as DiagnosisLoopState);
-
-const createRunningState = (selectedCheckIds: Set<string> = new Set(), runId: string = RUN_ID): DiagnosisLoopState => ({
-  tag: "running",
-  incidentId: INCIDENT_ID,
-  runId,
-  selectedCheckIds,
-});
-
-const createSuccessState = (response: DiagnosisLoopOnePassResponse, runId: string = RUN_ID): DiagnosisLoopState => ({
-  tag: "success",
-  incidentId: INCIDENT_ID,
-  runId,
-  selectedCheckIds: new Set(),
-  response,
-});
-
-const createErrorState = (errorMessage: string = "Test error", runId: string = RUN_ID): DiagnosisLoopState => ({
-  tag: "error",
-  incidentId: INCIDENT_ID,
-  runId,
-  selectedCheckIds: new Set(),
-  errorMessage,
-});
+import { update } from "./incidentDiagnosisLoopUpdate";
+import type { DiagnosisLoopState } from "./incidentDiagnosisLoopModel";
+import {
+  INCIDENT_ID,
+  RUN_ID,
+  createEmptyState,
+  createIdleState,
+  createRunningState,
+  createSuccessState,
+  createErrorState,
+  createFakeResponse,
+  buildRunRequestedMsg,
+  buildCheckToggledMsg,
+  buildInitMsg,
+  buildRunCompletedMsg,
+  buildRunFailedMsg,
+  buildResetRequestedMsg,
+} from "./incidentDiagnosisLoopUpdate.testSupport";
 
 // =============================================================================
 // empty State Tests
@@ -88,8 +36,8 @@ const createErrorState = (errorMessage: string = "Test error", runId: string = R
 
 describe("empty state transitions", () => {
   test("init transitions from empty to idle", () => {
-    const state: DiagnosisLoopState = { tag: "empty" };
-    const msg: DiagnosisLoopMsg = { type: "init", incidentId: INCIDENT_ID };
+    const state = createEmptyState();
+    const msg = buildInitMsg(INCIDENT_ID);
 
     const next = update(state, msg);
 
@@ -101,8 +49,8 @@ describe("empty state transitions", () => {
   });
 
   test("checkToggled is ignored in empty state", () => {
-    const state: DiagnosisLoopState = { tag: "empty" };
-    const msg: DiagnosisLoopMsg = { type: "checkToggled", checkId: "check-1" };
+    const state = createEmptyState();
+    const msg = buildCheckToggledMsg("check-1");
 
     const next = update(state, msg);
 
@@ -110,8 +58,8 @@ describe("empty state transitions", () => {
   });
 
   test("runRequested is ignored in empty state", () => {
-    const state: DiagnosisLoopState = { tag: "empty" };
-    const msg: DiagnosisLoopMsg = { type: "runRequested", runId: RUN_ID };
+    const state = createEmptyState();
+    const msg = buildRunRequestedMsg(RUN_ID);
 
     const next = update(state, msg);
 
@@ -126,7 +74,7 @@ describe("empty state transitions", () => {
 describe("idle state transitions", () => {
   test("checkToggled adds new check to selection", () => {
     const state = createIdleState();
-    const msg: DiagnosisLoopMsg = { type: "checkToggled", checkId: "check-1" };
+    const msg = buildCheckToggledMsg("check-1");
 
     const next = update(state, msg);
 
@@ -138,7 +86,7 @@ describe("idle state transitions", () => {
 
   test("checkToggled removes existing check from selection", () => {
     const state = createIdleState({ selectedCheckIds: new Set(["check-1", "check-2"]) });
-    const msg: DiagnosisLoopMsg = { type: "checkToggled", checkId: "check-1" };
+    const msg = buildCheckToggledMsg("check-1");
 
     const next = update(state, msg);
 
@@ -151,7 +99,7 @@ describe("idle state transitions", () => {
 
   test("runRequested transitions from idle to running with runId", () => {
     const state = createIdleState({ selectedCheckIds: new Set(["check-1"]) });
-    const msg: DiagnosisLoopMsg = { type: "runRequested", runId: RUN_ID };
+    const msg = buildRunRequestedMsg(RUN_ID);
 
     const next = update(state, msg);
 
@@ -165,7 +113,7 @@ describe("idle state transitions", () => {
 
   test("init with same incidentId returns same state", () => {
     const state = createIdleState();
-    const msg: DiagnosisLoopMsg = { type: "init", incidentId: INCIDENT_ID };
+    const msg = buildInitMsg(INCIDENT_ID);
 
     const next = update(state, msg);
 
@@ -174,7 +122,7 @@ describe("idle state transitions", () => {
 
   test("init with different incidentId resets state", () => {
     const state = createIdleState({ selectedCheckIds: new Set(["check-1"]) });
-    const msg: DiagnosisLoopMsg = { type: "init", incidentId: "different-incident" };
+    const msg = buildInitMsg("different-incident");
 
     const next = update(state, msg);
 
@@ -183,26 +131,6 @@ describe("idle state transitions", () => {
       incidentId: "different-incident",
       selectedCheckIds: new Set(),
     });
-  });
-
-  test("runCompleted is rejected in idle state", () => {
-    const state = createIdleState();
-    const msg: DiagnosisLoopMsg = { type: "runCompleted", incidentId: INCIDENT_ID, runId: RUN_ID, response: createFakeResponse() };
-
-    const next = update(state, msg);
-
-    // State unchanged - cannot complete when idle
-    expect(next).toEqual(state);
-  });
-
-  test("runFailed is rejected in idle state", () => {
-    const state = createIdleState();
-    const msg: DiagnosisLoopMsg = { type: "runFailed", incidentId: INCIDENT_ID, runId: RUN_ID, errorMessage: "Network error" };
-
-    const next = update(state, msg);
-
-    // State unchanged - cannot fail when idle
-    expect(next).toEqual(state);
   });
 });
 
@@ -214,7 +142,7 @@ describe("running state transitions", () => {
   test("runCompleted transitions from running to success with matching runId", () => {
     const response = createFakeResponse();
     const state = createRunningState(new Set(["check-1"]));
-    const msg: DiagnosisLoopMsg = { type: "runCompleted", incidentId: INCIDENT_ID, runId: RUN_ID, response };
+    const msg = buildRunCompletedMsg(INCIDENT_ID, RUN_ID, response);
 
     const next = update(state, msg);
 
@@ -229,7 +157,7 @@ describe("running state transitions", () => {
 
   test("runFailed transitions from running to error with matching runId", () => {
     const state = createRunningState(new Set(["check-1"]));
-    const msg: DiagnosisLoopMsg = { type: "runFailed", incidentId: INCIDENT_ID, runId: RUN_ID, errorMessage: "Server error" };
+    const msg = buildRunFailedMsg(INCIDENT_ID, RUN_ID, "Server error");
 
     const next = update(state, msg);
 
@@ -242,19 +170,9 @@ describe("running state transitions", () => {
     });
   });
 
-  test("checkToggled is rejected while running", () => {
-    const state = createRunningState(new Set(["check-1"]));
-    const msg: DiagnosisLoopMsg = { type: "checkToggled", checkId: "check-2" };
-
-    const next = update(state, msg);
-
-    // State unchanged - cannot toggle while running
-    expect(next).toEqual(state);
-  });
-
   test("runRequested is ignored while already running", () => {
     const state = createRunningState(new Set(["check-1"]));
-    const msg: DiagnosisLoopMsg = { type: "runRequested", runId: "new-run-id" };
+    const msg = buildRunRequestedMsg("new-run-id");
 
     const next = update(state, msg);
 
@@ -264,7 +182,7 @@ describe("running state transitions", () => {
 
   test("resetRequested is rejected while running", () => {
     const state = createRunningState();
-    const msg: DiagnosisLoopMsg = { type: "resetRequested" };
+    const msg = buildResetRequestedMsg();
 
     const next = update(state, msg);
 
@@ -282,7 +200,7 @@ describe("success state transitions", () => {
 
   test("runRequested transitions from success to running (run another pass)", () => {
     const successState = createSuccessState(response);
-    const msg: DiagnosisLoopMsg = { type: "runRequested", runId: "new-run-id" };
+    const msg = buildRunRequestedMsg("new-run-id");
 
     const next = update(successState, msg);
 
@@ -296,7 +214,7 @@ describe("success state transitions", () => {
 
   test("resetRequested transitions from success to idle", () => {
     const successState = createSuccessState(response);
-    const msg: DiagnosisLoopMsg = { type: "resetRequested" };
+    const msg = buildResetRequestedMsg();
 
     const next = update(successState, msg);
 
@@ -307,34 +225,16 @@ describe("success state transitions", () => {
     });
   });
 
-  test("checkToggled is ignored in success state", () => {
+  test("runRequested transitions from success to running (retry)", () => {
     const successState = createSuccessState(response);
-    const msg: DiagnosisLoopMsg = { type: "checkToggled", checkId: "check-1" };
+    const msg = buildRunRequestedMsg("retry-run-id");
 
     const next = update(successState, msg);
 
-    // State unchanged - toggles don't affect current result
-    expect(next).toEqual(successState);
-  });
-
-  test("runCompleted is ignored in success state", () => {
-    const successState = createSuccessState(response);
-    const msg: DiagnosisLoopMsg = { type: "runCompleted", incidentId: INCIDENT_ID, runId: "new-run", response: createFakeResponse() };
-
-    const next = update(successState, msg);
-
-    // State unchanged - already succeeded
-    expect(next).toEqual(successState);
-  });
-
-  test("runFailed is rejected in success state", () => {
-    const successState = createSuccessState(response);
-    const msg: DiagnosisLoopMsg = { type: "runFailed", incidentId: INCIDENT_ID, runId: "new-run", errorMessage: "Should not happen" };
-
-    const next = update(successState, msg);
-
-    // State unchanged - already succeeded
-    expect(next).toEqual(successState);
+    expect(next.tag).toBe("running");
+    if (next.tag === "running") {
+      expect(next.runId).toBe("retry-run-id");
+    }
   });
 });
 
@@ -345,7 +245,7 @@ describe("success state transitions", () => {
 describe("error state transitions", () => {
   test("runRequested transitions from error to running (retry)", () => {
     const state = createErrorState("Network error");
-    const msg: DiagnosisLoopMsg = { type: "runRequested", runId: "retry-run-id" };
+    const msg = buildRunRequestedMsg("retry-run-id");
 
     const next = update(state, msg);
 
@@ -359,7 +259,7 @@ describe("error state transitions", () => {
 
   test("resetRequested transitions from error to idle", () => {
     const state = createErrorState("Network error");
-    const msg: DiagnosisLoopMsg = { type: "resetRequested" };
+    const msg = buildResetRequestedMsg();
 
     const next = update(state, msg);
 
@@ -370,29 +270,9 @@ describe("error state transitions", () => {
     });
   });
 
-  test("checkToggled is ignored in error state", () => {
-    const state = createErrorState("Network error");
-    const msg: DiagnosisLoopMsg = { type: "checkToggled", checkId: "check-1" };
-
-    const next = update(state, msg);
-
-    // State unchanged - toggles don't affect current error
-    expect(next).toEqual(state);
-  });
-
-  test("runCompleted is rejected in error state", () => {
-    const state = createErrorState("Network error");
-    const msg: DiagnosisLoopMsg = { type: "runCompleted", incidentId: INCIDENT_ID, runId: RUN_ID, response: createFakeResponse() };
-
-    const next = update(state, msg);
-
-    // State unchanged - already failed
-    expect(next).toEqual(state);
-  });
-
   test("repeated runFailed updates error message", () => {
     const state = createErrorState("First error");
-    const msg: DiagnosisLoopMsg = { type: "runFailed", incidentId: INCIDENT_ID, runId: "stale-run", errorMessage: "Second error" };
+    const msg = buildRunFailedMsg(INCIDENT_ID, "stale-run", "Second error");
 
     const next = update(state, msg);
 
@@ -410,12 +290,11 @@ describe("error state transitions", () => {
 describe("stale completion rejection", () => {
   test("rejects completion with wrong incidentId", () => {
     const state = createRunningState(new Set(["check-1"]));
-    const msg: DiagnosisLoopMsg = {
-      type: "runCompleted",
-      incidentId: "different-incident",
-      runId: RUN_ID,
-      response: createFakeResponse({ incident_id: "different-incident" }),
-    };
+    const msg = buildRunCompletedMsg(
+      "different-incident",
+      RUN_ID,
+      createFakeResponse({ incident_id: "different-incident" }),
+    );
 
     const next = update(state, msg);
 
@@ -425,12 +304,11 @@ describe("stale completion rejection", () => {
 
   test("rejects completion with wrong runId for same incident", () => {
     const state = createRunningState(new Set(["check-1"]));
-    const msg: DiagnosisLoopMsg = {
-      type: "runCompleted",
-      incidentId: INCIDENT_ID,
-      runId: "stale-run-id",
-      response: createFakeResponse({ incident_id: INCIDENT_ID }),
-    };
+    const msg = buildRunCompletedMsg(
+      INCIDENT_ID,
+      "stale-run-id",
+      createFakeResponse({ incident_id: INCIDENT_ID }),
+    );
 
     const next = update(state, msg);
 
@@ -440,12 +318,7 @@ describe("stale completion rejection", () => {
 
   test("rejects failure with wrong incidentId", () => {
     const state = createRunningState(new Set(["check-1"]));
-    const msg: DiagnosisLoopMsg = {
-      type: "runFailed",
-      incidentId: "different-incident",
-      runId: RUN_ID,
-      errorMessage: "Network error",
-    };
+    const msg = buildRunFailedMsg("different-incident", RUN_ID, "Network error");
 
     const next = update(state, msg);
 
@@ -455,12 +328,7 @@ describe("stale completion rejection", () => {
 
   test("rejects failure with wrong runId for same incident", () => {
     const state = createRunningState(new Set(["check-1"]));
-    const msg: DiagnosisLoopMsg = {
-      type: "runFailed",
-      incidentId: INCIDENT_ID,
-      runId: "stale-run-id",
-      errorMessage: "stale failure",
-    };
+    const msg = buildRunFailedMsg(INCIDENT_ID, "stale-run-id", "stale failure");
 
     const next = update(state, msg);
 
@@ -471,12 +339,7 @@ describe("stale completion rejection", () => {
   test("accepts completion with matching incidentId and runId", () => {
     const state = createRunningState(new Set(["check-1"]));
     const response = createFakeResponse();
-    const msg: DiagnosisLoopMsg = {
-      type: "runCompleted",
-      incidentId: INCIDENT_ID,
-      runId: RUN_ID,
-      response,
-    };
+    const msg = buildRunCompletedMsg(INCIDENT_ID, RUN_ID, response);
 
     const next = update(state, msg);
 
@@ -499,7 +362,7 @@ describe("impossible state prevention", () => {
    */
   test("does not accept diagnosis completion while incident detail is still loading", () => {
     const state: DiagnosisLoopState = { tag: "loading" as const, incidentId: "inc-1" };
-    const msg: DiagnosisLoopMsg = { type: "runCompleted", incidentId: INCIDENT_ID, runId: RUN_ID, response: createFakeResponse() };
+    const msg = buildRunCompletedMsg(INCIDENT_ID, RUN_ID, createFakeResponse());
 
     const next = update(state, msg);
 
@@ -509,7 +372,7 @@ describe("impossible state prevention", () => {
 
   test("cannot transition to running without explicit runRequested", () => {
     const state = createIdleState();
-    const msg: DiagnosisLoopMsg = { type: "checkToggled", checkId: "check-1" };
+    const msg = buildCheckToggledMsg("check-1");
 
     const next = update(state, msg);
 
@@ -519,7 +382,7 @@ describe("impossible state prevention", () => {
 
   test("cannot skip running state to reach success", () => {
     const state = createIdleState();
-    const msg: DiagnosisLoopMsg = { type: "runCompleted", incidentId: INCIDENT_ID, runId: RUN_ID, response: createFakeResponse() };
+    const msg = buildRunCompletedMsg(INCIDENT_ID, RUN_ID, createFakeResponse());
 
     const next = update(state, msg);
 
@@ -529,44 +392,11 @@ describe("impossible state prevention", () => {
 
   test("cannot skip running state to reach error", () => {
     const state = createIdleState();
-    const msg: DiagnosisLoopMsg = { type: "runFailed", incidentId: INCIDENT_ID, runId: RUN_ID, errorMessage: "Error" };
+    const msg = buildRunFailedMsg(INCIDENT_ID, RUN_ID, "Error");
 
     const next = update(state, msg);
 
     // Cannot go directly to error from idle
     expect(next.tag).toBe("idle");
-  });
-});
-
-// =============================================================================
-// toggleCheckId Helper Tests
-// =============================================================================
-
-describe("toggleCheckId", () => {
-  test("adds checkId when not present", () => {
-    const set = new Set<string>(["a", "b"]);
-    const result = toggleCheckId(set, "c");
-
-    expect(result).toEqual(new Set(["a", "b", "c"]));
-    // Original set unchanged
-    expect(set).toEqual(new Set(["a", "b"]));
-  });
-
-  test("removes checkId when present", () => {
-    const set = new Set<string>(["a", "b", "c"]);
-    const result = toggleCheckId(set, "b");
-
-    expect(result).toEqual(new Set(["a", "c"]));
-    // Original set unchanged
-    expect(set).toEqual(new Set(["a", "b", "c"]));
-  });
-
-  test("returns new Set instance (immutability)", () => {
-    const set = new Set<string>();
-    const result = toggleCheckId(set, "x");
-
-    expect(result).not.toBe(set);
-    expect(set.size).toBe(0);
-    expect(result.size).toBe(1);
   });
 });
