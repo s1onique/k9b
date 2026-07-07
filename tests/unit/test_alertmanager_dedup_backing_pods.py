@@ -14,15 +14,14 @@ from unittest.mock import patch
 
 from k8s_diag_agent.external_analysis.alertmanager_discovery_dedup_helpers import (
     DedupKey,
-    _get_service_backing_pods,
     _build_backing_pod_cache,
+    _get_service_backing_pods,
     _group_by_backing_pods,
     deduplicate_service_heuristic_sources,
 )
 from k8s_diag_agent.external_analysis.alertmanager_discovery_models import (
     AlertmanagerSource,
     AlertmanagerSourceOrigin,
-    AlertmanagerSourceState,
 )
 
 
