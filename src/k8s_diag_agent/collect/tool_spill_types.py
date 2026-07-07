@@ -31,6 +31,9 @@ class SpillReason(StrEnum):
     SIZE_THRESHOLD = "size_threshold"
 
     #: Content exceeded llm_visible_bytes
+    LLM_VISIBLE_EXCEEDED = "llm_visible_exceeded"
+
+    #: Deprecated: use LLM_VISIBLE_EXCEEDED. Kept for import compatibility.
     LLMR_VISIBLE_EXCEEDED = "llm_visible_exceeded"
 
     #: Content was explicitly flagged for artifact storage

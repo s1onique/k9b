@@ -75,6 +75,17 @@ class TestToolOutputSpillResult:
         assert result_zero.spill_ratio == 0.0
 
 
+class TestSpillReason:
+    def test_llm_visible_exceeded_member_has_stable_value(self) -> None:
+        """LLM_VISIBLE_EXCEEDED should have stable serialized value."""
+        assert SpillReason.LLM_VISIBLE_EXCEEDED.value == "llm_visible_exceeded"
+
+    def test_deprecated_llmr_visible_exceeded_alias_is_stable(self) -> None:
+        """Deprecated LLMR_VISIBLE_EXCEEDED alias should have stable value."""
+        assert SpillReason.LLMR_VISIBLE_EXCEEDED.value == "llm_visible_exceeded"
+        assert SpillReason.LLMR_VISIBLE_EXCEEDED is SpillReason.LLM_VISIBLE_EXCEEDED
+
+
 class TestRawToolOutputArtifact:
     def test_to_dict_roundtrip(self) -> None:
         """to_dict should produce serializable output."""
