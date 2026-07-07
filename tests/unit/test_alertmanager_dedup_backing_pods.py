@@ -128,6 +128,10 @@ class TestBuildBackingPodCache:
             assert len(cache) == 2
             assert "monitoring/alertmanager-operated" in cache
             assert "monitoring/kube-prometheus-stack-alertmanager" in cache
+        
+        # Should call _get_service_backing_pods for each unique namespace/name pair
+        assert mock_get_pods.call_count == 2
+        assert cache == {"monitoring/alertmanager-operated": frozenset({"10.48.3.1", "10.48.5.168"}), "monitoring/kube-prometheus-stack-alertmanager": frozenset({"10.48.3.1", "10.48.5.168"})}
 
     def test_deduplicates_cache_keys(self) -> None:
         """Should not query same namespace/name pair twice."""
