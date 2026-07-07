@@ -11,7 +11,6 @@ import json
 import tempfile
 from pathlib import Path
 
-
 from k8s_diag_agent.collect.incident_collectors import (
     _build_projection_metadata,
     collect_pods,
