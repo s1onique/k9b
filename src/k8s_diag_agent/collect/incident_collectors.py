@@ -30,6 +30,9 @@ from .incident_parsers import (
 )
 from .live_snapshot_helpers import _extract_items
 from .tool_output_projection import project_read_only_tool_output
+from .tool_projection_metadata import (
+    build_tool_projection_metadata,
+)
 from .tool_spill_types import ToolOutputSpillResult
 
 _logger = logging.getLogger(__name__)
@@ -62,7 +65,8 @@ def _build_projection_metadata(
 ) -> dict[str, Any]:
     """Build projection metadata from spill result.
 
-    This metadata is operator-visible and describes the spill/truncation state.
+    DEPRECATED: Use build_tool_projection_metadata() from tool_projection_metadata instead.
+    This wrapper maintains backward compatibility while delegating to the canonical implementation.
 
     Args:
         spill_result: Result from spill_tool_output()
@@ -71,19 +75,9 @@ def _build_projection_metadata(
     Returns:
         Metadata dict with spill, truncation, and provenance info
     """
-    return {
-        "source_tool": source_tool,
-        "schema_version": spill_result.schema_version,
-        "spill_occurred": spill_result.spill_occurred,
-        "spill_reason": spill_result.spill_reason,
-        "raw_artifact_id": spill_result.raw_artifact_id,
-        "raw_artifact_path": spill_result.raw_artifact_path,
-        "raw_size_bytes": spill_result.raw_size_bytes,
-        "llm_visible_size_bytes": spill_result.llm_visible_size_bytes,
-        "content_type": spill_result.content_type,
-        "error": spill_result.error,
-        "provenance": spill_result.provenance,
-    }
+    # Delegate to canonical implementation
+    metadata = build_tool_projection_metadata(spill_result, source_tool)
+    return metadata.to_dict()
 
 
 def collect_pods(

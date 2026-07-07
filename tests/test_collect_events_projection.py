@@ -102,10 +102,9 @@ class TestCollectEventsProjection:
                 # Spill metadata present
                 assert metadata.get("spill_occurred") is True
                 assert metadata.get("raw_artifact_id") is not None
-                assert metadata.get("raw_artifact_path") is not None
+                # raw_artifact_path is NOT included per artifact path policy
+                assert "raw_artifact_path" not in metadata
                 assert metadata.get("raw_size_bytes") > metadata.get("llm_visible_size_bytes")
-                # Artifact file should exist
-                assert Path(metadata["raw_artifact_path"]).exists()
 
     def test_large_events_output_without_artifact_dir_returns_bounded_error(self) -> None:
         """Large events output without artifact_dir returns bounded error metadata."""
@@ -322,7 +321,7 @@ class TestCollectEventsStaleCallerRegression:
         ):
             # Old code expecting 2 values should fail
             try:
-                events, errors = collect_events("default", None, 2)  # type: ignore
+                events, errors = collect_events("default", None, 2)
                 # If this doesn't raise, the test framework should catch the extra value
                 assert False, "Should have raised ValueError for too many values"
             except ValueError as e:

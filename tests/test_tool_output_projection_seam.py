@@ -13,10 +13,9 @@ from pathlib import Path
 
 from k8s_diag_agent.collect.incident_collectors import (
     _build_projection_metadata,
-    collect_events,
     collect_pods,
 )
-from k8s_diag_agent.collect.tool_budget_defaults import KUBECTL_EVENTS_BUDGET, KUBECTL_GET_BUDGET
+from k8s_diag_agent.collect.tool_budget_defaults import KUBECTL_GET_BUDGET
 from k8s_diag_agent.collect.tool_budget_registry import get_tool_budget_registry
 from k8s_diag_agent.collect.tool_budget_types import ToolBudget
 from k8s_diag_agent.collect.tool_output_projection import (
@@ -292,7 +291,8 @@ class TestBuildProjectionMetadata:
         assert metadata["spill_occurred"] is True
         assert metadata["spill_reason"] == "size_threshold"
         assert metadata["raw_artifact_id"] == "artifact-123"
-        assert metadata["raw_artifact_path"] == "/tmp/artifact.json"
+        # raw_artifact_path is NOT included per artifact path policy
+        assert "raw_artifact_path" not in metadata
 
     def test_handles_error_result(self) -> None:
         """Handles error in spill result."""
