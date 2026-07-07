@@ -1,0 +1,4 @@
+{"timestamp":"2026-01-01T10:00:00Z","component":"health-scheduler","severity":"INFO","message":"Starting scheduler"}
+Deprecated LLM provider alias used
+kubectl failed with exit code 1: argv=['kubectl', 'version', '--output', 'json']
+{"timestamp":"2026-01-01T10:00:05Z","component":"health-loop","severity":"WARNING","message":"Snapshot collection failed"}

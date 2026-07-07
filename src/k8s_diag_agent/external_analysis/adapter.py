@@ -17,6 +17,9 @@ from .config import ExternalAnalysisAdapterConfig, ExternalAnalysisSettings
 
 _logger = logging.getLogger(__name__)
 
+# Run label for adapter logs - used when emit_structured_log requires a run_label
+_ADAPTER_RUN_LABEL = "llm-provider"
+
 
 class ExternalAnalysisExecutionError(RuntimeError):
     """Base exception for external analysis adapter failures."""
@@ -87,13 +90,17 @@ def normalize_adapter_name(name: str) -> str:
     if normalized == LEGACY_LLAMACPP_ADAPTER_NAME:
         # Only warn once per adapter name to avoid noisy repeated warnings
         if normalized not in _DEPRECATION_WARNING_LOGGED:
-            _logger.warning(
-                "Deprecated LLM provider alias used",
-                extra={
-                    "event": "deprecated-provider-alias",
-                    "provider": LEGACY_LLAMACPP_ADAPTER_NAME,
-                    "replacement": OPENAI_COMPATIBLE_ADAPTER_NAME,
-                },
+            # Import here to avoid circular import
+            from ..structured_logging import emit_structured_log
+            # Emit structured log for runtime contract compliance (JSONL-only)
+            emit_structured_log(
+                component="llm-provider",
+                message="Deprecated LLM provider alias used",
+                run_label=_ADAPTER_RUN_LABEL,
+                severity="WARNING",
+                event="deprecated-provider-alias",
+                provider=LEGACY_LLAMACPP_ADAPTER_NAME,
+                replacement=OPENAI_COMPATIBLE_ADAPTER_NAME,
             )
             _DEPRECATION_WARNING_LOGGED.add(normalized)
         return OPENAI_COMPATIBLE_ADAPTER_NAME

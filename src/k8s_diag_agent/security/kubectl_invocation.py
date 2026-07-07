@@ -14,6 +14,9 @@ _ALL_NAMESPACES_FLAG = frozenset({"--all-namespaces", "-A"})
 # Default timeout for kubectl commands
 DEFAULT_TIMEOUT_SECONDS = 60
 
+# Run label for kubectl invocation logs
+_KUBECTL_RUN_LABEL = "kubectl-invocation"
+
 
 @dataclass
 class KubectlInvocation:
@@ -172,39 +175,68 @@ class KubectlInvocation:
         }
 
 
+# INVARIANT: K9B_DEBUG_UNSTRUCTURED_LOGS must be absent or "false" in scheduler runtime.
+# This env var is an escape hatch for local debugging only and must never be set
+# in production scheduler deployments. Setting it to "true" will emit unstructured
+# logs and break the runtime contract (UI warning counts, log queryability).
+
+
 def log_kubectl_invocation(
     invocation: KubectlInvocation,
     level: str,
     message: str,
 ) -> None:
-    """Log kubectl invocation with structured metadata."""
-    log_level = getattr(logging, level.upper(), logging.DEBUG)
-    if not _logger.isEnabledFor(log_level):
-        return
+    """Log kubectl invocation as a JSONL runtime event only.
+
+    Runtime path emits exactly one scheduler-visible log record per event,
+    and it is JSONL. This is the contract for runtime monitoring and UI
+    warning counts (12-factor logging / event stream).
+
+    For local debugging, set K9B_DEBUG_UNSTRUCTURED_LOGS=true (NOT in scheduler).
+    See module-level INVARIANT about this env var.
+    """
+    import os
+
+    # Import here to avoid circular import between structured_logging and security modules
+    from ..structured_logging import emit_structured_log
 
     log_data = invocation.to_log_dict()
-    # Use a compact summary for the log message
-    summary_parts = [
-        f"argv={list(invocation.argv[:4])}..."
-        if len(invocation.argv) > 4
-        else f"argv={list(invocation.argv)}",
-    ]
-    if invocation.resource_kind:
-        summary_parts.append(f"kind={invocation.resource_kind}")
-    if invocation.namespace:
-        summary_parts.append(f"ns={invocation.namespace}")
-    elif invocation.is_all_namespaces:
-        summary_parts.append("ns=all")
-    if invocation.output_format:
-        summary_parts.append(f"fmt={invocation.output_format}")
-    summary_parts.append(f"timeout={invocation.timeout_seconds}s")
-    if invocation.run_id:
-        summary_parts.append(f"run_id={invocation.run_id[:8]}")
 
-    summary = " | ".join(summary_parts)
-
-    _logger.log(
-        log_level,
-        f"{message}: {summary}",
-        extra={"kubectl_invocation": log_data},
+    # Emit structured log for runtime contract compliance (JSONL-only)
+    emit_structured_log(
+        component="kubectl-invocation",
+        message=message,
+        run_label=_KUBECTL_RUN_LABEL,
+        severity=level.upper(),
+        **log_data,
     )
+
+    # Debug-only: emit standard logger for local debugging (NOT in scheduler runtime path)
+    if os.environ.get("K9B_DEBUG_UNSTRUCTURED_LOGS") == "true":
+        log_level = getattr(logging, level.upper(), logging.DEBUG)
+        if _logger.isEnabledFor(log_level):
+            # Use a compact summary for the log message
+            summary_parts = [
+                f"argv={list(invocation.argv[:4])}..."
+                if len(invocation.argv) > 4
+                else f"argv={list(invocation.argv)}",
+            ]
+            if invocation.resource_kind:
+                summary_parts.append(f"kind={invocation.resource_kind}")
+            if invocation.namespace:
+                summary_parts.append(f"ns={invocation.namespace}")
+            elif invocation.is_all_namespaces:
+                summary_parts.append("ns=all")
+            if invocation.output_format:
+                summary_parts.append(f"fmt={invocation.output_format}")
+            summary_parts.append(f"timeout={invocation.timeout_seconds}s")
+            if invocation.run_id:
+                summary_parts.append(f"run_id={invocation.run_id[:8]}")
+
+            summary = " | ".join(summary_parts)
+
+            _logger.log(
+                log_level,
+                f"{message}: {summary}",
+                extra={"kubectl_invocation": log_data},
+            )

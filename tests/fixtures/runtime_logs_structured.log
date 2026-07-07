@@ -1,0 +1,4 @@
+{"timestamp":"2026-01-01T10:00:00Z","component":"health-scheduler","severity":"INFO","message":"Starting scheduler"}
+{"timestamp":"2026-01-01T10:00:01Z","component":"llm-provider","severity":"WARNING","message":"Deprecated LLM provider alias used","event":"deprecated-provider-alias","provider":"llamacpp","replacement":"openai_compatible"}
+{"timestamp":"2026-01-01T10:00:02Z","component":"kubectl-invocation","severity":"ERROR","message":"kubectl failed with exit code 1","event":"kubectl-invocation-failed","argv":["kubectl","version","--output","json"],"returncode":1}
+{"timestamp":"2026-01-01T10:00:05Z","component":"health-loop","severity":"WARNING","message":"Snapshot collection failed","event":"snapshot-collection-failed"}

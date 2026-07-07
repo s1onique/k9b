@@ -1,0 +1,7 @@
+{"timestamp":"2026-01-01T10:00:00Z","component":"health-scheduler","severity":"INFO","message":"Health scheduler started","interval_seconds":60,"max_runs":null,"run_once":false}
+{"timestamp":"2026-01-01T10:00:01Z","component":"health-loop","severity":"INFO","message":"Health run started","run_label":"health-loop"}
+{"timestamp":"2026-01-01T10:00:02Z","component":"health-loop","severity":"DEBUG","message":"Running kubectl get pods","run_id":"health-run-abc123"}
+{"timestamp":"2026-01-01T10:00:03Z","component":"health-loop","severity":"INFO","message":"Collected 5 pods"}
+{"timestamp":"2026-01-01T10:00:04Z","component":"health-loop","severity":"WARNING","message":"Node n1 has 3 pending pods"}
+{"timestamp":"2026-01-01T10:00:05Z","component":"health-loop","severity":"INFO","message":"Health run completed","run_id":"health-run-abc123","assessments":2,"warnings":1}
+{"timestamp":"2026-01-01T10:00:06Z","component":"health-scheduler","severity":"INFO","message":"Health scheduler stopped","exit_code":0}

@@ -30,6 +30,7 @@ from act_local_checks import (
     run_mypy_on_files,
     run_no_new_llm_allowlist_check,
     run_ruff_on_files,
+    run_runtime_structured_logs_check,
     run_shell_containment_on_files,
     run_verification_discipline_check,
     run_workflow_check,
@@ -181,6 +182,14 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(provider_artifact_result)
     if provider_artifact_result.status == "FAIL":
         failure_commands.append(provider_artifact_result.command)
+    
+    # Run runtime structured logs check
+    # Verifies scheduler runtime log fixtures conform to JSONL-only contract
+    # This catches unstructured log emissions that cause UI warning count mismatches
+    runtime_logs_result = run_runtime_structured_logs_check()
+    checks.append(runtime_logs_result)
+    if runtime_logs_result.status == "FAIL":
+        failure_commands.append(runtime_logs_result.command)
     
     # Run small-provider smoke test
     # Proves non-incident small-provider path reads env vars, initializes provider,

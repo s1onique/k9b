@@ -34,6 +34,10 @@ coverage/
 
 # Logs / temp
 *.log
+
+# Runtime-log contract fixtures are source-controlled.
+# They prove the scheduler JSONL-only runtime log gate.
+!tests/fixtures/runtime_logs_*.log
 tmp/
 .tmp/
 .cache/
