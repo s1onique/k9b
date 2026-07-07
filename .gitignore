@@ -105,6 +105,9 @@ scripts/backend_health_gate/__pycache__/
 # CNPG live-lab runtime artifacts
 lab-artifacts/
 
+# Lab fixture findings (generated verifier output, not committed)
+fixtures/lab/**/_findings.json
+
 # GitHub Actions runtime environment
 .github_env
 
