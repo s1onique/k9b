@@ -15,7 +15,7 @@ from ..kubernetes_auth import (
     build_kubectl_env,
     is_in_cluster,
     log_auth_mode,
-    resolve_auth_mode,
+    resolve_process_auth_mode,
 )
 from ..security.kubectl_errors import (
     KubectlExecutionError,
@@ -110,18 +110,8 @@ def _get_auth_mode() -> AuthMode:
     if _resolved_auth_mode is not None:
         return _resolved_auth_mode
 
-    # Check if kubeconfig is enabled (mounted via Helm chart)
-    kubeconfig_enabled = os.environ.get("KUBERNETES_AUTH_KUBECONFIG_ENABLED", "").lower() in ("true", "1", "yes")
-    # Also check for KUBECONFIG env var as a fallback indicator
-    if os.environ.get("KUBECONFIG") and not kubeconfig_enabled:
-        kubeconfig_enabled = True
-
-    # Resolve auth mode with config-based fallback
-    configured_mode = os.environ.get("KUBERNETES_AUTH_MODE")
-    _resolved_auth_mode = resolve_auth_mode(
-        configured_mode,
-        kubeconfig_enabled=kubeconfig_enabled,
-    )
+    # Use shared helper for auth mode resolution
+    _resolved_auth_mode = resolve_process_auth_mode()
 
     # Log selected auth mode (once, without exposing paths)
     log_auth_mode(_resolved_auth_mode, logger=_logger)

@@ -270,3 +270,34 @@ def log_auth_mode(
         target_logger.info(
             "Kubernetes auth: using auto-detected mode"
         )
+
+
+def resolve_process_auth_mode() -> AuthMode:
+    """Resolve auth mode for this process using environment variables.
+
+    This is the canonical function for resolving auth mode in kubectl subprocess
+    execution paths. It reads standard environment variables:
+    - KUBERNETES_AUTH_MODE: explicit mode (auto, inCluster, kubeconfig)
+    - KUBERNETES_AUTH_KUBECONFIG_ENABLED: whether kubeconfig secret is mounted
+    - KUBECONFIG: external kubeconfig path (takes precedence if kubeconfig_enabled)
+
+    Returns:
+        Resolved AuthMode (IN_CLUSTER or KUBECONFIG, never AUTO).
+
+    Note:
+        This function does not raise AuthError for missing prerequisites.
+        It returns the resolved mode and lets subprocess execution fail later
+        if credentials are actually missing.
+    """
+    # Check if kubeconfig is enabled (mounted via Helm chart)
+    kubeconfig_enabled = os.environ.get("KUBERNETES_AUTH_KUBECONFIG_ENABLED", "").lower() in ("true", "1", "yes")
+    # Also check for KUBECONFIG env var as a fallback indicator
+    if os.environ.get("KUBECONFIG") and not kubeconfig_enabled:
+        kubeconfig_enabled = True
+
+    # Resolve auth mode (returns IN_CLUSTER or KUBECONFIG, never AUTO)
+    configured_mode = os.environ.get("KUBERNETES_AUTH_MODE")
+    return resolve_auth_mode(
+        configured_mode,
+        kubeconfig_enabled=kubeconfig_enabled,
+    )

@@ -17,8 +17,9 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from ..kubernetes_auth import resolve_process_auth_mode
 from ..security.kubectl_subprocess import (
     run_kubectl,
 )
@@ -35,6 +36,9 @@ from .tool_projection_metadata import (
 )
 from .tool_spill_types import ToolOutputSpillResult
 
+if TYPE_CHECKING:
+    from ..kubernetes_auth import AuthMode
+
 _logger = logging.getLogger(__name__)
 
 # Subprocess timeout for kubectl commands
@@ -44,10 +48,20 @@ KUBECTL_COMMAND_TIMEOUT_SECONDS = 60
 DEFAULT_SINCE_HOURS = 2
 
 
-def kubectl(context: str | None, *args: str) -> str:
+# Local alias for backward compatibility; delegates to shared helper
+_resolve_auth_mode = resolve_process_auth_mode
+
+
+def kubectl(context: str | None, *args: str, auth_mode: AuthMode | None = None) -> str:
     """Execute a kubectl command with optional context.
 
     Uses bounded execution to prevent memory growth from large collections.
+
+    Args:
+        context: Kubernetes context (None for in-cluster default)
+        *args: kubectl arguments
+        auth_mode: Auth mode for in-cluster authentication. When None,
+            falls back to process-level auth mode resolution.
     """
     command = ["kubectl"]
     if context:
@@ -56,6 +70,7 @@ def kubectl(context: str | None, *args: str) -> str:
     return run_kubectl(
         command,
         timeout_seconds=KUBECTL_COMMAND_TIMEOUT_SECONDS,
+        auth_mode=auth_mode,
     )
 
 
@@ -99,7 +114,8 @@ def collect_pods(
     errors: list[str] = []
     projection_metadata: dict[str, Any] = {}
     try:
-        output = kubectl(context, "get", "pods", "-n", namespace, "-o", "json")
+        auth_mode = _resolve_auth_mode()
+        output = kubectl(context, "get", "pods", "-n", namespace, "-o", "json", auth_mode=auth_mode)
     except RuntimeError as exc:
         errors.append(f"pods_collection: {exc}")
         return [], errors, projection_metadata
@@ -148,7 +164,8 @@ def collect_deployments(
     errors: list[str] = []
     projection_metadata: dict[str, Any] = {}
     try:
-        output = kubectl(context, "get", "deployments", "-n", namespace, "-o", "json")
+        auth_mode = _resolve_auth_mode()
+        output = kubectl(context, "get", "deployments", "-n", namespace, "-o", "json", auth_mode=auth_mode)
     except RuntimeError as exc:
         errors.append(f"deployments_collection: {exc}")
         return [], errors, projection_metadata
@@ -198,6 +215,7 @@ def collect_events(
     """
     errors: list[str] = []
     projection_metadata: dict[str, Any] = {}
+    auth_mode = _resolve_auth_mode()
     try:
         output = kubectl(
             context,
@@ -209,11 +227,12 @@ def collect_events(
             f"lastTimestamp>=now-{since_hours}h",
             "-o",
             "json",
+            auth_mode=auth_mode,
         )
     except RuntimeError:
         # Fallback without time filter
         try:
-            output = kubectl(context, "get", "events", "-n", namespace, "-o", "json")
+            output = kubectl(context, "get", "events", "-n", namespace, "-o", "json", auth_mode=auth_mode)
         except RuntimeError as exc:
             errors.append(f"events_collection: {exc}")
             return [], errors, projection_metadata
