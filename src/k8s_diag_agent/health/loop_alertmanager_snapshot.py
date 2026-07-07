@@ -517,7 +517,11 @@ def _ingest_alert_signals(
         )
 
         # Promote firing signals to incidents if store is available
-        if incident_store is not None and persist_result.signals_written > 0:
+        # Run promotion even when signals are duplicates/idempotent writes because:
+        # - IncidentStore may be empty (fresh start or reset)
+        # - Promotion scans artifacts and is idempotent (won't create duplicates)
+        # - Previous promotion may have failed
+        if incident_store is not None and signals:
             try:
                 promotion_result = promote_alert_signals_to_incidents(
                     incident_store=incident_store,

@@ -98,10 +98,10 @@ Added `TYPE_CHECKING` imports for `IncidentStore` and `AlertmanagerSource`.
 
 ## Verification
 
-- **ruff**: ✅ Pass (2 issues auto-fixed)
+- **ruff**: ✅ Pass
 - **mypy**: ✅ Pass (no issues in 4 source files)
 - **Unit tests**: ✅ 15/15 pass
-- **ACT-local gate**: ⚠️ llm-friendly-changed needs ACT doc
+- **ACT-local gate**: ✅ Pass (live-closed after hardening pass)
 
 ## Files Changed
 
