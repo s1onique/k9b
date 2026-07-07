@@ -176,6 +176,9 @@ class IncidentEvidenceBundle:
     symptoms: list[IncidentSymptom]
     collection_errors: tuple[str, ...] = field(default_factory=tuple)
     candidates: tuple[IncidentCandidate, ...] = field(default_factory=tuple)
+    # Projection metadata from tool output budget/spill infrastructure
+    # Key: source tool name, Value: projection metadata dict
+    tool_output_projection: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -186,6 +189,7 @@ class IncidentEvidenceBundle:
             "symptoms": [s.to_dict() for s in self.symptoms],
             "collection_errors": list(self.collection_errors),
             "candidates": [c.to_dict() for c in self.candidates],
+            "tool_output_projection": self.tool_output_projection,
         }
 
 

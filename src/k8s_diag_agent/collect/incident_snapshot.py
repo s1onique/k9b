@@ -35,6 +35,8 @@ This file remains for backward compatibility with existing imports.
 
 from __future__ import annotations
 
+from typing import Any
+
 from ..datetime_utils import now_utc
 from .incident_candidates import detect_incident_candidates
 from .incident_collectors import (
@@ -105,9 +107,14 @@ def collect_incident_snapshot(
     # Generate deterministic bundle ID
     bundle_id = f"{namespace}-{now.strftime('%Y%m%d-%H%M%S')}"
 
+    # Projection metadata from tool output budget/spill infrastructure
+    tool_output_projection: dict[str, Any] = {}
+
     # Collect pods
-    pods, pod_errors = collect_pods(namespace, context)
+    pods, pod_errors, pod_projection_metadata = collect_pods(namespace, context)
     errors.extend(pod_errors)
+    if pod_projection_metadata:
+        tool_output_projection["pods"] = pod_projection_metadata
 
     # Collect deployments
     deployments, deploy_errors = collect_deployments(namespace, context)
@@ -152,4 +159,5 @@ def collect_incident_snapshot(
         symptoms=symptoms,
         collection_errors=tuple(errors),
         candidates=candidates,
+        tool_output_projection=tool_output_projection,
     )
