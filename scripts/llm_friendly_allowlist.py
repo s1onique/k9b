@@ -42,7 +42,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     # Old monolithic file removed.
     ("tests/unit/test_health_ui.py", "[TEST] Health UI tests - complex fixtures"),
     ("tests/unit/test_ui_server_api.py", "[TEST] UI server API tests - complex fixtures"),
-    ("tests/unit/test_alertmanager_discovery.py", "[TEST] Alertmanager discovery tests"),
     ("tests/test_health_loop.py", "[TEST] Health loop tests - complex fixtures"),
     ("tests/test_alertmanager.py", "[TEST] Alertmanager tests - complex scenarios"),
     ("tests/test_security_path_validation.py", "[TEST] Security tests - complex scenarios"),

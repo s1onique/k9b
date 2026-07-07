@@ -12,6 +12,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 # --- Alertmanager CRD Strategy Tests ---
 
 
@@ -114,6 +116,7 @@ class TestPrometheusCRDConfigStrategyForbiddenErrors:
 class TestAlertmanagerDiscoveryOrchestratorStructuredLogs:
     """Test that Alertmanager discovery orchestrator emits structured events."""
 
+    @pytest.mark.mock_kubectl
     def test_alertmanager_orchestrator_emits_structured_warning_on_strategy_failure(self):
         """Orchestrator should emit structured WARNING event when strategy fails."""
         from k8s_diag_agent.external_analysis.alertmanager_discovery import (
