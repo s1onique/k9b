@@ -120,29 +120,46 @@ def _probe_endpoint(url: str, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> HttpP
 def _parse_status_response(response_data: dict[str, Any]) -> dict[str, Any]:
     """Parse /api/v2/status response and extract redacted data.
     
+    Supports both Alertmanager API response shapes:
+    - Top-level (live): {cluster, config, uptime, versionInfo}
+    - Wrapped (standard): {data: {cluster, config, uptime, versionInfo}}
+    
     Returns:
         Dictionary with version, cluster_status, peer_count, config_sha256,
-        and count fields only. Does NOT return raw config data.
+        uptime, and count fields only. Does NOT return raw config data.
     """
     result: dict[str, Any] = {}
     
+    # Determine which shape we're dealing with
+    # Top-level shape: keys are directly on root (cluster, config, versionInfo)
+    # Wrapped shape: keys are under "data" (data.cluster, data.config, data.versionInfo)
+    if "data" in response_data and isinstance(response_data["data"], dict):
+        # Wrapped shape
+        data_root = response_data["data"]
+    else:
+        # Top-level shape (live Alertmanager)
+        data_root = response_data
+    
     # Extract version info
-    version_info = response_data.get("data", {}).get("versionInfo", {})
+    version_info = data_root.get("versionInfo", {})
     result["version"] = version_info.get("version")
     
     # Extract cluster info
-    cluster_info = response_data.get("data", {}).get("cluster", {})
+    cluster_info = data_root.get("cluster", {})
     result["cluster_status"] = cluster_info.get("status")
     result["peer_count"] = len(cluster_info.get("peers", []))
     
     # Extract config hash (not raw config)
-    config_info = response_data.get("data", {}).get("config", {})
+    config_info = data_root.get("config", {})
     config_original = config_info.get("original")
     if config_original:
         result["config_sha256"] = _compute_config_sha256(config_original)
     
     # Extract count fields (not raw data)
-    result["receiver_count"] = len(response_data.get("data", {}).get("receivers", []))
+    result["receiver_count"] = len(data_root.get("receivers", []))
+    
+    # Extract uptime if present (top-level shape may have it)
+    result["uptime"] = data_root.get("uptime")
     
     return result
 

@@ -21,10 +21,54 @@ dataclass to_dict() methods from external_analysis modules.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
+
+
+def _find_likely_aliases(
+    source_view: Any, sources_view: Any, source_key: str
+) -> list[tuple[str, str]]:
+    """Find likely aliases based on runtime identity signals."""
+    likely_aliases: list[tuple[str, str]] = []
+    source_config_hash = getattr(source_view, "config_sha256", None)
+    source_version = getattr(source_view, "verified_version", None)
+    source_cluster_status = getattr(source_view, "cluster_status", None)
+    source_peer_count = getattr(source_view, "peer_count", 0)
+
+    for s in sources_view.sources:
+        if s.source_id == source_key or s.is_manual:
+            continue
+        alias_reasons: list[str] = []
+        other_config_hash = getattr(s, "config_sha256", None)
+        other_version = getattr(s, "verified_version", None)
+        other_cluster_status = getattr(s, "cluster_status", None)
+        other_peer_count = getattr(s, "peer_count", 0)
+
+        if source_config_hash and other_config_hash and source_config_hash == other_config_hash:
+            alias_reasons.append("same config hash")
+        if source_version and other_version and source_version == other_version:
+            alias_reasons.append("same version")
+        if source_cluster_status and other_cluster_status and source_cluster_status == other_cluster_status:
+            alias_reasons.append("same cluster status")
+        if source_peer_count > 0 and source_peer_count == other_peer_count:
+            alias_reasons.append("same peer count")
+
+        if len(alias_reasons) >= 2:
+            likely_aliases.append((s.source_id, f"likely alias: {', '.join(alias_reasons)}"))
+
+    return likely_aliases
+
+
+def _find_duplicate_manual(source_view: Any, sources_view: Any, source_key: str) -> Any:
+    """Find a manual source that duplicates the given source's endpoint."""
+    if source_view.is_manual:
+        return None
+    for s in sources_view.sources:
+        if s.source_id != source_key and s.is_manual and s.endpoint == source_view.endpoint:
+            return s
+    return None
 
 
 def handle_alertmanager_sources_review_packet(
@@ -51,7 +95,6 @@ def handle_alertmanager_sources_review_packet(
         Summary,
     )
 
-    # Load context for the specific run_id from the URL path
     context = handler._load_context(requested_run_id=run_id)
     if context is None:
         context = handler._load_context()
@@ -59,24 +102,26 @@ def handle_alertmanager_sources_review_packet(
             handler._send_json({"error": "Unable to load run context"}, 500)
             return
 
-    # Get sources view
     sources_view = context.alertmanager_sources
     if sources_view is None:
         handler._send_json({"error": "Alertmanager sources not available"}, 400)
         return
 
-    # Build canonical SourceEntry for each source
     source_entries: list[SourceEntry] = []
     for source in sources_view.sources:
-        # Build RuntimeIdentity from source view attributes
         runtime_identity = RuntimeIdentity(
-            probe_attempted=False,
+            probe_attempted=getattr(source, "probe_attempted", False),
             ready=getattr(source, "ready", False),
             healthy=getattr(source, "healthy", False),
             alertmanager_version=getattr(source, "verified_version", None),
+            cluster_status=getattr(source, "cluster_status", None),
+            cluster_peer_count=getattr(source, "peer_count", 0),
+            config_sha256=getattr(source, "config_sha256", None),
+            receiver_count=getattr(source, "receiver_count", None),
+            silence_count=getattr(source, "silence_count", None),
+            alert_group_count=getattr(source, "alert_group_count", None),
         )
 
-        # Build KubernetesIdentity from source view attributes
         kubernetes_identity = KubernetesIdentity(
             service_uid=getattr(source, "service_uid", None),
             service_type=getattr(source, "service_type", None),
@@ -87,7 +132,6 @@ def handle_alertmanager_sources_review_packet(
             owner_references=list(getattr(source, "owner_references", [])),
         )
 
-        # Build EndpointIdentity from source view attributes
         from ..external_analysis.alertmanager_sources_review_packet import EndpointIdentity
 
         endpoint_identity = EndpointIdentity(
@@ -112,7 +156,6 @@ def handle_alertmanager_sources_review_packet(
         )
         source_entries.append(source_entry)
 
-    # Build summary
     summary = Summary(
         total=len(source_entries),
         tracked=sum(1 for s in sources_view.sources if s.is_tracking),
@@ -122,18 +165,10 @@ def handle_alertmanager_sources_review_packet(
         duplicate_groups=0,
     )
 
-    # Build canonical review packet
-    packet = AlertmanagerSourcesReviewPacket(
-        sources=tuple(source_entries),
-        summary=summary,
-    )
-
-    # Convert to dict and add wire-level fields
+    packet = AlertmanagerSourcesReviewPacket(sources=tuple(source_entries), summary=summary)
     response = packet.to_dict()
     response["run_id"] = context.run.run_id
     response["cluster_label"] = sources_view.cluster_context or "unknown"
-
-    # Update summary with wire-level fields
     response["summary"]["cluster_context"] = sources_view.cluster_context or "unknown"
     response["summary"]["discovery_run_id"] = context.run.run_id
     response["summary"]["discovery_timestamp"] = datetime.now(UTC).isoformat()
@@ -173,10 +208,7 @@ def handle_alertmanager_source_debug_packet(
     )
     from ..external_analysis.alertmanager_source_probe import probe_alertmanager
 
-    # Decode URL-encoded source_id
     source_key = unquote(source_key)
-
-    # Load context
     context = handler._load_context(requested_run_id=run_id)
     if context is None:
         context = handler._load_context()
@@ -184,7 +216,6 @@ def handle_alertmanager_source_debug_packet(
             handler._send_json({"error": "Unable to load run context"}, 500)
             return
 
-    # Find the source
     sources_view = context.alertmanager_sources
     if sources_view is None:
         handler._send_json({"error": "Alertmanager sources not available"}, 400)
@@ -200,7 +231,6 @@ def handle_alertmanager_source_debug_packet(
         handler._send_json({"error": f"Source not found: {source_key}"}, 404)
         return
 
-    # Build canonical HttpProbeResults
     probe_result = None
     probe_error: str | None = None
     http_probes: HttpProbeResults
@@ -209,52 +239,36 @@ def handle_alertmanager_source_debug_packet(
         try:
             probe_result = probe_alertmanager(source_view.endpoint)
             http_probes = HttpProbeResults(
-                healthy=probe_result.healthy,
-                ready=probe_result.ready,
-                status=probe_result.status,
+                healthy=probe_result.healthy, ready=probe_result.ready, status=probe_result.status
             )
         except Exception as exc:  # noqa: BLE001
-            # Preserve failure evidence rather than silently swallowing
             from ..security import sanitize_exception_message
 
             probe_error = sanitize_exception_message(exc)
-            # Build empty probes with error
             http_probes = HttpProbeResults(
                 healthy=HttpProbeResult(
-                    url=f"{source_view.endpoint}/-/healthy",
-                    status_code=None,
-                    latency_ms=None,
-                    error=probe_error,
+                    url=f"{source_view.endpoint}/-/healthy", status_code=None, latency_ms=None, error=probe_error
                 ),
                 ready=HttpProbeResult(
-                    url=f"{source_view.endpoint}/-/ready",
-                    status_code=None,
-                    latency_ms=None,
-                    error=probe_error,
+                    url=f"{source_view.endpoint}/-/ready", status_code=None, latency_ms=None, error=probe_error
                 ),
                 status=HttpProbeResult(
-                    url=f"{source_view.endpoint}/api/v2/status",
-                    status_code=None,
-                    latency_ms=None,
-                    error=probe_error,
+                    url=f"{source_view.endpoint}/api/v2/status", status_code=None, latency_ms=None, error=probe_error
                 ),
             )
     else:
-        # Build empty probes without errors
         http_probes = HttpProbeResults(
             healthy=HttpProbeResult(url=f"{source_view.endpoint}/-/healthy"),
             ready=HttpProbeResult(url=f"{source_view.endpoint}/-/ready"),
             status=HttpProbeResult(url=f"{source_view.endpoint}/api/v2/status"),
         )
 
-    # Build canonical DiscoveryReason
     discovery_reason = DiscoveryReason(
         matched_heuristic=getattr(source_view, "discovery_method", None),
         matched_fields=list(getattr(source_view, "matched_fields", [])),
         confidence="unknown",
     )
 
-    # Build canonical KubernetesProbeData
     kubernetes_probe = KubernetesProbeData(
         service=dict(getattr(source_view, "service_data", {})),
         endpoints=dict(getattr(source_view, "endpoints_data", {})),
@@ -264,7 +278,6 @@ def handle_alertmanager_source_debug_packet(
         statefulset_matches=list(getattr(source_view, "statefulset_matches", [])),
     )
 
-    # Build canonical debug packet
     errors: list[str] = []
     if probe_error:
         errors.append(probe_error)
@@ -277,7 +290,6 @@ def handle_alertmanager_source_debug_packet(
         errors=errors,
     )
 
-    # Convert to dict and add wire-level fields
     response = packet.to_dict()
     response["run_id"] = context.run.run_id
     response["cluster_label"] = sources_view.cluster_context or "unknown"
@@ -289,7 +301,6 @@ def handle_alertmanager_source_debug_packet(
     response["probe_attempted"] = probe_now
     response["probe_error"] = probe_error
 
-    # Add runtime identity fields from probe result if available
     if probe_result is not None:
         response["runtime_identity"] = {
             "endpoint": probe_result.endpoint,
@@ -335,10 +346,7 @@ def handle_alertmanager_source_promotion_review(
         TrackedSourceSpec,
     )
 
-    # Decode URL-encoded source_id
     source_key = unquote(source_key)
-
-    # Load context
     context = handler._load_context(requested_run_id=run_id)
     if context is None:
         context = handler._load_context()
@@ -346,7 +354,6 @@ def handle_alertmanager_source_promotion_review(
             handler._send_json({"error": "Unable to load run context"}, 500)
             return
 
-    # Find the source
     sources_view = context.alertmanager_sources
     if sources_view is None:
         handler._send_json({"error": "Alertmanager sources not available"}, 400)
@@ -363,24 +370,29 @@ def handle_alertmanager_source_promotion_review(
         return
 
     # Check for duplicate manual sources
-    duplicate_manual = None
-    if not source_view.is_manual:
-        for s in sources_view.sources:
-            if s.source_id != source_key and s.is_manual:
-                if s.endpoint == source_view.endpoint:
-                    duplicate_manual = s
-                    break
+    duplicate_manual = _find_duplicate_manual(source_view, sources_view, source_key)
 
-    # Build canonical promotion review packet
+    # Check for likely aliases based on runtime identity
+    likely_aliases = _find_likely_aliases(source_view, sources_view, source_key)
+
     # Determine if promotable based on source state
     promotable = not source_view.is_manual and source_view.state in ("auto-tracked", "discovered")
 
-    # Build will_create if promotable
+    # Compute identity_hash from runtime identity if available
+    source_config_hash = getattr(source_view, "config_sha256", None)
+    source_version = getattr(source_view, "verified_version", None)
+    source_cluster_status = getattr(source_view, "cluster_status", None)
+    source_peer_count = getattr(source_view, "peer_count", 0)
+
+    identity_hash = source_config_hash or (
+        f"{source_version}:{source_cluster_status}:{source_peer_count}" if source_version else None
+    )
+
     will_create: TrackedSourceSpec | None = None
     if promotable:
         will_create = TrackedSourceSpec(
             endpoint_url=source_view.endpoint,
-            identity_hash=None,  # Would need to be computed from source identity
+            identity_hash=identity_hash,
             cluster=sources_view.cluster_context,
             namespace=source_view.namespace,
             name=source_view.name,
@@ -397,26 +409,43 @@ def handle_alertmanager_source_promotion_review(
                 mitigation=f"Consider disabling or promoting {duplicate_manual.source_id} instead",
             )
         )
+    elif likely_aliases:
+        alias_info = "; ".join([f"{sid} ({reason})" for sid, reason in likely_aliases])
+        risks.append(
+            PromotionRisk(
+                risk_id="duplicate_tracking_or_alias_risk",
+                severity="warning",
+                description=f"Other discovered sources share same Alertmanager cluster identity: {alias_info}",
+                mitigation="Consider collapsing as aliases or promoting the canonical source instead",
+            )
+        )
+    elif identity_hash is None:
+        risks.append(
+            PromotionRisk(
+                risk_id="insufficient_identity_evidence",
+                severity="info",
+                description="No runtime probe data available. Unable to verify cluster identity.",
+                mitigation="Run probe to gather runtime identity before promoting",
+            )
+        )
     else:
         risks.append(
             PromotionRisk(
                 risk_id="no_conflicts",
                 severity="info",
-                description="No duplicate manual sources found for this endpoint",
+                description="No duplicate manual sources found and no likely aliases detected",
                 mitigation=None,
             )
         )
 
-    # Build canonical promotion review
     packet = AlertmanagerSourcePromotionReview(
         source_id=source_key,
         promotable=promotable,
         will_create=will_create,
-        aliases=(),  # Aliases would be computed from source aliases
+        aliases=(),
         risks=tuple(risks),
     )
 
-    # Convert to dict and add wire-level fields
     response = packet.to_dict()
     response["run_id"] = context.run.run_id
     response["cluster_label"] = sources_view.cluster_context or "unknown"
@@ -425,7 +454,6 @@ def handle_alertmanager_source_promotion_review(
     response["endpoint"] = source_view.endpoint
     response["promotion_target"] = "manual"
 
-    # Add tracked_source_if_duplicate for UI compatibility
     if duplicate_manual:
         response["tracked_source_if_duplicate"] = {
             "source_id": duplicate_manual.source_id,
