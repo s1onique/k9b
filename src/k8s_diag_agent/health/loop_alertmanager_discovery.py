@@ -30,6 +30,10 @@ from ..external_analysis.alertmanager_source_registry import (
     apply_registry_to_inventory,
     lookup_registry_state,
     read_source_registry,
+    write_source_registry,
+)
+from ..external_analysis.alertmanager_source_registry_reconciliation import (
+    collapse_duplicate_registry_entries,
 )
 
 if TYPE_CHECKING:
@@ -185,6 +189,28 @@ def run_alertmanager_discovery(
     registry = read_source_registry(directories["root"])
     
     if registry is not None:
+        # Migrate persisted registry: collapse duplicate entries that map to the
+        # same logical Alertmanager (e.g., alertmanager-operated + chart service).
+        # This runs once on load to clean up any legacy duplicate entries.
+        cleaned_registry, collapsed_count = collapse_duplicate_registry_entries(
+            registry,
+            verified_inventory,
+            kube_context=verified_inventory.cluster_context,
+        )
+        
+        # Write back cleaned registry if duplicates were collapsed
+        if collapsed_count > 0:
+            write_source_registry(cleaned_registry, directories["root"])
+            log_event(
+                "alertmanager-discovery",
+                "INFO",
+                "Alertmanager registry migrated: collapsed duplicate entries",
+                event="alertmanager-registry-migrated",
+                duplicates_collapsed=collapsed_count,
+                registry_entries=len(cleaned_registry.entries),
+            )
+            registry = cleaned_registry
+        
         # Use shared lookup helper for registry matching.
         # This centralizes the label-first key logic and avoids duplicating key construction.
         # lookup_registry_state() uses source.cluster_label (not inventory-level label)

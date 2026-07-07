@@ -288,6 +288,10 @@ def _serialize_alertmanager_sources(output_dir: Path, run_id: str) -> dict[str, 
             "canonical_identity": source.canonical_identity,
             "cluster_label": source.cluster_label,
             "cluster_context": source.cluster_context,
+            # Include aliases for UI to show duplicate sources as endpoints
+            "aliases": [a.to_dict() for a in source.aliases] if source.aliases else [],
+            "merged_provenances": [p.value for p in source.merged_provenances],
+            "display_provenance": source.display_provenance,
         }
 
         if source.manual_source_mode.value != "not-manual":

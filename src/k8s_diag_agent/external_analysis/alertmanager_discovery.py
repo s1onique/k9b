@@ -74,6 +74,9 @@ from .alertmanager_discovery_verification import (
     VerificationResult,
     verify_alertmanager_endpoint,
 )
+from .alertmanager_source_reconciliation_merge import (
+    reconcile_alertmanager_sources,
+)
 
 # Module logger for debug output
 _logger = logging.getLogger(__name__)
@@ -277,11 +280,21 @@ def merge_deduplicate_inventory(
                 [p.value for p in sorted_provenances],
             )
 
-    return AlertmanagerSourceInventory(
+    # Build initial inventory from deduplication
+    deduplicated_inventory = AlertmanagerSourceInventory(
         sources=final_sources,
         discovered_at=inventory.discovered_at,
         cluster_context=inventory.cluster_context,
     )
+
+    # Step 4: Run reconciliation to collapse duplicate logical sources
+    # This handles cross-strategy duplicates and ensures one logical source per backing pods
+    reconciled_inventory = reconcile_alertmanager_sources(
+        deduplicated_inventory,
+        kube_context=inventory.cluster_context,
+    )
+
+    return reconciled_inventory
 
 
 # --- Re-exports for backward compatibility ---

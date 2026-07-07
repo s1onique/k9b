@@ -7,7 +7,7 @@ entry types, and I/O operations.
 Design principles:
 - Registry artifact lives under runs/health/ (not run-scoped)
 - Entries are keyed by stable identity: cluster_context + canonical_identity
-- Supports desired states: "manual" (promoted), "disabled"
+- Supports desired states: "manual" (promoted), "disabled", "discovered" (neutral)
 - Preserves audit metadata: reason, operator, updated_at, source_run_id
 - Canonical identity uses namespace/name format (not raw source_id)
 - Prometheus Operator alias handling is preserved (alertmanager-operated -> CRD name)
@@ -42,6 +42,7 @@ class RegistryDesiredState(StrEnum):
     """Desired state for a source in the durable registry."""
     MANUAL = "manual"  # Promoted to manual - should appear as manual in future runs
     DISABLED = "disabled"  # Disabled - should not be tracked in future runs
+    DISCOVERED = "discovered"  # Default/neutral - resolved by service-name priority
 
 
 @dataclass(frozen=True)
