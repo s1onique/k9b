@@ -14,7 +14,6 @@ Test coverage:
 from __future__ import annotations
 
 import errno
-import sys
 import unittest
 import unittest.mock as mock
 from io import StringIO
