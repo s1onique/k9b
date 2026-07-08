@@ -79,7 +79,7 @@ def _handle_get_request_impl(handler: HealthUIRequestHandler, route: str, query:
         # Protected routes: /api/* (except auth routes) and /artifact/*
         # NOTE: require_auth(), via check_route_auth(), has already sent JSON 401 on auth failure.
         # We only need to log completion and return.
-        is_protected_api = route.startswith("/api/") and not _is_auth_route(route)
+        is_protected_api = route.startswith("/api/") and not _is_session_auth_exempt_route(route)
         is_protected_artifact = route == "/artifact" or route.startswith("/artifact/")
         if is_protected_api or is_protected_artifact:
             from .auth_guard import check_route_auth
@@ -148,7 +148,7 @@ def _handle_post_request_impl(handler: HealthUIRequestHandler, route: str) -> No
     # AUTH-06: Check authentication for protected routes (includes POST mutations)
     # NOTE: require_auth(), via check_route_auth(), has already sent JSON 401 on auth failure.
     # We only need to log completion and return.
-    if not _is_auth_route(route):
+    if not _is_session_auth_exempt_route(route):
         from .auth_guard import check_route_auth
 
         if not check_route_auth(handler):
@@ -171,17 +171,34 @@ def _handle_post_request_impl(handler: HealthUIRequestHandler, route: str) -> No
         handler._log_access_completion()
 
 
-def _is_auth_route(route: str) -> bool:
-    """Check if route is an auth route (public, no auth required).
+# Internal API routes are exempt from UI/session auth
+# They are protected by bearer token auth in the handlers themselves
+# IMPORTANT: Every internal route MUST call _validate_internal_token() in its handler
+_INTERNAL_AUTH_EXEMPT_ROUTES: frozenset[str] = frozenset({
+    "/api/internal/incidents/promote-alert-signals",
+    "/api/internal/incidents/promote-candidates",
+})
+
+
+def _is_session_auth_exempt_route(route: str) -> bool:
+    """Check if route is exempt from session-based authentication.
+
+    Routes are exempt from session auth if they are:
+    - Public auth endpoints (/api/auth/*) - these SET the session
+    - Internal API routes - protected by bearer token, not session auth
 
     Args:
         route: The request path
 
     Returns:
-        True if route is an auth route, False otherwise
+        True if route is exempt from session auth, False otherwise
     """
     # Auth routes are always public
     if route.startswith("/api/auth/"):
+        return True
+    # Internal API routes are protected by bearer token, not session auth
+    # Each internal route must be explicitly allowlisted here
+    if route in _INTERNAL_AUTH_EXEMPT_ROUTES:
         return True
     return False
 
