@@ -8,7 +8,7 @@
  * Also tests blockingReason preservation via ResponseError.
  */
 
-import { describe, expect, test, vi, beforeEach } from "vitest";
+import { describe, expect, test, vi, beforeEach, afterEach } from "vitest";
 import { ResponseError } from "../generated/k9b-api/runtime";
 import { IncidentsApi } from "../generated/k9b-api";
 
@@ -51,9 +51,26 @@ import {
 } from "../api/alertmanager";
 import { fetchRun, runBatchExecution } from "../api/runs";
 
-// Reset mocks before each test
+// ---------------------------------------------------------------------------
+// Global fetch stub for direct fetch() calls (e.g., performAlertmanagerSourceAction)
+// Vitest/Node cannot resolve relative URLs like "/api/..." without a document base.
+// Stubbing fetch prevents "TypeError: Invalid URL" when constructing requests.
+// ---------------------------------------------------------------------------
 beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 // Helper to get the mock instance for assertions
@@ -368,15 +385,12 @@ describe("runBatchExecution wrapper mapping", () => {
 // ---------------------------------------------------------------------------
 
 describe("performAlertmanagerSourceAction wrapper mapping", () => {
-  test("calls api.performAlertmanagerSourceAction with correct request object", async () => {
-    const mockApi = createMockIncidentsApi();
-    mockApi.performAlertmanagerSourceAction.mockResolvedValue({
-      status: "success",
-    } as never);
-
+  test("POSTs to correct endpoint with sourceId in body (not URL path)", async () => {
+    // This test uses direct fetch() (not the generated IncidentsApi mock),
+    // so we assert at the fetch boundary instead.
     const result = await performAlertmanagerSourceAction(
       {
-        sourceId: "src-123",
+        sourceId: "crd:monitoring.coreos.com/v1/Alertmanager/main",
         clusterLabel: "cluster-a",
         action: "promote",
         reason: "Confirmed alert",
@@ -384,17 +398,49 @@ describe("performAlertmanagerSourceAction wrapper mapping", () => {
       "run-456"
     );
 
-    expect(result.status).toBe("success");
-    expect(mockApi.performAlertmanagerSourceAction).toHaveBeenCalledTimes(1);
-    expect(mockApi.performAlertmanagerSourceAction).toHaveBeenCalledWith({
-      runId: "run-456",
-      sourceId: "src-123",
-      performAlertmanagerSourceActionRequest: {
-        action: "promote",
+    expect(result.ok).toBe(true);
+
+    // Regression guard: sourceId must be in POST body, not URL path
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/runs/run-456/alertmanager-sources/action",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          sourceId: "crd:monitoring.coreos.com/v1/Alertmanager/main",
+          action: "promote",
+          clusterLabel: "cluster-a",
+          reason: "Confirmed alert",
+        }),
+      }),
+    );
+
+    // Verify sourceId is NOT in URL path (was the old buggy behavior)
+    const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).not.toContain("crd:monitoring.coreos.com");
+    expect(url).not.toContain("sourceId");
+  });
+
+  test("handles simple alphanumeric sourceId", async () => {
+    const result = await performAlertmanagerSourceAction(
+      {
+        sourceId: "src-123",
         clusterLabel: "cluster-a",
-        reason: "Confirmed alert",
+        action: "disable",
       },
-    });
+      "run-789"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/runs/run-789/alertmanager-sources/action",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"sourceId":"src-123"'),
+      }),
+    );
   });
 });
 
