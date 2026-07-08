@@ -12,7 +12,6 @@ These helpers do NOT import HealthLoopRunner.
 from __future__ import annotations
 
 from pathlib import Path
-from subprocess import Popen
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
     from ..external_analysis.vmalert_discovery import VmalertSourceInventory
 
 # Port-forward handle type: (subprocess handle, local port number)
-PortForwardHandle = tuple[Popen[str], int]
+PortForwardHandle = tuple[Any, int]
 
 
 class LogEventFn:
