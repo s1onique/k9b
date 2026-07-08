@@ -127,6 +127,23 @@ spec:
                   name: {{ .Values.scheduler.smallProvider.existingSecret }}
                   key: {{ .Values.scheduler.smallProvider.apiKeyKey }}
             {{- end }}
+            # Process role: scheduler promotes incidents via backend API (not direct SQLite)
+            - name: K9B_PROCESS_ROLE
+              value: "scheduler"
+            # Incident promotion configuration (scheduler -> backend internal API)
+            - name: K9B_INCIDENT_PROMOTION_MODE
+              value: {{ .Values.scheduler.incidentPromotion.mode | quote }}
+            {{- if or (eq .Values.scheduler.incidentPromotion.mode "backend-api") (eq .Values.scheduler.incidentPromotion.mode "auto") }}
+            - name: K9B_BACKEND_INTERNAL_URL
+              value: {{ .Values.scheduler.incidentPromotion.internalApi.backendUrl | quote }}
+            {{- if .Values.scheduler.incidentPromotion.internalApi.existingSecret }}
+            - name: K9B_INTERNAL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.scheduler.incidentPromotion.internalApi.existingSecret }}
+                  key: {{ .Values.scheduler.incidentPromotion.internalApi.tokenKey }}
+            {{- end }}
+            {{- end }}
           {{- with .Values.scheduler.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

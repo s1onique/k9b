@@ -5,6 +5,16 @@ domain objects and their promotion to incidents.
 
 This module is intentionally isolated from collection logic to keep the
 ingestion path testable independently.
+
+Promotion routing:
+- K9B_INCIDENT_PROMOTION_MODE=local: Direct store promotion (memory/file backends)
+- K9B_INCIDENT_PROMOTION_MODE=backend-api: POST to backend internal API (sqlite backend)
+- K9B_INCIDENT_PROMOTION_MODE=auto: Automatically selects based on role/backend
+
+Hard constraints:
+- NO scheduler direct SQLite writes
+- NO remediation actions
+- NO LLM calls from the promotion transport layer
 """
 
 from __future__ import annotations
@@ -50,7 +60,6 @@ def _ingest_alert_signals(
         run_label: Run label
         effective_cluster_context: Cluster context for logging
     """
-    from ..incident_alert_promotion import promote_alert_signals_to_incidents
     from ..incident_alert_signal_snapshot_adapter import (
         adapt_snapshot_to_alert_signals,
         persist_alert_signals,
@@ -120,46 +129,55 @@ def _ingest_alert_signals(
             cluster_context=effective_cluster_context,
         )
 
-        # Promote firing signals to incidents if store is available
-        # Run promotion even when signals are duplicates/idempotent writes because:
-        # - IncidentStore may be empty (fresh start or reset)
-        # - Promotion scans artifacts and is idempotent (won't create duplicates)
-        # - Previous promotion may have failed
-        if incident_store is not None and signals:
-            try:
-                promotion_result = promote_alert_signals_to_incidents(
-                    incident_store=incident_store,
-                    runs_dir=root,
-                    now=received_at,
-                )
+        # Promote firing signals to incidents
+        # The dispatcher selects the appropriate path (local vs backend-api) based on config.
+        # In backend-api mode, we scan artifacts and POST to backend internal API.
+        # In local mode, we use the provided incident_store directly.
+        try:
+            # Import dispatcher at runtime to avoid circular imports
+            from ..collect.incident_promotion_dispatch import (
+                promote_alert_signals_from_artifacts,
+            )
 
-                log_event(
-                    "alertmanager-snapshot",
-                    "INFO",
-                    "Alert signals promoted to incidents",
-                    event="alert-signals-promoted",
-                    run_id=run_id,
-                    run_label=run_label,
-                    source_identity=source_instance,
-                    scanned=promotion_result.scanned_signal_count,
-                    firing=promotion_result.firing_signal_count,
-                    opened_incidents=promotion_result.opened_incident_count,
-                    updated_incidents=promotion_result.updated_incident_count,
-                    skipped_duplicates=promotion_result.skipped_duplicate_count,
-                    errors=promotion_result.error_count,
-                    cluster_context=effective_cluster_context,
-                )
-            except Exception as exc:
-                log_event(
-                    "alertmanager-snapshot",
-                    "WARNING",
-                    "Alert signal promotion failed",
-                    event="alert-signal-promotion-failed",
-                    run_id=run_id,
-                    run_label=run_label,
-                    source_identity=source_instance,
-                    severity_reason=str(exc),
-                    reason="promotion-error",
-                    cluster_context=effective_cluster_context,
-                )
-                # Non-fatal: promotion failure should not crash the run
+            # Use the dispatcher which handles both local and backend-api modes
+            promotion_result = promote_alert_signals_from_artifacts(
+                runs_dir=root,
+                snapshot_bundle_id=None,
+            )
+
+            # Map dispatcher result to log format - use actual promotion_mode
+            log_event_name = (
+                "alert-signals-promoted-via-backend"
+                if promotion_result.promotion_mode == "backend-api"
+                else "alert-signals-promoted"
+            )
+            log_event(
+                "alertmanager-snapshot",
+                "INFO",
+                "Alert signals promoted to incidents",
+                event=log_event_name,
+                run_id=run_id,
+                run_label=run_label,
+                source_identity=source_instance,
+                scanned=promotion_result.scanned,
+                firing=promotion_result.firing,
+                opened_incidents=promotion_result.opened_incidents,
+                updated_incidents=promotion_result.updated_incidents,
+                skipped_duplicates=promotion_result.skipped_duplicates,
+                errors=promotion_result.errors,
+                cluster_context=effective_cluster_context,
+            )
+        except Exception as exc:
+            log_event(
+                "alertmanager-snapshot",
+                "WARNING",
+                "Alert signal promotion failed",
+                event="alert-signal-promotion-failed",
+                run_id=run_id,
+                run_label=run_label,
+                source_identity=source_instance,
+                severity_reason=str(exc),
+                reason="promotion-error",
+                cluster_context=effective_cluster_context,
+            )
+            # Non-fatal: promotion failure should not crash the run

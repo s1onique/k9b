@@ -31,6 +31,23 @@ backend:
   command: []
   # args: Override container arguments. Leave empty to use image's default.
   args: []
+  # incidentStore: Incident store configuration (SQLite backend recommended for production).
+  incidentStore:
+    # backend: Incident store backend type (memory|file|sqlite).
+    # sqlite is recommended for production with scheduler deployment.
+    backend: sqlite
+    # sqlitePath: Path to SQLite database file.
+    sqlitePath: /app/runs/incidents/k9b-incidents.sqlite3
+    # journalMode: SQLite journal mode (DELETE|TRUNCATE|PERSIST|WAL).
+    # Note: WAL requires careful mount configuration and is not the default.
+    journalMode: DELETE
+  # internalApi: Internal API configuration for scheduler-to-backend promotion.
+  internalApi:
+    # existingSecret: Name of a Kubernetes Secret containing K9B_INTERNAL_API_TOKEN.
+    # Create via: kubectl create secret generic k9b-internal-api --from-literal=K9B_INTERNAL_API_TOKEN=<your-token>
+    existingSecret: ""
+    # tokenKey: Key name in the Secret containing the token.
+    tokenKey: K9B_INTERNAL_API_TOKEN
   # auth: Admin authentication for the backend UI/API.
   # When enabled, the backend requires login with admin credentials.
   # The password hash must come from a Kubernetes Secret (existingSecret or adminPasswordHash).
@@ -96,6 +113,26 @@ scheduler:
   #   --config, --every-seconds, --max-runs, --once, --quiet
   # Do NOT pass --unsafe-bind to scheduler; that flag belongs to the UI/API server.
   args: []
+  # incidentPromotion: Incident promotion configuration.
+  # When backend uses SQLite store (incidentStore.backend=sqlite), scheduler must
+  # promote incidents via the backend internal API to avoid direct SQLite access.
+  incidentPromotion:
+    # mode: Promotion mode (local|backend-api|auto).
+    # - local: Direct store promotion (memory/file backends only)
+    # - backend-api: POST to backend internal API (required for SQLite backend)
+    # - auto: Automatically select based on backend type (default)
+    # Note: backend-api mode requires internalApi configuration below.
+    mode: backend-api
+    # internalApi: Configuration for backend internal API promotion.
+    internalApi:
+      # backendUrl: Base URL of the k9b-backend service.
+      # Default: http://k9b-backend.k9b.svc.cluster.local:8080
+      backendUrl: "http://k9b-backend.k9b.svc.cluster.local:8080"
+      # existingSecret: Name of a Kubernetes Secret containing K9B_INTERNAL_API_TOKEN.
+      # Must be the same secret used by the backend.
+      existingSecret: ""
+      # tokenKey: Key name in the Secret containing the token.
+      tokenKey: K9B_INTERNAL_API_TOKEN
   env:
     # K9B_EXTERNAL_ANALYSIS_*: Canonical env vars for OpenAI-compatible review enrichment.
     # Override via --set scheduler.env.K9B_EXTERNAL_ANALYSIS_BASE_URL=http://your-llm:8080

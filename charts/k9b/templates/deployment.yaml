@@ -131,6 +131,26 @@ spec:
                   name: {{ include "k9b.adminAuthSecretName" . }}
                   key: {{ .Values.backend.auth.passwordHashKey }}
             {{- end }}
+            # Process role: backend owns SQLite incident store
+            - name: K9B_PROCESS_ROLE
+              value: "backend"
+            # Incident store configuration
+            - name: K9B_INCIDENT_STORE_BACKEND
+              value: {{ .Values.backend.incidentStore.backend | quote }}
+            {{- if eq .Values.backend.incidentStore.backend "sqlite" }}
+            - name: K9B_INCIDENT_STORE_SQLITE_PATH
+              value: {{ .Values.backend.incidentStore.sqlitePath | quote }}
+            - name: K9B_INCIDENT_STORE_SQLITE_JOURNAL_MODE
+              value: {{ .Values.backend.incidentStore.journalMode | quote }}
+            {{- end }}
+            # Internal API token for scheduler-to-backend authentication
+            {{- if .Values.backend.internalApi.existingSecret }}
+            - name: K9B_INTERNAL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.internalApi.existingSecret }}
+                  key: {{ .Values.backend.internalApi.tokenKey }}
+            {{- end }}
           {{- with .Values.backend.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

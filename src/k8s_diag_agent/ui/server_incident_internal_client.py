@@ -1,6 +1,12 @@
 """Scheduler client for internal API communication.
 
 Client for scheduler to submit promotion requests to backend.
+
+Hard constraints:
+- NO LLM calls from the client
+- NO token logging (token is never logged)
+- Transport failures are bounded and don't crash callers
+- Uses K9B_INTERNAL_API_TOKEN bearer auth
 """
 
 from __future__ import annotations
@@ -13,6 +19,18 @@ from typing import Any
 from .server_incident_internal_models import PromotionResponse
 
 _logger = logging.getLogger(__name__)
+
+
+# Error reason codes for structured error handling
+class PromotionErrorReason:
+    """Error reason codes for promotion failures."""
+
+    BACKEND_UNREACHABLE = "backend_unreachable"
+    UNAUTHORIZED = "unauthorized"
+    BAD_RESPONSE = "bad_response"
+    TIMEOUT = "timeout"
+    INVALID_JSON = "invalid_json"
+    UNKNOWN = "unknown"
 
 
 def create_scheduler_client(base_url: str, token: str | None = None) -> SchedulerClient:
