@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from unittest.mock import MagicMock, patch
 
 from k8s_diag_agent.health.drilldown import DrilldownCollector
+from tests.unit.k8s_fake_client import FakeKubernetesReadClient
 
 
 class MockPodSummary:
@@ -127,17 +128,49 @@ def test_drilldown_collector_in_cluster_underscore_does_not_pass_context_flag() 
 
 
 def test_drilldown_collector_real_context_passes_context_flag() -> None:
-    """Regression test: real context names should still include --context."""
+    """Regression test: real context names should still include --context.
+    
+    Note: _collect_warning_events now uses Python client (via get_cached_kubernetes_client)
+    instead of kubectl subprocess. We mock the client and verify kubectl commands
+    from other operations (rollout status) include --context.
+    """
+    from datetime import UTC, datetime
+
+    from k8s_diag_agent.security.kubernetes_client_models import EventProjection
+
     recorder = CommandRecorder()
+    # Create fake client that returns warning events
+    fake_client = FakeKubernetesReadClient()
+    fake_client._warning_events = [
+        EventProjection(
+            namespace="default",
+            name="test-event",
+            event_type="Warning",
+            reason="TestReason",
+            message="Test message",
+            involved_object_kind="Pod",
+            involved_object_name="test-pod",
+            creation_timestamp=datetime.now(UTC),
+            count=1,
+        )
+    ]
+    
     collector = DrilldownCollector(
         max_warning_events=1,
         max_non_running_pods=0,
         max_pod_descriptions=0,
-        max_rollout_namespaces=0,
-        max_rollouts=0,
+        max_rollout_namespaces=1,
+        max_rollouts=1,
         command_runner=recorder,
     )
-    collector.collect("my-prod-cluster", ["default"])
+    
+    # Patch the client factory to return our fake
+    import unittest.mock as mock
+    with mock.patch(
+        "k8s_diag_agent.health.drilldown.get_cached_kubernetes_client",
+        return_value=fake_client,
+    ):
+        collector.collect("my-prod-cluster", ["default"])
     
     # Verify commands with kubectl include --context for real contexts
     kubectl_commands = [cmd for cmd in recorder.commands if "kubectl" in cmd]

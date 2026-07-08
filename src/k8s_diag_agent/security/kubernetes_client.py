@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from .kubernetes_client_constants import (
@@ -40,14 +41,17 @@ from .kubernetes_client_errors import (
     translate_api_exception,
 )
 from .kubernetes_client_models import (
+    CrdSummary,
     DeploymentProjection,
     EventProjection,
     NamespaceProjection,
+    NodeSummary,
     PaginationMetadata,
     PodProjection,
     PodSummary,
     SecretProjection,
     ServiceAccountProjection,
+    StatefulSetSummary,
 )
 from .kubernetes_client_pagination import (
     list_all_namespaces_pods_summaries,
@@ -422,6 +426,294 @@ class KubernetesReadClient:
             max_failed_reported=max_failed_reported,
             max_evicted_reported=max_evicted_reported,
         )
+
+    # === New methods for kubectl migration ===
+
+    def list_warning_events_for_all_namespaces(
+        self,
+        *,
+        limit: int,
+        timeout_seconds: int | None = None,
+    ) -> list[EventProjection]:
+        """List warning events across all namespaces with the Python client.
+
+        This replaces: kubectl get events --all-namespaces --field-selector type=Warning
+
+        To ensure we get the newest events (not just the first page), we collect a
+        bounded set of events then sort and slice. Kubernetes API uses server-side
+        ordering by creationTimestamp when using field selectors, but pagination
+        may skip newer events on later pages if we only request `limit` items.
+
+        Args:
+            limit: Maximum number of events to return
+            timeout_seconds: Optional timeout override (defaults to client timeout)
+
+        Returns:
+            List of EventProjection for warning events, sorted by creation timestamp (newest first)
+
+        Raises:
+            KubernetesApiPermissionError: If RBAC denies event access
+            KubernetesClientError: Other API errors
+        """
+        self._ensure_config()
+        timeout = timeout_seconds or self._timeout_seconds
+        
+        # Collect more events than requested to handle pagination properly.
+        # Kubernetes API may return arbitrary events per page, so we collect
+        # a bounded buffer, sort all collected events, then return the newest.
+        max_collect = min(limit * 20, DEFAULT_MAX_ITEMS)
+        
+        all_events: list[Any] = []
+        continue_token: str | None = None
+        
+        try:
+            while len(all_events) < max_collect:
+                page_size = min(limit * 5, max_collect - len(all_events))
+                response = self.core_v1.list_event_for_all_namespaces(
+                    field_selector="type=Warning",
+                    limit=page_size,
+                    _continue=continue_token,
+                    _request_timeout=timeout,
+                )
+                if response.items:
+                    all_events.extend(response.items)
+                continue_token = response.metadata._continue if hasattr(response.metadata, '_continue') else None
+                if not continue_token:
+                    break
+        except Exception as exc:
+            raise translate_api_exception(
+                exc,
+                resource="events",
+                operation="list_warning_events_for_all_namespaces",
+            ) from exc
+
+        # Sort by creation timestamp (newest first)
+        # Use a sentinel datetime for None values to sort them last
+        _MIN_DATETIME = datetime.min.replace(tzinfo=UTC) if hasattr(datetime, 'min') else None
+        
+        def _event_sort_key(e: Any) -> Any:
+            ts = e.last_timestamp or e.event_time
+            if ts is None and e.metadata:
+                ts = e.metadata.creation_timestamp
+            return ts if ts is not None else _MIN_DATETIME
+        
+        all_events.sort(key=_event_sort_key, reverse=True)
+        return [EventProjection.from_dict(e.to_dict()) for e in all_events[:limit]]
+
+    def list_namespaced_deployments(
+        self,
+        namespace: str,
+        *,
+        timeout_seconds: int | None = None,
+    ) -> list[DeploymentProjection]:
+        """List deployments in a namespace with the Python client.
+
+        This replaces: kubectl get deployments -n <namespace> -o json
+
+        Args:
+            namespace: Namespace name
+            timeout_seconds: Optional timeout override
+
+        Returns:
+            List of DeploymentProjection
+
+        Raises:
+            KubernetesApiPermissionError: If RBAC denies deployment access
+            KubernetesClientError: Other API errors
+        """
+        self._ensure_config()
+        timeout = timeout_seconds or self._timeout_seconds
+        try:
+            response = self.apps_v1.list_namespaced_deployment(
+                namespace=namespace,
+                _request_timeout=timeout,
+            )
+        except Exception as exc:
+            raise translate_api_exception(
+                exc,
+                resource="deployment",
+                namespace=namespace,
+                operation="list_namespaced_deployments",
+            ) from exc
+
+        return [
+            DeploymentProjection.from_dict(item.to_dict())
+            for item in (response.items or [])
+        ]
+
+    def list_namespaced_statefulsets(
+        self,
+        namespace: str,
+        *,
+        timeout_seconds: int | None = None,
+    ) -> list[StatefulSetSummary]:
+        """List statefulsets in a namespace with the Python client.
+
+        This replaces: kubectl get statefulsets -n <namespace> -o json
+
+        Args:
+            namespace: Namespace name
+            timeout_seconds: Optional timeout override
+
+        Returns:
+            List of StatefulSetSummary
+
+        Raises:
+            KubernetesApiPermissionError: If RBAC denies statefulset access
+            KubernetesClientError: Other API errors
+        """
+        self._ensure_config()
+        timeout = timeout_seconds or self._timeout_seconds
+        try:
+            response = self.apps_v1.list_namespaced_stateful_set(
+                namespace=namespace,
+                _request_timeout=timeout,
+            )
+        except Exception as exc:
+            raise translate_api_exception(
+                exc,
+                resource="statefulset",
+                namespace=namespace,
+                operation="list_namespaced_statefulsets",
+            ) from exc
+
+        return [
+            StatefulSetSummary.from_dict(item.to_dict())
+            for item in (response.items or [])
+        ]
+
+    def list_namespaced_pods(
+        self,
+        namespace: str,
+        *,
+        label_selector: str | None = None,
+        field_selector: str | None = None,
+        timeout_seconds: int | None = None,
+    ) -> list[PodSummary]:
+        """List pods in a namespace with the Python client.
+
+        This replaces: kubectl get pods -n <namespace> -o wide
+        Uses explicit field selection instead of wide output.
+
+        Args:
+            namespace: Namespace name
+            label_selector: Optional label selector
+            field_selector: Optional field selector
+            timeout_seconds: Optional timeout override
+
+        Returns:
+            List of PodSummary
+
+        Raises:
+            KubernetesApiPermissionError: If RBAC denies pod access
+            KubernetesClientError: Other API errors
+        """
+        self._ensure_config()
+        timeout = timeout_seconds or self._timeout_seconds
+        try:
+            response = self.core_v1.list_namespaced_pod(
+                namespace=namespace,
+                label_selector=label_selector,
+                field_selector=field_selector,
+                _request_timeout=timeout,
+            )
+        except Exception as exc:
+            raise translate_api_exception(
+                exc,
+                resource="pod",
+                namespace=namespace,
+                operation="list_namespaced_pods",
+            ) from exc
+
+        return [
+            PodSummary.from_pod_dict(item.to_dict())
+            for item in (response.items or [])
+        ]
+
+    def list_nodes(
+        self,
+        *,
+        timeout_seconds: int | None = None,
+    ) -> list[NodeSummary]:
+        """List all nodes with the Python client.
+
+        This replaces: kubectl get nodes -o wide and kubectl describe nodes
+        Returns structured evidence instead of free-text describe output.
+
+        Args:
+            timeout_seconds: Optional timeout override
+
+        Returns:
+            List of NodeSummary with structured evidence
+
+        Raises:
+            KubernetesApiPermissionError: If RBAC denies node access
+            KubernetesClientError: Other API errors
+        """
+        self._ensure_config()
+        timeout = timeout_seconds or self._timeout_seconds
+        try:
+            response = self.core_v1.list_node(_request_timeout=timeout)
+        except Exception as exc:
+            raise translate_api_exception(
+                exc,
+                resource="node",
+                operation="list_nodes",
+            ) from exc
+
+        return [
+            NodeSummary.from_dict(item.to_dict())
+            for item in (response.items or [])
+        ]
+
+    def list_crds(
+        self,
+        *,
+        timeout_seconds: int | None = None,
+    ) -> list[CrdSummary]:
+        """List all CustomResourceDefinitions with the Python client.
+
+        This replaces: kubectl get crds -o json
+
+        Note: CRD listing requires cluster-scope RBAC permissions.
+        Returns KubernetesApiPermissionError if RBAC denies access.
+
+        Args:
+            timeout_seconds: Optional timeout override
+
+        Returns:
+            List of CrdSummary
+
+        Raises:
+            KubernetesApiPermissionError: If RBAC denies CRD access
+            KubernetesClientError: Other API errors
+        """
+        self._ensure_config()
+        try:
+            from kubernetes.client import ApiextensionsV1Api
+        except ImportError as exc:
+            raise KubernetesClientError(
+                "apiextensions client not available. Upgrade kubernetes package.",
+                cause=exc,
+            ) from exc
+
+        timeout = timeout_seconds or self._timeout_seconds
+        try:
+            apiextensions = ApiextensionsV1Api(api_client=self._client)
+            response = apiextensions.list_custom_resource_definition(
+                _request_timeout=timeout,
+            )
+        except Exception as exc:
+            raise translate_api_exception(
+                exc,
+                resource="CustomResourceDefinition",
+                operation="list_crds",
+            ) from exc
+
+        return [
+            CrdSummary.from_dict(item.to_dict())
+            for item in (response.items or [])
+        ]
 
 
 def create_kubernetes_read_client(*, kubeconfig: str | None = None, context: str | None = None,

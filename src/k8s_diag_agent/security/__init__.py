@@ -51,6 +51,18 @@ from .kubernetes_client import (
     PodSummary,
     create_kubernetes_read_client,
 )
+from .kubernetes_client_models import (
+    CrdSummary,
+    DeploymentProjection,
+    EventProjection,
+    NamespaceProjection,
+    NodeSummary,
+    PaginationMetadata,
+    PodProjection,
+    SecretProjection,
+    ServiceAccountProjection,
+    StatefulSetSummary,
+)
 from .path_validation import (
     SecurityError,
     safe_child_path,

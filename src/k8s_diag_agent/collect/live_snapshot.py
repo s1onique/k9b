@@ -24,6 +24,7 @@ from ..security.kubectl_errors import (
 from ..security.kubectl_subprocess import (
     run_kubectl,
 )
+from ..security.kubernetes_client import get_cached_kubernetes_client
 from ..security.path_validation import (
     validate_kube_context_name,
 )
@@ -232,24 +233,50 @@ def _collect_helm_releases(context: str) -> dict[str, HelmReleaseRecord]:
 
 
 def _collect_crds(context: str) -> dict[str, CRDRecord]:
-    output = _kubectl(context, "get", "crds", "-o", "json")
-    if not output.strip():
-        return {}
-    parsed = json.loads(output)
-    items = parsed.get("items") if isinstance(parsed, dict) else []
+    """Collect CRDs using the Kubernetes Python client.
+    
+    Uses Python client instead of kubectl subprocess for better error handling
+    and RBAC-degraded behavior support.
+    
+    Preserves specific error types for RBAC-degraded behavior:
+    - KubernetesApiPermissionError -> "crd_discovery_forbidden"
+    - Other KubernetesClientError -> "crd_discovery_failed:<error_type>"
+    - Generic Exception -> "CRD listing failed"
+    """
+    from k8s_diag_agent.security.kubernetes_client_errors import (
+        KubernetesApiPermissionError,
+        KubernetesClientError,
+    )
+    
+    try:
+        client = get_cached_kubernetes_client(context=context)
+        crd_summaries = client.list_crds()
+    except KubernetesApiPermissionError:
+        # Preserve RBAC-degraded capability information
+        raise RuntimeError("crd_discovery_forbidden") from None
+    except KubernetesClientError as exc:
+        # Preserve specific error type for diagnostics
+        raise RuntimeError(f"crd_discovery_failed:{exc.__class__.__name__}") from None
+    except Exception:
+        # Generic fallback for unexpected errors
+        raise RuntimeError("CRD listing failed") from None
+    
     results: dict[str, CRDRecord] = {}
-    for item in items or []:
-        if not isinstance(item, dict):
-            continue
-        metadata = item.get("metadata") or {}
-        name = metadata.get("name")
-        if not name:
-            continue
+    for summary in crd_summaries:
+        # Build a dict compatible with CRDRecord.from_dict
+        record_dict = {
+            "name": summary.name,
+            "spec": {
+                "group": summary.group,
+                "versions": list(summary.versions),
+                "storageVersion": summary.storage_version,
+            },
+        }
         try:
-            record = CRDRecord.from_dict({"name": name, "spec": item.get("spec", {})})
+            record = CRDRecord.from_dict(record_dict)
+            results[record.name] = record
         except KeyError:
             continue
-        results[record.name] = record
     return results
 
 
@@ -269,49 +296,34 @@ def _collect_job_failures(context: str) -> tuple[int, tuple[str, ...]]:
 def _collect_warning_events(
     context: str, limit: int = 6
 ) -> tuple[tuple[WarningEventSummary, ...], tuple[str, ...]]:
+    """Collect warning events using the Kubernetes Python client.
+    
+    Uses Python client instead of kubectl subprocess for better error handling
+    and RBAC-degraded behavior support.
+    """
     try:
-        output = _kubectl(
-            context,
-            "get",
-            "events",
-            "--all-namespaces",
-            "--field-selector",
-            "type=Warning",
-            "--sort-by=.metadata.creationTimestamp",
-            "-o",
-            "json",
-        )
-    except RuntimeError:
+        client = get_cached_kubernetes_client(context=context)
+        event_projections = client.list_warning_events_for_all_namespaces(limit=limit)
+    except Exception:
         return (), ("events",)
-    payload = json.loads(output)
-    items = _extract_items(payload)
-    sorted_items = sorted(
-        items,
-        key=lambda event: str(
-            (event.get("metadata") or {}).get("creationTimestamp") or ""
-        ),
-        reverse=True,
-    )
+    
     events: list[WarningEventSummary] = []
-    for entry in sorted_items:
+    for proj in event_projections:
         if len(events) >= limit:
             break
-        metadata = entry.get("metadata") or {}
-        namespace = str(metadata.get("namespace") or "")
-        reason = str(entry.get("reason") or "")
-        message = str(entry.get("message") or "")
-        last_seen = str(
-            metadata.get("lastTimestamp") or
-            metadata.get("eventTime") or
-            metadata.get("creationTimestamp")
-            or ""
-        )
+        # Format last_seen from last_timestamp or creation_timestamp
+        last_seen = ""
+        if proj.last_timestamp:
+            last_seen = proj.last_timestamp.isoformat()
+        elif proj.creation_timestamp:
+            last_seen = proj.creation_timestamp.isoformat()
+        
         events.append(
             WarningEventSummary(
-                namespace=namespace,
-                reason=reason,
-                message=message,
-                count=_int_or_zero(entry.get("count")),
+                namespace=proj.namespace,
+                reason=proj.reason,
+                message=proj.message,
+                count=proj.count,
                 last_seen=last_seen,
             )
         )

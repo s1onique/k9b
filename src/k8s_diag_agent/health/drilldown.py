@@ -155,49 +155,34 @@ class DrilldownCollector:
     def _collect_warning_events(
         self, context: str, limit: int
     ) -> tuple[WarningEventSummary, ...]:
+        """Collect warning events using the Kubernetes Python client.
+        
+        Uses Python client instead of kubectl subprocess for better error handling
+        and RBAC-degraded behavior support.
+        """
         try:
-            output = self._kubectl(
-                context,
-                "get",
-                "events",
-                "--all-namespaces",
-                "--field-selector",
-                "type=Warning",
-                "--sort-by=.metadata.creationTimestamp",
-                "-o",
-                "json",
-            )
-        except RuntimeError:
+            client = get_cached_kubernetes_client(context=context)
+            event_projections = client.list_warning_events_for_all_namespaces(limit=limit)
+        except Exception:
             return ()
-        try:
-            payload = json.loads(output)
-        except json.JSONDecodeError:
-            return ()
-        items = sorted(
-            _extract_items(payload),
-            key=lambda event: str((event.get("metadata") or {}).get("creationTimestamp") or ""),
-            reverse=True,
-        )
+        
         events: list[WarningEventSummary] = []
-        for entry in items:
+        for proj in event_projections:
             if len(events) >= limit:
                 break
-            metadata = entry.get("metadata") or {}
-            namespace = str(metadata.get("namespace") or "")
-            reason = str(entry.get("reason") or "")
-            message = str(entry.get("message") or "")
-            last_seen = str(
-                metadata.get("lastTimestamp")
-                or metadata.get("eventTime")
-                or metadata.get("creationTimestamp")
-                or ""
-            )
+            # Format last_seen from last_timestamp or creation_timestamp
+            last_seen = ""
+            if proj.last_timestamp:
+                last_seen = proj.last_timestamp.isoformat()
+            elif proj.creation_timestamp:
+                last_seen = proj.creation_timestamp.isoformat()
+            
             events.append(
                 WarningEventSummary(
-                    namespace=namespace,
-                    reason=reason,
-                    message=message,
-                    count=_int_or_zero(entry.get("count")),
+                    namespace=proj.namespace,
+                    reason=proj.reason,
+                    message=proj.message,
+                    count=proj.count,
                     last_seen=last_seen,
                 )
             )
