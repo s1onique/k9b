@@ -52,8 +52,8 @@ def rebuild_index(
     Returns:
         IndexerSummary with operation results.
     """
-    # Create temp database
-    temp_path, temp_conn = create_temp_database()
+    # Create temp database in same directory as target to ensure atomic replace works
+    temp_path, temp_conn = create_temp_database(target_db_path)
 
     try:
         # Initialize indexer

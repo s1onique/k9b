@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import tempfile
 import time
 from pathlib import Path
 
@@ -122,15 +123,49 @@ def initialize_database(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
-def create_temp_database() -> tuple[Path, sqlite3.Connection]:
+def create_content_index_temp_path(target_db_path: Path) -> Path:
+    """Create a temp content-index DB path on the same filesystem as target_db_path.
+
+    This ensures atomic replacement (os.replace) works without EXDEV errors
+    when the target is on a different filesystem than the default temp directory.
+
+    Args:
+        target_db_path: Path to the target database (temp path will be in same directory).
+
+    Returns:
+        Path to the newly created temp file (already created on disk).
+    """
+    target_db_path = Path(target_db_path)
+    db_dir = target_db_path.parent
+    db_dir.mkdir(parents=True, exist_ok=True)
+
+    fd, raw_path = tempfile.mkstemp(
+        prefix=f".{target_db_path.name}.",
+        suffix=".tmp",
+        dir=db_dir,
+    )
+    os.close(fd)
+    return Path(raw_path)
+
+
+def create_temp_database(
+    target_db_path: Path | None = None,
+) -> tuple[Path, sqlite3.Connection]:
     """Create a temporary database for rebuild operations.
+
+    Args:
+        target_db_path: Optional path to the target database. If provided, the temp
+            database will be created in the same directory to ensure atomic
+            replacement works across filesystem boundaries.
 
     Returns:
         Tuple of (temp path, connection).
     """
-    import tempfile
+    if target_db_path is not None:
+        temp_path = create_content_index_temp_path(target_db_path)
+    else:
+        temp_dir = Path(tempfile.gettempdir())
+        temp_path = temp_dir / f"k9b_content_index_{os.getpid()}_{time.time()}.sqlite"
 
-    temp_dir = Path(tempfile.gettempdir())
-    temp_path = temp_dir / f"k9b_content_index_{os.getpid()}_{time.time()}.sqlite"
     conn = initialize_database(temp_path)
     return temp_path, conn

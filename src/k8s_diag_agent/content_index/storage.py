@@ -18,6 +18,7 @@ from __future__ import annotations
 # Re-export all public functions from sub-modules
 # Connection and initialization
 from .storage_connection import (
+    create_content_index_temp_path,
     create_temp_database,
     get_connection,
     initialize_database,
@@ -62,6 +63,7 @@ __all__ = [
     "get_connection",
     "initialize_database",
     "create_temp_database",
+    "create_content_index_temp_path",
     # Metadata
     "get_metadata",
     "update_indexed_at",
