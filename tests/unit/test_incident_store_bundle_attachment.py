@@ -218,9 +218,10 @@ class TestReadyForReviewNotDowngraded(unittest.TestCase):
         store = make_store()
         candidate = make_candidate(name="crashloop-pod")
 
-        # Create incident and mark ready for review
-        store.promote_candidates([candidate], TEST_TIME_1)
+        # Create incident with bundle (COLLECTING_EVIDENCE) then mark ready for review
+        store.promote_candidates([candidate], TEST_TIME_1, snapshot_bundle_id="bundle-1")
         incident_id = store.list_incidents()[0].incident_id
+        self.assertEqual(store.get_incident(incident_id).status, IncidentStatus.COLLECTING_EVIDENCE)
         store.mark_ready_for_review(incident_id, "review-123")
 
         # Verify ready for review
@@ -228,14 +229,14 @@ class TestReadyForReviewNotDowngraded(unittest.TestCase):
         self.assertEqual(ready.status, IncidentStatus.READY_FOR_REVIEW)
 
         # Promote again with bundle - should NOT downgrade
-        store.promote_candidates([candidate], TEST_TIME_2, snapshot_bundle_id="bundle-1")
+        store.promote_candidates([candidate], TEST_TIME_2, snapshot_bundle_id="bundle-2")
         after_repeat = store.get_incident(incident_id)
 
         self.assertEqual(after_repeat.status, IncidentStatus.READY_FOR_REVIEW)
         # last_observed_at should still update
         self.assertEqual(after_repeat.last_observed_at, TEST_TIME_2)
         # snapshot_bundle_id should NOT be updated for READY_FOR_REVIEW
-        self.assertIsNone(after_repeat.latest_snapshot_bundle_id)
+        self.assertEqual(after_repeat.latest_snapshot_bundle_id, "bundle-1")
 
 
 class TestReturnedIncidentsAreSnapshots(unittest.TestCase):

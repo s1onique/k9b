@@ -2,7 +2,7 @@
 
 This module provides an in-memory incident store that:
 - Promotes deterministic incident candidates into k9b-owned incident records
-- Manages incident lifecycle transitions
+- Manages incident lifecycle transitions via typed domain core
 - Returns copies/snapshots to avoid exposing internal mutable state
 
 Hard constraints enforced:
@@ -19,10 +19,14 @@ Promotion semantics:
 - first_observed_at remains stable
 - Signals append on merge
 - raw_object_kind-aware ID ensures ReplicaSet/foo ≠ StatefulSet/foo
+
+Lifecycle transitions are delegated to the typed domain core in:
+    k8s_diag_agent.domain.incident_lifecycle
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -31,19 +35,32 @@ from .incident_bundle_promotion import (
     merge_candidate_into_incident_with_bundle,
     open_incident_from_candidate_with_bundle,
 )
+from .incident_events import IncidentEvent
 from .incident_evidence import EvidenceLink, EvidenceRole
 from .incident_lifecycle import (
     Incident,
-    IncidentEvent,
     IncidentStatus,
     incident_id_from_candidate,
     merge_candidate_into_incident,
     open_incident_from_candidate,
 )
+from .incident_lifecycle_transitions import (
+    store_mark_collecting_evidence,
+    store_mark_duplicate,
+    store_mark_investigating,
+    store_mark_ready_for_review,
+    store_mark_ready_for_review_by_bundle_id,
+    store_resolve,
+    store_suppress,
+)
 
 if TYPE_CHECKING:
     from .incident_candidates import IncidentCandidate
 
+
+# =============================================================================
+# IncidentStore
+# =============================================================================
 
 @dataclass
 class IncidentStore:
@@ -185,26 +202,26 @@ class IncidentStore:
         snapshot = self._snapshot_incident(incident)
         self._incidents[snapshot.incident_id] = snapshot
 
-    def get_incident_timeline(self, incident_id: str) -> list[IncidentEvent]:
+    def get_incident_timeline(self, incident_id: str) -> Sequence[IncidentEvent]:
         """Get the timeline for a specific incident.
 
         Args:
             incident_id: The incident ID to look up
         Returns:
-            List of timeline events sorted by occurrence time, or empty list if not found
+            Sequence of timeline events sorted by occurrence time, or empty list if not found
         """
         incident = self._incidents.get(incident_id)
         if incident is None:
             return []
         return incident.get_timeline()
 
-    def get_incident_evidence_links(self, incident_id: str) -> list[EvidenceLink]:
+    def get_incident_evidence_links(self, incident_id: str) -> Sequence[EvidenceLink]:
         """Get the evidence links for a specific incident.
 
         Args:
             incident_id: The incident ID to look up
         Returns:
-            List of evidence links, or empty list if not found
+            Sequence of evidence links, or empty list if not found
         """
         incident = self._incidents.get(incident_id)
         if incident is None:
@@ -219,21 +236,15 @@ class IncidentStore:
     def mark_collecting_evidence(self, incident_id: str, bundle_id: str) -> Incident | None:
         """Transition incident to COLLECTING_EVIDENCE state.
 
+        This method delegates to the typed domain core.
+
         Args:
             incident_id: ID of the incident to transition
             bundle_id: ID of the snapshot bundle being collected
         Returns:
             Updated incident snapshot, or None if not found
         """
-        from .incident_lifecycle import mark_collecting_evidence as _mark_collecting_evidence
-
-        incident = self._incidents.get(incident_id)
-        if incident is None:
-            return None
-
-        updated = _mark_collecting_evidence(incident, bundle_id)
-        self._incidents[incident_id] = updated
-        return self._snapshot_incident(updated)
+        return store_mark_collecting_evidence(self, incident_id, bundle_id)
 
     def mark_ready_for_review(
         self,
@@ -242,21 +253,15 @@ class IncidentStore:
     ) -> Incident | None:
         """Transition incident to READY_FOR_REVIEW state.
 
+        This method delegates to the typed domain core.
+
         Args:
             incident_id: ID of the incident to transition
             review_packet_id: Optional ID of the review packet
         Returns:
             Updated incident snapshot, or None if not found
         """
-        from .incident_lifecycle import mark_ready_for_review as _mark_ready_for_review
-
-        incident = self._incidents.get(incident_id)
-        if incident is None:
-            return None
-
-        updated = _mark_ready_for_review(incident, review_packet_id)
-        self._incidents[incident_id] = updated
-        return self._snapshot_incident(updated)
+        return store_mark_ready_for_review(self, incident_id, review_packet_id)
 
     def find_incidents_by_bundle_id(
         self,
@@ -307,26 +312,14 @@ class IncidentStore:
         Returns:
             Tuple of updated incidents
         """
-        from .incident_lifecycle import mark_ready_for_review as _mark_ready_for_review
-
-        updated: list[Incident] = []
-        for incident_id, incident in self._incidents.items():
-            if incident.latest_snapshot_bundle_id == snapshot_bundle_id:
-                # Do not update protected statuses (terminal-ish states)
-                if incident.status in (
-                    IncidentStatus.SUPPRESSED,
-                    IncidentStatus.DUPLICATE,
-                    IncidentStatus.RESOLVED,
-                ):
-                    continue
-                updated_incident = _mark_ready_for_review(incident, review_packet_id)
-                self._incidents[incident_id] = updated_incident
-                updated.append(self._snapshot_incident(updated_incident))
-
-        return tuple(sorted(updated, key=lambda i: i.incident_id))
+        return store_mark_ready_for_review_by_bundle_id(
+            self, snapshot_bundle_id, review_packet_id
+        )
 
     def suppress(self, incident_id: str, reason: str) -> Incident | None:
         """Transition incident to SUPPRESSED state.
+
+        This method delegates to the typed domain core.
 
         Args:
             incident_id: ID of the incident to suppress
@@ -334,18 +327,12 @@ class IncidentStore:
         Returns:
             Updated incident snapshot, or None if not found
         """
-        from .incident_lifecycle import suppress_incident as _suppress_incident
-
-        incident = self._incidents.get(incident_id)
-        if incident is None:
-            return None
-
-        updated = _suppress_incident(incident, reason)
-        self._incidents[incident_id] = updated
-        return self._snapshot_incident(updated)
+        return store_suppress(self, incident_id, reason)
 
     def mark_duplicate(self, incident_id: str, duplicate_of: str) -> Incident | None:
         """Transition incident to DUPLICATE state.
+
+        This method delegates to the typed domain core.
 
         Args:
             incident_id: ID of the incident to mark as duplicate
@@ -353,15 +340,31 @@ class IncidentStore:
         Returns:
             Updated incident snapshot, or None if not found
         """
-        from .incident_lifecycle import mark_duplicate as _mark_duplicate
+        return store_mark_duplicate(self, incident_id, duplicate_of)
 
-        incident = self._incidents.get(incident_id)
-        if incident is None:
-            return None
+    def resolve(self, incident_id: str) -> Incident | None:
+        """Transition incident to RESOLVED state.
 
-        updated = _mark_duplicate(incident, duplicate_of)
-        self._incidents[incident_id] = updated
-        return self._snapshot_incident(updated)
+        This method delegates to the typed domain core.
+
+        Args:
+            incident_id: ID of the incident to resolve
+        Returns:
+            Updated incident snapshot, or None if not found
+        """
+        return store_resolve(self, incident_id)
+
+    def mark_investigating(self, incident_id: str) -> Incident | None:
+        """Transition incident to INVESTIGATING state.
+
+        This method delegates to the typed domain core.
+
+        Args:
+            incident_id: ID of the incident to transition
+        Returns:
+            Updated incident snapshot, or None if not found
+        """
+        return store_mark_investigating(self, incident_id)
 
     def attach_evidence(
         self,

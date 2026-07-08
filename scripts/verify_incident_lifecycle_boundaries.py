@@ -9,6 +9,7 @@ Checks performed:
 2. Transition reason strings remain in an allowlist (domain module only).
 3. Direct status assignments outside allowlisted files are detected (repo-wide).
 4. Domain module remains pure (no IO dependencies).
+5. Store modules reference typed lifecycle core functions.
 
 Exit codes:
     0 - All checks passed
@@ -74,6 +75,18 @@ ALLOWED_REJECTION_REASONS: frozenset[str] = frozenset({
 _ALLOWED_STATUS_MUTATION_FILES: frozenset[str] = frozenset({
     "src/k8s_diag_agent/collect/incident_store.py",
     "src/k8s_diag_agent/collect/incident_store_provider.py",
+})
+
+
+# Required lifecycle transition function CALLS in the transitions module
+# These must be actual AST.Call nodes, not just string presence
+_REQUIRED_LIFECYCLE_CALLS: frozenset[str] = frozenset({
+    "domain_mark_collecting_evidence",
+    "domain_mark_ready_for_review",
+    "domain_mark_investigating",
+    "domain_suppress_incident",
+    "domain_mark_duplicate",
+    "domain_resolve_incident",
 })
 
 
@@ -221,6 +234,51 @@ def check_status_assignments(filepath: str) -> list[str]:
     return errors
 
 
+def _get_called_names(tree: ast.AST) -> set[str]:
+    """Extract all function call names from an AST."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            names.add(node.func.id)
+    return names
+
+
+def check_transition_adapter_uses_lifecycle_core(filepath: str) -> list[str]:
+    """Check that transition adapter calls typed lifecycle transition functions.
+
+    This ensures that lifecycle transitions go through the typed domain core
+    via actual function calls, not just imports or string presence.
+
+    Uses AST analysis to verify that required domain functions are actually
+    called, not just imported or commented.
+    """
+    errors: list[str] = []
+
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            source = f.read()
+    except OSError as e:
+        return [f"Cannot read {filepath}: {e}"]
+
+    try:
+        tree = ast.parse(source, filename=filepath)
+    except SyntaxError as e:
+        return [f"Syntax error in {filepath}: {e}"]
+
+    # Get all function calls via AST
+    called_names = _get_called_names(tree)
+
+    # Check for required function calls
+    for required_call in _REQUIRED_LIFECYCLE_CALLS:
+        if required_call not in called_names:
+            errors.append(
+                f"{filepath}: Missing required lifecycle core CALL '{required_call}'. "
+                f"Transition adapter must CALL typed domain functions, not just import them."
+            )
+
+    return errors
+
+
 def iter_python_files(root: Path) -> list[Path]:
     """Iterate over all Python files in a directory, excluding virtual envs."""
     return [
@@ -237,6 +295,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Default paths
     domain_module = Path("src/k8s_diag_agent/domain/incident_lifecycle.py")
+    transitions_module = Path("src/k8s_diag_agent/collect/incident_lifecycle_transitions.py")
     repo_root = Path("src")
 
     errors: list[str] = []
@@ -267,6 +326,11 @@ def main(argv: list[str] | None = None) -> int:
     if status_errors:
         errors.extend(status_errors)
 
+    # Check 4: Transition adapter calls typed lifecycle core (transitions module only)
+    if transitions_module.exists():
+        transition_errors = check_transition_adapter_uses_lifecycle_core(str(transitions_module))
+        errors.extend(transition_errors)
+
     # Report results
     if errors:
         print("BOUNDARY VERIFICATION FAILED")
@@ -282,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  Domain module has no forbidden imports")
         print("  Rejection reasons are in allowlist")
         print("  No direct .status mutations detected outside allowed files")
+        print("  Transition adapter calls typed lifecycle core functions")
         print("  Module is isolated from IO, Kubernetes, HTTP dependencies")
         print("=" * 60)
         return 0
