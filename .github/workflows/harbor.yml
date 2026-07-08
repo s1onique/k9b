@@ -119,6 +119,14 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/pip install -e ".[dev]"
 
+      - name: Capture shard collection artifact
+        run: |
+          echo "Capturing collection order for shard ${{ matrix.shard_index }}/${{ matrix.shard_total }}"
+          mkdir -p artifacts/collection
+          .venv/bin/python scripts/shard_tests.py --shard "${{ matrix.shard_index }}" --total "${{ matrix.shard_total }}" \
+            > "artifacts/collection/shard-${{ matrix.shard_index }}-nodeids.txt" 2>&1
+          echo "Collection captured: $(wc -l < artifacts/collection/shard-${{ matrix.shard_index }}-nodeids.txt) tests"
+
       - name: Run Python unit test shard
         run: |
           echo "Running Python unit tests shard ${{ matrix.shard_index }}/${{ matrix.shard_total }}"
