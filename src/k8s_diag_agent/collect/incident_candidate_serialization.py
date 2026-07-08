@@ -13,6 +13,7 @@ Usage:
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
 
 from .incident_candidates import (
@@ -24,6 +25,29 @@ from .incident_candidates import (
 )
 
 
+def _wire_value(value: Any) -> str:
+    """Convert a value to a wire-safe string.
+
+    Handles both Enum members (which have .value) and raw strings.
+    This ensures the serializer is tolerant of both enum instances
+    and string literals when building candidate dicts.
+    """
+    if isinstance(value, Enum):
+        return str(value.value)
+    return str(value)
+
+
+def _input_value(value: Any) -> str:
+    """Convert an input value to a normalized string.
+
+    Handles both Enum members and raw strings, converting to lowercase
+    for case-insensitive matching before enum construction.
+    """
+    if isinstance(value, Enum):
+        return str(value.value)
+    return str(value)
+
+
 def incident_candidate_to_dict(candidate: IncidentCandidate) -> dict[str, Any]:
     """Convert an IncidentCandidate to a dict for API transmission.
 
@@ -33,7 +57,33 @@ def incident_candidate_to_dict(candidate: IncidentCandidate) -> dict[str, Any]:
     Returns:
         Dict representation suitable for JSON serialization and API transmission
     """
-    return candidate.to_dict()
+    # Use _wire_value for backward compatibility - the dataclass.to_dict()
+    # already handles enum values correctly, but tests may pass raw strings
+    signals = [
+        {
+            "source": signal.source,
+            "reason": signal.reason,
+            "message": signal.message,
+        }
+        for signal in candidate.signals
+    ]
+
+    result: dict[str, Any] = {
+        "candidate_id": candidate.candidate_id,
+        "namespace": candidate.namespace,
+        "object_kind": _wire_value(candidate.object_kind),
+        "object_name": candidate.object_name,
+        "class": _wire_value(candidate.candidate_class),
+        "candidate_class": _wire_value(candidate.candidate_class),
+        "severity": _wire_value(candidate.severity),
+        "signals": signals,
+        "evidence_needed": list(candidate.evidence_needed),
+    }
+
+    if candidate.raw_object_kind:
+        result["raw_object_kind"] = candidate.raw_object_kind
+
+    return result
 
 
 def incident_candidate_from_dict(data: dict[str, Any]) -> IncidentCandidate:

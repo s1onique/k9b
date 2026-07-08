@@ -10,6 +10,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from ..ui.server_incident_internal_client import SchedulerClient
+from .incident_candidate_serialization import incident_candidates_to_dict_list
 from .incident_candidates import IncidentCandidate
 
 _logger = logging.getLogger(__name__)
@@ -35,9 +37,6 @@ def promote_via_backend_api(
         updated_incidents, skipped_duplicates, errors, error_messages
     """
     import os
-
-    from ..ui.server_incident_internal_client import SchedulerClient
-    from .incident_candidate_serialization import incident_candidates_to_dict_list
 
     backend_url = os.environ.get("K9B_BACKEND_INTERNAL_URL")
     internal_api_token = os.environ.get("K9B_INTERNAL_API_TOKEN")
@@ -113,9 +112,6 @@ def promote_alert_signals_via_backend_api(
         updated_incidents, skipped_duplicates, errors, error_messages
     """
     import os
-
-    from ..ui.server_incident_internal_client import SchedulerClient
-    from .incident_candidate_serialization import incident_candidates_to_dict_list
 
     backend_url = os.environ.get("K9B_BACKEND_INTERNAL_URL")
     internal_api_token = os.environ.get("K9B_INTERNAL_API_TOKEN")

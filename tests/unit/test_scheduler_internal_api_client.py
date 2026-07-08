@@ -68,8 +68,22 @@ class TestSchedulerClientEndpoints:
             token="test-token",
         )
 
-        with patch.object(client, "_post_request") as mock_post:
-            mock_post.return_value = MagicMock(ok=True, errors=0, error_messages=[])
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            # Mock successful response
+            mock_response = MagicMock()
+            mock_response.read.return_value = json.dumps({
+                "ok": True,
+                "scanned": 1,
+                "firing": 1,
+                "opened_incidents": 0,
+                "updated_incidents": 0,
+                "skipped_duplicates": 0,
+                "errors": 0,
+                "error_messages": [],
+            }).encode()
+            mock_response.__enter__ = MagicMock(return_value=mock_response)
+            mock_response.__exit__ = MagicMock(return_value=False)
+            mock_urlopen.return_value = mock_response
 
             client.promote_alert_signals(
                 candidates=[{"id": "test"}],
@@ -77,8 +91,10 @@ class TestSchedulerClientEndpoints:
             )
 
             # Verify the URL contains the alert-signals endpoint
-            call_args = mock_post.call_args
-            assert "/promote-alert-signals" in call_args[0][0]
+            mock_urlopen.assert_called_once()
+            call_args = mock_urlopen.call_args
+            request = call_args[0][0]
+            assert "/promote-alert-signals" in request.full_url
 
     def test_promote_candidates_uses_generic_endpoint(self) -> None:
         """promote_candidates should call /promote-candidates endpoint."""
@@ -87,8 +103,22 @@ class TestSchedulerClientEndpoints:
             token="test-token",
         )
 
-        with patch.object(client, "_post_request") as mock_post:
-            mock_post.return_value = MagicMock(ok=True, errors=0, error_messages=[])
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            # Mock successful response
+            mock_response = MagicMock()
+            mock_response.read.return_value = json.dumps({
+                "ok": True,
+                "scanned": 1,
+                "firing": 1,
+                "opened_incidents": 0,
+                "updated_incidents": 0,
+                "skipped_duplicates": 0,
+                "errors": 0,
+                "error_messages": [],
+            }).encode()
+            mock_response.__enter__ = MagicMock(return_value=mock_response)
+            mock_response.__exit__ = MagicMock(return_value=False)
+            mock_urlopen.return_value = mock_response
 
             client.promote_candidates(
                 candidates=[{"id": "test"}],
@@ -96,8 +126,10 @@ class TestSchedulerClientEndpoints:
             )
 
             # Verify the URL contains the promote-candidates endpoint
-            call_args = mock_post.call_args
-            assert "/promote-candidates" in call_args[0][0]
+            mock_urlopen.assert_called_once()
+            call_args = mock_urlopen.call_args
+            request = call_args[0][0]
+            assert "/promote-candidates" in request.full_url
 
     def test_promote_alert_signals_does_not_call_promote_candidates(self) -> None:
         """promote_alert_signals should NOT call the generic promote_candidates endpoint."""
@@ -106,8 +138,22 @@ class TestSchedulerClientEndpoints:
             token="test-token",
         )
 
-        with patch.object(client, "_post_request") as mock_post:
-            mock_post.return_value = MagicMock(ok=True, errors=0, error_messages=[])
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            # Mock successful response
+            mock_response = MagicMock()
+            mock_response.read.return_value = json.dumps({
+                "ok": True,
+                "scanned": 1,
+                "firing": 1,
+                "opened_incidents": 0,
+                "updated_incidents": 0,
+                "skipped_duplicates": 0,
+                "errors": 0,
+                "error_messages": [],
+            }).encode()
+            mock_response.__enter__ = MagicMock(return_value=mock_response)
+            mock_response.__exit__ = MagicMock(return_value=False)
+            mock_urlopen.return_value = mock_response
 
             client.promote_alert_signals(
                 candidates=[{"id": "test"}],
@@ -115,8 +161,10 @@ class TestSchedulerClientEndpoints:
             )
 
             # Verify the URL does NOT contain the generic endpoint
-            call_args = mock_post.call_args
-            assert "/promote-candidates" not in call_args[0][0]
+            mock_urlopen.assert_called_once()
+            call_args = mock_urlopen.call_args
+            request = call_args[0][0]
+            assert "/promote-candidates" not in request.full_url
 
 
 class TestSchedulerClientErrorHandling:

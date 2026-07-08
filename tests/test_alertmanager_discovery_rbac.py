@@ -21,6 +21,10 @@ def get_rbac_rules(cluster_scoped: bool) -> Any:
         "--show-only", "templates/rbac.yaml",
         "--set", "rbac.create=true",
         "--set", f"rbac.clusterScoped={scope}",
+        "--set", "backend.internalApi.existingSecret=k9b-internal-api",
+        "--set", "backend.internalApi.tokenKey=K9B_INTERNAL_API_TOKEN",
+        "--set", "scheduler.incidentPromotion.internalApi.existingSecret=k9b-internal-api",
+        "--set", "scheduler.incidentPromotion.internalApi.tokenKey=K9B_INTERNAL_API_TOKEN",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     

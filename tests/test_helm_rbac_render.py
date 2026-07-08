@@ -98,7 +98,11 @@ class TestClusterScopedRBAC:
     def cluster_scoped_docs(self) -> list[dict[str, Any]]:
         """Render chart with clusterScoped=true."""
         chart_path = Path(__file__).resolve().parents[1] / "charts" / "k9b"
-        values = {"rbac": {"create": True, "clusterScoped": True}}
+        values = {
+            "rbac": {"create": True, "clusterScoped": True},
+            "backend": {"internalApi": {"existingSecret": "k9b-internal-api", "tokenKey": "K9B_INTERNAL_API_TOKEN"}},
+            "scheduler": {"incidentPromotion": {"internalApi": {"existingSecret": "k9b-internal-api", "tokenKey": "K9B_INTERNAL_API_TOKEN"}}},
+        }
         return render_manifest(chart_path, values)
 
     def test_renders_cluster_role(self, cluster_scoped_docs: list[dict[str, Any]]) -> None:
@@ -176,7 +180,11 @@ class TestNamespaceScopedRBAC:
     def namespace_scoped_docs(self) -> list[dict[str, Any]]:
         """Render chart with clusterScoped=false."""
         chart_path = Path(__file__).resolve().parents[1] / "charts" / "k9b"
-        values = {"rbac": {"create": True, "clusterScoped": False}}
+        values = {
+            "rbac": {"create": True, "clusterScoped": False},
+            "backend": {"internalApi": {"existingSecret": "k9b-internal-api", "tokenKey": "K9B_INTERNAL_API_TOKEN"}},
+            "scheduler": {"incidentPromotion": {"internalApi": {"existingSecret": "k9b-internal-api", "tokenKey": "K9B_INTERNAL_API_TOKEN"}}},
+        }
         return render_manifest(chart_path, values)
 
     def test_renders_role(self, namespace_scoped_docs: list[dict[str, Any]]) -> None:

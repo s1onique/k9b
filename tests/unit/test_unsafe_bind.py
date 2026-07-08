@@ -10,6 +10,51 @@ from pathlib import Path
 from unittest import mock
 
 from k8s_diag_agent.ui.server import _SAFE_LOOPBACK_HOSTS, _is_exposed_host, start_ui_server
+from k8s_diag_agent.ui.server_runtime import start_ui_server_impl
+
+
+class FakeServer:
+    """Fake HTTP server for unit tests that does not bind to any port.
+    
+    This server:
+    - Implements the minimal server interface needed by start_ui_server_impl
+    - Raises AssertionError if serve_forever() is called (unit tests must not block)
+    - Supports context manager protocol for proper cleanup
+    """
+
+    def __init__(self, server_address, handler_cls):
+        self.server_address = server_address
+        self.handler_cls = handler_cls
+        self._started = False
+
+    def __enter__(self):
+        self._started = True
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def serve_forever(self):
+        """Called by server.serve_forever() - should NOT be called in unit tests."""
+        raise AssertionError(
+            "Unit test must not block in serve_forever(). "
+            "Use serve_forever=False with FakeServer."
+        )
+
+    def shutdown(self):
+        """Called during server cleanup."""
+        pass
+
+    def server_close(self):
+        """Called during server cleanup."""
+        pass
+
+
+def make_fake_server_factory():
+    """Create a factory that produces FakeServer instances."""
+    def factory(server_address, handler_cls):
+        return FakeServer(server_address, handler_cls)
+    return factory
 
 
 class TestIsExposedHost(unittest.TestCase):
@@ -68,47 +113,44 @@ class TestStartUIServerUnsafeBind(unittest.TestCase):
 
     def test_loopback_ipv4_no_unsafe_flag_starts(self) -> None:
         """Server starts on 127.0.0.1 without --unsafe-bind."""
-        # This should not raise SystemExit
+        # Use start_ui_server_impl with serve_forever=False and FakeServer
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", new_callable=io.StringIO):
-                with mock.patch(
-                    "k8s_diag_agent.ui.server.ThreadingHTTPServer"
-                ) as _mock_server:
-                    # Should start without error
-                    start_ui_server(
-                        runs_dir=self.health_dir,
-                        host="127.0.0.1",
-                        port=8080,
-                        unsafe_bind=False,
-                    )
+                # Should start without error
+                start_ui_server_impl(
+                    server_factory=make_fake_server_factory(),
+                    runs_dir=self.health_dir,
+                    host="127.0.0.1",
+                    port=8080,
+                    unsafe_bind=False,
+                    serve_forever=False,
+                )
 
     def test_localhost_no_unsafe_flag_starts(self) -> None:
         """Server starts on localhost without --unsafe-bind."""
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", new_callable=io.StringIO):
-                with mock.patch(
-                    "k8s_diag_agent.ui.server.ThreadingHTTPServer"
-                ) as _mock_server:
-                    start_ui_server(
-                        runs_dir=self.health_dir,
-                        host="localhost",
-                        port=8080,
-                        unsafe_bind=False,
-                    )
+                start_ui_server_impl(
+                    server_factory=make_fake_server_factory(),
+                    runs_dir=self.health_dir,
+                    host="localhost",
+                    port=8080,
+                    unsafe_bind=False,
+                    serve_forever=False,
+                )
 
     def test_loopback_ipv6_no_unsafe_flag_starts(self) -> None:
         """Server starts on ::1 without --unsafe-bind."""
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", new_callable=io.StringIO):
-                with mock.patch(
-                    "k8s_diag_agent.ui.server.ThreadingHTTPServer"
-                ) as _mock_server:
-                    start_ui_server(
-                        runs_dir=self.health_dir,
-                        host="::1",
-                        port=8080,
-                        unsafe_bind=False,
-                    )
+                start_ui_server_impl(
+                    server_factory=make_fake_server_factory(),
+                    runs_dir=self.health_dir,
+                    host="::1",
+                    port=8080,
+                    unsafe_bind=False,
+                    serve_forever=False,
+                )
 
     def test_all_interfaces_without_unsafe_flag_rejected(self) -> None:
         """Server refuses to start on 0.0.0.0 without --unsafe-bind."""
@@ -116,11 +158,13 @@ class TestStartUIServerUnsafeBind(unittest.TestCase):
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", stderr_output):
                 with self.assertRaises(SystemExit) as context:
-                    start_ui_server(
+                    start_ui_server_impl(
+                        server_factory=make_fake_server_factory(),
                         runs_dir=self.health_dir,
                         host="0.0.0.0",
                         port=8080,
                         unsafe_bind=False,
+                        serve_forever=False,
                     )
 
         self.assertEqual(context.exception.code, 1)
@@ -135,11 +179,13 @@ class TestStartUIServerUnsafeBind(unittest.TestCase):
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", stderr_output):
                 with self.assertRaises(SystemExit) as context:
-                    start_ui_server(
+                    start_ui_server_impl(
+                        server_factory=make_fake_server_factory(),
                         runs_dir=self.health_dir,
                         host="::",
                         port=8080,
                         unsafe_bind=False,
+                        serve_forever=False,
                     )
 
         self.assertEqual(context.exception.code, 1)
@@ -154,11 +200,13 @@ class TestStartUIServerUnsafeBind(unittest.TestCase):
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", stderr_output):
                 with self.assertRaises(SystemExit) as context:
-                    start_ui_server(
+                    start_ui_server_impl(
+                        server_factory=make_fake_server_factory(),
                         runs_dir=self.health_dir,
                         host="192.168.1.100",
                         port=8080,
                         unsafe_bind=False,
+                        serve_forever=False,
                     )
 
         self.assertEqual(context.exception.code, 1)
@@ -170,15 +218,14 @@ class TestStartUIServerUnsafeBind(unittest.TestCase):
         stderr_output = io.StringIO()
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", stderr_output):
-                with mock.patch(
-                    "k8s_diag_agent.ui.server.ThreadingHTTPServer"
-                ) as _mock_server:
-                    start_ui_server(
-                        runs_dir=self.health_dir,
-                        host="0.0.0.0",
-                        port=8080,
-                        unsafe_bind=True,
-                    )
+                start_ui_server_impl(
+                    server_factory=make_fake_server_factory(),
+                    runs_dir=self.health_dir,
+                    host="0.0.0.0",
+                    port=8080,
+                    unsafe_bind=True,
+                    serve_forever=False,
+                )
 
         stderr_text = stderr_output.getvalue()
         self.assertIn("WARNING: Starting operator UI on exposed address '0.0.0.0:8080'", stderr_text)
@@ -190,15 +237,14 @@ class TestStartUIServerUnsafeBind(unittest.TestCase):
         stderr_output = io.StringIO()
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", stderr_output):
-                with mock.patch(
-                    "k8s_diag_agent.ui.server.ThreadingHTTPServer"
-                ) as _mock_server:
-                    start_ui_server(
-                        runs_dir=self.health_dir,
-                        host="::",
-                        port=8080,
-                        unsafe_bind=True,
-                    )
+                start_ui_server_impl(
+                    server_factory=make_fake_server_factory(),
+                    runs_dir=self.health_dir,
+                    host="::",
+                    port=8080,
+                    unsafe_bind=True,
+                    serve_forever=False,
+                )
 
         stderr_text = stderr_output.getvalue()
         # IPv6 address :: with port 8080 may be rendered as :::8080 or ::8080 depending on context
@@ -211,15 +257,14 @@ class TestStartUIServerUnsafeBind(unittest.TestCase):
         stderr_output = io.StringIO()
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", stderr_output):
-                with mock.patch(
-                    "k8s_diag_agent.ui.server.ThreadingHTTPServer"
-                ) as _mock_server:
-                    start_ui_server(
-                        runs_dir=self.health_dir,
-                        host="192.168.1.100",
-                        port=8080,
-                        unsafe_bind=True,
-                    )
+                start_ui_server_impl(
+                    server_factory=make_fake_server_factory(),
+                    runs_dir=self.health_dir,
+                    host="192.168.1.100",
+                    port=8080,
+                    unsafe_bind=True,
+                    serve_forever=False,
+                )
 
         stderr_text = stderr_output.getvalue()
         self.assertIn("WARNING: Starting operator UI on exposed address '192.168.1.100:8080'", stderr_text)
@@ -232,11 +277,13 @@ class TestStartUIServerUnsafeBind(unittest.TestCase):
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", stderr_output):
                 with self.assertRaises(SystemExit):
-                    start_ui_server(
+                    start_ui_server_impl(
+                        server_factory=make_fake_server_factory(),
                         runs_dir=self.health_dir,
                         host="0.0.0.0",
                         port=8080,
                         unsafe_bind=False,
+                        serve_forever=False,
                     )
 
         stderr_text = stderr_output.getvalue()
@@ -251,11 +298,13 @@ class TestStartUIServerUnsafeBind(unittest.TestCase):
         with mock.patch("sys.stdout", new_callable=io.StringIO):
             with mock.patch.object(sys, "stderr", stderr_output):
                 with self.assertRaises(SystemExit):
-                    start_ui_server(
+                    start_ui_server_impl(
+                        server_factory=make_fake_server_factory(),
                         runs_dir=self.health_dir,
                         host="0.0.0.0",
                         port=8080,
                         unsafe_bind=False,
+                        serve_forever=False,
                     )
 
         stderr_text = stderr_output.getvalue()

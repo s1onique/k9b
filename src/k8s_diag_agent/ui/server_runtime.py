@@ -155,6 +155,7 @@ def start_ui_server_impl(
     static_dir: Path | None = None,
     unsafe_bind: bool = False,
     auth_token: str | None = None,
+    serve_forever: bool = True,
 ) -> None:
     """Start the UI HTTP server with the given configuration.
 
@@ -166,6 +167,8 @@ def start_ui_server_impl(
         static_dir: Directory containing static assets (default: frontend/dist)
         unsafe_bind: Allow binding to non-loopback addresses
         auth_token: Bearer token for mutation endpoint authentication
+        serve_forever: If True, call server.serve_forever(). If False, return after
+            server startup (for unit test fake servers). Defaults to True.
     """
     # Import here to avoid circular imports
     from .server import HealthUIRequestHandler
@@ -222,7 +225,12 @@ def start_ui_server_impl(
         file=sys.stderr,
     )
     try:
-        server.serve_forever()
+        if serve_forever:
+            server.serve_forever()
+        else:
+            # For unit tests: return after server construction and safety checks.
+            # Cleanup is handled by the server context manager.
+            pass
     except KeyboardInterrupt:
         print("Shutting down operator UI server", file=sys.stderr)
         server.shutdown()
