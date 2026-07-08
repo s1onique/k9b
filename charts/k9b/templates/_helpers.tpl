@@ -153,35 +153,35 @@ Priority:
 3. Fail with a clear error if neither is set and auth is enabled.
 */}}
 {{- define "k9b.adminAuthSecretName" -}}
-{{- $existingSecret := .Values.backend.auth.existingSecret | default "" -}}
-{{- $adminPasswordHash := .Values.backend.auth.adminPasswordHash | default "" -}}
-{{- if .Values.backend.auth.enabled -}}
-  {{- if and (ne $existingSecret "") -}}
-    {{- $existingSecret -}}
-  {{- else if ne $adminPasswordHash "" -}}
-    {{- printf "%s-admin-auth" (include "k9b.fullname" .) -}}
-  {{- else -}}
-    {{- $failMsg := "backend.auth.enabled=true but neither backend.auth.existingSecret nor backend.auth.adminPasswordHash is set. " -}}
-    {{- $failMsg = printf "%sEither provide an existingSecret name or set adminPasswordHash for local/dev use." $failMsg -}}
-    {{- fail $failMsg -}}
-  {{- end -}}
-{{- else -}}
-  {{- /* Auth not enabled, return empty to skip secretKeyRef entirely */ -}}
-  {{- "" -}}
-{{- end -}}
-{{- end -}}
+{{- $existingSecret := .Values.backend.auth.existingSecret | default "" }}
+{{- $adminPasswordHash := .Values.backend.auth.adminPasswordHash | default "" }}
+{{- if .Values.backend.auth.enabled }}
+  {{- if and (ne $existingSecret "") }}
+    {{- $existingSecret }}
+  {{- else if ne $adminPasswordHash "" }}
+    {{- printf "%s-admin-auth" (include "k9b.fullname" .) }}
+  {{- else }}
+    {{- $failMsg := "backend.auth.enabled=true but neither backend.auth.existingSecret nor backend.auth.adminPasswordHash is set. " }}
+    {{- $failMsg = printf "%sEither provide an existingSecret name or set adminPasswordHash for local/dev use." $failMsg }}
+    {{- fail $failMsg }}
+  {{- end }}
+{{- else }}
+  {{- /* Auth not enabled, return empty to skip secretKeyRef entirely */ }}
+  {{- "" }}
+{{- end }}
+{{- end }}
 
 {{/*
 Determine if chart should create the admin auth secret.
 Returns true only when auth is enabled, existingSecret is empty, and adminPasswordHash is set.
 */}}
 {{- define "k9b.createAdminAuthSecret" -}}
-{{- if and .Values.backend.auth.enabled (not .Values.backend.auth.existingSecret) .Values.backend.auth.adminPasswordHash -}}
+{{- if and .Values.backend.auth.enabled (not .Values.backend.auth.existingSecret) .Values.backend.auth.adminPasswordHash }}
 true
-{{- else -}}
+{{- else }}
 false
-{{- end -}}
-{{- end -}}
+{{- end }}
+{{- end }}
 
 {{/*
 Determine RBAC cluster scope mode.
@@ -194,11 +194,129 @@ Priority:
 Returns "true" for cluster-scoped or "false" for namespace-scoped.
 */}}
 {{- define "k9b.rbac.clusterScoped" -}}
-{{- if hasKey .Values.rbac "clusterScoped" -}}
-{{- .Values.rbac.clusterScoped | toString -}}
-{{- else if hasKey .Values.rbac "clusterWide" -}}
-{{- .Values.rbac.clusterWide | toString -}}
-{{- else -}}
-{{- "true" -}}
-{{- end -}}
-{{- end -}}
+{{- if hasKey .Values.rbac "clusterScoped" }}
+{{- .Values.rbac.clusterScoped | toString }}
+{{- else if hasKey .Values.rbac "clusterWide" }}
+{{- .Values.rbac.clusterWide | toString }}
+{{- else }}
+{{- "true" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Resolve internal API secret name for backend and scheduler.
+
+When sqlite/backend-api mode is enabled, both backend and scheduler must reference
+the same Secret (or Secrets with identical token values).
+
+Policy:
+- Returns the backend internalApi.existingSecret if set
+- Falls back to scheduler internalApi.existingSecret if backend is empty
+- Returns empty string if neither is configured (validation will catch this)
+*/}}
+{{- define "k9b.internalApiSecretName" -}}
+{{- $backendSecret := .Values.backend.internalApi.existingSecret | default "" }}
+{{- $schedulerSecret := .Values.scheduler.incidentPromotion.internalApi.existingSecret | default "" }}
+{{- if and (eq .Values.backend.incidentStore.backend "sqlite") (or (eq .Values.scheduler.incidentPromotion.mode "backend-api") (eq .Values.scheduler.incidentPromotion.mode "auto")) }}
+  {{- /* sqlite + backend-api/auto mode: need secrets */ }}
+  {{- if $backendSecret }}
+    {{- $backendSecret }}
+  {{- else if $schedulerSecret }}
+    {{- $schedulerSecret }}
+  {{- else }}
+    {{- "" }}
+  {{- end }}
+{{- else if eq .Values.scheduler.incidentPromotion.mode "backend-api" }}
+  {{- /* backend-api mode only */ }}
+  {{- if $schedulerSecret }}
+    {{- $schedulerSecret }}
+  {{- else }}
+    {{- "" }}
+  {{- end }}
+{{- else }}
+  {{- /* local mode: no secret required */ }}
+  {{- "" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Validate incident promotion configuration.
+
+This template MUST be called when sqlite or backend-api mode is enabled.
+It fails Helm rendering if configuration is incomplete.
+
+Fails with clear message if:
+- backend.incidentStore.backend=sqlite but backend.internalApi.existingSecret is empty
+- scheduler.incidentPromotion.mode=backend-api but scheduler.internalApi.existingSecret is empty
+- scheduler.incidentPromotion.mode=auto but scheduler.internalApi.existingSecret is empty
+  (auto resolves to backend-api when process_role=scheduler)
+- scheduler.incidentPromotion.mode=backend-api but scheduler.internalApi.backendUrl is empty
+*/}}
+{{- define "k9b.validateIncidentPromotionConfig" }}
+{{- /* SQLite mode requires backend internal API token */ }}
+{{- if eq .Values.backend.incidentStore.backend "sqlite" }}
+  {{- if not .Values.backend.internalApi.existingSecret }}
+    {{- fail "backend.incidentStore.backend=sqlite requires backend.internalApi.existingSecret to be set. Create a secret: kubectl create secret generic k9b-internal-api --from-literal=K9B_INTERNAL_API_TOKEN=<your-token>" }}
+  {{- end }}
+{{- end }}
+
+{{- /* backend-api or auto mode requires scheduler internal API token */ }}
+{{- if or (eq .Values.scheduler.incidentPromotion.mode "backend-api") (eq .Values.scheduler.incidentPromotion.mode "auto") }}
+  {{- /* Backend URL must be configured for backend-api/auto mode */ }}
+  {{- if not .Values.scheduler.incidentPromotion.internalApi.backendUrl }}
+    {{- fail "scheduler.incidentPromotion.mode=backend-api requires scheduler.incidentPromotion.internalApi.backendUrl to be set" }}
+  {{- end }}
+
+  {{- /* auto mode ALWAYS requires scheduler token because scheduler process_role=scheduler
+       causes dispatcher to resolve auto to backend-api at runtime */ }}
+  {{- if eq .Values.scheduler.incidentPromotion.mode "auto" }}
+    {{- if not .Values.scheduler.incidentPromotion.internalApi.existingSecret }}
+      {{- fail "scheduler.incidentPromotion.mode=auto requires scheduler.incidentPromotion.internalApi.existingSecret to be set. The scheduler process_role=scheduler causes dispatcher to resolve auto to backend-api, which requires internal API token. Create a secret: kubectl create secret generic k9b-internal-api --from-literal=K9B_INTERNAL_API_TOKEN=<your-token>" }}
+    {{- end }}
+  {{- end }}
+
+  {{- /* backend-api mode: require secrets based on backend type */ }}
+  {{- if eq .Values.scheduler.incidentPromotion.mode "backend-api" }}
+    {{- /* When backend is sqlite, both backend AND scheduler need secrets */ }}
+    {{- if eq .Values.backend.incidentStore.backend "sqlite" }}
+      {{- if not .Values.backend.internalApi.existingSecret }}
+        {{- fail "sqlite backend with backend-api scheduler requires backend.internalApi.existingSecret to be set" }}
+      {{- end }}
+      {{- if not .Values.scheduler.incidentPromotion.internalApi.existingSecret }}
+        {{- fail "sqlite backend with backend-api scheduler requires scheduler.incidentPromotion.internalApi.existingSecret to be set. Both backend and scheduler must reference a Secret containing K9B_INTERNAL_API_TOKEN" }}
+      {{- end }}
+    {{- else }}
+      {{- /* Non-sqlite backend with backend-api mode: only scheduler needs secret */ }}
+      {{- if not .Values.scheduler.incidentPromotion.internalApi.existingSecret }}
+        {{- fail "scheduler.incidentPromotion.mode=backend-api requires scheduler.incidentPromotion.internalApi.existingSecret to be set. Create a secret: kubectl create secret generic k9b-internal-api --from-literal=K9B_INTERNAL_API_TOKEN=<your-token>" }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Check if internal API token is required for backend.
+
+Returns true if backend.incidentStore.backend=sqlite (backend needs to validate tokens).
+*/}}
+{{- define "k9b.backendRequiresInternalApiToken" -}}
+{{- if eq .Values.backend.incidentStore.backend "sqlite" }}
+true
+{{- else }}
+false
+{{- end }}
+{{- end }}
+
+{{/*
+Check if internal API token is required for scheduler.
+
+Returns true if scheduler.incidentPromotion.mode is backend-api or auto.
+*/}}
+{{- define "k9b.schedulerRequiresInternalApiToken" -}}
+{{- if or (eq .Values.scheduler.incidentPromotion.mode "backend-api") (eq .Values.scheduler.incidentPromotion.mode "auto") }}
+true
+{{- else }}
+false
+{{- end }}
+{{- end }}

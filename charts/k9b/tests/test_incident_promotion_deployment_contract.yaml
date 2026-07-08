@@ -1,0 +1,227 @@
+# Helm chart tests for incident promotion deployment contract.
+# Tests validate that Helm rendering fails-fast when sqlite/backend-api mode
+# is configured without required internal API secrets.
+
+templates:
+  - templates/deployment.yaml
+  - templates/deployment-scheduler.yaml
+
+tests:
+  # Test 1: Backend SQLite renders store envs with secret
+  - name: backend-sqlite-renders-store-envs
+    values:
+      - &default_values
+        backend:
+          incidentStore:
+            backend: sqlite
+            sqlitePath: /app/runs/incidents/k9b-incidents.sqlite3
+            journalMode: DELETE
+          internalApi:
+            existingSecret: k9b-internal-api
+            tokenKey: K9B_INTERNAL_API_TOKEN
+        scheduler:
+          incidentPromotion:
+            mode: backend-api
+            internalApi:
+              backendUrl: http://k9b-backend.k9b.svc.cluster.local:8080
+              existingSecret: k9b-internal-api
+              tokenKey: K9B_INTERNAL_API_TOKEN
+    asserts:
+      # Backend deployment contains required env vars
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_PROCESS_ROLE].value
+          value: "backend"
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_INCIDENT_STORE_BACKEND].value
+          value: "sqlite"
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_INCIDENT_STORE_SQLITE_PATH].value
+          value: "/app/runs/incidents/k9b-incidents.sqlite3"
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_INCIDENT_STORE_SQLITE_JOURNAL_MODE].value
+          value: "DELETE"
+      # Backend has internal API token via secretKeyRef
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_INTERNAL_API_TOKEN].valueFrom.secretKeyRef.name
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_INTERNAL_API_TOKEN].valueFrom.secretKeyRef.name
+          value: "k9b-internal-api"
+
+  # Test 2: Scheduler backend-api renders promotion envs with secret
+  - name: scheduler-backend-api-renders-promotion-envs
+    values:
+      - *default_values
+    asserts:
+      # Scheduler deployment contains required env vars
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_PROCESS_ROLE].value
+          value: "scheduler"
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_INCIDENT_PROMOTION_MODE].value
+          value: "backend-api"
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_BACKEND_INTERNAL_URL].value
+          value: "http://k9b-backend.k9b.svc.cluster.local:8080"
+      # Scheduler has internal API token via secretKeyRef
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_INTERNAL_API_TOKEN].valueFrom.secretKeyRef.name
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_INTERNAL_API_TOKEN].valueFrom.secretKeyRef.name
+          value: "k9b-internal-api"
+
+  # Test 3: SQLite without backend secret fails render
+  - name: sqlite-without-backend-secret-fails
+    values:
+      - &sqlite_no_backend_secret
+        backend:
+          incidentStore:
+            backend: sqlite
+            sqlitePath: /app/runs/incidents/k9b-incidents.sqlite3
+            journalMode: DELETE
+          internalApi:
+            existingSecret: ""  # Empty secret - should fail
+            tokenKey: K9B_INTERNAL_API_TOKEN
+        scheduler:
+          incidentPromotion:
+            mode: backend-api
+            internalApi:
+              backendUrl: http://k9b-backend.k9b.svc.cluster.local:8080
+              existingSecret: k9b-internal-api
+              tokenKey: K9B_INTERNAL_API_TOKEN
+    asserts:
+      # This should fail during helm template rendering
+      - failed:
+          errorMessage: "backend.incidentStore.backend=sqlite requires backend.internalApi.existingSecret"
+
+  # Test 4: backend-api without scheduler secret fails render
+  - name: backend-api-without-scheduler-secret-fails
+    values:
+      - &backend_api_no_scheduler_secret
+        backend:
+          incidentStore:
+            backend: sqlite
+            sqlitePath: /app/runs/incidents/k9b-incidents.sqlite3
+            journalMode: DELETE
+          internalApi:
+            existingSecret: k9b-internal-api
+            tokenKey: K9B_INTERNAL_API_TOKEN
+        scheduler:
+          incidentPromotion:
+            mode: backend-api
+            internalApi:
+              backendUrl: http://k9b-backend.k9b.svc.cluster.local:8080
+              existingSecret: ""  # Empty secret - should fail
+              tokenKey: K9B_INTERNAL_API_TOKEN
+    asserts:
+      # This should fail during helm template rendering
+      - failed:
+          errorMessage: "scheduler.incidentPromotion.mode=backend-api requires scheduler.incidentPromotion.internalApi.existingSecret"
+
+  # Test 5: memory/local dev mode renders without internal token
+  - name: memory-local-dev-mode-no-token-required
+    values:
+      - &memory_mode
+        backend:
+          incidentStore:
+            backend: memory
+            sqlitePath: ""
+            journalMode: DELETE
+          internalApi:
+            existingSecret: ""  # Not required for memory mode
+            tokenKey: K9B_INTERNAL_API_TOKEN
+        scheduler:
+          incidentPromotion:
+            mode: local
+            internalApi:
+              backendUrl: ""
+              existingSecret: ""  # Not required for local mode
+              tokenKey: K9B_INTERNAL_API_TOKEN
+    asserts:
+      # Backend renders with memory backend
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_INCIDENT_STORE_BACKEND].value
+          value: "memory"
+      # No SQLite path env for memory mode
+      - notExists:
+          path: spec.template.spec.containers[0].env[name=K9B_INCIDENT_STORE_SQLITE_PATH]
+      # Scheduler renders with local mode
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_INCIDENT_PROMOTION_MODE].value
+          value: "local"
+      # No backend URL for local mode
+      - notExists:
+          path: spec.template.spec.containers[0].env[name=K9B_BACKEND_INTERNAL_URL]
+      # No internal API token for local mode
+      - notExists:
+          path: spec.template.spec.containers[name=scheduler].env[name=K9B_INTERNAL_API_TOKEN]
+
+  # Test 6: SQLite with auto mode also requires secrets
+  - name: auto-mode-with-sqlite-requires-secrets
+    values:
+      - &auto_mode_sqlite
+        backend:
+          incidentStore:
+            backend: sqlite
+            sqlitePath: /app/runs/incidents/k9b-incidents.sqlite3
+            journalMode: DELETE
+          internalApi:
+            existingSecret: ""
+            tokenKey: K9B_INTERNAL_API_TOKEN
+        scheduler:
+          incidentPromotion:
+            mode: auto
+            internalApi:
+              backendUrl: http://k9b-backend.k9b.svc.cluster.local:8080
+              existingSecret: ""
+              tokenKey: K9B_INTERNAL_API_TOKEN
+    asserts:
+      - failed:
+          errorMessage: "backend.incidentStore.backend=sqlite requires backend.internalApi.existingSecret"
+
+  # Test 7: WAL mode renders but with warning in values (chart renders OK)
+  - name: sqlite-wal-mode-renders-with-explicit-warning
+    values:
+      - &sqlite_wal
+        backend:
+          incidentStore:
+            backend: sqlite
+            sqlitePath: /app/runs/incidents/k9b-incidents.sqlite3
+            journalMode: WAL
+          internalApi:
+            existingSecret: k9b-internal-api
+            tokenKey: K9B_INTERNAL_API_TOKEN
+        scheduler:
+          incidentPromotion:
+            mode: backend-api
+            internalApi:
+              backendUrl: http://k9b-backend.k9b.svc.cluster.local:8080
+              existingSecret: k9b-internal-api
+              tokenKey: K9B_INTERNAL_API_TOKEN
+    asserts:
+      # Chart still renders with WAL mode (it's the operator's choice)
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_INCIDENT_STORE_SQLITE_JOURNAL_MODE].value
+          value: "WAL"
+
+  # Test 8: Missing backend URL in backend-api mode fails
+  - name: backend-api-missing-url-fails
+    values:
+      - &backend_api_no_url
+        backend:
+          incidentStore:
+            backend: sqlite
+            sqlitePath: /app/runs/incidents/k9b-incidents.sqlite3
+            journalMode: DELETE
+          internalApi:
+            existingSecret: k9b-internal-api
+            tokenKey: K9B_INTERNAL_API_TOKEN
+        scheduler:
+          incidentPromotion:
+            mode: backend-api
+            internalApi:
+              backendUrl: ""  # Empty URL - should fail
+              existingSecret: k9b-internal-api
+              tokenKey: K9B_INTERNAL_API_TOKEN
+    asserts:
+      - failed:
+          errorMessage: "scheduler.incidentPromotion.mode=backend-api requires scheduler.incidentPromotion.internalApi.backendUrl"

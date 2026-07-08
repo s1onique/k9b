@@ -39,12 +39,16 @@ backend:
     # sqlitePath: Path to SQLite database file.
     sqlitePath: /app/runs/incidents/k9b-incidents.sqlite3
     # journalMode: SQLite journal mode (DELETE|TRUNCATE|PERSIST|WAL).
-    # Note: WAL requires careful mount configuration and is not the default.
+    # WARNING: WAL mode requires careful mount configuration (shared PVC) and is NOT the default.
+    # WAL can cause "database is locked" errors in multi-pod deployments.
     journalMode: DELETE
   # internalApi: Internal API configuration for scheduler-to-backend promotion.
+  # REQUIRED when incidentStore.backend=sqlite (scheduler uses backend API for incident promotion).
   internalApi:
     # existingSecret: Name of a Kubernetes Secret containing K9B_INTERNAL_API_TOKEN.
+    # REQUIRED for sqlite backend mode - Helm rendering will FAIL without this.
     # Create via: kubectl create secret generic k9b-internal-api --from-literal=K9B_INTERNAL_API_TOKEN=<your-token>
+    # IMPORTANT: Never commit real token values to values.yaml or version control.
     existingSecret: ""
     # tokenKey: Key name in the Secret containing the token.
     tokenKey: K9B_INTERNAL_API_TOKEN
@@ -96,6 +100,8 @@ backend:
     # K9B_ENABLE_DEBUG_ENDPOINTS: Enable UI debug diagnostics endpoints (/api/debug/*).
     # Set to "true" to show diagnostic execution details button in the UI.
     K9B_ENABLE_DEBUG_ENDPOINTS: "false"
+    K9B_CONTENT_INDEX_ENABLED: "true"
+    K9B_CONTENT_INDEX_DB_PATH: "/app/runs/content-index.sqlite"
   resources:
     requests:
       cpu: 100m
@@ -118,7 +124,7 @@ scheduler:
   # promote incidents via the backend internal API to avoid direct SQLite access.
   incidentPromotion:
     # mode: Promotion mode (local|backend-api|auto).
-    # - local: Direct store promotion (memory/file backends only)
+    # - local: Direct store promotion (memory/file backends only) - SCHEDULER CANNOT USE THIS WITH SQLITE
     # - backend-api: POST to backend internal API (required for SQLite backend)
     # - auto: Automatically select based on backend type (default)
     # Note: backend-api mode requires internalApi configuration below.
@@ -127,9 +133,12 @@ scheduler:
     internalApi:
       # backendUrl: Base URL of the k9b-backend service.
       # Default: http://k9b-backend.k9b.svc.cluster.local:8080
+      # REQUIRED for backend-api/auto mode - Helm rendering will FAIL without this.
       backendUrl: "http://k9b-backend.k9b.svc.cluster.local:8080"
       # existingSecret: Name of a Kubernetes Secret containing K9B_INTERNAL_API_TOKEN.
-      # Must be the same secret used by the backend.
+      # REQUIRED for backend-api mode when backend uses SQLite - Helm rendering will FAIL without this.
+      # IMPORTANT: Never commit real token values to values.yaml or version control.
+      # Create via: kubectl create secret generic k9b-internal-api --from-literal=K9B_INTERNAL_API_TOKEN=<your-token>
       existingSecret: ""
       # tokenKey: Key name in the Secret containing the token.
       tokenKey: K9B_INTERNAL_API_TOKEN
