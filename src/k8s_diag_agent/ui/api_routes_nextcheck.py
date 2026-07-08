@@ -125,14 +125,14 @@ NEXTCHECK_ROUTES: tuple[APIOperation, ...] = (
     ),
     APIOperation(
         method="POST",
-        path="/api/runs/{run_id}/alertmanager-sources/{source_id}/action",
+        path="/api/runs/{run_id}/alertmanager-sources/action",
         summary="Perform AlertManager source action",
-        description="Perform an action (promote/disable) on an AlertManager source.",
+        description="Perform an action (promote/disable) on an AlertManager source. The source_id is in the request body to support slashes in source identifiers.",
         tags=("incidents",),
         operation_id="perform_alertmanager_source_action",
         handler="k8s_diag_agent.ui.api_dispatch_adapters:handle_alertmanager_source_action_dispatch",
         match="template",
-        path_params=("run_id", "source_id"),
+        path_params=("run_id",),
         request_schema=ALERTMANAGER_SOURCE_ACTION_REQUEST_SCHEMA,
         responses=(
             APIResponse(

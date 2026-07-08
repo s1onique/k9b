@@ -185,12 +185,10 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
         source_id: str,
         payload: dict[str, object] | None = None,
     ) -> urllib.error.HTTPError | dict[str, object]:
-        """POST to the source action endpoint."""
-        from urllib.parse import quote
-
-        encoded_source_id = quote(source_id, safe="")
-        path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
-        body = json.dumps(payload or {"action": "promote", "clusterLabel": "test-cluster"}).encode(
+        """POST to the source action endpoint (body-based to support slashes in source_id)."""
+        # Body-based: source_id is now in the request body (not path)
+        path = f"/api/runs/{run_id}/alertmanager-sources/action"
+        body = json.dumps(payload or {"sourceId": source_id, "action": "promote", "clusterLabel": "test-cluster"}).encode(
             "utf-8"
         )
 
@@ -231,13 +229,11 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
             static_dir=self.static_dir,
         )
         try:
-            from urllib.parse import quote
-
-            encoded_source_id = quote(source_id, safe="")
-            path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+            # Body-based: source_id is now in the request body (not path)
+            path = f"/api/runs/{run_id}/alertmanager-sources/action"
 
             # Send malformed JSON (missing closing brace)
-            malformed_payload = b'{"action": "promote", "clusterLabel": "test-cluster"'
+            malformed_payload = b'{"sourceId": "test-source-1", "action": "promote", "clusterLabel": "test-cluster"'
 
             status, body = self._fetch(server, "POST", path, malformed_payload)
             self.assertEqual(status, 400, "Malformed JSON should return 400")
@@ -273,10 +269,8 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
             static_dir=self.static_dir,
         )
         try:
-            from urllib.parse import quote
-
-            encoded_source_id = quote(source_id, safe="")
-            path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+            # Body-based: source_id is now in the request body (not path)
+            path = f"/api/runs/{run_id}/alertmanager-sources/action"
 
             # Send array instead of object (ValueError from json.loads)
             array_payload = b'["not", "an", "object"]'
@@ -315,13 +309,11 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
             static_dir=self.static_dir,
         )
         try:
-            from urllib.parse import quote
-
-            encoded_source_id = quote(source_id, safe="")
-            path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+            # Body-based: source_id is now in the request body (not path)
+            path = f"/api/runs/{run_id}/alertmanager-sources/action"
 
             # Send valid JSON but missing required 'action' field
-            payload = b'{"clusterLabel": "test-cluster"}'
+            payload = b'{"sourceId": "test-source-3", "clusterLabel": "test-cluster"}'
 
             status, body = self._fetch(server, "POST", path, payload)
             self.assertEqual(status, 400, "Missing action should return 400")
@@ -365,7 +357,7 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
                 server,
                 run_id,
                 source_id,
-                {"action": "promote", "clusterLabel": "test-cluster"},
+                {"sourceId": source_id, "action": "promote", "clusterLabel": "test-cluster"},
             )
 
             # Should succeed despite corrupted file (starts fresh)
@@ -402,13 +394,11 @@ class AlertmanagerSourceActionExceptionTests(unittest.TestCase):
             static_dir=self.static_dir,
         )
         try:
-            from urllib.parse import quote
-
-            encoded_source_id = quote(source_id, safe="")
-            path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+            # Body-based: source_id is now in the request body (not path)
+            path = f"/api/runs/{run_id}/alertmanager-sources/action"
 
             # Send invalid UTF-8 bytes (continuation byte without start)
-            invalid_utf8 = b'{"action": "promote", "clusterLabel": "test-cluster"}\xff\xfe'
+            invalid_utf8 = b'{"sourceId": "test-source-5", "action": "promote", "clusterLabel": "test-cluster"}\xff\xfe'
 
             status, body = self._fetch(server, "POST", path, invalid_utf8)
             self.assertEqual(status, 400, "Invalid UTF-8 should return 400")
@@ -580,13 +570,12 @@ class AlertmanagerSourceActionLoggingTests(unittest.TestCase):
         )
         try:
             with self.assertLogs("k8s_diag_agent.ui.server_alertmanager", level="INFO") as logs:
-                from urllib.parse import quote
-
-                encoded_source_id = quote(source_id, safe="")
-                path = f"/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+                # Body-based: source_id is now in the request body (not path)
+                path = f"/api/runs/{run_id}/alertmanager-sources/action"
 
                 payload = json.dumps(
                     {
+                        "sourceId": source_id,
                         "action": "promote",
                         "clusterLabel": "test-cluster",
                         "reason": "test-reason-for-logging",

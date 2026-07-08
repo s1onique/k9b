@@ -90,16 +90,29 @@ def handle_alertmanager_source_action_dispatch(
     query: str,
     path_params: dict[str, str],
 ) -> None:
-    """Dispatch adapter for POST /api/runs/{run_id}/alertmanager-sources/{source_id}/action."""
-    from urllib.parse import unquote
+    """Dispatch adapter for POST /api/runs/{run_id}/alertmanager-sources/action.
 
+    Note: source_id is now read from the request body (not the URL path) to support
+    slashes in source identifiers like 'crd:monitoring/kube-prometheus-stack-alertmanager'.
+    """
     from .server_alertmanager import handle_alertmanager_source_action
+    from .server_shared import _validate_json_mutation_request
 
     run_id = path_params.get("run_id", "")
-    source_id = path_params.get("source_id", "")
-    # Decode URL-encoded source_id
-    source_id = unquote(source_id)
-    handle_alertmanager_source_action(handler, run_id, source_id)
+
+    # Validate Content-Type and parse JSON body
+    payload = _validate_json_mutation_request(handler)
+    if payload is None:
+        return
+
+    # Read source_id from body
+    source_id = payload.get("sourceId")
+    if not isinstance(source_id, str) or not source_id:
+        handler._send_json({"error": "sourceId is required in request body"}, 400)
+        return
+
+    # Pass the already-parsed payload to avoid double-reading the request body
+    handle_alertmanager_source_action(handler, run_id, source_id, payload)
 
 
 def handle_alertmanager_sources_review_packet_dispatch(

@@ -26,6 +26,9 @@ import {
 } from "../generated/k9b-api";
 import { createK9bApiConfiguration, normalizeGeneratedApiError } from "./generatedClient";
 
+// Body-based source_id endpoint (sourceId in request body to support slashes)
+const ALERTMANAGER_SOURCE_ACTION_ENDPOINT = "/api/runs/{runId}/alertmanager-sources/action";
+
 // =============================================================================
 // API Factory
 // =============================================================================
@@ -41,7 +44,9 @@ function createIncidentsApi(): IncidentsApi {
 /**
  * Perform an action on an Alertmanager source.
  *
- * Uses the generated client with typed request body from API schema.
+ * Uses direct fetch to POST to the body-based endpoint. sourceId is now in the
+ * request body (not the URL path) to support slashes in identifiers like
+ * 'crd:monitoring/kube-prometheus-stack-alertmanager'.
  *
  * @param request - The action request with sourceId, action, and optional clusterLabel/reason
  * @param runId - The run ID for the run-scoped route
@@ -51,18 +56,32 @@ export const performAlertmanagerSourceAction = async (
   runId: string
 ): Promise<AlertmanagerSourceActionResponse> => {
   try {
-    const api = createIncidentsApi();
-    const generatedRequest: PerformAlertmanagerSourceActionRequest = {
-      action: request.action,
-      clusterLabel: request.clusterLabel,
-      reason: request.reason,
-    };
-    const result = await api.performAlertmanagerSourceAction({
-      runId,
-      sourceId: request.sourceId,
-      performAlertmanagerSourceActionRequest: generatedRequest,
+    const config = createK9bApiConfiguration();
+    const endpoint = ALERTMANAGER_SOURCE_ACTION_ENDPOINT.replace("{runId}", runId);
+
+    const response = await fetch(`${config.basePath}${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(config.username ? {
+          Authorization: `Basic ${btoa(`${config.username}:${config.password}`)}`
+        } : {}),
+      },
+      credentials: "include", // Preserve cookies/session
+      body: JSON.stringify({
+        sourceId: request.sourceId,
+        action: request.action,
+        clusterLabel: request.clusterLabel,
+        reason: request.reason,
+      }),
     });
-    return result as AlertmanagerSourceActionResponse;
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorBody}`);
+    }
+
+    return await response.json() as AlertmanagerSourceActionResponse;
   } catch (error) {
     throw await normalizeGeneratedApiError(error);
   }

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING
-from urllib.parse import unquote
 
 if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
@@ -23,7 +22,7 @@ if TYPE_CHECKING:
 
 # Route patterns for path matching
 _RUN_ALERTMANAGER_SOURCE_ACTION = re.compile(
-    r"^/api/runs/([^/]+)/alertmanager-sources/([^/]+)/action$"
+    r"^/api/runs/([^/]+)/alertmanager-sources/action$"
 )
 _INCIDENT_DIAGNOSIS_LOOP_PATTERN = re.compile(
     r"^/api/incidents/([^/]+)/diagnosis-loop/one-pass$"
@@ -299,15 +298,26 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
     if route == "/api/run-batch-next-check-execution":
         handle_run_batch_next_check_execution(handler)
         return
-    # Alertmanager source action endpoint: POST /api/runs/{run_id}/alertmanager-sources/{source_id}/action
-    # Body: { "action": "promote"|"disable", "reason": "..." }
+    # Alertmanager source action endpoint: POST /api/runs/{run_id}/alertmanager-sources/action
+    # Body: { "sourceId": "...", "action": "promote"|"disable", "reason": "..." }
+    # Note: source_id is now in the body to support slashes in identifiers
     runs_am_source_match = _RUN_ALERTMANAGER_SOURCE_ACTION.match(route)
     if runs_am_source_match:
         run_id = runs_am_source_match.group(1)
-        # Decode URL-encoded source_id before lookup/validation
-        # e.g., "crd%3Amonitoring%2Fkube-prometheus-stack-alertmanager" -> "crd:monitoring/kube-prometheus-stack-alertmanager"
-        source_id = unquote(runs_am_source_match.group(2))
-        handle_alertmanager_source_action(handler, run_id, source_id)
+        # Read source_id from request body (body-based to support slashes)
+        from .server_shared import _validate_json_mutation_request
+
+        payload = _validate_json_mutation_request(handler)
+        if payload is None:
+            return
+
+        source_id = payload.get("sourceId")
+        if not isinstance(source_id, str) or not source_id:
+            handler._send_json({"error": "sourceId is required in request body"}, 400)
+            return
+
+        # Pass the already-parsed payload to avoid double-reading the request body
+        handle_alertmanager_source_action(handler, run_id, source_id, payload)
         return
 
     # NEW: Incident automatic diagnosis loop one-pass

@@ -337,17 +337,19 @@ def post_source_action(
     cluster_label: str = "test-cluster",
     reason: str = "test",
 ) -> dict[str, object]:
-    """POST to the source action endpoint and return parsed JSON response."""
+    """POST to the source action endpoint and return parsed JSON response.
+
+    Uses body-based source_id (not path-based) to support slashes in identifiers.
+    """
     address = server.server_address
     host_address, port, *_ = address
     host = host_address.decode("utf-8") if isinstance(host_address, bytes) else host_address
 
-    from urllib.parse import quote
-
-    encoded_source_id = quote(source_id, safe="")
-    url = f"http://{host}:{port}/api/runs/{run_id}/alertmanager-sources/{encoded_source_id}/action"
+    # Body-based: source_id is now in the request body (not path)
+    url = f"http://{host}:{port}/api/runs/{run_id}/alertmanager-sources/action"
 
     payload = json.dumps({
+        "sourceId": source_id,
         "action": action,
         "clusterLabel": cluster_label,
         "reason": reason,

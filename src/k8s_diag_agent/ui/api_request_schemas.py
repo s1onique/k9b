@@ -292,10 +292,11 @@ BATCH_EXECUTION_REQUEST_SCHEMA = object_schema(
 
 ALERTMANAGER_SOURCE_ACTION_REQUEST_SCHEMA = object_schema(
     properties={
+        "sourceId": string_schema("AlertManager source identifier (may contain slashes)"),
         "action": string_schema("Action to perform (promote, disable)"),
         "clusterLabel": string_schema("Cluster label for override persistence"),
         "reason": nullable_string_schema("Optional reason for audit trail"),
     },
-    required=("action", "clusterLabel"),
-    description="AlertManager source action request",
+    required=("sourceId", "action", "clusterLabel"),
+    description="AlertManager source action request. sourceId is in body to support slashes in identifiers.",
 )

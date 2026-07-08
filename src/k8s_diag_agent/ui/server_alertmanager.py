@@ -37,12 +37,15 @@ logger = logging.getLogger(__name__)
 
 
 def handle_alertmanager_source_action(
-    handler: HealthUIRequestHandler, run_id: str, source_key: str
+    handler: HealthUIRequestHandler,
+    run_id: str,
+    source_key: str,
+    payload: dict[str, object] | None = None,
 ) -> None:
     """Handle operator request to promote or disable an Alertmanager source.
 
-    Route: POST /api/runs/{run_id}/alertmanager-sources/{source_id}/action
-    Body: { "action": "promote"|"disable", "reason": "..." (optional) }
+    Route: POST /api/runs/{run_id}/alertmanager-sources/action
+    Body: { "sourceId": "...", "action": "promote"|"disable", "reason": "..." (optional) }
 
     The run_id in the URL path is authoritative. The cluster_label is still
     required in the request body for override persistence (since overrides
@@ -57,7 +60,8 @@ def handle_alertmanager_source_action(
     Args:
         handler: The HealthUIRequestHandler instance
         run_id: The run ID from the URL path
-        source_key: The source key (URL-decoded source_id) from the URL path
+        source_key: The source key (URL-decoded source_id)
+        payload: Optional pre-parsed JSON payload. If None, reads from request body.
     """
     from ..external_analysis.alertmanager_source_actions import (
         SourceAction,
@@ -75,10 +79,11 @@ def handle_alertmanager_source_action(
     from .server import _run_payload_cache, _run_payload_cache_lock
     from .server_shared import _validate_json_mutation_request
 
-    # Validate Content-Type and request size, parse JSON body
-    payload = _validate_json_mutation_request(handler)
+    # Parse JSON body if not already provided (for backward compatibility with fallback dispatch)
     if payload is None:
-        return
+        payload = _validate_json_mutation_request(handler)
+        if payload is None:
+            return
 
     # Load context for the specific run_id from the URL path
     context = handler._load_context(requested_run_id=run_id)
@@ -120,13 +125,6 @@ def handle_alertmanager_source_action(
         handler._send_json({"error": "clusterLabel is required in request body"}, 400)
         return
 
-    # Validate source_id from path matches body if provided
-    body_source_id = payload.get("sourceId")
-    if body_source_id is not None and str(body_source_id) != source_key:
-        handler._send_json(
-            {"error": f"sourceId mismatch: path has '{source_key}', body has '{body_source_id}'"}, 400
-        )
-        return
 
     # Find the source in the alertmanager_sources inventory
     sources_view = context.alertmanager_sources
