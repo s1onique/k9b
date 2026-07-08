@@ -1,0 +1,100 @@
+# Helm test assertions for k9b backend content-index configuration.
+# Tests content-index env var injection into backend container.
+suite: content index - backend deployment
+
+templates:
+  - deployment.yaml
+  - deployment-scheduler.yaml
+
+tests:
+  # ===== Default values: content-index enabled with default DB path =====
+
+  - it: backend should render content-index enabled=true by default
+    set:
+      backend.internalApi.existingSecret: k9b-internal-api
+      scheduler.incidentPromotion.internalApi.existingSecret: k9b-internal-api
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_ENABLED]
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_ENABLED].value
+          value: "true"
+
+  - it: backend should render content-index db path default
+    set:
+      backend.internalApi.existingSecret: k9b-internal-api
+      scheduler.incidentPromotion.internalApi.existingSecret: k9b-internal-api
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_DB_PATH]
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_DB_PATH].value
+          value: "/app/runs/content-index.sqlite"
+
+  # ===== Override: content-index disabled =====
+
+  - it: backend should render content-index enabled=false when disabled
+    set:
+      backend.internalApi.existingSecret: k9b-internal-api
+      scheduler.incidentPromotion.internalApi.existingSecret: k9b-internal-api
+      backend.contentIndex.enabled: false
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_ENABLED]
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_ENABLED].value
+          value: "false"
+
+  # ===== Override: custom DB path =====
+
+  - it: backend should render custom content-index db path
+    set:
+      backend.internalApi.existingSecret: k9b-internal-api
+      scheduler.incidentPromotion.internalApi.existingSecret: k9b-internal-api
+      backend.contentIndex.dbPath: /custom/content-index.sqlite
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_DB_PATH]
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_DB_PATH].value
+          value: "/custom/content-index.sqlite"
+
+  # ===== Both overrides together =====
+
+  - it: backend should render both overrides together
+    set:
+      backend.internalApi.existingSecret: k9b-internal-api
+      scheduler.incidentPromotion.internalApi.existingSecret: k9b-internal-api
+      backend.contentIndex.enabled: false
+      backend.contentIndex.dbPath: /data/index/content-index.sqlite
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_ENABLED].value
+          value: "false"
+      - equal:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_DB_PATH].value
+          value: "/data/index/content-index.sqlite"
+
+  # ===== Content-index env vars are backend-only =====
+
+  - it: backend deployment should contain content-index env vars
+    template: deployment.yaml
+    set:
+      backend.internalApi.existingSecret: k9b-internal-api
+      scheduler.incidentPromotion.internalApi.existingSecret: k9b-internal-api
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_ENABLED]
+      - isNotNull:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_DB_PATH]
+
+  - it: scheduler deployment should NOT contain content-index env vars
+    template: deployment-scheduler.yaml
+    set:
+      backend.internalApi.existingSecret: k9b-internal-api
+      scheduler.incidentPromotion.internalApi.existingSecret: k9b-internal-api
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_ENABLED]
+      - isNull:
+          path: spec.template.spec.containers[0].env[name=K9B_CONTENT_INDEX_DB_PATH]

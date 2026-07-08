@@ -32,6 +32,17 @@ backend:
   # args: Override container arguments. Leave empty to use image's default.
   args: []
   # incidentStore: Incident store configuration (SQLite backend recommended for production).
+  # contentIndex: Content index configuration for accelerated read path.
+  # When enabled, the backend queries a pre-built SQLite index for content lookups.
+  # Safe fallback: if the DB is missing, stale, corrupt, or invalid, the backend
+  # falls back to the direct read path automatically.
+  contentIndex:
+    # enabled: Enable content index read path (default: true).
+    # Set to false to disable and use direct read path only.
+    enabled: true
+    # dbPath: Path to the SQLite content index database file.
+    # Must be readable by the backend pod (mounted at /app/runs by default).
+    dbPath: /app/runs/content-index.sqlite
   incidentStore:
     # backend: Incident store backend type (memory|file|sqlite).
     # sqlite is recommended for production with scheduler deployment.
@@ -100,8 +111,6 @@ backend:
     # K9B_ENABLE_DEBUG_ENDPOINTS: Enable UI debug diagnostics endpoints (/api/debug/*).
     # Set to "true" to show diagnostic execution details button in the UI.
     K9B_ENABLE_DEBUG_ENDPOINTS: "false"
-    K9B_CONTENT_INDEX_ENABLED: "true"
-    K9B_CONTENT_INDEX_DB_PATH: "/app/runs/content-index.sqlite"
   resources:
     requests:
       cpu: 100m

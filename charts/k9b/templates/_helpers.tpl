@@ -166,7 +166,7 @@ Priority:
     {{- fail $failMsg }}
   {{- end }}
 {{- else }}
-  {{- /* Auth not enabled, return empty to skip secretKeyRef entirely */ }}
+  {{- "" -}}
   {{- "" }}
 {{- end }}
 {{- end }}
@@ -218,7 +218,6 @@ Policy:
 {{- $backendSecret := .Values.backend.internalApi.existingSecret | default "" }}
 {{- $schedulerSecret := .Values.scheduler.incidentPromotion.internalApi.existingSecret | default "" }}
 {{- if and (eq .Values.backend.incidentStore.backend "sqlite") (or (eq .Values.scheduler.incidentPromotion.mode "backend-api") (eq .Values.scheduler.incidentPromotion.mode "auto")) }}
-  {{- /* sqlite + backend-api/auto mode: need secrets */ }}
   {{- if $backendSecret }}
     {{- $backendSecret }}
   {{- else if $schedulerSecret }}
@@ -227,14 +226,12 @@ Policy:
     {{- "" }}
   {{- end }}
 {{- else if eq .Values.scheduler.incidentPromotion.mode "backend-api" }}
-  {{- /* backend-api mode only */ }}
   {{- if $schedulerSecret }}
     {{- $schedulerSecret }}
   {{- else }}
     {{- "" }}
   {{- end }}
 {{- else }}
-  {{- /* local mode: no secret required */ }}
   {{- "" }}
 {{- end }}
 {{- end }}
@@ -253,31 +250,24 @@ Fails with clear message if:
 - scheduler.incidentPromotion.mode=backend-api but scheduler.internalApi.backendUrl is empty
 */}}
 {{- define "k9b.validateIncidentPromotionConfig" }}
-{{- /* SQLite mode requires backend internal API token */ }}
 {{- if eq .Values.backend.incidentStore.backend "sqlite" }}
   {{- if not .Values.backend.internalApi.existingSecret }}
     {{- fail "backend.incidentStore.backend=sqlite requires backend.internalApi.existingSecret to be set. Create a secret: kubectl create secret generic k9b-internal-api --from-literal=K9B_INTERNAL_API_TOKEN=<your-token>" }}
   {{- end }}
 {{- end }}
 
-{{- /* backend-api or auto mode requires scheduler internal API token */ }}
 {{- if or (eq .Values.scheduler.incidentPromotion.mode "backend-api") (eq .Values.scheduler.incidentPromotion.mode "auto") }}
-  {{- /* Backend URL must be configured for backend-api/auto mode */ }}
   {{- if not .Values.scheduler.incidentPromotion.internalApi.backendUrl }}
     {{- fail "scheduler.incidentPromotion.mode=backend-api requires scheduler.incidentPromotion.internalApi.backendUrl to be set" }}
   {{- end }}
 
-  {{- /* auto mode ALWAYS requires scheduler token because scheduler process_role=scheduler
-       causes dispatcher to resolve auto to backend-api at runtime */ }}
   {{- if eq .Values.scheduler.incidentPromotion.mode "auto" }}
     {{- if not .Values.scheduler.incidentPromotion.internalApi.existingSecret }}
       {{- fail "scheduler.incidentPromotion.mode=auto requires scheduler.incidentPromotion.internalApi.existingSecret to be set. The scheduler process_role=scheduler causes dispatcher to resolve auto to backend-api, which requires internal API token. Create a secret: kubectl create secret generic k9b-internal-api --from-literal=K9B_INTERNAL_API_TOKEN=<your-token>" }}
     {{- end }}
   {{- end }}
 
-  {{- /* backend-api mode: require secrets based on backend type */ }}
   {{- if eq .Values.scheduler.incidentPromotion.mode "backend-api" }}
-    {{- /* When backend is sqlite, both backend AND scheduler need secrets */ }}
     {{- if eq .Values.backend.incidentStore.backend "sqlite" }}
       {{- if not .Values.backend.internalApi.existingSecret }}
         {{- fail "sqlite backend with backend-api scheduler requires backend.internalApi.existingSecret to be set" }}
@@ -286,7 +276,6 @@ Fails with clear message if:
         {{- fail "sqlite backend with backend-api scheduler requires scheduler.incidentPromotion.internalApi.existingSecret to be set. Both backend and scheduler must reference a Secret containing K9B_INTERNAL_API_TOKEN" }}
       {{- end }}
     {{- else }}
-      {{- /* Non-sqlite backend with backend-api mode: only scheduler needs secret */ }}
       {{- if not .Values.scheduler.incidentPromotion.internalApi.existingSecret }}
         {{- fail "scheduler.incidentPromotion.mode=backend-api requires scheduler.incidentPromotion.internalApi.existingSecret to be set. Create a secret: kubectl create secret generic k9b-internal-api --from-literal=K9B_INTERNAL_API_TOKEN=<your-token>" }}
       {{- end }}

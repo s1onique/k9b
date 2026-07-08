@@ -71,7 +71,9 @@ spec:
             - name: HEALTH_UI_RUNS_DIR
               value: {{ .Values.backend.env.HEALTH_UI_RUNS_DIR | quote }}
             - name: K9B_CONTENT_INDEX_ENABLED
-              value: {{ .Values.backend.env.K9B_CONTENT_INDEX_ENABLED | quote }}
+              value: {{ .Values.backend.contentIndex.enabled | quote }}
+            - name: K9B_CONTENT_INDEX_DB_PATH
+              value: {{ .Values.backend.contentIndex.dbPath | quote }}
             - name: PYTHONPATH
               value: {{ .Values.backend.env.PYTHONPATH | quote }}
             - name: K9B_ENABLE_DEBUG_ENDPOINTS
