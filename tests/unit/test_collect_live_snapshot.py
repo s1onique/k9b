@@ -14,6 +14,7 @@ from k8s_diag_agent.collect.live_snapshot import (
 from k8s_diag_agent.kubernetes_auth import is_in_cluster
 from k8s_diag_agent.security.kubectl_errors import KubectlExecutionError
 from k8s_diag_agent.security.kubernetes_client_models import PodSummary
+from tests.unit.k8s_fake_client import FakeKubernetesReadClient
 
 
 def _make_runner(helm_failure: bool = False, crd_failure: bool = False) -> Callable[[Sequence[str]], str]:
@@ -65,12 +66,27 @@ def _make_runner(helm_failure: bool = False, crd_failure: bool = False) -> Calla
 
 class LiveSnapshotCollectionTest(unittest.TestCase):
     @patch("k8s_diag_agent.collect.live_snapshot._run_command")
-    def test_missing_helm_is_recorded(self, run_command: Any) -> None:
+    @patch("k8s_diag_agent.collect.live_snapshot.get_cached_kubernetes_client")
+    def test_missing_helm_is_recorded(
+        self, mock_get_client: Any, run_command: Any
+    ) -> None:
+        """Test that when helm is missing, the helm error is recorded but CRD/events are isolated."""
+        # Set up fake client that returns empty CRDs and events (no errors)
+        fake_client = FakeKubernetesReadClient.with_empty_cluster()
+        mock_get_client.return_value = fake_client
+
         run_command.side_effect = _make_runner(helm_failure=True)
         snapshot = collect_cluster_snapshot("demo")
+
+        # Helm error should be recorded
         self.assertIn("helm", snapshot.collection_status.helm_error or "")
         self.assertEqual(snapshot.helm_releases, {})
-        self.assertFalse(snapshot.collection_status.missing_evidence)
+
+        # CRD and events should NOT be in missing_evidence (client was mocked)
+        self.assertNotIn("crd_list", snapshot.collection_status.missing_evidence)
+        self.assertNotIn("events", snapshot.collection_status.missing_evidence)
+
+        # Basic health signals should still be collected
         self.assertEqual(snapshot.health_signals.node_conditions.total, 1)
         self.assertEqual(snapshot.health_signals.pod_counts.non_running, 0)
 

@@ -39,6 +39,7 @@ from .kubernetes_client_errors import (
     KubernetesApiTimeoutError,
     KubernetesClientError,
     KubernetesClientUnavailableError,
+    translate_api_exception,
 )
 from .kubernetes_client_models import (
     CrdSummary,
@@ -53,7 +54,6 @@ from .kubernetes_client_models import (
     ServiceAccountProjection,
     StatefulSetSummary,
 )
-from .kubernetes_client_translation import translate_api_exception
 
 if TYPE_CHECKING:
     from kubernetes.client import ApiClient, AppsV1Api, CoreV1Api, CustomObjectsApi
