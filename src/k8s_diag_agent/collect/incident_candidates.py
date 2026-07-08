@@ -92,7 +92,7 @@ class IncidentCandidate:
     candidate_class: CandidateClass
     severity: Severity
     signals: tuple[CandidateSignal, ...]
-    evidence_needed: tuple[str, ...]  # generic evidence types, not kubectl commands
+    evidence_needed: tuple[str, ...] = ()  # generic evidence types, not kubectl commands
     raw_object_kind: str | None = None  # Preserves original kind for UNKNOWN object kinds (ReplicaSet, StatefulSet, etc.)
 
     def to_dict(self) -> dict[str, Any]:

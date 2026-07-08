@@ -34,6 +34,11 @@ rbac:
 # =============================================================================
 backend:
   unsafeBind: true
+  internalApi:
+    existingSecret: k9b-internal-api
+    tokenKey: K9B_INTERNAL_API_TOKEN
+  incidentStore:
+    backend: sqlite
   resources:
     requests:
       cpu: 25m
@@ -56,6 +61,12 @@ scheduler:
     # Base URL, model, and API key are supplied via workflow/secret plumbing.
     K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_AUTO_DRILLDOWN: "3072"
     K9B_EXTERNAL_ANALYSIS_MAX_TOKENS_REVIEW_ENRICHMENT: "8192"
+  # Incident promotion: configure scheduler to backend communication via internal API.
+  incidentPromotion:
+    internalApi:
+      backendUrl: "http://k9b-backend.k9b.svc.cluster.local:8080"
+      existingSecret: k9b-internal-api
+      tokenKey: K9B_INTERNAL_API_TOKEN
   resources:
     requests:
       cpu: 25m

@@ -15,6 +15,8 @@ CI-only workflow (k9b-otel-demo-incident-lab.yml) is scaffold-only.
 
 from pathlib import Path
 
+from tests.helm_test_helpers import COMMON_INTERNAL_API_SET
+
 WORKFLOW = Path(".github/workflows/k9b-otel-demo-live-lab.yml")
 CI_ONLY_WORKFLOW = Path(".github/workflows/k9b-otel-demo-incident-lab.yml")
 
@@ -271,6 +273,7 @@ class TestOtelWorkflowSchedulerRenderedManifest:
                 "--set", "scheduler.smallProvider.provider=openai_compatible",
                 "--set", "scheduler.smallProvider.existingSecret=k9b-diagnosis-credentials",
                 "--set", "scheduler.smallProvider.apiKeyKey=K9B_EXTERNAL_ANALYSIS_API_KEY",
+                *COMMON_INTERNAL_API_SET,
             ],
             capture_output=True,
             text=True,
@@ -306,6 +309,7 @@ class TestOtelWorkflowSchedulerRenderedManifest:
                 "--namespace", "k9b",
                 "--set", "scheduler.smallProvider.existingSecret=k9b-diagnosis-credentials",
                 "--set", "scheduler.smallProvider.apiKeyKey=K9B_EXTERNAL_ANALYSIS_API_KEY",
+                *COMMON_INTERNAL_API_SET,
             ],
             capture_output=True,
             text=True,
@@ -329,6 +333,7 @@ class TestOtelWorkflowSchedulerRenderedManifest:
                 "helm", "template", "k9b", "charts/k9b",
                 "--namespace", "k9b",
                 "--set", "scheduler.env.K9B_EXTERNAL_ANALYSIS_PROVIDER=openai_compatible",
+                *COMMON_INTERNAL_API_SET,
             ],
             capture_output=True,
             text=True,

@@ -46,6 +46,12 @@ def create_scheduler_client(base_url: str, token: str | None = None) -> Schedule
     return SchedulerClient(base_url, token)
 
 
+class SchedulerBackendPromotionError(Exception):
+    """Error when backend URL is not configured."""
+
+    pass
+
+
 class SchedulerClient:
     """Client for scheduler to submit promotion requests to backend.
 
@@ -61,8 +67,68 @@ class SchedulerClient:
             base_url: Base URL of k9b-backend service
             token: Internal API token
         """
-        self._base_url = base_url.rstrip("/")
+        self._base_url = base_url.rstrip("/") if base_url else ""
         self._token = token
+
+    def _require_backend_url(self) -> str:
+        """Validate and return the backend URL.
+
+        Raises:
+            SchedulerBackendPromotionError: If backend URL is not configured
+        """
+        backend_url = (self._base_url or "").strip()
+        if not backend_url:
+            raise SchedulerBackendPromotionError(
+                "backend internal API URL is not configured"
+            )
+        return backend_url
+
+    def _post_request(self, path: str, payload: dict[str, object]) -> dict[str, object]:
+        """Make a POST request to the internal API.
+
+        Args:
+            path: API path (e.g., "/api/internal/incidents/promote-candidates")
+            payload: Request body
+
+        Returns:
+            Parsed JSON response
+
+        Raises:
+            SchedulerBackendPromotionError: If backend URL is not configured
+        """
+        import urllib.error
+        import urllib.request
+
+        base_url = self._require_backend_url()
+        url = f"{base_url}{path}"
+
+        data = json.dumps(payload).encode("utf-8")
+
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+        }
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers=headers,
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=30.0) as resp:
+                body = resp.read().decode("utf-8")
+                return dict(json.loads(body))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8")
+            try:
+                return dict(json.loads(body))
+            except json.JSONDecodeError:
+                return {"error": str(e), "status_code": e.code}
+        except Exception as e:
+            return {"error": str(e)}
 
     def promote_candidates(
         self,
@@ -82,6 +148,16 @@ class SchedulerClient:
         Returns:
             PromotionResponse from backend
         """
+        # Validate backend URL first - return bounded error if not configured
+        try:
+            self._require_backend_url()
+        except SchedulerBackendPromotionError as e:
+            return PromotionResponse(
+                ok=False,
+                errors=1,
+                error_messages=[str(e)],
+            )
+
         import urllib.error
         import urllib.request
 
@@ -153,6 +229,16 @@ class SchedulerClient:
         Returns:
             PromotionResponse from backend
         """
+        # Validate backend URL first - return bounded error if not configured
+        try:
+            self._require_backend_url()
+        except SchedulerBackendPromotionError as e:
+            return PromotionResponse(
+                ok=False,
+                errors=1,
+                error_messages=[str(e)],
+            )
+
         import urllib.error
         import urllib.request
 

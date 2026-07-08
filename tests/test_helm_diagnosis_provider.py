@@ -17,6 +17,8 @@ from typing import Any
 
 import pytest
 
+from tests.helm_test_helpers import COMMON_INTERNAL_API_SET
+
 
 def render_deployment(values: dict[str, Any]) -> dict[str, Any]:
     """Render the backend deployment using `helm template`.
@@ -52,6 +54,7 @@ def render_deployment(values: dict[str, Any]) -> dict[str, Any]:
                 "templates/deployment.yaml",
                 "-f",
                 values_file,
+                *COMMON_INTERNAL_API_SET,
             ],
             capture_output=True,
             text=True,
