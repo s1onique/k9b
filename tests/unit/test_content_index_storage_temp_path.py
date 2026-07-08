@@ -287,12 +287,13 @@ class TestRebuildIndexEndToEnd:
         Even if the system temp directory is somewhere else, the temp DB
         should be created next to the target to ensure atomic replace works.
         """
+        import tempfile
+
         from k8s_diag_agent.content_index.indexer_commands import rebuild_index
         from k8s_diag_agent.content_index.indexer_contract import (
             ContentIndexRoots,
             IndexerConfig,
         )
-        import tempfile
 
         # Create separate "global temp" directory
         global_tmp = tmp_path / "global-tmp"
