@@ -1,0 +1,189 @@
+"""Pod-related projection models for Kubernetes API responses.
+
+These models are focused projections of Pod objects used in health-loop
+and diagnostic collection paths.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+
+
+@dataclass(frozen=True)
+class ContainerStatusProjection:
+    """Minimal projection of a ContainerStatus."""
+    name: str
+    ready: bool
+    restart_count: int
+    state: str | None = None
+    image: str | None = None
+    image_id: str | None = None
+    container_id: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ContainerStatusProjection:
+        """Create from a ContainerStatus dict."""
+        state_data = data.get("state") or {}
+        state_str: str | None = None
+        if "running" in state_data:
+            state_str = "running"
+        elif "waiting" in state_data:
+            state_str = "waiting"
+        elif "terminated" in state_data:
+            state_str = "terminated"
+
+        return cls(
+            name=str(data.get("name") or ""),
+            ready=bool(data.get("ready", False)),
+            restart_count=int(data.get("restartCount") or 0),
+            state=state_str,
+            image=data.get("image"),
+            image_id=data.get("imageID"),
+            container_id=data.get("containerID"),
+        )
+
+
+@dataclass(frozen=True)
+class PodProjection:
+    """Minimal projection of a Kubernetes Pod."""
+    namespace: str
+    name: str
+    uid: str
+    node_name: str | None = None
+    phase: str | None = None
+    ip: str | None = None
+    host_ip: str | None = None
+    creation_timestamp: datetime | None = None
+    labels: dict[str, str] = field(default_factory=dict)
+    restart_count: int = 0
+    container_statuses: tuple[ContainerStatusProjection, ...] = field(default_factory=tuple)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> PodProjection:
+        """Create from a Kubernetes Pod dict."""
+        metadata = data.get("metadata") or {}
+        spec = data.get("spec") or {}
+        status = data.get("status") or {}
+
+        ts = metadata.get("creationTimestamp")
+        creation_ts: datetime | None = None
+        if ts:
+            try:
+                creation_ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+
+        container_statuses_list: list[ContainerStatusProjection] = []
+        container_statuses_data = status.get("containerStatuses") or []
+        for cs_data in container_statuses_data:
+            container_statuses_list.append(ContainerStatusProjection.from_dict(cs_data))
+
+        return cls(
+            namespace=str(metadata.get("namespace") or ""),
+            name=str(metadata.get("name") or ""),
+            uid=str(metadata.get("uid") or ""),
+            node_name=spec.get("nodeName"),
+            phase=status.get("phase"),
+            ip=status.get("podIP"),
+            host_ip=status.get("hostIP"),
+            creation_timestamp=creation_ts,
+            labels=dict(metadata.get("labels") or {}),
+            restart_count=sum(
+                cs.get("restartCount", 0)
+                for cs in container_statuses_data
+            ),
+            container_statuses=tuple(container_statuses_list),
+        )
+
+
+@dataclass(frozen=True)
+class PodSummary:
+    """Minimal summary projection for health-loop pod collection.
+
+    This is a compact projection that contains only the fields needed
+    for health assessment, excluding full pod manifests to prevent OOM.
+    """
+    namespace: str
+    name: str
+    phase: str | None
+    reason: str | None  # e.g. "Evicted", "Error", "OOMKilled"
+    node_name: str | None
+    owner_kind: str | None
+    owner_name: str | None
+    restart_count: int
+    waiting_reasons: tuple[str, ...]
+    terminated_reasons: tuple[str, ...]
+    created_at: datetime | None
+
+    @classmethod
+    def from_pod_dict(cls, data: dict[str, Any]) -> PodSummary:
+        """Create from a Kubernetes Pod dict (extracted from API response).
+
+        Args:
+            data: Pod dictionary from kubernetes.client.V1Pod or JSON
+
+        Returns:
+            PodSummary with only diagnostically-relevant fields
+        """
+        metadata = data.get("metadata") or {}
+        spec = data.get("spec") or {}
+        status = data.get("status") or {}
+
+        # Extract owner reference (workload parent)
+        owner_kind: str | None = None
+        owner_name: str | None = None
+        owner_refs = metadata.get("ownerReferences") or []
+        if owner_refs and isinstance(owner_refs, list) and len(owner_refs) > 0:
+            owner_kind = str(owner_refs[0].get("kind") or "")
+            owner_name = str(owner_refs[0].get("name") or "")
+
+        # Extract container reasons
+        waiting_reasons: list[str] = []
+        terminated_reasons: list[str] = []
+        container_statuses = status.get("containerStatuses") or []
+        for container in container_statuses:
+            for attr in ("state", "lastState"):
+                state = container.get(attr) or {}
+                waiting = state.get("waiting") or {}
+                waiting_reason = str(waiting.get("reason") or "")
+                if waiting_reason:
+                    waiting_reasons.append(waiting_reason)
+                terminated = state.get("terminated") or {}
+                terminated_reason = str(terminated.get("reason") or "")
+                if terminated_reason:
+                    terminated_reasons.append(terminated_reason)
+
+        # Parse creation timestamp
+        ts = metadata.get("creationTimestamp")
+        creation_ts: datetime | None = None
+        if ts:
+            try:
+                creation_ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+
+        return cls(
+            namespace=str(metadata.get("namespace") or ""),
+            name=str(metadata.get("name") or ""),
+            phase=str(status.get("phase") or "") or None,
+            reason=str(status.get("reason") or "") or None,
+            node_name=spec.get("nodeName"),
+            owner_kind=owner_kind or None,
+            owner_name=owner_name or None,
+            restart_count=int(sum(
+                cs.get("restartCount", 0)
+                for cs in container_statuses
+            )),
+            waiting_reasons=tuple(waiting_reasons),
+            terminated_reasons=tuple(terminated_reasons),
+            created_at=creation_ts,
+        )
+
+
+__all__ = [
+    "ContainerStatusProjection",
+    "PodProjection",
+    "PodSummary",
+]
