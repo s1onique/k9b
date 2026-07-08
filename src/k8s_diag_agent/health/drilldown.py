@@ -2,15 +2,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from textwrap import shorten
 from typing import ClassVar
 
 from ..collect.cluster_snapshot import WarningEventSummary
-from ..security.kubectl_subprocess import (
-    run_kubectl,
-)
+from ..security.kubectl_subprocess import run_kubectl
+from ..security.kubernetes_client import get_cached_kubernetes_client
 from .drilldown_models import (
     DrilldownArtifact,
     DrilldownEvidence,
@@ -21,6 +21,8 @@ from .drilldown_models import (
     _now_iso,
 )
 from .image_pull_secret import KUBECTL_HEALTH_COMMAND_TIMEOUT_SECONDS, ImagePullSecretInsight
+
+_logger = logging.getLogger(__name__)
 
 # Re-export for backward compatibility
 __all__ = [
@@ -204,46 +206,49 @@ class DrilldownCollector:
     def _collect_non_running_pods(
         self, context: str, limit: int
     ) -> tuple[DrilldownPod, ...]:
+        """Collect non-running pods using bounded Python client.
+
+        Uses KubernetesReadClient.list_all_namespaces_pods_summaries() for memory-safe
+        collection with pagination and terminal phase exclusion.
+
+        Args:
+            context: Kubernetes context for client cache lookup (propagated)
+            limit: Maximum number of pods to return
+
+        Returns:
+            Tuple of DrilldownPod for non-running pods
+        """
         try:
-            output = self._kubectl(context, "get", "pods", "--all-namespaces", "-o", "json")
-        except RuntimeError:
+            client = get_cached_kubernetes_client(context=context)
+            # Get non-terminal pods with pagination
+            summaries, _ = client.list_all_namespaces_pods_summaries(
+                exclude_terminal=True,
+            )
+        except Exception as exc:
+            _logger.debug("Failed to collect pods via Python client: %s", exc)
             return ()
-        try:
-            payload = json.loads(output)
-        except json.JSONDecodeError:
-            return ()
-        items = _extract_items(payload)
+
         pods: list[DrilldownPod] = []
-        for entry in items:
+        for summary in summaries:
             if len(pods) >= limit:
                 break
-            metadata = entry.get("metadata") or {}
-            namespace = str(metadata.get("namespace") or "")
-            name = str(metadata.get("name") or "")
-            status = entry.get("status") or {}
-            phase = str(status.get("phase") or "").lower()
-            counted = phase and phase != "running"
-            reason_text = phase
-            container_statuses = status.get("containerStatuses") or []
-            for container in container_statuses:
-                for attr in ("state", "lastState"):
-                    state = container.get(attr) or {}
-                    waiting = state.get("waiting") or {}
-                    waiting_reason = str(waiting.get("reason") or "")
-                    if waiting_reason:
-                        reason_text = waiting_reason
-                        break
-                if reason_text not in {"", phase}:
-                    break
-            if counted:
-                pods.append(
-                    DrilldownPod(
-                        namespace=namespace,
-                        name=name,
-                        phase=phase or "unknown",
-                        reason=reason_text or "non-running",
-                    )
+            # Only include non-running phases
+            if summary.phase and summary.phase.lower() == "running":
+                continue
+            # Use waiting reason as the reason if available
+            reason = summary.reason or ""
+            if not reason and summary.waiting_reasons:
+                reason = summary.waiting_reasons[0]
+            if not reason and summary.phase:
+                reason = summary.phase.lower()
+            pods.append(
+                DrilldownPod(
+                    namespace=summary.namespace,
+                    name=summary.name,
+                    phase=summary.phase or "unknown",
+                    reason=reason or "non-running",
                 )
+            )
         return tuple(pods)
 
     def _describe_pods(

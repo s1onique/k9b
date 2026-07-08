@@ -1,4 +1,4 @@
-"""Live cluster snapshot helpers using kubectl/helm."""
+"""Live cluster snapshot helpers using kubectl/helm and KubernetesReadClient."""
 from __future__ import annotations
 
 import json
@@ -45,6 +45,10 @@ from .live_snapshot_helpers import (  # noqa: F401 - re-exported for backward co
     _pod_owned_by_job,
     _summarize_node_conditions,
     _summarize_pod_health,
+)
+from .live_snapshot_pods import (
+    collect_pods_bounded,
+    summarize_pod_health_from_summaries,
 )
 
 # Re-export is_in_cluster as _is_in_cluster for backward compatibility with test mocks
@@ -190,10 +194,10 @@ def _collect_metadata(
     control_plane_version = _parse_server_version(version_output)
     node_payload = json.loads(_kubectl(context, "get", "nodes", "-o", "json"))
     node_items = _extract_items(node_payload)
-    pod_payload = json.loads(
-        _kubectl(context, "get", "pods", "--all-namespaces", "-o", "json")
-    )
-    pod_items = _extract_items(pod_payload)
+
+    # Use bounded Python client for pod collection to prevent OOM on large clusters
+    # This replaces: kubectl get pods --all-namespaces -o json
+    pod_summaries, _ = collect_pods_bounded(context)
 
     # Use shared helper for cluster_uid derivation (canonical identity)
     cluster_uid = derive_cluster_uid(context)
@@ -204,9 +208,9 @@ def _collect_metadata(
         control_plane_version=control_plane_version,
         node_count=len(node_items),
         cluster_uid=cluster_uid,  # Canonical identity (kube-system namespace UID)
-        pod_count=len(pod_items),
+        pod_count=len(pod_summaries),
     )
-    return metadata, _summarize_node_conditions(node_items), _summarize_pod_health(pod_items)
+    return metadata, _summarize_node_conditions(node_items), summarize_pod_health_from_summaries(pod_summaries)
 
 
 def _collect_helm_releases(context: str) -> dict[str, HelmReleaseRecord]:

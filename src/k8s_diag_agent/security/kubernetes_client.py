@@ -19,10 +19,15 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from .kubernetes_client_constants import (
+    DEFAULT_ACTIVE_PODS_MAX,
+    DEFAULT_EVICTED_PODS_REPORTED_MAX,
+    DEFAULT_FAILED_PODS_REPORTED_MAX,
+    DEFAULT_FAILED_PODS_SCANNED_MAX,
     DEFAULT_LIMIT,
     DEFAULT_LOG_BYTES,
     DEFAULT_LOG_TAIL_LINES,
     DEFAULT_MAX_ITEMS,
+    DEFAULT_POD_PAGE_LIMIT,
     DEFAULT_TIMEOUT_SECONDS,
 )
 from .kubernetes_client_errors import (
@@ -40,13 +45,16 @@ from .kubernetes_client_models import (
     NamespaceProjection,
     PaginationMetadata,
     PodProjection,
+    PodSummary,
     SecretProjection,
     ServiceAccountProjection,
 )
 from .kubernetes_client_pagination import (
+    list_all_namespaces_pods_summaries,
     list_namespaced_deployments_projected,
     list_namespaced_events_projected,
     list_namespaced_pods_projected,
+    sample_failed_pods_bounded,
 )
 
 if TYPE_CHECKING:
@@ -353,6 +361,68 @@ class KubernetesReadClient:
             _logger.debug("Failed to read service account %s/%s: %s", namespace, name, type(exc).__name__)
             return None
 
+    def list_all_namespaces_pods_summaries(
+        self,
+        *,
+        page_limit: int = DEFAULT_POD_PAGE_LIMIT,
+        max_active_pods: int = DEFAULT_ACTIVE_PODS_MAX,
+        exclude_terminal: bool = True,
+    ) -> tuple[list[PodSummary], PaginationMetadata]:
+        """List all pods across all namespaces with pagination, projecting compact summaries.
+
+        This is the primary method for health-loop pod collection. It uses server-side
+        pagination with continue tokens and projects only diagnostically-relevant fields.
+
+        By default excludes terminal phases (Succeeded, Failed) to reduce memory pressure
+        from clusters with many completed/evicted pods.
+
+        Args:
+            page_limit: Items per API page (default 200)
+            max_active_pods: Maximum pods to collect (default 1000)
+            exclude_terminal: Exclude Succeeded/Failed phases (default True)
+
+        Returns:
+            Tuple of (list of PodSummary, pagination metadata)
+        """
+        self._ensure_config()
+        return list_all_namespaces_pods_summaries(
+            self,
+            page_limit=page_limit,
+            max_active_pods=max_active_pods,
+            exclude_terminal=exclude_terminal,
+        )
+
+    def sample_failed_pods_bounded(
+        self,
+        *,
+        page_limit: int = DEFAULT_POD_PAGE_LIMIT,
+        max_scanned: int = DEFAULT_FAILED_PODS_SCANNED_MAX,
+        max_failed_reported: int = DEFAULT_FAILED_PODS_REPORTED_MAX,
+        max_evicted_reported: int = DEFAULT_EVICTED_PODS_REPORTED_MAX,
+    ) -> tuple[list[PodSummary], dict[str, Any]]:
+        """Sample failed and evicted pods with bounded collection.
+
+        This is a separate method for collecting terminal pods that should not
+        be mixed with active pod collection due to different pagination patterns.
+
+        Args:
+            page_limit: Items per API page (default 200)
+            max_scanned: Maximum pods to scan before stopping (default 500)
+            max_failed_reported: Maximum failed pods in result (default 50)
+            max_evicted_reported: Maximum evicted pods in result (default 20)
+
+        Returns:
+            Tuple of (list of PodSummary, metadata dict with truncation flags)
+        """
+        self._ensure_config()
+        return sample_failed_pods_bounded(
+            self,
+            page_limit=page_limit,
+            max_scanned=max_scanned,
+            max_failed_reported=max_failed_reported,
+            max_evicted_reported=max_evicted_reported,
+        )
+
 
 def create_kubernetes_read_client(*, kubeconfig: str | None = None, context: str | None = None,
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> KubernetesReadClient:
@@ -409,10 +479,12 @@ __all__ = [
     "AppsV1Api", "ApiClient", "CoreV1Api", "clear_client_cache",
     "create_kubernetes_read_client", "get_cached_kubernetes_client",
     "DEFAULT_LIMIT", "DEFAULT_LOG_BYTES", "DEFAULT_LOG_TAIL_LINES", "DEFAULT_MAX_ITEMS",
-    "DEFAULT_TIMEOUT_SECONDS", "DeploymentProjection", "EventProjection",
+    "DEFAULT_TIMEOUT_SECONDS", "DEFAULT_POD_PAGE_LIMIT", "DEFAULT_ACTIVE_PODS_MAX",
+    "DEFAULT_FAILED_PODS_SCANNED_MAX", "DEFAULT_FAILED_PODS_REPORTED_MAX", "DEFAULT_EVICTED_PODS_REPORTED_MAX",
+    "DeploymentProjection", "EventProjection",
     "KubernetesApiNotFoundError", "KubernetesApiPermissionError",
     "KubernetesApiResponseTooLargeError", "KubernetesApiTimeoutError",
     "KubernetesClientError", "KubernetesClientUnavailableError", "KubernetesReadClient",
-    "NamespaceProjection", "PaginationMetadata", "PodProjection",
+    "NamespaceProjection", "PaginationMetadata", "PodProjection", "PodSummary",
     "SecretProjection", "ServiceAccountProjection", "translate_api_exception",
 ]

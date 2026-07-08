@@ -342,6 +342,90 @@ class BoundedPodLogResult:
     duration_seconds: float = 0.0
 
 
+@dataclass(frozen=True)
+class PodSummary:
+    """Minimal summary projection for health-loop pod collection.
+
+    This is a compact projection that contains only the fields needed
+    for health assessment, excluding full pod manifests to prevent OOM.
+    """
+    namespace: str
+    name: str
+    phase: str | None
+    reason: str | None  # e.g., "Evicted", "Error", "OOMKilled"
+    node_name: str | None
+    owner_kind: str | None
+    owner_name: str | None
+    restart_count: int
+    waiting_reasons: tuple[str, ...]
+    terminated_reasons: tuple[str, ...]
+    created_at: datetime | None
+
+    @classmethod
+    def from_pod_dict(cls, data: dict[str, Any]) -> PodSummary:
+        """Create from a Kubernetes Pod dict (extracted from API response).
+
+        Args:
+            data: Pod dictionary from kubernetes.client.V1Pod or JSON
+
+        Returns:
+            PodSummary with only diagnostically-relevant fields
+        """
+        metadata = data.get("metadata") or {}
+        spec = data.get("spec") or {}
+        status = data.get("status") or {}
+
+        # Extract owner reference (workload parent)
+        owner_kind: str | None = None
+        owner_name: str | None = None
+        owner_refs = metadata.get("ownerReferences") or []
+        if owner_refs and isinstance(owner_refs, list) and len(owner_refs) > 0:
+            owner_kind = str(owner_refs[0].get("kind") or "")
+            owner_name = str(owner_refs[0].get("name") or "")
+
+        # Extract container reasons
+        waiting_reasons: list[str] = []
+        terminated_reasons: list[str] = []
+        container_statuses = status.get("containerStatuses") or []
+        for container in container_statuses:
+            for attr in ("state", "lastState"):
+                state = container.get(attr) or {}
+                waiting = state.get("waiting") or {}
+                waiting_reason = str(waiting.get("reason") or "")
+                if waiting_reason:
+                    waiting_reasons.append(waiting_reason)
+                terminated = state.get("terminated") or {}
+                terminated_reason = str(terminated.get("reason") or "")
+                if terminated_reason:
+                    terminated_reasons.append(terminated_reason)
+
+        # Parse creation timestamp
+        ts = metadata.get("creationTimestamp")
+        creation_ts: datetime | None = None
+        if ts:
+            try:
+                creation_ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+
+        return cls(
+            namespace=str(metadata.get("namespace") or ""),
+            name=str(metadata.get("name") or ""),
+            phase=str(status.get("phase") or "") or None,
+            reason=str(status.get("reason") or "") or None,
+            node_name=spec.get("nodeName"),
+            owner_kind=owner_kind or None,
+            owner_name=owner_name or None,
+            restart_count=int(sum(
+                cs.get("restartCount", 0)
+                for cs in container_statuses
+            )),
+            waiting_reasons=tuple(waiting_reasons),
+            terminated_reasons=tuple(terminated_reasons),
+            created_at=creation_ts,
+        )
+
+
 __all__ = [
     "NamespaceProjection",
     "PodProjection",
@@ -352,4 +436,5 @@ __all__ = [
     "ServiceAccountProjection",
     "PaginationMetadata",
     "BoundedPodLogResult",
+    "PodSummary",
 ]

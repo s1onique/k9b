@@ -6,9 +6,23 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from .kubernetes_client_constants import DEFAULT_LIMIT, DEFAULT_MAX_ITEMS
+from .kubernetes_client_constants import (
+    DEFAULT_ACTIVE_PODS_MAX,
+    DEFAULT_EVICTED_PODS_REPORTED_MAX,
+    DEFAULT_FAILED_PODS_REPORTED_MAX,
+    DEFAULT_FAILED_PODS_SCANNED_MAX,
+    DEFAULT_LIMIT,
+    DEFAULT_MAX_ITEMS,
+    DEFAULT_POD_PAGE_LIMIT,
+)
 from .kubernetes_client_errors import KubernetesApiResponseTooLargeError
-from .kubernetes_client_models import DeploymentProjection, EventProjection, PaginationMetadata, PodProjection
+from .kubernetes_client_models import (
+    DeploymentProjection,
+    EventProjection,
+    PaginationMetadata,
+    PodProjection,
+    PodSummary,
+)
 
 if TYPE_CHECKING:
     from .kubernetes_client import KubernetesReadClient
@@ -169,8 +183,171 @@ def list_namespaced_deployments_projected(
     )
 
 
+def list_all_namespaces_pods_summaries(
+    client: KubernetesReadClient,
+    *,
+    page_limit: int = DEFAULT_POD_PAGE_LIMIT,
+    max_active_pods: int = DEFAULT_ACTIVE_PODS_MAX,
+    exclude_terminal: bool = True,
+) -> tuple[list[PodSummary], PaginationMetadata]:
+    """List all pods across all namespaces with pagination, projecting compact summaries.
+
+    This function is designed for the health loop. It:
+    1. Uses server-side pagination with limit/continue
+    2. Projects only diagnostically-relevant fields (no full manifests)
+    3. Optionally excludes terminal phases (Succeeded, Failed)
+    4. Hard-caps results to prevent unbounded memory growth
+
+    Args:
+        client: KubernetesReadClient instance
+        page_limit: Items per API page (default 200)
+        max_active_pods: Maximum active pods to collect (default 1000)
+        exclude_terminal: If True, exclude Succeeded and Failed phases (default True)
+
+    Returns:
+        Tuple of (list of PodSummary, pagination metadata with truncation info)
+    """
+    all_pods: list[PodSummary] = []
+    continue_token: str | None = None
+    remaining = 0
+    truncated = False
+
+    # Field selector for non-terminal pods when exclude_terminal=True
+    # Kubernetes field selectors support: =, ==, !=
+    # We use != to exclude terminal phases
+    if exclude_terminal:
+        # This excludes Succeeded and Failed pods
+        # Note: Evicted pods have phase=Failed, so they are also excluded
+        field_selector = "status.phase!=Succeeded,status.phase!=Failed"
+    else:
+        field_selector = None
+
+    while True:
+        try:
+            response = client.core_v1.list_pod_for_all_namespaces(
+                field_selector=field_selector,
+                limit=page_limit,
+                _continue=continue_token,
+                timeout_seconds=client._timeout_seconds,
+            )
+            # Process page items immediately and release response
+            for item in response.items:
+                if len(all_pods) >= max_active_pods:
+                    truncated = True
+                    remaining = response.metadata.remaining_item_count or 0
+                    break
+                # Project to compact summary - no full pod storage
+                pod_dict = item.to_dict()
+                # Defensive client-side filter: belt-and-suspenders for API compatibility
+                # Edge cases: older API versions, custom schedulers, mock responses
+                if exclude_terminal:
+                    phase = str(pod_dict.get("status", {}).get("phase") or "")
+                    if phase in ("Succeeded", "Failed"):
+                        continue
+                all_pods.append(PodSummary.from_pod_dict(pod_dict))
+            if truncated:
+                break
+            continue_token = response.metadata._continue
+            if not continue_token:
+                break
+            # Release response before next iteration
+            del response
+        except Exception as exc:  # noqa: BLE001
+            _logger.debug("Failed to list pods across all namespaces: %s", type(exc).__name__)
+            break
+
+    return all_pods, PaginationMetadata(
+        total=len(all_pods),
+        remaining=remaining,
+        truncated=truncated,
+        continuation_token=continue_token,
+        items_returned=len(all_pods),
+    )
+
+
+def sample_failed_pods_bounded(
+    client: KubernetesReadClient,
+    *,
+    page_limit: int = DEFAULT_POD_PAGE_LIMIT,
+    max_scanned: int = DEFAULT_FAILED_PODS_SCANNED_MAX,
+    max_failed_reported: int = DEFAULT_FAILED_PODS_REPORTED_MAX,
+    max_evicted_reported: int = DEFAULT_EVICTED_PODS_REPORTED_MAX,
+) -> tuple[list[PodSummary], dict[str, Any]]:
+    """Sample failed and evicted pods with bounded collection.
+
+    This function collects a bounded sample of failed/evicted pods for
+    diagnostic purposes, without loading the entire terminal pod population.
+
+    Args:
+        client: KubernetesReadClient instance
+        page_limit: Items per API page (default 200)
+        max_scanned: Maximum pods to scan before stopping (default 500)
+        max_failed_reported: Maximum failed pods in result (default 50)
+        max_evicted_reported: Maximum evicted pods in result (default 20)
+
+    Returns:
+        Tuple of (list of PodSummary, metadata dict with truncation flags)
+    """
+    failed_pods: list[PodSummary] = []
+    evicted_pods: list[PodSummary] = []
+    scanned_count = 0
+    continue_token: str | None = None
+
+    # Field selector for Failed pods (Evicted pods have phase=Failed)
+    field_selector = "status.phase=Failed"
+
+    while scanned_count < max_scanned:
+        try:
+            response = client.core_v1.list_pod_for_all_namespaces(
+                field_selector=field_selector,
+                limit=page_limit,
+                _continue=continue_token,
+                timeout_seconds=client._timeout_seconds,
+            )
+            for item in response.items:
+                scanned_count += 1
+                if scanned_count > max_scanned:
+                    break
+                summary = PodSummary.from_pod_dict(item.to_dict())
+                # Separate evicted from other failed pods
+                # Evicted pods have reason="Evicted" in their status
+                if summary.reason == "Evicted":
+                    if len(evicted_pods) < max_evicted_reported:
+                        evicted_pods.append(summary)
+                else:
+                    if len(failed_pods) < max_failed_reported:
+                        failed_pods.append(summary)
+            continue_token = response.metadata._continue
+            # Release response before next iteration
+            del response
+            if not continue_token:
+                break
+        except Exception as exc:  # noqa: BLE001
+            _logger.debug("Failed to list failed pods: %s", type(exc).__name__)
+            break
+
+    # Combine results: evicted first, then other failed
+    all_results = evicted_pods + failed_pods
+
+    metadata = {
+        "scanned": scanned_count,
+        "scanned_limit": max_scanned,
+        "evicted_count": len(evicted_pods),
+        "evicted_limit": max_evicted_reported,
+        "failed_count": len(failed_pods),
+        "failed_limit": max_failed_reported,
+        "evicted_truncated": len(evicted_pods) == max_evicted_reported,
+        "failed_truncated": len(failed_pods) == max_failed_reported,
+        "scan_truncated": scanned_count >= max_scanned,
+    }
+
+    return all_results, metadata
+
+
 __all__ = [
+    "list_all_namespaces_pods_summaries",
     "list_namespaced_deployments_projected",
     "list_namespaced_events_projected",
     "list_namespaced_pods_projected",
+    "sample_failed_pods_bounded",
 ]
