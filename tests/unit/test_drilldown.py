@@ -1,7 +1,18 @@
 import json
 from collections.abc import Sequence
+from unittest.mock import MagicMock, patch
 
 from k8s_diag_agent.health.drilldown import DrilldownCollector
+
+
+class MockPodSummary:
+    """Mock PodSummary for testing."""
+    def __init__(self, namespace: str, name: str, phase: str, reason: str | None = None, waiting_reasons: list[str] | None = None):
+        self.namespace = namespace
+        self.name = name
+        self.phase = phase
+        self.reason = reason
+        self.waiting_reasons = waiting_reasons or []
 
 
 class CommandRecorder:
@@ -36,17 +47,37 @@ class CommandRecorder:
 
 
 def test_drilldown_collector_limits_pods_and_descriptions() -> None:
+    """Test that drilldown collector respects non_running_pods limit and describes limited pods."""
+    # Mock the Kubernetes client to return non-running pods
+    mock_client = MagicMock()
+    mock_client.list_all_namespaces_pods_summaries.return_value = (
+        [
+            # 5 non-running pods for testing limit
+            MockPodSummary("default", "pod-0", "Pending", reason="CrashLoopBackOff"),
+            MockPodSummary("default", "pod-1", "Pending", reason="CrashLoopBackOff"),
+            MockPodSummary("default", "pod-2", "Pending", reason="ImagePullBackOff"),
+            MockPodSummary("default", "pod-3", "Failed", reason="Error"),
+            MockPodSummary("default", "pod-4", "Pending"),
+        ],
+        MagicMock(truncated=False, remaining=0, items_returned=5),
+    )
+
     recorder = CommandRecorder()
     collector = DrilldownCollector(
         max_warning_events=5,
-        max_non_running_pods=2,
-        max_pod_descriptions=1,
+        max_non_running_pods=2,  # Limit to 2 pods
+        max_pod_descriptions=1,   # Limit descriptions to 1
         max_rollout_namespaces=1,
         max_rollouts=0,
         command_runner=recorder,
     )
-    evidence = collector.collect("cluster", ["default"])
+
+    with patch("k8s_diag_agent.health.drilldown.get_cached_kubernetes_client", return_value=mock_client):
+        evidence = collector.collect("cluster", ["default"])
+
+    # Should respect max_non_running_pods limit
     assert len(evidence.non_running_pods) == 2
+    # Should only describe max_pod_descriptions pods
     describe_calls = sum(1 for command in recorder.commands if "describe" in command)
     assert describe_calls == 1
 

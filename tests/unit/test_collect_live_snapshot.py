@@ -3,7 +3,7 @@ import os
 import unittest
 from collections.abc import Callable, Sequence
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from k8s_diag_agent.collect.live_snapshot import (
     _kubectl,
@@ -13,6 +13,7 @@ from k8s_diag_agent.collect.live_snapshot import (
 )
 from k8s_diag_agent.kubernetes_auth import is_in_cluster
 from k8s_diag_agent.security.kubectl_errors import KubectlExecutionError
+from k8s_diag_agent.security.kubernetes_client_models import PodSummary
 
 
 def _make_runner(helm_failure: bool = False, crd_failure: bool = False) -> Callable[[Sequence[str]], str]:
@@ -82,32 +83,46 @@ class LiveSnapshotCollectionTest(unittest.TestCase):
         self.assertEqual(snapshot.health_signals.job_failures, 0)
         self.assertEqual(snapshot.health_signals.warning_events, ())
 
-    @patch("k8s_diag_agent.collect.live_snapshot._run_command")
-    def test_succeeded_job_pods_not_counted_as_non_running(self, run_command: Any) -> None:
-        base_runner = _make_runner()
+    def test_succeeded_job_pods_not_counted_as_non_running(self) -> None:
+        """Test that Succeeded job pods are counted as completed_job_pods but not non_running."""
+        # Create a mock PodSummary for a Succeeded job pod
+        # Using the actual PodSummary field names from kubernetes_client_models.py
+        mock_pod_summary = PodSummary(
+            namespace="default",
+            name="backup-job-pod",
+            phase="Succeeded",
+            reason=None,
+            node_name=None,
+            owner_kind="Job",
+            owner_name="backup-job",
+            restart_count=0,
+            waiting_reasons=(),
+            terminated_reasons=(),
+            created_at=None,
+        )
 
-        def runner(command: Sequence[str]) -> str:
-            if command[0] == "kubectl" and "pods" in command:
-                payload = {
-                    "items": [
-                        {
-                            "metadata": {
-                                "name": "backup-job-pod",
-                                "ownerReferences": [
-                                    {"kind": "Job", "name": "backup-job"}
-                                ],
-                            },
-                            "status": {"phase": "Succeeded", "containerStatuses": []},
-                        }
-                    ]
-                }
-                return json.dumps(payload)
-            return base_runner(command)
+        # Mock the Kubernetes client to return the Succeeded pod
+        mock_client = MagicMock()
+        mock_client.list_all_namespaces_pods_summaries.return_value = (
+            [mock_pod_summary],
+            MagicMock(
+                truncated=False,
+                remaining=0,
+                items_returned=1,
+            ),
+        )
 
-        run_command.side_effect = runner
-        snapshot = collect_cluster_snapshot("demo")
-        self.assertEqual(snapshot.health_signals.pod_counts.non_running, 0)
-        self.assertEqual(snapshot.health_signals.pod_counts.completed_job_pods, 1)
+        # Patch both the client getter and _run_command (for other kubectl calls)
+        with patch(
+            "k8s_diag_agent.collect.live_snapshot_pods.get_cached_kubernetes_client",
+            return_value=mock_client,
+        ):
+            with patch("k8s_diag_agent.collect.live_snapshot._run_command", side_effect=_make_runner()):
+                snapshot = collect_cluster_snapshot("demo")
+                # Succeeded pods should NOT be counted as non_running
+                self.assertEqual(snapshot.health_signals.pod_counts.non_running, 0)
+                # But they SHOULD be counted as completed_job_pods
+                self.assertEqual(snapshot.health_signals.pod_counts.completed_job_pods, 1)
 
 
 class TimeoutTest(unittest.TestCase):

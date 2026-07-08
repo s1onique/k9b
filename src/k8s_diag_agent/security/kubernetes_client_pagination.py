@@ -215,10 +215,10 @@ def list_all_namespaces_pods_summaries(
     # Field selector for non-terminal pods when exclude_terminal=True
     # Kubernetes field selectors support: =, ==, !=
     # We use != to exclude terminal phases
+    # IMPORTANT: Only exclude Succeeded pods. Failed/Evicted pods are diagnostically
+    # relevant for K9B and should remain in non-running / failed-pod sampling.
     if exclude_terminal:
-        # This excludes Succeeded and Failed pods
-        # Note: Evicted pods have phase=Failed, so they are also excluded
-        field_selector = "status.phase!=Succeeded,status.phase!=Failed"
+        field_selector = "status.phase!=Succeeded"
     else:
         field_selector = None
 
@@ -240,9 +240,11 @@ def list_all_namespaces_pods_summaries(
                 pod_dict = item.to_dict()
                 # Defensive client-side filter: belt-and-suspenders for API compatibility
                 # Edge cases: older API versions, custom schedulers, mock responses
+                # IMPORTANT: Only exclude Succeeded pods client-side. Failed/Evicted pods
+                # are diagnostically relevant for K9B and should remain visible.
                 if exclude_terminal:
                     phase = str(pod_dict.get("status", {}).get("phase") or "")
-                    if phase in ("Succeeded", "Failed"):
+                    if phase == "Succeeded":
                         continue
                 all_pods.append(PodSummary.from_pod_dict(pod_dict))
             if truncated:
@@ -305,9 +307,11 @@ def sample_failed_pods_bounded(
                 timeout_seconds=client._timeout_seconds,
             )
             for item in response.items:
-                scanned_count += 1
-                if scanned_count > max_scanned:
+                # Check scan limit BEFORE incrementing and processing
+                # This ensures we scan exactly max_scanned pods
+                if scanned_count >= max_scanned:
                     break
+                scanned_count += 1
                 summary = PodSummary.from_pod_dict(item.to_dict())
                 # Separate evicted from other failed pods
                 # Evicted pods have reason="Evicted" in their status

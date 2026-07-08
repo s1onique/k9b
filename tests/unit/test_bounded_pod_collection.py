@@ -171,8 +171,8 @@ class TestTerminalPodExclusion:
         assert len(summaries) == 1
         assert summaries[0].name == "pod-running"
 
-    def test_excludes_failed_pods(self) -> None:
-        """Verify Failed pods are excluded."""
+    def test_includes_failed_pods(self) -> None:
+        """Verify Failed pods are included (diagnostically relevant for K9B)."""
         mock_client = MagicMock()
         mock_client.core_v1.list_pod_for_all_namespaces.return_value = MagicMock(
             items=[
@@ -187,12 +187,13 @@ class TestTerminalPodExclusion:
             exclude_terminal=True,
         )
 
-        # Only Running pod should be present
-        assert len(summaries) == 1
-        assert summaries[0].name == "pod-running"
+        # Failed pods should be included (diagnostically relevant)
+        assert len(summaries) == 2
+        names = {s.name for s in summaries}
+        assert names == {"pod-running", "pod-failed"}
 
-    def test_excludes_evicted_pods(self) -> None:
-        """Verify Evicted pods (phase=Failed, reason=Evicted) are excluded."""
+    def test_includes_evicted_pods(self) -> None:
+        """Verify Evicted pods (phase=Failed, reason=Evicted) are included (diagnostically relevant)."""
         mock_client = MagicMock()
         mock_client.core_v1.list_pod_for_all_namespaces.return_value = MagicMock(
             items=[
@@ -207,9 +208,10 @@ class TestTerminalPodExclusion:
             exclude_terminal=True,
         )
 
-        # Only Running pod should be present (Evicted has phase=Failed)
-        assert len(summaries) == 1
-        assert summaries[0].name == "pod-running"
+        # Evicted pods should be included (diagnostically relevant)
+        assert len(summaries) == 2
+        names = {s.name for s in summaries}
+        assert names == {"pod-running", "pod-evicted"}
 
     def test_includes_pending_and_unknown(self) -> None:
         """Verify Pending and Unknown phases are included."""
@@ -322,10 +324,12 @@ class TestFailedSamplerCap:
         mock_client = MagicMock()
 
         # Create enough to trigger both limits
+        # Need >50 failed (non-evicted) pods to test failed_truncated
+        # 25 evicted + 55 failed = 80 total pods
         page = MagicMock()
         page.items = [
             MockPod("default", f"pod-{i}", "Failed", reason="Evicted" if i < 25 else "Error")
-            for i in range(60)
+            for i in range(80)
         ]
         page.metadata = MockMetadata(continue_token=None)
 
@@ -406,8 +410,8 @@ class TestPodSummaryProjection:
 class TestFieldSelector:
     """Test Kubernetes field selector behavior."""
 
-    def test_field_selector_excludes_terminal_phases(self) -> None:
-        """Verify correct field selector is passed for terminal exclusion."""
+    def test_field_selector_excludes_succeeded_only(self) -> None:
+        """Verify field selector excludes only Succeeded pods (Failed/Evicted remain for diagnostics)."""
         mock_client = MagicMock()
         mock_client.core_v1.list_pod_for_all_namespaces.return_value = MagicMock(
             items=[],
@@ -423,8 +427,10 @@ class TestFieldSelector:
         call_args = mock_client.core_v1.list_pod_for_all_namespaces.call_args
         field_selector = call_args.kwargs.get("field_selector") or call_args[1].get("field_selector")
 
+        # Only Succeeded is excluded via field selector
+        # Failed/Evicted pods are diagnostically relevant for K9B
         assert "!=Succeeded" in field_selector
-        assert "!=Failed" in field_selector
+        assert "!=Failed" not in field_selector
 
     def test_no_field_selector_when_exclude_false(self) -> None:
         """Verify no field selector when exclude_terminal=False."""

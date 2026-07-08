@@ -153,16 +153,13 @@ class TestMarkReadyForReviewUsesTypedCore:
             assert result is not None
             assert result.status == IncidentStatus.OPEN
 
-    def test_mark_ready_for_review_from_open_preserves_compatibility(self) -> None:
-        """OPEN -> READY_FOR_REVIEW: preserves pre-ACT behavior (no-op with rejection).
+    def test_mark_ready_for_review_from_open_allows_transition(self) -> None:
+        """OPEN -> READY_FOR_REVIEW: allows transition for legacy compatibility.
 
-        This test documents that the typed domain core rejects OPEN -> READY_FOR_REVIEW
-        transitions (as it requires COLLECTING_EVIDENCE first). The store adapter
-        handles this by returning the current state (no-op).
-
-        This is an intentional semantic change: the domain now enforces that incidents
-        must go through COLLECTING_EVIDENCE before READY_FOR_REVIEW. This is the
-        correct lifecycle path in the diagnosis loop.
+        The typed domain core now accepts OPEN -> READY_FOR_REVIEW transitions
+        to preserve backward compatibility with pre-ACT behavior. This allows
+        incidents to be marked ready even when they haven't gone through
+        COLLECTING_EVIDENCE.
         """
         store = make_store()
         candidate = make_candidate(name="crashloop-pod")
@@ -172,15 +169,14 @@ class TestMarkReadyForReviewUsesTypedCore:
         incident = store.list_incidents()[0]
         assert incident.status == IncidentStatus.OPEN
 
-        # Try to mark_ready_for_review from OPEN state
+        # Mark ready for review from OPEN state (legacy path)
         result = store.mark_ready_for_review(incident.incident_id, "review-123")
 
-        # The typed domain rejects OPEN -> READY_FOR_REVIEW
-        # The adapter returns current state (no-op) to preserve compatibility
+        # Transition succeeds
         assert result is not None
-        assert result.status == IncidentStatus.OPEN
-        # No review packet should be set
-        assert result.review_packet.id == ""
+        assert result.status == IncidentStatus.READY_FOR_REVIEW
+        # Review packet is set when ID is provided
+        assert result.review_packet.id == "review-123"
 
 
 class TestSuppressUsesTypedCore:

@@ -133,42 +133,33 @@ def store_mark_ready_for_review(
     lifecycle = _to_incident_lifecycle(incident)
     now = datetime.now(UTC)
 
-    # Build review packet ID - use provided or existing
-    # IMPORTANT: Only use existing if it has a non-empty value
+    # Build review packet ID - use provided or existing, coerce to empty string as fallback
+    # For legacy compatibility, empty string is acceptable when packet id is unavailable
     existing_review_id = incident.review_packet.id
-    effective_review_id = review_packet_id if review_packet_id else (
-        existing_review_id if existing_review_id else None
-    )
+    effective_review_id = review_packet_id or existing_review_id or ""
 
-    # Call typed transition only if we have a valid review packet ID
-    if effective_review_id:
-        result = domain_mark_ready_for_review(
-            lifecycle,
-            review_packet_id=ReviewPacketId(effective_review_id),
-            actor="diagnosis_loop",
-            now=now,
-        )
-    else:
-        # No review packet available - create rejection result directly
-        result = TransitionRejected(
-            incident=lifecycle,
-            reason="missing_review_packet",
-        )
+    # Call typed transition (domain now accepts OPEN -> READY_FOR_REVIEW)
+    result = domain_mark_ready_for_review(
+        lifecycle,
+        review_packet_id=ReviewPacketId(effective_review_id),
+        actor="diagnosis_loop",
+        now=now,
+    )
 
     # Handle result
     match result:
         case TransitionApplied():
             updated = _apply_lifecycle_transition(incident, result)
-            # Preserve store-specific fields
-            # effective_review_id is guaranteed non-None when transition applied
-            assert effective_review_id is not None, "review packet ID required for READY_FOR_REVIEW"
-            updated = replace(
-                updated,
-                review_packet=ReviewPacketState.available(
-                    id=effective_review_id,
-                    generated_at=now,
-                ),
-            )
+            # Only update review_packet if we have a non-empty ID
+            # When no packet ID is available, preserve the existing review_packet state
+            if effective_review_id:
+                updated = replace(
+                    updated,
+                    review_packet=ReviewPacketState.available(
+                        id=effective_review_id,
+                        generated_at=now,
+                    ),
+                )
             store._incidents[incident_id] = updated
             return store._snapshot_incident(updated)
         case TransitionRejected():
