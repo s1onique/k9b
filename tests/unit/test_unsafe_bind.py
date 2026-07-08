@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from k8s_diag_agent.ui.server import _SAFE_LOOPBACK_HOSTS, _is_exposed_host, start_ui_server
+from k8s_diag_agent.ui.server import _SAFE_LOOPBACK_HOSTS, _is_exposed_host
 from k8s_diag_agent.ui.server_runtime import start_ui_server_impl
 
 
