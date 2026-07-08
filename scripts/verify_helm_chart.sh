@@ -98,10 +98,13 @@ fi
 # Template rendering checks
 # ---------------------------------------------------------------------------
 
+# Common values needed for all template renders (using array for proper shell expansion)
+COMMON_SET=(--set "backend.internalApi.existingSecret=k9b-internal-api" --set "scheduler.incidentPromotion.internalApi.existingSecret=k9b-internal-api")
+
 if [[ "$MODE" == "all" ]] || [[ "$MODE" == "render" ]]; then
-    _run "helm template (default values)" helm template k9b "$CHART_DIR"
-    _run "helm template (ingress enabled)" helm template k9b "$CHART_DIR" --set ingress.enabled=true --set ingress.host=k9b.example.com
-    _run "helm template (external resources enabled)" helm template k9b "$CHART_DIR" --set kubeconfig.enabled=true --set healthConfig.enabled=true
+    _run "helm template (default values)" helm template k9b "$CHART_DIR" "${COMMON_SET[@]}"
+    _run "helm template (ingress enabled)" helm template k9b "$CHART_DIR" "${COMMON_SET[@]}" --set ingress.enabled=true --set ingress.host=k9b.example.com
+    _run "helm template (external resources enabled)" helm template k9b "$CHART_DIR" "${COMMON_SET[@]}" --set kubeconfig.enabled=true --set healthConfig.enabled=true
 fi
 
 # ---------------------------------------------------------------------------
@@ -112,7 +115,7 @@ if [[ "$MODE" == "all" ]] || [[ "$MODE" == "selector" ]]; then
     echo "=== Selector validation ==="
 
     # Render with ingress to get all resources
-    rendered=$(helm template k9b "$CHART_DIR" --set ingress.enabled=true --set ingress.host=k9b.example.com 2>&1) || {
+    rendered=$(helm template k9b "$CHART_DIR" "${COMMON_SET[@]}" --set ingress.enabled=true --set ingress.host=k9b.example.com 2>&1) || {
         _fail "helm template for selector check"
         echo "$rendered" >&2
     }
@@ -154,12 +157,8 @@ fi
 if [[ "$MODE" == "all" ]] || [[ "$MODE" == "render" ]]; then
     echo "=== Frontend production regression checks ==="
     
-    # Render default values (already computed above as $rendered if selector mode ran)
-    if [[ "$MODE" == "all" ]]; then
-        frontend_rendered=$(helm template k9b "$CHART_DIR" 2>&1)
-    else
-        frontend_rendered=$(helm template k9b "$CHART_DIR" 2>&1)
-    fi
+    # Render default values
+    frontend_rendered=$(helm template k9b "$CHART_DIR" "${COMMON_SET[@]}" 2>&1)
     
     # Extract frontend container spec
     frontend_container=$(echo "$frontend_rendered" | sed -n '/^# Source: k9b\/templates\/deployment-frontend.yaml$/,/^---$/p')
