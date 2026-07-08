@@ -6,26 +6,21 @@
  * and initOverrides to the generated IncidentsApi.
  *
  * Also tests blockingReason preservation via ResponseError.
+ *
+ * Note: performAlertmanagerSourceAction tests are in a separate shard
+ * (generatedPostWrappers.alertmanagerActions.test.ts) because it uses direct fetch()
+ * rather than the generated IncidentsApi client.
  */
 
-import { describe, expect, test, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, test, vi, beforeEach } from "vitest";
 import { ResponseError } from "../generated/k9b-api/runtime";
-import { IncidentsApi } from "../generated/k9b-api";
+
+import {
+  mockIncidentsApiInstance,
+  createMockIncidentsApi,
+} from "./generatedPostWrappers.testSupport";
 
 // Mock the IncidentsApi before importing wrapper modules
-const mockIncidentsApiInstance = {
-  captureIncidentSnapshot: vi.fn(),
-  createIncidentReviewPacket: vi.fn(),
-  executeNextCheck: vi.fn(),
-  approveNextCheck: vi.fn(),
-  promoteDeterministicNextCheck: vi.fn(),
-  recordNextCheckUsefulness: vi.fn(),
-  runBatchNextCheckExecution: vi.fn(),
-  performAlertmanagerSourceAction: vi.fn(),
-  recordAlertmanagerRelevanceFeedback: vi.fn(),
-  getRunDetail: vi.fn(),
-};
-
 vi.mock("../generated/k9b-api", async () => {
   const actual = await vi.importActual("../generated/k9b-api");
   return {
@@ -45,36 +40,22 @@ import {
   promoteDeterministicNextCheck,
   submitUsefulnessFeedback,
 } from "../api/nextChecks";
-import {
-  performAlertmanagerSourceAction,
-  submitAlertmanagerRelevanceFeedback,
-} from "../api/alertmanager";
+import { submitAlertmanagerRelevanceFeedback } from "../api/alertmanager";
 import { fetchRun, runBatchExecution } from "../api/runs";
 
 // ---------------------------------------------------------------------------
-// Global fetch stub for direct fetch() calls (e.g., performAlertmanagerSourceAction)
-// Vitest/Node cannot resolve relative URLs like "/api/..." without a document base.
-// Stubbing fetch prevents "TypeError: Invalid URL" when constructing requests.
+// Mock cleanup between tests
 // ---------------------------------------------------------------------------
+
 beforeEach(() => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () =>
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    ),
-  );
   vi.clearAllMocks();
 });
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
+// ---------------------------------------------------------------------------
 // Helper to get the mock instance for assertions
-const createMockIncidentsApi = () => mockIncidentsApiInstance;
+// ---------------------------------------------------------------------------
+
+const getMockApi = createMockIncidentsApi;
 
 // ---------------------------------------------------------------------------
 // captureIncidentSnapshot
@@ -82,7 +63,7 @@ const createMockIncidentsApi = () => mockIncidentsApiInstance;
 
 describe("captureIncidentSnapshot wrapper mapping", () => {
   test("calls api.captureIncidentSnapshot with correct request object", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.captureIncidentSnapshot.mockResolvedValue({
       artifactPath: "/snapshots/test.json",
     } as never);
@@ -109,7 +90,7 @@ describe("captureIncidentSnapshot wrapper mapping", () => {
 
 describe("generateIncidentReviewPacket wrapper mapping", () => {
   test("calls api.createIncidentReviewPacket with correct request object", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.createIncidentReviewPacket.mockResolvedValue({
       reviewPacketPath: "/reviews/test.json",
     } as never);
@@ -136,7 +117,7 @@ describe("generateIncidentReviewPacket wrapper mapping", () => {
 
 describe("executeNextCheckCandidate wrapper mapping", () => {
   test("calls api.executeNextCheck with correct request object", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.executeNextCheck.mockResolvedValue({
       status: "executed",
     } as never);
@@ -161,7 +142,7 @@ describe("executeNextCheckCandidate wrapper mapping", () => {
   });
 
   test("preserves blockingReason from ResponseError body", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
 
     // Create a ResponseError with blockingReason in the JSON body
     const errorResponse = new Response(
@@ -193,7 +174,7 @@ describe("executeNextCheckCandidate wrapper mapping", () => {
 
 describe("approveNextCheckCandidate wrapper mapping", () => {
   test("calls api.approveNextCheck with correct request object", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.approveNextCheck.mockResolvedValue({
       status: "approved",
     } as never);
@@ -222,7 +203,7 @@ describe("approveNextCheckCandidate wrapper mapping", () => {
 
 describe("promoteDeterministicNextCheck wrapper mapping", () => {
   test("calls api.promoteDeterministicNextCheck with all request fields", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.promoteDeterministicNextCheck.mockResolvedValue({
       status: "promoted",
     } as never);
@@ -267,7 +248,7 @@ describe("promoteDeterministicNextCheck wrapper mapping", () => {
 
 describe("submitUsefulnessFeedback wrapper mapping", () => {
   test("calls api.recordNextCheckUsefulness with all 8 fields", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.recordNextCheckUsefulness.mockResolvedValue({
       status: "recorded",
     } as never);
@@ -303,7 +284,7 @@ describe("submitUsefulnessFeedback wrapper mapping", () => {
   });
 
   test("works with minimal required fields only", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.recordNextCheckUsefulness.mockResolvedValue({
       status: "recorded",
     } as never);
@@ -338,7 +319,7 @@ describe("submitUsefulnessFeedback wrapper mapping", () => {
 
 describe("runBatchExecution wrapper mapping", () => {
   test("calls api.runBatchNextCheckExecution with correct request object", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.runBatchNextCheckExecution.mockResolvedValue({
       status: "batch_executed",
       results: [],
@@ -360,7 +341,7 @@ describe("runBatchExecution wrapper mapping", () => {
   });
 
   test("passes dryRun: true when specified", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.runBatchNextCheckExecution.mockResolvedValue({
       status: "dry_run_complete",
       results: [],
@@ -381,76 +362,12 @@ describe("runBatchExecution wrapper mapping", () => {
 });
 
 // ---------------------------------------------------------------------------
-// performAlertmanagerSourceAction
-// ---------------------------------------------------------------------------
-
-describe("performAlertmanagerSourceAction wrapper mapping", () => {
-  test("POSTs to correct endpoint with sourceId in body (not URL path)", async () => {
-    // This test uses direct fetch() (not the generated IncidentsApi mock),
-    // so we assert at the fetch boundary instead.
-    const result = await performAlertmanagerSourceAction(
-      {
-        sourceId: "crd:monitoring.coreos.com/v1/Alertmanager/main",
-        clusterLabel: "cluster-a",
-        action: "promote",
-        reason: "Confirmed alert",
-      },
-      "run-456"
-    );
-
-    expect(result.ok).toBe(true);
-
-    // Regression guard: sourceId must be in POST body, not URL path
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/runs/run-456/alertmanager-sources/action",
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({
-          "Content-Type": "application/json",
-        }),
-        body: JSON.stringify({
-          sourceId: "crd:monitoring.coreos.com/v1/Alertmanager/main",
-          action: "promote",
-          clusterLabel: "cluster-a",
-          reason: "Confirmed alert",
-        }),
-      }),
-    );
-
-    // Verify sourceId is NOT in URL path (was the old buggy behavior)
-    const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).not.toContain("crd:monitoring.coreos.com");
-    expect(url).not.toContain("sourceId");
-  });
-
-  test("handles simple alphanumeric sourceId", async () => {
-    const result = await performAlertmanagerSourceAction(
-      {
-        sourceId: "src-123",
-        clusterLabel: "cluster-a",
-        action: "disable",
-      },
-      "run-789"
-    );
-
-    expect(result.ok).toBe(true);
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/runs/run-789/alertmanager-sources/action",
-      expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining('"sourceId":"src-123"'),
-      }),
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
 // submitAlertmanagerRelevanceFeedback
 // ---------------------------------------------------------------------------
 
 describe("submitAlertmanagerRelevanceFeedback wrapper mapping", () => {
   test("calls api.recordAlertmanagerRelevanceFeedback with correct request object", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.recordAlertmanagerRelevanceFeedback.mockResolvedValue({
       status: "recorded",
     } as never);
@@ -479,7 +396,7 @@ describe("submitAlertmanagerRelevanceFeedback wrapper mapping", () => {
 
 describe("fetchRun initOverrides regression", () => {
   test("passes clientRequestId in headers and signal via initOverrides", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.getRunDetail.mockResolvedValue({
       runId: "run-123",
     } as never);
@@ -502,7 +419,7 @@ describe("fetchRun initOverrides regression", () => {
   });
 
   test("works without clientRequestId and signal", async () => {
-    const mockApi = createMockIncidentsApi();
+    const mockApi = getMockApi();
     mockApi.getRunDetail.mockResolvedValue({
       runId: "run-123",
     } as never);
