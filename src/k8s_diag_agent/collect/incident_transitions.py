@@ -2,6 +2,16 @@
 
 This module provides pure functions for incident state transitions.
 All functions are pure with no side effects.
+
+Lifecycle invariant for ready_for_review:
+    open -> collecting_evidence -> ready_for_review
+
+Terminal states that cannot transition to ready_for_review:
+    - SUPPRESSED
+    - DUPLICATE
+    - RESOLVED
+
+Also rejects direct transition from OPEN (must go through COLLECTING_EVIDENCE first).
 """
 
 from __future__ import annotations
@@ -403,6 +413,45 @@ def mark_diagnosis_loop_failed(
     return replace(incident, events=incident.events + [new_event])
 
 
+def can_transition_to_ready_for_review(incident: Incident) -> bool:
+    """Check if incident can transition to READY_FOR_REVIEW.
+
+    Lifecycle invariant: open -> collecting_evidence -> ready_for_review
+
+    Terminal states that cannot transition to ready_for_review:
+    - SUPPRESSED
+    - DUPLICATE
+    - RESOLVED
+
+    Also rejects direct transition from OPEN (must go through COLLECTING_EVIDENCE first).
+
+    Args:
+        incident: The incident to check
+
+    Returns:
+        True if transition is allowed, False otherwise
+    """
+    from .incident_lifecycle import IncidentStatus
+
+    # Terminal states cannot transition
+    if incident.status in (
+        IncidentStatus.SUPPRESSED,
+        IncidentStatus.DUPLICATE,
+        IncidentStatus.RESOLVED,
+    ):
+        return False
+
+    # OPEN status cannot skip COLLECTING_EVIDENCE
+    if incident.status == IncidentStatus.OPEN:
+        return False
+
+    # Only COLLECTING_EVIDENCE or INVESTIGATING can transition to READY_FOR_REVIEW
+    return incident.status in (
+        IncidentStatus.COLLECTING_EVIDENCE,
+        IncidentStatus.INVESTIGATING,
+    )
+
+
 __all__ = [
     "merge_candidate_into_incident",
     "mark_collecting_evidence",
@@ -413,4 +462,5 @@ __all__ = [
     "mark_diagnosis_loop_started",
     "mark_diagnosis_loop_completed",
     "mark_diagnosis_loop_failed",
+    "can_transition_to_ready_for_review",
 ]

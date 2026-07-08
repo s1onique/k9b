@@ -225,6 +225,10 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
     from .server_batch_execution import handle_run_batch_next_check_execution
     from .server_feedback import handle_alertmanager_relevance_feedback, handle_usefulness_feedback
     from .server_incident import handle_incident_snapshot_api
+    from .server_incident_internal import (
+        handle_promote_alert_signals,
+        handle_promote_candidates,
+    )
     from .server_next_checks import (
         handle_deterministic_promotion,
         handle_next_check_approval,
@@ -253,6 +257,18 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
     # Incident review packet generation
     if route == "/api/incidents/review-packet":
         handle_incident_review_packet_api(handler)
+        return
+
+    # Internal: Promote alert signals from SQLite incident store
+    # POST /api/internal/incidents/promote-alert-signals
+    if route == "/api/internal/incidents/promote-alert-signals":
+        handle_promote_alert_signals(handler)
+        return
+
+    # Internal: Promote candidates from SQLite incident store
+    # POST /api/internal/incidents/promote-candidates
+    if route == "/api/internal/incidents/promote-candidates":
+        handle_promote_candidates(handler)
         return
 
     # Incident diagnosis loop one-pass
