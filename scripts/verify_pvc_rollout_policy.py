@@ -416,7 +416,16 @@ def main() -> int:
     
     print("Rendering Helm templates...")
     result = subprocess.run(
-        ["helm", "template", "k9b", str(chart_dir)],
+        [
+            "helm",
+            "template",
+            "k9b",
+            str(chart_dir),
+            "--set",
+            "backend.internalApi.existingSecret=k9b-internal-api",
+            "--set",
+            "scheduler.incidentPromotion.internalApi.existingSecret=k9b-internal-api",
+        ],
         capture_output=True,
         text=True,
     )
