@@ -213,12 +213,14 @@ def run_bounded_kubectl_logs(
 
     start_time = time.monotonic()
 
+    # Normalize env to satisfy run_bounded's dict[str, str] requirement
+    run_env: dict[str, str] = env or {}
     result = _run_bounded(
         argv,
         max_stdout_bytes=max_stdout_bytes,
         max_stderr_bytes=max_stderr_bytes,
         timeout_seconds=int(timeout_seconds),
-        env=env,  # type: ignore[arg-type]
+        env=run_env,
     )
 
     duration_seconds = time.monotonic() - start_time

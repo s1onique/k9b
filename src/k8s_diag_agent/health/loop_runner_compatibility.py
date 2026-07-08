@@ -12,11 +12,15 @@ These helpers do NOT import HealthLoopRunner.
 from __future__ import annotations
 
 from pathlib import Path
+from subprocess import Popen
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..external_analysis.alertmanager_discovery import AlertmanagerSourceInventory
     from ..external_analysis.vmalert_discovery import VmalertSourceInventory
+
+# Port-forward handle type: (subprocess handle, local port number)
+PortForwardHandle = tuple[Popen[str], int]
 
 
 class LogEventFn:
@@ -174,7 +178,7 @@ def start_alertmanager_port_forward_compat(
     namespace: str,
     service_name: str,
     context: str | None,
-) -> tuple[object, ...]:
+) -> PortForwardHandle:
     """Compatibility wrapper for starting Alertmanager port-forward.
 
     This is a delegator that wraps start_alertmanager_port_forward

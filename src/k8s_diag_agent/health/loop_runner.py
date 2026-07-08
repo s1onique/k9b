@@ -52,6 +52,7 @@ from .loop_retention import prune_external_analysis_history
 from .loop_run_config import HealthRunConfig
 from .loop_runner_collection import collect_snapshots_for_targets
 from .loop_runner_compatibility import (
+    PortForwardHandle,
     failure_metadata_field_compat,
     run_alertmanager_discovery_compat,
     run_alertmanager_snapshot_collection_compat,
@@ -300,7 +301,7 @@ class HealthLoopRunner:
             run_label=self.run_label,
             log_event=self._log_event,
             directories=directories,
-            start_port_forward=self._start_alertmanager_port_forward,  # type: ignore[arg-type]
+            start_port_forward=self._start_alertmanager_port_forward,
             stop_port_forward=self._stop_alertmanager_port_forward,
             incident_store=incident_store,
         )
@@ -336,7 +337,7 @@ class HealthLoopRunner:
         namespace: str,
         service_name: str,
         context: str | None,
-    ) -> tuple[object, ...]:
+    ) -> PortForwardHandle:
         """Start kubectl port-forward to an Alertmanager service."""
         return start_alertmanager_port_forward_compat(
             runner=self,

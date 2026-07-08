@@ -13,6 +13,10 @@ from .security import sanitize_log_entry
 
 DEFAULT_HEALTH_LOG = Path("runs") / "health" / "health.log"
 
+# Type alias for structured log field values - matches emit_structured_log's extra_metadata
+StructuredLogValue = str | int | float | bool | None
+StructuredLogFields = dict[str, StructuredLogValue]
+
 DEFAULT_LOG_STREAM: TextIO = sys.stdout
 
 

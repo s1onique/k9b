@@ -203,13 +203,13 @@ def log_kubectl_invocation(
     log_data = invocation.to_log_dict()
 
     # Emit structured log for runtime contract compliance (JSONL-only)
-    # Cast log_data to the expected type to satisfy mypy while preserving flexibility
+    # Pass log_data via metadata to avoid kwargs expansion with complex types like list[str]
     emit_structured_log(
         component="kubectl-invocation",
         message=message,
         run_label=_KUBECTL_RUN_LABEL,
         severity=level.upper(),
-        **log_data,  # type: ignore[arg-type]
+        metadata=log_data,
     )
 
     # Debug-only: emit standard logger for local debugging (NOT in scheduler runtime path)

@@ -46,8 +46,8 @@ class TestLogKubectlInvocationStructuredLogs:
                 run_id: str | None = None,
                 log_path: Path | None = None,
                 writer: TextIO | None = None,
-                metadata: dict | None = None,
-                **extra_metadata: dict,
+                metadata: dict[str, object] | None = None,
+                **extra_metadata: dict[str, object],
             ) -> dict[str, object]:
                 result: dict[str, object] = original_func(
                     component=component,
@@ -195,3 +195,60 @@ class TestLogKubectlInvocationStructuredLogs:
         payload = json.loads(lines[0])
         assert payload["event"] == "kubectl_invocation"
         assert payload["failed"] is True
+
+    def test_log_kubectl_invocation_output_shape_contract(self) -> None:
+        """Prove kubectl_invocation logs expose expected runtime fields from to_log_dict.
+
+        This test explicitly verifies the output shape contract - fields from
+        KubectlInvocation.to_log_dict() must appear in the JSON payload under
+        the metadata merge path (not kwargs expansion).
+
+        The metadata= parameter path was chosen over **kwargs expansion to avoid
+        mypy arg-type errors with complex types like list[str] in argv.
+        """
+        invocation = KubectlInvocation.from_command(
+            ["kubectl", "get", "pods", "-n", "monitoring", "-o", "json"],
+            timeout_seconds=30,
+            run_id="run-shape-test",
+        )
+        invocation.failed = False
+        invocation.returncode = 0
+        invocation.elapsed_seconds = 1.5
+        invocation.stdout_bytes = 4096
+        invocation.stderr_bytes = 0
+
+        writer = StringIO()
+        self._call_with_capture(
+            invocation,
+            "INFO",
+            "kubectl completed successfully",
+            writer,
+        )
+
+        output = writer.getvalue()
+        lines = [line for line in output.splitlines() if line.strip()]
+        assert len(lines) == 1, f"Expected 1 JSONL line, got {len(lines)}"
+
+        payload = json.loads(lines[0])
+
+        # Top-level fields from emit_structured_log contract
+        assert "timestamp" in payload
+        assert "component" in payload
+        assert payload["component"] == "kubectl-invocation"
+        assert "message" in payload
+        assert "severity" in payload
+        assert payload["severity"] == "INFO"
+        assert "run_label" in payload
+
+        # Fields from to_log_dict() via metadata= parameter
+        assert payload["event"] == "kubectl_invocation"
+        assert payload["failed"] is False
+        assert payload["returncode"] == 0
+        assert payload["elapsed_seconds"] == 1.5
+        assert payload["stdout_bytes"] == 4096
+        assert payload["stderr_bytes"] == 0
+        assert payload["namespace"] == "monitoring"
+        assert payload["output_format"] == "json"
+        assert payload["run_id"] == "run-shape-test"
+        assert "argv" in payload
+        assert payload["argv"] == ["kubectl", "get", "pods", "-n", "monitoring", "-o", "json"]
