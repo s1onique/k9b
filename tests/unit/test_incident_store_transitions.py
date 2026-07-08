@@ -52,14 +52,25 @@ class TestReadyForReviewTransition(unittest.TestCase):
     """Test ready_for_review state transition."""
 
     def test_ready_for_review_transition_updates_stored_incident(self) -> None:
-        """mark_ready_for_review must update the incident in the store."""
+        """mark_ready_for_review must update the incident in the store.
+
+        Requires COLLECTING_EVIDENCE state first per domain invariant:
+        open -> collecting_evidence -> ready_for_review
+        """
         store = make_store()
         candidate = make_candidate(name="crashloop-pod")
+        bundle_id = "bundle-123"
 
-        store.promote_candidates([candidate], TEST_TIME_1)
+        store.promote_candidates([candidate], TEST_TIME_1, snapshot_bundle_id=bundle_id)
         incidents = store.list_incidents()
         incident_id = incidents[0].incident_id
 
+        # First transition: OPEN -> COLLECTING_EVIDENCE
+        incident = store.mark_collecting_evidence(incident_id, bundle_id)
+        self.assertIsNotNone(incident)
+        self.assertEqual(incident.status, IncidentStatus.COLLECTING_EVIDENCE)
+
+        # Second transition: COLLECTING_EVIDENCE -> READY_FOR_REVIEW
         updated = store.mark_ready_for_review(incident_id, "review-456")
 
         self.assertIsNotNone(updated)
@@ -73,14 +84,25 @@ class TestReadyForReviewTransition(unittest.TestCase):
         self.assertEqual(stored.status, IncidentStatus.READY_FOR_REVIEW)
 
     def test_ready_for_review_without_packet_id(self) -> None:
-        """mark_ready_for_review must work without review_packet_id."""
+        """mark_ready_for_review must work without review_packet_id.
+
+        Requires COLLECTING_EVIDENCE state first per domain invariant:
+        open -> collecting_evidence -> ready_for_review
+        """
         store = make_store()
         candidate = make_candidate(name="crashloop-pod")
+        bundle_id = "bundle-123"
 
-        store.promote_candidates([candidate], TEST_TIME_1)
+        store.promote_candidates([candidate], TEST_TIME_1, snapshot_bundle_id=bundle_id)
         incidents = store.list_incidents()
         incident_id = incidents[0].incident_id
 
+        # First transition: OPEN -> COLLECTING_EVIDENCE
+        incident = store.mark_collecting_evidence(incident_id, bundle_id)
+        self.assertIsNotNone(incident)
+        self.assertEqual(incident.status, IncidentStatus.COLLECTING_EVIDENCE)
+
+        # Second transition: COLLECTING_EVIDENCE -> READY_FOR_REVIEW (without packet_id)
         updated = store.mark_ready_for_review(incident_id)
 
         self.assertIsNotNone(updated)

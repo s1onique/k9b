@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from incident_store_fixtures import TEST_TIME_1, TEST_TIME_2, make_candidate, make_store
 
-from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus
+from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus, ReviewPacketStatus
 from k8s_diag_agent.domain.incident_lifecycle import (
     DuplicateOfIncidentId,
     IncidentId,
@@ -153,13 +153,11 @@ class TestMarkReadyForReviewUsesTypedCore:
             assert result is not None
             assert result.status == IncidentStatus.OPEN
 
-    def test_mark_ready_for_review_from_open_allows_transition(self) -> None:
-        """OPEN -> READY_FOR_REVIEW: allows transition for legacy compatibility.
+    def test_mark_ready_for_review_from_open_rejects_transition(self) -> None:
+        """OPEN -> READY_FOR_REVIEW: rejects transition per new domain invariant.
 
-        The typed domain core now accepts OPEN -> READY_FOR_REVIEW transitions
-        to preserve backward compatibility with pre-ACT behavior. This allows
-        incidents to be marked ready even when they haven't gone through
-        COLLECTING_EVIDENCE.
+        The domain invariant now requires: open -> collecting_evidence -> ready_for_review.
+        Direct OPEN -> READY_FOR_REVIEW transitions are rejected to enforce this contract.
         """
         store = make_store()
         candidate = make_candidate(name="crashloop-pod")
@@ -169,14 +167,14 @@ class TestMarkReadyForReviewUsesTypedCore:
         incident = store.list_incidents()[0]
         assert incident.status == IncidentStatus.OPEN
 
-        # Mark ready for review from OPEN state (legacy path)
+        # Attempt to mark ready for review from OPEN state (should be rejected)
         result = store.mark_ready_for_review(incident.incident_id, "review-123")
 
-        # Transition succeeds
+        # Transition is rejected - status remains OPEN
         assert result is not None
-        assert result.status == IncidentStatus.READY_FOR_REVIEW
-        # Review packet is set when ID is provided
-        assert result.review_packet.id == "review-123"
+        assert result.status == IncidentStatus.OPEN
+        # Review packet should not be set when transition is rejected
+        assert result.review_packet.status != ReviewPacketStatus.AVAILABLE
 
 
 class TestSuppressUsesTypedCore:
