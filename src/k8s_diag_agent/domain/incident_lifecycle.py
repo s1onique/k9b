@@ -318,8 +318,8 @@ def mark_ready_for_review(
 ) -> TransitionResult:
     """Transition incident to ready_for_review status.
 
-    Valid from: open, collecting_evidence
-    Rejected from: ready_for_review, investigating, suppressed, duplicate, resolved
+    Valid from: collecting_evidence
+    Rejected from: open, ready_for_review, investigating, suppressed, duplicate, resolved
     """
     # Check terminal state
     if _is_terminal(incident):
@@ -328,8 +328,8 @@ def mark_ready_for_review(
             reason=_REJECT_TERMINAL_INCIDENT,
         )
 
-    # Valid from 'open' or 'collecting_evidence' (legacy compatibility)
-    if incident.status not in ("open", "collecting_evidence"):
+    # Only valid from 'collecting_evidence'
+    if incident.status != "collecting_evidence":
         return TransitionRejected(
             incident=incident,
             reason=_REJECT_INVALID_TRANSITION,
