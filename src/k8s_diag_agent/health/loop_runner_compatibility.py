@@ -174,7 +174,7 @@ def start_alertmanager_port_forward_compat(
     namespace: str,
     service_name: str,
     context: str | None,
-) -> tuple:
+) -> tuple[object, ...]:
     """Compatibility wrapper for starting Alertmanager port-forward.
 
     This is a delegator that wraps start_alertmanager_port_forward

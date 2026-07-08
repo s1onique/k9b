@@ -168,7 +168,7 @@ def _direct_list_incidents(
             # Invalid status value - return empty list
             return {"incidents": [], "total": 0}
 
-    def _list_incidents() -> tuple:
+    def _list_incidents() -> tuple[object, ...]:
         return store.list_incidents(status=status_filter)
 
     incidents = trace_incident_store_list(
@@ -176,7 +176,7 @@ def _direct_list_incidents(
         attributes={"k9b.item.kind": "incident"},
     )
 
-    def _project_incidents() -> list:
+    def _project_incidents() -> list[object]:
         return [build_incident_summary_payload(inc) for inc in incidents]
 
     projected = trace_incident_store_list(

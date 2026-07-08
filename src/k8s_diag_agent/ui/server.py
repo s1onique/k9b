@@ -10,6 +10,7 @@ from http.server import (
     ThreadingHTTPServer,  # noqa: E402, F401 (re-export for backward compatibility)
 )
 from pathlib import Path
+from typing import Any
 
 from ..external_analysis.artifact import ExternalAnalysisArtifact
 from ..structured_logging import emit_structured_log
@@ -167,7 +168,7 @@ def _single_flight_acquire(
     key: str,
     request_path: str = "",
     cache_key: str = "",
-) -> tuple[bool, tuple[object, list] | None, float]:
+) -> tuple[bool, tuple[object, list[Any]] | None, float]:
     """Compatibility wrapper that injects emit_structured_log for test mock compatibility.
 
     This preserves the old patch point k8s_diag_agent.ui.server.emit_structured_log

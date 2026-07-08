@@ -80,7 +80,7 @@ class AlertIncidentClassification:
     # Source information
     source_instance: str | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         """Convert to dict for serialization."""
         return {
             "class": self.class_.value,

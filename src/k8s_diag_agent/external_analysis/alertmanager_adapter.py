@@ -124,7 +124,7 @@ class AlertmanagerAdapter(ExternalAnalysisAdapter):
             error_summary="; ".join(snapshot.errors) if snapshot.errors else None,
         )
 
-    def _fetch_alerts(self) -> dict | list | None:
+    def _fetch_alerts(self) -> dict[str, object] | list[object] | None:
         """Fetch alerts from Alertmanager endpoint.
         
         Raises:

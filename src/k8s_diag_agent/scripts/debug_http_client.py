@@ -37,7 +37,7 @@ class HttpClient:
             headers_dict['Authorization'] = f'Bearer {self.token}'
         return urllib.request.Request(url, headers=headers_dict)
     
-    def fetch_json(self, url: str) -> tuple[dict | None, int, str | None]:
+    def fetch_json(self, url: str) -> tuple[dict[str, object] | None, int, str | None]:
         """Fetch JSON from URL using curl. Returns (data, status, error)."""
         import subprocess
         import tempfile

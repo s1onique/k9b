@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from k8s_diag_agent.collect.tool_reducer_protocol import (
+from .tool_reducer_protocol import (
     REDUCER_SCHEMA_VERSION,
     ToolOutputReducer,
     ToolReducedOutput,

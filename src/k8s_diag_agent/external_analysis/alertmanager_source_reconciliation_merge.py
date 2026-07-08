@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .alertmanager_discovery_models import AlertmanagerSource
+    from .alertmanager_discovery_models import AlertmanagerSource, AlertmanagerSourceAlias
 
 # Import models for runtime use
 from .alertmanager_discovery_dedup_helpers import (
@@ -50,7 +50,7 @@ def _is_ambiguous_operator_alias(
 def _build_alias_records(
     source: AlertmanagerSource,
     all_sources: list[AlertmanagerSource],
-) -> tuple:
+) -> tuple[AlertmanagerSourceAlias, ...]:
     """Build AlertmanagerSourceAlias records from source data.
 
     Args:
@@ -58,7 +58,7 @@ def _build_alias_records(
         all_sources: All sources in the inventory (for ambiguity checking)
 
     Returns:
-        Tuple of AlertmanagerSourceAlias records (empty if aliasing would be ambiguous)
+        Tuple of AlertmanagerSourceAlias records (empty tuple if aliasing would be ambiguous)
     """
     from .alertmanager_discovery_models import AlertmanagerSourceAlias
 

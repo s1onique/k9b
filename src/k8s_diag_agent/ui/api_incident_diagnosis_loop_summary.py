@@ -132,7 +132,7 @@ def _bound_string(value: str | None, max_length: int) -> str | None:
     return value[:max_length]
 
 
-def _extract_timestamp(event_data: dict | None, key: str) -> str | None:
+def _extract_timestamp(event_data: dict[str, object] | None, key: str) -> str | None:
     """Extract and format a timestamp from event data.
 
     Returns ISO format string or None if not present/invalid.
@@ -142,13 +142,18 @@ def _extract_timestamp(event_data: dict | None, key: str) -> str | None:
     value = event_data.get(key)
     if value is None:
         return None
-    dt = _parse_datetime(value)
-    if dt is None:
-        return None
-    return dt.isoformat()
+    # Only call _parse_datetime if value is a string or datetime
+    if isinstance(value, str):
+        dt = _parse_datetime(value)
+        if dt is None:
+            return None
+        return dt.isoformat()
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return None
 
 
-def _extract_int(event_data: dict | None, key: str) -> int | None:
+def _extract_int(event_data: dict[str, object] | None, key: str) -> int | None:
     """Extract an integer from event data.
 
     Returns None if not present or not a valid integer.
@@ -158,13 +163,10 @@ def _extract_int(event_data: dict | None, key: str) -> int | None:
     value = event_data.get(key)
     if value is None:
         return None
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        return None
+    return _safe_get_int(value)
 
 
-def _extract_reason(event_data: dict | None) -> str | None:
+def _extract_reason(event_data: dict[str, object] | None) -> str | None:
     """Extract unavailable_reason from event data.
 
     Returns bounded reason string or None if not present.
@@ -178,6 +180,26 @@ def _extract_reason(event_data: dict | None) -> str | None:
 
 
 # =============================================================================
+
+# =============================================================================
+# Type-guard helpers for dict access
+# =============================================================================
+
+
+def _safe_get_str(value: object) -> str | None:
+    """Safely extract a string from a dict value."""
+    if isinstance(value, str):
+        return value
+    return None
+
+
+def _safe_get_int(value: object) -> int | None:
+    """Safely extract an integer from a dict value."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
+
+
 # Main summary builder
 # =============================================================================
 

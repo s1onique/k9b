@@ -45,7 +45,7 @@ def _load_notifications_from_index(
     search_term: str,
     limit_int: int | None,
     page_int: int,
-) -> dict:
+) -> dict[str, object]:
     """Load notifications from ui-index.json (fast path).
     
     Returns dict with path_strategy="index_notifications_path" when successful.
@@ -90,7 +90,7 @@ def _load_notifications_from_index(
         filtered.append(entry)
     
     # Sort by timestamp (newest first) - use dict-based sort key
-    def _dict_sort_key(entry: dict) -> datetime:
+    def _dict_sort_key(entry: dict[str, object]) -> datetime:
         timestamp_str = entry.get("timestamp")
         if timestamp_str:
             # Try to parse the timestamp

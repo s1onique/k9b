@@ -395,7 +395,7 @@ def _make_error_response(
     incident_id: str,
     error: str,
     error_class: str | None = None,
-) -> dict:
+) -> dict[str, object]:
     """Create a bounded error response.
 
     Args:
@@ -406,7 +406,7 @@ def _make_error_response(
     Returns:
         Bounded error response dict
     """
-    result: dict = {
+    result: dict[str, object] = {
         "schema_version": "1.0",
         "incident_id": incident_id,
         "read_only": True,

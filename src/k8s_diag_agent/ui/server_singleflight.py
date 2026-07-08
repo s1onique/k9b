@@ -24,7 +24,7 @@ from typing import Any
 # Single-flight locks to prevent duplicate concurrent builds for the same cache key.
 # Key: cache key, Value: tuple of (event, result_holder list)
 # result_holder: list with one element to hold the result when ready.
-_single_flight_events: dict[str, tuple[object, list]] = {}
+_single_flight_events: dict[str, tuple[object, list[Any]]] = {}
 _single_flight_lock = Lock()
 
 
@@ -39,7 +39,7 @@ def _single_flight_acquire_impl(
     key: str,
     request_path: str = "",
     cache_key: str = "",
-) -> tuple[bool, tuple[object, list] | None, float]:
+) -> tuple[bool, tuple[object, list[Any]] | None, float]:
     """Internal implementation of single-flight acquire with emit injection.
 
     Returns:

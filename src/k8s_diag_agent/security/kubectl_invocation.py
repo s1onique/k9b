@@ -153,7 +153,7 @@ class KubectlInvocation:
             run_id=run_id,
         )
 
-    def to_log_dict(self) -> dict:
+    def to_log_dict(self) -> dict[str, object]:
         """Convert to dict for structured logging."""
         return {
             "event": "kubectl_invocation",
@@ -203,12 +203,13 @@ def log_kubectl_invocation(
     log_data = invocation.to_log_dict()
 
     # Emit structured log for runtime contract compliance (JSONL-only)
+    # Cast log_data to the expected type to satisfy mypy while preserving flexibility
     emit_structured_log(
         component="kubectl-invocation",
         message=message,
         run_label=_KUBECTL_RUN_LABEL,
         severity=level.upper(),
-        **log_data,
+        **log_data,  # type: ignore[arg-type]
     )
 
     # Debug-only: emit standard logger for local debugging (NOT in scheduler runtime path)

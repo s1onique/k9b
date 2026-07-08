@@ -195,9 +195,9 @@ def _build_operator_worklist_payload(
             if matched_deterministic:
                 continue
         existing_queue_ids = {
-            cast("str | None", item.get("id"))
+            item.get("id")
             for item in items
-            if cast("str | None", item.get("sourceType")) == _SOURCE_TYPE_PLANNER
+            if item.get("sourceType") == _SOURCE_TYPE_PLANNER
         }
         if item_id in existing_queue_ids:
             for existing in items:

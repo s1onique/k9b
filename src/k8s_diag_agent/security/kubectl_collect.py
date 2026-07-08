@@ -107,7 +107,7 @@ def collect_events_bounded(
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     max_events: int = 100,
     run_id: str | None = None,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """Collect events with bounded output using field selectors."""
     field_selectors: list[str] = []
 
@@ -169,7 +169,7 @@ def collect_pods_bounded(
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     max_pods: int = 500,
     run_id: str | None = None,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """Collect pods with bounded output using selectors."""
     cmd = ["kubectl", "get", "pods"]
 

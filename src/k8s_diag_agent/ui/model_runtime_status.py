@@ -67,7 +67,7 @@ class RuntimeStatusPayload:
     log_windows: LogWindows = field(default_factory=LogWindows)
     backend_pvc: PvcUsage | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         """Convert to dictionary for JSON serialization."""
         return {
             "log_windows": {

@@ -61,7 +61,7 @@ class BoundedKubectlLogsResult:
         """Decode stderr with replacement for invalid UTF-8."""
         return self.stderr.decode("utf-8", errors="replace")
 
-    def to_truncation_metadata(self) -> dict:
+    def to_truncation_metadata(self) -> dict[str, object]:
         """Convert to artifact-compatible truncation metadata."""
         return {
             "kind": "kubectl_output_truncated",
@@ -218,7 +218,7 @@ def run_bounded_kubectl_logs(
         max_stdout_bytes=max_stdout_bytes,
         max_stderr_bytes=max_stderr_bytes,
         timeout_seconds=int(timeout_seconds),
-        env=env or {},
+        env=env,  # type: ignore[arg-type]
     )
 
     duration_seconds = time.monotonic() - start_time
@@ -256,7 +256,7 @@ def collect_pod_logs_bounded(
     since_hours: int | None = None,
     previous: bool = False,
     timeout_seconds: float = DEFAULT_LOG_TIMEOUT_SECONDS,
-) -> tuple[str, dict]:
+) -> tuple[str, dict[str, object]]:
     """Collect pod logs with bounds and return (output, metadata).
 
     This is the primary entry point for health loop log collection.

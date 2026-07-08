@@ -300,7 +300,7 @@ class HealthLoopRunner:
             run_label=self.run_label,
             log_event=self._log_event,
             directories=directories,
-            start_port_forward=self._start_alertmanager_port_forward,
+            start_port_forward=self._start_alertmanager_port_forward,  # type: ignore[arg-type]
             stop_port_forward=self._stop_alertmanager_port_forward,
             incident_store=incident_store,
         )
@@ -336,7 +336,7 @@ class HealthLoopRunner:
         namespace: str,
         service_name: str,
         context: str | None,
-    ) -> tuple:
+    ) -> tuple[object, ...]:
         """Start kubectl port-forward to an Alertmanager service."""
         return start_alertmanager_port_forward_compat(
             runner=self,

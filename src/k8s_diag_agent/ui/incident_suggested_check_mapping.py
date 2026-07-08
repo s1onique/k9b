@@ -66,8 +66,8 @@ class MappingDecision:
 
 
 def classify_next_check_mapping_candidate(
-    next_check_candidate: dict,
-    incidents: list[dict],
+    next_check_candidate: dict[str, object],
+    incidents: list[dict[str, object]],
 ) -> MappingDecision:
     """Classify the mapping confidence for a next-check candidate to incidents.
 
@@ -96,7 +96,7 @@ def classify_next_check_mapping_candidate(
             confidence="safe",
             reason="Direct incident_id match found",
             required_fields=("incident_id",),
-            matched_incident_id=incident_id,
+            matched_incident_id=str(incident_id) if incident_id else None,
         )
 
     # Strategy 2: run_id + candidateId match
@@ -188,8 +188,8 @@ def classify_next_check_mapping_candidate(
 
 
 def explain_next_check_mapping_candidate(
-    next_check_candidate: dict,
-    incidents: list[dict],
+    next_check_candidate: dict[str, object],
+    incidents: list[dict[str, object]],
 ) -> str:
     """Return a human-readable explanation of the mapping decision.
 
@@ -224,7 +224,7 @@ def explain_next_check_mapping_candidate(
 
 
 def _has_direct_incident_id_match(
-    candidate: dict, incidents: list[dict]
+    candidate: dict[str, object], incidents: list[dict[str, object]]
 ) -> bool:
     """Check if candidate has a direct incident_id field."""
     incident_id = candidate.get("incident_id") or candidate.get("incidentId")
@@ -234,7 +234,7 @@ def _has_direct_incident_id_match(
 
 
 def _count_run_and_candidate_id_matches(
-    candidate: dict, incidents: list[dict]
+    candidate: dict[str, object], incidents: list[dict[str, object]]
 ) -> int | None:
     """Count incidents matching run_id + candidateId.
 
@@ -258,7 +258,7 @@ def _count_run_and_candidate_id_matches(
     return count
 
 
-def _get_run_id_from_candidate(candidate: dict) -> str | None:
+def _get_run_id_from_candidate(candidate: dict[str, object]) -> str | None:
     """Extract run_id from candidate (from filename or explicit field)."""
     # Explicit field
     if candidate.get("run_id") or candidate.get("runId"):
@@ -266,7 +266,7 @@ def _get_run_id_from_candidate(candidate: dict) -> str | None:
 
     # From artifact path: runs/health/external-analysis/{run_id}-next-check-*.json
     artifact_path = candidate.get("artifactPath") or candidate.get("artifact_path")
-    if artifact_path and "-next-check" in artifact_path:
+    if artifact_path and isinstance(artifact_path, str) and "-next-check" in artifact_path:
         # Extract run_id from filename prefix
         filename = artifact_path.split("/")[-1]
         for suffix in [
@@ -281,14 +281,14 @@ def _get_run_id_from_candidate(candidate: dict) -> str | None:
     return None
 
 
-def _incident_has_signal_run_id(incident: dict, run_id: str) -> bool:
+def _incident_has_signal_run_id(incident: dict[str, object], run_id: str) -> bool:
     """Check if incident has a signal with matching run_id."""
     signals = incident.get("signals", [])
     return any(s.get("run_id") == run_id for s in signals)
 
 
 def _find_incident_by_run_and_candidate(
-    candidate: dict, incidents: list[dict]
+    candidate: dict[str, object], incidents: list[dict[str, object]]
 ) -> str | None:
     """Find incident by run_id + candidate_id match."""
     run_id = _get_run_id_from_candidate(candidate)
@@ -308,7 +308,7 @@ def _find_incident_by_run_and_candidate(
 
 
 def _has_complete_entity_identity_match(
-    candidate: dict, incidents: list[dict]
+    candidate: dict[str, object], incidents: list[dict[str, object]]
 ) -> tuple[list[str], bool] | None:
     """Check if candidate has complete entity identity fields matching incident(s).
 
@@ -356,7 +356,7 @@ def _has_complete_entity_identity_match(
     return (matches, is_complete) if matches else None
 
 
-def _has_bundle_match(candidate: dict, incidents: list[dict]) -> bool:
+def _has_bundle_match(candidate: dict[str, object], incidents: list[dict[str, object]]) -> bool:
     """Check if candidate matches incident only via bundle_id."""
     bundle_id = candidate.get("latest_snapshot_bundle_id") or candidate.get(
         "snapshot_bundle_id"
@@ -371,7 +371,7 @@ def _has_bundle_match(candidate: dict, incidents: list[dict]) -> bool:
     return len(matching) > 0
 
 
-def _has_text_match_only(candidate: dict) -> bool:
+def _has_text_match_only(candidate: dict[str, object]) -> bool:
     """Check if only text fields are available for matching."""
     text_fields = [
         "description",
@@ -386,7 +386,7 @@ def _has_text_match_only(candidate: dict) -> bool:
     )
 
 
-def _has_structured_identity(candidate: dict) -> bool:
+def _has_structured_identity(candidate: dict[str, object]) -> bool:
     """Check if candidate has structured identity fields."""
     return any(
         [

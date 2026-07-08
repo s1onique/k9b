@@ -36,10 +36,10 @@ class HealthLoopResult:
     def __init__(
         self,
         status: HealthLoopStatus,
-        assessments: list | None = None,
-        triggers: list | None = None,
-        drilldowns: list | None = None,
-        external_artifacts: list | None = None,
+        assessments: list[object] | None = None,
+        triggers: list[object] | None = None,
+        drilldowns: list[object] | None = None,
+        external_artifacts: list[object] | None = None,
         error: str | None = None,
     ) -> None:
         self.status = status

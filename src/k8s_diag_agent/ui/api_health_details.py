@@ -94,14 +94,14 @@ class HealthEvaluation:
     """
     healthy: bool
     primary_failure_class: str = ""
-    dependencies: list[dict] = field(default_factory=list)
+    dependencies: list[dict[str, object]] = field(default_factory=list)
     reason_code: str = ""
     phase: str = ""
     # Internal state tracking
     _route_exception: str | None = None
     _route_returned_500: bool = False
     
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         """Convert to dict for JSON serialization."""
         return {
             "healthy": self.healthy,
@@ -204,7 +204,7 @@ def safe_evaluate_backend_health() -> HealthEvaluation:
 evaluate_backend_health = safe_evaluate_backend_health
 
 
-def _get_reason_code_for_failure(primary_failure: str, dependencies: list[dict]) -> str:
+def _get_reason_code_for_failure(primary_failure: str, dependencies: list[dict[str, object]]) -> str:
     """Get the reason code for the primary failure."""
     if not primary_failure:
         return HealthReasonCode.HEALTH_ROUTE_HEALTHY
@@ -233,7 +233,7 @@ def _get_reason_code_for_failure(primary_failure: str, dependencies: list[dict])
     return "unknown"
 
 
-def _get_phase_for_failure(primary_failure: str, dependencies: list[dict]) -> str:
+def _get_phase_for_failure(primary_failure: str, dependencies: list[dict[str, object]]) -> str:
     """Get the phase (which component failed) for the primary failure."""
     if not primary_failure:
         return "healthy"
@@ -241,7 +241,7 @@ def _get_phase_for_failure(primary_failure: str, dependencies: list[dict]) -> st
     # Find the dependency with the failure
     for dep in dependencies:
         if dep.get("failure_class") == primary_failure:
-            phase: str = dep.get("phase", "unknown")
+            phase: str = str(dep.get("phase", "unknown"))
             return phase
     
     # Map failure class to default phase
@@ -267,7 +267,7 @@ def _get_phase_for_failure(primary_failure: str, dependencies: list[dict]) -> st
     return "unknown"
 
 
-def _get_runtime_health_status() -> dict:
+def _get_runtime_health_status() -> dict[str, object]:
     """Get the runtime health status from the health loop.
     
     Returns:
@@ -284,7 +284,7 @@ def _get_runtime_health_status() -> dict:
         return {"healthy": True, "error": None}
 
 
-def _get_provider_health_status() -> dict:
+def _get_provider_health_status() -> dict[str, object]:
     """Get the diagnosis provider health status.
     
     Returns:
@@ -309,7 +309,7 @@ def _get_provider_health_status() -> dict:
         }
 
 
-def _build_health_dependencies() -> list[dict]:
+def _build_health_dependencies() -> list[dict[str, object]]:
     """Build the health dependencies list.
     
     This function checks internal health dependencies and returns a safe,
@@ -319,7 +319,7 @@ def _build_health_dependencies() -> list[dict]:
         List of dependency status dicts with bounded fields only.
         reason_code is enum-only - no raw error strings.
     """
-    dependencies = []
+    dependencies: list[dict[str, object]] = []
     
     # Check runtime health
     runtime_status = _get_runtime_health_status()
@@ -328,7 +328,7 @@ def _build_health_dependencies() -> list[dict]:
         if runtime_status["healthy"]
         else HealthReasonCode.RUNTIME_ERROR_PRESENT
     )
-    runtime_dep = {
+    runtime_dep: dict[str, object] = {
         "dependency_name": "health_loop_runtime",
         "status": "healthy" if runtime_status["healthy"] else "unhealthy",
         "failure_class": HealthDependencyFailure.RUNTIME_ERROR if runtime_status["error"] else "",
@@ -364,9 +364,9 @@ def _build_health_dependencies() -> list[dict]:
         provider_reason_code = HealthReasonCode.PROVIDER_UNKNOWN_ERROR
     else:
         # No error_class - classify the raw error
-        provider_reason_code = _classify_provider_reason_code(raw_error)
+        provider_reason_code = _classify_provider_reason_code(str(raw_error) if raw_error is not None else None)
     
-    provider_dep = {
+    provider_dep: dict[str, object] = {
         "dependency_name": "diagnosis_provider",
         "status": "available" if provider_status["available"] else "unavailable",
         "phase": provider_status.get("phase") or "unknown",
@@ -407,7 +407,7 @@ def _classify_provider_reason_code(error: str | None) -> str:
         return HealthReasonCode.PROVIDER_UNKNOWN_ERROR
 
 
-def _classify_primary_failure(dependencies: list[dict]) -> str:
+def _classify_primary_failure(dependencies: list[dict[str, object]]) -> str:
     """Classify the primary failure from dependency list.
     
     Args:
@@ -455,8 +455,8 @@ def handle_health_details(handler: JsonResponseSender) -> None:
     # Always evaluate fresh - no stale cached state
     evaluation = safe_evaluate_backend_health()
     
-    deps: list[dict] = list(evaluation.dependencies)  # Copy to avoid mutation
-    response: dict = {
+    deps: list[dict[str, object]] = list(evaluation.dependencies)  # Copy to avoid mutation
+    response: dict[str, object] = {
         "timestamp": datetime.now(UTC).isoformat(),
         "healthy": evaluation.healthy,
         "primary_failure_class": evaluation.primary_failure_class,

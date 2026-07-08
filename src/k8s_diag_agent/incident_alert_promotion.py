@@ -73,7 +73,7 @@ class AlertIncidentPromotionResult:
     error_count: int = 0
     errors: tuple[str, ...] = field(default_factory=tuple)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         """Convert to dict for serialization."""
         return {
             "scanned_signal_count": self.scanned_signal_count,

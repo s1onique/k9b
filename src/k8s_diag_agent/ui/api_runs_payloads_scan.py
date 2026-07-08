@@ -247,7 +247,7 @@ def build_runs_list_scan_stage(
         row_start = time.perf_counter()
         review_download_path: str | None = None
         if review_status in ("unreviewed", "partially-reviewed"):
-            run_id_str = cast(str, run_id)
+            run_id_str = run_id
             if review_artifact_exists.get(run_id_str, False):
                 run_scoped_path = diagnostic_packs_dir / run_id_str / "next_check_usefulness_review.json"
                 review_download_path = str(run_scoped_path.relative_to(runs_dir))

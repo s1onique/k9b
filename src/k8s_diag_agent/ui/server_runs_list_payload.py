@@ -235,7 +235,7 @@ def build_runs_list_payload(
             "serialize_ms": round(cast(float, timings.get("serialize_ms", 0)), 2),
             "review_files_count": timings.get("review_files_count", 0),
             "execution_files_scanned": timings.get("execution_files_scanned", 0),
-            "runs_count": len(cast(list, payload.get("runs", []))),
+            "runs_count": len(cast("list[object]", payload.get("runs", []))),
             "cache_hit": False,
             "limit": limit,
             "include_expensive": include_expensive,

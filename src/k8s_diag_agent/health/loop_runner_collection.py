@@ -12,6 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..collect.cluster_snapshot import ClusterSnapshot
+from .baseline import BaselinePolicy
 from .loop_history import _format_snapshot_filename, _write_json
 from .loop_types import HealthSnapshotRecord, HealthTarget
 
@@ -21,7 +22,7 @@ def collect_snapshots_for_targets(
     available_contexts: set[str],
     run_id: str,
     snapshot_collector: Callable[[str], ClusterSnapshot],
-    baseline_for_target_fn: Callable[[HealthTarget], tuple],
+    baseline_for_target_fn: Callable[[HealthTarget], tuple[BaselinePolicy, Path | None]],
     log_event_fn: Callable[..., None] | None,
     directory: Path,
 ) -> list[HealthSnapshotRecord]:

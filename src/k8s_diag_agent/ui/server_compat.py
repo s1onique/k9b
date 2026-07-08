@@ -81,7 +81,7 @@ def _single_flight_acquire_with_emit(
     key: str,
     request_path: str = "",
     cache_key: str = "",
-) -> tuple[bool, tuple[object, list] | None, float]:
+) -> tuple[bool, tuple[object, list[Any]] | None, float]:
     """Single-flight acquire implementation helper.
 
     This function accepts an injectable emit_fn to preserve test mock
