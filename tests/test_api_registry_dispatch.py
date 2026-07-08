@@ -112,12 +112,13 @@ class TestRouteMatching:
 
     def test_sample_template_routes_match(self) -> None:
         """Sample templated routes should match and extract params."""
+        # Alertmanager source action is now body-based: sourceId lives in JSON,
+        # so it is intentionally absent from path-template sample tests.
         test_cases = [
             # (method, sample_path, expected_template_path, expected_params)
             ("GET", "/api/incidents/inc-123", "/api/incidents/{incident_id}", {"incident_id": "inc-123"}),
             ("GET", "/api/incidents/inc-abc/automatic-diagnosis-review/handoff", "/api/incidents/{incident_id}/automatic-diagnosis-review/handoff", {"incident_id": "inc-abc"}),
             ("POST", "/api/incidents/test-inc/diagnosis-loop/one-pass", "/api/incidents/{incident_id}/diagnosis-loop/one-pass", {"incident_id": "test-inc"}),
-            ("POST", "/api/runs/run-1/alertmanager-sources/src%2F1/action", "/api/runs/{run_id}/alertmanager-sources/{source_id}/action", {"run_id": "run-1", "source_id": "src%2F1"}),
         ]
 
         for method, sample_path, template_path, expected_params in test_cases:
@@ -128,10 +129,10 @@ class TestRouteMatching:
 
     def test_no_path_param_leakage(self) -> None:
         """Path params should be correctly extracted from sample paths."""
+        # Alertmanager source action is body-based: sourceId lives in JSON, not path.
         test_cases = [
             ("GET", "/api/incidents/inc-123", {"incident_id": "inc-123"}),
             ("POST", "/api/incidents/test-inc/diagnosis-loop/one-pass", {"incident_id": "test-inc"}),
-            ("POST", "/api/runs/run-abc/alertmanager-sources/src%2Fdef/action", {"run_id": "run-abc", "source_id": "src%2Fdef"}),
         ]
 
         for method, sample_path, expected_params in test_cases:

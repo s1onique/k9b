@@ -293,9 +293,11 @@ class RunApiServerTests(unittest.TestCase):
         )
         try:
             # Test promote action (will fail at source lookup stage, but action validation should pass)
+            # Note: Now uses body-based sourceId instead of path-based {source_id}
             req = urllib.request.Request(
-                f"http://127.0.0.1:{server.server_address[1]}/api/runs/{run_id}/alertmanager-sources/src-001/action",
+                f"http://127.0.0.1:{server.server_address[1]}/api/runs/{run_id}/alertmanager-sources/action",
                 data=json.dumps({
+                    "sourceId": "src-001",
                     "action": "promote",
                     "clusterLabel": "cluster-a",
                     "reason": "Permanent monitoring source",
@@ -328,9 +330,11 @@ class RunApiServerTests(unittest.TestCase):
         )
         try:
             # Test invalid action
+            # Note: Now uses body-based sourceId instead of path-based {source_id}
             req = urllib.request.Request(
-                f"http://127.0.0.1:{server.server_address[1]}/api/runs/{run_id}/alertmanager-sources/src-001/action",
+                f"http://127.0.0.1:{server.server_address[1]}/api/runs/{run_id}/alertmanager-sources/action",
                 data=json.dumps({
+                    "sourceId": "src-001",
                     "action": "invalid",
                     "clusterLabel": "cluster-a",
                 }).encode("utf-8"),
@@ -360,9 +364,11 @@ class RunApiServerTests(unittest.TestCase):
         )
         try:
             # Test missing clusterLabel
+            # Note: Now uses body-based sourceId instead of path-based {source_id}
             req = urllib.request.Request(
-                f"http://127.0.0.1:{server.server_address[1]}/api/runs/{run_id}/alertmanager-sources/src-001/action",
+                f"http://127.0.0.1:{server.server_address[1]}/api/runs/{run_id}/alertmanager-sources/action",
                 data=json.dumps({
+                    "sourceId": "src-001",
                     "action": "promote",
                 }).encode("utf-8"),
                 method="POST",
