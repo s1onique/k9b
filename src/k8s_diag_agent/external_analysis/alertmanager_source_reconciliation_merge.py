@@ -117,9 +117,6 @@ def reconcile_alertmanager_sources(
     """
     from dataclasses import replace as _replace
 
-    from .alertmanager_discovery_models import (
-        AlertmanagerSourceAlias,
-    )
 
     if not inventory.sources:
         return inventory
