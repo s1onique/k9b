@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+import tempfile
 import textwrap
 
 import pytest
@@ -189,6 +191,140 @@ class TestRunBounded:
         assert result.returncode == 0
         # stderr should be capped at max_stderr
         assert len(result.stderr) <= max_stderr + 50
+
+    def test_stderr_truncated_while_stdout_delayed(self) -> None:
+        """Stderr exceeding limit while stdout is slow should not block on stdout."""
+        max_stdout = 1024
+        max_stderr = 128
+
+        # Child writes stderr past limit first, then stdout slowly
+        script = textwrap.dedent("""
+            import sys
+            import time
+            # Write large stderr immediately
+            sys.stderr.write('e' * 1024)
+            sys.stderr.flush()
+            # Delay before stdout - if parent blocks on stdout.read(), this deadlocks
+            time.sleep(2)
+            sys.stdout.write('slow output')
+        """)
+
+        result = run_bounded(
+            command=[PYTHON, "-c", script],
+            max_stdout_bytes=max_stdout,
+            max_stderr_bytes=max_stderr,
+            timeout_seconds=5,
+            env={},
+        )
+
+        assert result.returncode == 0
+        # stderr should be truncated
+        assert len(result.stderr) <= max_stderr + 50
+
+    def test_stdout_truncated_while_stderr_delayed(self) -> None:
+        """Stdout exceeding limit while stderr is slow should not block on stderr."""
+        max_stdout = 64
+        max_stderr = 1024
+
+        # Child writes stdout past limit first, then stderr slowly
+        script = textwrap.dedent("""
+            import sys
+            import time
+            # Write large stdout immediately
+            sys.stdout.write('x' * 256)
+            sys.stdout.flush()
+            # Delay before stderr - should still drain properly
+            time.sleep(1)
+            sys.stderr.write('slow error')
+        """)
+
+        # This should raise due to stdout limit
+        with pytest.raises(KubectlOutputTooLargeError):
+            run_bounded(
+                command=[PYTHON, "-c", script],
+                max_stdout_bytes=max_stdout,
+                max_stderr_bytes=max_stderr,
+                timeout_seconds=5,
+                env={},
+            )
+
+    def test_child_never_closes_stdout_stderr(self) -> None:
+        """Child that never explicitly closes pipes should still complete."""
+        max_stdout = 1024
+        max_stderr = 256
+
+        # Child uses sys.stdout/sys.stderr without explicit close
+        script = textwrap.dedent("""
+            import sys
+            # Write output without explicit close
+            sys.stdout.write('hello')
+            sys.stderr.write('error')
+            # Exit without flush/close - relies on atexit
+        """)
+
+        result = run_bounded(
+            command=[PYTHON, "-c", script],
+            max_stdout_bytes=max_stdout,
+            max_stderr_bytes=max_stderr,
+            timeout_seconds=5,
+            env={},
+        )
+
+        assert result.returncode == 0
+        assert b"hello" in result.stdout
+
+    def test_timeout_kills_process_group(self) -> None:
+        """Timeout should kill entire process group, leaving no zombie processes."""
+        # Script writes child PID to temp file, then sleeps
+        script = textwrap.dedent("""
+            import subprocess
+            import time
+            import sys
+            import os
+
+            # Create child process that will outlive parent
+            proc = subprocess.Popen(['sleep', '60'])
+
+            # Write PID to temp file so parent can verify kill
+            with open(sys.argv[1], 'w') as f:
+                f.write(str(proc.pid))
+
+            # Keep parent alive while we wait
+            time.sleep(60)
+        """)
+
+        # Create temp file for child PID
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.pid', delete=False) as f:
+            pid_file = f.name
+
+        try:
+            with pytest.raises(subprocess.TimeoutExpired):
+                run_bounded(
+                    command=[PYTHON, "-c", script, pid_file],
+                    max_stdout_bytes=MAX_STDOUT_BYTES,
+                    max_stderr_bytes=MAX_STDERR_BYTES,
+                    timeout_seconds=1,
+                    env={},
+                )
+
+            # Read child PID from temp file
+            with open(pid_file) as f:
+                child_pid = int(f.read().strip())
+
+            # Give time for cleanup
+            import time as time_module
+            time_module.sleep(0.5)
+
+            # Verify child process was killed (ProcessLookupError expected)
+            with pytest.raises(ProcessLookupError):
+                os.kill(child_pid, 0)
+
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(pid_file)
+            except OSError:
+                pass
 
 
 class TestMaxConstants:
