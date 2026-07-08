@@ -428,7 +428,7 @@ describe("performAlertmanagerSourceAction", () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
-        "/api/runs/run-456/alertmanager-sources/src-123/action": mockResponse({
+        "/api/runs/run-456/alertmanager-sources/action": mockResponse({
           status: "success",
           sourceId: "src-123",
           action: "promote",
@@ -441,16 +441,21 @@ describe("performAlertmanagerSourceAction", () => {
     );
     expect(result.sourceId).toBe("src-123");
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/runs/run-456/alertmanager-sources/src-123/action",
+      "/api/runs/run-456/alertmanager-sources/action",
       expect.objectContaining({ method: "POST" })
     );
+    // Verify sourceId is in body, not URL path
+    const call = vi.mocked(globalThis.fetch).mock.calls[0];
+    const body = JSON.parse((call[1] as { body?: string }).body as string);
+    expect(body.sourceId).toBe("src-123");
+    expect(body.action).toBe("promote");
   });
 
   test("builds correct run-scoped URL for disable action", async () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
-        "/api/runs/run-789/alertmanager-sources/src-456/action": mockResponse({
+        "/api/runs/run-789/alertmanager-sources/action": mockResponse({
           status: "success",
           sourceId: "src-456",
           action: "disable",
@@ -462,16 +467,21 @@ describe("performAlertmanagerSourceAction", () => {
       "run-789"
     );
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/runs/run-789/alertmanager-sources/src-456/action",
+      "/api/runs/run-789/alertmanager-sources/action",
       expect.any(Object)
     );
+    // Verify sourceId is in body
+    const call = vi.mocked(globalThis.fetch).mock.calls[0];
+    const body = JSON.parse((call[1] as { body?: string }).body as string);
+    expect(body.sourceId).toBe("src-456");
+    expect(body.action).toBe("disable");
   });
 
   test("omits reason field from body when not provided", async () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
-        "/api/runs/run-456/alertmanager-sources/src-123/action": mockResponse({
+        "/api/runs/run-456/alertmanager-sources/action": mockResponse({
           status: "success",
         }, 200),
       })
@@ -489,7 +499,7 @@ describe("performAlertmanagerSourceAction", () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
-        "/api/runs/run-456/alertmanager-sources/src-123/action": mockResponse({
+        "/api/runs/run-456/alertmanager-sources/action": mockResponse({
           status: "success",
         }, 200),
       })
@@ -507,7 +517,7 @@ describe("performAlertmanagerSourceAction", () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
-        "/api/runs/run-456/alertmanager-sources/src-123/action": mockResponse({
+        "/api/runs/run-456/alertmanager-sources/action": mockResponse({
           status: "success",
         }, 200),
       })
@@ -525,9 +535,13 @@ describe("performAlertmanagerSourceAction", () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
-        "/api/runs/run-456/alertmanager-sources/src-123/action": mockResponse(
-          { error: "Action not allowed" },
-          403
+        "/api/runs/run-456/alertmanager-sources/action": new Response(
+          JSON.stringify({ error: "Action not allowed" }),
+          {
+            status: 403,
+            statusText: "Forbidden",
+            headers: { "Content-Type": "application/json" },
+          }
         ),
       })
     );
@@ -539,11 +553,14 @@ describe("performAlertmanagerSourceAction", () => {
     ).rejects.toThrow("Action not allowed");
   });
 
-  test("uses statusText when body is null and no error field", async () => {
+  test("uses HTTP status and empty body when body is null and no error field", async () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
-        "/api/runs/run-456/alertmanager-sources/src-123/action": mockResponse(null, 500, "Internal Server Error"),
+        "/api/runs/run-456/alertmanager-sources/action": new Response(null, {
+          status: 500,
+          statusText: "Internal Server Error",
+        }),
       })
     );
     await expect(
@@ -551,26 +568,31 @@ describe("performAlertmanagerSourceAction", () => {
         { sourceId: "src-123", clusterLabel: "cluster-a", action: "promote" },
         "run-456"
       )
-    ).rejects.toThrow("Request failed with status 500");
+    ).rejects.toThrow("HTTP 500:");
   });
 
-  test("encodes sourceId with special characters", async () => {
+  test("sends sourceId with special characters in request body", async () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
-        "/api/runs/run-456/alertmanager-sources/src%2F123/action": mockResponse({
+        "/api/runs/run-456/alertmanager-sources/action": mockResponse({
           status: "success",
         }, 200),
       })
     );
+    const sourceId = "crd:monitoring.coreos.com/v1/PrometheusRule/prometheus-kube-prometheus-alertmanager";
     await performAlertmanagerSourceAction(
-      { sourceId: "src/123", clusterLabel: "cluster-a", action: "promote" },
+      { sourceId, clusterLabel: "cluster-a", action: "promote" },
       "run-456"
     );
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
-      "/api/runs/run-456/alertmanager-sources/src%2F123/action",
+      "/api/runs/run-456/alertmanager-sources/action",
       expect.any(Object)
     );
+    // Verify sourceId is in body, not URL
+    const call = vi.mocked(globalThis.fetch).mock.calls[0];
+    const body = JSON.parse((call[1] as { body?: string }).body as string);
+    expect(body.sourceId).toBe(sourceId);
   });
 });
 
@@ -583,7 +605,7 @@ describe("promoteAlertmanagerSource", () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
-        "/api/runs/run-999/alertmanager-sources/src-123/action": mockResponse({
+        "/api/runs/run-999/alertmanager-sources/action": mockResponse({
           status: "success",
           action: "promote",
         }, 200),
@@ -592,6 +614,10 @@ describe("promoteAlertmanagerSource", () => {
     await promoteAlertmanagerSource(
       { sourceId: "src-123", clusterLabel: "cluster-a" },
       "run-999"
+    );
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/runs/run-999/alertmanager-sources/action",
+      expect.objectContaining({ method: "POST" })
     );
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
     const body = JSON.parse((call[1] as { body?: string }).body as string);
@@ -608,7 +634,7 @@ describe("stopTrackingAlertmanagerSource", () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
-        "/api/runs/run-111/alertmanager-sources/src-789/action": mockResponse({
+        "/api/runs/run-111/alertmanager-sources/action": mockResponse({
           status: "success",
           action: "disable",
         }, 200),
@@ -617,6 +643,10 @@ describe("stopTrackingAlertmanagerSource", () => {
     await stopTrackingAlertmanagerSource(
       { sourceId: "src-789", clusterLabel: "cluster-b" },
       "run-111"
+    );
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/api/runs/run-111/alertmanager-sources/action",
+      expect.objectContaining({ method: "POST" })
     );
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
     const body = JSON.parse((call[1] as { body?: string }).body as string);
