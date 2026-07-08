@@ -130,6 +130,14 @@ spec:
                   name: {{ .Values.scheduler.smallProvider.existingSecret }}
                   key: {{ .Values.scheduler.smallProvider.apiKeyKey }}
             {{- end }}
+            # Content index producer: scheduler maintains SQLite content index for backend read-path
+            - name: K9B_CONTENT_INDEX_ENABLED
+              value: {{ .Values.scheduler.contentIndex.enabled | quote }}
+            {{- $contentIndexDbPath := .Values.scheduler.contentIndex.dbPath | default .Values.backend.contentIndex.dbPath }}
+            - name: K9B_CONTENT_INDEX_DB_PATH
+              value: {{ $contentIndexDbPath | quote }}
+            - name: K9B_CONTENT_INDEX_UPDATE_MODE
+              value: {{ .Values.scheduler.contentIndex.updateMode | quote }}
             # Process role: scheduler promotes incidents via backend API (not direct SQLite)
             - name: K9B_PROCESS_ROLE
               value: "scheduler"

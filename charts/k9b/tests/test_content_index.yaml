@@ -1,0 +1,83 @@
+# Helm test assertions for k9b content-index configuration.
+# Tests content-index env var injection into backend and scheduler containers.
+suite: content index - deployment configuration
+
+templates:
+  - deployment.yaml
+  - deployment-scheduler.yaml
+
+set:
+  backend.internalApi.existingSecret: k9b-internal-api
+  scheduler.incidentPromotion.internalApi.existingSecret: k9b-internal-api
+
+tests:
+  # ===== Backend content-index reader env =====
+
+  - it: backend renders content-index reader env
+    template: deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K9B_CONTENT_INDEX_ENABLED
+            value: "true"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K9B_CONTENT_INDEX_DB_PATH
+            value: "/app/runs/content-index.sqlite"
+          any: true
+
+  # ===== Scheduler content-index producer env =====
+
+  - it: scheduler renders content-index producer env
+    template: deployment-scheduler.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K9B_CONTENT_INDEX_ENABLED
+            value: "true"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K9B_CONTENT_INDEX_DB_PATH
+            value: "/app/runs/content-index.sqlite"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K9B_CONTENT_INDEX_UPDATE_MODE
+            value: "update"
+          any: true
+
+  # ===== Scheduler inherits backend content-index db path by default =====
+
+  - it: scheduler inherits backend content-index db path by default
+    template: deployment-scheduler.yaml
+    set:
+      backend.contentIndex.dbPath: /custom/content-index.sqlite
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K9B_CONTENT_INDEX_DB_PATH
+            value: "/custom/content-index.sqlite"
+          any: true
+
+  # ===== Scheduler can override backend path explicitly =====
+
+  - it: scheduler uses explicit dbPath when set
+    template: deployment-scheduler.yaml
+    set:
+      backend.contentIndex.dbPath: /backend/index.sqlite
+      scheduler.contentIndex.dbPath: /scheduler/index.sqlite
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K9B_CONTENT_INDEX_DB_PATH
+            value: "/scheduler/index.sqlite"
+          any: true

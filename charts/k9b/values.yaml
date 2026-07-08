@@ -42,7 +42,7 @@ backend:
     enabled: true
     # dbPath: Path to the SQLite content index database file.
     # Must be readable by the backend pod (mounted at /app/runs by default).
-    dbPath: /app/runs/content-index.sqlite
+    dbPath: ""
   incidentStore:
     # backend: Incident store backend type (memory|file|sqlite).
     # sqlite is recommended for production with scheduler deployment.
@@ -80,7 +80,7 @@ backend:
     # Should match the key used when creating the Secret.
     passwordHashKey: K9B_ADMIN_PASSWORD_HASH
     # adminPasswordHash: Direct password hash value (local/dev convenience only).
-    # WARNING: Do NOT commit real password hashes to values.yaml or version control.
+    # WARNING: Do not commit real password hashes to values.yaml or version control.
     # Use existingSecret for production deployments.
     # The hash format is PBKDF2-HMAC-SHA256 (e.g., $pbkdf2-sha256$600000$salt$encoded_hash).
     adminPasswordHash: ""
@@ -128,6 +128,20 @@ scheduler:
   #   --config, --every-seconds, --max-runs, --once, --quiet
   # Do NOT pass --unsafe-bind to scheduler; that flag belongs to the UI/API server.
   args: []
+  # contentIndex: Content index producer configuration.
+  # The scheduler produces and maintains the SQLite content index for backend read-path.
+  # This is separate from the backend's read-path configuration.
+  contentIndex:
+    # enabled: Enable content index producer (default: true).
+    # When enabled, the scheduler updates /app/runs/content-index.sqlite after each run.
+    enabled: true
+    # dbPath: Optional scheduler override. Empty means inherit backend.contentIndex.dbPath.
+    dbPath: ""
+    # updateMode: Update mode (update|rebuild_if_missing|rebuild).
+    # - update: Incremental update (default)
+    # - rebuild_if_missing: Rebuild only if DB is missing or invalid
+    # - rebuild: Full rebuild every time
+    updateMode: update
   # incidentPromotion: Incident promotion configuration.
   # When backend uses SQLite store (incidentStore.backend=sqlite), scheduler must
   # promote incidents via the backend internal API to avoid direct SQLite access.

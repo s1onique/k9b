@@ -13,8 +13,10 @@ accessing LockManager directly.
 
 from __future__ import annotations
 
+import os
 import time
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from .loop_scheduler_cycle import (
     CycleState,
@@ -24,6 +26,153 @@ from .loop_scheduler_cycle import (
     update_finish_time,
 )
 from .loop_scheduler_diagnostics import resolve_run_id
+
+if TYPE_CHECKING:
+    from k8s_diag_agent.content_index.scheduler_producer import (
+        SchedulerContentIndexConfig,
+    )
+
+# =============================================================================
+# Content Index Producer (lazy import to avoid circular deps)
+# =============================================================================
+
+_CONTENT_INDEX_CONFIG: SchedulerContentIndexConfig | None = None
+_CONTENT_INDEX_HOOK_ENABLED = False
+
+
+def _derive_content_index_runs_dir(raw_runs_dir: str | None) -> Path:
+    """Derive the content index runs directory from HEALTH_RUNS_DIR.
+
+    Scheduler's HEALTH_RUNS_DIR is commonly /app/runs/health.
+    The content index root must be the shared runs parent.
+
+    Args:
+        raw_runs_dir: Raw HEALTH_RUNS_DIR value or None.
+
+    Returns:
+        Path to the runs directory for content indexing.
+    """
+    if not raw_runs_dir:
+        return Path("/app/runs")
+
+    path = Path(raw_runs_dir.rstrip("/"))
+
+    # Scheduler health runs dir is commonly /app/runs/health.
+    # The content index root must be the shared runs parent.
+    if path.name == "health":
+        return path.parent
+
+    return path
+
+
+def _init_content_index_producer(env_vars: dict[str, str] | None = None) -> None:
+    """Initialize the content index producer config from environment.
+
+    This is called once at scheduler startup to set up the producer configuration.
+    """
+    global _CONTENT_INDEX_CONFIG, _CONTENT_INDEX_HOOK_ENABLED
+    try:
+        from k8s_diag_agent.content_index.scheduler_producer import (
+            load_scheduler_content_index_config_from_env,
+        )
+
+        # Get runs_dir from environment or use default
+        if env_vars is None:
+            _env = dict(os.environ)
+        else:
+            _env = env_vars
+
+        raw_runs_dir = _env.get("HEALTH_RUNS_DIR")
+        default_runs_dir = _derive_content_index_runs_dir(raw_runs_dir)
+
+        _CONTENT_INDEX_CONFIG = load_scheduler_content_index_config_from_env(
+            env=_env,
+            default_runs_dir=default_runs_dir,
+        )
+        _CONTENT_INDEX_HOOK_ENABLED = True
+    except ImportError:
+        # Content index producer not available (older build)
+        _CONTENT_INDEX_CONFIG = None
+        _CONTENT_INDEX_HOOK_ENABLED = False
+
+
+def _update_content_index(
+    scheduler: Any,
+    run_id: str | None,
+    env_vars: dict[str, str] | None = None,
+) -> None:
+    """Update content index after a successful scheduler run.
+
+    This hook is called after a health run completes successfully.
+    It updates the SQLite content index for backend read-path consumption.
+    """
+    global _CONTENT_INDEX_HOOK_ENABLED, _CONTENT_INDEX_CONFIG
+
+    if not _CONTENT_INDEX_HOOK_ENABLED:
+        return
+
+    if _CONTENT_INDEX_CONFIG is None:
+        return
+
+    try:
+        # Import here to avoid import-time side effects
+        from k8s_diag_agent.content_index.scheduler_producer import (
+            update_content_index_after_scheduler_run,
+        )
+
+        # Use scheduler's _log_event for structured logging
+        result = update_content_index_after_scheduler_run(
+            config=_CONTENT_INDEX_CONFIG,
+            run_id=run_id,
+            log_fn=None,  # We handle logging below
+        )
+
+        # Emit canonical structured log with component identifier
+        # (producer module logs internally at debug level if log_fn provided)
+        if result.skipped_reason:
+            scheduler._log_event(
+                "DEBUG",
+                "Scheduler content index update skipped",
+                component="content-index-scheduler",
+                db_path=str(result.db_path),
+                skipped_reason=result.skipped_reason,
+                duration_ms=round(result.duration_ms, 2),
+            )
+        elif result.error:
+            scheduler._log_event(
+                "WARNING",
+                "Scheduler content index update failed; backend fallback remains available",
+                component="content-index-scheduler",
+                db_path=str(result.db_path),
+                run_id=run_id,
+                error_type="ContentIndexUpdateError",
+                error=result.error,
+                duration_ms=round(result.duration_ms, 2),
+            )
+        else:
+            scheduler._log_event(
+                "INFO",
+                "Scheduler content index update completed",
+                component="content-index-scheduler",
+                db_path=str(result.db_path),
+                run_id=run_id,
+                created=result.created,
+                updated=result.updated,
+                duration_ms=round(result.duration_ms, 2),
+                indexed_count=result.indexed_count,
+            )
+    except Exception as exc:
+        # Never let content index failure propagate to scheduler loop
+        # Backend fallback remains available, but log structured warning
+        scheduler._log_event(
+            "WARNING",
+            "Scheduler content index update hook failed; backend fallback remains available",
+            component="content-index-scheduler",
+            run_id=run_id,
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
+
 
 # =============================================================================
 # Run Loop Orchestration
@@ -45,6 +194,7 @@ def run_scheduler_loop(scheduler: Any) -> int:
         - Sleep cadence between cycles
         - Freshness age reporting
         - Diagnostic pack invocation
+        - Content index update
         - Exit code propagation from failed runs
         - KeyboardInterrupt handling
     """
@@ -54,6 +204,9 @@ def run_scheduler_loop(scheduler: Any) -> int:
         max_runs=scheduler._max_runs,
         interval_seconds=scheduler._interval_seconds,
     )
+
+    # Initialize content index producer
+    _init_content_index_producer()
 
     # Log scheduler startup
     scheduler._log_event(
@@ -134,6 +287,9 @@ def run_scheduler_loop(scheduler: Any) -> int:
 
                     # Build diagnostic pack if configured
                     scheduler._maybe_build_diagnostic_pack(run_id)
+
+                    # Update content index after successful run
+                    _update_content_index(scheduler, run_id)
 
                     # Record finish time for next cycle's freshness computation
                     scheduler._last_run_finish_time = update_finish_time()
