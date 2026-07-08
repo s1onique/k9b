@@ -643,6 +643,11 @@ jobs:
           fi
           
           # Render manifests to file for schema validation using array
+          # COMMON_SET: Required for SQLite backend mode - both backend and scheduler need internal API secret
+          COMMON_SET_ARGS=(
+            --set "backend.internalApi.existingSecret=k9b-internal-api"
+            --set "scheduler.incidentPromotion.internalApi.existingSecret=k9b-internal-api"
+          )
           set +e
           HELM_TEMPLATE_CMD=(
             helm template k9b ./charts/k9b
@@ -655,6 +660,7 @@ jobs:
             --set kubernetes.auth.mode=inCluster
             --set serviceAccount.automountServiceAccountToken=true
             "${FRONTEND_SET_ARGS[@]}"
+            "${COMMON_SET_ARGS[@]}"
           )
           "${HELM_TEMPLATE_CMD[@]}" > ./lab-artifacts/live/logs/helm-rendered.yaml \
             2> ./lab-artifacts/live/logs/helm-template.log
@@ -876,6 +882,12 @@ jobs:
             --release-name k9b \
             || echo "Warning: Failed to collect rendered manifest evidence"
           
+          # COMMON_SET: Required for SQLite backend mode - both backend and scheduler need internal API secret
+          COMMON_SET_ARGS=(
+            --set "backend.internalApi.existingSecret=k9b-internal-api"
+            --set "scheduler.incidentPromotion.internalApi.existingSecret=k9b-internal-api"
+          )
+          
           # Deploy with --wait=false to avoid blocking using array
           set +e
           # Harden against transient client-side rate limiter deadline exceeded errors
@@ -897,6 +909,7 @@ jobs:
             --set kubernetes.auth.mode=inCluster
             --set serviceAccount.automountServiceAccountToken=true
             "${FRONTEND_SET_ARGS[@]}"
+            "${COMMON_SET_ARGS[@]}"
             "${PROVIDER_SET_ARGS[@]}"
           )
           # Capture stdout and stderr separately for proper evidence collection
