@@ -6,6 +6,7 @@ These tests verify the IncidentPromotionDispatchConfig class behavior.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from k8s_diag_agent.collect.incident_promotion_dispatch import (
     MODE_AUTO,
@@ -276,3 +277,37 @@ class TestDispatchConfigFromEnv:
 
         config = _get_dispatch_config()
         assert config.process_role == "scheduler"
+
+
+class TestAlertClassifierImportRegression:
+    """Regression tests for alert classifier module imports.
+
+    These tests verify that the dispatcher correctly imports the canonical alert classifier
+    module (incident_alert_classifier.py) and not a nonexistent module.
+    """
+
+    def test_canonical_alert_classifier_importable(self) -> None:
+        """Regression: dispatcher must import the canonical alert classifier module.
+
+        The canonical module is incident_alert_classifier.py (not incident_alert_classification.py).
+        """
+        from k8s_diag_agent.incident_alert_classifier import classify_alert_signal
+
+        assert callable(classify_alert_signal)
+
+    def test_scan_alert_signals_as_candidates_imports_existing_classifier(
+        self, tmp_path: Path
+    ) -> None:
+        """Regression: execute lazy import inside scan_alert_signals_as_candidates().
+
+        This test exercises the lazy import of classify_alert_signal inside
+        scan_alert_signals_as_candidates() to verify that the correct module is found.
+        """
+        from k8s_diag_agent.collect.incident_promotion_dispatch import (
+            scan_alert_signals_as_candidates,
+        )
+
+        # Should return empty list with no artifacts (empty runs_dir)
+        # This implicitly exercises the lazy import of classify_alert_signal
+        result = scan_alert_signals_as_candidates(tmp_path)
+        assert result == []

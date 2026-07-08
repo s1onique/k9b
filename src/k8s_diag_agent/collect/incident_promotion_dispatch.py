@@ -352,7 +352,7 @@ def scan_alert_signals_as_candidates(runs_dir: Path) -> list[IncidentCandidate]:
     Returns:
         List of IncidentCandidates ready for promotion
     """
-    from ..incident_alert_classification import classify_alert_signal
+    from ..incident_alert_classifier import classify_alert_signal
     from ..incident_alert_correlation import build_alert_incident_correlation_key
     from ..incident_alert_promotion import (
         _build_alert_message,
