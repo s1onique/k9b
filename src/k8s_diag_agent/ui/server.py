@@ -46,6 +46,7 @@ from .server_handler_state import (  # noqa: E402, F401
     reset_request_state,
     set_request_timing_state,
 )
+from .server_http import StructuredErrorHTTPServer  # noqa: E402, F401
 from .server_next_checks import (  # noqa: E402, F401
     handle_deterministic_promotion,
     handle_next_check_approval,

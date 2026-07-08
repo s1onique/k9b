@@ -19,6 +19,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..structured_logging import emit_structured_log
+from .server_client_disconnect import (
+    CLIENT_DISCONNECT_EXCEPTIONS,
+    get_disconnect_errno,
+)
 
 if TYPE_CHECKING:
     from http.server import BaseHTTPRequestHandler
@@ -73,15 +77,46 @@ def send_json_response(
             handler.send_header(name, value)
     handler.end_headers()
     flush_done = time.perf_counter()
-    handler.wfile.write(encoded)
-    handler.wfile.flush()
+
+    # Wrap body write to handle expected client disconnects gracefully.
+    # Catch only canonical disconnect exceptions - do not catch serialization errors
+    # or arbitrary exceptions here.
+    try:
+        handler.wfile.write(encoded)
+        handler.wfile.flush()
+    except CLIENT_DISCONNECT_EXCEPTIONS as exc:
+        write_done = time.perf_counter()
+        # Client disconnected before response body was fully written.
+        # Headers were already sent, but we cannot send an error body.
+        # Emit structured INFO log and mark connection for close.
+        emit_structured_log(
+            component="ui-send",
+            severity="INFO",
+            message="Client disconnected before HTTP response body was fully written",
+            path=request_path,
+            request_outcome="client_disconnected",
+            exception_type=type(exc).__name__,
+            errno=get_disconnect_errno(exc),
+            payload_bytes=len(encoded),
+            json_dumps_ms=round((encode_done - send_start) * 1000, 3),
+            encode_ms=round((body_write_done - encode_done) * 1000, 3),
+            send_response_ms=round((send_headers_done - body_write_done) * 1000, 3),
+            send_headers_ms=round((flush_done - send_headers_done) * 1000, 3),
+            wfile_write_ms=round((write_done - flush_done) * 1000, 3),
+            total_send_ms=round((write_done - send_start) * 1000, 3),
+            run_id="",
+            run_label="",
+        )
+        handler.close_connection = True
+        return
+
     write_done = time.perf_counter()
 
     # Tell BaseHTTPRequestHandler to close connection after this response
     # This is the definitive way to prevent keep-alive with HTTP/1.1
     handler.close_connection = True
 
-    # Log detailed send timing for debugging
+    # Log detailed send timing for debugging - only emitted after successful write
     emit_structured_log(
         component="ui-send",
         message="HTTP response sent",

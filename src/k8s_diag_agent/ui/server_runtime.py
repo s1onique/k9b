@@ -240,8 +240,8 @@ def start_ui_server(
 ) -> None:
     """Start the UI HTTP server with the given configuration.
 
-    This is a compatibility wrapper that injects the default ThreadingHTTPServer.
-    Tests should patch k8s_diag_agent.ui.server.ThreadingHTTPServer before calling
+    This is a compatibility wrapper that injects the default StructuredErrorHTTPServer.
+    Tests should patch k8s_diag_agent.ui.server.StructuredErrorHTTPServer before calling
     this function to intercept server startup.
 
     Args:
@@ -252,11 +252,11 @@ def start_ui_server(
         unsafe_bind: Allow binding to non-loopback addresses
         auth_token: Bearer token for mutation endpoint authentication
     """
-    # Import here to allow tests to patch server.ThreadingHTTPServer before this runs
-    from .server import ThreadingHTTPServer as _ThreadingHTTPServer
+    # Import here to allow tests to patch server.StructuredErrorHTTPServer before this runs
+    from .server import StructuredErrorHTTPServer as _StructuredErrorHTTPServer
 
     start_ui_server_impl(
-        server_factory=_ThreadingHTTPServer,
+        server_factory=_StructuredErrorHTTPServer,
         runs_dir=runs_dir,
         host=host,
         port=port,
