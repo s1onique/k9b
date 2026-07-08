@@ -225,4 +225,10 @@ ALLOWLIST: list[tuple[str, str]] = [
     # and is not hand-authored code.
     ("scripts/python_test_durations.json", "[GENERATED] Test duration manifest - auto-regenerated from JUnit XML; 5000+ entries"),
 
+    # [DOMAIN] Typed incident lifecycle domain core - comprehensive domain types
+    ("src/k8s_diag_agent/domain/incident_lifecycle.py", "[DOMAIN] Typed incident lifecycle - all types, events, and pure transition functions in one coherent module"),
+
+    # [TEST] Incident lifecycle domain tests - comprehensive transition coverage
+    ("tests/unit/domain/test_incident_lifecycle.py", "[TEST] Incident lifecycle tests - all transitions, edge cases, and immutability checks"),
+
 ]
