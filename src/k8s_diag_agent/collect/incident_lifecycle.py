@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -135,6 +135,154 @@ class Incident:
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "resolution_notes": self.resolution_notes,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Incident:
+        """Reconstruct an Incident from a dict (e.g., loaded from JSON).
+
+        Args:
+            data: Dict representation of an incident.
+
+        Returns:
+            Reconstructed Incident instance.
+
+        Raises:
+            KeyError: If required fields are missing.
+            ValueError: If field values are invalid.
+        """
+        from datetime import datetime
+
+        from .incident_events import IncidentEvent
+        from .incident_evidence import EvidenceLink
+        from .incident_review_packet_state import ReviewPacketState
+
+        # Parse datetime fields
+        def _parse_datetime(value: str | None) -> datetime | None:
+            if value is None:
+                return None
+            return datetime.fromisoformat(value)
+
+        # Reconstruct signals
+        signals = []
+        for s in data.get("signals", []):
+            captured_at = _parse_datetime(s.get("captured_at"))
+            if captured_at is None:
+                captured_at = datetime.now(UTC)
+            signals.append(IncidentSignal(
+                source=s["source"],
+                reason=s["reason"],
+                message=s["message"],
+                captured_at=captured_at,
+                run_id=s.get("run_id"),
+                detector_id=s.get("detector_id"),
+                finding_id=s.get("finding_id"),
+                fingerprint=s.get("fingerprint"),
+            ))
+
+        # Reconstruct evidence links
+        evidence_links = []
+        for e in data.get("evidence_links", []):
+            # Convert role string to EvidenceRole enum
+            role_value = e["role"]
+            if isinstance(role_value, str):
+                role = EvidenceRole(role_value)
+            else:
+                role = role_value
+            # attached_at is optional, use current time if missing
+            attached_at = _parse_datetime(e.get("attached_at"))
+            if attached_at is None:
+                attached_at = datetime.now(UTC)
+            evidence_links.append(EvidenceLink(
+                incident_id=e["incident_id"],
+                artifact_id=e["artifact_id"],
+                role=role,
+                attached_at=attached_at,
+            ))
+
+        # Reconstruct events
+        events = []
+        for e in data.get("events", []):
+            occurred_at = _parse_datetime(e["occurred_at"])
+            if occurred_at is None:
+                raise ValueError(f"Event {e.get('event_id', 'unknown')} missing required occurred_at")
+
+            # Handle event_type - may be string or enum
+            event_type = e["event_type"]
+            if isinstance(event_type, str):
+                event_type = IncidentEventType(event_type)
+
+            # Handle actor - may be string or enum
+            actor = e["actor"]
+            if isinstance(actor, str):
+                actor = IncidentEventActor(actor)
+
+            events.append(IncidentEvent(
+                event_id=e["event_id"],
+                incident_id=e["incident_id"],
+                event_type=event_type,
+                actor=actor,
+                occurred_at=occurred_at,
+                message=e["message"],
+                actor_id=e.get("actor_id"),
+                data=e.get("data"),
+            ))
+
+        # Reconstruct review packet state
+        review_packet_data = data.get("review_packet", {})
+        # Convert status string to ReviewPacketStatus enum
+        rp_status_value = review_packet_data.get("status", "not_generated")
+        if isinstance(rp_status_value, str):
+            rp_status = ReviewPacketStatus(rp_status_value)
+        else:
+            rp_status = rp_status_value
+        review_packet = ReviewPacketState(
+            status=rp_status,
+            id=review_packet_data.get("id"),
+            generated_at=_parse_datetime(review_packet_data.get("generated_at")),
+            error_message=review_packet_data.get("error_message"),
+        )
+
+        # Convert status string to IncidentStatus enum
+        status_value = data["status"]
+        if isinstance(status_value, str):
+            status = IncidentStatus(status_value)
+        else:
+            status = status_value
+
+        # Parse required datetime fields - fail if missing
+        first_observed_at = _parse_datetime(data["first_observed_at"])
+        if first_observed_at is None:
+            raise ValueError("Incident missing required first_observed_at field")
+
+        last_observed_at = _parse_datetime(data["last_observed_at"])
+        if last_observed_at is None:
+            raise ValueError("Incident missing required last_observed_at field")
+
+        return cls(
+            incident_id=data["incident_id"],
+            source_candidate_id=data["source_candidate_id"],
+            namespace=data["namespace"],
+            object_kind=data["object_kind"],
+            object_name=data["object_name"],
+            raw_object_kind=data.get("raw_object_kind"),
+            candidate_class=data["class"],
+            severity=data["severity"],
+            status=status,
+            first_observed_at=first_observed_at,
+            last_observed_at=last_observed_at,
+            signals=signals,
+            evidence_needed=list(data.get("evidence_needed", [])),
+            evidence_links=evidence_links,
+            latest_snapshot_bundle_id=data.get("latest_snapshot_bundle_id"),
+            review_packet=review_packet,
+            signal_count=data.get("signal_count", len(signals)),
+            evidence_count=data.get("evidence_count", len(evidence_links)),
+            events=events,
+            suppressed_reason=data.get("suppressed_reason"),
+            duplicate_of=data.get("duplicate_of"),
+            resolved_at=_parse_datetime(data.get("resolved_at")),
+            resolution_notes=data.get("resolution_notes"),
+        )
 
     def get_timeline(self) -> list[IncidentEvent]:
         """Get timeline sorted by occurrence time."""
