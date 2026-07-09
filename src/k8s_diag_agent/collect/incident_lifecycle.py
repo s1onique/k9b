@@ -26,6 +26,24 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from k8s_diag_agent.domain.incident_lifecycle import (
+    IncidentId,
+    IncidentLifecycle,
+    ReviewPacketId,
+    SnapshotBundleId,
+    SourceCandidateId,
+    TransitionApplied,
+)
+from k8s_diag_agent.domain.incident_lifecycle import (
+    mark_collecting_evidence as domain_mark_collecting_evidence,
+)
+from k8s_diag_agent.domain.incident_lifecycle import (
+    mark_ready_for_review as domain_mark_ready_for_review,
+)
+from k8s_diag_agent.domain.incident_lifecycle import (
+    suppress_incident as domain_suppress_incident,
+)
+
 from .incident_events import IncidentEvent, IncidentEventActor, IncidentEventType, make_event_id
 from .incident_evidence import EvidenceLink, EvidenceRole
 from .incident_review_packet_state import ReviewPacketState, ReviewPacketStatus
@@ -358,6 +376,198 @@ def open_incident_from_candidate(candidate: IncidentCandidate, observed_at: date
     )
 
 
+# -----------------------------------------------------------------------------
+# Pure adapter functions for status transitions (compatibility surface)
+# These delegate to the typed domain core while preserving pure function semantics.
+# -----------------------------------------------------------------------------
+
+def _to_lifecycle(incident: Incident) -> IncidentLifecycle:
+    """Convert an Incident to the domain IncidentLifecycle type."""
+    return IncidentLifecycle(
+        incident_id=IncidentId(incident.incident_id),
+        source_candidate_id=SourceCandidateId(incident.source_candidate_id),
+        status=incident.status.value,
+        first_observed_at=incident.first_observed_at,
+        last_observed_at=incident.last_observed_at,
+        signal_count=incident.signal_count,
+        evidence_count=incident.evidence_count,
+    )
+
+
+def _map_transition_result(
+    incident: Incident,
+    result: TransitionApplied,
+    *,
+    preserve_last_observed_at: datetime | None = None,
+) -> Incident:
+    """Map a TransitionApplied result back to the Incident model.
+
+    Args:
+        incident: The original incident
+        result: The transition result from domain core
+        preserve_last_observed_at: If provided, use this timestamp instead of domain's
+    """
+    from dataclasses import replace
+
+    status_map: dict[str, IncidentStatus] = {
+        "open": IncidentStatus.OPEN,
+        "collecting_evidence": IncidentStatus.COLLECTING_EVIDENCE,
+        "ready_for_review": IncidentStatus.READY_FOR_REVIEW,
+        "investigating": IncidentStatus.INVESTIGATING,
+        "suppressed": IncidentStatus.SUPPRESSED,
+        "duplicate": IncidentStatus.DUPLICATE,
+        "resolved": IncidentStatus.RESOLVED,
+    }
+
+    new_lifecycle = result.incident
+    new_status = status_map.get(new_lifecycle.status, incident.status)
+
+    # Map domain events to incident events
+    event_type_map = {
+        "incident_promoted": IncidentEventType.OPENED,
+        "incident_marked_collecting_evidence": IncidentEventType.EVIDENCE_COLLECTION_STARTED,
+        "incident_marked_ready_for_review": IncidentEventType.REVIEW_PACKET_GENERATED,
+        "incident_marked_investigating": IncidentEventType.STATUS_CHANGED,
+        "incident_suppressed": IncidentEventType.SUPPRESSED,
+        "incident_marked_duplicate": IncidentEventType.MARKED_DUPLICATE,
+        "incident_resolved": IncidentEventType.CLOSED,
+    }
+
+    actor_map = {
+        "system": IncidentEventActor.SYSTEM,
+        "user": IncidentEventActor.USER,
+        "diagnosis_loop": IncidentEventActor.SYSTEM,
+        "test": IncidentEventActor.SYSTEM,
+    }
+
+    new_events = []
+    for event in result.events:
+        event_type = event_type_map.get(event.event_type, IncidentEventType.STATUS_CHANGED)
+        actor = actor_map.get(event.actor, IncidentEventActor.SYSTEM)
+        occurred_at = event.created_at
+        new_events.append(IncidentEvent(
+            event_id=make_event_id(incident.incident_id, event.event_type, occurred_at),
+            incident_id=incident.incident_id,
+            event_type=event_type,
+            actor=actor,
+            occurred_at=occurred_at,
+            message=event.detail or f"Transition: {event.event_type}",
+            data={"lifecycle_event": event.event_type, "detail": event.detail},
+        ))
+
+    # Use preserved timestamp if provided, otherwise use domain's timestamp
+    effective_last_observed_at = (
+        preserve_last_observed_at if preserve_last_observed_at is not None
+        else new_lifecycle.last_observed_at
+    )
+
+    return replace(
+        incident,
+        status=new_status,
+        last_observed_at=effective_last_observed_at,
+        events=incident.events + new_events,
+    )
+
+
+def mark_collecting_evidence(
+    incident: Incident,
+    bundle_id: str,
+    *,
+    now: datetime | None = None,
+) -> Incident:
+    """Transition incident to COLLECTING_EVIDENCE state (pure function).
+
+    Args:
+        incident: The incident to transition
+        bundle_id: ID of the snapshot bundle being collected
+        now: Optional timestamp (defaults to current time)
+
+    Returns:
+        New incident with updated status
+    """
+    now = now or datetime.now(UTC)
+    lifecycle = _to_lifecycle(incident)
+
+    result = domain_mark_collecting_evidence(
+        lifecycle,
+        bundle_id=SnapshotBundleId(bundle_id),
+        actor="system",
+        now=now,
+    )
+
+    match result:
+        case TransitionApplied():
+            return _map_transition_result(incident, result, preserve_last_observed_at=now)
+    # TransitionRejected should not happen for OPEN -> COLLECTING_EVIDENCE
+    return incident
+
+
+def mark_ready_for_review(
+    incident: Incident,
+    review_packet_id: str,
+    *,
+    now: datetime | None = None,
+) -> Incident:
+    """Transition incident to READY_FOR_REVIEW state (pure function).
+
+    Args:
+        incident: The incident to transition
+        review_packet_id: ID of the review packet
+        now: Optional timestamp (defaults to current time)
+
+    Returns:
+        New incident with updated status
+    """
+    now = now or datetime.now(UTC)
+    lifecycle = _to_lifecycle(incident)
+
+    result = domain_mark_ready_for_review(
+        lifecycle,
+        review_packet_id=ReviewPacketId(review_packet_id),
+        actor="system",
+        now=now,
+    )
+
+    match result:
+        case TransitionApplied():
+            return _map_transition_result(incident, result, preserve_last_observed_at=now)
+    # TransitionRejected should not happen for COLLECTING_EVIDENCE -> READY_FOR_REVIEW
+    return incident
+
+
+def suppress_incident(
+    incident: Incident,
+    reason: str,
+    *,
+    now: datetime | None = None,
+) -> Incident:
+    """Transition incident to SUPPRESSED state (pure function).
+
+    Args:
+        incident: The incident to suppress
+        reason: Human-readable reason for suppression
+        now: Optional timestamp (defaults to current time)
+
+    Returns:
+        New incident with updated status
+    """
+    now = now or datetime.now(UTC)
+    lifecycle = _to_lifecycle(incident)
+
+    result = domain_suppress_incident(
+        lifecycle,
+        reason=reason,
+        actor="user",
+        now=now,
+    )
+
+    match result:
+        case TransitionApplied():
+            return _map_transition_result(incident, result, preserve_last_observed_at=now)
+    # TransitionRejected should not happen for valid transitions
+    return incident
+
+
 __all__ = [
     # Core models
     "Incident",
@@ -381,4 +591,8 @@ __all__ = [
     # Non-status transition functions
     "merge_candidate_into_incident",
     "attach_evidence_artifact",
+    # Status transition functions (pure, compatibility surface)
+    "mark_collecting_evidence",
+    "mark_ready_for_review",
+    "suppress_incident",
 ]

@@ -55,6 +55,8 @@ def store_mark_collecting_evidence(
     store: IncidentStore,
     incident_id: str,
     bundle_id: str,
+    *,
+    now: datetime | None = None,
 ) -> Incident | None:
     """Transition incident to COLLECTING_EVIDENCE state.
 
@@ -64,6 +66,9 @@ def store_mark_collecting_evidence(
         store: The incident store
         incident_id: ID of the incident to transition
         bundle_id: ID of the snapshot bundle being collected
+        now: Optional timestamp to use (defaults to current time).
+            When promoting candidates, pass the observed_at timestamp
+            to preserve deterministic timing.
     Returns:
         Updated incident snapshot, or None if not found
     """
@@ -71,9 +76,11 @@ def store_mark_collecting_evidence(
     if incident is None:
         return None
 
+    # Use provided timestamp or current time
+    now = now or datetime.now(UTC)
+
     # Convert to domain type
     lifecycle = _to_incident_lifecycle(incident)
-    now = datetime.now(UTC)
 
     # Call typed transition
     result = domain_mark_collecting_evidence(

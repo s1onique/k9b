@@ -131,7 +131,7 @@ class IncidentStore:
                     # Transition to COLLECTING_EVIDENCE via typed store path
                     # This also adds the bundle evidence link
                     transitioned = store_mark_collecting_evidence(
-                        self, incident_id, snapshot_bundle_id
+                        self, incident_id, snapshot_bundle_id, now=observed_at
                     )
                     if transitioned is not None:
                         new_incident = transitioned
