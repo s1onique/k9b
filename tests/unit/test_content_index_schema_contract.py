@@ -59,29 +59,52 @@ class TestSchemaVersion:
 class TestIndexedContentKinds:
     """Test indexed content kinds."""
 
-    def test_required_content_kinds_present(self) -> None:
-        """All required content kinds must be present."""
-        required_kinds = {
-            "incident",
-            "evidence_link",
-            "snapshot_bundle",
-            "review_packet",
-            "automatic_diagnosis_review",
-            "diagnosis_loop_run",
-            "diagnosis_loop_pass",
-            "lab_result",
-            "trace_capture_summary",
-            "perf_baseline_summary",
-        }
-        assert required_kinds.issubset(INDEXED_CONTENT_KINDS)
+    # Explicit schema contract: all 14 indexed content kinds.
+    # Update this set when adding/removing content kinds to keep the contract
+    # explicit and fail on accidental drift.
+    EXPECTED_INDEXED_CONTENT_KINDS = frozenset({
+        # Core incident and evidence
+        "incident",
+        "evidence_link",
+        "snapshot_bundle",
+        "review_packet",
+        # Diagnosis loop artifacts
+        "diagnosis_loop_run",
+        "diagnosis_loop_pass",
+        # Automatic diagnosis artifacts (ACT-K9B-AUTO-DIAG01)
+        "automatic_diagnosis_review",
+        "automatic_diagnosis_hypothesis_burst",
+        "automatic_diagnosis_pass",
+        "automatic_diagnosis_final_hypotheses",
+        "automatic_diagnosis_summary",
+        # Lab and trace artifacts
+        "lab_result",
+        "trace_capture_summary",
+        "perf_baseline_summary",
+    })
 
     def test_content_kinds_is_frozenset(self) -> None:
         """Content kinds must be immutable (frozenset)."""
         assert isinstance(INDEXED_CONTENT_KINDS, frozenset)
 
     def test_content_kinds_count(self) -> None:
-        """Must have exactly 10 content kinds."""
-        assert len(INDEXED_CONTENT_KINDS) == 10
+        """Must have exactly 14 content kinds."""
+        assert len(INDEXED_CONTENT_KINDS) == 14
+
+    def test_content_kinds_exact_match(self) -> None:
+        """Content kinds must exactly match the schema contract.
+
+        Uses set equality for clear diagnostics on drift:
+        - Missing kinds: unexpected test failures
+        - Extra kinds: accidental exports caught
+        - Renamed kinds: caught as missing+extra
+        """
+        missing = self.EXPECTED_INDEXED_CONTENT_KINDS - INDEXED_CONTENT_KINDS
+        unexpected = INDEXED_CONTENT_KINDS - self.EXPECTED_INDEXED_CONTENT_KINDS
+
+        assert not missing, f"Contract kinds missing from INDEXED_CONTENT_KINDS: {sorted(missing)}"
+        assert not unexpected, f"INDEXED_CONTENT_KINDS has unexpected kinds: {sorted(unexpected)}"
+        assert INDEXED_CONTENT_KINDS == self.EXPECTED_INDEXED_CONTENT_KINDS
 
 
 class TestIndexedPathKinds:
