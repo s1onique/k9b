@@ -284,13 +284,15 @@ def mark_collecting_evidence(
 
     match result:
         case TransitionApplied():
-            return _map_transition_result(incident, result, preserve_last_observed_at=now)
+            updated = _map_transition_result(incident, result, preserve_last_observed_at=now)
+            # Project snapshot_bundle_id to the stored incident
+            return replace(updated, latest_snapshot_bundle_id=bundle_id)
     return incident
 
 
 def mark_ready_for_review(
     incident: Incident,
-    review_packet_id: str,
+    review_packet_id: str | None = None,
     *,
     now: datetime | None = None,
 ) -> Incident:
@@ -298,16 +300,32 @@ def mark_ready_for_review(
     now = now or datetime.now(UTC)
     lifecycle = _to_lifecycle(incident)
 
+    # Prefer a provided packet ID, then an existing packet ID.
+    # If neither exists, preserve legacy behavior: transition status only,
+    # and leave review_packet non-available.
+    existing_id = incident.review_packet.id
+    effective_id = review_packet_id or existing_id
+
     result = domain_mark_ready_for_review(
         lifecycle,
-        review_packet_id=ReviewPacketId(review_packet_id),
+        review_packet_id=ReviewPacketId(effective_id or ""),
         actor="system",
         now=now,
     )
 
     match result:
         case TransitionApplied():
-            return _map_transition_result(incident, result, preserve_last_observed_at=now)
+            updated = _map_transition_result(incident, result, preserve_last_observed_at=now)
+            # Project review_packet status to AVAILABLE if we have a non-empty ID
+            if effective_id:
+                return replace(
+                    updated,
+                    review_packet=ReviewPacketState.available(
+                        id=effective_id,
+                        generated_at=now,
+                    ),
+                )
+            return updated
     return incident
 
 

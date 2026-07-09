@@ -106,14 +106,18 @@ class TestReviewPacketAvailability(unittest.TestCase):
         self.assertEqual(updated.review_packet.id, "review-packet-456")
 
     def test_review_packet_id_none_when_not_provided(self) -> None:
-        """review_packet_id must be None when not provided."""
+        """When no review_packet_id is provided, status transitions but packet stays not_available."""
         incident = make_review_packet_incident(
             status=IncidentStatus.COLLECTING_EVIDENCE,
         )
 
         updated = mark_ready_for_review(incident)
 
+        # Status transitions to ready_for_review
+        self.assertEqual(updated.status, IncidentStatus.READY_FOR_REVIEW)
+        # But review_packet stays in non-available state (no ID = no packet)
         self.assertIsNone(updated.review_packet.id)
+        self.assertNotEqual(updated.review_packet.status, ReviewPacketStatus.AVAILABLE)
 
 
 if __name__ == "__main__":
