@@ -12,18 +12,18 @@ Hard constraints enforced:
 State transitions are provided by incident_transitions.py.
 
 Modules:
-- incident_evidence.py: EvidenceArtifact, EvidenceLink, EvidenceKind, EvidenceRole
+- incident_lifecycle_types.py: IncidentStatus, IncidentSignal
 - incident_events.py: IncidentEvent, IncidentEventType, IncidentEventActor
 - incident_review_packet_state.py: ReviewPacketState, ReviewPacketStatus
 - incident_transitions.py: Pure transition functions
+- incident_lifecycle_serialization.py: Dict serialization helpers
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from k8s_diag_agent.domain.incident_lifecycle import (
@@ -44,8 +44,16 @@ from k8s_diag_agent.domain.incident_lifecycle import (
     suppress_incident as domain_suppress_incident,
 )
 
+# Re-export types from new modules for backward compatibility
 from .incident_events import IncidentEvent, IncidentEventActor, IncidentEventType, make_event_id
 from .incident_evidence import EvidenceLink, EvidenceRole
+from .incident_lifecycle_serialization import (
+    incident_from_dict as _incident_from_dict,
+)
+from .incident_lifecycle_serialization import (
+    incident_to_dict as _incident_to_dict,
+)
+from .incident_lifecycle_types import IncidentSignal, IncidentStatus
 from .incident_review_packet_state import ReviewPacketState, ReviewPacketStatus
 from .incident_transitions import (
     attach_evidence_artifact,
@@ -54,45 +62,6 @@ from .incident_transitions import (
 
 if TYPE_CHECKING:
     from .incident_candidates import IncidentCandidate
-
-
-class IncidentStatus(StrEnum):
-    """Lifecycle states for incidents."""
-
-    OPEN = "open"
-    COLLECTING_EVIDENCE = "collecting_evidence"
-    READY_FOR_REVIEW = "ready_for_review"
-    INVESTIGATING = "investigating"
-    SUPPRESSED = "suppressed"
-    DUPLICATE = "duplicate"
-    RESOLVED = "resolved"
-
-
-@dataclass(frozen=True)
-class IncidentSignal:
-    """Signal that contributed to the incident."""
-
-    source: str
-    reason: str
-    message: str
-    captured_at: datetime
-    run_id: str | None = None
-    detector_id: str | None = None
-    finding_id: str | None = None
-    fingerprint: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        result = {
-            "source": self.source,
-            "reason": self.reason,
-            "message": self.message,
-            "captured_at": self.captured_at.isoformat(),
-        }
-        for opt in ("run_id", "detector_id", "finding_id", "fingerprint"):
-            val = getattr(self, opt)
-            if val is not None:
-                result[opt] = val
-        return result
 
 
 @dataclass
@@ -124,179 +93,14 @@ class Incident:
     resolution_notes: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "incident_id": self.incident_id,
-            "source_candidate_id": self.source_candidate_id,
-            "namespace": self.namespace,
-            "object_kind": self.object_kind,
-            "object_name": self.object_name,
-            "raw_object_kind": self.raw_object_kind,
-            "class": self.candidate_class,
-            "severity": self.severity,
-            "status": self.status.value,
-            "first_observed_at": self.first_observed_at.isoformat(),
-            "last_observed_at": self.last_observed_at.isoformat(),
-            "signals": [s.to_dict() for s in self.signals],
-            "evidence_needed": list(self.evidence_needed),
-            "evidence_links": [e.to_dict() for e in self.evidence_links],
-            "latest_snapshot_bundle_id": self.latest_snapshot_bundle_id,
-            "review_packet": self.review_packet.to_dict(),
-            "signal_count": self.signal_count,
-            "evidence_count": self.evidence_count,
-            "events": [e.to_dict() for e in self.events],
-            "suppressed_reason": self.suppressed_reason,
-            "duplicate_of": self.duplicate_of,
-            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
-            "resolution_notes": self.resolution_notes,
-        }
+        """Serialize incident to dict for JSON storage."""
+        return _incident_to_dict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Incident:
-        """Reconstruct an Incident from a dict (e.g., loaded from JSON).
-
-        Args:
-            data: Dict representation of an incident.
-
-        Returns:
-            Reconstructed Incident instance.
-
-        Raises:
-            KeyError: If required fields are missing.
-            ValueError: If field values are invalid.
-        """
-        from datetime import datetime
-
-        from .incident_events import IncidentEvent
-        from .incident_evidence import EvidenceLink
-        from .incident_review_packet_state import ReviewPacketState
-
-        # Parse datetime fields
-        def _parse_datetime(value: str | None) -> datetime | None:
-            if value is None:
-                return None
-            return datetime.fromisoformat(value)
-
-        # Reconstruct signals
-        signals = []
-        for s in data.get("signals", []):
-            captured_at = _parse_datetime(s.get("captured_at"))
-            if captured_at is None:
-                captured_at = datetime.now(UTC)
-            signals.append(IncidentSignal(
-                source=s["source"],
-                reason=s["reason"],
-                message=s["message"],
-                captured_at=captured_at,
-                run_id=s.get("run_id"),
-                detector_id=s.get("detector_id"),
-                finding_id=s.get("finding_id"),
-                fingerprint=s.get("fingerprint"),
-            ))
-
-        # Reconstruct evidence links
-        evidence_links = []
-        for e in data.get("evidence_links", []):
-            # Convert role string to EvidenceRole enum
-            role_value = e["role"]
-            if isinstance(role_value, str):
-                role = EvidenceRole(role_value)
-            else:
-                role = role_value
-            # attached_at is optional, use current time if missing
-            attached_at = _parse_datetime(e.get("attached_at"))
-            if attached_at is None:
-                attached_at = datetime.now(UTC)
-            evidence_links.append(EvidenceLink(
-                incident_id=e["incident_id"],
-                artifact_id=e["artifact_id"],
-                role=role,
-                attached_at=attached_at,
-            ))
-
-        # Reconstruct events
-        events = []
-        for e in data.get("events", []):
-            occurred_at = _parse_datetime(e["occurred_at"])
-            if occurred_at is None:
-                raise ValueError(f"Event {e.get('event_id', 'unknown')} missing required occurred_at")
-
-            # Handle event_type - may be string or enum
-            event_type = e["event_type"]
-            if isinstance(event_type, str):
-                event_type = IncidentEventType(event_type)
-
-            # Handle actor - may be string or enum
-            actor = e["actor"]
-            if isinstance(actor, str):
-                actor = IncidentEventActor(actor)
-
-            events.append(IncidentEvent(
-                event_id=e["event_id"],
-                incident_id=e["incident_id"],
-                event_type=event_type,
-                actor=actor,
-                occurred_at=occurred_at,
-                message=e["message"],
-                actor_id=e.get("actor_id"),
-                data=e.get("data"),
-            ))
-
-        # Reconstruct review packet state
-        review_packet_data = data.get("review_packet", {})
-        # Convert status string to ReviewPacketStatus enum
-        rp_status_value = review_packet_data.get("status", "not_generated")
-        if isinstance(rp_status_value, str):
-            rp_status = ReviewPacketStatus(rp_status_value)
-        else:
-            rp_status = rp_status_value
-        review_packet = ReviewPacketState(
-            status=rp_status,
-            id=review_packet_data.get("id"),
-            generated_at=_parse_datetime(review_packet_data.get("generated_at")),
-            error_message=review_packet_data.get("error_message"),
-        )
-
-        # Convert status string to IncidentStatus enum
-        status_value = data["status"]
-        if isinstance(status_value, str):
-            status = IncidentStatus(status_value)
-        else:
-            status = status_value
-
-        # Parse required datetime fields - fail if missing
-        first_observed_at = _parse_datetime(data["first_observed_at"])
-        if first_observed_at is None:
-            raise ValueError("Incident missing required first_observed_at field")
-
-        last_observed_at = _parse_datetime(data["last_observed_at"])
-        if last_observed_at is None:
-            raise ValueError("Incident missing required last_observed_at field")
-
-        return cls(
-            incident_id=data["incident_id"],
-            source_candidate_id=data["source_candidate_id"],
-            namespace=data["namespace"],
-            object_kind=data["object_kind"],
-            object_name=data["object_name"],
-            raw_object_kind=data.get("raw_object_kind"),
-            candidate_class=data["class"],
-            severity=data["severity"],
-            status=status,
-            first_observed_at=first_observed_at,
-            last_observed_at=last_observed_at,
-            signals=signals,
-            evidence_needed=list(data.get("evidence_needed", [])),
-            evidence_links=evidence_links,
-            latest_snapshot_bundle_id=data.get("latest_snapshot_bundle_id"),
-            review_packet=review_packet,
-            signal_count=data.get("signal_count", len(signals)),
-            evidence_count=data.get("evidence_count", len(evidence_links)),
-            events=events,
-            suppressed_reason=data.get("suppressed_reason"),
-            duplicate_of=data.get("duplicate_of"),
-            resolved_at=_parse_datetime(data.get("resolved_at")),
-            resolution_notes=data.get("resolution_notes"),
-        )
+        """Reconstruct an Incident from a dict (e.g., loaded from JSON)."""
+        result: Incident = _incident_from_dict(data)
+        return result
 
     def get_timeline(self) -> list[IncidentEvent]:
         """Get timeline sorted by occurrence time."""
@@ -400,15 +204,7 @@ def _map_transition_result(
     *,
     preserve_last_observed_at: datetime | None = None,
 ) -> Incident:
-    """Map a TransitionApplied result back to the Incident model.
-
-    Args:
-        incident: The original incident
-        result: The transition result from domain core
-        preserve_last_observed_at: If provided, use this timestamp instead of domain's
-    """
-    from dataclasses import replace
-
+    """Map a TransitionApplied result back to the Incident model."""
     status_map: dict[str, IncidentStatus] = {
         "open": IncidentStatus.OPEN,
         "collecting_evidence": IncidentStatus.COLLECTING_EVIDENCE,
@@ -475,16 +271,7 @@ def mark_collecting_evidence(
     *,
     now: datetime | None = None,
 ) -> Incident:
-    """Transition incident to COLLECTING_EVIDENCE state (pure function).
-
-    Args:
-        incident: The incident to transition
-        bundle_id: ID of the snapshot bundle being collected
-        now: Optional timestamp (defaults to current time)
-
-    Returns:
-        New incident with updated status
-    """
+    """Transition incident to COLLECTING_EVIDENCE state (pure function)."""
     now = now or datetime.now(UTC)
     lifecycle = _to_lifecycle(incident)
 
@@ -498,7 +285,6 @@ def mark_collecting_evidence(
     match result:
         case TransitionApplied():
             return _map_transition_result(incident, result, preserve_last_observed_at=now)
-    # TransitionRejected should not happen for OPEN -> COLLECTING_EVIDENCE
     return incident
 
 
@@ -508,16 +294,7 @@ def mark_ready_for_review(
     *,
     now: datetime | None = None,
 ) -> Incident:
-    """Transition incident to READY_FOR_REVIEW state (pure function).
-
-    Args:
-        incident: The incident to transition
-        review_packet_id: ID of the review packet
-        now: Optional timestamp (defaults to current time)
-
-    Returns:
-        New incident with updated status
-    """
+    """Transition incident to READY_FOR_REVIEW state (pure function)."""
     now = now or datetime.now(UTC)
     lifecycle = _to_lifecycle(incident)
 
@@ -531,7 +308,6 @@ def mark_ready_for_review(
     match result:
         case TransitionApplied():
             return _map_transition_result(incident, result, preserve_last_observed_at=now)
-    # TransitionRejected should not happen for COLLECTING_EVIDENCE -> READY_FOR_REVIEW
     return incident
 
 
@@ -541,16 +317,7 @@ def suppress_incident(
     *,
     now: datetime | None = None,
 ) -> Incident:
-    """Transition incident to SUPPRESSED state (pure function).
-
-    Args:
-        incident: The incident to suppress
-        reason: Human-readable reason for suppression
-        now: Optional timestamp (defaults to current time)
-
-    Returns:
-        New incident with updated status
-    """
+    """Transition incident to SUPPRESSED state (pure function)."""
     now = now or datetime.now(UTC)
     lifecycle = _to_lifecycle(incident)
 
@@ -564,7 +331,6 @@ def suppress_incident(
     match result:
         case TransitionApplied():
             return _map_transition_result(incident, result, preserve_last_observed_at=now)
-    # TransitionRejected should not happen for valid transitions
     return incident
 
 
