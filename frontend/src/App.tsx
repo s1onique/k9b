@@ -49,6 +49,7 @@ import { useAppRunSummaryProps } from "./app/useAppRunSummaryProps";
 import { useAppClusterFocusHandler } from "./app/useAppClusterFocusHandler";
 import { useAppDemoShellOverlayProps } from "./app/useAppDemoShellOverlayProps";
 import { RuntimeStatusSummary } from "./components/runtime-status";
+import { IncidentsOverviewSection } from "./components/run-summary";
 import { useRuntimeStatus } from "./hooks/useRuntimeStatus";
 import { useAppProposalSectionProps } from "./app/useAppProposalSectionProps";
 import { useAppWorkNextChecksLaneProps } from "./app/useAppWorkNextChecksLaneProps";
@@ -771,6 +772,7 @@ const App = ({ clock }: AppProps = {}) => {
             isLoading={runtimeStatusLoading}
             isError={runtimeStatusError}
           />
+          <IncidentsOverviewSection runId={selectedRunId} />
           <RecentRunsPanel {...recentRunsPanelProps} />
           <AppRunSummarySection
             run={run}
