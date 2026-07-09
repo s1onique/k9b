@@ -325,10 +325,8 @@ class TestDiagnosisLoopEventEmission:
         incident_id = incidents[0].incident_id
 
         # Ensure incident has evidence link (so it's eligible for auto loop)
-        from k8s_diag_agent.collect.incident_transitions import mark_collecting_evidence
-        incident = store.get_incident(incident_id)
-        updated = mark_collecting_evidence(incident, bundle_id="test-bundle-001")
-        store._incidents[incident_id] = updated
+        # Use store method to transition to COLLECTING_EVIDENCE
+        store.mark_collecting_evidence(incident_id, bundle_id="test-bundle-001")
 
         set_incident_store(store)
 
@@ -377,10 +375,8 @@ class TestDiagnosisLoopEventEmission:
         incident_id = incidents[0].incident_id
 
         # Ensure incident has evidence link (so it's eligible for auto loop)
-        from k8s_diag_agent.collect.incident_transitions import mark_collecting_evidence
-        incident = store.get_incident(incident_id)
-        updated = mark_collecting_evidence(incident, bundle_id="test-bundle-001")
-        store._incidents[incident_id] = updated
+        # Use store method to transition to COLLECTING_EVIDENCE
+        store.mark_collecting_evidence(incident_id, bundle_id="test-bundle-001")
 
         set_incident_store(store)
 

@@ -361,17 +361,13 @@ def iter_python_files(root: Path) -> list[Path]:
 
 
 # Files excluded from status projection checks.
-# These files predate the typed lifecycle architecture and use the old direct
-# status mutation pattern. They are being phased out in favor of the typed
-# transition path through incident_lifecycle_transitions.py.
+# After ACT-K9B-HULK-LEGACY-INCIDENT-TRANSITIONS-RETIRE01, no files are excluded.
+# The only allowed status projection is in:
+#   incident_lifecycle_domain_adapter.py::_apply_lifecycle_transition
 #
 # Invariant: Direct status projection is forbidden except:
 # 1. incident_lifecycle_domain_adapter.py::_apply_lifecycle_transition (primary seam)
-# 2. Legacy incident_transitions.py (temporarily excluded, pending removal via follow-up ACT)
-_EXCLUDED_FROM_STATUS_CHECKS: frozenset[str] = frozenset({
-    # Legacy transition file that predates typed lifecycle architecture
-    "src/k8s_diag_agent/collect/incident_transitions.py",
-})
+_EXCLUDED_FROM_STATUS_CHECKS: frozenset[str] = frozenset()
 
 
 def main(argv: list[str] | None = None) -> int:

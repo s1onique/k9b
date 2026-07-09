@@ -315,22 +315,29 @@ def helper(incident):
 
 
 class TestLegacyExclusionChecks:
-    """Tests for the legacy file exclusion mechanism."""
+    """Tests proving no legacy file exclusions remain."""
 
-    def test_legacy_transitions_file_excluded_from_status_checks(self) -> None:
-        """Legacy incident_transitions.py should be excluded from status checks.
+    def test_no_status_projection_exclusions_remain(self) -> None:
+        """After ACT-K9B-HULK-LEGACY-INCIDENT-TRANSITIONS-RETIRE01, no exclusions remain.
         
-        This file predates the typed lifecycle architecture and is being phased out
-        in favor of the typed transition path through incident_lifecycle_transitions.py.
-        The exclusion is intentional and bounded.
+        The only allowed status projection is in:
+            incident_lifecycle_domain_adapter.py::_apply_lifecycle_transition
         """
-        legacy_file = "src/k8s_diag_agent/collect/incident_transitions.py"
-        assert legacy_file in verifier._EXCLUDED_FROM_STATUS_CHECKS
+        assert verifier._EXCLUDED_FROM_STATUS_CHECKS == frozenset()
 
-    def test_legacy_exclusion_only_includes_transitions_file(self) -> None:
-        """Legacy exclusion should only contain the specific legacy file."""
-        assert len(verifier._EXCLUDED_FROM_STATUS_CHECKS) == 1
-        assert "incident_transitions.py" in list(verifier._EXCLUDED_FROM_STATUS_CHECKS)[0]
+    def test_exclusion_constant_is_empty_frozenset(self) -> None:
+        """Verify the exclusion constant is an empty frozenset."""
+        assert isinstance(verifier._EXCLUDED_FROM_STATUS_CHECKS, frozenset)
+        assert len(verifier._EXCLUDED_FROM_STATUS_CHECKS) == 0
+
+    def test_legacy_transitions_file_checked_if_present(self) -> None:
+        """If incident_transitions.py is present, it should be checked for status projections.
+        
+        This verifies the exclusion was truly removed.
+        """
+        # The exclusion set should be empty
+        assert "incident_transitions.py" not in verifier._EXCLUDED_FROM_STATUS_CHECKS
+        assert "src/k8s_diag_agent/collect/incident_transitions.py" not in verifier._EXCLUDED_FROM_STATUS_CHECKS
 
 
 class TestTransitionAdapterUsesLifecycleCoreChecks:

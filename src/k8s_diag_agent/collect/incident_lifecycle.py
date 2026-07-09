@@ -31,11 +31,7 @@ from .incident_evidence import EvidenceLink, EvidenceRole
 from .incident_review_packet_state import ReviewPacketState, ReviewPacketStatus
 from .incident_transitions import (
     attach_evidence_artifact,
-    mark_collecting_evidence,
-    mark_duplicate,
-    mark_ready_for_review,
     merge_candidate_into_incident,
-    suppress_incident,
 )
 
 if TYPE_CHECKING:
@@ -380,12 +376,9 @@ __all__ = [
     "make_incident_id",
     "incident_id_from_candidate",
     "make_event_id",
-    # Transition functions
+    # Incident creation
     "open_incident_from_candidate",
+    # Non-status transition functions
     "merge_candidate_into_incident",
-    "mark_collecting_evidence",
-    "mark_ready_for_review",
-    "suppress_incident",
-    "mark_duplicate",
     "attach_evidence_artifact",
 ]

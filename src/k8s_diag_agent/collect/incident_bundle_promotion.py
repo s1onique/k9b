@@ -1,7 +1,7 @@
 """Bundle-attached incident promotion logic.
 
 This module provides pure functions for promoting candidates with bundle attachment:
-- open_incident_from_candidate_with_bundle: creates incident in COLLECTING_EVIDENCE state
+- open_incident_from_candidate_with_bundle: creates incident in OPEN state with bundle metadata
 - merge_candidate_into_incident_with_bundle: merges candidate while respecting terminal-ish statuses
 
 Hard constraints enforced:
@@ -26,7 +26,6 @@ from .incident_lifecycle import (
     IncidentSignal,
     IncidentStatus,
     make_event_id,
-    mark_collecting_evidence,
 )
 
 if TYPE_CHECKING:
@@ -40,7 +39,9 @@ def open_incident_from_candidate_with_bundle(
 ) -> Incident:
     """Create an incident record from a candidate with bundle attachment.
 
-    This is the candidate → collecting_evidence transition for bundle-attached promotion.
+    Creates a new incident with the bundle_id and evidence links attached.
+    The incident status remains OPEN; the caller should transition to COLLECTING_EVIDENCE
+    using store_mark_collecting_evidence if that state is desired.
 
     Args:
         candidate: The deterministic incident candidate to promote
@@ -48,7 +49,7 @@ def open_incident_from_candidate_with_bundle(
         snapshot_bundle_id: ID of the snapshot bundle containing evidence
 
     Returns:
-        New incident in COLLECTING_EVIDENCE state with bundle ID attached
+        New incident with bundle metadata attached (status remains OPEN)
     """
     # Import here to avoid circular imports at module level
     from .incident_lifecycle import open_incident_from_candidate
@@ -56,8 +57,52 @@ def open_incident_from_candidate_with_bundle(
     # Start with the base incident creation
     incident = open_incident_from_candidate(candidate, observed_at)
 
-    # Transition to collecting_evidence with bundle attachment
-    return mark_collecting_evidence(incident, snapshot_bundle_id, occurred_at=observed_at)
+    # Create evidence link for the bundle
+    bundle_link = EvidenceLink(
+        incident_id=incident.incident_id,
+        artifact_id=snapshot_bundle_id,
+        role=EvidenceRole.SNAPSHOT,
+        attached_at=observed_at,
+    )
+
+    # Create bundle attached event
+    bundle_event = IncidentEvent(
+        event_id=make_event_id(incident.incident_id, "evidence_collection_started", observed_at),
+        incident_id=incident.incident_id,
+        event_type=IncidentEventType.EVIDENCE_COLLECTION_STARTED,
+        actor=IncidentEventActor.SYSTEM,
+        occurred_at=observed_at,
+        message=f"Evidence collection started with bundle {snapshot_bundle_id}",
+        data={"bundle_id": snapshot_bundle_id},
+    )
+
+    # Attach bundle metadata without projecting status
+    # Status transition should be done by caller using store_mark_collecting_evidence
+    return Incident(
+        incident_id=incident.incident_id,
+        source_candidate_id=incident.source_candidate_id,
+        namespace=incident.namespace,
+        object_kind=incident.object_kind,
+        object_name=incident.object_name,
+        raw_object_kind=incident.raw_object_kind,
+        candidate_class=incident.candidate_class,
+        severity=incident.severity,
+        status=incident.status,  # Keep OPEN status
+        first_observed_at=incident.first_observed_at,
+        last_observed_at=observed_at,
+        signals=incident.signals,
+        evidence_needed=incident.evidence_needed,
+        evidence_links=incident.evidence_links + [bundle_link],
+        latest_snapshot_bundle_id=snapshot_bundle_id,
+        review_packet=incident.review_packet,
+        signal_count=incident.signal_count,
+        evidence_count=incident.evidence_count + 1,
+        events=incident.events + [bundle_event],
+        suppressed_reason=incident.suppressed_reason,
+        duplicate_of=incident.duplicate_of,
+        resolved_at=incident.resolved_at,
+        resolution_notes=incident.resolution_notes,
+    )
 
 
 # Terminal-ish statuses that should not be reopened or downgraded

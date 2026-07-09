@@ -31,10 +31,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from .incident_bundle_promotion import (
-    merge_candidate_into_incident_with_bundle,
-    open_incident_from_candidate_with_bundle,
-)
+from .incident_bundle_promotion import merge_candidate_into_incident_with_bundle
 from .incident_events import IncidentEvent
 from .incident_evidence import EvidenceLink, EvidenceRole
 from .incident_lifecycle import (
@@ -127,12 +124,20 @@ class IncidentStore:
             else:
                 # Open new incident
                 if snapshot_bundle_id is not None:
-                    new_incident = open_incident_from_candidate_with_bundle(
-                        candidate, observed_at, snapshot_bundle_id
+                    # Create incident without bundle metadata - store_mark_collecting_evidence
+                    # will add the bundle attachment as part of the typed transition
+                    new_incident = open_incident_from_candidate(candidate, observed_at)
+                    self._incidents[incident_id] = new_incident
+                    # Transition to COLLECTING_EVIDENCE via typed store path
+                    # This also adds the bundle evidence link
+                    transitioned = store_mark_collecting_evidence(
+                        self, incident_id, snapshot_bundle_id
                     )
+                    if transitioned is not None:
+                        new_incident = transitioned
                 else:
                     new_incident = open_incident_from_candidate(candidate, observed_at)
-                self._incidents[incident_id] = new_incident
+                    self._incidents[incident_id] = new_incident
                 updated_incidents[incident_id] = new_incident
 
         # Return snapshot copies to avoid exposing internal state
