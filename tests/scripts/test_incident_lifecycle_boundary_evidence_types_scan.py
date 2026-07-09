@@ -1,4 +1,4 @@
-"""Tests for the evidence type checks in the incident lifecycle boundary verifier."""
+"""Tests for evidence type scanning functions."""
 
 from __future__ import annotations
 
@@ -6,15 +6,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Import the verifier package
+# Import from the package using absolute imports from scripts root
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
-from incident_lifecycle_boundary.evidence_types import (
+from incident_lifecycle_boundary.evidence_types_contract import (  # noqa: I001
     EXPECTED_EVIDENCE_KINDS,
     EXPECTED_EVIDENCE_ROLES,
+)
+from incident_lifecycle_boundary.evidence_types_scan import (  # noqa: I001
     check_evidence_dataclass_field_types,
     check_evidence_literal_usage,
-    check_evidence_type_aliases,
-    check_evidence_type_contract,
     extract_evidence_kind_values,
     extract_evidence_role_values,
 )
@@ -126,151 +126,6 @@ EvidenceRoleCode = Literal["primary"]
             kinds = extract_evidence_kind_values(str(evidence_module))
             assert "snapshot_bundle" in kinds
             assert "review_packet" in kinds
-
-
-class TestEvidenceTypeAliasCheck:
-    """Tests for EvidenceRoleCode and EvidenceKindCode type alias verification."""
-
-    def test_passes_for_correct_typed_aliases(self) -> None:
-        """Passes if both aliases exist with correct values."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False, dir="."
-        ) as f:
-            f.write('''
-from typing import Literal
-
-EvidenceRoleCode = Literal[
-    "primary",
-    "supporting",
-    "snapshot",
-    "review_packet",
-    "debug",
-]
-
-EvidenceKindCode = Literal[
-    "snapshot_bundle",
-    "review_packet",
-    "log_excerpt",
-    "metric_window",
-    "trace",
-    "run_summary",
-    "external_analysis",
-]
-''')
-            temp_path = f.name
-
-        try:
-            errors = check_evidence_type_aliases(temp_path)
-            assert errors == [], f"Expected no errors: {errors}"
-        finally:
-            Path(temp_path).unlink()
-
-    def test_fails_if_role_alias_missing(self) -> None:
-        """Fails if EvidenceRoleCode alias is missing."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False, dir="."
-        ) as f:
-            f.write('''
-from typing import Literal
-
-EvidenceKindCode = Literal["snapshot_bundle"]
-''')
-            temp_path = f.name
-
-        try:
-            errors = check_evidence_type_aliases(temp_path)
-            assert len(errors) > 0
-            assert any("EvidenceRoleCode" in e for e in errors)
-        finally:
-            Path(temp_path).unlink()
-
-    def test_fails_if_kind_alias_missing(self) -> None:
-        """Fails if EvidenceKindCode alias is missing."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False, dir="."
-        ) as f:
-            f.write('''
-from typing import Literal
-
-EvidenceRoleCode = Literal["primary"]
-''')
-            temp_path = f.name
-
-        try:
-            errors = check_evidence_type_aliases(temp_path)
-            assert len(errors) > 0
-            assert any("EvidenceKindCode" in e for e in errors)
-        finally:
-            Path(temp_path).unlink()
-
-    def test_fails_if_role_values_mismatch(self) -> None:
-        """Fails if role values don't match expected contract."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False, dir="."
-        ) as f:
-            f.write('''
-from typing import Literal
-
-# Missing "user", has unexpected "unknown_role"
-EvidenceRoleCode = Literal[
-    "primary",
-    "supporting",
-    "snapshot",
-    "review_packet",
-    "debug",
-    "system",
-    "unknown_role",
-]
-
-EvidenceKindCode = Literal["snapshot_bundle"]
-''')
-            temp_path = f.name
-
-        try:
-            errors = check_evidence_type_aliases(temp_path)
-            assert len(errors) > 0
-            assert any("missing" in e.lower() or "unexpected" in e.lower() for e in errors)
-        finally:
-            Path(temp_path).unlink()
-
-    def test_fails_if_kind_values_mismatch(self) -> None:
-        """Fails if kind values don't match expected contract."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False, dir="."
-        ) as f:
-            f.write('''
-from typing import Literal
-
-EvidenceRoleCode = Literal["primary", "supporting", "snapshot", "review_packet", "debug", "system", "user"]
-
-# Missing "log_excerpt", has unexpected "unknown_kind"
-EvidenceKindCode = Literal[
-    "snapshot_bundle",
-    "review_packet",
-    "unknown_kind",
-]
-''')
-            temp_path = f.name
-
-        try:
-            errors = check_evidence_type_aliases(temp_path)
-            assert len(errors) > 0
-            assert any("missing" in e.lower() or "unexpected" in e.lower() for e in errors)
-        finally:
-            Path(temp_path).unlink()
-
-    def test_passes_for_actual_evidence_module(self) -> None:
-        """Actual incident_evidence.py passes type alias checks."""
-        evidence_module = (
-            Path(__file__).parent.parent.parent
-            / "src"
-            / "k8s_diag_agent"
-            / "collect"
-            / "incident_evidence.py"
-        )
-        if evidence_module.exists():
-            errors = check_evidence_type_aliases(str(evidence_module))
-            assert errors == [], f"Expected no errors for actual module: {errors}"
 
 
 class TestEvidenceDataclassFieldTypes:
@@ -566,26 +421,6 @@ class TestEvidenceLiteralUsage:
             )
             # Should not flag unknown literals in scripts/
             assert not any("unknown_in_script" in e for e in errors)
-
-
-class TestEvidenceTypeContract:
-    """Tests for the complete evidence type contract check."""
-
-    def test_passes_for_actual_evidence_module(self) -> None:
-        """Actual incident_evidence.py passes the complete contract check."""
-        evidence_module = (
-            Path(__file__).parent.parent.parent
-            / "src"
-            / "k8s_diag_agent"
-            / "collect"
-            / "incident_evidence.py"
-        )
-        if evidence_module.exists():
-            errors = check_evidence_type_contract(
-                evidence_filepath=str(evidence_module),
-                repo_root=Path(__file__).parent.parent.parent / "src",
-            )
-            assert errors == [], f"Expected no errors for actual module: {errors}"
 
 
 if __name__ == "__main__":
