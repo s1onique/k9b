@@ -321,7 +321,8 @@ export const IncidentsOverviewSection: React.FC<IncidentsOverviewSectionProps> =
         // API only supports status filter; run scoping is done by backend
         const response: IncidentsListResponse = await listIncidents();
         if (!ignore) {
-          setAllIncidents(response.incidents);
+          // Defensively handle missing incidents field (treat undefined/null as empty)
+          setAllIncidents(Array.isArray(response.incidents) ? response.incidents : []);
         }
       } catch (err) {
         if (!ignore) {

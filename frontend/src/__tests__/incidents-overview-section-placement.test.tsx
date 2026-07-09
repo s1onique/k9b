@@ -281,6 +281,79 @@ describe("IncidentsOverviewSection", () => {
       });
     });
   });
+
+  describe("Edge cases and regression tests", () => {
+    it("does not crash when selected run is not available yet (runId is null)", async () => {
+      vi.mocked(listIncidents).mockResolvedValue({ incidents: [] });
+
+      // This tests the stale-selected-run-fallback scenario where runId becomes null
+      // during transition between runs
+      render(<IncidentsOverviewSection runId={null} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("incidents-overview-section")).toBeInTheDocument();
+      });
+
+      // Should show empty state, not crash
+      expect(screen.getByText("No incidents for this run.")).toBeInTheDocument();
+    });
+
+    it("treats missing incidents payload as empty array", async () => {
+      // This tests a malformed/sparse API response where the incidents field is absent.
+      vi.mocked(listIncidents).mockResolvedValue({});
+
+      render(<IncidentsOverviewSection runId="run-123" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("incidents-overview-section")).toBeInTheDocument();
+      });
+
+      // Should show empty state, not crash
+      expect(screen.getByText("No incidents for this run.")).toBeInTheDocument();
+    });
+
+    it("treats undefined incidents payload as empty array", async () => {
+      // Explicit undefined test for type safety
+      vi.mocked(listIncidents).mockResolvedValue({ incidents: undefined } as any);
+
+      render(<IncidentsOverviewSection runId="run-123" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("incidents-overview-section")).toBeInTheDocument();
+      });
+
+      // Should show empty state, not crash
+      expect(screen.getByText("No incidents for this run.")).toBeInTheDocument();
+    });
+
+    it("treats null incidents payload as empty array", async () => {
+      // Explicit null test for type safety
+      vi.mocked(listIncidents).mockResolvedValue({ incidents: null } as any);
+
+      render(<IncidentsOverviewSection runId="run-123" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("incidents-overview-section")).toBeInTheDocument();
+      });
+
+      // Should show empty state, not crash
+      expect(screen.getByText("No incidents for this run.")).toBeInTheDocument();
+    });
+
+    it("handles non-array incidents payload gracefully", async () => {
+      // Test edge case where incidents is a string or object instead of array
+      vi.mocked(listIncidents).mockResolvedValue({ incidents: "not-an-array" } as any);
+
+      render(<IncidentsOverviewSection runId="run-123" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("incidents-overview-section")).toBeInTheDocument();
+      });
+
+      // Should show empty state, not crash
+      expect(screen.getByText("No incidents for this run.")).toBeInTheDocument();
+    });
+  });
 });
 
 describe("App.tsx section order", () => {
