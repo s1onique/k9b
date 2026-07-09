@@ -14,6 +14,10 @@ Design notes:
     - IncidentDetailPayload: full case view with signals, evidence links, timeline
     - Uses latest_snapshot_bundle_id (not snapshot_bundle_id)
     - Uses review_packet object (not review_packet_available + review_packet_id)
+
+Note: Internal API payloads (IncidentInternalListItemPayload, IncidentInternalDetailPayload)
+have been moved to api_incident_internal_reads.py for better LLM-friendliness (under 500 lines).
+They are NOT re-exported here since the external API does not use them.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from __future__ import annotations
 from typing import Any, Literal, TypedDict
 
 __all__ = [
+    # Local payload definitions
     "IncidentSignalPayload",
     "IncidentEvidenceLinkPayload",
     "IncidentReviewPacketPayload",
@@ -384,6 +389,11 @@ class IncidentDetailPayload(TypedDict, total=False):
     # Automatic diagnosis loop summary - derived from timeline events
     # Provides current-state summary without opening raw artifacts
     automatic_diagnosis_loop_summary: AutomaticDiagnosisLoopSummary
+
+
+# NOTE: IncidentInternalListItemPayload and IncidentInternalDetailPayload have been
+# moved to api_incident_internal_reads.py for LLM-friendliness (under 500 lines).
+# They are NOT re-exported here since the external API does not use them.
 
 
 class AutomaticDiagnosisLoopSummary(TypedDict, total=False):

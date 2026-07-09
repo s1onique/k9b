@@ -9,6 +9,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from .api_incident_internal_reads import (
+    build_incident_internal_detail_payload,
+    build_incident_internal_list_item_payload,
+)
 from .server_incident_internal_auth import _validate_internal_token
 
 if TYPE_CHECKING:
@@ -48,30 +52,12 @@ def handle_get_incident(handler: HealthUIRequestHandler, incident_id: str) -> No
             )
             return
 
-        # Convert to response format
-        handler._send_json({
-            "incident_id": incident.incident_id,
-            "status": incident.status.value,
-            "created_at": incident.created_at.isoformat() if incident.created_at else None,
-            "updated_at": incident.updated_at.isoformat() if incident.updated_at else None,
-            "severity": incident.severity.value if incident.severity else None,
-            "namespace": incident.namespace,
-            "object_name": incident.object_name,
-            "object_kind": incident.object_kind.value if incident.object_kind else None,
-            "summary": incident.summary,
-            "description": incident.description,
-            "signals": [
-                {
-                    "signal_id": sig.signal_id,
-                    "source": sig.source,
-                    "reason": sig.reason,
-                    "message": sig.message,
-                    "severity": sig.severity.value if sig.severity else None,
-                    "observed_at": sig.observed_at.isoformat() if sig.observed_at else None,
-                }
-                for sig in incident.signals
-            ] if incident.signals else [],
-        }, 200)
+        # Haskellized: use total projection function for serialization
+        # instead of ad-hoc field access scattered in handler
+        handler._send_json(
+            build_incident_internal_detail_payload(incident),
+            200,
+        )
 
     except Exception as e:
         _logger.exception("Failed to get incident %s", incident_id)
@@ -150,15 +136,12 @@ def handle_list_incidents(handler: HealthUIRequestHandler) -> None:
         if limit is not None and limit > 0:
             incidents = incidents[:limit]
 
-        # Convert to summary format (minimal data for internal API)
-        incident_summaries = []
-        for inc in incidents:
-            incident_summaries.append({
-                "incident_id": inc.incident_id,
-                "status": inc.status.value,
-                "created_at": inc.created_at.isoformat() if inc.created_at else None,
-                "updated_at": inc.updated_at.isoformat() if inc.updated_at else None,
-            })
+        # Haskellized: use total projection function for serialization
+        # instead of ad-hoc field access scattered in handler
+        incident_summaries = [
+            build_incident_internal_list_item_payload(inc)
+            for inc in incidents
+        ]
 
         handler._send_json({
             "incidents": incident_summaries,
@@ -167,9 +150,8 @@ def handle_list_incidents(handler: HealthUIRequestHandler) -> None:
 
     except Exception as e:
         _logger.exception("Failed to list incidents")
+        # Projection failure is an internal error - return 500, not 200
         handler._send_json({
             "error": "Internal Error",
             "message": str(e),
-            "incidents": [],
-            "total": 0,
         }, 500)
