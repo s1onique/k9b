@@ -5,6 +5,8 @@ This module contains:
 - EvidenceLink: relationship between incident and artifact
 - EvidenceKind, EvidenceRole, RedactionStatus enums
 - EvidenceRoleCode, EvidenceKindCode: closed typed aliases for role/kind values
+- Branded ID types: ArtifactId, EvidenceLinkId, SnapshotBundleId, ReviewPacketId,
+  DiagnosisLoopPassId, ExternalAnalysisArtifactId
 
 Design notes:
 - EvidenceArtifacts are stored separately from incidents to keep incidents lightweight
@@ -12,6 +14,16 @@ Design notes:
 - Multiple evidence types can be attached over the incident lifecycle
 - Typed aliases (EvidenceRoleCode, EvidenceKindCode) provide closed contracts
   for string values crossing the domain/store boundary
+- Branded NewType IDs prevent accidental mixing of different identifier types
+- Serialization (to_dict, API) still emits plain strings for compatibility
+
+Branding rationale:
+- ArtifactId: generic evidence artifact identifier
+- EvidenceLinkId: unique link identifier between incident and artifact
+- SnapshotBundleId: snapshot bundle artifact identifier
+- ReviewPacketId: review packet artifact identifier
+- DiagnosisLoopPassId: diagnosis loop pass artifact identifier
+- ExternalAnalysisArtifactId: external analysis artifact identifier
 """
 
 from __future__ import annotations
@@ -19,7 +31,51 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any, Literal, NewType
+
+# -----------------------------------------------------------------------------
+# Branded ID types for evidence/artifact identifiers
+# These NewType aliases prevent accidental mixing of different ID types.
+# Runtime values are still plain strings; branding is enforced statically.
+# -----------------------------------------------------------------------------
+
+ArtifactId = NewType("ArtifactId", str)
+EvidenceLinkId = NewType("EvidenceLinkId", str)
+SnapshotBundleId = NewType("SnapshotBundleId", str)
+ReviewPacketId = NewType("ReviewPacketId", str)
+DiagnosisLoopPassId = NewType("DiagnosisLoopPassId", str)
+ExternalAnalysisArtifactId = NewType("ExternalAnalysisArtifactId", str)
+
+
+# -----------------------------------------------------------------------------
+# Explicit conversion helpers at the boundary
+# Use these to convert plain strings to branded IDs at typed construction seams.
+# -----------------------------------------------------------------------------
+
+def make_artifact_id(value: str) -> ArtifactId:
+    """Convert a string to an ArtifactId."""
+    return ArtifactId(value)
+
+
+def make_snapshot_bundle_id(value: str) -> SnapshotBundleId:
+    """Convert a string to a SnapshotBundleId."""
+    return SnapshotBundleId(value)
+
+
+def make_review_packet_id(value: str) -> ReviewPacketId:
+    """Convert a string to a ReviewPacketId."""
+    return ReviewPacketId(value)
+
+
+def make_diagnosis_loop_pass_id(value: str) -> DiagnosisLoopPassId:
+    """Convert a string to a DiagnosisLoopPassId."""
+    return DiagnosisLoopPassId(value)
+
+
+def make_external_analysis_artifact_id(value: str) -> ExternalAnalysisArtifactId:
+    """Convert a string to an ExternalAnalysisArtifactId."""
+    return ExternalAnalysisArtifactId(value)
+
 
 # -----------------------------------------------------------------------------
 # Closed typed aliases for evidence role/kind values
@@ -93,7 +149,7 @@ class EvidenceArtifact:
     lightweight and to support multiple evidence types over time.
     """
 
-    artifact_id: str
+    artifact_id: ArtifactId
     kind: EvidenceKind
     storage_ref: str
     content_hash: str | None = None
@@ -103,7 +159,7 @@ class EvidenceArtifact:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "artifact_id": self.artifact_id,
+            "artifact_id": str(self.artifact_id),
             "kind": self.kind.value,
             "storage_ref": self.storage_ref,
             "content_hash": self.content_hash,
@@ -118,20 +174,34 @@ class EvidenceLink:
     """Link between an incident and an evidence artifact."""
 
     incident_id: str
-    artifact_id: str
+    artifact_id: ArtifactId
     role: EvidenceRole
     attached_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "incident_id": self.incident_id,
-            "artifact_id": self.artifact_id,
+            "artifact_id": str(self.artifact_id),
             "role": self.role.value,
             "attached_at": self.attached_at.isoformat(),
         }
 
 
 __all__ = [
+    # Branded ID types
+    "ArtifactId",
+    "DiagnosisLoopPassId",
+    "EvidenceLinkId",
+    "ExternalAnalysisArtifactId",
+    "ReviewPacketId",
+    "SnapshotBundleId",
+    # Conversion helpers
+    "make_artifact_id",
+    "make_diagnosis_loop_pass_id",
+    "make_external_analysis_artifact_id",
+    "make_review_packet_id",
+    "make_snapshot_bundle_id",
+    # Models
     "EvidenceArtifact",
     "EvidenceKind",
     "EvidenceKindCode",

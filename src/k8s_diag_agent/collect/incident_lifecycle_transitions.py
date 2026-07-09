@@ -39,7 +39,12 @@ from k8s_diag_agent.domain.incident_lifecycle import (
     suppress_incident as domain_suppress_incident,
 )
 
-from .incident_evidence import EvidenceLink, EvidenceRole
+from .incident_evidence import (
+    ArtifactId,
+    EvidenceLink,
+    EvidenceRole,
+    make_artifact_id,
+)
 from .incident_lifecycle import Incident, IncidentStatus
 from .incident_lifecycle_domain_adapter import (
     _apply_lifecycle_transition,
@@ -95,13 +100,15 @@ def store_mark_collecting_evidence(
         case TransitionApplied():
             updated = _apply_lifecycle_transition(incident, result)
             # Preserve store-specific fields that domain doesn't know about
+            # Use branded ArtifactId for evidence link
+            branded_artifact_id: ArtifactId = make_artifact_id(bundle_id)
             updated = replace(
                 updated,
                 latest_snapshot_bundle_id=bundle_id,
                 evidence_links=incident.evidence_links + [
                     EvidenceLink(
                         incident_id=incident_id,
-                        artifact_id=bundle_id,
+                        artifact_id=branded_artifact_id,
                         role=EvidenceRole.SNAPSHOT,
                         attached_at=now,
                     )

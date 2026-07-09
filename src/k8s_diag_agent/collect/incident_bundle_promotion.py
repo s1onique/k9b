@@ -17,7 +17,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from .incident_evidence import EvidenceLink, EvidenceRole
+from .incident_evidence import (
+    EvidenceLink,
+    EvidenceRole,
+    make_artifact_id,
+)
 from .incident_lifecycle import (
     Incident,
     IncidentEvent,
@@ -57,10 +61,10 @@ def open_incident_from_candidate_with_bundle(
     # Start with the base incident creation
     incident = open_incident_from_candidate(candidate, observed_at)
 
-    # Create evidence link for the bundle
+    # Create evidence link for the bundle using branded ID
     bundle_link = EvidenceLink(
         incident_id=incident.incident_id,
-        artifact_id=snapshot_bundle_id,
+        artifact_id=make_artifact_id(snapshot_bundle_id),
         role=EvidenceRole.SNAPSHOT,
         attached_at=observed_at,
     )
@@ -175,10 +179,10 @@ def merge_candidate_into_incident_with_bundle(
             for link in incident.evidence_links
         )
         if not existing_link:
-            # Create evidence link for the new bundle
+            # Create evidence link for the new bundle using branded ID
             new_link = EvidenceLink(
                 incident_id=incident.incident_id,
-                artifact_id=snapshot_bundle_id,
+                artifact_id=make_artifact_id(snapshot_bundle_id),
                 role=EvidenceRole.SNAPSHOT,
                 attached_at=observed_at,
             )

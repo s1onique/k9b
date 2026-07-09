@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import sys
 
+from incident_lifecycle_boundary.artifact_ids import check_artifact_id_contract
 from incident_lifecycle_boundary.common import (
     DOMAIN_ADAPTER_MODULE,
     DOMAIN_MODULE,
@@ -93,6 +94,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         errors.extend(evidence_errors)
 
+    # Check 7: Artifact/evidence ID contracts are branded and serialized safely
+    if EVIDENCE_MODULE.exists():
+        artifact_id_errors = check_artifact_id_contract(str(EVIDENCE_MODULE))
+        errors.extend(artifact_id_errors)
+
     # Report results
     if errors:
         print("BOUNDARY VERIFICATION FAILED")
@@ -111,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  Transition adapter calls typed lifecycle core functions")
         print("  Event and actor mappings are complete")
         print("  Evidence role/kind contracts are typed and complete")
+        print("  Artifact/evidence ID contracts are branded and serialized safely")
         print("  Module is isolated from IO, Kubernetes, HTTP dependencies")
         print("=" * 60)
         return 0

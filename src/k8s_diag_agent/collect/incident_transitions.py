@@ -26,7 +26,11 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from .incident_events import IncidentEvent, IncidentEventActor, IncidentEventType, make_event_id
-from .incident_evidence import EvidenceLink, EvidenceRole
+from .incident_evidence import (
+    ArtifactId,
+    EvidenceLink,
+    EvidenceRole,
+)
 
 if TYPE_CHECKING:
     from .incident_candidates import IncidentCandidate
@@ -74,15 +78,26 @@ def merge_candidate_into_incident(
 
 def attach_evidence_artifact(
     incident: Incident,
-    artifact_id: str,
+    artifact_id: ArtifactId,
     role: EvidenceRole,
     occurred_at: datetime | None = None,
 ) -> Incident:
-    """Attach an evidence artifact to the incident (idempotent)."""
+    """Attach an evidence artifact to the incident (idempotent).
+
+    Args:
+        incident: The incident to attach evidence to
+        artifact_id: Branded artifact ID
+        role: Role of the evidence
+        occurred_at: Optional timestamp (defaults to now)
+
+    Returns:
+        Updated incident with evidence link and event
+    """
     now = occurred_at or datetime.now(UTC)
+    artifact_id_str = str(artifact_id)
 
     # Check idempotency
-    if any(link.artifact_id == artifact_id and link.role == role for link in incident.evidence_links):
+    if any(link.artifact_id == artifact_id_str and link.role == role for link in incident.evidence_links):
         return incident
 
     new_link = EvidenceLink(
@@ -98,8 +113,8 @@ def attach_evidence_artifact(
         event_type=IncidentEventType.EVIDENCE_ARTIFACT_ATTACHED,
         actor=IncidentEventActor.SYSTEM,
         occurred_at=now,
-        message=f"Evidence artifact attached: {artifact_id}",
-        data={"artifact_id": artifact_id, "role": role.value},
+        message=f"Evidence artifact attached: {artifact_id_str}",
+        data={"artifact_id": artifact_id_str, "role": role.value},
     )
 
     return replace(

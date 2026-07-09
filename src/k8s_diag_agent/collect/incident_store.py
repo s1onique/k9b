@@ -33,7 +33,12 @@ from typing import TYPE_CHECKING
 
 from .incident_bundle_promotion import merge_candidate_into_incident_with_bundle
 from .incident_events import IncidentEvent
-from .incident_evidence import EvidenceLink, EvidenceRole
+from .incident_evidence import (
+    ArtifactId,
+    EvidenceLink,
+    EvidenceRole,
+    make_artifact_id,
+)
 from .incident_lifecycle import (
     Incident,
     IncidentStatus,
@@ -392,7 +397,9 @@ class IncidentStore:
         if incident is None:
             return None
 
-        updated = _attach_evidence_artifact(incident, artifact_id, role)
+        # Use branded ID at the construction seam
+        branded_artifact_id: ArtifactId = make_artifact_id(artifact_id)
+        updated = _attach_evidence_artifact(incident, branded_artifact_id, role)
         self._incidents[incident_id] = updated
         return self._snapshot_incident(updated)
 
