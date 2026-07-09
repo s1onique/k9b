@@ -10,11 +10,13 @@ import sys
 from incident_lifecycle_boundary.common import (
     DOMAIN_ADAPTER_MODULE,
     DOMAIN_MODULE,
+    EVIDENCE_MODULE,
     REPO_ROOT,
     TRANSITIONS_MODULE,
     iter_python_files,
 )
 from incident_lifecycle_boundary.event_mappings import check_lifecycle_event_mappings
+from incident_lifecycle_boundary.evidence_types import check_evidence_type_contract
 from incident_lifecycle_boundary.forbidden_imports import check_forbidden_imports
 from incident_lifecycle_boundary.rejection_reasons import (
     check_reason_allowlist,
@@ -83,6 +85,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         errors.extend(event_mapping_errors)
 
+    # Check 6: Evidence role/kind contracts are typed and complete
+    if EVIDENCE_MODULE.exists():
+        evidence_errors = check_evidence_type_contract(
+            evidence_filepath=str(EVIDENCE_MODULE),
+            repo_root=REPO_ROOT,
+        )
+        errors.extend(evidence_errors)
+
     # Report results
     if errors:
         print("BOUNDARY VERIFICATION FAILED")
@@ -100,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  No direct .status mutations detected outside allowed files")
         print("  Transition adapter calls typed lifecycle core functions")
         print("  Event and actor mappings are complete")
+        print("  Evidence role/kind contracts are typed and complete")
         print("  Module is isolated from IO, Kubernetes, HTTP dependencies")
         print("=" * 60)
         return 0

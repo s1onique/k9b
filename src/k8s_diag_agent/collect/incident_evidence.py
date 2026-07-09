@@ -4,11 +4,14 @@ This module contains:
 - EvidenceArtifact: immutable evidence blob
 - EvidenceLink: relationship between incident and artifact
 - EvidenceKind, EvidenceRole, RedactionStatus enums
+- EvidenceRoleCode, EvidenceKindCode: closed typed aliases for role/kind values
 
 Design notes:
 - EvidenceArtifacts are stored separately from incidents to keep incidents lightweight
 - EvidenceLinks provide explicit traceability
 - Multiple evidence types can be attached over the incident lifecycle
+- Typed aliases (EvidenceRoleCode, EvidenceKindCode) provide closed contracts
+  for string values crossing the domain/store boundary
 """
 
 from __future__ import annotations
@@ -16,7 +19,40 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
+
+# -----------------------------------------------------------------------------
+# Closed typed aliases for evidence role/kind values
+# EvidenceRoleCode mirrors EvidenceRole.
+# EvidenceKindCode contains EvidenceKind plus legacy/production extended kind
+# literals found at evidence seams (e.g., read_only_kubernetes, backing_pods).
+# -----------------------------------------------------------------------------
+
+# NOTE: EvidenceRoleCode mirrors EvidenceRole enum values.
+# EvidenceRole enum is used for runtime model; EvidenceRoleCode provides
+# the closed seam contract for evidence role strings at boundaries.
+EvidenceRoleCode = Literal[
+    "primary",
+    "supporting",
+    "snapshot",
+    "review_packet",
+    "debug",
+]
+
+# EvidenceKindCode mirrors EvidenceKind enum values.
+# EvidenceKind enum is used for runtime model; EvidenceKindCode provides
+# the closed seam contract for evidence kind strings at boundaries.
+# NOTE: Only include evidence kinds that are genuinely evidence artifacts,
+# not Kubernetes object kinds (Pod, Deployment, etc.) or unrelated domain values.
+EvidenceKindCode = Literal[
+    "snapshot_bundle",
+    "review_packet",
+    "log_excerpt",
+    "metric_window",
+    "trace",
+    "run_summary",
+    "external_analysis",
+]
 
 
 class EvidenceKind(StrEnum):
@@ -98,7 +134,9 @@ class EvidenceLink:
 __all__ = [
     "EvidenceArtifact",
     "EvidenceKind",
+    "EvidenceKindCode",
     "EvidenceLink",
     "EvidenceRole",
+    "EvidenceRoleCode",
     "RedactionStatus",
 ]
