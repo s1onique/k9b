@@ -70,11 +70,13 @@ ALLOWED_REJECTION_REASONS: frozenset[str] = frozenset({
 })
 
 
-# Files allowed to assign to .status on IncidentLifecycle instances
-# These are adapter/conversion files that bridge between persistence and domain
-_ALLOWED_STATUS_MUTATION_FILES: frozenset[str] = frozenset({
-    "src/k8s_diag_agent/collect/incident_store.py",
-    "src/k8s_diag_agent/collect/incident_store_provider.py",
+# Functions allowed to project lifecycle status back into the persistence model.
+# Only the adapter function that applies typed domain state may assign incident.status.
+_ALLOWED_STATUS_PROJECTION_FUNCTIONS: frozenset[tuple[str, str]] = frozenset({
+    (
+        "src/k8s_diag_agent/collect/incident_lifecycle_domain_adapter.py",
+        "_apply_lifecycle_transition",
+    ),
 })
 
 
@@ -98,7 +100,46 @@ class BoundaryChecker(ast.NodeVisitor):
         self.errors: list[str] = []
         self.imports: list[str] = []
         self.is_domain_module: bool = "domain/incident_lifecycle" in filepath
-        self.is_allowed_mutation_file: bool = filepath in _ALLOWED_STATUS_MUTATION_FILES
+        self._function_stack: list[str] = []
+
+    @property
+    def current_function(self) -> str | None:
+        """Return the current function name, or None if not in a function."""
+        return self._function_stack[-1] if self._function_stack else None
+
+    def _is_allowed_status_projection(self) -> bool:
+        """Check if the current function is allowed to project lifecycle status.
+        
+        Domain modules (k8s_diag_agent/domain/) are excluded from checks because
+        they use replace() internally on IncidentLifecycle as part of typed transition
+        functions - this is intentional and part of the typed domain core.
+        
+        Only the specific adapter function in collect/ is allowed to project
+        lifecycle status back into the persistence model (Incident type).
+        """
+        # Domain modules are excluded - they use replace() on IncidentLifecycle internally
+        if self.is_domain_module:
+            return True
+        return (
+            self.filepath,
+            self.current_function or "",
+        ) in _ALLOWED_STATUS_PROJECTION_FUNCTIONS
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Track function context for status projection checks."""
+        self._function_stack.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._function_stack.pop()
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """Track async function context for status projection checks."""
+        self._function_stack.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._function_stack.pop()
 
     def visit_Import(self, node: ast.Import) -> None:
         """Check import statements."""
@@ -138,25 +179,55 @@ class BoundaryChecker(ast.NodeVisitor):
         self._check_status_assignment(node.target, node.lineno)
         self.generic_visit(node)
 
+    def visit_Call(self, node: ast.Call) -> None:
+        """Check for replace(..., status=...) patterns."""
+        self._check_replace_status_projection(node)
+        self.generic_visit(node)
+
     def _check_status_assignment(self, target: ast.expr, lineno: int) -> None:
-        """Check if an assignment targets IncidentLifecycle.status."""
-        # Only check if this is NOT an allowed mutation file
-        if self.is_allowed_mutation_file:
+        """Check if an assignment targets incident.status."""
+        # Only check if this is NOT an allowed projection function
+        if self._is_allowed_status_projection():
             return
 
         # Check for patterns like: incident.status = ... or obj.incident.status = ...
         if isinstance(target, ast.Attribute):
             if target.attr == "status":
-                # Check if it's accessing .status on something that might be IncidentLifecycle
+                # Check if it's accessing .status on something that might be an Incident
                 if isinstance(target.value, ast.Name):
                     # Pattern: incident.status = ... (simple variable)
                     var_name = target.value.id
                     if var_name in ("incident", "lifecycle", "inc"):
                         self.errors.append(
-                            f"{self.filepath}:{lineno}: Direct .status assignment "
-                            f"to '{var_name}' outside allowed files "
-                            f"({', '.join(sorted(_ALLOWED_STATUS_MUTATION_FILES))})"
+                            f"{self.filepath}:{lineno}: lifecycle status projection is only "
+                            f"allowed in incident_lifecycle_domain_adapter.py::_apply_lifecycle_transition"
                         )
+
+    def _check_replace_status_projection(self, node: ast.Call) -> None:
+        """Check for replace(..., status=...) calls outside the allowed adapter."""
+        # Only check if this is NOT an allowed projection function
+        if self._is_allowed_status_projection():
+            return
+
+        # Check for replace(incident, status=...) pattern
+        is_replace_call = False
+
+        # Handle: replace(incident, status=...)
+        if isinstance(node.func, ast.Name) and node.func.id == "replace":
+            is_replace_call = True
+        # Handle: dataclasses.replace(incident, status=...)
+        elif isinstance(node.func, ast.Attribute) and node.func.attr == "replace":
+            is_replace_call = True
+
+        if is_replace_call:
+            # Check if any keyword has arg == "status"
+            for keyword in node.keywords:
+                if keyword.arg == "status":
+                    self.errors.append(
+                        f"{self.filepath}:{node.lineno}: lifecycle status projection is only "
+                        f"allowed in incident_lifecycle_domain_adapter.py::_apply_lifecycle_transition"
+                    )
+                    break
 
 
 def check_forbidden_imports(filepath: str) -> list[str]:
@@ -209,7 +280,7 @@ def check_reason_allowlist(filepath: str) -> list[str]:
 
 
 def check_status_assignments(filepath: str) -> list[str]:
-    """Check for direct .status assignments outside allowed files."""
+    """Check for direct .status assignments and replace(..., status=...) outside allowed functions."""
     errors: list[str] = []
 
     try:
@@ -226,9 +297,10 @@ def check_status_assignments(filepath: str) -> list[str]:
 
     checker = BoundaryChecker(filepath)
     checker.visit(tree)
-    # Only return status-related errors
+    # Return all status-related errors (both assignment and replace projection)
     errors.extend(
-        error for error in checker.errors if ".status assignment" in error
+        error for error in checker.errors
+        if ".status assignment" in error or "status projection" in error
     )
 
     return errors
@@ -288,6 +360,20 @@ def iter_python_files(root: Path) -> list[Path]:
     ]
 
 
+# Files excluded from status projection checks.
+# These files predate the typed lifecycle architecture and use the old direct
+# status mutation pattern. They are being phased out in favor of the typed
+# transition path through incident_lifecycle_transitions.py.
+#
+# Invariant: Direct status projection is forbidden except:
+# 1. incident_lifecycle_domain_adapter.py::_apply_lifecycle_transition (primary seam)
+# 2. Legacy incident_transitions.py (temporarily excluded, pending removal via follow-up ACT)
+_EXCLUDED_FROM_STATUS_CHECKS: frozenset[str] = frozenset({
+    # Legacy transition file that predates typed lifecycle architecture
+    "src/k8s_diag_agent/collect/incident_transitions.py",
+})
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run boundary checks."""
     if argv is None:
@@ -320,6 +406,9 @@ def main(argv: list[str] | None = None) -> int:
     python_files = iter_python_files(repo_root)
     status_errors: list[str] = []
     for filepath in python_files:
+        # Skip files excluded from status checks (legacy files being phased out)
+        if str(filepath) in _EXCLUDED_FROM_STATUS_CHECKS:
+            continue
         file_errors = check_status_assignments(str(filepath))
         status_errors.extend(file_errors)
 

@@ -115,10 +115,10 @@ class TestBoundaryVerifier:
 
 
 class TestStatusAssignmentChecks:
-    """Tests for direct .status assignment detection."""
+    """Tests for direct .status assignment detection with function-level allowlist."""
 
-    def test_status_assignment_plain_detected_in_non_allowlisted_file(self) -> None:
-        """Plain .status assignment (Assign) in non-allowlisted file should be detected."""
+    def test_status_assignment_plain_detected_outside_adapter(self) -> None:
+        """Plain .status assignment (Assign) outside adapter function should be detected."""
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".py", delete=False, dir="."
         ) as f:
@@ -129,13 +129,12 @@ class TestStatusAssignmentChecks:
         try:
             errors = verifier.check_status_assignments(temp_path)
             assert len(errors) == 1, f"Expected 1 error, got: {errors}"
-            assert "'incident'" in errors[0]
-            assert "outside allowed files" in errors[0]
+            assert "status projection" in errors[0]
         finally:
             Path(temp_path).unlink()
 
-    def test_status_assignment_annotated_detected_in_non_allowlisted_file(self) -> None:
-        """Annotated .status assignment (AnnAssign) in non-allowlisted file should be detected."""
+    def test_status_assignment_annotated_detected_outside_adapter(self) -> None:
+        """Annotated .status assignment (AnnAssign) outside adapter function should be detected."""
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".py", delete=False, dir="."
         ) as f:
@@ -146,30 +145,104 @@ class TestStatusAssignmentChecks:
         try:
             errors = verifier.check_status_assignments(temp_path)
             assert len(errors) == 1, f"Expected 1 error, got: {errors}"
-            assert "'incident'" in errors[0]
-            assert "outside allowed files" in errors[0]
+            assert "status projection" in errors[0]
         finally:
             Path(temp_path).unlink()
 
-    def test_status_assignment_passes_in_allowlisted_file(self) -> None:
-        """Direct .status assignment in allowlisted file should pass."""
-        # Create a temp file in the allowed directory with a predictable relative path
-        temp_path = "src/k8s_diag_agent/collect/test_incident_store.py"
-        with open(temp_path, "w") as f:
-            f.write("incident.status = 'resolved'\n")
+    def test_status_assignment_augmented_detected_outside_adapter(self) -> None:
+        """Augmented .status assignment (AugAssign) outside adapter function should be detected."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False, dir="."
+        ) as f:
+            # Augmented assignment
+            f.write("incident.status += 1\n")
+            temp_path = f.name
 
         try:
-            # Check with the allowlisted path
-            original = verifier._ALLOWED_STATUS_MUTATION_FILES.copy()
-            verifier._ALLOWED_STATUS_MUTATION_FILES = {
-                "src/k8s_diag_agent/collect/incident_store.py",
-                "src/k8s_diag_agent/collect/test_incident_store.py",
-            }
-            try:
-                errors = verifier.check_status_assignments(temp_path)
-                assert errors == [], f"Expected no errors for allowlisted file: {errors}"
-            finally:
-                verifier._ALLOWED_STATUS_MUTATION_FILES = original
+            errors = verifier.check_status_assignments(temp_path)
+            assert len(errors) == 1, f"Expected 1 error, got: {errors}"
+            assert "status projection" in errors[0]
+        finally:
+            Path(temp_path).unlink()
+
+    def test_replace_status_detected_outside_adapter(self) -> None:
+        """replace(incident, status=...) outside adapter function should be detected."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False, dir="."
+        ) as f:
+            f.write("""
+from dataclasses import replace
+
+def helper(incident):
+    return replace(incident, status='resolved')
+""")
+            temp_path = f.name
+
+        try:
+            errors = verifier.check_status_assignments(temp_path)
+            assert len(errors) == 1, f"Expected 1 error, got: {errors}"
+            assert "status projection" in errors[0]
+        finally:
+            Path(temp_path).unlink()
+
+    def test_replace_status_passes_inside_adapter(self, tmp_path: Path) -> None:
+        """replace(incident, status=...) inside _apply_lifecycle_transition should pass."""
+        # Create a temp file with the adapter function
+        temp_adapter = tmp_path / "incident_lifecycle_domain_adapter.py"
+        temp_adapter.write_text("""
+from dataclasses import replace
+
+def _apply_lifecycle_transition(incident, transition_result):
+    return replace(incident, status='resolved')
+""")
+
+        # Save original and patch the allowed functions set
+        original = verifier._ALLOWED_STATUS_PROJECTION_FUNCTIONS.copy()
+        try:
+            verifier._ALLOWED_STATUS_PROJECTION_FUNCTIONS = frozenset({
+                (str(temp_adapter), "_apply_lifecycle_transition"),
+            })
+            errors = verifier.check_status_assignments(str(temp_adapter))
+            assert errors == [], f"Expected no errors for allowed adapter: {errors}"
+        finally:
+            verifier._ALLOWED_STATUS_PROJECTION_FUNCTIONS = original
+
+    def test_status_read_outside_adapter_passes(self) -> None:
+        """Status reads and comparisons outside adapter function should pass."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False, dir="."
+        ) as f:
+            f.write("""
+def check_status(incident):
+    if incident.status == 'resolved':
+        return True
+    status = incident.status
+    return status
+""")
+            temp_path = f.name
+
+        try:
+            errors = verifier.check_status_assignments(temp_path)
+            assert errors == [], f"Expected no errors for status reads: {errors}"
+        finally:
+            Path(temp_path).unlink()
+
+    def test_replace_other_field_outside_adapter_passes(self) -> None:
+        """replace(..., other_field=...) outside adapter function should pass."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False, dir="."
+        ) as f:
+            f.write("""
+from dataclasses import replace
+
+def helper(incident):
+    return replace(incident, last_observed_at=123)
+""")
+            temp_path = f.name
+
+        try:
+            errors = verifier.check_status_assignments(temp_path)
+            assert errors == [], f"Expected no errors for other fields: {errors}"
         finally:
             Path(temp_path).unlink()
 
@@ -202,6 +275,62 @@ class TestStatusAssignmentChecks:
             assert errors == [], f"Expected no errors for syntax error file: {errors}"
         finally:
             Path(temp_path).unlink()
+
+    def test_actual_adapter_module_passes(self) -> None:
+        """Actual incident_lifecycle_domain_adapter.py should pass."""
+        # Use relative path to match the allowed functions set in the verifier
+        adapter_module = Path("src/k8s_diag_agent/collect/incident_lifecycle_domain_adapter.py")
+
+        if adapter_module.exists():
+            errors = verifier.check_status_assignments(str(adapter_module))
+            assert errors == [], f"Expected no errors for actual adapter: {errors}"
+
+    def test_actual_transitions_module_passes(self) -> None:
+        """Actual incident_lifecycle_transitions.py should pass."""
+        transitions_module = (
+            Path(__file__).parent.parent.parent
+            / "src"
+            / "k8s_diag_agent"
+            / "collect"
+            / "incident_lifecycle_transitions.py"
+        )
+
+        if transitions_module.exists():
+            errors = verifier.check_status_assignments(str(transitions_module))
+            assert errors == [], f"Expected no errors for actual transitions: {errors}"
+
+    def test_actual_store_module_passes(self) -> None:
+        """Actual incident_store.py should pass."""
+        store_module = (
+            Path(__file__).parent.parent.parent
+            / "src"
+            / "k8s_diag_agent"
+            / "collect"
+            / "incident_store.py"
+        )
+
+        if store_module.exists():
+            errors = verifier.check_status_assignments(str(store_module))
+            assert errors == [], f"Expected no errors for actual store: {errors}"
+
+
+class TestLegacyExclusionChecks:
+    """Tests for the legacy file exclusion mechanism."""
+
+    def test_legacy_transitions_file_excluded_from_status_checks(self) -> None:
+        """Legacy incident_transitions.py should be excluded from status checks.
+        
+        This file predates the typed lifecycle architecture and is being phased out
+        in favor of the typed transition path through incident_lifecycle_transitions.py.
+        The exclusion is intentional and bounded.
+        """
+        legacy_file = "src/k8s_diag_agent/collect/incident_transitions.py"
+        assert legacy_file in verifier._EXCLUDED_FROM_STATUS_CHECKS
+
+    def test_legacy_exclusion_only_includes_transitions_file(self) -> None:
+        """Legacy exclusion should only contain the specific legacy file."""
+        assert len(verifier._EXCLUDED_FROM_STATUS_CHECKS) == 1
+        assert "incident_transitions.py" in list(verifier._EXCLUDED_FROM_STATUS_CHECKS)[0]
 
 
 class TestTransitionAdapterUsesLifecycleCoreChecks:
