@@ -11,7 +11,7 @@ Exports:
 - IncidentId, SourceCandidateId, SnapshotBundleId, ReviewPacketId, DuplicateOfIncidentId
 - IncidentStatus, IncidentLifecycle, IncidentLifecycleEvent
 - IncidentLifecycleEventType, IncidentLifecycleActor
-- TransitionApplied, TransitionRejected, TransitionResult
+- TransitionApplied, TransitionRejected, TransitionRejectionReason, TransitionResult
 - mark_collecting_evidence, mark_ready_for_review, mark_investigating
 - suppress_incident, mark_duplicate, resolve_incident
 """
@@ -36,6 +36,7 @@ from k8s_diag_agent.domain.incident_lifecycle import (
     # Transition results
     TransitionApplied,
     TransitionRejected,
+    TransitionRejectionReason,
     TransitionResult,
     # Transition functions
     mark_collecting_evidence,
@@ -64,6 +65,7 @@ __all__ = [
     # Transition results
     "TransitionApplied",
     "TransitionRejected",
+    "TransitionRejectionReason",
     "TransitionResult",
     # Transition functions
     "mark_collecting_evidence",

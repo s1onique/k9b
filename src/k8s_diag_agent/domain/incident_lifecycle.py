@@ -189,7 +189,7 @@ class TransitionRejected:
     incident: IncidentLifecycle
     """The incident that was not modified."""
 
-    reason: str
+    reason: TransitionRejectionReason
     """Stable reason code for the rejection."""
 
 
@@ -201,19 +201,28 @@ TransitionResult = TransitionApplied | TransitionRejected
 # Stable rejection reason codes
 # -----------------------------------------------------------------------------
 
-_REJECT_TERMINAL_INCIDENT = "terminal_incident"
+TransitionRejectionReason = Literal[
+    "terminal_incident",
+    "invalid_transition",
+    "missing_review_packet",
+    "missing_snapshot_bundle",
+    "duplicate_self_reference",
+]
+"""Closed set of stable lifecycle transition rejection reason codes."""
+
+_REJECT_TERMINAL_INCIDENT: TransitionRejectionReason = "terminal_incident"
 """Incident is in a terminal state and cannot transition."""
 
-_REJECT_INVALID_TRANSITION = "invalid_transition"
+_REJECT_INVALID_TRANSITION: TransitionRejectionReason = "invalid_transition"
 """Requested transition is not allowed from current status."""
 
-_REJECT_MISSING_REVIEW_PACKET = "missing_review_packet"
+_REJECT_MISSING_REVIEW_PACKET: TransitionRejectionReason = "missing_review_packet"
 """Review packet ID is required but not provided."""
 
-_REJECT_MISSING_SNAPSHOT_BUNDLE = "missing_snapshot_bundle"
+_REJECT_MISSING_SNAPSHOT_BUNDLE: TransitionRejectionReason = "missing_snapshot_bundle"
 """Snapshot bundle ID is required but not provided."""
 
-_REJECT_DUPLICATE_SELF_REFERENCE = "duplicate_self_reference"
+_REJECT_DUPLICATE_SELF_REFERENCE: TransitionRejectionReason = "duplicate_self_reference"
 """Cannot mark an incident as a duplicate of itself."""
 
 
@@ -578,6 +587,7 @@ __all__ = [
     "TransitionApplied",
     "TransitionRejected",
     "TransitionResult",
+    "TransitionRejectionReason",
     # Transition functions
     "mark_collecting_evidence",
     "mark_ready_for_review",
