@@ -34,5 +34,6 @@ export { OperatorWorklistCard } from "./OperatorWorklistCard";
 export type { OperatorWorklistCardProps } from "./OperatorWorklistCard";
 
 // ACT-K9B-UI-RUN-OVERVIEW-INCIDENTS-SECTION01: Incidents overview for selected-run page
-export { IncidentsOverviewSection } from "./IncidentsOverviewSection";
-export type { IncidentsOverviewSectionProps } from "./IncidentsOverviewSection";
+// Re-export from canonical incidents Elmish island
+export { IncidentsOverviewSection } from "./incidents";
+export type { IncidentsOverviewSectionProps } from "./incidents";

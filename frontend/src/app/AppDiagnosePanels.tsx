@@ -13,7 +13,6 @@ import { DiagnosticPackReviewPanel } from "../components/DiagnosticPackReviewPan
 import { AlertmanagerSnapshotPanel } from "../components/AlertmanagerPanel";
 import { AlertmanagerSourcesPanel } from "../components/AlertmanagerPanel";
 import { DeterministicNextChecksPanel } from "../components/DeterministicNextChecksPanel";
-import { IncidentListPanel } from "../components/IncidentListPanel";
 import type { DeterministicNextCheckSummary } from "../types";
 
 export interface AppDiagnosePanelsProps {
@@ -125,8 +124,14 @@ export function AppDiagnosePanels({
           </div>
         </section>
       )}
-      {/* Incident list panel - read-only view of promoted incidents */}
-      <IncidentListPanel />
+      {/* 
+        NOTE: IncidentListPanel has been removed from here.
+        The canonical IncidentsOverviewSection is rendered in App.tsx between
+        RuntimeStatusSummary and RecentRunsPanel for run-scoped incidents view.
+        
+        If you need the full incident list with detail views, they are still available
+        via the IncidentDetailPanel component for explicit detail routes.
+      */}
     </>
   );
 }
