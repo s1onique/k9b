@@ -29,6 +29,18 @@ CONTENT_KIND_PATTERNS: dict[str, list[str]] = {
         "**/automatic-diagnosis-review*.json",
         "**/auto-diagnosis-review*.json",
     ],
+    "automatic_diagnosis_hypothesis_burst": [
+        "**/automatic-diagnosis/*-hypothesis-burst.json",
+    ],
+    "automatic_diagnosis_pass": [
+        "**/automatic-diagnosis/*-pass-*.json",
+    ],
+    "automatic_diagnosis_final_hypotheses": [
+        "**/automatic-diagnosis/*-final-hypotheses.json",
+    ],
+    "automatic_diagnosis_summary": [
+        "**/automatic-diagnosis/*-summary.json",
+    ],
     "diagnosis_loop_run": [
         "**/diagnosis-loop-run*.json",
     ],

@@ -30,6 +30,9 @@ from .otel_constants import (
     ATTR_CHECKS_ACCEPTED,
     ATTR_LOOP_STOP_REASON,
     EVENT_ARTIFACT_WRITTEN,
+    EVENT_AUTODIAG_INCIDENT_LIST_FAILED,
+    EVENT_AUTODIAG_INCIDENT_LIST_START,
+    EVENT_AUTODIAG_INCIDENT_LIST_SUCCESS,
     EVENT_BUDGET_EXCEEDED,
     EVENT_CHECK_REJECTED,
     EVENT_CHECKS_EXECUTED,
@@ -128,6 +131,62 @@ def emit_stop_event(
     span_ctx.add_event(EVENT_LOOP_STOP, {
         ATTR_LOOP_STOP_REASON: stop_reason,
     })
+
+
+def emit_autodiag_incident_list_start_event(
+    span_ctx: SpanContext,
+    mode: str,
+) -> None:
+    """Emit an automatic diagnosis incident list start event.
+
+    Args:
+        span_ctx: The span context to emit the event on
+        mode: The listing mode (local, backend-api)
+    """
+    span_ctx.add_event(EVENT_AUTODIAG_INCIDENT_LIST_START, {
+        "listing_mode": mode,
+    })
+
+
+def emit_autodiag_incident_list_success_event(
+    span_ctx: SpanContext,
+    count: int,
+    mode: str,
+) -> None:
+    """Emit an automatic diagnosis incident list success event.
+
+    Args:
+        span_ctx: The span context to emit the event on
+        count: Number of incidents listed
+        mode: The listing mode (local, backend-api)
+    """
+    span_ctx.add_event(EVENT_AUTODIAG_INCIDENT_LIST_SUCCESS, {
+        "incident_count": count,
+        "listing_mode": mode,
+    })
+
+
+def emit_autodiag_incident_list_failed_event(
+    span_ctx: SpanContext,
+    error: str,
+    mode: str,
+    error_type: str | None = None,
+) -> None:
+    """Emit an automatic diagnosis incident list failed event.
+
+    Args:
+        span_ctx: The span context to emit the event on
+        error: Error message (sanitized)
+        mode: The listing mode (local, backend-api)
+        error_type: Optional classified error type (unauthorized, timeout, etc.)
+    """
+    attributes: dict[str, Any] = {
+        "error": error,
+        "listing_mode": mode,
+    }
+    if error_type:
+        attributes["error_type"] = error_type
+    span_ctx.add_event(EVENT_AUTODIAG_INCIDENT_LIST_FAILED, attributes)
 
 
 # =============================================================================
@@ -247,6 +306,10 @@ __all__ = [
     "emit_checks_executed_event",
     "emit_artifact_written_event",
     "emit_stop_event",
+    # Automatic diagnosis incident listing events
+    "emit_autodiag_incident_list_start_event",
+    "emit_autodiag_incident_list_success_event",
+    "emit_autodiag_incident_list_failed_event",
     # Legacy event helpers (deprecated - use raw span)
     "emit_budget_exceeded_event_legacy",
     "emit_check_rejected_event_legacy",

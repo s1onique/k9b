@@ -65,6 +65,7 @@ class AutoLoopIncidentResult:
     skipped: bool = False
     skip_reason: str | None = None
     budget_diagnostics: tuple[DiagnosisBudgetDiagnostic, ...] = ()
+    hypothesis_loop_result: dict[str, Any] | None = None  # R2: Hypothesis loop result
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -93,6 +94,8 @@ class AutoLoopIncidentResult:
                 result["skip_reason"] = self.skip_reason
         if self.budget_diagnostics:
             result["budget_diagnostics"] = [d.to_dict() for d in self.budget_diagnostics]
+        if self.hypothesis_loop_result is not None:
+            result["hypothesis_loop_result"] = self.hypothesis_loop_result
         return result
 
 
@@ -109,6 +112,7 @@ class AutoLoopCollectorResult:
     generated_at: str
     enabled: bool
     config: dict[str, Any]
+    incidents_seen: int = 0  # R2: Track incidents seen
     incidents_processed: int = 0
     incidents_eligible: int = 0
     incidents_ineligible: int = 0
@@ -125,6 +129,7 @@ class AutoLoopCollectorResult:
             "generated_at": self.generated_at,
             "enabled": self.enabled,
             "config": self.config,
+            "incidents_seen": self.incidents_seen,
             "incidents_processed": self.incidents_processed,
             "incidents_eligible": self.incidents_eligible,
             "incidents_ineligible": self.incidents_ineligible,

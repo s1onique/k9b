@@ -17,11 +17,15 @@ Design constraints:
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .incident_automatic_diagnosis_loop import (
+    write_summary_artifact,
+)
 from .incident_case_file import build_incident_case_file
 from .incident_diagnosis_auto_loop_config import (
     AutomaticDiagnosisLoopConfig,
@@ -51,6 +55,8 @@ __all__ = [
     "collect_automatic_diagnosis_evidence",
     "run_automatic_diagnosis_loop_evidence_collection",
 ]
+
+_logger = logging.getLogger(__name__)
 
 
 def run_automatic_diagnosis_loop_evidence_collection(
@@ -82,6 +88,19 @@ def run_automatic_diagnosis_loop_evidence_collection(
         result.incident_results = [{
             "note": "Automatic diagnosis loop is disabled. Set K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true to enable.",
         }]
+        # Write summary artifact even when disabled
+        _write_loop_summary(
+            external_analysis_dir=external_analysis_dir,
+            collector_run_id=collector_run_id,
+            incidents_seen=0,
+            incidents_eligible=0,
+            incidents_processed=0,
+            hypothesis_bursts_written=0,
+            total_passes_completed=0,
+            total_checks_executed=0,
+            stop_reason="loop_disabled",
+            incident_results=result.incident_results,
+        )
         return result
 
     if incident_ids is not None:
@@ -96,14 +115,48 @@ def run_automatic_diagnosis_loop_evidence_collection(
             result.incident_results = [{
                 "note": f"Failed to list incidents: {error}",
             }]
+            # Write failure summary
+            _write_loop_summary(
+                external_analysis_dir=external_analysis_dir,
+                collector_run_id=collector_run_id,
+                incidents_seen=0,
+                incidents_eligible=0,
+                incidents_processed=0,
+                hypothesis_bursts_written=0,
+                total_passes_completed=0,
+                total_checks_executed=0,
+                stop_reason="incident_listing_failed",
+                incident_results=result.incident_results,
+            )
             return result
 
         candidates = [inc.incident_id for inc in incidents]
 
     result.incidents_processed = len(candidates)
+    result.incidents_seen = len(candidates)
 
     if len(candidates) == 0:
         log_zero_incidents_diagnostic(resolved_config)
+        _write_loop_summary(
+            external_analysis_dir=external_analysis_dir,
+            collector_run_id=collector_run_id,
+            incidents_seen=len(candidates),
+            incidents_eligible=0,
+            incidents_processed=0,
+            hypothesis_bursts_written=0,
+            total_passes_completed=0,
+            total_checks_executed=0,
+            stop_reason="no_eligible_incidents",
+            incident_results=result.incident_results,
+        )
+        return result
+
+    # Track hypothesis loop metrics
+    total_passes_completed = 0
+    total_checks_executed = 0
+    hypothesis_bursts_written = 0
+    overall_stop_reason = "loop_completed"
+    first_incident_run_id: str | None = None  # R3: Track first incident's run_id for summary
 
     for incident_id in candidates:
         incident_result = _process_incident(
@@ -119,13 +172,40 @@ def run_automatic_diagnosis_loop_evidence_collection(
             result.incidents_skipped += 1
         elif incident_result.error is not None:
             result.incidents_with_errors += 1
+            overall_stop_reason = "incident_error"
         elif incident_result.eligible:
             result.incidents_eligible += 1
+            # R3: Capture first incident's run_id for summary artifact identity
+            if first_incident_run_id is None and incident_result.run_id:
+                first_incident_run_id = incident_result.run_id
             if incident_result.review_packet_written:
                 result.total_review_packets_written += 1
             result.total_checks_run += incident_result.checks_run
+
+            # Aggregate hypothesis loop metrics from the incident result
+            if hasattr(incident_result, "hypothesis_loop_result") and incident_result.hypothesis_loop_result:
+                loop_result = incident_result.hypothesis_loop_result
+                total_passes_completed += loop_result.get("total_passes_completed", 0)
+                total_checks_executed += loop_result.get("total_checks_executed", 0)
+                if loop_result.get("hypothesis_burst_written"):
+                    hypothesis_bursts_written += 1
         else:
             result.incidents_ineligible += 1
+
+    # Write summary artifact for every loop run (R3: use first incident's real run_id)
+    _write_loop_summary(
+        external_analysis_dir=external_analysis_dir,
+        collector_run_id=collector_run_id,
+        incidents_seen=len(candidates),
+        incidents_eligible=result.incidents_eligible,
+        incidents_processed=result.incidents_processed,
+        hypothesis_bursts_written=hypothesis_bursts_written,
+        total_passes_completed=total_passes_completed,
+        total_checks_executed=total_checks_executed,
+        stop_reason=overall_stop_reason,
+        incident_results=result.incident_results,
+        run_id=first_incident_run_id,
+    )
 
     return result
 
@@ -233,6 +313,47 @@ def _process_incident(
             eligibility_reason=eligibility.reason,
             run_id=run_id,
             error="Case file is None",
+        )
+
+    # R3: Run hypothesis burst multipass loop
+    # This is the core production path for automatic diagnosis
+    hypothesis_loop_result: dict[str, Any] | None = None
+    try:
+        from .incident_automatic_diagnosis_loop import HypothesisLoopConfig, run_automatic_diagnosis_hypothesis_loop
+
+        # Build hypothesis loop config from collector config
+        loop_config = HypothesisLoopConfig(
+            max_passes_per_incident=min(config.max_passes_per_incident, 2),  # Cap at 2 passes
+            max_checks_per_pass=config.max_checks_per_pass,
+            max_total_checks=config.max_checks_per_pass * 2,
+            max_seconds_per_incident=config.max_seconds_per_incident,
+            min_confidence_to_stop=0.78,
+        )
+
+        # Run the hypothesis burst loop
+        # Ensure incident is always a dict for run_automatic_diagnosis_hypothesis_loop
+        incident_dict: dict[str, Any] = incident.to_dict() if hasattr(incident, "to_dict") else incident  # type: ignore[assignment]
+        loop_result = run_automatic_diagnosis_hypothesis_loop(
+            incident=incident_dict,
+            case_file=case_file,
+            external_analysis_dir=external_analysis_dir,
+            run_id=run_id,  # R3: Real health run_id preserved
+            collector_run_id=collector_run_id,
+            config=loop_config,
+            now=now,
+        )
+        hypothesis_loop_result = loop_result.to_dict()
+
+    except Exception as e:
+        # Hypothesis loop failure is non-fatal - continue with policy-enforced path
+        _logger.warning(
+            "Hypothesis loop failed, continuing with policy-enforced path",
+            extra={
+                "event": "hypothesis-loop-failed",
+                "incident_id": incident_id,
+                "run_id": run_id,
+                "error": str(e),
+            },
         )
 
     diagnosis_report = _build_minimal_diagnosis_report(case_file, config.max_checks_per_pass)
@@ -350,6 +471,7 @@ def _process_incident(
         review_packet_name=review_packet_name,
         read_only_check_artifact_written=read_only_check_artifact_written,
         loop_pass_artifact_written=loop_pass_artifact_written,
+        hypothesis_loop_result=hypothesis_loop_result,
     )
 
 
@@ -387,6 +509,45 @@ def _build_minimal_diagnosis_report(
             "case_file_generated_at": case_file.get("generated_at"),
         },
     }
+
+
+def _write_loop_summary(
+    external_analysis_dir: Path,
+    collector_run_id: str,
+    incidents_seen: int,
+    incidents_eligible: int,
+    incidents_processed: int,
+    hypothesis_bursts_written: int,
+    total_passes_completed: int,
+    total_checks_executed: int,
+    stop_reason: str,
+    incident_results: list[dict[str, Any]],
+    run_id: str | None = None,
+) -> dict[str, Any]:
+    """Write loop summary artifact.
+
+    The summary artifact is written for every loop run including failure cases.
+    Uses the first incident's real health run_id for identity when available.
+    """
+
+    artifact_dir = external_analysis_dir / "automatic-diagnosis"
+
+    # Use real health run_id when available, fallback to collector-based run_id
+    effective_run_id = run_id if run_id else f"collector-{collector_run_id}"
+
+    return write_summary_artifact(
+        artifact_dir=artifact_dir,
+        run_id=effective_run_id,
+        collector_run_id=collector_run_id,
+        incidents_seen=incidents_seen,
+        incidents_eligible=incidents_eligible,
+        incidents_processed=incidents_processed,
+        hypothesis_bursts_written=hypothesis_bursts_written,
+        total_passes_completed=total_passes_completed,
+        total_checks_executed=total_checks_executed,
+        stop_reason=stop_reason,
+        incident_results=incident_results,
+    )
 
 
 def collect_automatic_diagnosis_evidence(

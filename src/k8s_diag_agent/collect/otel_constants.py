@@ -66,6 +66,11 @@ EVENT_CHECKS_EXECUTED = "k9b.diagnosis_loop.checks_executed"
 EVENT_ARTIFACT_WRITTEN = "k9b.diagnosis_loop.artifact_written"
 EVENT_LOOP_STOP = "k9b.diagnosis_loop.stop"
 
+# Automatic diagnosis incident listing events
+EVENT_AUTODIAG_INCIDENT_LIST_START = "k9b.automatic_diagnosis.incident_list_start"
+EVENT_AUTODIAG_INCIDENT_LIST_SUCCESS = "k9b.automatic_diagnosis.incident_list_success"
+EVENT_AUTODIAG_INCIDENT_LIST_FAILED = "k9b.automatic_diagnosis.incident_list_failed"
+
 
 __all__ = [
     # Span names
@@ -107,4 +112,8 @@ __all__ = [
     "EVENT_CHECKS_EXECUTED",
     "EVENT_ARTIFACT_WRITTEN",
     "EVENT_LOOP_STOP",
+    # Automatic diagnosis incident listing events
+    "EVENT_AUTODIAG_INCIDENT_LIST_START",
+    "EVENT_AUTODIAG_INCIDENT_LIST_SUCCESS",
+    "EVENT_AUTODIAG_INCIDENT_LIST_FAILED",
 ]
