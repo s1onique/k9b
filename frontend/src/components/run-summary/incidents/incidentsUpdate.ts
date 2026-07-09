@@ -42,7 +42,7 @@ export function incidentsUpdate(
         // Keep incidents array during load transition to prevent flash
         // incidents: [],
         page: 1,
-        expandedIncidentIds: new ReadonlySet(),
+        expandedIncidentIds: new Set(),
       });
     }
 
@@ -78,7 +78,7 @@ export function incidentsUpdate(
         errorMessage: null,
         incidents: msg.incidents,
         page: clampedPage,
-        expandedIncidentIds: new ReadonlySet(validExpandedIds),
+        expandedIncidentIds: new Set(validExpandedIds),
       });
     }
 
@@ -96,7 +96,7 @@ export function incidentsUpdate(
         ...model,
         statusFilter: msg.statusFilter,
         page: 1,
-        expandedIncidentIds: new ReadonlySet(),
+        expandedIncidentIds: new Set(),
       });
     }
 
@@ -121,7 +121,7 @@ export function incidentsUpdate(
       return Object.freeze({
         ...model,
         page: clampedPage,
-        expandedIncidentIds: new ReadonlySet(), // Collapse expansions on page change
+        expandedIncidentIds: new Set(), // Collapse expansions on page change
       });
     }
 
@@ -136,7 +136,7 @@ export function incidentsUpdate(
         ...model,
         pageSize: newSize,
         page: 1,
-        expandedIncidentIds: new ReadonlySet(),
+        expandedIncidentIds: new Set(),
       });
     }
 
@@ -156,7 +156,7 @@ export function incidentsUpdate(
     case "allExpansionsCollapsed": {
       return Object.freeze({
         ...model,
-        expandedIncidentIds: new ReadonlySet(),
+        expandedIncidentIds: new Set(),
       });
     }
 

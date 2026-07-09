@@ -25,7 +25,7 @@ export function createInitialIncidentsModel(
     statusFilter: "all",
     page: 1,
     pageSize: DEFAULT_INCIDENTS_PAGE_SIZE,
-    expandedIncidentIds: new ReadonlySet(),
+    expandedIncidentIds: new Set(),
     refreshToken: 0,
   });
 }

@@ -63,7 +63,7 @@ function createTestModel(overrides: Partial<IncidentsModel> = {}): IncidentsMode
     statusFilter: "all",
     page: 1,
     pageSize: 10,
-    expandedIncidentIds: new ReadonlySet(),
+    expandedIncidentIds: new Set(),
     refreshToken: 0,
     ...overrides,
   };
@@ -323,7 +323,7 @@ describe("selectPageRangeLabel", () => {
 describe("selectIsIncidentExpanded", () => {
   it("returns true when incident is expanded", () => {
     const model = createTestModel({
-      expandedIncidentIds: new ReadonlySet(["inc-1", "inc-2"]),
+      expandedIncidentIds: new Set(["inc-1", "inc-2"]),
     });
 
     expect(selectIsIncidentExpanded(model, "inc-1")).toBe(true);
@@ -332,7 +332,7 @@ describe("selectIsIncidentExpanded", () => {
 
   it("returns false when incident is not expanded", () => {
     const model = createTestModel({
-      expandedIncidentIds: new ReadonlySet(["inc-1"]),
+      expandedIncidentIds: new Set(["inc-1"]),
     });
 
     expect(selectIsIncidentExpanded(model, "inc-2")).toBe(false);
@@ -340,7 +340,7 @@ describe("selectIsIncidentExpanded", () => {
 
   it("returns false for empty expanded set", () => {
     const model = createTestModel({
-      expandedIncidentIds: new ReadonlySet(),
+      expandedIncidentIds: new Set(),
     });
 
     expect(selectIsIncidentExpanded(model, "inc-1")).toBe(false);
@@ -350,7 +350,7 @@ describe("selectIsIncidentExpanded", () => {
 describe("selectHasExpandedIncidents", () => {
   it("returns true when there are expanded incidents", () => {
     const model = createTestModel({
-      expandedIncidentIds: new ReadonlySet(["inc-1"]),
+      expandedIncidentIds: new Set(["inc-1"]),
     });
 
     expect(selectHasExpandedIncidents(model)).toBe(true);
@@ -358,7 +358,7 @@ describe("selectHasExpandedIncidents", () => {
 
   it("returns false when no incidents are expanded", () => {
     const model = createTestModel({
-      expandedIncidentIds: new ReadonlySet(),
+      expandedIncidentIds: new Set(),
     });
 
     expect(selectHasExpandedIncidents(model)).toBe(false);

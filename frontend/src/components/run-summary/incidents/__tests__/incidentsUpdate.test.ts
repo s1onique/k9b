@@ -19,7 +19,7 @@ function createTestModel(overrides: Partial<IncidentsModel> = {}): IncidentsMode
     statusFilter: "all",
     page: 1,
     pageSize: 10,
-    expandedIncidentIds: new ReadonlySet(),
+    expandedIncidentIds: new Set(),
     refreshToken: 0,
     ...overrides,
   };
@@ -74,7 +74,7 @@ describe("incidentsUpdate", () => {
 
     it("collapses all expansions on run change", () => {
       const model = createTestModel({
-        expandedIncidentIds: new ReadonlySet(["inc-1", "inc-2"]),
+        expandedIncidentIds: new Set(["inc-1", "inc-2"]),
       });
       const msg: IncidentsMsg = { type: "runChanged", runId: "run-789" };
 
@@ -144,7 +144,7 @@ describe("incidentsUpdate", () => {
 
     it("removes expanded IDs that no longer exist", () => {
       const model = createTestModel({
-        expandedIncidentIds: new ReadonlySet(["inc-1", "inc-2", "inc-999"]),
+        expandedIncidentIds: new Set(["inc-1", "inc-2", "inc-999"]),
       });
       const incidents = createTestIncidents(2);
       const msg: IncidentsMsg = { type: "loadSucceeded", incidents };
@@ -202,7 +202,7 @@ describe("incidentsUpdate", () => {
 
     it("collapses all expansions on filter change", () => {
       const model = createTestModel({
-        expandedIncidentIds: new ReadonlySet(["inc-1", "inc-2"]),
+        expandedIncidentIds: new Set(["inc-1", "inc-2"]),
       });
       const msg: IncidentsMsg = { type: "statusFilterChanged", statusFilter: "investigating" };
 
@@ -272,7 +272,7 @@ describe("incidentsUpdate", () => {
 
     it("collapses all expansions on page change", () => {
       const model = createTestModel({
-        expandedIncidentIds: new ReadonlySet(["inc-1"]),
+        expandedIncidentIds: new Set(["inc-1"]),
       });
       const msg: IncidentsMsg = { type: "pageChanged", page: 2 };
 
@@ -303,7 +303,7 @@ describe("incidentsUpdate", () => {
 
     it("collapses all expansions on page size change", () => {
       const model = createTestModel({
-        expandedIncidentIds: new ReadonlySet(["inc-1"]),
+        expandedIncidentIds: new Set(["inc-1"]),
       });
       const msg: IncidentsMsg = { type: "pageSizeChanged", pageSize: 25 };
 
@@ -325,7 +325,7 @@ describe("incidentsUpdate", () => {
 
   describe("incidentExpansionToggled", () => {
     it("adds incident to expanded set when not present", () => {
-      const model = createTestModel({ expandedIncidentIds: new ReadonlySet() });
+      const model = createTestModel({ expandedIncidentIds: new Set() });
       const msg: IncidentsMsg = { type: "incidentExpansionToggled", incidentId: "inc-1" };
 
       const result = incidentsUpdate(model, msg);
@@ -335,7 +335,7 @@ describe("incidentsUpdate", () => {
 
     it("removes incident from expanded set when present", () => {
       const model = createTestModel({
-        expandedIncidentIds: new ReadonlySet(["inc-1", "inc-2"]),
+        expandedIncidentIds: new Set(["inc-1", "inc-2"]),
       });
       const msg: IncidentsMsg = { type: "incidentExpansionToggled", incidentId: "inc-1" };
 
@@ -346,7 +346,7 @@ describe("incidentsUpdate", () => {
     });
 
     it("allows multiple expanded incidents", () => {
-      const model = createTestModel({ expandedIncidentIds: new ReadonlySet(["inc-1"]) });
+      const model = createTestModel({ expandedIncidentIds: new Set(["inc-1"]) });
       const msg: IncidentsMsg = { type: "incidentExpansionToggled", incidentId: "inc-2" };
 
       const result = incidentsUpdate(model, msg);
@@ -359,7 +359,7 @@ describe("incidentsUpdate", () => {
   describe("allExpansionsCollapsed", () => {
     it("clears all expanded incidents", () => {
       const model = createTestModel({
-        expandedIncidentIds: new ReadonlySet(["inc-1", "inc-2", "inc-3"]),
+        expandedIncidentIds: new Set(["inc-1", "inc-2", "inc-3"]),
       });
       const msg: IncidentsMsg = { type: "allExpansionsCollapsed" };
 
