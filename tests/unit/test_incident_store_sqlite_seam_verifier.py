@@ -29,7 +29,7 @@ from k8s_diag_agent.collect.incident_store_sqlite_context import (
 # Files that are allowed to use sqlite3.connect directly
 ALLOWED_CONNECT_FILES = {
     # Only the connection factory should create connections
-    "incident_store_sqlite.py",
+    "incident_store_sqlite_connection.py",
 }
 
 # Files that are allowed to access store._write_lock directly
@@ -166,30 +166,31 @@ class TestSQLiteSeamVerifierAST(TestCase):
         This checks that the fix for ACT-K9B-INCIDENT-SQLITE-THREAD-SAFE-PROMOTION01
         is maintained - no shared connection field.
         """
-        # Check incident_store_sqlite.py for shared _conn field
-        module = self._read_module("incident_store_sqlite.py")
-        if module is None:
-            self.skipTest("incident_store_sqlite.py not found")
+        # Check connection factory module for sqlite3.connect calls
+        factory_module = self._read_module("incident_store_sqlite_connection.py")
+        if factory_module is None:
+            self.fail("incident_store_sqlite_connection.py not found")
 
         # Verify connection factory exists and produces connection calls
         # We allow _conn in private methods like _connect, but not as instance state
-        conn_calls = find_function_calls(module, "connect")
+        conn_calls = find_function_calls(factory_module, "connect")
         self.assertGreater(len(conn_calls), 0, "Should have sqlite3.connect calls in connection factory")
 
     def test_sqlite_connect_only_used_in_connection_factory(self) -> None:
         """Verify sqlite3.connect is only used in the connection factory."""
-        module = self._read_module("incident_store_sqlite.py")
-        if module is None:
-            self.skipTest("incident_store_sqlite.py not found")
+        # Check connection factory module for sqlite3.connect calls
+        factory_module = self._read_module("incident_store_sqlite_connection.py")
+        if factory_module is None:
+            self.fail("incident_store_sqlite_connection.py not found")
 
-        connect_calls = find_function_calls(module, "connect")
+        connect_calls = find_function_calls(factory_module, "connect")
 
         # Should have exactly one place that creates connections (the factory)
         self.assertGreater(len(connect_calls), 0, "Should have sqlite3.connect calls")
 
         # Verify the factory function exists
         factory_found = False
-        for item in ast.walk(module):
+        for item in ast.walk(factory_module):
             if isinstance(item, ast.FunctionDef):
                 if item.name == "_create_connection":
                     factory_found = True
