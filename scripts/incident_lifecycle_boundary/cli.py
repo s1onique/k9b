@@ -8,6 +8,7 @@ from __future__ import annotations
 import sys
 
 from incident_lifecycle_boundary.artifact_ids import check_artifact_id_contract
+from incident_lifecycle_boundary.artifact_paths import check_artifact_path_contract
 from incident_lifecycle_boundary.common import (
     DOMAIN_ADAPTER_MODULE,
     DOMAIN_MODULE,
@@ -99,6 +100,14 @@ def main(argv: list[str] | None = None) -> int:
         artifact_id_errors = check_artifact_id_contract(str(EVIDENCE_MODULE))
         errors.extend(artifact_id_errors)
 
+    # Check 8: Artifact path/reference contracts are branded and LLM-safe
+    if EVIDENCE_MODULE.exists():
+        path_errors = check_artifact_path_contract(
+            evidence_filepath=str(EVIDENCE_MODULE),
+            repo_root=REPO_ROOT,
+        )
+        errors.extend(path_errors)
+
     # Report results
     if errors:
         print("BOUNDARY VERIFICATION FAILED")
@@ -118,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  Event and actor mappings are complete")
         print("  Evidence role/kind contracts are typed and complete")
         print("  Artifact/evidence ID contracts are branded and serialized safely")
+        print("  Artifact path/reference contracts are branded and LLM-safe")
         print("  Module is isolated from IO, Kubernetes, HTTP dependencies")
         print("=" * 60)
         return 0

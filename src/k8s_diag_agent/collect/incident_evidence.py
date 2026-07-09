@@ -7,6 +7,8 @@ This module contains:
 - EvidenceRoleCode, EvidenceKindCode: closed typed aliases for role/kind values
 - Branded ID types: ArtifactId, EvidenceLinkId, SnapshotBundleId, ReviewPacketId,
   DiagnosisLoopPassId, ExternalAnalysisArtifactId
+- Branded path/reference types: SafeRelativeArtifactPath, LocalArtifactPath,
+  ExternalStorageRef, ReviewPacketStorageRef, LLMSafeArtifactRef
 
 Design notes:
 - EvidenceArtifacts are stored separately from incidents to keep incidents lightweight
@@ -15,6 +17,7 @@ Design notes:
 - Typed aliases (EvidenceRoleCode, EvidenceKindCode) provide closed contracts
   for string values crossing the domain/store boundary
 - Branded NewType IDs prevent accidental mixing of different identifier types
+- Branded path/reference types prevent mixing local paths, external refs, and safe refs
 - Serialization (to_dict, API) still emits plain strings for compatibility
 
 Branding rationale:
@@ -24,6 +27,11 @@ Branding rationale:
 - ReviewPacketId: review packet artifact identifier
 - DiagnosisLoopPassId: diagnosis loop pass artifact identifier
 - ExternalAnalysisArtifactId: external analysis artifact identifier
+- SafeRelativeArtifactPath: relative artifact path safe for review/LLM boundaries
+- LocalArtifactPath: local filesystem path for implementation details
+- ExternalStorageRef: external storage reference (s3://, gs://, etc.)
+- ReviewPacketStorageRef: storage reference for review packet boundaries
+- LLMSafeArtifactRef: artifact reference safe for LLM-facing outputs
 """
 
 from __future__ import annotations
@@ -31,6 +39,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal, NewType
 
 # -----------------------------------------------------------------------------
@@ -45,6 +54,33 @@ SnapshotBundleId = NewType("SnapshotBundleId", str)
 ReviewPacketId = NewType("ReviewPacketId", str)
 DiagnosisLoopPassId = NewType("DiagnosisLoopPassId", str)
 ExternalAnalysisArtifactId = NewType("ExternalAnalysisArtifactId", str)
+
+# -----------------------------------------------------------------------------
+# Branded path/reference types for artifact storage references
+# These NewType aliases prevent mixing of:
+# - SafeRelativeArtifactPath: relative paths for review/LLM boundaries
+# - LocalArtifactPath: local filesystem paths (implementation only)
+# - ExternalStorageRef: external storage references (s3://, gs://, az://, https://)
+# - ReviewPacketStorageRef: storage refs for review packet boundaries
+# - LLMSafeArtifactRef: artifact refs safe for LLM-facing outputs
+#
+# ArtifactStorageRef is a union of the valid storage ref types that can be used
+# as the type for EvidenceArtifact.storage_ref.
+# -----------------------------------------------------------------------------
+
+SafeRelativeArtifactPath = NewType("SafeRelativeArtifactPath", str)
+LocalArtifactPath = NewType("LocalArtifactPath", str)
+ExternalStorageRef = NewType("ExternalStorageRef", str)
+ReviewPacketStorageRef = NewType("ReviewPacketStorageRef", str)
+LLMSafeArtifactRef = NewType("LLMSafeArtifactRef", str)
+
+# Allowed schemes for ExternalStorageRef (explicit allowlist)
+_ALLOWED_EXTERNAL_STORAGE_SCHEMES = ("s3://", "gs://", "az://", "https://")
+
+# Union type for storage_ref field - accepts all valid storage ref types
+# This is used as the explicit type annotation for EvidenceArtifact.storage_ref
+# to enforce that only branded path/reference types are used.
+ArtifactStorageRef = SafeRelativeArtifactPath | LocalArtifactPath | ExternalStorageRef
 
 
 # -----------------------------------------------------------------------------
@@ -75,6 +111,211 @@ def make_diagnosis_loop_pass_id(value: str) -> DiagnosisLoopPassId:
 def make_external_analysis_artifact_id(value: str) -> ExternalAnalysisArtifactId:
     """Convert a string to an ExternalAnalysisArtifactId."""
     return ExternalAnalysisArtifactId(value)
+
+
+# -----------------------------------------------------------------------------
+# Branded path/reference type constructors with validation
+# Use these to create typed path/reference values at construction seams.
+# -----------------------------------------------------------------------------
+
+def make_safe_relative_artifact_path(value: str) -> SafeRelativeArtifactPath:
+    """Convert a string to a SafeRelativeArtifactPath.
+
+    Safe relative artifact paths are allowed in review packets, case files,
+    and LLM-facing outputs. They must NOT contain:
+    - Empty string
+    - Leading whitespace or trailing whitespace
+    - Absolute paths (starting with /)
+    - Home directory references (starting with ~)
+    - Path traversal (.. components)
+    - URL schemes (s3://, gs://, https://, file://, etc.)
+    - Windows backslashes
+
+    Args:
+        value: The path string to validate
+
+    Returns:
+        SafeRelativeArtifactPath if valid
+
+    Raises:
+        ValueError: If the path is empty, absolute, or contains traversal/URLs
+    """
+    if not value or value.strip() != value:
+        raise ValueError(
+            f"Invalid SafeRelativeArtifactPath: '{value}' is empty or has whitespace"
+        )
+    # Reject URL schemes
+    if "://" in value:
+        raise ValueError(
+            f"Invalid SafeRelativeArtifactPath: '{value}' contains a URL scheme"
+        )
+    # Reject absolute paths and home directory refs
+    if value.startswith(("/", "~")):
+        raise ValueError(
+            f"Invalid SafeRelativeArtifactPath: '{value}' is absolute or home-relative"
+        )
+    # Reject Windows-style paths
+    if "\\" in value:
+        raise ValueError(
+            f"Invalid SafeRelativeArtifactPath: '{value}' contains Windows backslashes"
+        )
+    # Check for traversal using PurePosixPath
+    path = PurePosixPath(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(
+            f"Invalid SafeRelativeArtifactPath: '{value}' is absolute or contains traversal"
+        )
+    return SafeRelativeArtifactPath(value)
+
+
+def make_local_artifact_path(value: str | Path) -> LocalArtifactPath:
+    """Convert a value to a LocalArtifactPath.
+
+    Local artifact paths are local filesystem paths used for implementation
+    details (reading/writing artifacts). They may be absolute or relative.
+
+    This type should NOT be used in review packets, case files, or LLM outputs.
+
+    Args:
+        value: The path string or Path object
+
+    Returns:
+        LocalArtifactPath
+    """
+    if isinstance(value, Path):
+        return LocalArtifactPath(str(value))
+    return LocalArtifactPath(value)
+
+
+def make_external_storage_ref(value: str) -> ExternalStorageRef:
+    """Convert a string to an ExternalStorageRef.
+
+    External storage refs are references to external storage systems like
+    S3, GCS, Azure Blob, or HTTPS URLs. They must use an allowed scheme.
+
+    Allowed schemes: s3://, gs://, az://, https://
+
+    Args:
+        value: The storage reference string (e.g., s3://bucket/path)
+
+    Returns:
+        ExternalStorageRef
+
+    Raises:
+        ValueError: If the value doesn't contain an allowed URL scheme
+    """
+    if "://" not in value:
+        raise ValueError(
+            f"Invalid ExternalStorageRef: '{value}' must contain a URL scheme (s3://, gs://, az://, https://)"
+        )
+    # Check against allowed schemes
+    scheme_found = None
+    for scheme in _ALLOWED_EXTERNAL_STORAGE_SCHEMES:
+        if value.startswith(scheme):
+            scheme_found = scheme
+            break
+
+    if scheme_found is None:
+        raise ValueError(
+            f"Invalid ExternalStorageRef: '{value}' uses unsupported scheme. "
+            f"Allowed: {', '.join(_ALLOWED_EXTERNAL_STORAGE_SCHEMES)}"
+        )
+
+    return ExternalStorageRef(value)
+
+
+def make_review_packet_storage_ref(value: str) -> ReviewPacketStorageRef:
+    """Convert a string to a ReviewPacketStorageRef.
+
+    Review packet storage refs are storage references safe for review packet
+    boundaries. They must be safe relative artifact paths.
+
+    Args:
+        value: The storage reference string
+
+    Returns:
+        ReviewPacketStorageRef
+
+    Raises:
+        ValueError: If the value is not a valid safe relative path
+    """
+    # Validate using safe relative path rules
+    if not value or value.strip() != value:
+        raise ValueError(
+            f"Invalid ReviewPacketStorageRef: '{value}' is empty or has whitespace"
+        )
+    if "://" in value:
+        raise ValueError(
+            f"Invalid ReviewPacketStorageRef: '{value}' contains a URL scheme"
+        )
+    if value.startswith(("/", "~")):
+        raise ValueError(
+            f"Invalid ReviewPacketStorageRef: '{value}' is absolute or home-relative"
+        )
+    if "\\" in value:
+        raise ValueError(
+            f"Invalid ReviewPacketStorageRef: '{value}' contains Windows backslashes"
+        )
+    path = PurePosixPath(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(
+            f"Invalid ReviewPacketStorageRef: '{value}' is absolute or contains traversal"
+        )
+    return ReviewPacketStorageRef(value)
+
+
+def make_llm_safe_artifact_ref(value: str) -> LLMSafeArtifactRef:
+    """Convert a string to an LLMSafeArtifactRef.
+
+    LLM-safe artifact refs are artifact references safe for LLM-facing outputs.
+    They must be safe relative artifact paths (not local absolute paths).
+
+    Args:
+        value: The artifact reference string
+
+    Returns:
+        LLMSafeArtifactRef
+
+    Raises:
+        ValueError: If the value is not a valid safe relative path
+    """
+    # Validate using safe relative path rules
+    if not value or value.strip() != value:
+        raise ValueError(
+            f"Invalid LLMSafeArtifactRef: '{value}' is empty or has whitespace"
+        )
+    if "://" in value:
+        raise ValueError(
+            f"Invalid LLMSafeArtifactRef: '{value}' contains a URL scheme"
+        )
+    if value.startswith(("/", "~")):
+        raise ValueError(
+            f"Invalid LLMSafeArtifactRef: '{value}' is absolute or home-relative"
+        )
+    if "\\" in value:
+        raise ValueError(
+            f"Invalid LLMSafeArtifactRef: '{value}' contains Windows backslashes"
+        )
+    path = PurePosixPath(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(
+            f"Invalid LLMSafeArtifactRef: '{value}' is absolute or contains traversal"
+        )
+    return LLMSafeArtifactRef(value)
+
+
+def make_llm_safe_artifact_ref_from_safe_path(path: SafeRelativeArtifactPath) -> LLMSafeArtifactRef:
+    """Convert a SafeRelativeArtifactPath to an LLMSafeArtifactRef.
+
+    This is the preferred way to create LLM-safe refs from safe relative paths.
+
+    Args:
+        path: A SafeRelativeArtifactPath
+
+    Returns:
+        LLMSafeArtifactRef
+    """
+    return LLMSafeArtifactRef(str(path))
 
 
 # -----------------------------------------------------------------------------
@@ -147,11 +388,16 @@ class EvidenceArtifact:
 
     Evidence is stored separately from the incident to keep the incident
     lightweight and to support multiple evidence types over time.
+
+    storage_ref is typed as ArtifactStorageRef (a union of SafeRelativeArtifactPath,
+    LocalArtifactPath, ExternalStorageRef) to enforce branded type usage at the
+    evidence boundary. Use constructor helpers like make_safe_relative_artifact_path()
+    or make_external_storage_ref() to create valid storage_ref values.
     """
 
     artifact_id: ArtifactId
     kind: EvidenceKind
-    storage_ref: str
+    storage_ref: ArtifactStorageRef
     content_hash: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     collected_by: str = "system"  # "system" or "user"
@@ -161,7 +407,7 @@ class EvidenceArtifact:
         return {
             "artifact_id": str(self.artifact_id),
             "kind": self.kind.value,
-            "storage_ref": self.storage_ref,
+            "storage_ref": str(self.storage_ref),
             "content_hash": self.content_hash,
             "created_at": self.created_at.isoformat(),
             "collected_by": self.collected_by,
@@ -190,17 +436,31 @@ class EvidenceLink:
 __all__ = [
     # Branded ID types
     "ArtifactId",
+    "ArtifactStorageRef",
     "DiagnosisLoopPassId",
     "EvidenceLinkId",
     "ExternalAnalysisArtifactId",
     "ReviewPacketId",
     "SnapshotBundleId",
-    # Conversion helpers
+    # Branded path/reference types
+    "ExternalStorageRef",
+    "LLMSafeArtifactRef",
+    "LocalArtifactPath",
+    "ReviewPacketStorageRef",
+    "SafeRelativeArtifactPath",
+    # ID conversion helpers
     "make_artifact_id",
     "make_diagnosis_loop_pass_id",
     "make_external_analysis_artifact_id",
     "make_review_packet_id",
     "make_snapshot_bundle_id",
+    # Path/reference conversion helpers
+    "make_external_storage_ref",
+    "make_llm_safe_artifact_ref",
+    "make_llm_safe_artifact_ref_from_safe_path",
+    "make_local_artifact_path",
+    "make_review_packet_storage_ref",
+    "make_safe_relative_artifact_path",
     # Models
     "EvidenceArtifact",
     "EvidenceKind",
