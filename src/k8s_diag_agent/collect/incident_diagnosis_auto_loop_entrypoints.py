@@ -13,8 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .incident_diagnosis_auto_loop import run_automatic_diagnosis_loop_evidence_collection
 from .incident_diagnosis_auto_loop_config import AutomaticDiagnosisLoopConfig
+from .incident_diagnosis_auto_loop_evidence_collection import run_automatic_diagnosis_loop_evidence_collection
 from .incident_diagnosis_auto_loop_models import AutoLoopIncidentResult
 
 if TYPE_CHECKING:
