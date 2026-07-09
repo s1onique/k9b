@@ -34,6 +34,7 @@ class TestInternalApiAuthAllowlist:
         expected_routes = {
             "/api/internal/incidents/promote-alert-signals",
             "/api/internal/incidents/promote-candidates",
+            "/api/internal/incidents/list",
         }
         assert _INTERNAL_AUTH_EXEMPT_ROUTES == expected_routes
 
