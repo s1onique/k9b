@@ -12,365 +12,42 @@ Design constraints:
 - Bounded budgets (max_passes, max_checks, time budget)
 - Read-only checks only
 - Writes artifacts to external_analysis_dir
+
+This module is a facade that re-exports from specialized modules:
+- incident_automatic_diagnosis_loop_state: HypothesisLoopConfig, HypothesisLoopResult, etc.
+- incident_automatic_diagnosis_loop_artifacts: Artifact writer functions
 """
 
 from __future__ import annotations
 
-import json
 import logging
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from .incident_automatic_diagnosis_loop_artifacts import (
+    write_final_hypotheses_artifact,
+    write_hypothesis_burst_artifact,
+    write_pass_artifact,
+    write_summary_artifact,
+)
+from .incident_automatic_diagnosis_loop_state import (
+    DiagnosisLoopStopReason,
+    HypothesisLoopConfig,
+    HypothesisLoopResult,
+)
 from .incident_diagnosis_pass_executor import (
-    PassResult,
     StopDecision,
     execute_pass,
     select_checks_for_pass,
 )
 from .incident_hypothesis_burst import (
-    HypothesisBurst,
     run_hypothesis_burst,
 )
 
 _logger = logging.getLogger(__name__)
 
-# =============================================================================
-# Schema Version
-# =============================================================================
-
 SCHEMA_VERSION = "1.0"
-
-# =============================================================================
-# Stop Reasons
-# =============================================================================
-
-
-class DiagnosisLoopStopReason(StrEnum):
-    """Reasons for stopping the diagnosis loop."""
-
-    CONFIDENCE_THRESHOLD = "confidence_threshold_reached"
-    MAX_PASSES_REACHED = "max_passes_reached"
-    ALL_HYPOTHESES_FALSIFIED = "all_hypotheses_falsified"
-    NO_MORE_CHECKS = "no_discriminating_checks"
-    CHECK_BUDGET_EXHAUSTED = "check_budget_exhausted"
-    TIME_BUDGET_EXHAUSTED = "time_budget_exhausted"
-    ERROR = "error"
-
-
-# =============================================================================
-# Result Models
-# =============================================================================
-
-
-@dataclass
-class HypothesisLoopConfig:
-    """Configuration for the hypothesis loop."""
-
-    max_passes_per_incident: int = 2  # Pass 0 (burst) + Pass 1 (evidence) = 2
-    max_checks_per_pass: int = 3
-    max_total_checks: int = 6
-    max_seconds_per_incident: int = 45
-    min_confidence_to_stop: float = 0.78
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dict."""
-        return {
-            "max_passes_per_incident": self.max_passes_per_incident,
-            "max_checks_per_pass": self.max_checks_per_pass,
-            "max_total_checks": self.max_total_checks,
-            "max_seconds_per_incident": self.max_seconds_per_incident,
-            "min_confidence_to_stop": self.min_confidence_to_stop,
-        }
-
-
-@dataclass
-class HypothesisLoopResult:
-    """Result of running the hypothesis loop for one incident."""
-
-    incident_id: str
-    run_id: str  # Health run identity (from scheduler)
-    collector_run_id: str  # Batch collector run ID
-    started_at: str
-    completed_at: str | None = None
-    status: str = "running"  # running|success|failed
-    stop_reason: str | None = None
-    stop_reason_detail: str = ""
-    pass_results: list[dict[str, Any]] = field(default_factory=list)
-    final_hypotheses: list[dict[str, Any]] = field(default_factory=list)
-    total_passes_completed: int = 0
-    total_checks_executed: int = 0
-    hypothesis_burst_written: bool = False
-    passes_written: int = 0
-    summary_written: bool = False
-    error: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dict."""
-        result: dict[str, Any] = {
-            "schema_version": SCHEMA_VERSION,
-            "incident_id": self.incident_id,
-            "run_id": self.run_id,
-            "collector_run_id": self.collector_run_id,
-            "started_at": self.started_at,
-            "completed_at": self.completed_at,
-            "status": self.status,
-            "stop_reason": self.stop_reason,
-            "stop_reason_detail": self.stop_reason_detail,
-            "pass_results": self.pass_results,
-            "final_hypotheses": self.final_hypotheses,
-            "total_passes_completed": self.total_passes_completed,
-            "total_checks_executed": self.total_checks_executed,
-            "hypothesis_burst_written": self.hypothesis_burst_written,
-            "passes_written": self.passes_written,
-            "summary_written": self.summary_written,
-            "error": self.error,
-        }
-        return result
-
-
-# =============================================================================
-# Artifact Paths
-# =============================================================================
-
-
-def _get_automatic_diagnosis_dir(external_analysis_dir: Path, run_id: str) -> Path:
-    """Get the automatic-diagnosis artifact directory.
-
-    Uses the health run_id for artifact naming to preserve health run identity.
-    """
-    return external_analysis_dir / "automatic-diagnosis" / run_id
-
-
-def _hypothesis_burst_path(artifact_dir: Path, run_id: str, incident_id: str) -> Path:
-    """Get path for hypothesis burst artifact."""
-    return artifact_dir / f"{run_id}-{incident_id}-hypothesis-burst.json"
-
-
-def _pass_artifact_path(artifact_dir: Path, run_id: str, incident_id: str, pass_index: int) -> Path:
-    """Get path for pass artifact."""
-    return artifact_dir / f"{run_id}-{incident_id}-pass-{pass_index:03d}.json"
-
-
-def _final_hypotheses_path(artifact_dir: Path, run_id: str, incident_id: str) -> Path:
-    """Get path for final hypotheses artifact."""
-    return artifact_dir / f"{run_id}-{incident_id}-final-hypotheses.json"
-
-
-def _summary_path(artifact_dir: Path, run_id: str) -> Path:
-    """Get path for loop summary artifact."""
-    return artifact_dir / f"{run_id}-summary.json"
-
-
-# =============================================================================
-# Artifact Writers
-# =============================================================================
-
-
-def write_hypothesis_burst_artifact(
-    artifact_dir: Path,
-    run_id: str,
-    incident_id: str,
-    burst: HypothesisBurst,
-) -> dict[str, Any]:
-    """Write hypothesis burst artifact.
-
-    Args:
-        artifact_dir: Directory for automatic-diagnosis artifacts
-        run_id: Health run identity (from scheduler)
-        incident_id: Incident ID
-        burst: Hypothesis burst result
-
-    Returns:
-        Write result dict with 'written' and 'path'
-    """
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    path = _hypothesis_burst_path(artifact_dir, run_id, incident_id)
-
-    artifact = {
-        "schema_version": SCHEMA_VERSION,
-        "artifact_type": "automatic-diagnosis-hypothesis-burst",
-        "run_id": run_id,
-        "incident_id": incident_id,
-        "generated_at": datetime.now(UTC).isoformat(),
-        **burst.to_dict(),
-    }
-
-    try:
-        path.write_text(json.dumps(artifact, indent=2, default=str))
-        _logger.info(
-            "automatic-diagnosis-hypothesis-burst-written",
-            extra={
-                "run_id": run_id,
-                "incident_id": incident_id,
-                "path": str(path),
-                "hypothesis_count": len(burst.hypotheses),
-            },
-        )
-        return {"written": True, "path": str(path)}
-    except Exception as exc:
-        _logger.exception("Failed to write hypothesis burst artifact")
-        return {"written": False, "path": str(path), "error": str(exc)}
-
-
-def write_pass_artifact(
-    artifact_dir: Path,
-    run_id: str,
-    incident_id: str,
-    pass_result: PassResult,
-) -> dict[str, Any]:
-    """Write pass artifact.
-
-    Args:
-        artifact_dir: Directory for automatic-diagnosis artifacts
-        run_id: Health run identity (from scheduler)
-        incident_id: Incident ID
-        pass_result: Pass result
-
-    Returns:
-        Write result dict with 'written' and 'path'
-    """
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    path = _pass_artifact_path(artifact_dir, run_id, incident_id, pass_result.pass_index)
-
-    artifact = pass_result.to_dict()
-
-    try:
-        path.write_text(json.dumps(artifact, indent=2, default=str))
-        _logger.info(
-            "automatic-diagnosis-pass-written",
-            extra={
-                "run_id": run_id,
-                "incident_id": incident_id,
-                "pass_index": pass_result.pass_index,
-                "path": str(path),
-                "checks_executed": len(pass_result.checks_executed),
-                "decision": pass_result.decision_action,
-            },
-        )
-        return {"written": True, "path": str(path)}
-    except Exception as exc:
-        _logger.exception("Failed to write pass artifact")
-        return {"written": False, "path": str(path), "error": str(exc)}
-
-
-def write_final_hypotheses_artifact(
-    artifact_dir: Path,
-    run_id: str,
-    incident_id: str,
-    hypotheses: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Write final hypotheses artifact.
-
-    Args:
-        artifact_dir: Directory for automatic-diagnosis artifacts
-        run_id: Health run identity (from scheduler)
-        incident_id: Incident ID
-        hypotheses: Final hypothesis list
-
-    Returns:
-        Write result dict with 'written' and 'path'
-    """
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    path = _final_hypotheses_path(artifact_dir, run_id, incident_id)
-
-    artifact = {
-        "schema_version": SCHEMA_VERSION,
-        "artifact_type": "automatic-diagnosis-final-hypotheses",
-        "run_id": run_id,
-        "incident_id": incident_id,
-        "generated_at": datetime.now(UTC).isoformat(),
-        "hypotheses": hypotheses,
-    }
-
-    try:
-        path.write_text(json.dumps(artifact, indent=2, default=str))
-        _logger.info(
-            "automatic-diagnosis-final-hypotheses-written",
-            extra={
-                "run_id": run_id,
-                "incident_id": incident_id,
-                "path": str(path),
-                "hypothesis_count": len(hypotheses),
-            },
-        )
-        return {"written": True, "path": str(path)}
-    except Exception as exc:
-        _logger.exception("Failed to write final hypotheses artifact")
-        return {"written": False, "path": str(path), "error": str(exc)}
-
-
-def write_summary_artifact(
-    artifact_dir: Path,
-    run_id: str,
-    collector_run_id: str,
-    incidents_seen: int,
-    incidents_eligible: int,
-    incidents_processed: int,
-    hypothesis_bursts_written: int,
-    total_passes_completed: int,
-    total_checks_executed: int,
-    stop_reason: str,
-    incident_results: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Write loop summary artifact.
-
-    Args:
-        artifact_dir: Directory for automatic-diagnosis artifacts
-        run_id: Health run identity (from scheduler)
-        collector_run_id: Batch collector run ID
-        incidents_seen: Number of incidents seen
-        incidents_eligible: Number of eligible incidents
-        incidents_processed: Number of incidents processed
-        hypothesis_bursts_written: Number of hypothesis bursts written
-        total_passes_completed: Total passes completed
-        total_checks_executed: Total checks executed
-        stop_reason: Overall stop reason
-        incident_results: Per-incident results
-
-    Returns:
-        Write result dict with 'written' and 'path'
-    """
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    path = _summary_path(artifact_dir, run_id)
-
-    artifact = {
-        "schema_version": SCHEMA_VERSION,
-        "artifact_type": "automatic-diagnosis-summary",
-        "run_id": run_id,
-        "collector_run_id": collector_run_id,
-        "generated_at": datetime.now(UTC).isoformat(),
-        "summary": {
-            "incidents_seen": incidents_seen,
-            "incidents_eligible": incidents_eligible,
-            "incidents_processed": incidents_processed,
-            "hypothesis_bursts_written": hypothesis_bursts_written,
-            "total_passes_completed": total_passes_completed,
-            "total_checks_executed": total_checks_executed,
-            "stop_reason": stop_reason,
-        },
-        "incident_results": incident_results,
-    }
-
-    try:
-        path.write_text(json.dumps(artifact, indent=2, default=str))
-        _logger.info(
-            "automatic-diagnosis-summary-written",
-            extra={
-                "run_id": run_id,
-                "collector_run_id": collector_run_id,
-                "path": str(path),
-                "incidents_processed": incidents_processed,
-                "total_passes_completed": total_passes_completed,
-                "total_checks_executed": total_checks_executed,
-            },
-        )
-        return {"written": True, "path": str(path)}
-    except Exception as exc:
-        _logger.exception("Failed to write summary artifact")
-        return {"written": False, "path": str(path), "error": str(exc)}
 
 
 # =============================================================================
@@ -408,6 +85,8 @@ def run_automatic_diagnosis_hypothesis_loop(
     Returns:
         HypothesisLoopResult with loop outcome
     """
+    from .incident_automatic_diagnosis_loop_artifacts import _get_automatic_diagnosis_dir
+
     resolved_config = config or HypothesisLoopConfig()
     resolved_now = now if now is not None else datetime.now(UTC)
     incident_id = incident.get("incident_id", "unknown")
