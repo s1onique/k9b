@@ -231,24 +231,4 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [TEST] Incident lifecycle domain tests - comprehensive transition coverage
     ("tests/unit/domain/test_incident_lifecycle.py", "[TEST] Incident lifecycle tests - all transitions, edge cases, and immutability checks"),
 
-    # [VERIFIER] Incident lifecycle boundary verifier - AST extraction for typed rejection reasons
-    # Size rationale: 664 lines - comprehensive AST-based verification including:
-    #   - Literal subscript validation (only Literal[], not Sequence[], etc.)
-    #   - TransitionRejected class existence enforcement
-    #   - TransitionRejected.reason field existence and correct type annotation check
-    #   - Status projection boundary checks
-    #   - Transition adapter lifecycle core call verification
-    # All checks are cohesive and essential for typed domain contract enforcement.
-    ("scripts/verify_incident_lifecycle_boundaries.py", "[VERIFIER] Incident lifecycle boundary verifier - comprehensive typed domain contract enforcement via AST analysis"),
-
-    # [TEST] Incident lifecycle boundary verifier tests - comprehensive AST extraction coverage
-    # Size rationale: 840 lines - comprehensive test coverage for all verifier checks including:
-    #   - Literal subscript validation (reject NotLiteral[], Sequence[], etc.)
-    #   - TransitionRejected class/field existence enforcement
-    #   - TransitionRejected.reason type narrowing checks (reject str, object, Any, Sequence)
-    #   - Status projection boundary tests
-    #   - Transition adapter call verification
-    # All tests are cohesive and essential for verifier correctness proof.
-    ("tests/scripts/test_verify_incident_lifecycle_boundaries.py", "[TEST] Incident lifecycle boundary verifier tests - comprehensive typed domain contract enforcement coverage"),
-
 ]
