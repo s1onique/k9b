@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING
 from k8s_diag_agent.domain.incident_lifecycle import (
     IncidentId,
     IncidentLifecycle,
+    IncidentLifecycleActor,
+    IncidentLifecycleEventType,
     SourceCandidateId,
     TransitionApplied,
 )
@@ -46,6 +48,30 @@ def _to_incident_lifecycle(incident: Incident) -> IncidentLifecycle:
     )
 
 
+# -----------------------------------------------------------------------------
+# Mapping tables (centralized, total)
+# Keys are domain IncidentLifecycleEventType / IncidentLifecycleActor values
+# Values are store IncidentEventType / IncidentEventActor enum values
+# -----------------------------------------------------------------------------
+
+_DOMAIN_EVENT_TO_STORE_EVENT: dict[IncidentLifecycleEventType, IncidentEventType] = {
+    "incident_promoted": IncidentEventType.OPENED,
+    "incident_marked_collecting_evidence": IncidentEventType.EVIDENCE_COLLECTION_STARTED,
+    "incident_marked_ready_for_review": IncidentEventType.REVIEW_PACKET_GENERATED,
+    "incident_marked_investigating": IncidentEventType.STATUS_CHANGED,
+    "incident_suppressed": IncidentEventType.SUPPRESSED,
+    "incident_marked_duplicate": IncidentEventType.MARKED_DUPLICATE,
+    "incident_resolved": IncidentEventType.CLOSED,
+}
+
+_DOMAIN_ACTOR_TO_STORE_ACTOR: dict[IncidentLifecycleActor, IncidentEventActor] = {
+    "system": IncidentEventActor.SYSTEM,
+    "user": IncidentEventActor.USER,
+    "diagnosis_loop": IncidentEventActor.SYSTEM,
+    "test": IncidentEventActor.SYSTEM,
+}
+
+
 def _map_lifecycle_event_to_incident_event(
     domain_event: IncidentLifecycleEvent,
     occurred_at: datetime,
@@ -54,30 +80,23 @@ def _map_lifecycle_event_to_incident_event(
 
     This preserves the existing event serialization shape while capturing
     the lifecycle transition information.
+
+    Raises:
+        ValueError: If domain event type or actor is not in the mapping table.
     """
-    # Map domain event types to existing incident event types
-    event_type_map = {
-        "incident_promoted": IncidentEventType.OPENED,
-        "incident_marked_collecting_evidence": IncidentEventType.EVIDENCE_COLLECTION_STARTED,
-        "incident_marked_ready_for_review": IncidentEventType.REVIEW_PACKET_GENERATED,
-        "incident_marked_investigating": IncidentEventType.STATUS_CHANGED,
-        "incident_suppressed": IncidentEventType.SUPPRESSED,
-        "incident_marked_duplicate": IncidentEventType.MARKED_DUPLICATE,
-        "incident_resolved": IncidentEventType.CLOSED,
-    }
+    # Map domain event type - raise on unknown (total mapping)
+    try:
+        store_event_type = _DOMAIN_EVENT_TO_STORE_EVENT[domain_event.event_type]
+    except KeyError as exc:
+        raise ValueError(
+            f"unmapped lifecycle event type: {domain_event.event_type!r}"
+        ) from exc
 
-    # Map domain actors to incident actors
-    actor_map = {
-        "system": IncidentEventActor.SYSTEM,
-        "user": IncidentEventActor.USER,
-        "diagnosis_loop": IncidentEventActor.SYSTEM,
-        "test": IncidentEventActor.SYSTEM,
-    }
-
-    event_type = event_type_map.get(
-        domain_event.event_type, IncidentEventType.STATUS_CHANGED
-    )
-    actor = actor_map.get(domain_event.actor, IncidentEventActor.SYSTEM)
+    # Map domain actor - raise on unknown (total mapping)
+    try:
+        store_actor = _DOMAIN_ACTOR_TO_STORE_ACTOR[domain_event.actor]
+    except KeyError as exc:
+        raise ValueError(f"unmapped lifecycle actor: {domain_event.actor!r}") from exc
 
     return IncidentEvent(
         event_id=make_event_id(
@@ -86,8 +105,8 @@ def _map_lifecycle_event_to_incident_event(
             occurred_at,
         ),
         incident_id=str(domain_event.incident_id),
-        event_type=event_type,
-        actor=actor,
+        event_type=store_event_type,
+        actor=store_actor,
         occurred_at=occurred_at,
         message=domain_event.detail or f"Transition: {domain_event.event_type}",
         data={"lifecycle_event": domain_event.event_type, "detail": domain_event.detail},

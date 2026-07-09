@@ -6,7 +6,9 @@ import ast
 import sys
 
 # Functions allowed to project lifecycle status back into the persistence model.
-# Only the adapter function that applies typed domain state may assign incident.status.
+#
+# Invariant: Direct lifecycle status projection is only allowed in the adapter seam:
+#   incident_lifecycle_domain_adapter.py::_apply_lifecycle_transition
 ALLOWED_STATUS_PROJECTION_FUNCTIONS: frozenset[tuple[str, str]] = frozenset({
     (
         "src/k8s_diag_agent/collect/incident_lifecycle_domain_adapter.py",

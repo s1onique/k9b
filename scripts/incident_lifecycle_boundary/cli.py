@@ -8,11 +8,13 @@ from __future__ import annotations
 import sys
 
 from incident_lifecycle_boundary.common import (
+    DOMAIN_ADAPTER_MODULE,
     DOMAIN_MODULE,
     REPO_ROOT,
     TRANSITIONS_MODULE,
     iter_python_files,
 )
+from incident_lifecycle_boundary.event_mappings import check_lifecycle_event_mappings
 from incident_lifecycle_boundary.forbidden_imports import check_forbidden_imports
 from incident_lifecycle_boundary.rejection_reasons import (
     check_reason_allowlist,
@@ -73,6 +75,14 @@ def main(argv: list[str] | None = None) -> int:
         transition_errors = check_transition_adapter_uses_lifecycle_core(str(TRANSITIONS_MODULE))
         errors.extend(transition_errors)
 
+    # Check 5: Event and actor mappings are complete (domain + adapter modules)
+    if DOMAIN_ADAPTER_MODULE.exists():
+        event_mapping_errors = check_lifecycle_event_mappings(
+            domain_filepath=str(DOMAIN_MODULE),
+            adapter_filepath=str(DOMAIN_ADAPTER_MODULE),
+        )
+        errors.extend(event_mapping_errors)
+
     # Report results
     if errors:
         print("BOUNDARY VERIFICATION FAILED")
@@ -89,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  Rejection reasons are in allowlist")
         print("  No direct .status mutations detected outside allowed files")
         print("  Transition adapter calls typed lifecycle core functions")
+        print("  Event and actor mappings are complete")
         print("  Module is isolated from IO, Kubernetes, HTTP dependencies")
         print("=" * 60)
         return 0

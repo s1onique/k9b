@@ -6,6 +6,7 @@ from pathlib import Path
 
 # Default paths for verification
 DOMAIN_MODULE = Path("src/k8s_diag_agent/domain/incident_lifecycle.py")
+DOMAIN_ADAPTER_MODULE = Path("src/k8s_diag_agent/collect/incident_lifecycle_domain_adapter.py")
 TRANSITIONS_MODULE = Path("src/k8s_diag_agent/collect/incident_lifecycle_transitions.py")
 REPO_ROOT = Path("src")
 
