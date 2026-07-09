@@ -97,7 +97,7 @@ def incident_from_dict(data: dict[str, Any]) -> Any:
     """
     # Import here to avoid circular imports
     from .incident_events import IncidentEvent, IncidentEventActor, IncidentEventType
-    from .incident_evidence import EvidenceLink, EvidenceRole
+    from .incident_evidence import ArtifactId, EvidenceLink, EvidenceRole
     from .incident_lifecycle_types import IncidentStatus
     from .incident_review_packet_state import ReviewPacketState, ReviewPacketStatus
 
@@ -141,7 +141,7 @@ def incident_from_dict(data: dict[str, Any]) -> Any:
             attached_at = datetime.now(UTC)
         evidence_links.append(EvidenceLink(
             incident_id=e["incident_id"],
-            artifact_id=e["artifact_id"],
+            artifact_id=ArtifactId(e["artifact_id"]),
             role=role,
             attached_at=attached_at,
         ))

@@ -23,7 +23,7 @@ from .incident_bundle_promotion import (
     open_incident_from_candidate_with_bundle,
 )
 from .incident_candidates import IncidentCandidate
-from .incident_evidence import EvidenceLink, EvidenceRole
+from .incident_evidence import ArtifactId, EvidenceLink, EvidenceRole
 from .incident_lifecycle import (
     Incident,
     incident_id_from_candidate,
@@ -229,7 +229,7 @@ def attach_evidence_impl(
 
         new_link = EvidenceLink(
             incident_id=incident_id,
-            artifact_id=artifact_id,
+            artifact_id=ArtifactId(artifact_id),
             role=role,
             attached_at=datetime.now(UTC),
         )
