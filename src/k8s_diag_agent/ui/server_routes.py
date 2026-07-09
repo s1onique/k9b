@@ -179,6 +179,24 @@ _INTERNAL_AUTH_EXEMPT_ROUTES: frozenset[str] = frozenset({
     "/api/internal/incidents/promote-candidates",
 })
 
+# Public auth routes - these endpoints SET the session and are always public
+_PUBLIC_AUTH_ROUTES: frozenset[str] = frozenset({
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/me",
+    "/api/auth/status",
+})
+
+
+def _is_auth_route(path: str) -> bool:
+    """Return whether a request path belongs to the public auth API surface.
+
+    Kept here because auth-boundary tests import this helper from server_routes.
+    Do not broaden this to prefix matching; incident routes must remain protected.
+    """
+    route = path.split("?", 1)[0]
+    return route in _PUBLIC_AUTH_ROUTES
+
 
 def _is_session_auth_exempt_route(route: str) -> bool:
     """Check if route is exempt from session-based authentication.
