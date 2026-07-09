@@ -27,6 +27,8 @@ from .server_incident_internal_fetch import (
 class PromotionErrorReason:
     """Error reason codes for promotion failures."""
 
+    BACKEND_NOT_CONFIGURED = "backend_not_configured"
+    INVALID_TOKEN = "invalid_token"
     BACKEND_UNREACHABLE = "backend_unreachable"
     UNAUTHORIZED = "unauthorized"
     BAD_RESPONSE = "bad_response"
