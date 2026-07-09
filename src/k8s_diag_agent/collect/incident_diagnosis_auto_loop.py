@@ -37,10 +37,18 @@ from .incident_diagnosis_auto_loop_config import (
     check_incident_eligibility,
     is_automatic_diagnosis_loop_enabled,
 )
+from .incident_diagnosis_auto_loop_entrypoints import (
+    collect_automatic_diagnosis_evidence,
+)
 from .incident_diagnosis_auto_loop_models import (
     _COLLECTOR_SAFETY_METADATA,
     AutoLoopCollectorResult,
     AutoLoopIncidentResult,
+)
+from .incident_diagnosis_diagnostic import log_zero_incidents_diagnostic
+from .incident_diagnosis_dispatch import (
+    fetch_incident_for_diagnosis,
+    list_incidents_for_diagnosis,
 )
 from .incident_diagnosis_loop_models import LoopDecision
 from .incident_diagnosis_loop_runtime import run_policy_enforced_loop_pass
@@ -61,8 +69,7 @@ __all__ = [
     "AutoLoopIncidentResult",
     "AutoLoopCollectorResult",
     "run_automatic_diagnosis_loop_evidence_collection",
-    # collect_automatic_diagnosis_evidence is available via lazy import
-    # from .incident_diagnosis_auto_loop_entrypoints
+    "collect_automatic_diagnosis_evidence",
 ]
 
 
@@ -123,23 +130,36 @@ def run_automatic_diagnosis_loop_evidence_collection(
         return result
 
     # Get incidents to process
-    from .incident_diagnosis_auto_loop_config import _ACTIVE_STATUSES  # Import here to avoid circular
-
-    store = get_incident_store()
-
     if incident_ids is not None:
         # Process specific incidents
         candidates = incident_ids[:resolved_config.max_incidents_per_run]
     else:
-        # Get all active incidents
-        active_incidents = store.list_incidents(status=None)
-        active_candidates = [
-            i.incident_id for i in active_incidents
-            if i.status in _ACTIVE_STATUSES
-        ]
-        candidates = active_candidates[:resolved_config.max_incidents_per_run]
+        # Get active incidents using the dispatch module
+        # This selects local store or backend API based on configuration
+        # Active status filtering (open, collecting_evidence, investigating) happens
+        # BEFORE the limit is applied to avoid false-zero when non-active incidents
+        # are at the front of the list
+        incidents, success, error = list_incidents_for_diagnosis(
+            active_only=True,  # Only return active incidents
+            limit=resolved_config.max_incidents_per_run,
+        )
+
+        if not success:
+            # Backend API or local listing failed - log the error
+            result.incident_results = [{
+                "note": f"Failed to list incidents: {error}",
+            }]
+            return result
+
+        # incidents already filtered to active status by dispatch module
+        candidates = [inc.incident_id for inc in incidents]
 
     result.incidents_processed = len(candidates)
+
+    # Log diagnostic info for incidents_eligible=0 case
+    if len(candidates) == 0:
+        # Provide diagnostic info about why no incidents were found
+        log_zero_incidents_diagnostic(resolved_config)
 
     # Process each candidate
     for incident_id in candidates:
@@ -190,6 +210,28 @@ def _process_incident(
         Emits DIAGNOSIS_LOOP_STARTED, DIAGNOSIS_LOOP_COMPLETED, and
         DIAGNOSIS_LOOP_FAILED events to the incident timeline.
     """
+    # Fetch incident using backend-aware dispatch
+    # This selects local store or backend API based on configuration
+    incident, fetch_success, fetch_error = fetch_incident_for_diagnosis(incident_id)
+
+    if not fetch_success:
+        return AutoLoopIncidentResult(
+            incident_id=incident_id,
+            eligible=False,
+            eligibility_reason=f"fetch_failed: {fetch_error}",
+            skipped=True,
+            skip_reason=f"fetch_failed: {fetch_error}",
+        )
+
+    if incident is None:
+        return AutoLoopIncidentResult(
+            incident_id=incident_id,
+            eligible=False,
+            eligibility_reason="not_found",
+            skipped=True,
+            skip_reason="incident_not_found",
+        )
+
     store: IncidentStore = get_incident_store()
 
     # Check eligibility (pass external_analysis_dir to count existing review packets)
@@ -237,10 +279,12 @@ def _process_incident(
     )
 
     # Build case file
+    # Pass the backend-fetched incident to avoid local store fallback
     try:
         case_file = build_incident_case_file(
             incident_id=incident_id,
             external_analysis_dir=external_analysis_dir,
+            incident=incident,
         )
     except (OSError, ValueError, KeyError):
         # Emit failure event for case file build failure
@@ -451,18 +495,3 @@ def _build_minimal_diagnosis_report(
             "case_file_generated_at": case_file.get("generated_at"),
         },
     }
-
-
-# =============================================================================
-# Convenience Function
-# =============================================================================
-
-
-# Backwards compatibility import - the single-incident entrypoint was extracted
-# to keep this module under the LLM-friendly size limit.
-# Import lazily to avoid circular dependency.
-def __getattr__(name: str) -> object:
-    if name == "collect_automatic_diagnosis_evidence":
-        from .incident_diagnosis_auto_loop_entrypoints import collect_automatic_diagnosis_evidence
-        return collect_automatic_diagnosis_evidence
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

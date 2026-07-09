@@ -291,3 +291,150 @@ class SchedulerClient:
                 errors=1,
                 error_messages=[str(e)],
             )
+
+    def list_incidents(
+        self,
+        status: str | None = None,
+        limit: int | None = None,
+        timeout: float = 30.0,
+    ) -> dict[str, Any]:
+        """List incidents from backend via internal API.
+
+        This method enables the automatic diagnosis loop to read incidents
+        from the backend SQLite store when running in backend-api mode.
+
+        Args:
+            status: Optional status filter (e.g., "open", "collecting_evidence")
+            limit: Optional maximum number of incidents to return
+            timeout: Request timeout in seconds
+
+        Returns:
+            Dict with "incidents" list and "total" count, or error dict
+        """
+        # Validate backend URL first - return bounded error if not configured
+        try:
+            self._require_backend_url()
+        except SchedulerBackendPromotionError as e:
+            return {
+                "error": str(e),
+                "incidents": [],
+                "total": 0,
+            }
+
+        import urllib.error
+        import urllib.request
+
+        url = f"{self._base_url}/api/internal/incidents/list"
+        params: list[str] = []
+        if status is not None:
+            params.append(f"status={status}")
+        if limit is not None:
+            params.append(f"limit={limit}")
+        if params:
+            url = f"{url}?{'&'.join(params)}"
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        req = urllib.request.Request(
+            url,
+            headers=headers,
+            method="GET",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8")
+                return dict(json.loads(body))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8")
+            try:
+                err_data = json.loads(body)
+                return {
+                    "error": err_data.get("message", str(e)),
+                    "incidents": [],
+                    "total": 0,
+                }
+            except json.JSONDecodeError:
+                return {
+                    "error": str(e),
+                    "incidents": [],
+                    "total": 0,
+                }
+        except Exception as e:
+            return {
+                "error": str(e),
+                "incidents": [],
+                "total": 0,
+            }
+
+    def get_incident(
+        self,
+        incident_id: str,
+        timeout: float = 30.0,
+    ) -> dict[str, Any] | None:
+        """Get a single incident from backend via internal API.
+
+        This method enables fetching individual incidents when the diagnosis loop
+        needs to process an incident discovered via list_incidents().
+
+        Args:
+            incident_id: The incident ID to fetch
+            timeout: Request timeout in seconds
+
+        Returns:
+            Incident dict if found, None if not found or error
+        """
+        # Validate backend URL first
+        try:
+            self._require_backend_url()
+        except SchedulerBackendPromotionError:
+            return None
+
+        import urllib.error
+        import urllib.request
+
+        url = f"{self._base_url}/api/internal/incidents/{incident_id}"
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        req = urllib.request.Request(
+            url,
+            headers=headers,
+            method="GET",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8")
+                return dict(json.loads(body))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            body = e.read().decode("utf-8")
+            try:
+                err_data = json.loads(body)
+                _logger.warning(
+                    "Failed to fetch incident from backend",
+                    extra={
+                        "event": "fetch-incident-backend-error",
+                        "incident_id": incident_id,
+                        "error": err_data.get("message", str(e)),
+                    },
+                )
+                return None
+            except json.JSONDecodeError:
+                return None
+        except Exception as e:
+            _logger.warning(
+                "Failed to fetch incident from backend",
+                extra={
+                    "event": "fetch-incident-backend-error",
+                    "incident_id": incident_id,
+                    "error": str(e),
+                },
+            )
+            return None

@@ -38,6 +38,10 @@ from .server_incident_internal_models import (
     PromoteCandidatesRequest,
     PromotionResponse,
 )
+from .server_incident_internal_read_handlers import (
+    handle_get_incident,
+    handle_list_incidents,
+)
 
 __all__ = [
     # Models
@@ -49,6 +53,8 @@ __all__ = [
     "_validate_internal_token",
     "_get_internal_api_token",
     # Handlers
+    "handle_get_incident",
+    "handle_list_incidents",
     "handle_promote_alert_signals",
     "handle_promote_candidates",
     # Client

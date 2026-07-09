@@ -177,7 +177,13 @@ def _handle_post_request_impl(handler: HealthUIRequestHandler, route: str) -> No
 _INTERNAL_AUTH_EXEMPT_ROUTES: frozenset[str] = frozenset({
     "/api/internal/incidents/promote-alert-signals",
     "/api/internal/incidents/promote-candidates",
+    "/api/internal/incidents/list",
 })
+
+# Internal API route patterns (for dynamic paths like /api/internal/incidents/{id})
+_INTERNAL_ROUTE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"^/api/internal/incidents/([^/]+)$"), "get_incident"),
+]
 
 # Public auth routes - these endpoints SET the session and are always public
 _PUBLIC_AUTH_ROUTES: frozenset[str] = frozenset({
@@ -218,6 +224,10 @@ def _is_session_auth_exempt_route(route: str) -> bool:
     # Each internal route must be explicitly allowlisted here
     if route in _INTERNAL_AUTH_EXEMPT_ROUTES:
         return True
+    # Check dynamic internal route patterns
+    for pattern, _ in _INTERNAL_ROUTE_PATTERNS:
+        if pattern.match(route):
+            return True
     return False
 
 

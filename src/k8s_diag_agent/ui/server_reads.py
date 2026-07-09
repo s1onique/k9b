@@ -93,6 +93,25 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
     if dispatch_api_operation(handler, "GET", route, query):
         return
 
+    # Internal API routes - handled specially (bearer token auth)
+    if route == "/api/internal/incidents/list":
+        from .server_incident_internal import handle_list_incidents
+
+        handle_list_incidents(handler)
+        return
+
+    # Internal API: GET /api/internal/incidents/{incident_id}
+    import re
+
+    _INCIDENT_GET_PATTERN = re.compile(r"^/api/internal/incidents/([^/]+)$")
+    match = _INCIDENT_GET_PATTERN.match(route)
+    if match:
+        incident_id = match.group(1)
+        from .server_incident_internal import handle_get_incident
+
+        handle_get_incident(handler, incident_id)
+        return
+
     # Routes that need context loading - handled specially below
     # These cannot be dispatched through the registry because they need
     # the UI context to be loaded first

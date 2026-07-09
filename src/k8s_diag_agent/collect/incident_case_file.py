@@ -47,7 +47,7 @@ from .incident_scheduling_root_cause import (
 from .incident_store_provider import get_incident_store
 
 if TYPE_CHECKING:
-    pass
+    from .incident_lifecycle import Incident
 
 # Packet schema version for tracking structure evolution
 PACKET_SCHEMA_VERSION = "1.0"
@@ -94,6 +94,7 @@ def build_incident_case_file(
     read_only_check_result_run_ids: Sequence[str] | None = None,
     diagnosis_loop_pass_run_ids: Sequence[str] | None = None,
     tool_output_projection: dict[str, dict[str, Any]] | None = None,
+    incident: Incident | None = None,
 ) -> dict[str, object] | None:
     """Build a read-only incident case-file packet for LLM-assisted diagnosis.
 
@@ -154,9 +155,10 @@ def build_incident_case_file(
     # Use provided now or current time (timezone-aware UTC)
     generated_at = now if now is not None else datetime.now(UTC)
 
-    # Fetch incident from store (read-only)
-    store = get_incident_store()
-    incident = store.get_incident(incident_id)
+    # Use provided incident or fetch from store (read-only)
+    if incident is None:
+        store = get_incident_store()
+        incident = store.get_incident(incident_id)
 
     if incident is None:
         return None

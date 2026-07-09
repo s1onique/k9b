@@ -1,17 +1,15 @@
-"""Internal API request handlers.
+"""Internal API promotion handlers.
 
-Provides handlers for the scheduler-to-backend promotion API endpoints.
+Provides POST handlers for the scheduler-to-backend promotion API endpoints.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from .server_incident_internal_auth import _validate_internal_token
 from .server_incident_internal_models import (
     PromoteAlertSignalsRequest,
     PromoteCandidatesRequest,
@@ -22,40 +20,6 @@ if TYPE_CHECKING:
     from .server import HealthUIRequestHandler
 
 _logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class PromotionStats:
-    """Statistics from a promotion operation.
-
-    Tracks the counts of opened, updated, and skipped incidents
-    during promotion for accurate reporting.
-    """
-    scanned: int = 0
-    opened_incidents: int = 0
-    updated_incidents: int = 0
-    skipped_duplicates: int = 0
-    errors: int = 0
-    error_messages: list[str] = field(default_factory=list)
-
-    def to_response(self, ok: bool = True) -> PromotionResponse:
-        """Convert stats to API response.
-
-        Args:
-            ok: Whether the operation was successful
-
-        Returns:
-            PromotionResponse with accurate counts
-        """
-        return PromotionResponse(
-            ok=ok,
-            scanned=self.scanned,
-            opened_incidents=self.opened_incidents,
-            updated_incidents=self.updated_incidents,
-            skipped_duplicates=self.skipped_duplicates,
-            errors=self.errors,
-            error_messages=self.error_messages if self.errors > 0 else [],
-        )
 
 
 def _convert_candidates_to_objects(
@@ -142,6 +106,17 @@ def _parse_observed_at(observed_at_str: str) -> datetime | None:
         return None
 
 
+def _validate_internal_token(handler: Any) -> bool:
+    """Validate the internal API token from request headers.
+
+    Args:
+        handler: The request handler
+
+    Returns:
+        True if token is valid, False otherwise
+    """
+    from .server_incident_internal_auth import _validate_internal_token as auth_validate
+    return auth_validate(handler)
 def handle_promote_alert_signals(handler: HealthUIRequestHandler) -> None:
     """Handle POST /api/internal/incidents/promote-alert-signals.
 
