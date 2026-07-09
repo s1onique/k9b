@@ -146,7 +146,7 @@ describe("incidentsUpdate", () => {
       const model = createTestModel({
         expandedIncidentIds: new Set(["inc-1", "inc-2", "inc-999"]),
       });
-      const incidents = createTestIncidents(2);
+      const incidents = createTestIncidents(3);
       const msg: IncidentsMsg = { type: "loadSucceeded", incidents };
 
       const result = incidentsUpdate(model, msg);

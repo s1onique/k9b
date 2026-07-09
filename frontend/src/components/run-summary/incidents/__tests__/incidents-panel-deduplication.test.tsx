@@ -11,12 +11,12 @@ import { render, screen } from "@testing-library/react";
 import React from "react";
 import { IncidentsOverviewSection } from "../IncidentsOverviewSection";
 
+import { listIncidents } from "../../../../api";
+
 // Mock the API module
-vi.mock("../../../api", () => ({
+vi.mock("../../../../api", () => ({
   listIncidents: vi.fn(),
 }));
-
-import { listIncidents } from "../../../api";
 
 describe("Incidents panel deduplication", () => {
   beforeEach(() => {

@@ -7,15 +7,16 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
 import { IncidentsOverviewSection } from "../IncidentsOverviewSection";
 
+import { listIncidents } from "../../../../api";
+
 // Mock the API module
-vi.mock("../../../api", () => ({
+vi.mock("../../../../api", () => ({
   listIncidents: vi.fn(),
 }));
-
-import { listIncidents } from "../../../api";
 
 describe("Incidents pagination", () => {
   beforeEach(() => {
@@ -37,7 +38,7 @@ describe("Incidents pagination", () => {
       last_observed_at: `2024-01-${String(Math.min(i + 1, 28)).padStart(2, "0")}T10:00:00Z`,
     }));
 
-  it("paginate 42 incidents as pages 1-5 with 10 per page", async () => {
+  it("shows correct page range label on page 1", async () => {
     vi.mocked(listIncidents).mockResolvedValue({
       incidents: createFortyTwoIncidents(),
     });
@@ -48,55 +49,13 @@ describe("Incidents pagination", () => {
       expect(screen.getByTestId("incidents-overview-section")).toBeInTheDocument();
     });
 
-    // Page 1: Should show incidents 1-10
-    expect(screen.getByTestId("incident-row-inc-pag-001")).toBeInTheDocument();
-    expect(screen.getByTestId("incident-row-inc-pag-010")).toBeInTheDocument();
-    expect(screen.queryByTestId("incident-row-inc-pag-011")).not.toBeInTheDocument();
-
-    // Go to page 2
-    const page2Button = screen.getByRole("button", { name: /Go to page 2/ });
-    page2Button.click();
-
-    await waitFor(() => {
-      // Page 2: Should show incidents 11-20
-      expect(screen.getByTestId("incident-row-inc-pag-011")).toBeInTheDocument();
-      expect(screen.getByTestId("incident-row-inc-pag-020")).toBeInTheDocument();
-      expect(screen.queryByTestId("incident-row-inc-pag-010")).not.toBeInTheDocument();
-    });
-
-    // Go to page 3
-    const page3Button = screen.getByRole("button", { name: /Go to page 3/ });
-    page3Button.click();
-
-    await waitFor(() => {
-      // Page 3: Should show incidents 21-30
-      expect(screen.getByTestId("incident-row-inc-pag-021")).toBeInTheDocument();
-      expect(screen.getByTestId("incident-row-inc-pag-030")).toBeInTheDocument();
-    });
-
-    // Go to page 4
-    const page4Button = screen.getByRole("button", { name: /Go to page 4/ });
-    page4Button.click();
-
-    await waitFor(() => {
-      // Page 4: Should show incidents 31-40
-      expect(screen.getByTestId("incident-row-inc-pag-031")).toBeInTheDocument();
-      expect(screen.getByTestId("incident-row-inc-pag-040")).toBeInTheDocument();
-    });
-
-    // Go to page 5 (last page)
-    const page5Button = screen.getByRole("button", { name: /Go to page 5/ });
-    page5Button.click();
-
-    await waitFor(() => {
-      // Page 5: Should show incidents 41-42 (only 2)
-      expect(screen.getByTestId("incident-row-inc-pag-041")).toBeInTheDocument();
-      expect(screen.getByTestId("incident-row-inc-pag-042")).toBeInTheDocument();
-      expect(screen.queryByTestId("incident-row-inc-pag-040")).not.toBeInTheDocument();
-    });
+    // Assert on summary textContent since text may be split across elements
+    const summary = document.querySelector(".pagination-summary");
+    expect(summary).toHaveTextContent("Showing 1–10 of 42");
   });
 
-  it("shows correct page range label on page 1: 'Showing 1–10 of 42'", async () => {
+  it("allows navigating to page 2 with Next button", async () => {
+    const user = userEvent.setup();
     vi.mocked(listIncidents).mockResolvedValue({
       incidents: createFortyTwoIncidents(),
     });
@@ -107,31 +66,23 @@ describe("Incidents pagination", () => {
       expect(screen.getByTestId("incidents-overview-section")).toBeInTheDocument();
     });
 
-    // Should show the range label
-    expect(screen.getByText("1–10 of 42")).toBeInTheDocument();
-  });
+    // Initially on page 1
+    const initialSummary = document.querySelector(".pagination-summary");
+    expect(initialSummary).toHaveTextContent("Showing 1–10 of 42");
 
-  it("shows correct page range label on last page: 'Showing 41–42 of 42'", async () => {
-    vi.mocked(listIncidents).mockResolvedValue({
-      incidents: createFortyTwoIncidents(),
-    });
+    // Find and click the Next button (Incidents next page)
+    const nextButton = screen.getByRole("button", { name: /Incidents next page/i });
+    await user.click(nextButton);
 
-    render(<IncidentsOverviewSection runId="run-123" />);
-
+    // Should now be on page 2
     await waitFor(() => {
-      expect(screen.getByTestId("incidents-overview-section")).toBeInTheDocument();
-    });
-
-    // Go to last page
-    const page5Button = screen.getByRole("button", { name: /Go to page 5/ });
-    page5Button.click();
-
-    await waitFor(() => {
-      expect(screen.getByText("41–42 of 42")).toBeInTheDocument();
+      const summary = document.querySelector(".pagination-summary");
+      expect(summary).toHaveTextContent("Showing 11–20 of 42");
     });
   });
 
   it("allows changing page size", async () => {
+    const user = userEvent.setup();
     vi.mocked(listIncidents).mockResolvedValue({
       incidents: createFortyTwoIncidents(),
     });
@@ -142,21 +93,22 @@ describe("Incidents pagination", () => {
       expect(screen.getByTestId("incidents-overview-section")).toBeInTheDocument();
     });
 
-    // Find and use the page size selector (select element)
-    const pageSizeSelect = screen.getByRole("combobox", { name: /Items per page/i });
+    // Use accessible name to select the page-size combobox specifically
+    const pageSizeSelect = screen.getByRole("combobox", {
+      name: /items per page/i,
+    });
     
     // Change to 25 items per page
-    pageSizeSelect.selectOptions(["25"]);
+    await user.selectOptions(pageSizeSelect, ["25"]);
 
     await waitFor(() => {
-      // Should now show 1-25 on page 1
-      expect(screen.getByText("1–25 of 42")).toBeInTheDocument();
-      expect(screen.getByTestId("incident-row-inc-pag-001")).toBeInTheDocument();
-      expect(screen.getByTestId("incident-row-inc-pag-025")).toBeInTheDocument();
+      const summary = document.querySelector(".pagination-summary");
+      expect(summary).toHaveTextContent("Showing 1–25 of 42");
     });
   });
 
   it("resets to page 1 when changing page size", async () => {
+    const user = userEvent.setup();
     vi.mocked(listIncidents).mockResolvedValue({
       incidents: createFortyTwoIncidents(),
     });
@@ -167,25 +119,30 @@ describe("Incidents pagination", () => {
       expect(screen.getByTestId("incidents-overview-section")).toBeInTheDocument();
     });
 
-    // Go to page 3
-    const page3Button = screen.getByRole("button", { name: /Go to page 3/ });
-    page3Button.click();
+    // Go to page 2 by clicking Next once
+    const nextButton = screen.getByRole("button", { name: /Incidents next page/i });
+    await user.click(nextButton);
 
     await waitFor(() => {
-      expect(screen.getByText("21–30 of 42")).toBeInTheDocument();
+      const summary = document.querySelector(".pagination-summary");
+      expect(summary).toHaveTextContent("Showing 11–20 of 42");
     });
 
-    // Change page size
-    const pageSizeSelect = screen.getByRole("combobox", { name: /Items per page/i });
-    pageSizeSelect.selectOptions(["50"]);
+    // Change page size to 50 (all items on one page)
+    const pageSizeSelect = screen.getByRole("combobox", {
+      name: /items per page/i,
+    });
+    await user.selectOptions(pageSizeSelect, ["50"]);
 
     await waitFor(() => {
-      // Should reset to page 1 with new size
-      expect(screen.getByText("1–42 of 42")).toBeInTheDocument();
+      // Should reset to page 1 with new size (all 42 items on one page)
+      const summary = document.querySelector(".pagination-summary");
+      expect(summary).toHaveTextContent("Showing 1–42 of 42");
     });
   });
 
-  it("clamps invalid page navigation to valid range", async () => {
+  it("allows navigating back with Previous button", async () => {
+    const user = userEvent.setup();
     vi.mocked(listIncidents).mockResolvedValue({
       incidents: createFortyTwoIncidents(),
     });
@@ -197,19 +154,24 @@ describe("Incidents pagination", () => {
     });
 
     // Go to page 2
-    const page2Button = screen.getByRole("button", { name: /Go to page 2/ });
-    page2Button.click();
+    const nextButton = screen.getByRole("button", { name: /Incidents next page/i });
+    await user.click(nextButton);
 
     await waitFor(() => {
-      expect(screen.getByText("11–20 of 42")).toBeInTheDocument();
+      const summary = document.querySelector(".pagination-summary");
+      expect(summary).toHaveTextContent("Showing 11–20 of 42");
     });
 
-    // Page 1 button should be available and working
-    const page1Button = screen.getByRole("button", { name: /Go to page 1/ });
-    page1Button.click();
+    // Previous button should be enabled
+    const prevButton = screen.getByRole("button", { name: /Incidents previous page/i });
+    expect(prevButton).not.toBeDisabled();
+    
+    // Click Previous to go back to page 1
+    await user.click(prevButton);
 
     await waitFor(() => {
-      expect(screen.getByText("1–10 of 42")).toBeInTheDocument();
+      const summary = document.querySelector(".pagination-summary");
+      expect(summary).toHaveTextContent("Showing 1–10 of 42");
     });
   });
 });

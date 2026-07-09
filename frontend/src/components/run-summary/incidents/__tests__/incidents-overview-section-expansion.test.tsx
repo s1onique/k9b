@@ -6,16 +6,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { IncidentsOverviewSection } from "../IncidentsOverviewSection";
 
+import { listIncidents } from "../../../../api";
+
 // Mock the API module
-vi.mock("../../../api", () => ({
+vi.mock("../../../../api", () => ({
   listIncidents: vi.fn(),
 }));
-
-import { listIncidents } from "../../../api";
 
 describe("Incidents expand/collapse ARIA behavior", () => {
   beforeEach(() => {
@@ -58,8 +58,9 @@ describe("Incidents expand/collapse ARIA behavior", () => {
       expect(screen.getByTestId("incident-row-inc-expand-001")).toBeInTheDocument();
     });
 
-    // Find the expand button for the first incident
-    const expandButton = screen.getByRole("button", { name: "Expand" });
+    // Use within() to scope query to the specific row
+    const firstRow = screen.getByTestId("incident-row-inc-expand-001");
+    const expandButton = within(firstRow).getByRole("button", { name: "Expand" });
     expect(expandButton).toHaveAttribute("aria-expanded", "false");
 
     // Click to expand
@@ -80,8 +81,9 @@ describe("Incidents expand/collapse ARIA behavior", () => {
       expect(screen.getByTestId("incident-row-inc-expand-001")).toBeInTheDocument();
     });
 
-    // Expand first
-    const expandButton = screen.getByRole("button", { name: "Expand" });
+    // Use within() to scope query to the specific row
+    const firstRow = screen.getByTestId("incident-row-inc-expand-001");
+    const expandButton = within(firstRow).getByRole("button", { name: "Expand" });
     expandButton.click();
 
     await waitFor(() => {
@@ -89,7 +91,7 @@ describe("Incidents expand/collapse ARIA behavior", () => {
     });
 
     // Collapse
-    const collapseButton = screen.getByRole("button", { name: "Collapse" });
+    const collapseButton = within(firstRow).getByRole("button", { name: "Collapse" });
     collapseButton.click();
 
     await waitFor(() => {
@@ -106,7 +108,9 @@ describe("Incidents expand/collapse ARIA behavior", () => {
       expect(screen.getByTestId("incident-row-inc-expand-001")).toBeInTheDocument();
     });
 
-    const expandButton = screen.getByRole("button", { name: "Expand" });
+    // Use within() to scope query to the specific row
+    const firstRow = screen.getByTestId("incident-row-inc-expand-001");
+    const expandButton = within(firstRow).getByRole("button", { name: "Expand" });
     
     // aria-controls should point to the details ID
     const detailsId = `incident-details-inc-expand-001`;
@@ -122,8 +126,9 @@ describe("Incidents expand/collapse ARIA behavior", () => {
       expect(screen.getByTestId("incident-row-inc-expand-001")).toBeInTheDocument();
     });
 
-    // Expand the incident
-    const expandButton = screen.getByRole("button", { name: "Expand" });
+    // Use within() to scope query to the specific row
+    const firstRow = screen.getByTestId("incident-row-inc-expand-001");
+    const expandButton = within(firstRow).getByRole("button", { name: "Expand" });
     expandButton.click();
 
     // Expanded row should appear with details
@@ -148,10 +153,14 @@ describe("Incidents expand/collapse ARIA behavior", () => {
       expect(screen.getByTestId("incident-row-inc-expand-002")).toBeInTheDocument();
     });
 
-    // Expand both incidents
-    const buttons = screen.getAllByRole("button", { name: "Expand" });
-    buttons[0].click();
-    buttons[1].click();
+    // Expand both incidents using within() for row-specific queries
+    const firstRow = screen.getByTestId("incident-row-inc-expand-001");
+    const secondRow = screen.getByTestId("incident-row-inc-expand-002");
+    const firstExpandBtn = within(firstRow).getByRole("button", { name: "Expand" });
+    const secondExpandBtn = within(secondRow).getByRole("button", { name: "Expand" });
+    
+    firstExpandBtn.click();
+    secondExpandBtn.click();
 
     // Both should be expanded
     await waitFor(() => {
@@ -180,20 +189,21 @@ describe("Incidents expand/collapse ARIA behavior", () => {
     render(<IncidentsOverviewSection runId="run-123" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("incident-table-wrapper")).toBeInTheDocument();
+      expect(screen.getByTestId("incidents-table-wrapper")).toBeInTheDocument();
     });
 
-    // Expand first incident
-    const expandButton = screen.getByRole("button", { name: "Expand" });
+    // Use within() to scope query to the first row
+    const firstRow = screen.getByTestId("incident-row-inc-page-0");
+    const expandButton = within(firstRow).getByRole("button", { name: "Expand" });
     expandButton.click();
 
     await waitFor(() => {
       expect(screen.getByTestId("incident-expanded-inc-page-0")).toBeInTheDocument();
     });
 
-    // Go to page 2
-    const page2Button = screen.getByRole("button", { name: /Go to page 2/ });
-    page2Button.click();
+    // Go to page 2 using Next button
+    const nextButton = screen.getByRole("button", { name: /Incidents next page/i });
+    nextButton.click();
 
     // Expanded row should be gone
     await waitFor(() => {
