@@ -177,6 +177,7 @@ def _handle_post_request_impl(handler: HealthUIRequestHandler, route: str) -> No
 _INTERNAL_AUTH_EXEMPT_ROUTES: frozenset[str] = frozenset({
     "/api/internal/incidents/promote-alert-signals",
     "/api/internal/incidents/promote-candidates",
+    "/api/internal/incidents",
     "/api/internal/incidents/list",
 })
 

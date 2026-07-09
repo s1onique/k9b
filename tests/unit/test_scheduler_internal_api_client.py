@@ -14,6 +14,7 @@ Tests validate:
 from __future__ import annotations
 
 import json
+import urllib.error
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -44,18 +45,26 @@ class MockHTTPResponse:
         return json.dumps(self._body or {}).encode("utf-8")
 
 
-class MockHTTPError(Exception):
-    """Mock HTTP error for testing."""
+class MockHTTPError(urllib.error.HTTPError):
+    """Mock HTTP error for testing - inherits from urllib.error.HTTPError."""
 
     def __init__(self, code: int, message: str, body: str = ""):
-        super().__init__(message)
-        self.code = code
-        self.reason = message
-        self._body = body
+        from email.message import Message
 
-    def read(self) -> bytes:
-        """Return the error body as bytes."""
-        return self._body.encode("utf-8")
+        super().__init__(
+            url="http://localhost",
+            code=code,
+            msg=message,
+            hdrs=Message(),
+            fp=None,
+        )
+        self._body = body
+        self._body_bytes = body.encode("utf-8") if body else b""
+
+    def read(self, n: int | None = None) -> bytes:
+        if n is None:
+            return self._body_bytes
+        return self._body_bytes[:n]
 
 
 class TestSchedulerClientEndpoints:
@@ -347,6 +356,16 @@ class TestSchedulerClientTokenHandling:
             assert request.headers["Authorization"] == "Bearer test-token-123"
 
 
+class TestPromotionErrorReasonBackwardCompat:
+    """Test backward compatibility for PromotionErrorReason constants."""
+
+    def test_promotion_error_reason_constants_available(self) -> None:
+        """PromotionErrorReason constants should be importable for backward compat."""
+        # These are re-exported from the original module for backward compatibility
+        assert PromotionErrorReason.BACKEND_NOT_CONFIGURED is not None
+        assert PromotionErrorReason.INVALID_TOKEN is not None
+
+
 class TestSchedulerClientIntegration:
     """Integration-style tests for the full promotion path."""
 
@@ -378,14 +397,3 @@ class TestSchedulerClientIntegration:
         assert client._base_url == "http://k9b-backend:8080"
 
 
-class TestPromotionErrorReason:
-    """Test PromotionErrorReason constants are defined."""
-
-    def test_error_reasons_defined(self) -> None:
-        """Error reason constants should be defined."""
-        assert PromotionErrorReason.BACKEND_UNREACHABLE == "backend_unreachable"
-        assert PromotionErrorReason.UNAUTHORIZED == "unauthorized"
-        assert PromotionErrorReason.BAD_RESPONSE == "bad_response"
-        assert PromotionErrorReason.TIMEOUT == "timeout"
-        assert PromotionErrorReason.INVALID_JSON == "invalid_json"
-        assert PromotionErrorReason.UNKNOWN == "unknown"

@@ -53,11 +53,14 @@ class BackendListingErrorType:
     targeted alerting and diagnostics.
     """
 
+    MISSING_BACKEND_URL = "missing_backend_url"  # Backend URL not configured
+    MISSING_INTERNAL_TOKEN = "missing_internal_token"  # Internal API token not configured
     UNAUTHORIZED = "unauthorized"  # 401/403 status codes
     TIMEOUT = "timeout"  # Request timed out
     BACKEND_UNREACHABLE = "backend_unreachable"  # Connection refused, DNS failed, etc.
     BAD_RESPONSE = "bad_response"  # Non-success HTTP status (other than 401/403)
     INVALID_JSON = "invalid_json"  # Response body is not valid JSON
+    UNEXPECTED_SHAPE = "unexpected_shape"  # Response structure is unexpected
     UNKNOWN = "unknown"  # Everything else
 
 

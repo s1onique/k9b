@@ -94,7 +94,9 @@ def handle_api(handler: HealthUIRequestHandler, route: str, query: str) -> None:
         return
 
     # Internal API routes - handled specially (bearer token auth)
-    if route == "/api/internal/incidents/list":
+    # Canonical path: /api/internal/incidents (preferred)
+    # Legacy path: /api/internal/incidents/list (supported for backward compatibility)
+    if route in ("/api/internal/incidents", "/api/internal/incidents/list"):
         from .server_incident_internal import handle_list_incidents
 
         handle_list_incidents(handler)

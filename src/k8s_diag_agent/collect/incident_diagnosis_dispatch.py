@@ -179,17 +179,31 @@ def _list_incidents_backend_api(
         Tuple of (incidents, success, error_message, error_type)
         - error_type: Classified error type (unauthorized, timeout, etc.) or None
     """
+    # Canonical internal API path for incident listing
+    api_path = "/api/internal/incidents"
+
     if not backend_url or not internal_api_token:
+        error_type = (
+            BackendListingErrorType.MISSING_BACKEND_URL
+            if not backend_url
+            else BackendListingErrorType.MISSING_INTERNAL_TOKEN
+        )
         error_msg = "Backend API configuration incomplete: missing backend_url or internal_api_token"
         _logger.error(
             error_msg,
             extra={
-                "event": "diagnosis-incident-list-backend-config-incomplete",
-                "backend_url": backend_url is not None,
-                "internal_api_token": internal_api_token is not None,
+                "event": "backend-incident-listing-failed",
+                "component": "automatic-diagnosis",
+                "run_id": None,
+                "mode": MODE_BACKEND_API,
+                "backend_url_present": backend_url is not None,
+                "internal_api_token_present": internal_api_token is not None,
+                "path": api_path,
+                "error_type": error_type,
+                "sanitized_error": error_msg,
             },
         )
-        return [], False, error_msg, None
+        return [], False, error_msg, error_type
 
     from ..ui.server_incident_internal_client import SchedulerClient
 
@@ -202,14 +216,36 @@ def _list_incidents_backend_api(
         # Check for error in response
         if "error" in response:
             error_msg = str(response.get("error", "Unknown error"))
+            status_code = response.get("status_code")
+
+            # Determine error type - prefer explicit type from response, otherwise classify
+            classified_error_type: str = response.get("error_type") or ""
+            if not classified_error_type:
+                if "401" in error_msg or "unauthorized" in error_msg.lower():
+                    classified_error_type = BackendListingErrorType.UNAUTHORIZED
+                elif "not found" in error_msg.lower():
+                    classified_error_type = BackendListingErrorType.BAD_RESPONSE  # 404
+                elif "timeout" in error_msg.lower():
+                    classified_error_type = BackendListingErrorType.TIMEOUT
+                else:
+                    classified_error_type = BackendListingErrorType.UNKNOWN
+
             _logger.error(
                 "Backend API incident listing failed",
                 extra={
-                    "event": "diagnosis-incident-list-backend-error",
-                    "error": error_msg,
+                    "event": "backend-incident-listing-failed",
+                    "component": "automatic-diagnosis",
+                    "run_id": None,
+                    "mode": MODE_BACKEND_API,
+                    "backend_url_present": True,
+                    "internal_api_token_present": True,
+                    "path": api_path,
+                    "status_code": status_code,
+                    "error_type": classified_error_type,
+                    "sanitized_error": error_msg[:500],  # Truncate for log safety
                 },
             )
-            return [], False, error_msg, None
+            return [], False, error_msg, classified_error_type
 
         # Extract incidents from response
         raw_incidents = response.get("incidents", [])
@@ -247,9 +283,31 @@ def _list_incidents_backend_api(
         return summaries, True, None, None
 
     except Exception as e:
-        _logger.exception("Backend API incident listing failed")
         # Classify the error for structured event
         error_type, sanitized_error = _classify_backend_listing_error(e)
+
+        # Determine status_code from exception if available
+        status_code = None
+        if hasattr(e, "code"):
+            status_code = e.code
+        elif hasattr(e, "status"):
+            status_code = e.status
+
+        _logger.error(
+            "Backend API incident listing failed",
+            extra={
+                "event": "backend-incident-listing-failed",
+                "component": "automatic-diagnosis",
+                "run_id": None,
+                "mode": MODE_BACKEND_API,
+                "backend_url_present": True,
+                "internal_api_token_present": True,
+                "path": api_path,
+                "status_code": status_code,
+                "error_type": error_type,
+                "sanitized_error": sanitized_error,
+            },
+        )
         # Return the classified error - caller will emit the failure event
         return [], False, sanitized_error, error_type
 
