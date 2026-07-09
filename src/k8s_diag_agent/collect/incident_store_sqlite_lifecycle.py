@@ -4,6 +4,9 @@ This module provides the lifecycle transition methods for SQLite-backed incident
 - Promotion and addition methods
 - Evidence attachment
 - Diagnosis loop tracking
+
+Thread safety: All write operations must be called within a write lock context.
+The store provides _write_connection() context manager for this purpose.
 """
 
 from __future__ import annotations
@@ -45,129 +48,139 @@ def promote_candidates_impl(
     observed_at: datetime,
     snapshot_bundle_id: str | None = None,
 ) -> tuple[Incident, ...]:
-    """Promote candidates to incidents with event sourcing."""
-    updated_incidents: dict[str, Incident] = {}
+    """Promote candidates to incidents with event sourcing.
 
-    for candidate in candidates:
-        incident_id = incident_id_from_candidate(candidate)
+    This implementation uses the store's _write_connection() to ensure
+    thread-safe writes. The connection is held for the entire promotion
+    operation to maintain atomicity of the transaction.
+    """
+    # Use write connection context to serialize writes across threads
+    with store._write_connection() as conn:
+        updated_incidents: dict[str, Incident] = {}
 
-        if incident_id in store._incidents:
-            # Merge into existing
-            existing = store._incidents[incident_id]
-            if snapshot_bundle_id is not None:
-                updated = merge_candidate_into_incident_with_bundle(
-                    existing, candidate, observed_at, snapshot_bundle_id
-                )
-            else:
-                updated = merge_candidate_into_incident(existing, candidate, observed_at)
+        for candidate in candidates:
+            incident_id = incident_id_from_candidate(candidate)
 
-            # Create event for signal merge
-            payload = {
-                "signal_count": len(candidate.signals),
-                "candidate_id": candidate.candidate_id,
-                "last_observed_at": observed_at.isoformat(),
-                "signals": [s.to_dict() for s in updated.signals],
-            }
+            if incident_id in store._incidents:
+                # Merge into existing
+                existing = store._incidents[incident_id]
+                if snapshot_bundle_id is not None:
+                    updated = merge_candidate_into_incident_with_bundle(
+                        existing, candidate, observed_at, snapshot_bundle_id
+                    )
+                else:
+                    updated = merge_candidate_into_incident(existing, candidate, observed_at)
 
-            if snapshot_bundle_id is not None:
-                payload["bundle_id"] = snapshot_bundle_id
-                payload["status"] = updated.status.value
-                payload["evidence_links"] = [e.to_dict() for e in updated.evidence_links]
-                _append_event(
-                    store,
-                    store._conn,
-                    incident_id=incident_id,
-                    event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
-                    actor=IncidentEventActor.SYSTEM,
-                    payload=payload,
-                    occurred_at=observed_at,
-                )
-            else:
-                _append_event(
-                    store,
-                    store._conn,
-                    incident_id=incident_id,
-                    event_type=IncidentEventType.SIGNAL_OBSERVED,
-                    actor=IncidentEventActor.SYSTEM,
-                    payload=payload,
-                    occurred_at=observed_at,
-                )
-
-            store._incidents[incident_id] = updated
-            updated_incidents[incident_id] = updated
-        else:
-            # Open new incident
-            if snapshot_bundle_id is not None:
-                new_incident = open_incident_from_candidate_with_bundle(
-                    candidate, observed_at, snapshot_bundle_id
-                )
-            else:
-                new_incident = open_incident_from_candidate(candidate, observed_at)
-
-            # Create OPENED event (ALWAYS first event for correct projection)
-            opened_payload = {
-                "source_candidate_id": candidate.candidate_id,
-                "namespace": candidate.namespace,
-                "object_kind": candidate.object_kind.value,
-                "object_name": candidate.object_name,
-                "raw_object_kind": candidate.raw_object_kind,
-                "candidate_class": candidate.candidate_class.value,
-                "severity": candidate.severity.value,
-                "first_observed_at": observed_at.isoformat(),
-                "last_observed_at": observed_at.isoformat(),
-                "signals": [s.to_dict() for s in new_incident.signals],
-                "evidence_needed": list(new_incident.evidence_needed),
-                "signal_count": new_incident.signal_count,
-                "evidence_count": new_incident.evidence_count,
-                "status": "open",  # Start with OPEN status
-            }
-
-            _append_event(
-                store,
-                store._conn,
-                incident_id=incident_id,
-                event_type=IncidentEventType.OPENED,
-                actor=IncidentEventActor.SYSTEM,
-                payload=opened_payload,
-                occurred_at=observed_at,
-            )
-
-            # If snapshot bundle provided, also emit COLLECTING_EVIDENCE_STARTED
-            # NOTE: Each _append_event() call starts its own BEGIN IMMEDIATE transaction
-            # and commits independently. These are two durable events, not one atomic op.
-            # For true atomic pair, use append_events_batch() - not implemented yet.
-            if snapshot_bundle_id is not None:
-                collecting_payload = {
-                    "bundle_id": snapshot_bundle_id,
-                    "status": "collecting_evidence",
+                # Create event for signal merge
+                payload = {
+                    "signal_count": len(candidate.signals),
+                    "candidate_id": candidate.candidate_id,
                     "last_observed_at": observed_at.isoformat(),
-                    "evidence_links": [e.to_dict() for e in new_incident.evidence_links],
+                    "signals": [s.to_dict() for s in updated.signals],
+                }
+
+                if snapshot_bundle_id is not None:
+                    payload["bundle_id"] = snapshot_bundle_id
+                    payload["status"] = updated.status.value
+                    payload["evidence_links"] = [e.to_dict() for e in updated.evidence_links]
+                    _append_event(
+                        store,
+                        conn,
+                        incident_id=incident_id,
+                        event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
+                        actor=IncidentEventActor.SYSTEM,
+                        payload=payload,
+                        occurred_at=observed_at,
+                    )
+                else:
+                    _append_event(
+                        store,
+                        conn,
+                        incident_id=incident_id,
+                        event_type=IncidentEventType.SIGNAL_OBSERVED,
+                        actor=IncidentEventActor.SYSTEM,
+                        payload=payload,
+                        occurred_at=observed_at,
+                    )
+
+                store._incidents[incident_id] = updated
+                updated_incidents[incident_id] = updated
+            else:
+                # Open new incident
+                if snapshot_bundle_id is not None:
+                    new_incident = open_incident_from_candidate_with_bundle(
+                        candidate, observed_at, snapshot_bundle_id
+                    )
+                else:
+                    new_incident = open_incident_from_candidate(candidate, observed_at)
+
+                # Create OPENED event (ALWAYS first event for correct projection)
+                opened_payload = {
+                    "source_candidate_id": candidate.candidate_id,
+                    "namespace": candidate.namespace,
+                    "object_kind": candidate.object_kind.value,
+                    "object_name": candidate.object_name,
+                    "raw_object_kind": candidate.raw_object_kind,
+                    "candidate_class": candidate.candidate_class.value,
+                    "severity": candidate.severity.value,
+                    "first_observed_at": observed_at.isoformat(),
+                    "last_observed_at": observed_at.isoformat(),
+                    "signals": [s.to_dict() for s in new_incident.signals],
+                    "evidence_needed": list(new_incident.evidence_needed),
+                    "signal_count": new_incident.signal_count,
                     "evidence_count": new_incident.evidence_count,
-                    "latest_snapshot_bundle_id": snapshot_bundle_id,
+                    "status": "open",  # Start with OPEN status
                 }
 
                 _append_event(
                     store,
-                    store._conn,
+                    conn,
                     incident_id=incident_id,
-                    event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
+                    event_type=IncidentEventType.OPENED,
                     actor=IncidentEventActor.SYSTEM,
-                    payload=collecting_payload,
+                    payload=opened_payload,
                     occurred_at=observed_at,
                 )
 
-            store._incidents[incident_id] = new_incident
-            updated_incidents[incident_id] = new_incident
+                # If snapshot bundle provided, also emit COLLECTING_EVIDENCE_STARTED
+                # NOTE: Each _append_event() call starts its own BEGIN IMMEDIATE transaction
+                # and commits independently. These are two durable events, not one atomic op.
+                # For true atomic pair, use append_events_batch() - not implemented yet.
+                if snapshot_bundle_id is not None:
+                    collecting_payload = {
+                        "bundle_id": snapshot_bundle_id,
+                        "status": "collecting_evidence",
+                        "last_observed_at": observed_at.isoformat(),
+                        "evidence_links": [e.to_dict() for e in new_incident.evidence_links],
+                        "evidence_count": new_incident.evidence_count,
+                        "latest_snapshot_bundle_id": snapshot_bundle_id,
+                    }
 
-    all_updated = [store._snapshot_incident(i) for i in updated_incidents.values()]
-    return tuple(sorted(all_updated, key=lambda i: i.incident_id))
+                    _append_event(
+                        store,
+                        conn,
+                        incident_id=incident_id,
+                        event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
+                        actor=IncidentEventActor.SYSTEM,
+                        payload=collecting_payload,
+                        occurred_at=observed_at,
+                    )
+
+                store._incidents[incident_id] = new_incident
+                updated_incidents[incident_id] = new_incident
+
+        all_updated = [store._snapshot_incident(i) for i in updated_incidents.values()]
+        return tuple(sorted(all_updated, key=lambda i: i.incident_id))
 
 
 def add_incident_impl(
     store: SQLiteIncidentStore,
     incident: Incident,
 ) -> None:
-    """Add an incident by appending an OPENED event."""
+    """Add an incident by appending an OPENED event.
+
+    Thread safety: Must be called within a write lock context.
+    """
     if incident.incident_id in store._incidents:
         _logger.warning(
             "Incident %s already exists, skipping add",
@@ -191,15 +204,17 @@ def add_incident_impl(
         "evidence_count": incident.evidence_count,
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident.incident_id,
-        event_type=IncidentEventType.OPENED,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=incident.first_observed_at,
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident.incident_id,
+            event_type=IncidentEventType.OPENED,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=incident.first_observed_at,
+        )
 
     store._incidents[incident.incident_id] = incident
 
@@ -215,7 +230,10 @@ def attach_evidence_impl(
     artifact_id: str,
     role: EvidenceRole,
 ) -> Incident | None:
-    """Attach evidence to incident."""
+    """Attach evidence to incident.
+
+    Thread safety: Must be called within a write lock context.
+    """
     incident = store._incidents.get(incident_id)
     if incident is None:
         return None
@@ -235,15 +253,17 @@ def attach_evidence_impl(
         "evidence_count": len(evidence_links),
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident_id,
-        event_type=IncidentEventType.EVIDENCE_ATTACHED,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=datetime.now(UTC),
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident_id,
+            event_type=IncidentEventType.EVIDENCE_ATTACHED,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=datetime.now(UTC),
+        )
 
     updated = incident.__class__(
         **{
@@ -267,7 +287,10 @@ def mark_diagnosis_loop_started_impl(
     run_id: str,
     collector_run_id: str,
 ) -> Incident | None:
-    """Mark diagnosis loop started."""
+    """Mark diagnosis loop started.
+
+    Thread safety: Must be called within a write lock context.
+    """
     incident = store._incidents.get(incident_id)
     if incident is None:
         return None
@@ -277,15 +300,17 @@ def mark_diagnosis_loop_started_impl(
         "collector_run_id": collector_run_id,
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident_id,
-        event_type=IncidentEventType.DIAGNOSIS_LOOP_STARTED,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=datetime.now(UTC),
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident_id,
+            event_type=IncidentEventType.DIAGNOSIS_LOOP_STARTED,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=datetime.now(UTC),
+        )
 
     return store._snapshot_incident(incident)
 
@@ -301,7 +326,10 @@ def mark_diagnosis_loop_completed_impl(
     checks_rejected: int = 0,
     decision: str | None = None,
 ) -> Incident | None:
-    """Mark diagnosis loop completed."""
+    """Mark diagnosis loop completed.
+
+    Thread safety: Must be called within a write lock context.
+    """
     incident = store._incidents.get(incident_id)
     if incident is None:
         return None
@@ -316,15 +344,17 @@ def mark_diagnosis_loop_completed_impl(
         "decision": decision,
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident_id,
-        event_type=IncidentEventType.DIAGNOSIS_LOOP_COMPLETED,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=datetime.now(UTC),
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident_id,
+            event_type=IncidentEventType.DIAGNOSIS_LOOP_COMPLETED,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=datetime.now(UTC),
+        )
 
     return store._snapshot_incident(incident)
 
@@ -336,7 +366,10 @@ def mark_diagnosis_loop_failed_impl(
     collector_run_id: str | None = None,
     unavailable_reason: str | None = None,
 ) -> Incident | None:
-    """Mark diagnosis loop failed."""
+    """Mark diagnosis loop failed.
+
+    Thread safety: Must be called within a write lock context.
+    """
     incident = store._incidents.get(incident_id)
     if incident is None:
         return None
@@ -347,15 +380,17 @@ def mark_diagnosis_loop_failed_impl(
         "unavailable_reason": unavailable_reason,
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident_id,
-        event_type=IncidentEventType.DIAGNOSIS_LOOP_FAILED,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=datetime.now(UTC),
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident_id,
+            event_type=IncidentEventType.DIAGNOSIS_LOOP_FAILED,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=datetime.now(UTC),
+        )
 
     return store._snapshot_incident(incident)
 

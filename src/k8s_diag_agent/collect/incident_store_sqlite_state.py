@@ -7,6 +7,9 @@ This module provides the state transition methods for SQLite-backed incidents:
 - mark_duplicate
 - resolve
 - mark_investigating
+
+Thread safety: All write operations must be called within a write lock context.
+The store provides _write_connection() context manager for this purpose.
 """
 
 from __future__ import annotations
@@ -39,7 +42,10 @@ def mark_collecting_evidence_impl(
     incident_id: str,
     bundle_id: str,
 ) -> Incident | None:
-    """Transition to COLLECTING_EVIDENCE."""
+    """Transition to COLLECTING_EVIDENCE.
+
+    Thread safety: Must be called within a write lock context.
+    """
     incident = store._incidents.get(incident_id)
     if incident is None:
         return None
@@ -58,15 +64,17 @@ def mark_collecting_evidence_impl(
         "status": IncidentStatus.COLLECTING_EVIDENCE.value,
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident_id,
-        event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=occurred_at,
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident_id,
+            event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=occurred_at,
+        )
 
     updated = cast(Incident, incident.mark_collecting_evidence(bundle_id))
     store._incidents[incident_id] = updated
@@ -78,7 +86,10 @@ def mark_ready_for_review_impl(
     incident_id: str,
     reviewer_id: str,
 ) -> Incident | None:
-    """Transition to READY_FOR_REVIEW."""
+    """Transition to READY_FOR_REVIEW.
+
+    Thread safety: Must be called within a write lock context.
+    """
     from .incident_transitions import can_transition_to_ready_for_review
 
     incident = store._incidents.get(incident_id)
@@ -99,15 +110,17 @@ def mark_ready_for_review_impl(
         "status": IncidentStatus.READY_FOR_REVIEW.value,
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident_id,
-        event_type=IncidentEventType.READY_FOR_REVIEW,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=occurred_at,
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident_id,
+            event_type=IncidentEventType.READY_FOR_REVIEW,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=occurred_at,
+        )
 
     updated = cast(Incident, incident.mark_ready_for_review(reviewer_id))
     store._incidents[incident_id] = updated
@@ -119,7 +132,10 @@ def suppress_impl(
     incident_id: str,
     reason: str,
 ) -> Incident | None:
-    """Suppress an incident."""
+    """Suppress an incident.
+
+    Thread safety: Must be called within a write lock context.
+    """
     incident = store._incidents.get(incident_id)
     if incident is None:
         return None
@@ -139,15 +155,17 @@ def suppress_impl(
         "status": IncidentStatus.SUPPRESSED.value,
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident_id,
-        event_type=IncidentEventType.SUPPRESSED,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=occurred_at,
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident_id,
+            event_type=IncidentEventType.SUPPRESSED,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=occurred_at,
+        )
 
     updated = cast(Incident, incident.suppress(reason))
     store._incidents[incident_id] = updated
@@ -159,7 +177,10 @@ def mark_duplicate_impl(
     incident_id: str,
     duplicate_of_id: str,
 ) -> Incident | None:
-    """Mark an incident as duplicate."""
+    """Mark an incident as duplicate.
+
+    Thread safety: Must be called within a write lock context.
+    """
     incident = store._incidents.get(incident_id)
     if incident is None:
         return None
@@ -179,15 +200,17 @@ def mark_duplicate_impl(
         "status": IncidentStatus.DUPLICATE.value,
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident_id,
-        event_type=IncidentEventType.MARKED_DUPLICATE,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=occurred_at,
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident_id,
+            event_type=IncidentEventType.MARKED_DUPLICATE,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=occurred_at,
+        )
 
     updated = cast(Incident, incident.mark_duplicate(duplicate_of_id))
     store._incidents[incident_id] = updated
@@ -199,7 +222,10 @@ def resolve_impl(
     incident_id: str,
     resolution: str,
 ) -> Incident | None:
-    """Resolve an incident."""
+    """Resolve an incident.
+
+    Thread safety: Must be called within a write lock context.
+    """
     incident = store._incidents.get(incident_id)
     if incident is None:
         return None
@@ -219,15 +245,17 @@ def resolve_impl(
         "status": IncidentStatus.RESOLVED.value,
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident_id,
-        event_type=IncidentEventType.RESOLVED,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=occurred_at,
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident_id,
+            event_type=IncidentEventType.RESOLVED,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=occurred_at,
+        )
 
     updated = cast(Incident, incident.resolve(resolution))
     store._incidents[incident_id] = updated
@@ -238,7 +266,10 @@ def mark_investigating_impl(
     store: SQLiteIncidentStore,
     incident_id: str,
 ) -> Incident | None:
-    """Transition to INVESTIGATING."""
+    """Transition to INVESTIGATING.
+
+    Thread safety: Must be called within a write lock context.
+    """
     incident = store._incidents.get(incident_id)
     if incident is None:
         return None
@@ -256,16 +287,28 @@ def mark_investigating_impl(
         "status": IncidentStatus.INVESTIGATING.value,
     }
 
-    _append_event(
-        store,
-        store._conn,
-        incident_id=incident_id,
-        event_type=IncidentEventType.INVESTIGATING_STARTED,
-        actor=IncidentEventActor.SYSTEM,
-        payload=payload,
-        occurred_at=occurred_at,
-    )
+    # Use write connection for thread-safe append
+    with store._write_connection() as conn:
+        _append_event(
+            store,
+            conn,
+            incident_id=incident_id,
+            event_type=IncidentEventType.INVESTIGATION_STARTED,
+            actor=IncidentEventActor.SYSTEM,
+            payload=payload,
+            occurred_at=occurred_at,
+        )
 
     updated = cast(Incident, incident.mark_investigating())
     store._incidents[incident_id] = updated
     return updated
+
+
+__all__ = [
+    "mark_collecting_evidence_impl",
+    "mark_ready_for_review_impl",
+    "suppress_impl",
+    "mark_duplicate_impl",
+    "resolve_impl",
+    "mark_investigating_impl",
+]

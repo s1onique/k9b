@@ -6,6 +6,13 @@ This module provides a production-grade incident store backed by SQLite:
 - Atomic transactions for event append + projection update
 - Hash chain for tamper evidence
 - Trigger-protected immutability
+- Thread-safe connection factory (each operation gets its own connection)
+
+Thread safety design:
+- Each store operation opens a fresh connection via _connect() context manager
+- All write operations are serialized via _write_lock
+- Connections are NOT shared across threads to avoid sqlite3.ProgrammingError
+- SQLite check_same_thread=True is preserved (default)
 
 Hard constraints:
 - NO remediation actions
@@ -19,9 +26,11 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from datetime import datetime
+import threading
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterator
 
 from .incident_candidates import IncidentCandidate
 from .incident_evidence import EvidenceRole
@@ -38,7 +47,6 @@ from .incident_store_sqlite_config import (
     ENV_SQLITE_PATH,
     VALID_JOURNAL_MODES,
     SQLiteConnectionConfig,
-    create_connection,
 )
 from .incident_store_sqlite_events import (
     StoredEvent,
@@ -69,6 +77,80 @@ _logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Connection Factory
+# =============================================================================
+
+
+def _create_connection(path: Path, journal_mode: str) -> sqlite3.Connection:
+    """Create a configured SQLite connection.
+
+    This factory creates connections without sharing state between threads.
+    Each operation gets its own connection, and writes are serialized via lock.
+
+    Args:
+        path: Path to the SQLite database
+        journal_mode: SQLite journal mode (DELETE, TRUNCATE, PERSIST, WAL)
+
+    Returns:
+        Configured SQLite connection with row_factory and pragmas
+    """
+    conn = sqlite3.connect(
+        str(path),
+        isolation_level="DEFERRED",  # Explicit transaction management
+        timeout=5.0,  # 5 second busy timeout
+    )
+    conn.row_factory = sqlite3.Row
+
+    # Enable foreign keys
+    conn.execute("PRAGMA foreign_keys=ON")
+
+    # Set busy timeout (ms)
+    conn.execute("PRAGMA busy_timeout=5000")
+
+    # Set journal mode
+    _set_journal_mode(conn, journal_mode, path)
+
+    return conn
+
+
+def _set_journal_mode(conn: sqlite3.Connection, mode: str, path: Path) -> None:
+    """Set SQLite journal mode with safety checks.
+
+    Args:
+        conn: SQLite connection
+        mode: Journal mode (DELETE, TRUNCATE, PERSIST, WAL)
+        path: Path to database (for logging)
+    """
+    mode = mode.upper()
+    if mode not in VALID_JOURNAL_MODES:
+        _logger.warning(
+            "Invalid journal mode %s, using DELETE",
+            mode,
+        )
+        mode = "DELETE"
+
+    # WAL warning for network filesystems
+    if mode == "WAL":
+        _logger.warning(
+            "WAL journal mode requested for %s. "
+            "WAL mode is UNSAFE on network filesystems (NFS, RWX volumes). "
+            "Consider using DELETE mode for Kubernetes shared storage.",
+            path,
+            extra={
+                "event": "sqlite-wal-warning",
+                "path": str(path),
+            },
+        )
+
+    conn.execute(f"PRAGMA journal_mode={mode}")
+    _logger.debug(
+        "SQLite journal mode set to %s for %s",
+        mode,
+        path,
+    )
+
+
+# =============================================================================
 # SQLiteIncidentStore
 # =============================================================================
 
@@ -82,6 +164,11 @@ class SQLiteIncidentStore(IncidentStore):
     - Atomic transactions for event + projection updates
     - Hash chain for tamper evidence
     - Trigger-protected immutability
+
+    Thread safety:
+    - Each operation opens a fresh connection via _connect()
+    - All write operations are serialized via _write_lock
+    - Connections are NOT shared across threads
 
     Backend ownership model:
     - Only k9b-backend process writes to SQLite
@@ -100,13 +187,18 @@ class SQLiteIncidentStore(IncidentStore):
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._journal_mode = journal_mode
 
-        config = SQLiteConnectionConfig(
-            path=self._path,
-            journal_mode=journal_mode,
-        )
-        self._conn: sqlite3.Connection = create_connection(config)
+        # Write serialization lock - MUST be acquired before any write operation
+        self._write_lock = threading.Lock()
 
-        self._schema_version = run_migrations(self._conn)
+        # Create initial connection for schema setup and initial load
+        # This connection is only used during __init__, then closed
+        init_conn = _create_connection(self._path, journal_mode)
+        try:
+            self._schema_version = run_migrations(init_conn)
+        finally:
+            init_conn.close()
+
+        # Load incidents from projection into memory cache
         self._load_from_projection()
 
         _logger.info(
@@ -131,30 +223,72 @@ class SQLiteIncidentStore(IncidentStore):
         """Return the kind of store for logging."""
         return "sqlite"
 
+    @property
+    def write_lock(self) -> threading.Lock:
+        """Return the write lock for serialization.
+
+        Exposed for lifecycle/state modules that need to serialize writes.
+        """
+        return self._write_lock
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Context manager for getting a fresh SQLite connection.
+
+        Each call creates a new connection. This avoids sharing connections
+        across threads which causes sqlite3.ProgrammingError.
+
+        The caller is responsible for acquiring _write_lock before using
+        this connection for writes.
+
+        Yields:
+            A fresh configured SQLite connection
+        """
+        conn = _create_connection(self._path, self._journal_mode)
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    @contextmanager
+    def _write_connection(self) -> Iterator[sqlite3.Connection]:
+        """Context manager for getting a connection with write lock held.
+
+        This combines _write_lock acquisition with _connect() to ensure
+        thread-safe write operations.
+
+        Yields:
+            A fresh configured SQLite connection with write lock held
+        """
+        with self._write_lock:
+            with self._connect() as conn:
+                yield conn
+
     def _load_from_projection(self) -> None:
         """Load incidents from incident_current projection into memory cache."""
-        cursor = self._conn.execute(
-            """
-            SELECT incident_id, current_state_json, last_event_seq
-            FROM incident_current
-            ORDER BY incident_id
-            """
-        )
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                SELECT incident_id, current_state_json, last_event_seq
+                FROM incident_current
+                ORDER BY incident_id
+                """
+            )
 
-        for row in cursor.fetchall():
-            incident_id = row[0]
-            current_json = row[1]
+            for row in cursor.fetchall():
+                incident_id = row[0]
+                current_json = row[1]
 
-            try:
-                state = json.loads(current_json)
-                incident = self._state_to_incident(state)
-                self._incidents[incident_id] = incident
-            except (json.JSONDecodeError, KeyError, ValueError) as e:
-                _logger.warning(
-                    "Failed to deserialize incident %s from projection: %s",
-                    incident_id,
-                    e,
-                )
+                try:
+                    state = json.loads(current_json)
+                    incident = self._state_to_incident(state)
+                    self._incidents[incident_id] = incident
+                except (json.JSONDecodeError, KeyError, ValueError) as e:
+                    _logger.warning(
+                        "Failed to deserialize incident %s from projection: %s",
+                        incident_id,
+                        e,
+                    )
 
     def _state_to_incident(self, state: dict[str, Any]) -> Incident:
         """Convert a projection state dict to an Incident object.
@@ -267,24 +401,25 @@ class SQLiteIncidentStore(IncidentStore):
         limit: int = 100,
     ) -> list[StoredEvent]:
         """Get events for an incident."""
-        cursor = self._conn.execute(
-            """
-            SELECT event_seq, event_id, incident_id, aggregate_version, event_type,
-                   occurred_at, actor, actor_id, payload_json, payload_sha256,
-                   previous_event_sha256, event_sha256, created_at
-            FROM incident_events
-            WHERE incident_id = ?
-            ORDER BY event_seq DESC
-            LIMIT ?
-            """,
-            (incident_id, limit),
-        )
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                SELECT event_seq, event_id, incident_id, aggregate_version, event_type,
+                       occurred_at, actor, actor_id, payload_json, payload_sha256,
+                       previous_event_sha256, event_sha256, created_at
+                FROM incident_events
+                WHERE incident_id = ?
+                ORDER BY event_seq DESC
+                LIMIT ?
+                """,
+                (incident_id, limit),
+            )
 
-        events = []
-        for row in cursor.fetchall():
-            events.append(parse_stored_event(row))
+            events = []
+            for row in cursor.fetchall():
+                events.append(parse_stored_event(row))
 
-        return events
+            return events
 
     # =========================================================================
     # Diagnostics
@@ -292,22 +427,24 @@ class SQLiteIncidentStore(IncidentStore):
 
     def get_event_count(self) -> int:
         """Get total number of events in the store."""
-        cursor = self._conn.execute("SELECT COUNT(*) FROM incident_events")
-        row = cursor.fetchone()
-        return row[0] if row else 0
+        with self._connect() as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM incident_events")
+            row = cursor.fetchone()
+            return row[0] if row else 0
 
     def get_incident_count(self) -> int:
         """Get total number of incidents in the store."""
-        cursor = self._conn.execute("SELECT COUNT(*) FROM incident_current")
-        row = cursor.fetchone()
-        return row[0] if row else 0
+        with self._connect() as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM incident_current")
+            row = cursor.fetchone()
+            return row[0] if row else 0
 
     def rebuild_projection(self) -> int:
         """Rebuild the entire projection from events."""
         from .incident_store_sqlite_projection import rebuild_projection as _rebuild
 
-        with self._conn:
-            count = _rebuild(self._conn)
+        with self._write_connection() as conn:
+            count = _rebuild(conn)
 
         self._incidents.clear()
         self._load_from_projection()
@@ -315,10 +452,9 @@ class SQLiteIncidentStore(IncidentStore):
         return count
 
     def close(self) -> None:
-        """Close the SQLite connection."""
-        conn = self._conn
-        if conn:
-            conn.close()
+        """Close the store (no-op, connections are per-operation)."""
+        # Connections are per-operation, so no global connection to close
+        pass
 
     def __len__(self) -> int:
         """Return the number of incidents in the store."""
@@ -332,7 +468,6 @@ class SQLiteIncidentStore(IncidentStore):
 __all__ = [
     "SQLiteIncidentStore",
     "SQLiteConnectionConfig",
-    "create_connection",
     "ENV_BACKEND",
     "ENV_SQLITE_PATH",
     "ENV_FILE_PATH",
