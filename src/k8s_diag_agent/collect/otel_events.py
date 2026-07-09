@@ -171,6 +171,7 @@ def emit_autodiag_incident_list_failed_event(
     error: str,
     mode: str,
     error_type: str | None = None,
+    diagnostic: str | None = None,
 ) -> None:
     """Emit an automatic diagnosis incident list failed event.
 
@@ -179,6 +180,7 @@ def emit_autodiag_incident_list_failed_event(
         error: Error message (sanitized)
         mode: The listing mode (local, backend-api)
         error_type: Optional classified error type (unauthorized, timeout, etc.)
+        diagnostic: Optional actionable diagnostic for operators
     """
     attributes: dict[str, Any] = {
         "error": error,
@@ -186,6 +188,8 @@ def emit_autodiag_incident_list_failed_event(
     }
     if error_type:
         attributes["error_type"] = error_type
+    if diagnostic:
+        attributes["diagnostic"] = diagnostic
     span_ctx.add_event(EVENT_AUTODIAG_INCIDENT_LIST_FAILED, attributes)
 
 

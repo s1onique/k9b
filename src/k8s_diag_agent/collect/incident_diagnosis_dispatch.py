@@ -119,7 +119,11 @@ def list_incidents_for_diagnosis(
     else:
         # Sanitize error message for structured event (no stack traces)
         sanitized_error = str(error)[:500] if error else "Unknown error"
-        emit_autodiag_incident_list_failed_event(span_ctx, sanitized_error, resolved, error_type)
+        # Build diagnostic if we have an error_type from backend API failure
+        diagnostic = None
+        if error_type:
+            diagnostic = _build_listing_error_diagnostic(error_type, None, sanitized_error)
+        emit_autodiag_incident_list_failed_event(span_ctx, sanitized_error, resolved, error_type, diagnostic)
 
     return incidents, success, error
 
@@ -188,7 +192,19 @@ def _list_incidents_backend_api(
             if not backend_url
             else BackendListingErrorType.MISSING_INTERNAL_TOKEN
         )
-        error_msg = "Backend API configuration incomplete: missing backend_url or internal_api_token"
+        # Provide actionable diagnostic for common misconfiguration
+        if not backend_url:
+            error_msg = (
+                "Backend API configuration incomplete: K9B_BACKEND_INTERNAL_URL is not set. "
+                "The scheduler must have K9B_BACKEND_INTERNAL_URL pointing to the backend service "
+                "(e.g., http://k9b-backend:8080) for automatic diagnosis to work."
+            )
+        else:
+            error_msg = (
+                "Backend API configuration incomplete: K9B_INTERNAL_API_TOKEN is not set. "
+                "The scheduler must have K9B_INTERNAL_API_TOKEN configured to authenticate "
+                "with the backend's internal API for automatic diagnosis."
+            )
         _logger.error(
             error_msg,
             extra={
@@ -201,6 +217,7 @@ def _list_incidents_backend_api(
                 "path": api_path,
                 "error_type": error_type,
                 "sanitized_error": error_msg,
+                "diagnostic": "Check that K9B_BACKEND_INTERNAL_URL and K9B_INTERNAL_API_TOKEN are set in scheduler deployment",
             },
         )
         return [], False, error_msg, error_type
@@ -217,9 +234,10 @@ def _list_incidents_backend_api(
         if "error" in response:
             error_msg = str(response.get("error", "Unknown error"))
             status_code = response.get("status_code")
+            error_type_from_response = response.get("error_type", "")
 
             # Determine error type - prefer explicit type from response, otherwise classify
-            classified_error_type: str = response.get("error_type") or ""
+            classified_error_type: str = error_type_from_response
             if not classified_error_type:
                 if "401" in error_msg or "unauthorized" in error_msg.lower():
                     classified_error_type = BackendListingErrorType.UNAUTHORIZED
@@ -229,6 +247,9 @@ def _list_incidents_backend_api(
                     classified_error_type = BackendListingErrorType.TIMEOUT
                 else:
                     classified_error_type = BackendListingErrorType.UNKNOWN
+
+            # Build actionable diagnostic based on error type
+            diagnostic = _build_listing_error_diagnostic(classified_error_type, status_code, error_msg)
 
             _logger.error(
                 "Backend API incident listing failed",
@@ -242,7 +263,9 @@ def _list_incidents_backend_api(
                     "path": api_path,
                     "status_code": status_code,
                     "error_type": classified_error_type,
+                    "error_type_from_response": error_type_from_response,
                     "sanitized_error": error_msg[:500],  # Truncate for log safety
+                    "diagnostic": diagnostic,
                 },
             )
             return [], False, error_msg, classified_error_type
@@ -293,6 +316,9 @@ def _list_incidents_backend_api(
         elif hasattr(e, "status"):
             status_code = e.status
 
+        # Build actionable diagnostic based on error type
+        diagnostic = _build_listing_error_diagnostic(error_type, status_code, sanitized_error)
+
         _logger.error(
             "Backend API incident listing failed",
             extra={
@@ -306,10 +332,79 @@ def _list_incidents_backend_api(
                 "status_code": status_code,
                 "error_type": error_type,
                 "sanitized_error": sanitized_error,
+                "diagnostic": diagnostic,
             },
         )
         # Return the classified error - caller will emit the failure event
         return [], False, sanitized_error, error_type
+
+
+def _build_listing_error_diagnostic(
+    error_type: str | None,
+    status_code: int | None,
+    error_msg: str,
+) -> str:
+    """Build an actionable diagnostic message for backend listing errors.
+
+    This provides operators with concrete next steps based on the error type,
+    helping them resolve configuration and connectivity issues faster.
+
+    Args:
+        error_type: The classified error type
+        status_code: HTTP status code if available
+        error_msg: The error message
+
+    Returns:
+        Actionable diagnostic string for operators
+    """
+    if error_type == BackendListingErrorType.MISSING_BACKEND_URL:
+        return (
+            "K9B_BACKEND_INTERNAL_URL is not set. "
+            "Set it to the backend service URL (e.g., http://k9b-backend:8080) "
+            "in the scheduler deployment."
+        )
+    elif error_type == BackendListingErrorType.MISSING_INTERNAL_TOKEN:
+        return (
+            "K9B_INTERNAL_API_TOKEN is not set. "
+            "Set it to match the K9B_INTERNAL_API_TOKEN in the backend deployment."
+        )
+    elif error_type == BackendListingErrorType.UNAUTHORIZED:
+        return (
+            "Internal API token is invalid or expired. "
+            "Verify K9B_INTERNAL_API_TOKEN matches between scheduler and backend."
+        )
+    elif error_type == BackendListingErrorType.BACKEND_UNREACHABLE:
+        return (
+            "Backend service is unreachable. "
+            "Check that the backend deployment is running and network connectivity exists. "
+            "Verify K9B_BACKEND_INTERNAL_URL is correct."
+        )
+    elif error_type == BackendListingErrorType.TIMEOUT:
+        return (
+            "Request to backend timed out. "
+            "Check backend health and load. "
+            "Consider increasing timeout if backend is slow under load."
+        )
+    elif error_type == BackendListingErrorType.BAD_RESPONSE:
+        if status_code == 404:
+            return (
+                "Backend returned 404. The internal API endpoint may have changed. "
+                "Verify backend version matches scheduler expectations."
+            )
+        return (
+            f"Backend returned HTTP {status_code}. "
+            "Check backend logs for more details."
+        )
+    elif error_type == BackendListingErrorType.INVALID_JSON:
+        return (
+            "Backend returned invalid JSON. "
+            "This may indicate a backend bug. Check backend logs."
+        )
+    else:
+        return (
+            f"Unexpected error: {error_msg[:100]}. "
+            "Check backend health and scheduler logs for details."
+        )
 
 
 def _fetch_incident_backend_api(
