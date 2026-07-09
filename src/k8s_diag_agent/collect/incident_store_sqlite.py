@@ -48,6 +48,9 @@ from .incident_store_sqlite_config import (
     VALID_JOURNAL_MODES,
     SQLiteConnectionConfig,
 )
+from .incident_store_sqlite_context import (
+    SQLiteWriteContext,
+)
 from .incident_store_sqlite_events import (
     StoredEvent,
     parse_stored_event,
@@ -259,10 +262,48 @@ class SQLiteIncidentStore(IncidentStore):
 
         Yields:
             A fresh configured SQLite connection with write lock held
+
+        Note:
+            Prefer _write_context() for new code that also needs cache access.
+            This method is kept for backward compatibility with existing code.
         """
         with self._write_lock:
             with self._connect() as conn:
                 yield conn
+
+    @contextmanager
+    def _write_context(self) -> Iterator[SQLiteWriteContext]:
+        """Context manager for acquiring a write capability.
+
+        This is the preferred way to perform write operations on the store.
+        It creates a SQLiteWriteContext that owns:
+        - Event append authority
+        - Cache read/write authority
+        - Snapshot helper access
+
+        The context is only valid inside this block. After the block exits,
+        the context is closed and any further use will raise ContextClosedError.
+
+        Yields:
+            SQLiteWriteContext with write authority
+
+        Example:
+            with store._write_context() as ctx:
+                ctx.append_event(...)
+                ctx.put_cached_incident(updated)
+                return ctx.snapshot_incident(updated)
+        """
+        with self._write_lock:
+            with self._connect() as conn:
+                ctx = SQLiteWriteContext(
+                    conn=conn,
+                    cache=self._incidents,
+                    store=self,
+                )
+                try:
+                    yield ctx
+                finally:
+                    ctx.close()
 
     def _load_from_projection(self) -> None:
         """Load incidents from incident_current projection into memory cache."""

@@ -205,6 +205,12 @@ def incident_from_dict(data: dict[str, Any]) -> Any:
     if last_observed_at is None:
         raise ValueError("Incident missing required last_observed_at field")
 
+    # Handle both "class" (serialization format) and "candidate_class" (projection format)
+    # The projection stores "candidate_class", but serialization uses "class"
+    candidate_class = data.get("class") or data.get("candidate_class")
+    if candidate_class is None:
+        raise ValueError("Incident missing required class/candidate_class field")
+
     # Import Incident here to construct the instance
     from .incident_lifecycle import Incident
 
@@ -215,7 +221,7 @@ def incident_from_dict(data: dict[str, Any]) -> Any:
         object_kind=data["object_kind"],
         object_name=data["object_name"],
         raw_object_kind=data.get("raw_object_kind"),
-        candidate_class=data["class"],
+        candidate_class=candidate_class,
         severity=data["severity"],
         status=status,
         first_observed_at=first_observed_at,

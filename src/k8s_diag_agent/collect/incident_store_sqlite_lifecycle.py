@@ -5,8 +5,11 @@ This module provides the lifecycle transition methods for SQLite-backed incident
 - Evidence attachment
 - Diagnosis loop tracking
 
-Thread safety: All write operations must be called within a write lock context.
-The store provides _write_connection() context manager for this purpose.
+These methods use SQLiteWriteContext to encapsulate write authority:
+- Event append goes through ctx.append_event()
+- Cache access goes through ctx.get_cached_incident() and ctx.put_cached_incident()
+
+The store provides _write_context() context manager for thread-safe writes.
 """
 
 from __future__ import annotations
@@ -27,12 +30,10 @@ from .incident_lifecycle import (
     merge_candidate_into_incident,
     open_incident_from_candidate,
 )
+from .incident_store_sqlite_context import SQLiteWriteContext
 from .incident_store_sqlite_events import (
     IncidentEventActor,
     IncidentEventType,
-)
-from .incident_store_sqlite_events_writer import (
-    append_event as _append_event,
 )
 
 if TYPE_CHECKING:
@@ -50,20 +51,25 @@ def promote_candidates_impl(
 ) -> tuple[Incident, ...]:
     """Promote candidates to incidents with event sourcing.
 
-    This implementation uses the store's _write_connection() to ensure
-    thread-safe writes. The connection is held for the entire promotion
-    operation to maintain atomicity of the transaction.
+    This implementation uses the store's _write_context() to ensure
+    thread-safe writes. The write context owns:
+    - Event append authority
+    - Cache read/write authority
+    - Snapshot helper access
     """
-    # Use write connection context to serialize writes across threads
-    with store._write_connection() as conn:
+    with store._write_context() as ctx:
         updated_incidents: dict[str, Incident] = {}
 
         for candidate in candidates:
             incident_id = incident_id_from_candidate(candidate)
 
-            if incident_id in store._incidents:
+            if ctx.has_incident(incident_id):
                 # Merge into existing
-                existing = store._incidents[incident_id]
+                existing = ctx.get_cached_incident(incident_id)
+                if existing is None:
+                    # Should not happen if has_incident is True, but be safe
+                    continue
+
                 if snapshot_bundle_id is not None:
                     updated = merge_candidate_into_incident_with_bundle(
                         existing, candidate, observed_at, snapshot_bundle_id
@@ -83,9 +89,7 @@ def promote_candidates_impl(
                     payload["bundle_id"] = snapshot_bundle_id
                     payload["status"] = updated.status.value
                     payload["evidence_links"] = [e.to_dict() for e in updated.evidence_links]
-                    _append_event(
-                        store,
-                        conn,
+                    ctx.append_event(
                         incident_id=incident_id,
                         event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
                         actor=IncidentEventActor.SYSTEM,
@@ -93,9 +97,7 @@ def promote_candidates_impl(
                         occurred_at=observed_at,
                     )
                 else:
-                    _append_event(
-                        store,
-                        conn,
+                    ctx.append_event(
                         incident_id=incident_id,
                         event_type=IncidentEventType.SIGNAL_OBSERVED,
                         actor=IncidentEventActor.SYSTEM,
@@ -103,7 +105,7 @@ def promote_candidates_impl(
                         occurred_at=observed_at,
                     )
 
-                store._incidents[incident_id] = updated
+                ctx.put_cached_incident(updated)
                 updated_incidents[incident_id] = updated
             else:
                 # Open new incident
@@ -132,9 +134,7 @@ def promote_candidates_impl(
                     "status": "open",  # Start with OPEN status
                 }
 
-                _append_event(
-                    store,
-                    conn,
+                ctx.append_event(
                     incident_id=incident_id,
                     event_type=IncidentEventType.OPENED,
                     actor=IncidentEventActor.SYSTEM,
@@ -143,9 +143,8 @@ def promote_candidates_impl(
                 )
 
                 # If snapshot bundle provided, also emit COLLECTING_EVIDENCE_STARTED
-                # NOTE: Each _append_event() call starts its own BEGIN IMMEDIATE transaction
+                # NOTE: Each ctx.append_event() call starts its own BEGIN IMMEDIATE transaction
                 # and commits independently. These are two durable events, not one atomic op.
-                # For true atomic pair, use append_events_batch() - not implemented yet.
                 if snapshot_bundle_id is not None:
                     collecting_payload = {
                         "bundle_id": snapshot_bundle_id,
@@ -156,9 +155,7 @@ def promote_candidates_impl(
                         "latest_snapshot_bundle_id": snapshot_bundle_id,
                     }
 
-                    _append_event(
-                        store,
-                        conn,
+                    ctx.append_event(
                         incident_id=incident_id,
                         event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
                         actor=IncidentEventActor.SYSTEM,
@@ -166,10 +163,10 @@ def promote_candidates_impl(
                         occurred_at=observed_at,
                     )
 
-                store._incidents[incident_id] = new_incident
+                ctx.put_cached_incident(new_incident)
                 updated_incidents[incident_id] = new_incident
 
-        all_updated = [store._snapshot_incident(i) for i in updated_incidents.values()]
+        all_updated = [ctx.snapshot_incident(i) for i in updated_incidents.values()]
         return tuple(sorted(all_updated, key=lambda i: i.incident_id))
 
 
@@ -179,36 +176,33 @@ def add_incident_impl(
 ) -> None:
     """Add an incident by appending an OPENED event.
 
-    Thread safety: Must be called within a write lock context.
+    Thread safety: Uses store._write_context() for thread-safe writes.
     """
-    if incident.incident_id in store._incidents:
-        _logger.warning(
-            "Incident %s already exists, skipping add",
-            incident.incident_id,
-        )
-        return
+    with store._write_context() as ctx:
+        if ctx.has_incident(incident.incident_id):
+            _logger.warning(
+                "Incident %s already exists, skipping add",
+                incident.incident_id,
+            )
+            return
 
-    payload = {
-        "source_candidate_id": incident.source_candidate_id,
-        "namespace": incident.namespace,
-        "object_kind": incident.object_kind,
-        "object_name": incident.object_name,
-        "raw_object_kind": incident.raw_object_kind,
-        "candidate_class": incident.candidate_class,
-        "severity": incident.severity,
-        "first_observed_at": incident.first_observed_at.isoformat(),
-        "last_observed_at": incident.last_observed_at.isoformat(),
-        "signals": [s.to_dict() for s in incident.signals],
-        "evidence_needed": list(incident.evidence_needed),
-        "signal_count": incident.signal_count,
-        "evidence_count": incident.evidence_count,
-    }
+        payload = {
+            "source_candidate_id": incident.source_candidate_id,
+            "namespace": incident.namespace,
+            "object_kind": incident.object_kind,
+            "object_name": incident.object_name,
+            "raw_object_kind": incident.raw_object_kind,
+            "candidate_class": incident.candidate_class,
+            "severity": incident.severity,
+            "first_observed_at": incident.first_observed_at.isoformat(),
+            "last_observed_at": incident.last_observed_at.isoformat(),
+            "signals": [s.to_dict() for s in incident.signals],
+            "evidence_needed": list(incident.evidence_needed),
+            "signal_count": incident.signal_count,
+            "evidence_count": incident.evidence_count,
+        }
 
-    # Use write connection for thread-safe append
-    with store._write_connection() as conn:
-        _append_event(
-            store,
-            conn,
+        ctx.append_event(
             incident_id=incident.incident_id,
             event_type=IncidentEventType.OPENED,
             actor=IncidentEventActor.SYSTEM,
@@ -216,7 +210,7 @@ def add_incident_impl(
             occurred_at=incident.first_observed_at,
         )
 
-    store._incidents[incident.incident_id] = incident
+        ctx.put_cached_incident(incident)
 
 
 # =============================================================================
@@ -232,32 +226,29 @@ def attach_evidence_impl(
 ) -> Incident | None:
     """Attach evidence to incident.
 
-    Thread safety: Must be called within a write lock context.
+    Thread safety: Uses store._write_context() for thread-safe writes.
     """
-    incident = store._incidents.get(incident_id)
-    if incident is None:
-        return None
+    with store._write_context() as ctx:
+        incident = ctx.get_cached_incident(incident_id)
+        if incident is None:
+            return None
 
-    new_link = EvidenceLink(
-        incident_id=incident_id,
-        artifact_id=artifact_id,
-        role=role,
-        attached_at=datetime.now(UTC),
-    )
-    evidence_links = list(incident.evidence_links) + [new_link]
+        new_link = EvidenceLink(
+            incident_id=incident_id,
+            artifact_id=artifact_id,
+            role=role,
+            attached_at=datetime.now(UTC),
+        )
+        evidence_links = list(incident.evidence_links) + [new_link]
 
-    payload = {
-        "artifact_id": artifact_id,
-        "role": role.value,
-        "evidence_links": [e.to_dict() for e in evidence_links],
-        "evidence_count": len(evidence_links),
-    }
+        payload = {
+            "artifact_id": artifact_id,
+            "role": role.value,
+            "evidence_links": [e.to_dict() for e in evidence_links],
+            "evidence_count": len(evidence_links),
+        }
 
-    # Use write connection for thread-safe append
-    with store._write_connection() as conn:
-        _append_event(
-            store,
-            conn,
+        ctx.append_event(
             incident_id=incident_id,
             event_type=IncidentEventType.EVIDENCE_ATTACHED,
             actor=IncidentEventActor.SYSTEM,
@@ -265,15 +256,15 @@ def attach_evidence_impl(
             occurred_at=datetime.now(UTC),
         )
 
-    updated = incident.__class__(
-        **{
-            **incident.__dict__,
-            "evidence_links": evidence_links,
-            "evidence_count": len(evidence_links),
-        }
-    )
-    store._incidents[incident_id] = updated
-    return store._snapshot_incident(updated)
+        updated = incident.__class__(
+            **{
+                **incident.__dict__,
+                "evidence_links": evidence_links,
+                "evidence_count": len(evidence_links),
+            }
+        )
+        ctx.put_cached_incident(updated)
+        return ctx.snapshot_incident(updated)
 
 
 # =============================================================================
@@ -289,22 +280,19 @@ def mark_diagnosis_loop_started_impl(
 ) -> Incident | None:
     """Mark diagnosis loop started.
 
-    Thread safety: Must be called within a write lock context.
+    Thread safety: Uses store._write_context() for thread-safe writes.
     """
-    incident = store._incidents.get(incident_id)
-    if incident is None:
-        return None
+    with store._write_context() as ctx:
+        incident = ctx.get_cached_incident(incident_id)
+        if incident is None:
+            return None
 
-    payload = {
-        "run_id": run_id,
-        "collector_run_id": collector_run_id,
-    }
+        payload = {
+            "run_id": run_id,
+            "collector_run_id": collector_run_id,
+        }
 
-    # Use write connection for thread-safe append
-    with store._write_connection() as conn:
-        _append_event(
-            store,
-            conn,
+        ctx.append_event(
             incident_id=incident_id,
             event_type=IncidentEventType.DIAGNOSIS_LOOP_STARTED,
             actor=IncidentEventActor.SYSTEM,
@@ -312,7 +300,7 @@ def mark_diagnosis_loop_started_impl(
             occurred_at=datetime.now(UTC),
         )
 
-    return store._snapshot_incident(incident)
+        return ctx.snapshot_incident(incident)
 
 
 def mark_diagnosis_loop_completed_impl(
@@ -328,27 +316,24 @@ def mark_diagnosis_loop_completed_impl(
 ) -> Incident | None:
     """Mark diagnosis loop completed.
 
-    Thread safety: Must be called within a write lock context.
+    Thread safety: Uses store._write_context() for thread-safe writes.
     """
-    incident = store._incidents.get(incident_id)
-    if incident is None:
-        return None
+    with store._write_context() as ctx:
+        incident = ctx.get_cached_incident(incident_id)
+        if incident is None:
+            return None
 
-    payload = {
-        "run_id": run_id,
-        "collector_run_id": collector_run_id,
-        "review_packet_name": review_packet_name,
-        "checks_requested": checks_requested,
-        "checks_run": checks_run,
-        "checks_rejected": checks_rejected,
-        "decision": decision,
-    }
+        payload = {
+            "run_id": run_id,
+            "collector_run_id": collector_run_id,
+            "review_packet_name": review_packet_name,
+            "checks_requested": checks_requested,
+            "checks_run": checks_run,
+            "checks_rejected": checks_rejected,
+            "decision": decision,
+        }
 
-    # Use write connection for thread-safe append
-    with store._write_connection() as conn:
-        _append_event(
-            store,
-            conn,
+        ctx.append_event(
             incident_id=incident_id,
             event_type=IncidentEventType.DIAGNOSIS_LOOP_COMPLETED,
             actor=IncidentEventActor.SYSTEM,
@@ -356,7 +341,7 @@ def mark_diagnosis_loop_completed_impl(
             occurred_at=datetime.now(UTC),
         )
 
-    return store._snapshot_incident(incident)
+        return ctx.snapshot_incident(incident)
 
 
 def mark_diagnosis_loop_failed_impl(
@@ -368,23 +353,20 @@ def mark_diagnosis_loop_failed_impl(
 ) -> Incident | None:
     """Mark diagnosis loop failed.
 
-    Thread safety: Must be called within a write lock context.
+    Thread safety: Uses store._write_context() for thread-safe writes.
     """
-    incident = store._incidents.get(incident_id)
-    if incident is None:
-        return None
+    with store._write_context() as ctx:
+        incident = ctx.get_cached_incident(incident_id)
+        if incident is None:
+            return None
 
-    payload = {
-        "run_id": run_id,
-        "collector_run_id": collector_run_id,
-        "unavailable_reason": unavailable_reason,
-    }
+        payload = {
+            "run_id": run_id,
+            "collector_run_id": collector_run_id,
+            "unavailable_reason": unavailable_reason,
+        }
 
-    # Use write connection for thread-safe append
-    with store._write_connection() as conn:
-        _append_event(
-            store,
-            conn,
+        ctx.append_event(
             incident_id=incident_id,
             event_type=IncidentEventType.DIAGNOSIS_LOOP_FAILED,
             actor=IncidentEventActor.SYSTEM,
@@ -392,7 +374,7 @@ def mark_diagnosis_loop_failed_impl(
             occurred_at=datetime.now(UTC),
         )
 
-    return store._snapshot_incident(incident)
+        return ctx.snapshot_incident(incident)
 
 
 __all__ = [
