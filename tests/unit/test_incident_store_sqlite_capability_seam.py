@@ -27,7 +27,6 @@ from k8s_diag_agent.collect.incident_candidates import (
 from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
 from k8s_diag_agent.collect.incident_store_sqlite_context import (
     ContextClosedError,
-    SQLiteWriteContext,
 )
 
 
@@ -67,6 +66,7 @@ class TestSQLiteWriteContextClosedRejection(TestCase):
     def tearDown(self) -> None:
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self._temp_dir, ignore_errors=True)
 
     def test_closed_context_rejects_append_event(self) -> None:
@@ -178,6 +178,7 @@ class TestSQLiteWriteContextCacheOperations(TestCase):
     def tearDown(self) -> None:
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self._temp_dir, ignore_errors=True)
 
     def test_context_has_incident_returns_true_for_existing(self) -> None:
@@ -235,6 +236,7 @@ class TestSQLiteWriteContextEventAppend(TestCase):
     def tearDown(self) -> None:
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self._temp_dir, ignore_errors=True)
 
     def test_context_append_event_updates_projection(self) -> None:
@@ -271,6 +273,7 @@ class TestSQLiteWriteContextPublicAPIStability(TestCase):
     def tearDown(self) -> None:
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self._temp_dir, ignore_errors=True)
 
     def test_promote_candidates_returns_tuple(self) -> None:
@@ -321,6 +324,7 @@ class TestSQLiteWriteContextCrossThreadSafety(TestCase):
     def tearDown(self) -> None:
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self._temp_dir, ignore_errors=True)
 
     def test_cross_thread_promotion_still_works(self) -> None:
@@ -409,6 +413,7 @@ class TestSQLiteWriteContextInvestigationStarted(TestCase):
     def tearDown(self) -> None:
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self._temp_dir, ignore_errors=True)
 
     def test_mark_investigating_uses_canonical_event_type(self) -> None:
@@ -435,16 +440,8 @@ class TestSQLiteWriteContextInvestigationStarted(TestCase):
         event_types = [e.event_type for e in events]
 
         # Should have INVESTIGATION_STARTED, not INVESTIGATING_STARTED
-        self.assertIn(
-            "incident.investigation_started",
-            event_types,
-            "Expected INVESTIGATION_STARTED event, not INVESTIGATING_STARTED"
-        )
-        self.assertNotIn(
-            "incident.investigating_started",
-            event_types,
-            "Found stale INVESTIGATING_STARTED event type"
-        )
+        self.assertIn("incident.investigation_started", event_types, "Expected INVESTIGATION_STARTED event, not INVESTIGATING_STARTED")
+        self.assertNotIn("incident.investigating_started", event_types, "Found stale INVESTIGATING_STARTED event type")
 
 
 class TestSQLiteWriteContextStateTransitions(TestCase):
@@ -458,6 +455,7 @@ class TestSQLiteWriteContextStateTransitions(TestCase):
     def tearDown(self) -> None:
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self._temp_dir, ignore_errors=True)
 
     def test_mark_collecting_evidence_uses_context(self) -> None:
@@ -545,6 +543,7 @@ class TestSQLiteWriteContextDiagnosisLoop(TestCase):
     def tearDown(self) -> None:
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self._temp_dir, ignore_errors=True)
 
     def test_mark_diagnosis_loop_started_uses_context(self) -> None:
@@ -558,9 +557,7 @@ class TestSQLiteWriteContextDiagnosisLoop(TestCase):
         incident_id = incidents[0].incident_id
 
         # Mark diagnosis loop started
-        updated = store.mark_diagnosis_loop_started(
-            incident_id, run_id="run-123", collector_run_id="collector-1"
-        )
+        updated = store.mark_diagnosis_loop_started(incident_id, run_id="run-123", collector_run_id="collector-1")
         self.assertIsNotNone(updated)
 
         # Verify event
@@ -630,6 +627,7 @@ class TestSQLiteWriteContextEvidenceAttachment(TestCase):
     def tearDown(self) -> None:
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self._temp_dir, ignore_errors=True)
 
     def test_attach_evidence_uses_context(self) -> None:
@@ -645,9 +643,7 @@ class TestSQLiteWriteContextEvidenceAttachment(TestCase):
         incident_id = incidents[0].incident_id
 
         # Attach evidence
-        updated = store.attach_evidence(
-            incident_id, artifact_id="artifact-123", role=EvidenceRole.SNAPSHOT
-        )
+        updated = store.attach_evidence(incident_id, artifact_id="artifact-123", role=EvidenceRole.SNAPSHOT)
         self.assertIsNotNone(updated)
         self.assertEqual(updated.evidence_count, 1)
 
@@ -668,6 +664,7 @@ class TestSQLiteWriteContextRebuildProjection(TestCase):
     def tearDown(self) -> None:
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self._temp_dir, ignore_errors=True)
 
     def test_rebuild_projection_preserves_cache_consistency(self) -> None:

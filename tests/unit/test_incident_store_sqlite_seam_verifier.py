@@ -14,7 +14,6 @@ These tests act as "verifier" tests that prevent regression of the seam.
 from __future__ import annotations
 
 import ast
-import os
 from pathlib import Path
 from unittest import TestCase
 
@@ -22,7 +21,6 @@ from k8s_diag_agent.collect.incident_store_sqlite_context import (
     ContextClosedError,
     SQLiteWriteContext,
 )
-
 
 # =============================================================================
 # Test Configuration
@@ -85,25 +83,17 @@ def find_function_calls(node: ast.Module, name: str) -> list[ast.Call]:
     return calls
 
 
-def find_attribute_accesses(
-    node: ast.Module, obj_name: str, attr_name: str
-) -> list[ast.Attribute]:
+def find_attribute_accesses(node: ast.Module, obj_name: str, attr_name: str) -> list[ast.Attribute]:
     """Find all accesses to obj.attr."""
     accesses = []
     for item in ast.walk(node):
         if isinstance(item, ast.Attribute):
-            if (
-                isinstance(item.value, ast.Name)
-                and item.value.id == obj_name
-                and item.attr == attr_name
-            ):
+            if isinstance(item.value, ast.Name) and item.value.id == obj_name and item.attr == attr_name:
                 accesses.append(item)
     return accesses
 
 
-def find_function_params_with_type(
-    node: ast.Module, type_name: str
-) -> list[tuple[str, str, str]]:
+def find_function_params_with_type(node: ast.Module, type_name: str) -> list[tuple[str, str, str]]:
     """Find function parameters with a specific type annotation.
 
     Returns list of (filename, function_name, param_name) tuples.
@@ -115,11 +105,13 @@ def find_function_params_with_type(
                 if arg.annotation:
                     annot = ast.unparse(arg.annotation)
                     if type_name in annot:
-                        results.append((
-                            getattr(item, '__name__', str(item)),
-                            item.name,
-                            arg.arg,
-                        ))
+                        results.append(
+                            (
+                                getattr(item, "__name__", str(item)),
+                                item.name,
+                                arg.arg,
+                            )
+                        )
     return results
 
 
@@ -138,9 +130,7 @@ def find_store_attribute_accesses(node: ast.Module) -> list[str]:
             if isinstance(item.func, ast.Attribute):
                 if isinstance(item.func.value, ast.Attribute):
                     if isinstance(item.func.value.value, ast.Name):
-                        if (item.func.value.value.id == "store" and
-                            item.func.value.attr == "_incidents" and
-                            item.func.attr in ("get", "pop", "keys", "values", "items")):
+                        if item.func.value.value.id == "store" and item.func.value.attr == "_incidents" and item.func.attr in ("get", "pop", "keys", "values", "items"):
                             accesses.append(f"store._incidents.{item.func.attr}(...) at line {item.lineno}")
     return accesses
 
@@ -163,7 +153,7 @@ class TestSQLiteSeamVerifierAST(TestCase):
         filepath = self.collect_dir / filename
         if not filepath.exists():
             return None
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             source = f.read()
         try:
             return ast.parse(source)
@@ -181,25 +171,10 @@ class TestSQLiteSeamVerifierAST(TestCase):
         if module is None:
             self.skipTest("incident_store_sqlite.py not found")
 
-        # Look for self._conn = ... pattern (shared connection)
-        found_conn_assignment = False
-        for item in ast.walk(module):
-            if isinstance(item, ast.Assign):
-                for target in item.targets:
-                    if isinstance(target, ast.Attribute):
-                        if target.attr == "_conn" and isinstance(target.value, ast.Name):
-                            if target.value.id == "self":
-                                # Check if it's NOT inside a function that creates a new connection
-                                # This is a heuristic - proper fix should have no self._conn at all
-                                found_conn_assignment = True
-
+        # Verify connection factory exists and produces connection calls
         # We allow _conn in private methods like _connect, but not as instance state
-        # The best check is to ensure _write_connection and _write_context create fresh connections
         conn_calls = find_function_calls(module, "connect")
-        self.assertGreater(
-            len(conn_calls), 0,
-            "Should have sqlite3.connect calls in connection factory"
-        )
+        self.assertGreater(len(conn_calls), 0, "Should have sqlite3.connect calls in connection factory")
 
     def test_sqlite_connect_only_used_in_connection_factory(self) -> None:
         """Verify sqlite3.connect is only used in the connection factory."""
@@ -210,10 +185,7 @@ class TestSQLiteSeamVerifierAST(TestCase):
         connect_calls = find_function_calls(module, "connect")
 
         # Should have exactly one place that creates connections (the factory)
-        self.assertGreater(
-            len(connect_calls), 0,
-            "Should have sqlite3.connect calls"
-        )
+        self.assertGreater(len(connect_calls), 0, "Should have sqlite3.connect calls")
 
         # Verify the factory function exists
         factory_found = False
@@ -223,10 +195,7 @@ class TestSQLiteSeamVerifierAST(TestCase):
                     factory_found = True
                     break
 
-        self.assertTrue(
-            factory_found,
-            "Connection factory _create_connection should exist"
-        )
+        self.assertTrue(factory_found, "Connection factory _create_connection should exist")
 
     def test_check_same_thread_false_is_forbidden(self) -> None:
         """Verify check_same_thread=False is not used anywhere."""
@@ -234,18 +203,14 @@ class TestSQLiteSeamVerifierAST(TestCase):
         violations = []
         for filepath in self.collect_dir.glob("*.py"):
             try:
-                with open(filepath, "r") as f:
+                with open(filepath) as f:
                     source = f.read()
                 if "check_same_thread" in source and "False" in source:
                     violations.append(str(filepath.relative_to(self.collect_dir)))
             except Exception:
                 pass
 
-        self.assertEqual(
-            len(violations), 0,
-            f"Found check_same_thread=False in: {violations}. "
-            "This is forbidden - SQLite connections must not be shared across threads."
-        )
+        self.assertEqual(len(violations), 0, f"Found check_same_thread=False in: {violations}. This is forbidden - SQLite connections must not be shared across threads.")
 
     def test_lifecycle_state_helpers_do_not_touch_write_lock(self) -> None:
         """Verify lifecycle/state helpers don't directly access _write_lock."""
@@ -261,11 +226,7 @@ class TestSQLiteSeamVerifierAST(TestCase):
 
             lock_accesses = find_attribute_accesses(module, "store", "_write_lock")
 
-            self.assertEqual(
-                len(lock_accesses), 0,
-                f"{filename} should not access store._write_lock directly. "
-                "Use store._write_context() instead."
-            )
+            self.assertEqual(len(lock_accesses), 0, f"{filename} should not access store._write_lock directly. Use store._write_context() instead.")
 
     def test_lifecycle_state_helpers_do_not_touch_store_cache_directly(self) -> None:
         """Verify lifecycle/state helpers don't directly access store._incidents."""
@@ -282,11 +243,7 @@ class TestSQLiteSeamVerifierAST(TestCase):
             # Look for store._incidents[...] or store._incidents.get(...)
             accesses = find_store_attribute_accesses(module)
 
-            self.assertEqual(
-                len(accesses), 0,
-                f"{filename} should not access store._incidents directly. "
-                f"Found: {accesses}. Use ctx.get_cached_incident() and ctx.put_cached_incident() instead."
-            )
+            self.assertEqual(len(accesses), 0, f"{filename} should not access store._incidents directly. Found: {accesses}. Use ctx.get_cached_incident() and ctx.put_cached_incident() instead.")
 
     def test_lifecycle_state_helpers_do_not_accept_raw_sqlite_connection(self) -> None:
         """Verify lifecycle/state helpers don't accept raw sqlite3.Connection parameter."""
@@ -303,18 +260,13 @@ class TestSQLiteSeamVerifierAST(TestCase):
             # Look for parameters with sqlite3.Connection type
             violations = find_function_params_with_type(module, "sqlite3.Connection")
 
-            self.assertEqual(
-                len(violations), 0,
-                f"{filename} should not accept raw sqlite3.Connection parameters. "
-                f"Use SQLiteWriteContext instead. Found: {violations}"
-            )
+            self.assertEqual(len(violations), 0, f"{filename} should not accept raw sqlite3.Connection parameters. Use SQLiteWriteContext instead. Found: {violations}")
 
     def test_context_module_exports_required_types(self) -> None:
         """Verify context module exports required types."""
         from k8s_diag_agent.collect.incident_store_sqlite_context import (
-            SQLiteWriteContext,
             SQLiteReadContext,
-            ContextClosedError,
+            SQLiteWriteContext,
         )
 
         # Verify types exist and have expected methods
@@ -333,25 +285,15 @@ class TestSQLiteSeamVerifierAST(TestCase):
 
     def test_context_closed_error_raised_on_closed_context(self) -> None:
         """Verify ContextClosedError is raised when using closed context."""
-        from k8s_diag_agent.collect.incident_store_sqlite_context import (
-            ContextClosedError,
-            SQLiteWriteContext,
-        )
-        import tempfile
         import sqlite3
-        from k8s_diag_agent.collect.incident_lifecycle import Incident
 
-        # Create a mock context
-        with tempfile.TemporaryDirectory() as tmpdir:
-            conn = sqlite3.connect(":memory:")
-            try:
-                # Create a mock cache and store reference
-                cache: dict[str, Incident] = {}
-
-                # We can't fully test without the store, but we can test error type
-                self.assertTrue(issubclass(ContextClosedError, RuntimeError))
-            finally:
-                conn.close()
+        # Create a mock context to verify error type
+        conn = sqlite3.connect(":memory:")
+        try:
+            # We can't fully test without the store, but we can test error type
+            self.assertTrue(issubclass(ContextClosedError, RuntimeError))
+        finally:
+            conn.close()
 
     def test_write_context_has_required_methods(self) -> None:
         """Verify SQLiteWriteContext has all required methods."""
@@ -366,10 +308,7 @@ class TestSQLiteSeamVerifierAST(TestCase):
         ]
 
         for method_name in required_methods:
-            self.assertTrue(
-                hasattr(SQLiteWriteContext, method_name),
-                f"SQLiteWriteContext should have method '{method_name}'"
-            )
+            self.assertTrue(hasattr(SQLiteWriteContext, method_name), f"SQLiteWriteContext should have method '{method_name}'")
 
     def test_scheduler_does_not_import_sqlite_store_or_sqlite3(self) -> None:
         """Verify scheduler code does not import sqlite store or sqlite3.
@@ -389,7 +328,7 @@ class TestSQLiteSeamVerifierAST(TestCase):
 
             for filepath in scheduler_dir.glob("**/*.py"):
                 try:
-                    with open(filepath, "r") as f:
+                    with open(filepath) as f:
                         source = f.read()
                     imports = find_imports(ast.parse(source))
                     if "sqlite3" in imports or "incident_store_sqlite" in " ".join(imports):
@@ -397,11 +336,7 @@ class TestSQLiteSeamVerifierAST(TestCase):
                 except (SyntaxError, FileNotFoundError):
                     pass
 
-        self.assertEqual(
-            len(violations), 0,
-            f"Scheduler should not import sqlite3 or incident_store_sqlite. "
-            f"Violations: {violations}"
-        )
+        self.assertEqual(len(violations), 0, f"Scheduler should not import sqlite3 or incident_store_sqlite. Violations: {violations}")
 
     def test_raw_sqlite_connection_does_not_escape_from_context(self) -> None:
         """Verify raw SQLite connection does not escape from SQLiteWriteContext."""
@@ -426,8 +361,9 @@ class TestSQLiteSeamVerifierAST(TestCase):
         the store and connection from the context. Future work may
         change this to receive only the context.
         """
-        from k8s_diag_agent.collect.incident_store_sqlite_events_writer import append_event
         import inspect
+
+        from k8s_diag_agent.collect.incident_store_sqlite_events_writer import append_event
 
         sig = inspect.signature(append_event)
         params = list(sig.parameters.keys())

@@ -27,10 +27,11 @@ import json
 import logging
 import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 from .incident_candidates import IncidentCandidate
 from .incident_evidence import EvidenceRole
@@ -135,9 +136,7 @@ def _set_journal_mode(conn: sqlite3.Connection, mode: str, path: Path) -> None:
     # WAL warning for network filesystems
     if mode == "WAL":
         _logger.warning(
-            "WAL journal mode requested for %s. "
-            "WAL mode is UNSAFE on network filesystems (NFS, RWX volumes). "
-            "Consider using DELETE mode for Kubernetes shared storage.",
+            "WAL journal mode requested for %s. WAL mode is UNSAFE on network filesystems (NFS, RWX volumes). Consider using DELETE mode for Kubernetes shared storage.",
             path,
             extra={
                 "event": "sqlite-wal-warning",
@@ -417,10 +416,7 @@ class SQLiteIncidentStore(IncidentStore):
         decision: str | None = None,
     ) -> Incident | None:
         """Mark diagnosis loop completed."""
-        return mark_diagnosis_loop_completed_impl(
-            self, incident_id, run_id, collector_run_id,
-            review_packet_name, checks_requested, checks_run, checks_rejected, decision
-        )
+        return mark_diagnosis_loop_completed_impl(self, incident_id, run_id, collector_run_id, review_packet_name, checks_requested, checks_run, checks_rejected, decision)
 
     def mark_diagnosis_loop_failed(
         self,

@@ -20,12 +20,15 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from k8s_diag_agent.domain.incident_lifecycle import (
     DuplicateOfIncidentId,
-    IncidentLifecycle,
     ReviewPacketId,
+    SnapshotBundleId,
+    TransitionApplied,
+)
+from k8s_diag_agent.domain.incident_lifecycle import (
     mark_collecting_evidence as domain_mark_collecting_evidence,
 )
 from k8s_diag_agent.domain.incident_lifecycle import (
@@ -41,23 +44,17 @@ from k8s_diag_agent.domain.incident_lifecycle import (
     resolve_incident as domain_resolve_incident,
 )
 from k8s_diag_agent.domain.incident_lifecycle import (
-    SnapshotBundleId,
     suppress_incident as domain_suppress,
-)
-from k8s_diag_agent.domain.incident_lifecycle import (
-    TransitionApplied,
 )
 
 from .incident_lifecycle import Incident, IncidentStatus
 from .incident_lifecycle_domain_adapter import _apply_lifecycle_transition, _to_incident_lifecycle
-from .incident_store_sqlite_context import SQLiteWriteContext
 from .incident_store_sqlite_events import (
     IncidentEventActor,
     IncidentEventType,
 )
 
 if TYPE_CHECKING:
-
     from .incident_store_sqlite import SQLiteIncidentStore
 
 _logger = logging.getLogger(__name__)

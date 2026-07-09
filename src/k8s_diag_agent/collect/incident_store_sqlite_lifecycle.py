@@ -30,14 +30,12 @@ from .incident_lifecycle import (
     merge_candidate_into_incident,
     open_incident_from_candidate,
 )
-from .incident_store_sqlite_context import SQLiteWriteContext
 from .incident_store_sqlite_events import (
     IncidentEventActor,
     IncidentEventType,
 )
 
 if TYPE_CHECKING:
-
     from .incident_store_sqlite import SQLiteIncidentStore
 
 _logger = logging.getLogger(__name__)
@@ -71,9 +69,7 @@ def promote_candidates_impl(
                     continue
 
                 if snapshot_bundle_id is not None:
-                    updated = merge_candidate_into_incident_with_bundle(
-                        existing, candidate, observed_at, snapshot_bundle_id
-                    )
+                    updated = merge_candidate_into_incident_with_bundle(existing, candidate, observed_at, snapshot_bundle_id)
                 else:
                     updated = merge_candidate_into_incident(existing, candidate, observed_at)
 
@@ -110,9 +106,7 @@ def promote_candidates_impl(
             else:
                 # Open new incident
                 if snapshot_bundle_id is not None:
-                    new_incident = open_incident_from_candidate_with_bundle(
-                        candidate, observed_at, snapshot_bundle_id
-                    )
+                    new_incident = open_incident_from_candidate_with_bundle(candidate, observed_at, snapshot_bundle_id)
                 else:
                     new_incident = open_incident_from_candidate(candidate, observed_at)
 

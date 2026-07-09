@@ -23,7 +23,6 @@ Usage:
 
 from __future__ import annotations
 
-import threading
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -98,15 +97,13 @@ class SQLiteWriteContext:
         self._store = store
         # Import implementation here to avoid circular imports at module level
         from .incident_store_sqlite_events_writer import append_event as _impl
+
         self._append_event_impl = _impl
 
     def _ensure_open(self) -> None:
         """Ensure the context is open and raise if not."""
         if self._closed:
-            raise ContextClosedError(
-                "SQLite write context is closed. "
-                "The context is only valid inside the store's write_context() block."
-            )
+            raise ContextClosedError("SQLite write context is closed. The context is only valid inside the store's write_context() block.")
 
     # -------------------------------------------------------------------------
     # Event Authority
@@ -288,10 +285,7 @@ class SQLiteReadContext:
     def _ensure_open(self) -> None:
         """Ensure the context is open and raise if not."""
         if self._closed:
-            raise ContextClosedError(
-                "SQLite read context is closed. "
-                "The context is only valid inside the store's read_context() block."
-            )
+            raise ContextClosedError("SQLite read context is closed. The context is only valid inside the store's read_context() block.")
 
     def execute_query(
         self,
