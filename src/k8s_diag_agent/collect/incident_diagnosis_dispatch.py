@@ -75,6 +75,7 @@ _logger = logging.getLogger(__name__)
 def list_incidents_for_diagnosis(
     active_only: bool = True,
     limit: int | None = None,
+    after_incident_id: str | None = None,
 ) -> tuple[list[DiagnosisIncidentSummary], bool, str | None]:
     """List incidents for the automatic diagnosis loop.
 
@@ -92,6 +93,7 @@ def list_incidents_for_diagnosis(
     Args:
         active_only: If True, only return incidents in active status
         limit: Optional maximum number of incidents to return (applied after filtering)
+        after_incident_id: Optional cursor for pagination (resume after this incident ID)
 
     Returns:
         Tuple of (incidents, success, error_message)
@@ -107,7 +109,11 @@ def list_incidents_for_diagnosis(
     emit_autodiag_incident_list_start_event(span_ctx, resolved)
 
     if resolved == MODE_LOCAL:
-        incidents, success, error = _list_incidents_local(active_only=active_only, limit=limit)
+        incidents, success, error = _list_incidents_local(
+            active_only=active_only,
+            limit=limit,
+            after_incident_id=after_incident_id,
+        )
         error_type = None  # Local errors don't have classified types
     else:
         # Backend API mode - returns 4-tuple with error_type
@@ -116,6 +122,7 @@ def list_incidents_for_diagnosis(
             internal_api_token=config.internal_api_token,
             active_only=active_only,
             limit=limit,
+            after_incident_id=after_incident_id,
         )
 
     # Emit result event

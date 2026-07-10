@@ -114,6 +114,7 @@ def _list_incidents_backend_api(
     internal_api_token: str | None,
     active_only: bool,
     limit: int | None,
+    after_incident_id: str | None = None,
 ) -> tuple[list[DiagnosisIncidentSummary], bool, str | None, str | None]:
     """List incidents from backend via internal API.
 
@@ -122,6 +123,7 @@ def _list_incidents_backend_api(
         internal_api_token: Internal API token
         active_only: If True, only return incidents in active status
         limit: Optional maximum number of incidents
+        after_incident_id: Resume after this incident ID (cursor-based pagination)
 
     Returns:
         Tuple of (incidents, success, error_message, error_type)
@@ -224,7 +226,26 @@ def _list_incidents_backend_api(
                 if inc.get("status", "") in _ACTIVE_STATUS_NAMES
             ]
 
-        # Apply limit after filtering
+        # Apply cursor-based pagination (skip incidents before cursor)
+        if after_incident_id is not None:
+            cursor_idx = None
+            for idx, inc in enumerate(raw_incidents):
+                if inc.get("incident_id") == after_incident_id:
+                    cursor_idx = idx
+                    break
+            if cursor_idx is not None:
+                raw_incidents = raw_incidents[cursor_idx + 1:]
+            else:
+                # Cursor incident not found - log and continue from beginning
+                _logger.warning(
+                    "Scan cursor incident not found in backend response, restarting from beginning",
+                    extra={
+                        "event": "scan-cursor-restart",
+                        "cursor_incident_id": after_incident_id,
+                    },
+                )
+
+        # Apply limit after filtering and pagination
         if limit is not None and limit > 0:
             raw_incidents = raw_incidents[:limit]
 

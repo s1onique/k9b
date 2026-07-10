@@ -143,12 +143,14 @@ def _classify_backend_listing_error(exc: BaseException) -> tuple[str, str]:
 def _list_incidents_local(
     active_only: bool,
     limit: int | None,
+    after_incident_id: str | None = None,
 ) -> tuple[list[DiagnosisIncidentSummary], bool, str | None]:
-    """List incidents from local incident store.
+    """List incidents from local incident store with cursor-based pagination.
 
     Args:
         active_only: If True, only return incidents in active status
         limit: Optional maximum number of incidents
+        after_incident_id: Resume after this incident ID (cursor-based pagination)
 
     Returns:
         Tuple of (incidents, success, error_message)
@@ -176,7 +178,29 @@ def _list_incidents_local(
         else:
             filtered_incidents = all_incidents
 
-        # Apply limit after filtering
+        # Apply cursor-based pagination (skip incidents before cursor)
+        if after_incident_id is not None:
+            # Find the position of the cursor incident
+            cursor_idx = None
+            for idx, inc in enumerate(filtered_incidents):
+                if inc.incident_id == after_incident_id:
+                    cursor_idx = idx
+                    break
+            if cursor_idx is not None:
+                # Resume after the cursor incident
+                filtered_incidents = filtered_incidents[cursor_idx + 1:]
+            else:
+                # Cursor incident not found (may have been resolved/deleted)
+                # Start from beginning but log the issue
+                _logger.warning(
+                    "Scan cursor incident not found, restarting from beginning",
+                    extra={
+                        "event": "scan-cursor-restart",
+                        "cursor_incident_id": after_incident_id,
+                    },
+                )
+
+        # Apply limit after pagination
         if limit is not None and limit > 0:
             filtered_incidents = filtered_incidents[:limit]
 
@@ -195,6 +219,7 @@ def _list_incidents_local(
                 "event": "diagnosis-incident-list-local",
                 "count": len(summaries),
                 "active_only": active_only,
+                "after_incident_id": after_incident_id,
             },
         )
 
