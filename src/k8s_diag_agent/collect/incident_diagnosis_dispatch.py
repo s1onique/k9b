@@ -35,6 +35,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from .incident_diagnosis_dispatch_backend import (
+    _build_listing_error_diagnostic,
     _fetch_incident_backend_api,
     _list_incidents_backend_api,
 )
@@ -176,5 +177,6 @@ __all__ = [
     "MODE_BACKEND_API",
     "MODE_LOCAL",
     # Internal helpers exported for testing compatibility
+    "_build_listing_error_diagnostic",
     "_classify_backend_listing_error",
 ]

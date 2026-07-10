@@ -21,8 +21,14 @@ class TestCLIMain:
                 with patch.object(cli, "check_rejection_reason_type_alias", return_value=[]):
                     with patch.object(cli, "check_status_assignments", return_value=[]):
                         with patch.object(cli, "check_transition_adapter_uses_lifecycle_core", return_value=[]):
-                            exit_code = cli.main(["verify_incident_lifecycle_boundaries.py"])
-                            assert exit_code == 0
+                            with patch.object(cli, "check_lifecycle_event_mappings", return_value=[]):
+                                with patch.object(cli, "check_evidence_type_contract", return_value=[]):
+                                    with patch.object(cli, "check_artifact_id_contract", return_value=[]):
+                                        with patch.object(cli, "check_artifact_path_contract", return_value=[]):
+                                            with patch.object(cli, "check_llm_safe_evidence_contract", return_value=[]):
+                                                with patch.object(cli, "check_llm_safe_helper_signatures", return_value=[]):
+                                                    exit_code = cli.main(["verify_incident_lifecycle_boundaries.py"])
+                                                    assert exit_code == 0
 
     def test_verifier_fails_when_forbidden_imports_fail(self) -> None:
         """Verifier should detect forbidden imports."""
