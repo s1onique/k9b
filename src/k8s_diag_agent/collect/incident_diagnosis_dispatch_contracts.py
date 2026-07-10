@@ -154,6 +154,7 @@ __all__ = [
     "ROLE_BACKEND",
     "ROLE_SCHEDULER",
     "_ACTIVE_STATUS_NAMES",
+    "_REQUIRED_CANONICAL_INCIDENT_FIELDS",
     "BackendListingErrorType",
     "BackendIncidentShapeError",
     "IncidentDiagnosisDispatchConfig",
