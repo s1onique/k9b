@@ -159,6 +159,20 @@ def run_automatic_diagnosis_loop_evidence_collection(
 
         if incident_result.skipped:
             result.incidents_skipped += 1
+            # Structured logging for skipped incidents - reveals WHY incidents are skipped
+            _logger.info(
+                "incident_skipped_from_auto_loop",
+                extra={
+                    "event": "incident-skipped",
+                    "incident_id": incident_id,
+                    "eligible": False,
+                    "eligibility_reason": incident_result.eligibility_reason,
+                    "skip_reason": incident_result.skip_reason,
+                    "budget_diagnostics": [
+                        d.to_dict() for d in (incident_result.budget_diagnostics or [])
+                    ],
+                },
+            )
         elif incident_result.error is not None:
             result.incidents_with_errors += 1
             overall_stop_reason = "incident_error"
@@ -178,6 +192,29 @@ def run_automatic_diagnosis_loop_evidence_collection(
                     hypothesis_bursts_written += 1
         else:
             result.incidents_ineligible += 1
+
+    # Aggregate skip reasons for operator diagnostics
+    skip_reason_counts: dict[str, int] = {}
+    for ir in result.incident_results:
+        if ir.get("skipped"):
+            reason = ir.get("eligibility_reason") or ir.get("skip_reason") or "unknown"
+            skip_reason_counts[reason] = skip_reason_counts.get(reason, 0) + 1
+
+    # Emit aggregate eligibility summary
+    _logger.info(
+        "automatic_diagnosis_eligibility_summary",
+        extra={
+            "event": "automatic-diagnosis-eligibility-summary",
+            "collector_run_id": collector_run_id,
+            "eligibility_version": 1,
+            "incidents_processed": result.incidents_processed,
+            "incidents_eligible": result.incidents_eligible,
+            "incidents_skipped": result.incidents_skipped,
+            "incidents_ineligible": result.incidents_ineligible,
+            "incidents_with_errors": result.incidents_with_errors,
+            "skip_reasons": skip_reason_counts,
+        },
+    )
 
     _write_loop_summary(
         external_analysis_dir=external_analysis_dir,

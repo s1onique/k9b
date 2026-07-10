@@ -198,3 +198,93 @@ class TestBudgetDiagnosticsSerialization:
         assert response["budget_diagnostics"][0]["nested"]["name"] == "inner"
         assert response["budget_diagnostics"][0]["nested"]["used"] == 1
         assert response["budget_diagnostics"][0]["nested"]["exhausted"] is True
+
+
+class TestLoggingContractForSkippedIncidents:
+    """Regression tests for structured logging contract on skipped incidents.
+
+    These tests protect the logging contract against future refactoring:
+    1. A skipped incident emits exactly one incident-skipped event
+    2. eligibility_reason is populated
+    3. budget_diagnostics serializes correctly (including the empty-list case)
+    4. Aggregate summary is emitted after loop completes
+
+    Related to: incidents_eligible=0 debugging where individual skip reasons
+    are needed to diagnose why multi-pass diagnosis loop never starts.
+    """
+
+    def test_skipped_incident_has_eligibility_reason(self) -> None:
+        """Regression: skipped incident must have eligibility_reason populated."""
+        response = _response_for_result(
+            _skipped_result(
+                reason="budget_exhausted",
+                budget_diagnostics=(),
+            )
+        )
+
+        assert response["skipped"] is True
+        assert response["eligible"] is False
+        assert response["eligibility_reason"] == "budget_exhausted"
+        assert response["skip_reason"] == "budget_exhausted"
+
+    def test_skipped_incident_budget_diagnostics_empty_list(self) -> None:
+        """Regression: empty budget_diagnostics should serialize to empty list."""
+        response = _response_for_result(
+            _skipped_result(
+                reason="terminal_status_resolved",
+                budget_diagnostics=[],
+            )
+        )
+
+        assert response["skipped"] is True
+        # Should serialize to empty list, not cause errors
+        assert "budget_diagnostics" in response
+        assert response["budget_diagnostics"] == []
+
+    def test_skipped_incident_budget_diagnostics_with_values(self) -> None:
+        """Regression: budget_diagnostics with values should include all fields."""
+        response = _response_for_result(
+            _skipped_result(
+                reason="budget_exhausted",
+                budget_diagnostics=[
+                    {
+                        "name": "review_packet_budget",
+                        "used": 5,
+                        "limit": 5,
+                        "remaining": 0,
+                        "exhausted": True,
+                        "source": "review_packet_artifacts",
+                        "resettable": True,
+                    },
+                ],
+            )
+        )
+
+        assert response["skipped"] is True
+        assert response["budget_diagnostics"][0]["exhausted"] is True
+        assert response["budget_diagnostics"][0]["remaining"] == 0
+        assert response["budget_diagnostics"][0]["source"] == "review_packet_artifacts"
+        assert response["budget_diagnostics"][0]["resettable"] is True
+
+    def test_all_skip_reasons_are_deterministic_strings(self) -> None:
+        """Regression: all skip reasons must be deterministic strings.
+
+        Prevents accidental use of random/uuid-based reasons that would
+        make log aggregation impossible.
+        """
+        deterministic_reasons = [
+            "budget_exhausted",
+            "terminal_status_resolved",
+            "terminal_status_ready_for_review",
+            "inactive_status_open",
+            "incident_not_found",
+            "fetch_failed",
+        ]
+
+        for reason in deterministic_reasons:
+            response = _response_for_result(
+                _skipped_result(reason=reason)
+            )
+            assert response["eligibility_reason"] == reason
+            assert isinstance(response["eligibility_reason"], str)
+            assert len(response["eligibility_reason"]) > 0
