@@ -28,6 +28,22 @@ def temp_external_dir():
 
 
 @pytest.fixture
+def enabled_auto_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force the enabled production path without consulting cluster configuration."""
+    monkeypatch.setattr(
+        "k8s_diag_agent.collect."
+        "incident_diagnosis_auto_loop_evidence_collection."
+        "is_automatic_diagnosis_loop_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "k8s_diag_agent.health.loop_automatic_diagnosis."
+        "is_automatic_diagnosis_loop_enabled",
+        lambda: True,
+    )
+
+
+@pytest.fixture
 def capture_logs():
     """Capture structured logs emitted by the collector."""
     captured: list[dict[str, Any]] = []
@@ -60,7 +76,7 @@ class TestSchedulerPathIntegration:
     """Tests proving the scheduler path emits eligibility summary."""
 
     def test_scheduler_auto_diagnosis_path_emits_eligibility_summary(
-        self, temp_external_dir, capture_logs, monkeypatch: pytest.MonkeyPatch
+        self, temp_external_dir, capture_logs, monkeypatch: pytest.MonkeyPatch, enabled_auto_loop
     ):
         """Prove the scheduler-executed path emits eligibility summary."""
         store = IncidentStore()

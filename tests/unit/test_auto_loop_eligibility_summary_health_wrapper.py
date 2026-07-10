@@ -31,6 +31,22 @@ def temp_external_dir():
 
 
 @pytest.fixture
+def enabled_auto_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force the enabled production path without consulting cluster configuration."""
+    monkeypatch.setattr(
+        "k8s_diag_agent.collect."
+        "incident_diagnosis_auto_loop_evidence_collection."
+        "is_automatic_diagnosis_loop_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "k8s_diag_agent.health.loop_automatic_diagnosis."
+        "is_automatic_diagnosis_loop_enabled",
+        lambda: True,
+    )
+
+
+@pytest.fixture
 def capture_logs():
     """Capture structured logs emitted by the collector."""
     captured: list[dict[str, Any]] = []
@@ -61,7 +77,7 @@ class TestHealthWrapperPathEligibilitySummary:
     """Tests proving health loop wrapper emits eligibility summary with scheduler correlation."""
 
     def test_health_wrapper_emits_eligibility_summary_with_scheduler_run_id(
-        self, temp_external_dir, capture_logs, monkeypatch: pytest.MonkeyPatch
+        self, temp_external_dir, capture_logs, monkeypatch: pytest.MonkeyPatch, enabled_auto_loop
     ):
         """Prove health wrapper emits eligibility summary with run_id correlation.
 
@@ -125,10 +141,15 @@ class TestHealthWrapperPathEligibilitySummary:
         finally:
             set_incident_store(None)
 
-    def test_health_wrapper_disabled_path_emits_summary(
+    def test_health_wrapper_disabled_path_does_not_emit_collector_summary(
         self, temp_external_dir, capture_logs, monkeypatch: pytest.MonkeyPatch
     ):
-        """Prove disabled wrapper path still emits the eligibility summary via collector."""
+        """Prove disabled wrapper path does NOT emit eligibility summary.
+
+        The wrapper checks is_automatic_diagnosis_loop_enabled and returns early,
+        so the collector is never called and no eligibility summary is emitted.
+        This is correct behavior - the wrapper emits a disabled event instead.
+        """
         monkeypatch.setattr(
             "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
             lambda: False,
@@ -141,7 +162,9 @@ class TestHealthWrapperPathEligibilitySummary:
 
         assert result["automatic_diagnosis_enabled"] is False
 
-        # Even when disabled, the collector should emit the summary (it checks enabled itself)
-        # But since we mock is_automatic_diagnosis_loop_enabled, the wrapper returns early
-        # and the collector is never called. This is correct behavior.
-        # The wrapper emits a "disabled" event, not an eligibility summary.
+        # The wrapper returns before calling the collector, so no eligibility summary is emitted
+        assert not [
+            log
+            for log in capture_logs
+            if log["event"] == "automatic-diagnosis-eligibility-summary"
+        ], "Disabled wrapper should not emit eligibility summary"
