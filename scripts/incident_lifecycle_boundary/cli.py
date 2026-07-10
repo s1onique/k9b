@@ -12,6 +12,7 @@ from incident_lifecycle_boundary.artifact_paths import check_artifact_path_contr
 from incident_lifecycle_boundary.common import (
     DOMAIN_ADAPTER_MODULE,
     DOMAIN_MODULE,
+    EVIDENCE_LLM_SAFE_MODULE,
     EVIDENCE_MODULE,
     REPO_ROOT,
     TRANSITIONS_MODULE,
@@ -20,6 +21,10 @@ from incident_lifecycle_boundary.common import (
 from incident_lifecycle_boundary.event_mappings import check_lifecycle_event_mappings
 from incident_lifecycle_boundary.evidence_types import check_evidence_type_contract
 from incident_lifecycle_boundary.forbidden_imports import check_forbidden_imports
+from incident_lifecycle_boundary.llm_safe_evidence import (
+    check_llm_safe_evidence_contract,
+    check_llm_safe_helper_signatures,
+)
 from incident_lifecycle_boundary.rejection_reasons import (
     check_reason_allowlist,
     check_rejection_reason_type_alias,
@@ -108,6 +113,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         errors.extend(path_errors)
 
+    # Check 9: LLM-safe evidence boundary accepts only redacted summaries and safe refs
+    if EVIDENCE_LLM_SAFE_MODULE.exists():
+        llm_safe_errors = check_llm_safe_evidence_contract(
+            evidence_filepath=str(EVIDENCE_LLM_SAFE_MODULE),
+            repo_root=REPO_ROOT,
+        )
+        errors.extend(llm_safe_errors)
+
+    # Check 9b: evidence_artifact_to_llm_safe_summary has safe safe_ref parameter
+    if EVIDENCE_LLM_SAFE_MODULE.exists():
+        helper_sig_errors = check_llm_safe_helper_signatures(str(EVIDENCE_LLM_SAFE_MODULE))
+        errors.extend(helper_sig_errors)
+
     # Report results
     if errors:
         print("BOUNDARY VERIFICATION FAILED")
@@ -128,6 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  Evidence role/kind contracts are typed and complete")
         print("  Artifact/evidence ID contracts are branded and serialized safely")
         print("  Artifact path/reference contracts are branded and LLM-safe")
+        print("  LLM-safe evidence boundary accepts only redacted summaries and safe refs")
         print("  Module is isolated from IO, Kubernetes, HTTP dependencies")
         print("=" * 60)
         return 0
