@@ -3,19 +3,26 @@
 This module provides:
 - AutoLoopIncidentResult for single incident processing
 - AutoLoopCollectorResult for complete collector run
+- IncidentBatchOutcome for batch processing results (replaces positional tuple)
 - _COLLECTOR_SAFETY_METADATA constant
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 from .incident_diagnosis_auto_loop_config import DiagnosisBudgetDiagnostic
+
+if TYPE_CHECKING:
+    from .incident_diagnosis_keyset_cursor import IncidentDiagnosisCursor
 
 __all__ = [
     "AutoLoopIncidentResult",
     "AutoLoopCollectorResult",
+    "IncidentBatchOutcome",
+    "BatchStopReason",
     "_COLLECTOR_SAFETY_METADATA",
 ]
 
@@ -140,3 +147,68 @@ class AutoLoopCollectorResult:
             "incident_results": self.incident_results,
             "safety_metadata": self.safety_metadata,
         }
+
+
+# =============================================================================
+# Batch Processing Outcome (replaces positional tuple)
+# =============================================================================
+
+
+class BatchStopReason(StrEnum):
+    """Reasons why batch processing stopped."""
+
+    LOOP_COMPLETED = "loop_completed"
+    """All incidents processed without hitting any stop condition."""
+
+    SCAN_BOUND_REACHED = "scan_bound_reached"
+    """Reached the scan bound limit."""
+
+    DIAGNOSIS_BUDGET_EXHAUSTED = "diagnosis_budget_exhausted"
+    """Diagnosis budget exhausted for eligible incidents."""
+
+    INCIDENT_ERROR = "incident_error"
+    """An incident processing error occurred."""
+
+    NO_ELIGIBLE_INCIDENTS = "no_eligible_incidents"
+    """No eligible incidents found."""
+
+    LISTING_FAILED = "listing_failed"
+    """Incident listing/page retrieval failed."""
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentBatchOutcome:
+    """Outcome of batch incident processing.
+
+    This replaces the 13-element positional tuple with a named product type
+    for better type safety and readability.
+
+    Attributes:
+        incident_results: List of incident result dictionaries
+        incidents_skipped: Number of incidents skipped
+        incidents_with_errors: Number of incidents that errored
+        incidents_eligible: Number of eligible incidents processed
+        incidents_ineligible: Number of ineligible incidents
+        total_checks_run: Total checks run across all incidents
+        total_review_packets_written: Total review packets written
+        total_passes_completed: Total passes completed
+        total_checks_executed: Total checks executed
+        hypothesis_bursts_written: Number of hypothesis bursts written
+        stop_reason: Why batch processing stopped
+        first_incident_run_id: Run ID of first eligible incident
+        last_examined_cursor: Cursor after last examined incident
+    """
+
+    incident_results: tuple[dict[str, object], ...]
+    incidents_skipped: int
+    incidents_with_errors: int
+    incidents_eligible: int
+    incidents_ineligible: int
+    total_checks_run: int
+    total_review_packets_written: int
+    total_passes_completed: int
+    total_checks_executed: int
+    hypothesis_bursts_written: int
+    stop_reason: BatchStopReason
+    first_incident_run_id: str | None
+    last_examined_cursor: IncidentDiagnosisCursor | None

@@ -2,7 +2,7 @@
 
 Purpose: compact task-facing project state for routine work.
 
-**Last Updated:** 2026-06-29
+**Last Updated:** 2026-07-10
 
 **See also:** `docs/agent-docs-audit.md` for documentation drift tracking.
 
@@ -85,6 +85,26 @@ Do NOT update for:
 - Small code edits
 - Temporary experiments
 - Routine day-to-day changes
+
+## SQLite pagination contract closure (2026-07-10)
+
+R2J keyset pagination contract closed on 2026-07-10.
+
+Production and SQLite-backed starvation, compound-key, cursor-lifecycle, HTTP transport, planner and compatibility checks pass.
+
+Implementation details:
+
+- **Partial index added**: `idx_incident_current_active_diagnosis_scan` covers `(first_observed_at, incident_id)` with WHERE clause for active statuses
+- **INDEXED BY removed**: Eliminated the forced-hint contradiction from production queries
+- **Literal predicates**: Active-status filter uses literal values (not bound parameters) so SQLite's optimizer can match the partial index predicate
+- **IS NOT NULL removed**: Base predicate changed to `WHERE 1=1` to allow partial-index matching
+- **Isolation tests**: EXPLAIN QUERY PLAN tests prove partial-index works in isolation by dropping competing status index
+- **Schema path**: Tests use production `run_migrations()` instead of manual schema recreation
+- **Canonical predicate module**: `incident_diagnosis_active_status.py` provides verified consistency between query and schema predicates
+- **HTTP contract**: `DiagnosisPageLimit` branded type in `IncidentListQuery` with no `type: ignore` annotations
+- **Backward compatibility**: Import compatibility exports for `_process_incident`, `build_eligibility_summary_payload`, `run_policy_enforced_loop_pass` in `incident_diagnosis_auto_loop_evidence_collection`
+
+Note: SQLite's optimizer may still prefer `idx_incident_current_status_seen` when both indexes exist (cost-based decision). The partial index is proven correct through isolation tests.
 
 ## When to read deeper memory-bank files
 

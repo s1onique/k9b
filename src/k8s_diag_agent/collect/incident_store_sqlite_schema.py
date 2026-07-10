@@ -99,6 +99,15 @@ CREATE INDEX IF NOT EXISTS idx_incident_current_namespace_object
 
 CREATE INDEX IF NOT EXISTS idx_incident_current_candidate
     ON incident_current(source_candidate_id);
+
+CREATE INDEX IF NOT EXISTS idx_incident_current_diagnosis_scan
+    ON incident_current(first_observed_at, incident_id);
+
+-- Partial index for active incidents keyset pagination
+-- Covers ORDER BY first_observed_at, incident_id with active status filter
+CREATE INDEX IF NOT EXISTS idx_incident_current_active_diagnosis_scan
+    ON incident_current(first_observed_at, incident_id)
+    WHERE status IN ('open', 'collecting_evidence', 'investigating', 'ready_for_review');
 """
 
 # Append-only enforcement triggers

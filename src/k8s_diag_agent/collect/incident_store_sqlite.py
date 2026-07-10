@@ -51,6 +51,7 @@ from .incident_store_sqlite_config import (
 )
 from .incident_store_sqlite_connection import _create_connection
 from .incident_store_sqlite_context import (
+    SQLiteReadContext,
     SQLiteWriteContext,
 )
 from .incident_store_sqlite_events import (
@@ -76,7 +77,11 @@ from .incident_store_sqlite_state import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from .incident_diagnosis_dispatch_page import IncidentDiagnosisPage
+    from .incident_diagnosis_keyset_cursor import (
+        DiagnosisPageLimit,
+        IncidentDiagnosisCursor,
+    )
 
 _logger = logging.getLogger(__name__)
 
@@ -182,22 +187,21 @@ class SQLiteIncidentStore(IncidentStore):
             conn.close()
 
     @contextmanager
-    def _write_connection(self) -> Iterator[sqlite3.Connection]:
-        """Context manager for getting a connection with write lock held.
+    def _read_context(self) -> Iterator[SQLiteReadContext]:
+        """Context manager for getting a read-only capability.
 
-        This combines _write_lock acquisition with _connect() to ensure
-        thread-safe write operations.
+        This creates a SQLiteReadContext that owns read-only authority.
+        Unlike _write_context(), this does not acquire the write lock.
 
         Yields:
-            A fresh configured SQLite connection with write lock held
-
-        Note:
-            Prefer _write_context() for new code that also needs cache access.
-            This method is kept for backward compatibility with existing code.
+            SQLiteReadContext with read-only authority
         """
-        with self._write_lock:
-            with self._connect() as conn:
-                yield conn
+        with self._connect() as conn:
+            ctx = SQLiteReadContext(conn=conn)
+            try:
+                yield ctx
+            finally:
+                ctx.close()
 
     @contextmanager
     def _write_context(self) -> Iterator[SQLiteWriteContext]:
@@ -356,6 +360,38 @@ class SQLiteIncidentStore(IncidentStore):
     ) -> Incident | None:
         """Mark diagnosis loop failed."""
         return mark_diagnosis_loop_failed_impl(self, incident_id, run_id, collector_run_id, unavailable_reason)
+
+    # =========================================================================
+    # Keyset Pagination (SQLite-backed)
+    # =========================================================================
+
+    def list_incidents_for_diagnosis_page(
+        self,
+        active_only: bool,
+        limit: DiagnosisPageLimit,
+        after_cursor: IncidentDiagnosisCursor | None,
+    ) -> IncidentDiagnosisPage:
+        """List incidents for diagnosis with keyset pagination using SQLite.
+
+        This method overrides the base in-memory implementation to use
+        the actual SQLite database with proper keyset pagination via
+        the read context capability.
+
+        Args:
+            active_only: If True, only return incidents in active status
+            limit: Maximum number of incidents per page (DiagnosisPageLimit)
+            after_cursor: Optional cursor to resume after
+
+        Returns:
+            IncidentDiagnosisPage with paginated results from SQLite
+        """
+        # Use _read_context() to keep SQL within the persistence boundary
+        with self._read_context() as ctx:
+            return ctx.list_incidents_for_diagnosis_page(
+                active_only=active_only,
+                limit=limit,
+                after_cursor=after_cursor,
+            )
 
     # =========================================================================
     # Event History (for detail endpoint)

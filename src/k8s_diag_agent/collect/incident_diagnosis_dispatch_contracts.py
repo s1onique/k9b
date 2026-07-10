@@ -13,6 +13,7 @@ These are pure data contracts with no implementation logic.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -130,16 +131,47 @@ class IncidentDiagnosisDispatchConfig:
 
 
 # =============================================================================
-# Incident Summary
+# Incident Summary Types
 # =============================================================================
 
 
 @dataclass(frozen=True)
-class DiagnosisIncidentSummary:
-    """Minimal incident summary for diagnosis loop."""
+class DiagnosisPageIncident:
+    """Incident data from pagination page - timestamp is mandatory.
+
+    This type is used for page-level incident data where the timestamp is
+    required for cursor positioning. The EXACT database ordering key is preserved
+    to ensure cursor keys match SQLite ordering exactly.
+
+    Attributes:
+        incident_id: Unique incident identifier
+        status: Current incident status
+        first_observed_at: When the incident was first observed (for API use)
+        first_observed_at_key: EXACT database text for cursor key (R11)
+    """
 
     incident_id: str
     status: str
+    first_observed_at: datetime
+    first_observed_at_key: str  # R11: Exact DB text for cursor key
+
+
+@dataclass(frozen=True)
+class DiagnosisIncidentSummary:
+    """Minimal incident summary for diagnosis loop.
+
+    This type is used when timestamp is optional, such as in list summaries
+    where the caller may not need cursor positioning.
+
+    Attributes:
+        incident_id: Unique incident identifier
+        status: Current incident status
+        first_observed_at: When the incident was first observed (for cursor tracking)
+    """
+
+    incident_id: str
+    status: str
+    first_observed_at: datetime | None = None
 
 
 __all__ = [
@@ -158,6 +190,7 @@ __all__ = [
     "BackendListingErrorType",
     "BackendIncidentShapeError",
     "IncidentDiagnosisDispatchConfig",
+    "DiagnosisPageIncident",
     "DiagnosisIncidentSummary",
     "parse_backend_incident_detail_payload",
 ]

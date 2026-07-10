@@ -36,9 +36,16 @@ from .incident_store_sqlite_events import (
 if TYPE_CHECKING:
     import sqlite3
 
+    from .incident_diagnosis_dispatch_page import IncidentDiagnosisPage
+    from .incident_diagnosis_keyset_cursor import (
+        DiagnosisPageLimit,
+        IncidentDiagnosisCursor,
+    )
     from .incident_store_sqlite import SQLiteIncidentStore
 
-_logger = __import__("logging").getLogger(__name__)
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -307,6 +314,35 @@ class SQLiteReadContext:
         self._ensure_open()
         cursor = self._conn.execute(sql, params or ())
         return list(cursor.fetchall())
+
+    def list_incidents_for_diagnosis_page(
+        self,
+        *,
+        active_only: bool,
+        limit: DiagnosisPageLimit,
+        after_cursor: IncidentDiagnosisCursor | None,
+    ) -> IncidentDiagnosisPage:
+        """List incidents for diagnosis with keyset pagination using SQLite.
+
+        This method executes the keyset pagination query directly against
+        the SQLite connection, keeping all SQL within the persistence boundary.
+
+        Args:
+            active_only: If True, only return incidents in active status
+            limit: Maximum number of incidents per page (DiagnosisPageLimit)
+            after_cursor: Optional cursor to resume after
+
+        Returns:
+            IncidentDiagnosisPage with paginated results from SQLite
+        """
+        from .incident_diagnosis_dispatch_page import list_incidents_for_diagnosis_page_impl
+
+        return list_incidents_for_diagnosis_page_impl(
+            conn=self._conn,
+            active_only=active_only,
+            limit=limit,
+            after=after_cursor,
+        )
 
     def close(self) -> None:
         """Close the context, marking it as no longer usable."""

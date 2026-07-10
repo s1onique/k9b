@@ -5,9 +5,6 @@ functions. It MUST NOT import from:
 - incident_diagnosis_auto_loop
 - incident_diagnosis_auto_loop_entrypoints
 
-This module may import from models, config, store, case file, etc.,
-but not from either orchestration sibling.
-
 Design constraints:
 - No LLM calls, no Kubernetes calls, no subprocess/shell/kubectl
 - No remediation, no mutation, no execution
@@ -21,128 +18,47 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
-# Re-export from sibling for test compatibility (patches expect it here)
 from .incident_automatic_diagnosis_loop import run_automatic_diagnosis_hypothesis_loop
 from .incident_case_file import build_incident_case_file
+
+# Re-export for backward compatibility with existing tests that patch at this location
+from .incident_diagnosis_auto_loop_batch import _process_incident, process_incident_batch
 from .incident_diagnosis_auto_loop_config import (
     AutomaticDiagnosisLoopConfig,
     check_incident_eligibility,
     is_automatic_diagnosis_loop_enabled,
 )
-from .incident_diagnosis_auto_loop_cursor import (
-    _clear_scan_cursor,
-    _load_scan_cursor,
-    _save_scan_cursor,
+from .incident_diagnosis_auto_loop_cursor_ops import handle_cursor_disposition
+from .incident_diagnosis_auto_loop_eligibility import (
+    build_eligibility_summary_payload,
 )
-from .incident_diagnosis_auto_loop_evidence_processor import (
-    _process_incident,
-    _write_loop_summary,
+from .incident_diagnosis_auto_loop_eligibility import (
+    emit_eligibility_summary as _emit_eligibility_summary,
+)
+from .incident_diagnosis_auto_loop_evidence_processor import _write_loop_summary
+from .incident_diagnosis_auto_loop_listing import (
+    list_incidents_with_pagination,
+    load_cursor_for_scan,
 )
 from .incident_diagnosis_auto_loop_models import (
     _COLLECTOR_SAFETY_METADATA,
     AutoLoopCollectorResult,
     AutoLoopIncidentResult,
 )
+from .incident_diagnosis_cursor_disposition import decide_cursor_disposition
 from .incident_diagnosis_diagnostic import log_zero_incidents_diagnostic
 from .incident_diagnosis_dispatch import (
     fetch_incident_for_diagnosis,
-    list_incidents_for_diagnosis,
 )
-from .incident_diagnosis_loop_runtime import run_policy_enforced_loop_pass
+from .incident_diagnosis_dispatch_page import IncidentDiagnosisPage
+from .incident_diagnosis_loop_runtime_single_pass import run_policy_enforced_loop_pass
+from .incident_diagnosis_pagination_types import OpaqueCursorToken
 from .incident_diagnosis_review_packet import write_diagnosis_review_packet
 from .incident_read_only_check_artifacts import is_safe_run_id
 from .incident_store_provider import get_incident_store
 
 _logger = logging.getLogger(__name__)
-
-# Current eligibility summary schema version
-_ELIGIBILITY_VERSION = 1
-
-
-def build_eligibility_summary_payload(
-    *,
-    collector_run_id: str,
-    result: AutoLoopCollectorResult,
-    eligibility_version: int = _ELIGIBILITY_VERSION,
-) -> dict[str, Any]:
-    """Build the aggregate eligibility summary payload.
-
-    Args:
-        collector_run_id: Unique identifier for this collector run
-        result: The collector result containing incident processing outcomes
-        eligibility_version: Schema version for the eligibility summary format
-
-    Returns:
-        Dictionary containing the aggregate eligibility summary with:
-        - collector_run_id
-        - eligibility_version
-        - incidents_processed
-        - incidents_eligible
-        - incidents_skipped
-        - incidents_ineligible
-        - incidents_with_errors
-        - skip_reasons (aggregate counts, no incident IDs)
-        - error_reasons (aggregate counts, no incident IDs)
-    """
-    # Aggregate skip reasons from incident results
-    skip_reason_counts: dict[str, int] = {}
-    error_reason_counts: dict[str, int] = {}
-
-    for ir in result.incident_results:
-        if ir.get("skipped"):
-            # Prefer eligibility_reason over skip_reason
-            reason = ir.get("eligibility_reason") or ir.get("skip_reason") or "unknown"
-            skip_reason_counts[reason] = skip_reason_counts.get(reason, 0) + 1
-        if ir.get("error") is not None:
-            error = ir.get("error")
-            if isinstance(error, str):
-                # Extract the error type/class from the error message
-                error_type = error.split(":")[0] if ":" in error else error
-                error_reason_counts[error_type] = error_reason_counts.get(error_type, 0) + 1
-
-    return {
-        "event": "automatic-diagnosis-eligibility-summary",
-        "collector_run_id": collector_run_id,
-        "eligibility_version": eligibility_version,
-        "incidents_processed": result.incidents_processed,
-        "incidents_eligible": result.incidents_eligible,
-        "incidents_skipped": result.incidents_skipped,
-        "incidents_ineligible": result.incidents_ineligible,
-        "incidents_with_errors": result.incidents_with_errors,
-        "skip_reasons": skip_reason_counts,
-        "error_reasons": error_reason_counts,
-    }
-
-
-def _emit_eligibility_summary(
-    *,
-    collector_run_id: str,
-    result: AutoLoopCollectorResult,
-    scheduler_run_id: str | None = None,
-) -> None:
-    """Emit the aggregate eligibility summary log event.
-
-    This must be called on every exit path to ensure operators can always
-    see why incidents were skipped, even when the loop exits early.
-
-    Args:
-        collector_run_id: Unique identifier for this collector run
-        result: The collector result containing incident processing outcomes
-        scheduler_run_id: Optional scheduler run ID for correlation
-    """
-    payload = build_eligibility_summary_payload(
-        collector_run_id=collector_run_id,
-        result=result,
-    )
-    if scheduler_run_id:
-        payload["run_id"] = scheduler_run_id
-
-    _logger.info(
-        "Automatic diagnosis eligibility summary",
-        extra=payload,
-    )
 
 
 def run_automatic_diagnosis_loop_evidence_collection(
@@ -180,7 +96,6 @@ def run_automatic_diagnosis_loop_evidence_collection(
         result.incident_results = [{
             "note": "Automatic diagnosis loop is disabled. Set K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true to enable.",
         }]
-        # Emit eligibility summary before returning (shows loop was run but disabled)
         _emit_eligibility_summary(
             collector_run_id=collector_run_id,
             result=result,
@@ -201,74 +116,89 @@ def run_automatic_diagnosis_loop_evidence_collection(
         return result
 
     # Derive runs_dir from external_analysis_dir
-    # Path pattern: runs/{run_id}/external-analysis
-    # We need: runs/ for cursor state
     runs_dir = external_analysis_dir.parent.parent
 
-    # Phase 1: Load persisted scan cursor for fair queuing
-    scan_cursor = _load_scan_cursor(runs_dir) if incident_ids is None else None
-
-    # Phase 2: Get candidates with larger scan window to handle skipped-head starvation
-    max_diagnoses = resolved_config.max_incidents_per_run  # Budget for diagnoses started
+    # Phase 1: Get candidates - cursor only loaded for automatic discovery
+    max_diagnoses = resolved_config.max_incidents_per_run
+    page: IncidentDiagnosisPage | None = None
+    page_has_more = False
+    scan_cursor: OpaqueCursorToken | None = None  # Initialize for all branches
+    cursor_was_present = False  # Track whether cursor was loaded for disposition
 
     if incident_ids is not None:
-        # Explicit requests retain the public max-incidents contract.
-        # The starvation fix (3x window) is only for automatic discovery.
+        # Explicit selection: use provided IDs directly, no cursor I/O
         scan_bound = max_diagnoses
         all_scanned_ids = incident_ids[:scan_bound]
     else:
-        # Automatic discovery may scan past skipped/exhausted head entries.
-        # Get more incidents than max_diagnoses to skip past exhausted ones.
-        # Use cursor-based pagination to resume from where we left off.
+        # Automatic discovery: load persisted cursor for fair queuing
+        scan_cursor, cursor_was_present = load_cursor_for_scan(runs_dir)
         scan_bound = max_diagnoses * 3
-        incidents, success, error = list_incidents_for_diagnosis(
-            active_only=True,
-            limit=scan_bound,
-            after_incident_id=scan_cursor,
+        page_result = list_incidents_with_pagination(scan_cursor, scan_bound)
+
+        from .incident_diagnosis_pagination_results import (
+            AutomaticPageCursorRejected,
+            AutomaticPageListed,
+            AutomaticPageListingFailed,
         )
 
-        if not success:
-            result.incident_results = [{
-                "note": f"Failed to list incidents: {error}",
-            }]
-            # Emit eligibility summary before returning (shows listing failure)
-            _emit_eligibility_summary(
-                collector_run_id=collector_run_id,
-                result=result,
-                scheduler_run_id=scheduler_run_id,
-            )
-            _write_loop_summary(
-                external_analysis_dir=external_analysis_dir,
-                collector_run_id=collector_run_id,
-                incidents_seen=0,
-                incidents_eligible=0,
-                incidents_processed=0,
-                hypothesis_bursts_written=0,
-                total_passes_completed=0,
-                total_checks_executed=0,
-                stop_reason="incident_listing_failed",
-                incident_results=result.incident_results,
-            )
-            return result
-
-        all_scanned_ids = [inc.incident_id for inc in incidents]
+        match page_result:
+            case AutomaticPageListed(page=listed_page):
+                page = listed_page
+                all_scanned_ids = [inc.incident_id for inc in page.incidents]
+                page_has_more = page.has_more
+            case AutomaticPageCursorRejected(failure=failure):
+                result.incident_results = [{
+                    "note": f"Cursor decode error: {failure.error_message}"
+                }]
+                _emit_eligibility_summary(
+                    collector_run_id=collector_run_id,
+                    result=result,
+                    scheduler_run_id=scheduler_run_id,
+                )
+                _write_loop_summary(
+                    external_analysis_dir=external_analysis_dir,
+                    collector_run_id=collector_run_id,
+                    incidents_seen=0, incidents_eligible=0, incidents_processed=0,
+                    hypothesis_bursts_written=0, total_passes_completed=0,
+                    total_checks_executed=0, stop_reason="cursor_error",
+                    incident_results=result.incident_results,
+                )
+                return result
+            case AutomaticPageListingFailed(failure=failure):
+                result.incident_results = [{
+                    "note": f"Failed to list incidents: {failure.message}"
+                }]
+                _emit_eligibility_summary(
+                    collector_run_id=collector_run_id,
+                    result=result,
+                    scheduler_run_id=scheduler_run_id,
+                )
+                _write_loop_summary(
+                    external_analysis_dir=external_analysis_dir,
+                    collector_run_id=collector_run_id,
+                    incidents_seen=0, incidents_eligible=0, incidents_processed=0,
+                    hypothesis_bursts_written=0, total_passes_completed=0,
+                    total_checks_executed=0, stop_reason="incident_listing_failed",
+                    incident_results=result.incident_results,
+                )
+                return result
 
     if len(all_scanned_ids) == 0:
-        # Handle empty results after cursor - this means we've reached the end
-        # Clear cursor and restart from beginning on next run
-        if scan_cursor is not None:
-            _clear_scan_cursor(runs_dir)
-            _logger.info(
-                "Scan cursor reached end, cleared for next run",
-                extra={
-                    "event": "scan-cursor-end-reached",
-                    "previous_cursor": scan_cursor,
-                },
+        # Route empty successful page through cursor disposition algebra
+        # This ensures empty initial scan vs empty suffix after cursor are handled correctly
+        if incident_ids is None:
+            disposition = decide_cursor_disposition(
+                automatic_selection=True,
+                examined_rows=0,
+                page_rows=0,
+                has_more=False,
+                last_examined_cursor=None,
+                listing_failed=False,
+                cursor_was_present=cursor_was_present,
             )
-        # Restore zero-incident diagnostic
+            handle_cursor_disposition(disposition, runs_dir)
         log_zero_incidents_diagnostic(resolved_config)
         result.incident_results = []
-        # Emit eligibility summary before returning (shows zero candidates)
         _emit_eligibility_summary(
             collector_run_id=collector_run_id,
             result=result,
@@ -288,95 +218,35 @@ def run_automatic_diagnosis_loop_evidence_collection(
         )
         return result
 
-    total_passes_completed = 0
-    total_checks_executed = 0
-    hypothesis_bursts_written = 0
-    overall_stop_reason = "loop_completed"
-    first_incident_run_id: str | None = None
-    diagnoses_started = 0
-    # Track last examined ID for cursor persistence - must be the LAST incident
-    # we actually examined, not the last one we fetched but didn't process
-    last_examined_id: str | None = None
+    # Process incident batch
+    batch_outcome = process_incident_batch(
+        all_scanned_ids=all_scanned_ids,
+        page=page,
+        scan_bound=scan_bound,
+        max_diagnoses=max_diagnoses,
+        resolved_config=resolved_config,
+        collector_run_id=collector_run_id,
+        external_analysis_dir=external_analysis_dir,
+        resolved_now=resolved_now,
+    )
 
-    for incident_id in all_scanned_ids:
-        # Track last examined ID - this is what we'll persist for fair queuing
-        last_examined_id = incident_id
-        # Track incidents seen and processed for visibility
-        result.incidents_seen += 1
-        result.incidents_processed += 1
+    # Update result with batch results using named attributes
+    result.incident_results = list(batch_outcome.incident_results)
+    result.incidents_seen = len(batch_outcome.incident_results)
+    result.incidents_processed = len(batch_outcome.incident_results)
+    result.incidents_skipped = batch_outcome.incidents_skipped
+    result.incidents_with_errors = batch_outcome.incidents_with_errors
+    result.incidents_eligible = batch_outcome.incidents_eligible
+    result.incidents_ineligible = batch_outcome.incidents_ineligible
+    result.total_checks_run = batch_outcome.total_checks_run
+    result.total_review_packets_written = batch_outcome.total_review_packets_written
+    total_passes_completed = batch_outcome.total_passes_completed
+    total_checks_executed = batch_outcome.total_checks_executed
+    hypothesis_bursts_written = batch_outcome.hypothesis_bursts_written
+    overall_stop_reason = batch_outcome.stop_reason.value
+    first_incident_run_id = batch_outcome.first_incident_run_id
+    last_processed_cursor = batch_outcome.last_examined_cursor
 
-        incident_result = _process_incident(
-            incident_id=incident_id,
-            external_analysis_dir=external_analysis_dir,
-            config=resolved_config,
-            collector_run_id=collector_run_id,
-            now=resolved_now,
-        )
-        result.incident_results.append(incident_result.to_dict())
-
-        if incident_result.skipped:
-            result.incidents_skipped += 1
-            # Structured logging for skipped incidents - reveals WHY incidents are skipped
-            # Include collector_run_id for correlation with aggregate eligibility summary
-            _logger.info(
-                "incident_skipped_from_auto_loop",
-                extra={
-                    "event": "incident-skipped",
-                    "collector_run_id": collector_run_id,
-                    "incident_id": incident_id,
-                    "eligible": False,
-                    "eligibility_reason": incident_result.eligibility_reason,
-                    "skip_reason": incident_result.skip_reason,
-                    "budget_diagnostics": [
-                        d.to_dict() for d in (incident_result.budget_diagnostics or [])
-                    ],
-                },
-            )
-            # Continue scanning - don't stop on skipped incidents
-            # This is the key fix: we skip past exhausted incidents to find eligible ones
-            if result.incidents_processed >= scan_bound:
-                overall_stop_reason = "scan_bound_reached"
-                break
-            continue
-        elif incident_result.error is not None:
-            result.incidents_with_errors += 1
-            overall_stop_reason = "incident_error"
-            # Continue scanning for more eligible incidents
-            if diagnoses_started >= max_diagnoses or result.incidents_processed >= scan_bound:
-                break
-            continue
-        elif incident_result.eligible:
-            result.incidents_eligible += 1
-            diagnoses_started += 1
-            if first_incident_run_id is None and incident_result.run_id:
-                first_incident_run_id = incident_result.run_id
-            if incident_result.review_packet_written:
-                result.total_review_packets_written += 1
-            result.total_checks_run += incident_result.checks_run
-
-            if hasattr(incident_result, "hypothesis_loop_result") and incident_result.hypothesis_loop_result:
-                loop_result = incident_result.hypothesis_loop_result
-                total_passes_completed += loop_result.get("total_passes_completed", 0)
-                total_checks_executed += loop_result.get("total_checks_executed", 0)
-                if loop_result.get("hypothesis_burst_written"):
-                    hypothesis_bursts_written += 1
-
-            # Check if we've started enough diagnoses
-            if diagnoses_started >= max_diagnoses:
-                overall_stop_reason = "diagnosis_budget_exhausted"
-                break
-        else:
-            result.incidents_ineligible += 1
-            # Continue scanning for eligible incidents
-
-        # Safety: stop if we've scanned too many without finding eligible incidents
-        if result.incidents_processed >= scan_bound:
-            overall_stop_reason = "scan_bound_reached"
-            break
-
-    # Emit aggregate eligibility summary with skip_reasons breakdown
-    # This provides immediate visibility into why incidents were skipped
-    # without requiring log inspection of individual incident events
     _emit_eligibility_summary(
         collector_run_id=collector_run_id,
         result=result,
@@ -397,30 +267,18 @@ def run_automatic_diagnosis_loop_evidence_collection(
         run_id=first_incident_run_id,
     )
 
-    # Persist scan cursor for fair queuing
-    # Save cursor whenever we stop before proving end-of-scan:
-    # - diagnosis_budget_exhausted: normal success path, save progress
-    # - scan_bound_reached: hit scan limit, save progress
-    # - incident_error: stopped due to error, advance cursor to skip failed incident
-    # Note: Failed incidents are skipped, not retried immediately. They will be
-    # reconsidered after the cursor wraps around (reaches end and restarts).
-    if incident_ids is None and last_examined_id is not None and overall_stop_reason in (
-        "scan_bound_reached",
-        "diagnosis_budget_exhausted",
-        "incident_error",
-    ):
-        # Use last_examined_id (actual last processed), not all_scanned_ids[-1]
-        _save_scan_cursor(runs_dir, last_examined_id)
-        _logger.info(
-            "Saved scan cursor for next run",
-            extra={
-                "event": "scan-cursor-saved",
-                "last_incident_id": last_examined_id,
-                "stop_reason": overall_stop_reason,
-            },
+    # Cursor disposition using pure state machine
+    if incident_ids is None:
+        disposition = decide_cursor_disposition(
+            automatic_selection=True,
+            examined_rows=result.incidents_processed,
+            page_rows=len(all_scanned_ids),
+            has_more=page_has_more,
+            last_examined_cursor=last_processed_cursor,
+            listing_failed=False,
+            cursor_was_present=cursor_was_present,
         )
-    elif incident_ids is None and overall_stop_reason in ("loop_completed", "no_eligible_incidents"):
-        _clear_scan_cursor(runs_dir)
+        handle_cursor_disposition(disposition, runs_dir)
 
     return result
 
@@ -450,7 +308,6 @@ def collect_automatic_diagnosis_evidence(
     )
 
     if result.incident_results:
-        # Return the first incident result (single-incident API) - preserve all fields
         first = result.incident_results[0]
         return AutoLoopIncidentResult(**first)
 
@@ -465,6 +322,7 @@ def collect_automatic_diagnosis_evidence(
 
 __all__ = [
     "build_incident_case_file",
+    "build_eligibility_summary_payload",
     "check_incident_eligibility",
     "collect_automatic_diagnosis_evidence",
     "fetch_incident_for_diagnosis",
@@ -474,4 +332,6 @@ __all__ = [
     "run_automatic_diagnosis_loop_evidence_collection",
     "run_policy_enforced_loop_pass",
     "write_diagnosis_review_packet",
+    # Backward-compatible re-export for test patches
+    "_process_incident",
 ]

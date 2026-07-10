@@ -1,7 +1,9 @@
 """Incident diagnosis dispatcher for automatic diagnosis loop.
 
-This module selects the appropriate incident source (local vs backend-api) based on
-configuration and provides a unified interface for the automatic diagnosis loop.
+This module is a thin facade that:
+- Validates caller cursors
+- Resolves dispatch mode
+- Delegates to specialized modules
 
 Configuration:
 - K9B_INCIDENT_PROMOTION_MODE: local|backend-api|auto (default: auto)
@@ -10,23 +12,12 @@ Configuration:
 - K9B_INCIDENT_STORE_BACKEND: Backend type (memory|file|sqlite)
 - K9B_PROCESS_ROLE: Process role (backend|scheduler)
 
-Behavior:
-- local: Use existing local get_incident_store() for incident listing and fetch
-- backend-api: List and fetch incidents via backend internal API (required for scheduler+sqlite)
-- auto: Use backend-api if K9B_INCIDENT_STORE_BACKEND=sqlite or K9B_PROCESS_ROLE=scheduler
-
-This module mirrors the pattern from incident_promotion_dispatch.py but for
-the automatic diagnosis loop's incident listing requirement.
-
-Structured Events:
-- automatic-diagnosis-incident-list-start: Emitted when incident listing begins
-- automatic-diagnosis-incident-list-success: Emitted when incident listing succeeds
-- automatic-diagnosis-incident-list-failed: Emitted when incident listing fails
-
-This module is a facade that re-exports from specialized modules:
+This module delegates to:
 - incident_diagnosis_dispatch_contracts: Error types, config, summary
 - incident_diagnosis_dispatch_routes: Local store operations
 - incident_diagnosis_dispatch_backend: Backend API operations
+- incident_diagnosis_dispatch_pagination: Backend pagination implementation
+- incident_diagnosis_dispatch_page: Page types and local pagination
 """
 
 from __future__ import annotations
@@ -47,11 +38,27 @@ from .incident_diagnosis_dispatch_contracts import (
     DiagnosisIncidentSummary,
     IncidentDiagnosisDispatchConfig,
 )
+from .incident_diagnosis_dispatch_page import (
+    CursorDecodeFailure,
+    IncidentDiagnosisPage,
+    PageListed,
+    PageListingFailed,
+)
+from .incident_diagnosis_dispatch_pagination import (
+    _list_incidents_page_backend_api,
+)
 from .incident_diagnosis_dispatch_routes import (
     _classify_backend_listing_error,
     _fetch_incident_local,
     _get_dispatch_config,
     _list_incidents_local,
+)
+from .incident_diagnosis_keyset_cursor import (
+    DiagnosisPageLimit,
+)
+from .incident_diagnosis_pagination_results import (
+    IncidentPageListResult,
+    PageCursorRejected,
 )
 from .otel_events import (
     emit_autodiag_incident_list_failed_event,
@@ -134,8 +141,6 @@ def list_incidents_for_diagnosis(
         # Build diagnostic if we have an error_type from backend API failure
         diagnostic = None
         if error_type:
-            from .incident_diagnosis_dispatch_backend import _build_listing_error_diagnostic
-
             diagnostic = _build_listing_error_diagnostic(error_type, None, sanitized_error)
         emit_autodiag_incident_list_failed_event(span_ctx, sanitized_error, resolved, error_type, diagnostic)
 
@@ -174,11 +179,88 @@ def fetch_incident_for_diagnosis(
     )
 
 
+def list_incidents_for_diagnosis_page(
+    limit: DiagnosisPageLimit,
+    active_only: bool = True,
+    cursor: str | None = None,
+) -> IncidentPageListResult:
+    """List incidents for diagnosis with keyset pagination.
+
+    This is the cursor-based API that uses keyset pagination with
+    (first_observed_at, incident_id) for deterministic ordering.
+
+    Returns algebraic result:
+    - PageListed: Successful page listing
+    - PageCursorRejected: Cursor decoding failed
+    - PageListingFailed: Page listing operation failed
+
+    Args:
+        active_only: If True, only return incidents in active status
+        limit: Maximum number of incidents per page (DiagnosisPageLimit)
+        cursor: Optional opaque cursor token for pagination
+
+    Returns:
+        IncidentPageListResult with exhaustive variants
+    """
+    from typing import assert_never
+
+    from .incident_diagnosis_keyset_cursor import (
+        decode_cursor,
+    )
+
+    # Decode cursor if provided (cursor validation)
+    decoded_cursor = None
+    if cursor is not None:
+        decoded_cursor, cursor_err = decode_cursor(cursor)
+        if cursor_err is not None:
+            # Convert CursorDecodeError to CursorDecodeFailure for PageCursorRejected
+            return PageCursorRejected(
+                failure=CursorDecodeFailure(
+                    error_kind=cursor_err.kind,
+                    error_message=cursor_err.message,
+                )
+            )
+
+    config = _get_dispatch_config()
+    resolved = config.resolved_mode()
+
+    if resolved == MODE_LOCAL:
+        from .incident_diagnosis_dispatch_page import list_incidents_for_diagnosis_page_local
+
+        result = list_incidents_for_diagnosis_page_local(
+            active_only=active_only,
+            limit=limit,
+            after_cursor=decoded_cursor,
+        )
+        # Local mode returns PageListed | PageListingFailed - pass through directly
+        match result:
+            case PageListed():
+                return result
+            case PageListingFailed():
+                return result
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    # Backend API mode - delegate to pagination module
+    return _list_incidents_page_backend_api(
+        backend_url=config.backend_url,
+        internal_api_token=config.internal_api_token,
+        active_only=active_only,
+        limit=limit,
+        cursor=cursor,
+    )
+
+
 __all__ = [
     "BackendListingErrorType",
+    "CursorDecodeFailure",
+    "DiagnosisPageLimit",
     "IncidentDiagnosisDispatchConfig",
+    "IncidentDiagnosisPage",
+    "IncidentPageListResult",
     "DiagnosisIncidentSummary",
     "list_incidents_for_diagnosis",
+    "list_incidents_for_diagnosis_page",
     "fetch_incident_for_diagnosis",
     "MODE_AUTO",
     "MODE_BACKEND_API",

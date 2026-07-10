@@ -31,20 +31,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from .incident_bundle_promotion import merge_candidate_into_incident_with_bundle
 from .incident_events import IncidentEvent
 from .incident_evidence import (
-    ArtifactId,
     EvidenceLink,
     EvidenceRole,
-    make_artifact_id,
 )
 from .incident_lifecycle import (
     Incident,
     IncidentStatus,
-    incident_id_from_candidate,
-    merge_candidate_into_incident,
-    open_incident_from_candidate,
 )
 from .incident_lifecycle_transitions import (
     store_mark_collecting_evidence,
@@ -55,6 +49,25 @@ from .incident_lifecycle_transitions import (
     store_resolve,
     store_suppress,
 )
+from .incident_store_bundle_helpers import (
+    attach_evidence_to_incident,
+    find_incidents_by_bundle_id_for_store,
+)
+from .incident_store_diagnosis_loop_helpers import (
+    mark_diagnosis_loop_completed_for_store,
+    mark_diagnosis_loop_failed_for_store,
+    mark_diagnosis_loop_started_for_store,
+)
+from .incident_store_in_memory_pagination import in_memory_pagination
+from .incident_store_promotion_helpers import promote_candidates_for_store
+
+# Import pagination types used in list_incidents_for_diagnosis_page
+if TYPE_CHECKING:
+    from .incident_diagnosis_dispatch_page import IncidentDiagnosisPage
+    from .incident_diagnosis_keyset_cursor import (
+        DiagnosisPageLimit,
+        IncidentDiagnosisCursor,
+    )
 
 if TYPE_CHECKING:
     from .incident_candidates import IncidentCandidate
@@ -110,44 +123,7 @@ class IncidentStore:
         Returns:
             Tuple of all incidents (both new and updated), sorted by incident_id
         """
-        updated_incidents: dict[str, Incident] = {}
-
-        for candidate in candidates:
-            incident_id = incident_id_from_candidate(candidate)
-
-            if incident_id in self._incidents:
-                # Merge into existing incident
-                existing = self._incidents[incident_id]
-                if snapshot_bundle_id is not None:
-                    updated = merge_candidate_into_incident_with_bundle(
-                        existing, candidate, observed_at, snapshot_bundle_id
-                    )
-                else:
-                    updated = merge_candidate_into_incident(existing, candidate, observed_at)
-                self._incidents[incident_id] = updated
-                updated_incidents[incident_id] = updated
-            else:
-                # Open new incident
-                if snapshot_bundle_id is not None:
-                    # Create incident without bundle metadata - store_mark_collecting_evidence
-                    # will add the bundle attachment as part of the typed transition
-                    new_incident = open_incident_from_candidate(candidate, observed_at)
-                    self._incidents[incident_id] = new_incident
-                    # Transition to COLLECTING_EVIDENCE via typed store path
-                    # This also adds the bundle evidence link
-                    transitioned = store_mark_collecting_evidence(
-                        self, incident_id, snapshot_bundle_id, now=observed_at
-                    )
-                    if transitioned is not None:
-                        new_incident = transitioned
-                else:
-                    new_incident = open_incident_from_candidate(candidate, observed_at)
-                    self._incidents[incident_id] = new_incident
-                updated_incidents[incident_id] = new_incident
-
-        # Return snapshot copies to avoid exposing internal state
-        all_updated = [self._snapshot_incident(i) for i in updated_incidents.values()]
-        return tuple(sorted(all_updated, key=lambda i: i.incident_id))
+        return promote_candidates_for_store(self, candidates, observed_at, snapshot_bundle_id)
 
     def promote_candidates_from_bundle(
         self,
@@ -289,19 +265,7 @@ class IncidentStore:
         Returns:
             Tuple of matching incidents (excluding protected statuses)
         """
-        matching: list[Incident] = []
-        for incident in self._incidents.values():
-            if incident.latest_snapshot_bundle_id == snapshot_bundle_id:
-                # Do not include protected statuses (terminal-ish states)
-                if incident.status in (
-                    IncidentStatus.SUPPRESSED,
-                    IncidentStatus.DUPLICATE,
-                    IncidentStatus.RESOLVED,
-                ):
-                    continue
-                matching.append(self._snapshot_incident(incident))
-
-        return tuple(sorted(matching, key=lambda i: i.incident_id))
+        return find_incidents_by_bundle_id_for_store(self, snapshot_bundle_id)
 
     def mark_ready_for_review_by_bundle_id(
         self,
@@ -391,17 +355,7 @@ class IncidentStore:
         Returns:
             Updated incident snapshot, or None if not found
         """
-        from .incident_lifecycle import attach_evidence_artifact as _attach_evidence_artifact
-
-        incident = self._incidents.get(incident_id)
-        if incident is None:
-            return None
-
-        # Use branded ID at the construction seam
-        branded_artifact_id: ArtifactId = make_artifact_id(artifact_id)
-        updated = _attach_evidence_artifact(incident, branded_artifact_id, role)
-        self._incidents[incident_id] = updated
-        return self._snapshot_incident(updated)
+        return attach_evidence_to_incident(self, incident_id, artifact_id, role)
 
     def mark_diagnosis_loop_started(
         self,
@@ -420,10 +374,7 @@ class IncidentStore:
         Returns:
             Updated incident snapshot, or None if not found
         """
-        from .incident_diagnosis_loop_store_helpers import mark_diagnosis_loop_started as _helper
-
-        updated = _helper(self, incident_id, run_id, collector_run_id)
-        return self._snapshot_incident(updated) if updated else None
+        return mark_diagnosis_loop_started_for_store(self, incident_id, run_id, collector_run_id)
 
     def mark_diagnosis_loop_completed(
         self,
@@ -453,14 +404,11 @@ class IncidentStore:
         Returns:
             Updated incident snapshot, or None if not found
         """
-        from .incident_diagnosis_loop_store_helpers import mark_diagnosis_loop_completed as _helper
-
-        updated = _helper(
+        return mark_diagnosis_loop_completed_for_store(
             self, incident_id, run_id, collector_run_id,
             review_packet_name, checks_requested, checks_run, checks_rejected,
             decision=decision,
         )
-        return self._snapshot_incident(updated) if updated else None
 
     def mark_diagnosis_loop_failed(
         self,
@@ -481,10 +429,36 @@ class IncidentStore:
         Returns:
             Updated incident snapshot, or None if not found
         """
-        from .incident_diagnosis_loop_store_helpers import mark_diagnosis_loop_failed as _helper
+        return mark_diagnosis_loop_failed_for_store(self, incident_id, run_id, collector_run_id, unavailable_reason)
 
-        updated = _helper(self, incident_id, run_id, collector_run_id, unavailable_reason)
-        return self._snapshot_incident(updated) if updated else None
+    def list_incidents_for_diagnosis_page(
+        self,
+        active_only: bool,
+        limit: DiagnosisPageLimit,
+        after_cursor: IncidentDiagnosisCursor | None,
+    ) -> IncidentDiagnosisPage:
+        """List incidents for diagnosis with keyset pagination.
+
+        This method provides the page listing capability without exposing
+        the raw connection to callers.
+
+        For in-memory store, this returns a fallback page implementation.
+        SQLite store provides the full keyset pagination.
+
+        Args:
+            active_only: If True, only return incidents in active status
+            limit: Maximum number of incidents per page (DiagnosisPageLimit)
+            after_cursor: Optional cursor to resume after
+
+        Returns:
+            IncidentDiagnosisPage with paginated results
+        """
+        # Get all incidents sorted by first_observed_at
+        incidents = list(self._incidents.values())
+        incidents.sort(key=lambda i: (i.first_observed_at or datetime.min, i.incident_id))
+
+        # Use extracted pagination function
+        return in_memory_pagination(incidents, active_only, limit, after_cursor)
 
     def __len__(self) -> int:
         """Return the number of incidents in the store."""

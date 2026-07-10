@@ -32,6 +32,23 @@ _logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Observability Fields (not logged)
+# =============================================================================
+
+# Cursor observability - never log the full token
+_CURSOR_OBSERVABILITY_FIELDS = frozenset({
+    "cursor_present",
+    "page_size",
+    "has_more",
+    "incidents_returned",
+    "incidents_examined",
+    "diagnoses_started",
+    "cursor_schema_version",
+    "cursor_reset_reason",
+})
+
+
+# =============================================================================
 # Listing Error Diagnostic
 # =============================================================================
 

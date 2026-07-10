@@ -181,6 +181,8 @@ class SchedulerClient:
         self,
         status: str | None = None,
         limit: int | None = None,
+        cursor: str | None = None,
+        active_only: bool = False,
         timeout: float = 30.0,
     ) -> dict[str, Any]:
         """List incidents from backend via internal API.
@@ -193,15 +195,19 @@ class SchedulerClient:
         Args:
             status: Optional status filter (e.g., "open", "collecting_evidence")
             limit: Optional maximum number of incidents to return
+            cursor: Optional cursor token for keyset pagination
+            active_only: If True, only return active incidents
             timeout: Request timeout in seconds
 
         Returns:
-            Dict with "incidents" list and "total" count, or error dict
+            Dict with "incidents" list, "nextCursor", "hasMore", and "total", or error dict
             Error dict includes:
             - error: Error message
             - error_type: Classified error type (unauthorized, timeout, etc.)
             - status_code: HTTP status code if available
             - incidents: Empty list
+            - nextCursor: None
+            - hasMore: False
             - total: 0
         """
         # Validate backend URL first - return bounded error if not configured
@@ -213,6 +219,8 @@ class SchedulerClient:
                 "error_type": "missing_backend_url",
                 "status_code": None,
                 "incidents": [],
+                "nextCursor": None,
+                "hasMore": False,
                 "total": 0,
             }
 
@@ -223,6 +231,8 @@ class SchedulerClient:
                 "error_type": "missing_internal_token",
                 "status_code": None,
                 "incidents": [],
+                "nextCursor": None,
+                "hasMore": False,
                 "total": 0,
             }
 
@@ -233,6 +243,10 @@ class SchedulerClient:
             params["status"] = status
         if limit is not None:
             params["limit"] = limit
+        if cursor is not None:
+            params["cursor"] = cursor
+        if active_only:
+            params["activeOnly"] = "true"
         if params:
             url = f"{url}?{urlencode(params)}"
 
@@ -253,6 +267,8 @@ class SchedulerClient:
                         "error_type": "unexpected_shape",
                         "status_code": None,
                         "incidents": [],
+                        "nextCursor": None,
+                        "hasMore": False,
                         "total": 0,
                     }
                 if "incidents" not in decoded:
@@ -261,6 +277,8 @@ class SchedulerClient:
                         "error_type": "unexpected_shape",
                         "status_code": None,
                         "incidents": [],
+                        "nextCursor": None,
+                        "hasMore": False,
                         "total": 0,
                     }
                 if not isinstance(decoded["incidents"], list):
@@ -269,15 +287,25 @@ class SchedulerClient:
                         "error_type": "unexpected_shape",
                         "status_code": None,
                         "incidents": [],
+                        "nextCursor": None,
+                        "hasMore": False,
                         "total": 0,
                     }
-                return decoded
+                # Return with default values for backward compatibility
+                return {
+                    "incidents": decoded.get("incidents", []),
+                    "nextCursor": decoded.get("nextCursor"),
+                    "hasMore": decoded.get("hasMore", False),
+                    "total": decoded.get("total", len(decoded.get("incidents", []))),
+                }
         except json.JSONDecodeError:
             return {
                 "error": "Invalid JSON in response",
                 "error_type": "invalid_json",
                 "status_code": None,
                 "incidents": [],
+                "nextCursor": None,
+                "hasMore": False,
                 "total": 0,
             }
         except urllib.error.HTTPError as e:
@@ -304,6 +332,8 @@ class SchedulerClient:
                     "error_type": error_type,
                     "status_code": e.code,
                     "incidents": [],
+                    "nextCursor": None,
+                    "hasMore": False,
                     "total": 0,
                 }
             except json.JSONDecodeError:
@@ -312,6 +342,8 @@ class SchedulerClient:
                     "error_type": error_type,
                     "status_code": e.code,
                     "incidents": [],
+                    "nextCursor": None,
+                    "hasMore": False,
                     "total": 0,
                 }
         except TimeoutError:
@@ -320,6 +352,8 @@ class SchedulerClient:
                 "error_type": "timeout",
                 "status_code": None,
                 "incidents": [],
+                "nextCursor": None,
+                "hasMore": False,
                 "total": 0,
             }
         except Exception as e:
@@ -336,6 +370,8 @@ class SchedulerClient:
                 "error_type": error_type,
                 "status_code": None,
                 "incidents": [],
+                "nextCursor": None,
+                "hasMore": False,
                 "total": 0,
             }
 
