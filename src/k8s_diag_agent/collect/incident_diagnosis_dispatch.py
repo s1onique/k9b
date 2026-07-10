@@ -38,9 +38,11 @@ from .incident_diagnosis_dispatch_contracts import (
     MODE_AUTO,
     MODE_BACKEND_API,
     MODE_LOCAL,
+    BackendIncidentShapeError,
     BackendListingErrorType,
     DiagnosisIncidentSummary,
     IncidentDiagnosisDispatchConfig,
+    parse_backend_incident_detail_payload,
 )
 from .incident_diagnosis_dispatch_routes import (
     _classify_backend_listing_error,
@@ -439,7 +441,6 @@ def _fetch_incident_backend_api(
         return None, False, error_msg
 
     from ..ui.server_incident_internal_client import SchedulerClient
-    from .incident_lifecycle import Incident
 
     client = SchedulerClient(base_url=backend_url, token=internal_api_token)
 
@@ -457,8 +458,9 @@ def _fetch_incident_backend_api(
             )
             return None, True, None  # Not found is a success with None incident
 
-        # Deserialize dict to Incident object
-        incident = Incident.from_dict(incident_data)
+        # Parse and validate backend response using typed contract parser
+        # This ensures no KeyError can escape for missing first_observed_at
+        incident = parse_backend_incident_detail_payload(incident_data)
 
         _logger.info(
             "Fetched incident from backend API",
@@ -470,6 +472,20 @@ def _fetch_incident_backend_api(
         )
 
         return incident, True, None
+
+    except BackendIncidentShapeError as exc:
+        # Shape validation error - log structured event, no KeyError escape
+        missing = exc.missing_field
+        _logger.error(
+            "Backend API incident fetch returned invalid shape",
+            extra={
+                "event": "backend-incident-fetch-invalid-shape",
+                "incident_id": incident_id,
+                "missing_field": missing,
+                "error": str(exc),
+            },
+        )
+        return None, False, str(exc)
 
     except Exception as e:
         _logger.exception("Backend API incident fetch failed")

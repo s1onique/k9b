@@ -14,7 +14,7 @@ Hard constraints enforced:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Protocol, TypedDict
+from typing import Any, Literal, Protocol, TypedDict
 
 # =============================================================================
 # TypedDict Payloads (moved from api_payloads_incident_reads.py for LLM-friendliness)
@@ -73,20 +73,11 @@ class IncidentInternalListItemPayload(TypedDict):
 class IncidentInternalDetailPayload(TypedDict):
     """Internal scheduler-to-backend incident detail projection.
 
-    This payload is used by the internal API (GET /api/internal/incidents/{id})
-    for scheduler/backend communication. It provides full incident detail
-    for the automatic diagnosis loop.
+    DEPRECATED: This payload uses created_at/updated_at which are incompatible
+    with Incident.from_dict(). Use IncidentInternalDetailResponsePayload instead.
 
-    Design constraints:
-    - Serializes first_observed_at as created_at (API compatibility)
-    - Serializes last_observed_at as updated_at (API compatibility)
-    - Includes signals for diagnosis context
-    - object_kind is a plain string (not enum.value)
-
-    Haskellized: one total projection function from Incident -> dict,
-    with no ad-hoc field access scattered in handlers.
-
-    Note: All fields are required (total=True) for maximum static enforcement.
+    This payload is kept for any existing callers that explicitly need the
+    projection shape. New code should use the wrapper response type.
     """
 
     incident_id: str
@@ -98,11 +89,33 @@ class IncidentInternalDetailPayload(TypedDict):
     candidate_class: str
     severity: str
     status: str
-    created_at: str | None  # Mapped from first_observed_at
-    updated_at: str | None  # Mapped from last_observed_at
+    created_at: str | None  # Mapped from first_observed_at (DEPRECATED)
+    updated_at: str | None  # Mapped from last_observed_at (DEPRECATED)
     signal_count: int
     evidence_count: int
     signals: list[IncidentSignalPayload]
+
+
+class IncidentInternalDetailResponsePayload(TypedDict):
+    """Typed wrapper for the internal scheduler-to-backend detail endpoint.
+
+    This is the canonical response type for GET /api/internal/incidents/{id}.
+    It wraps the full Incident.to_dict() output in a typed envelope.
+
+    The nested "incident" field contains the canonical incident shape with:
+    - first_observed_at (required)
+    - last_observed_at (required)
+
+    This wrapper allows the scheduler to validate the shape before calling
+    Incident.from_dict(), ensuring no KeyError escapes.
+
+    Haskellized: one total projection function from Incident -> wrapped dict,
+    with no ad-hoc field access scattered in handlers.
+    """
+
+    schema_version: str
+    payload_type: Literal["incident-internal-detail"]
+    incident: dict[str, object]
 
 
 # =============================================================================
@@ -146,6 +159,19 @@ class IncidentSignalReadable(Protocol):
 # Protocol for structural subtyping - static analysis only, not runtime-checked.
 # Using Protocol enables duck-typing: any object with the required properties
 # can be serialized, regardless of concrete type.
+class IncidentCanonicalSerializable(Protocol):
+    """Structural protocol for canonical incident serialization.
+
+    This protocol defines the interface required for producing canonical
+    incident shapes suitable for scheduler/backend API contracts.
+
+    The key method is to_dict() which returns the canonical incident
+    serialization format with "class" (not "candidate_class").
+    """
+
+    def to_dict(self) -> dict[str, Any]: ...
+
+
 class IncidentReadable(Protocol):
     """Structural protocol for incident-like read inputs.
 
@@ -212,6 +238,7 @@ class IncidentReadable(Protocol):
 __all__ = [
     "build_incident_internal_list_item_payload",
     "build_incident_internal_detail_payload",
+    "build_incident_internal_detail_response_payload",
 ]
 
 
@@ -314,4 +341,38 @@ def build_incident_internal_list_item_payload(
         ),
         "signal_count": incident.signal_count,
         "evidence_count": incident.evidence_count,
+    }
+
+
+def build_incident_internal_detail_response_payload(
+    incident: IncidentCanonicalSerializable,
+) -> IncidentInternalDetailResponsePayload:
+    """Build the canonical wrapper response for internal detail endpoint.
+
+    This function produces the typed wrapper response for GET /api/internal/incidents/{id}.
+    The nested "incident" field contains the canonical Incident.to_dict() shape,
+    which includes first_observed_at and last_observed_at.
+
+    This wrapper allows the scheduler to:
+    1. Validate the response has the expected envelope shape
+    2. Extract the nested incident dict
+    3. Call Incident.from_dict() on the canonical shape without KeyError risk
+
+    Haskellized: one total projection function from Incident -> wrapped dict,
+    with no ad-hoc field access scattered in handlers.
+
+    Args:
+        incident: Incident model
+
+    Returns:
+        IncidentInternalDetailResponsePayload with nested canonical incident dict
+    """
+    # Use incident.to_dict() to get the canonical shape
+    # This guarantees first_observed_at and last_observed_at are present
+    incident_dict = incident.to_dict()
+
+    return {
+        "schema_version": "1",
+        "payload_type": "incident-internal-detail",
+        "incident": incident_dict,
     }

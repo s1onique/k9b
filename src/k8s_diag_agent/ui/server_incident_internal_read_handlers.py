@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from .api_incident_internal_reads import (
-    build_incident_internal_detail_payload,
+    build_incident_internal_detail_response_payload,
     build_incident_internal_list_item_payload,
 )
 from .server_incident_internal_auth import _validate_internal_token
@@ -54,8 +54,9 @@ def handle_get_incident(handler: HealthUIRequestHandler, incident_id: str) -> No
 
         # Haskellized: use total projection function for serialization
         # instead of ad-hoc field access scattered in handler
+        # Uses wrapper response with canonical incident.to_dict() for scheduler compatibility
         handler._send_json(
-            build_incident_internal_detail_payload(incident),
+            build_incident_internal_detail_response_payload(incident),
             200,
         )
 
