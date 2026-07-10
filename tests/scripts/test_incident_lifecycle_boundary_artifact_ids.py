@@ -25,7 +25,9 @@ from scripts.incident_lifecycle_boundary.artifact_ids import (
 
 # R2: Use correct repo root path (tests/scripts/ -> repo root is 3 levels up)
 REPO_ROOT = Path(__file__).parent.parent.parent
-EVIDENCE_MODULE = REPO_ROOT / "src" / "k8s_diag_agent" / "collect" / "incident_evidence.py"
+# NOTE: incident_evidence_types.py is the canonical source of evidence type definitions
+# after module split f6d707a; incident_evidence.py is a compatibility facade only.
+EVIDENCE_MODULE = REPO_ROOT / "src" / "k8s_diag_agent" / "collect" / "incident_evidence_types.py"
 
 
 class TestExtractNewTypeAliases:

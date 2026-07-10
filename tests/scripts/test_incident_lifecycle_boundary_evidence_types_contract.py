@@ -16,13 +16,17 @@ class TestEvidenceTypeContract:
     """Tests for the complete evidence type contract check."""
 
     def test_passes_for_actual_evidence_module(self) -> None:
-        """Actual incident_evidence.py passes the complete contract check."""
+        """Actual incident_evidence_types.py passes the complete contract check.
+
+        NOTE: incident_evidence_types.py is the canonical source of evidence type definitions
+        after module split f6d707a; incident_evidence.py is a compatibility facade only.
+        """
         evidence_module = (
             Path(__file__).parent.parent.parent
             / "src"
             / "k8s_diag_agent"
             / "collect"
-            / "incident_evidence.py"
+            / "incident_evidence_types.py"
         )
         if evidence_module.exists():
             errors = check_evidence_type_contract(

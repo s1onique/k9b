@@ -145,13 +145,17 @@ EvidenceKindCode = Literal[
             Path(temp_path).unlink()
 
     def test_passes_for_actual_evidence_module(self) -> None:
-        """Actual incident_evidence.py passes type alias checks."""
+        """Actual incident_evidence_types.py passes type alias checks.
+
+        NOTE: incident_evidence_types.py is the canonical source of evidence type definitions
+        after module split f6d707a; incident_evidence.py is a compatibility facade only.
+        """
         evidence_module = (
             Path(__file__).parent.parent.parent
             / "src"
             / "k8s_diag_agent"
             / "collect"
-            / "incident_evidence.py"
+            / "incident_evidence_types.py"
         )
         if evidence_module.exists():
             errors = check_evidence_type_aliases(str(evidence_module))

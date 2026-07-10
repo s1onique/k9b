@@ -1,8 +1,12 @@
 """Evidence artifact models for incident management.
 
 This module provides backward-compatible imports from submodules:
-- incident_evidence_types: Core types, enums, and models
+- incident_evidence_types: Core types, enums, and models (canonical source)
 - incident_evidence_llm_safe: LLM-safe evidence types and helpers
+
+NOTE: This module is a compatibility facade only. The canonical source of evidence
+type definitions (ArtifactId, EvidenceRoleCode, EvidenceKindCode, etc.) is
+incident_evidence_types.py after module split f6d707a.
 
 For new code, import directly from submodules for better tree-shaking:
     from k8s_diag_agent.collect.incident_evidence_types import (

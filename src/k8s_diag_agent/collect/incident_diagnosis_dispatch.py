@@ -47,6 +47,7 @@ from .incident_diagnosis_dispatch_contracts import (
     IncidentDiagnosisDispatchConfig,
 )
 from .incident_diagnosis_dispatch_routes import (
+    _classify_backend_listing_error,
     _fetch_incident_local,
     _get_dispatch_config,
     _list_incidents_local,
@@ -174,4 +175,6 @@ __all__ = [
     "MODE_AUTO",
     "MODE_BACKEND_API",
     "MODE_LOCAL",
+    # Internal helpers exported for testing compatibility
+    "_classify_backend_listing_error",
 ]
