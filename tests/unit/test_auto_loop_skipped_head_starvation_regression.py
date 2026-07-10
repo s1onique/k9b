@@ -17,9 +17,8 @@ These tests prove the fix:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -31,6 +30,18 @@ from k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection imp
 )
 from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
     AutoLoopIncidentResult,
+)
+from k8s_diag_agent.collect.incident_diagnosis_dispatch_contracts import (
+    DiagnosisPageIncident,
+)
+from k8s_diag_agent.collect.incident_diagnosis_dispatch_page import (
+    IncidentDiagnosisPage,
+)
+from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
+    cursor_after_page_incident,
+)
+from k8s_diag_agent.collect.incident_diagnosis_pagination_results import (
+    AutomaticPageListed,
 )
 
 
@@ -52,6 +63,51 @@ def enabled_auto_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.is_automatic_diagnosis_loop_enabled",
         lambda: True,
+    )
+
+
+def _make_page_incident(incident_id: str, hour: int, minute: int = 0) -> DiagnosisPageIncident:
+    """Create a DiagnosisPageIncident with exact timestamp text."""
+    timestamp = datetime(2024, 6, 15, hour, minute, 0, tzinfo=UTC)
+    ts_text = timestamp.isoformat()
+    return DiagnosisPageIncident(
+        incident_id=incident_id,
+        status="open",
+        first_observed_at=timestamp,
+        first_observed_at_key=ts_text,
+    )
+
+
+def _make_page(
+    incident_ids: list[str],
+    *,
+    has_more: bool,
+    start_hour: int = 10,
+) -> IncidentDiagnosisPage:
+    """Create an IncidentDiagnosisPage for testing.
+
+    Args:
+        incident_ids: List of incident IDs for this page
+        has_more: Whether there are more pages after this one
+        start_hour: Starting hour for timestamps (default 10)
+    """
+    incidents = []
+    for i, inc_id in enumerate(incident_ids):
+        ts = datetime(2024, 6, 15, start_hour, i, 0, tzinfo=UTC)
+        ts_text = ts.isoformat()
+        incidents.append(DiagnosisPageIncident(
+            incident_id=inc_id,
+            status="open",
+            first_observed_at=ts,
+            first_observed_at_key=ts_text,
+        ))
+
+    next_cursor = cursor_after_page_incident(incidents[-1]) if has_more else None
+
+    return IncidentDiagnosisPage(
+        incidents=tuple(incidents),
+        next_cursor=next_cursor,
+        has_more=has_more,
     )
 
 
@@ -79,25 +135,16 @@ class TestSkippedHeadStarvationRegression:
 
         Expected: incident 11 starts diagnosis (not starved by the first 10)
         """
-        # Mock incident listing to return 15 incidents
-        mock_incidents = []
-        for i in range(1, 16):
-            mock_incident = MagicMock()
-            mock_incident.incident_id = f"incident-{i:02d}"
-            mock_incident.status.value = "open"
-            mock_incidents.append(mock_incident)
+        # Create page with 15 incidents, has_more=False (terminal page)
+        incident_ids = [f"incident-{i:02d}" for i in range(1, 16)]
+        mock_page = _make_page(incident_ids, has_more=False)
 
-        def mock_list_incidents(
-            active_only: bool = True,
-            limit: int | None = None,
-            after_incident_id: str | None = None,
-        ):
-            # Return all 15 with limit 30 (scan_bound = 5 * 3 = 15)
-            return mock_incidents[: min(len(mock_incidents), limit or 30)], True, None
+        def mock_list_page(scan_cursor, scan_bound):
+            return AutomaticPageListed(page=mock_page)
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_for_diagnosis",
-            mock_list_incidents,
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination",
+            mock_list_page,
         )
 
         # Track processed incidents
@@ -133,7 +180,7 @@ class TestSkippedHeadStarvationRegression:
                 )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
             mock_process_incident,
         )
 
@@ -177,25 +224,16 @@ class TestSkippedHeadStarvationRegression:
 
         Expected: incidents 16-20 start diagnosis (not starved by the first 15)
         """
-        # Mock incident listing
-        mock_incidents = []
-        for i in range(1, 21):
-            mock_incident = MagicMock()
-            mock_incident.incident_id = f"incident-{i:02d}"
-            mock_incident.status.value = "open"
-            mock_incidents.append(mock_incident)
+        # Create page with 20 incidents, has_more=False (terminal page)
+        incident_ids = [f"incident-{i:02d}" for i in range(1, 21)]
+        mock_page = _make_page(incident_ids, has_more=False)
 
-        def mock_list_incidents(
-            active_only: bool = True,
-            limit: int | None = None,
-            after_incident_id: str | None = None,
-        ):
-            # Return all 20 incidents, limited by scan_bound (7*3=21)
-            return mock_incidents[: min(len(mock_incidents), limit or 30)], True, None
+        def mock_list_page(scan_cursor, scan_bound):
+            return AutomaticPageListed(page=mock_page)
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_for_diagnosis",
-            mock_list_incidents,
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination",
+            mock_list_page,
         )
 
         processed = []
@@ -228,7 +266,7 @@ class TestSkippedHeadStarvationRegression:
                 )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
             mock_process_incident,
         )
 
@@ -262,23 +300,16 @@ class TestSkippedHeadStarvationRegression:
 
         Expected: exactly 3 diagnoses started, loop stops
         """
-        mock_incidents = []
-        for i in range(1, 11):
-            mock_incident = MagicMock()
-            mock_incident.incident_id = f"incident-{i:02d}"
-            mock_incident.status.value = "open"
-            mock_incidents.append(mock_incident)
+        # Create page with 10 incidents, has_more=False (terminal page)
+        incident_ids = [f"incident-{i:02d}" for i in range(1, 11)]
+        mock_page = _make_page(incident_ids, has_more=False)
 
-        def mock_list_incidents(
-            active_only: bool = True,
-            limit: int | None = None,
-            after_incident_id: str | None = None,
-        ):
-            return mock_incidents, True, None
+        def mock_list_page(scan_cursor, scan_bound):
+            return AutomaticPageListed(page=mock_page)
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_for_diagnosis",
-            mock_list_incidents,
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination",
+            mock_list_page,
         )
 
         processed = []
@@ -303,7 +334,7 @@ class TestSkippedHeadStarvationRegression:
             )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
             mock_process_incident,
         )
 
@@ -337,28 +368,16 @@ class TestSkippedHeadStarvationRegression:
 
         Expected: loop processes up to scan_bound and stops with 0 eligible
         """
-        # Create 30 exhausted incidents
-        mock_incidents = []
-        for i in range(1, 31):
-            mock_incident = MagicMock()
-            mock_incident.incident_id = f"incident-{i:02d}"
-            mock_incident.status.value = "open"
-            mock_incidents.append(mock_incident)
+        # Create page with 30 exhausted incidents, has_more=False (terminal page)
+        incident_ids = [f"incident-{i:02d}" for i in range(1, 31)]
+        mock_page = _make_page(incident_ids, has_more=False)
 
-        # Use smaller scan_bound for test (scan_bound = max_incidents_per_run * 3)
-        # With max=1, scan_bound=3
-
-        def mock_list_incidents(
-            active_only: bool = True,
-            limit: int | None = None,
-            after_incident_id: str | None = None,
-        ):
-            # Limit is scan_bound = 3
-            return mock_incidents[:limit], True, None
+        def mock_list_page(scan_cursor, scan_bound):
+            return AutomaticPageListed(page=mock_page)
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_for_diagnosis",
-            mock_list_incidents,
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination",
+            mock_list_page,
         )
 
         processed = []
@@ -380,7 +399,7 @@ class TestSkippedHeadStarvationRegression:
             )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
             mock_process_incident,
         )
 

@@ -15,6 +15,12 @@ import pytest
 
 from k8s_diag_agent.collect.incident_diagnosis_auto_loop import run_automatic_diagnosis_loop_evidence_collection
 from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import AutoLoopIncidentResult
+from k8s_diag_agent.collect.incident_diagnosis_dispatch_page import (
+    IncidentDiagnosisPage,
+)
+from k8s_diag_agent.collect.incident_diagnosis_pagination_results import (
+    AutomaticPageListed,
+)
 from k8s_diag_agent.collect.incident_store import IncidentStore
 from k8s_diag_agent.collect.incident_store_provider import set_incident_store
 from tests.unit.incident_store_fixtures import make_candidate
@@ -91,9 +97,20 @@ class TestExactlyOneSummaryEmission:
             "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.is_automatic_diagnosis_loop_enabled",
             lambda: True,
         )
+
+        # Patch list_incidents_with_pagination to return an empty page
+        def mock_list_page(scan_cursor, scan_bound):
+            return AutomaticPageListed(
+                page=IncidentDiagnosisPage(
+                    incidents=(),  # Empty page
+                    next_cursor=None,
+                    has_more=False,
+                )
+            )
+
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_for_diagnosis",
-            lambda **kwargs: ([], True, None),
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination",
+            mock_list_page,
         )
         monkeypatch.setattr(
             "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.log_zero_incidents_diagnostic",
@@ -138,7 +155,7 @@ class TestExactlyOneSummaryEmission:
                 return result
 
             monkeypatch.setattr(
-                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
                 mock_process,
             )
 

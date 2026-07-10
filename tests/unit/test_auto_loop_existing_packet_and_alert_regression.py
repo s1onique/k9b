@@ -7,7 +7,7 @@ Tests prove that:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -21,6 +21,18 @@ from k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection imp
 )
 from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
     AutoLoopIncidentResult,
+)
+from k8s_diag_agent.collect.incident_diagnosis_dispatch_contracts import (
+    DiagnosisPageIncident,
+)
+from k8s_diag_agent.collect.incident_diagnosis_dispatch_page import (
+    IncidentDiagnosisPage,
+)
+from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
+    cursor_after_page_incident,
+)
+from k8s_diag_agent.collect.incident_diagnosis_pagination_results import (
+    AutomaticPageListed,
 )
 
 
@@ -45,6 +57,55 @@ def enabled_auto_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _make_page_incident(incident_id: str, hour: int, minute: int = 0) -> DiagnosisPageIncident:
+    """Create a DiagnosisPageIncident with exact timestamp text."""
+    timestamp = datetime(2024, 6, 15, hour, minute, 0, tzinfo=UTC)
+    ts_text = timestamp.isoformat()
+    return DiagnosisPageIncident(
+        incident_id=incident_id,
+        status="open",
+        first_observed_at=timestamp,
+        first_observed_at_key=ts_text,
+    )
+
+
+def _make_page(incident_ids: list[str], start_hour: int = 10) -> IncidentDiagnosisPage:
+    """Create an IncidentDiagnosisPage for testing."""
+    incidents = []
+    for i, inc_id in enumerate(incident_ids):
+        ts = datetime(2024, 6, 15, start_hour, i, 0, tzinfo=UTC)
+        ts_text = ts.isoformat()
+        incidents.append(DiagnosisPageIncident(
+            incident_id=inc_id,
+            status="open",
+            first_observed_at=ts,
+            first_observed_at_key=ts_text,
+        ))
+
+    has_more = len(incidents) > 0
+    next_cursor = cursor_after_page_incident(incidents[-1]) if has_more else None
+
+    return IncidentDiagnosisPage(
+        incidents=tuple(incidents),
+        next_cursor=next_cursor,
+        has_more=has_more,
+    )
+
+
+def _mock_incident(incident_id: str) -> MagicMock:
+    """Create a mock incident object for fetch_incident_for_diagnosis."""
+    mock = MagicMock()
+    mock.incident_id = incident_id
+    mock.signals = []
+    mock.to_dict.return_value = {
+        "incident_id": incident_id,
+        "status": "open",
+        "title": f"Test incident {incident_id}",
+        "first_observed_at": "2024-06-15T10:00:00+00:00",
+    }
+    return mock
+
+
 class TestExistingPacketContinuesIntoLoop:
     """Test that existing review packets don't prevent diagnosis loop from running."""
 
@@ -55,27 +116,36 @@ class TestExistingPacketContinuesIntoLoop:
         enabled_auto_loop,
     ) -> None:
         """Bug fix regression: Existing review packet should not skip diagnosis loop."""
-        mock_incidents = []
-        mock_incident = MagicMock()
-        mock_incident.incident_id = "incident-01"
-        mock_incident.status.value = "open"
-        mock_incidents.append(mock_incident)
+        # Create page with one incident
+        mock_page = _make_page(["incident-01"])
 
+        def mock_list_page(scan_cursor, scan_bound):
+            return AutomaticPageListed(page=mock_page)
+
+        monkeypatch.setattr(
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination",
+            mock_list_page,
+        )
+
+        # Mock fetch_incident_for_diagnosis to avoid needing a real incident store
+        def mock_fetch(incident_id: str):
+            return _mock_incident(incident_id), True, None
+
+        monkeypatch.setattr(
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.fetch_incident_for_diagnosis",
+            mock_fetch,
+        )
+
+        # Mock check_incident_eligibility to return eligible
+        monkeypatch.setattr(
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.check_incident_eligibility",
+            lambda *args, **kwargs: MagicMock(eligible=True, reason="active_incident"),
+        )
+
+        # Create review packet directory with existing packet
         review_packet_dir = temp_external_dir / "review-packets"
         review_packet_dir.mkdir(parents=True, exist_ok=True)
         (review_packet_dir / "auto-incident-01-20240101-test-diagnosis-review-packet.json").touch()
-
-        def mock_list_incidents(
-            active_only: bool = True,
-            limit: int | None = None,
-            after_incident_id: str | None = None,
-        ):
-            return mock_incidents, True, None
-
-        monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_for_diagnosis",
-            mock_list_incidents,
-        )
 
         diagnosis_loop_run = []
 
@@ -97,7 +167,7 @@ class TestExistingPacketContinuesIntoLoop:
             )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
             mock_process_incident,
         )
 
@@ -125,23 +195,30 @@ class TestAlertRefreshDoesNotStarvePendingWork:
         enabled_auto_loop,
     ) -> None:
         """Bug fix regression: Alert refresh should not starve unprocessed incidents."""
-        mock_incidents = []
-        for i, name in enumerate(["incident-old", "incident-new"], 1):
-            mock_incident = MagicMock()
-            mock_incident.incident_id = name
-            mock_incident.status.value = "open"
-            mock_incidents.append(mock_incident)
+        # Create page with two incidents
+        mock_page = _make_page(["incident-old", "incident-new"])
 
-        def mock_list_incidents(
-            active_only: bool = True,
-            limit: int | None = None,
-            after_incident_id: str | None = None,
-        ):
-            return mock_incidents, True, None
+        def mock_list_page(scan_cursor, scan_bound):
+            return AutomaticPageListed(page=mock_page)
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_for_diagnosis",
-            mock_list_incidents,
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination",
+            mock_list_page,
+        )
+
+        # Mock fetch_incident_for_diagnosis to avoid needing a real incident store
+        def mock_fetch(incident_id: str):
+            return _mock_incident(incident_id), True, None
+
+        monkeypatch.setattr(
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.fetch_incident_for_diagnosis",
+            mock_fetch,
+        )
+
+        # Mock check_incident_eligibility to return eligible
+        monkeypatch.setattr(
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.check_incident_eligibility",
+            lambda *args, **kwargs: MagicMock(eligible=True, reason="active_incident"),
         )
 
         processed = []
@@ -172,7 +249,7 @@ class TestAlertRefreshDoesNotStarvePendingWork:
                 )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
             mock_process_incident,
         )
 

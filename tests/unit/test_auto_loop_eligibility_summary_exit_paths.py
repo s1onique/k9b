@@ -7,10 +7,21 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+from k8s_diag_agent.collect.incident_diagnosis_dispatch_page import (
+    IncidentDiagnosisPage,
+)
+from k8s_diag_agent.collect.incident_diagnosis_pagination_results import (
+    AutomaticPageListed,
+    AutomaticPageListingFailed,
+    IncidentPageListingFailure,
+    IncidentPageListingFailureKind,
+)
 
 
 @pytest.fixture
@@ -113,9 +124,19 @@ class TestEligibilitySummaryEmissionOnAllPaths:
             "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.is_automatic_diagnosis_loop_enabled",
             lambda: True,
         )
+
+        # Patch list_incidents_with_pagination at the listing module
+        def mock_list_page(scan_cursor, scan_bound):
+            return AutomaticPageListingFailed(
+                failure=IncidentPageListingFailure(
+                    kind=IncidentPageListingFailureKind.STORE_UNAVAILABLE,
+                    message="Connection refused",
+                )
+            )
+
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_for_diagnosis",
-            lambda **kwargs: (None, False, "Connection refused"),
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination",
+            mock_list_page,
         )
 
         run_automatic_diagnosis_loop_evidence_collection(
@@ -131,6 +152,7 @@ class TestEligibilitySummaryEmissionOnAllPaths:
 
     def test_zero_candidates_path_emits_summary(self, temp_external_dir, capture_logs, monkeypatch: pytest.MonkeyPatch):
         """Prove zero candidates path emits eligibility summary."""
+
         from k8s_diag_agent.collect.incident_diagnosis_auto_loop import (
             run_automatic_diagnosis_loop_evidence_collection,
         )
@@ -139,9 +161,20 @@ class TestEligibilitySummaryEmissionOnAllPaths:
             "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.is_automatic_diagnosis_loop_enabled",
             lambda: True,
         )
+
+        # Patch list_incidents_with_pagination to return an empty page
+        def mock_list_page(scan_cursor, scan_bound):
+            return AutomaticPageListed(
+                page=IncidentDiagnosisPage(
+                    incidents=(),  # Empty page
+                    next_cursor=None,
+                    has_more=False,
+                )
+            )
+
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_for_diagnosis",
-            lambda **kwargs: ([], True, None),
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination",
+            mock_list_page,
         )
         monkeypatch.setattr(
             "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.log_zero_incidents_diagnostic",
@@ -165,7 +198,6 @@ class TestEligibilitySummaryEmissionOnAllPaths:
         self, temp_external_dir, capture_logs, monkeypatch: pytest.MonkeyPatch, enabled_auto_loop
     ):
         """Prove normal loop with skipped incidents emits eligibility summary."""
-        from datetime import UTC, datetime
 
         from k8s_diag_agent.collect.incident_diagnosis_auto_loop import (
             run_automatic_diagnosis_loop_evidence_collection,
@@ -209,7 +241,7 @@ class TestEligibilitySummaryEmissionOnAllPaths:
             )
 
             monkeypatch.setattr(
-                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
                 lambda **kwargs: mock_result,
             )
 

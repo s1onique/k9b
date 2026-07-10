@@ -15,32 +15,50 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from k8s_diag_agent.collect.incident_diagnosis_dispatch_contracts import (
+    DiagnosisPageIncident,
+)
+from k8s_diag_agent.collect.incident_diagnosis_dispatch_page import (
+    IncidentDiagnosisPage,
+)
+from k8s_diag_agent.collect.incident_diagnosis_pagination_results import (
+    AutomaticPageListed,
+)
+
 
 class TestCollectorEntrypointIntegration:
     """Integration tests for collector entrypoint wiring."""
 
+    def _make_page(self, incident_id: str, hour: int = 10) -> IncidentDiagnosisPage:
+        """Create an IncidentDiagnosisPage for testing."""
+        timestamp = datetime(2024, 1, 15, hour, 30, 0, tzinfo=UTC)
+        ts_text = timestamp.isoformat()
+        incident = DiagnosisPageIncident(
+            incident_id=incident_id,
+            status="open",
+            first_observed_at=timestamp,
+            first_observed_at_key=ts_text,
+        )
+        return IncidentDiagnosisPage(
+            incidents=(incident,),
+            next_cursor=None,
+            has_more=False,
+        )
+
     def test_collector_calls_hypothesis_loop_and_assigns_result(self, tmp_path: Path) -> None:
         """Collector calls run_automatic_diagnosis_hypothesis_loop and assigns result."""
-        # Set env to enable the loop
         with patch.dict(os.environ, {"K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED": "true"}):
             from k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection import (
                 run_automatic_diagnosis_loop_evidence_collection,
             )
 
-            # Mock the dependencies - patch where they are used (processor module)
-            mock_incident = MagicMock()
-            mock_incident.incident_id = "inc-123"
-            mock_incident.to_dict.return_value = {
-                "incident_id": "inc-123",
-                "title": "Test Incident",
-            }
+            # Create mock page with one incident
+            mock_page = self._make_page("inc-123")
 
-            # Patch at facade level for facade-level imports
+            # Mock the dependencies
             with patch(
-                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection."
-                "list_incidents_for_diagnosis"
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination"
             ) as mock_list, patch(
-                # Patch at processor level since _process_incident uses its own imports
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
                 "fetch_incident_for_diagnosis"
             ) as mock_fetch, patch(
@@ -74,7 +92,7 @@ class TestCollectorEntrypointIntegration:
                 mock_incident_obj.incident_id = "inc-123"
                 mock_incident_obj.to_dict.return_value = {"incident_id": "inc-123", "title": "Test"}
 
-                mock_list.return_value = ([MagicMock(incident_id="inc-123")], True, None)
+                mock_list.return_value = AutomaticPageListed(page=mock_page)
                 mock_fetch.return_value = (mock_incident_obj, True, None)
                 mock_eligibility.return_value = MagicMock(eligible=True, reason="test")
                 mock_safe.return_value = True
@@ -213,6 +231,9 @@ class TestCollectorEntrypointIntegration:
                 run_automatic_diagnosis_loop_evidence_collection,
             )
 
+            # Create mock page with signal incident
+            mock_page = self._make_page("signal-inc-456")
+
             # Create a mock incident with signals
             mock_incident_obj = MagicMock()
             mock_incident_obj.incident_id = "signal-inc-456"
@@ -244,8 +265,7 @@ class TestCollectorEntrypointIntegration:
             }
 
             with patch(
-                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection."
-                "list_incidents_for_diagnosis"
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination"
             ) as mock_list, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
                 "fetch_incident_for_diagnosis"
@@ -278,22 +298,7 @@ class TestCollectorEntrypointIntegration:
                 # Setup mock to return realistic hypothesis loop result
                 mock_hypothesis_loop.return_value = mock_loop_result
 
-                # Signal-bearing incident
-                mock_incident_obj = MagicMock()
-                mock_incident_obj.incident_id = "signal-inc-456"
-                mock_incident_obj.to_dict.return_value = {
-                    "incident_id": "signal-inc-456",
-                    "title": "Pod Crash Looping",
-                    "signals": [
-                        {
-                            "type": "pod_crash_loop",
-                            "namespace": "default",
-                            "pod_name": "crashing-pod",
-                        }
-                    ],
-                }
-
-                mock_list.return_value = ([MagicMock(incident_id="signal-inc-456")], True, None)
+                mock_list.return_value = AutomaticPageListed(page=mock_page)
                 mock_fetch.return_value = (mock_incident_obj, True, None)
                 mock_eligibility.return_value = MagicMock(
                     eligible=True,
