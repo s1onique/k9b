@@ -209,16 +209,18 @@ def run_automatic_diagnosis_loop_evidence_collection(
     scan_cursor = _load_scan_cursor(runs_dir) if incident_ids is None else None
 
     # Phase 2: Get candidates with larger scan window to handle skipped-head starvation
-    scan_bound = resolved_config.max_incidents_per_run * 3
     max_diagnoses = resolved_config.max_incidents_per_run  # Budget for diagnoses started
 
     if incident_ids is not None:
-        # For explicit incident_ids, respect the limit but scan all for visibility
-        all_scanned_ids = incident_ids
+        # Explicit requests retain the public max-incidents contract.
+        # The starvation fix (3x window) is only for automatic discovery.
+        scan_bound = max_diagnoses
+        all_scanned_ids = incident_ids[:scan_bound]
     else:
-        # Scan with larger bound to handle skipped-head starvation
-        # Get more incidents than max_diagnoses to skip past exhausted ones
-        # Use cursor-based pagination to resume from where we left off
+        # Automatic discovery may scan past skipped/exhausted head entries.
+        # Get more incidents than max_diagnoses to skip past exhausted ones.
+        # Use cursor-based pagination to resume from where we left off.
+        scan_bound = max_diagnoses * 3
         incidents, success, error = list_incidents_for_diagnosis(
             active_only=True,
             limit=scan_bound,

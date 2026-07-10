@@ -190,7 +190,16 @@ class TestCollectorRun:
     def test_collector_respects_max_incidents(
         self, temp_external_dir, monkeypatch: pytest.MonkeyPatch
     ):
-        """Prove collector respects max_incidents_per_run bound."""
+        """Prove collector respects max_incidents_per_run bound for explicit IDs.
+
+        Regression test for explicit-ID path honoring max_incidents_per_run.
+        When incident_ids are explicitly provided, the loop should process
+        at most max_incidents_per_run, not scan_bound (3x for starvation fix).
+        """
+        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
+            AutoLoopIncidentResult,
+        )
+
         env_backup = os.environ.get("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED")
         try:
             # Mock k8s client to return None (env var not in deployment)
@@ -203,13 +212,35 @@ class TestCollectorRun:
 
             os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "true"
 
+            # Track actual processed IDs to verify the bound is respected
+            processed_ids: list[str] = []
+
+            def fake_process_incident(**kwargs):
+                processed_ids.append(kwargs["incident_id"])
+                return AutoLoopIncidentResult(
+                    incident_id=kwargs["incident_id"],
+                    eligible=False,
+                    eligibility_reason="not_found",
+                    skipped=True,
+                    skip_reason="incident_not_found",
+                )
+
+            monkeypatch.setattr(
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+                fake_process_incident,
+            )
+
             config = AutomaticDiagnosisLoopConfig(max_incidents_per_run=1)
             result = run_automatic_diagnosis_loop_evidence_collection(
                 external_analysis_dir=temp_external_dir,
                 incident_ids=["inc1", "inc2", "inc3"],  # 3 incidents
                 config=config,
             )
-            assert result.incidents_processed <= 1
+            # Explicit IDs should be bounded by max_incidents_per_run, not scan_bound
+            assert processed_ids == ["inc1"], f"Expected only inc1, got {processed_ids}"
+            assert result.incidents_processed == 1, f"Expected 1 processed, got {result.incidents_processed}"
+            assert result.incidents_skipped == 1, f"Expected 1 skipped, got {result.incidents_skipped}"
+            assert len(result.incident_results) == 1, f"Expected 1 result, got {len(result.incident_results)}"
         finally:
             if env_backup is not None:
                 os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = env_backup
