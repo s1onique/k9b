@@ -21,6 +21,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 # Re-export from sibling for test compatibility (patches expect it here)
 from .incident_automatic_diagnosis_loop import run_automatic_diagnosis_hypothesis_loop
@@ -51,6 +52,93 @@ from .incident_store_provider import get_incident_store
 
 _logger = logging.getLogger(__name__)
 
+# Current eligibility summary schema version
+_ELIGIBILITY_VERSION = 1
+
+
+def build_eligibility_summary_payload(
+    *,
+    collector_run_id: str,
+    result: AutoLoopCollectorResult,
+    eligibility_version: int = _ELIGIBILITY_VERSION,
+) -> dict[str, Any]:
+    """Build the aggregate eligibility summary payload.
+
+    Args:
+        collector_run_id: Unique identifier for this collector run
+        result: The collector result containing incident processing outcomes
+        eligibility_version: Schema version for the eligibility summary format
+
+    Returns:
+        Dictionary containing the aggregate eligibility summary with:
+        - collector_run_id
+        - eligibility_version
+        - incidents_processed
+        - incidents_eligible
+        - incidents_skipped
+        - incidents_ineligible
+        - incidents_with_errors
+        - skip_reasons (aggregate counts, no incident IDs)
+        - error_reasons (aggregate counts, no incident IDs)
+    """
+    # Aggregate skip reasons from incident results
+    skip_reason_counts: dict[str, int] = {}
+    error_reason_counts: dict[str, int] = {}
+
+    for ir in result.incident_results:
+        if ir.get("skipped"):
+            # Prefer eligibility_reason over skip_reason
+            reason = ir.get("eligibility_reason") or ir.get("skip_reason") or "unknown"
+            skip_reason_counts[reason] = skip_reason_counts.get(reason, 0) + 1
+        if ir.get("error") is not None:
+            error = ir.get("error")
+            if isinstance(error, str):
+                # Extract the error type/class from the error message
+                error_type = error.split(":")[0] if ":" in error else error
+                error_reason_counts[error_type] = error_reason_counts.get(error_type, 0) + 1
+
+    return {
+        "event": "automatic-diagnosis-eligibility-summary",
+        "collector_run_id": collector_run_id,
+        "eligibility_version": eligibility_version,
+        "incidents_processed": result.incidents_processed,
+        "incidents_eligible": result.incidents_eligible,
+        "incidents_skipped": result.incidents_skipped,
+        "incidents_ineligible": result.incidents_ineligible,
+        "incidents_with_errors": result.incidents_with_errors,
+        "skip_reasons": skip_reason_counts,
+        "error_reasons": error_reason_counts,
+    }
+
+
+def _emit_eligibility_summary(
+    *,
+    collector_run_id: str,
+    result: AutoLoopCollectorResult,
+    scheduler_run_id: str | None = None,
+) -> None:
+    """Emit the aggregate eligibility summary log event.
+
+    This must be called on every exit path to ensure operators can always
+    see why incidents were skipped, even when the loop exits early.
+
+    Args:
+        collector_run_id: Unique identifier for this collector run
+        result: The collector result containing incident processing outcomes
+        scheduler_run_id: Optional scheduler run ID for correlation
+    """
+    payload = build_eligibility_summary_payload(
+        collector_run_id=collector_run_id,
+        result=result,
+    )
+    if scheduler_run_id:
+        payload["run_id"] = scheduler_run_id
+
+    _logger.info(
+        "Automatic diagnosis eligibility summary",
+        extra=payload,
+    )
+
 
 def run_automatic_diagnosis_loop_evidence_collection(
     *,
@@ -58,8 +146,17 @@ def run_automatic_diagnosis_loop_evidence_collection(
     config: AutomaticDiagnosisLoopConfig | None = None,
     incident_ids: list[str] | None = None,
     now: datetime | None = None,
+    scheduler_run_id: str | None = None,
 ) -> AutoLoopCollectorResult:
-    """Run automatic diagnosis loop evidence collection for eligible incidents."""
+    """Run automatic diagnosis loop evidence collection for eligible incidents.
+
+    Args:
+        external_analysis_dir: Path to external-analysis directory
+        config: Optional custom configuration
+        incident_ids: Optional list of specific incident IDs to process
+        now: Optional datetime for testing
+        scheduler_run_id: Optional scheduler run ID for correlation with other logs/artifacts
+    """
     resolved_config = config or AutomaticDiagnosisLoopConfig()
     resolved_now = now if now is not None else datetime.now(UTC)
     collector_run_id = f"auto-diagnosis-{resolved_now.strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
@@ -78,6 +175,12 @@ def run_automatic_diagnosis_loop_evidence_collection(
         result.incident_results = [{
             "note": "Automatic diagnosis loop is disabled. Set K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true to enable.",
         }]
+        # Emit eligibility summary before returning (shows loop was run but disabled)
+        _emit_eligibility_summary(
+            collector_run_id=collector_run_id,
+            result=result,
+            scheduler_run_id=scheduler_run_id,
+        )
         _write_loop_summary(
             external_analysis_dir=external_analysis_dir,
             collector_run_id=collector_run_id,
@@ -104,6 +207,12 @@ def run_automatic_diagnosis_loop_evidence_collection(
             result.incident_results = [{
                 "note": f"Failed to list incidents: {error}",
             }]
+            # Emit eligibility summary before returning (shows listing failure)
+            _emit_eligibility_summary(
+                collector_run_id=collector_run_id,
+                result=result,
+                scheduler_run_id=scheduler_run_id,
+            )
             _write_loop_summary(
                 external_analysis_dir=external_analysis_dir,
                 collector_run_id=collector_run_id,
@@ -127,6 +236,12 @@ def run_automatic_diagnosis_loop_evidence_collection(
         # Restore zero-incident diagnostic
         log_zero_incidents_diagnostic(resolved_config)
         result.incident_results = []
+        # Emit eligibility summary before returning (shows zero candidates)
+        _emit_eligibility_summary(
+            collector_run_id=collector_run_id,
+            result=result,
+            scheduler_run_id=scheduler_run_id,
+        )
         _write_loop_summary(
             external_analysis_dir=external_analysis_dir,
             collector_run_id=collector_run_id,
@@ -160,10 +275,12 @@ def run_automatic_diagnosis_loop_evidence_collection(
         if incident_result.skipped:
             result.incidents_skipped += 1
             # Structured logging for skipped incidents - reveals WHY incidents are skipped
+            # Include collector_run_id for correlation with aggregate eligibility summary
             _logger.info(
                 "incident_skipped_from_auto_loop",
                 extra={
                     "event": "incident-skipped",
+                    "collector_run_id": collector_run_id,
                     "incident_id": incident_id,
                     "eligible": False,
                     "eligibility_reason": incident_result.eligibility_reason,
@@ -193,27 +310,13 @@ def run_automatic_diagnosis_loop_evidence_collection(
         else:
             result.incidents_ineligible += 1
 
-    # Aggregate skip reasons for operator diagnostics
-    skip_reason_counts: dict[str, int] = {}
-    for ir in result.incident_results:
-        if ir.get("skipped"):
-            reason = ir.get("eligibility_reason") or ir.get("skip_reason") or "unknown"
-            skip_reason_counts[reason] = skip_reason_counts.get(reason, 0) + 1
-
-    # Emit aggregate eligibility summary
-    _logger.info(
-        "automatic_diagnosis_eligibility_summary",
-        extra={
-            "event": "automatic-diagnosis-eligibility-summary",
-            "collector_run_id": collector_run_id,
-            "eligibility_version": 1,
-            "incidents_processed": result.incidents_processed,
-            "incidents_eligible": result.incidents_eligible,
-            "incidents_skipped": result.incidents_skipped,
-            "incidents_ineligible": result.incidents_ineligible,
-            "incidents_with_errors": result.incidents_with_errors,
-            "skip_reasons": skip_reason_counts,
-        },
+    # Emit aggregate eligibility summary with skip_reasons breakdown
+    # This provides immediate visibility into why incidents were skipped
+    # without requiring log inspection of individual incident events
+    _emit_eligibility_summary(
+        collector_run_id=collector_run_id,
+        result=result,
+        scheduler_run_id=scheduler_run_id,
     )
 
     _write_loop_summary(

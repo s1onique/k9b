@@ -55,6 +55,7 @@ def collect_automatic_diagnosis_evidence(
     incident_id: str,
     external_analysis_dir: Path,
     config: AutomaticDiagnosisLoopConfig | None = None,
+    scheduler_run_id: str | None = None,
 ) -> AutoLoopIncidentResult:
     """Collect automatic diagnosis evidence for a single incident.
 
@@ -67,6 +68,7 @@ def collect_automatic_diagnosis_evidence(
         config: Optional custom configuration. If None, uses defaults.
             For lab scenarios requiring multiple passes (e.g., P4c with min_required_passes=2),
             pass a config with max_passes_per_incident >= min_required_passes.
+        scheduler_run_id: Optional scheduler run ID for correlation with other logs/artifacts
 
     Returns:
         AutoLoopIncidentResult with processing outcome
@@ -86,6 +88,7 @@ def collect_automatic_diagnosis_evidence(
         external_analysis_dir=external_analysis_dir,
         config=config,
         incident_ids=[incident_id],
+        scheduler_run_id=scheduler_run_id,
     )
 
     if result.incident_results:

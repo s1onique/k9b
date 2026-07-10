@@ -142,9 +142,11 @@ def run_automatic_diagnosis_loop_compat(
         Bounded result summary dict with:
         - automatic_diagnosis_enabled: bool
         - collector_run_id: str | None
+        - run_id: str | None (scheduler run_id for correlation)
         - incidents_processed: int
         - incidents_eligible: int
         - incidents_skipped: int
+        - incidents_ineligible: int
         - incidents_with_errors: int
         - total_review_packets_written: int
     """
@@ -154,6 +156,7 @@ def run_automatic_diagnosis_loop_compat(
     return loop_runner.run_automatic_diagnosis_loop(
         external_analysis_dir=external_analysis_dir,
         log_event_fn=runner._log_event,
+        scheduler_run_id=runner.run_id,
     )
 
 

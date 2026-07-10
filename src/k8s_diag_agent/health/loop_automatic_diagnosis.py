@@ -40,6 +40,7 @@ def run_automatic_diagnosis_loop(
     *,
     external_analysis_dir: Path,
     log_event_fn: Any | None = None,
+    scheduler_run_id: str | None = None,
 ) -> dict[str, Any]:
     """Run automatic diagnosis loop evidence collection.
 
@@ -49,11 +50,13 @@ def run_automatic_diagnosis_loop(
     Args:
         external_analysis_dir: Path to the external-analysis directory
         log_event_fn: Optional callback for logging events
+        scheduler_run_id: Optional scheduler run ID for correlation with other logs/artifacts
 
     Returns:
         Bounded result summary dict with:
         - automatic_diagnosis_enabled: bool
         - collector_run_id: str | None
+        - run_id: str | None (scheduler run_id if provided)
         - incidents_processed: int
         - incidents_eligible: int
         - incidents_skipped: int
@@ -114,20 +117,23 @@ def run_automatic_diagnosis_loop(
         result = run_automatic_diagnosis_loop_evidence_collection(
             external_analysis_dir=external_analysis_dir,
             config=config,
+            scheduler_run_id=scheduler_run_id,
         )
 
         # Extract bounded summary
         summary = {
             "automatic_diagnosis_enabled": True,
             "collector_run_id": result.run_id,
+            "run_id": scheduler_run_id,
             "incidents_processed": result.incidents_processed,
             "incidents_eligible": result.incidents_eligible,
             "incidents_skipped": result.incidents_skipped,
+            "incidents_ineligible": result.incidents_ineligible,
             "incidents_with_errors": result.incidents_with_errors,
             "total_review_packets_written": result.total_review_packets_written,
         }
 
-        # Log completion
+        # Log completion with full eligibility summary for operator diagnostics
         if log_event_fn:
             log_event_fn(
                 "automatic-diagnosis",
@@ -135,9 +141,11 @@ def run_automatic_diagnosis_loop(
                 "Automatic diagnosis loop completed",
                 event="complete",
                 collector_run_id=result.run_id,
+                run_id=scheduler_run_id,
                 incidents_processed=result.incidents_processed,
                 incidents_eligible=result.incidents_eligible,
                 incidents_skipped=result.incidents_skipped,
+                incidents_ineligible=result.incidents_ineligible,
                 incidents_with_errors=result.incidents_with_errors,
                 total_review_packets_written=result.total_review_packets_written,
             )
