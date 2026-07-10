@@ -386,8 +386,10 @@ class TestTwoRunCollectorIntegration:
         """
         import sqlite3
         from datetime import datetime
-        from typing import Any
 
+        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
+            AutomaticDiagnosisLoopConfig,
+        )
         from k8s_diag_agent.collect.incident_diagnosis_auto_loop_cursor import (
             _clear_scan_cursor,
             _load_scan_cursor,
@@ -398,12 +400,9 @@ class TestTwoRunCollectorIntegration:
         from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
             AutoLoopIncidentResult,
         )
-        from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
-            AutomaticDiagnosisLoopConfig,
-        )
         from k8s_diag_agent.collect.incident_diagnosis_dispatch_page import (
-            IncidentDiagnosisPage,
             CursorDecodeFailure,
+            IncidentDiagnosisPage,
         )
 
         # Clear any existing cursor state
@@ -445,7 +444,6 @@ class TestTwoRunCollectorIntegration:
                 conn.close()
 
         # Patch at the module level where collector imports it
-        import k8s_diag_agent.collect.incident_diagnosis_dispatch
         import k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection as evidence_module
 
         monkeypatch.setattr(
