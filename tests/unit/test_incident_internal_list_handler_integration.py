@@ -96,14 +96,16 @@ class TestInternalListIncidentsAfterPromotion(unittest.TestCase):
         self.assertEqual(response_body["total"], 1)
 
         # Check the incident has correct timestamp serialization
+        # R13: Pagination path returns first_observed_at (for cursor key) + status + incident_id
+        # The first_observed_at value uses first_observed_at_key (exact DB text)
         incident = response_body["incidents"][0]
-        self.assertIn("created_at", incident)
-        self.assertIn("updated_at", incident)
+        self.assertIn("incident_id", incident)
+        self.assertIn("status", incident)
+        self.assertIn("first_observed_at", incident)
 
-        # Timestamps must be ISO format strings from first_observed_at/last_observed_at
+        # Timestamps must be ISO format strings from first_observed_at
         expected_timestamp = promotion_time.isoformat()
-        self.assertEqual(incident["created_at"], expected_timestamp)
-        self.assertEqual(incident["updated_at"], expected_timestamp)
+        self.assertEqual(incident["first_observed_at"], expected_timestamp)
 
     def test_list_incidents_does_not_return_200_on_projection_failure(self) -> None:
         """Projection failure must return 500, not 200 with empty data.

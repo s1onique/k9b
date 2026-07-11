@@ -169,3 +169,90 @@ class TestSQLiteWriteContextRebuildProjection(TestCase):
         # Verify incidents are accessible
         incidents = store.list_incidents()
         self.assertEqual(len(incidents), 2)
+
+    def test_context_rebuild_projection_fails_after_closure(self) -> None:
+        """Test that rebuild_projection fails after context closure."""
+        from k8s_diag_agent.collect.incident_store_sqlite_context import (
+            ContextClosedError,
+        )
+
+        store = SQLiteIncidentStore(self._db_path)
+        observed_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+        # Create an incident
+        store.promote_candidates([make_candidate("pod-1")], observed_at)
+
+        # Get a context and close it
+        with store._write_context() as ctx:
+            pass  # Context is now closed
+
+        # Attempting to use rebuild_projection should fail
+        with self.assertRaises(ContextClosedError):
+            ctx.rebuild_projection()
+
+
+class TestSQLiteWriteContextSeamInvariant(TestCase):
+    """Test that SQLite write capability seam is preserved."""
+
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self._temp_dir = tempfile.mkdtemp()
+        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
+
+    def tearDown(self) -> None:
+        """Clean up test fixtures."""
+        shutil.rmtree(self._temp_dir, ignore_errors=True)
+
+    def test_store_does_not_access_context_connection_directly(self) -> None:
+        """Test that incident_store_sqlite.py does not access ctx._conn.
+
+        This test verifies the capability seam is preserved by ensuring
+        rebuild_projection uses the context method rather than direct conn access.
+        """
+        import re
+        from pathlib import Path
+
+        # Read the store source
+        store_path = Path(__file__).parent.parent.parent / "src" / "k8s_diag_agent" / "collect" / "incident_store_sqlite.py"
+        store_source = store_path.read_text()
+
+        # Pattern to detect direct _conn access in rebuild_projection
+        # This would be: ctx._conn somewhere in the file
+        direct_conn_pattern = re.compile(r'ctx\._conn')
+
+        # Find all occurrences of ctx._conn
+        matches = list(direct_conn_pattern.finditer(store_source))
+
+        # Filter out the matches that are NOT in rebuild_projection method
+        # (e.g., comments or other methods that might have legitimate access)
+        for match in matches:
+            start = match.start()
+            # Look backward to find the method context
+            # Extract 500 chars before to get method context
+            context_start = max(0, start - 500)
+            context = store_source[context_start:start]
+
+            # If we're in the rebuild_projection method area, this is a violation
+            if 'def rebuild_projection' in context or 'def rebuild_projection' in store_source[max(0, start-200):start+200]:
+                self.fail(
+                    "incident_store_sqlite.py accesses ctx._conn directly in rebuild_projection. "
+                    "Use ctx.rebuild_projection() instead."
+                )
+
+    def test_context_owns_projection_rebuild_operation(self) -> None:
+        """Test that rebuild_projection is a context-owned operation."""
+        from k8s_diag_agent.collect.incident_store_sqlite_context import (
+            SQLiteWriteContext,
+        )
+
+        # Verify rebuild_projection is a method on SQLiteWriteContext
+        self.assertTrue(
+            hasattr(SQLiteWriteContext, 'rebuild_projection'),
+            "SQLiteWriteContext must have rebuild_projection method"
+        )
+
+        # Verify it's callable
+        self.assertTrue(
+            callable(getattr(SQLiteWriteContext, 'rebuild_projection')),
+            "rebuild_projection must be callable"
+        )

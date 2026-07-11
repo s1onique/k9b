@@ -245,6 +245,28 @@ class SQLiteWriteContext:
         return self._store._snapshot_incident(incident)
 
     # -------------------------------------------------------------------------
+    # Projection Authority
+    # -------------------------------------------------------------------------
+
+    def rebuild_projection(self) -> int:
+        """Rebuild the entire incident_current projection from events.
+
+        This method rebuilds the projection cache from the append-only events
+        table. It is only valid inside the store's _write_context() critical
+        section where the write lock is held.
+
+        Returns:
+            Number of incidents rebuilt
+
+        Raises:
+            ContextClosedError: If the context has been closed
+        """
+        from .incident_store_sqlite_projection import rebuild_projection as _rebuild
+
+        self._ensure_open()
+        return _rebuild(self._conn)
+
+    # -------------------------------------------------------------------------
     # Context Lifetime
     # -------------------------------------------------------------------------
 

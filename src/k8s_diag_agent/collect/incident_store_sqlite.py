@@ -443,10 +443,8 @@ class SQLiteIncidentStore(IncidentStore):
 
     def rebuild_projection(self) -> int:
         """Rebuild the entire projection from events."""
-        from .incident_store_sqlite_projection import rebuild_projection as _rebuild
-
-        with self._write_connection() as conn:
-            count = _rebuild(conn)
+        with self._write_context() as ctx:
+            count = ctx.rebuild_projection()
 
         self._incidents.clear()
         self._load_from_projection()

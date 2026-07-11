@@ -95,7 +95,7 @@ class TestPerIncidentSkippedLogs:
             )
 
             monkeypatch.setattr(
-                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
                 lambda **kwargs: mock_result,
             )
 

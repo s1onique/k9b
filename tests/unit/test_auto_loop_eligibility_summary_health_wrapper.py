@@ -107,7 +107,7 @@ class TestHealthWrapperPathEligibilitySummary:
                 )
 
             monkeypatch.setattr(
-                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection._process_incident",
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
                 mock_process,
             )
 

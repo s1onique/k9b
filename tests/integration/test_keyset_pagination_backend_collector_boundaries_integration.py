@@ -42,21 +42,28 @@ class TestBackendCollectorCursorDisposition:
             _load_scan_cursor,
             _save_scan_cursor,
         )
+        from k8s_diag_agent.collect.incident_diagnosis_dispatch_contracts import (
+            DiagnosisPageIncident,
+        )
         from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
-            make_cursor,
+            cursor_after_page_incident,
+            encode_cursor,
         )
 
         _clear_scan_cursor(runs_dir)
 
         # Simulate processing last incident with more pages available
-        last_cursor = make_cursor(
-            first_observed_at=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
+        # Create a page incident with required fields
+        ts = datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC)
+        page_incident = DiagnosisPageIncident(
             incident_id="inc-003",
+            status="open",
+            first_observed_at=ts,
+            first_observed_at_key=ts.isoformat(),  # Required for cursor_after_page_incident
         )
+        last_cursor = cursor_after_page_incident(page_incident)
 
         # Save cursor (as collector would when hasMore=true)
-        from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import encode_cursor
-
         cursor_token = encode_cursor(last_cursor)
         _save_scan_cursor(runs_dir, cursor_token)
 
@@ -71,18 +78,25 @@ class TestBackendCollectorCursorDisposition:
             _load_scan_cursor,
             _save_scan_cursor,
         )
+        from k8s_diag_agent.collect.incident_diagnosis_dispatch_contracts import (
+            DiagnosisPageIncident,
+        )
         from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
+            cursor_after_page_incident,
             encode_cursor,
-            make_cursor,
         )
 
         _clear_scan_cursor(runs_dir)
 
         # Simulate cursor for last incident on final page
-        last_cursor = make_cursor(
-            first_observed_at=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
+        ts = datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC)
+        page_incident = DiagnosisPageIncident(
             incident_id="inc-010",
+            status="open",
+            first_observed_at=ts,
+            first_observed_at_key=ts.isoformat(),
         )
+        last_cursor = cursor_after_page_incident(page_incident)
         cursor_token = encode_cursor(last_cursor)
         _save_scan_cursor(runs_dir, cursor_token)
 
@@ -107,9 +121,9 @@ class TestBackendCollectorCursorDisposition:
             IncidentDiagnosisPage,
         )
         from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
+            cursor_after_page_incident,
             decode_cursor,
             encode_cursor,
-            make_cursor,
         )
 
         _clear_scan_cursor(runs_dir)
@@ -129,10 +143,9 @@ class TestBackendCollectorCursorDisposition:
         )
 
         # Create page with hasMore=True (more pages exist)
-        last_cursor = make_cursor(
-            first_observed_at=now.replace(hour=10, minute=10),
-            incident_id="inc-002",
-        )
+        # Use cursor_after_page_incident for proper cursor construction
+        last_incident = page_incidents[2]  # inc-002
+        last_cursor = cursor_after_page_incident(last_incident)
         page = IncidentDiagnosisPage(
             incidents=page_incidents,
             next_cursor=last_cursor,
@@ -216,16 +229,24 @@ class TestCursorBase64Validation:
         """R7.4: Strict Base64 decoding accepts valid tokens."""
         from datetime import datetime
 
+        from k8s_diag_agent.collect.incident_diagnosis_dispatch_contracts import (
+            DiagnosisPageIncident,
+        )
         from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
+            cursor_after_page_incident,
             decode_cursor,
             encode_cursor,
-            make_cursor,
         )
 
-        cursor = make_cursor(
-            first_observed_at=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
+        # Create a page incident and use cursor_after_page_incident for valid cursor
+        ts = datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC)
+        page_incident = DiagnosisPageIncident(
             incident_id="inc-001",
+            status="open",
+            first_observed_at=ts,
+            first_observed_at_key=ts.isoformat(),
         )
+        cursor = cursor_after_page_incident(page_incident)
         token = encode_cursor(cursor)
 
         decoded, err = decode_cursor(token)

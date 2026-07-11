@@ -63,14 +63,18 @@ class TestSQLiteKeysetPaginationReal:
             _build_diagnosis_page_query,
             _rows_to_page,
         )
+        from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
+            DiagnosisPageLimit,
+        )
 
         conn = sqlite3.connect(sqlite_db)
 
-        # First page: 2 incidents
-        sql, params = _build_diagnosis_page_query(active_only=True, limit=2, after=None)
+        # First page: 2 incidents - use DiagnosisPageLimit branded type
+        page_limit = DiagnosisPageLimit(2)
+        sql, params = _build_diagnosis_page_query(active_only=True, limit=page_limit, after=None)
         cursor = conn.execute(sql, params)
         rows = cursor.fetchall()
-        has_more = len(rows) > 2
+        has_more = len(rows) > page_limit.value
         page = _rows_to_page(list(rows), has_more)
 
         assert len(page.incidents) == 2
@@ -84,10 +88,11 @@ class TestSQLiteKeysetPaginationReal:
         assert after_cursor is not None
         assert after_cursor.incident_id == "inc-b"
 
-        sql2, params2 = _build_diagnosis_page_query(active_only=True, limit=2, after=after_cursor)
+        # Use DiagnosisPageLimit for second query as well
+        sql2, params2 = _build_diagnosis_page_query(active_only=True, limit=page_limit, after=after_cursor)
         cursor2 = conn.execute(sql2, params2)
         rows2 = cursor2.fetchall()
-        page2 = _rows_to_page(list(rows2), len(rows2) > 2)
+        page2 = _rows_to_page(list(rows2), len(rows2) > page_limit.value)
 
         assert len(page2.incidents) == 1
         assert page2.incidents[0].incident_id == "inc-c"
@@ -174,55 +179,65 @@ class TestTwoRunCollectorIntegration:
             AutoLoopIncidentResult,
         )
         from k8s_diag_agent.collect.incident_diagnosis_dispatch_page import (
-            CursorDecodeFailure,
-            IncidentDiagnosisPage,
+            list_incidents_for_diagnosis_page_impl,
+        )
+        from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
+            DiagnosisPageLimit,
+        )
+        from k8s_diag_agent.collect.incident_diagnosis_pagination_results import (
+            AutomaticPageListed,
         )
 
         # Clear any existing cursor state
         _clear_scan_cursor(runs_dir)
 
-        # ==== Patch list_incidents_for_diagnosis_page to use our test SQLite ====
-        # This exercises the full cursor flow without needing full store schema
-        def patched_list_incidents_for_diagnosis_page(
-            active_only: bool,
-            limit: int,
-            cursor: str | None = None,
-        ) -> tuple[IncidentDiagnosisPage | None, CursorDecodeFailure | None, str | None]:
-            """Patch that queries our test SQLite directly."""
-            from k8s_diag_agent.collect.incident_diagnosis_dispatch_page import (
-                list_incidents_for_diagnosis_page_impl,
-            )
-            from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
-                decode_cursor,
-            )
+        # Track cursor state across calls to simulate two-run behavior
+        current_cursor: str | None = None
 
-            # Decode cursor if provided
-            after_cursor = None
-            if cursor is not None:
-                decoded, err = decode_cursor(cursor)
-                if err is not None:
-                    return None, err, None
-                after_cursor = decoded
+        def mock_list_incidents_with_pagination(
+            scan_cursor,  # OpaqueCursorToken | None
+            scan_bound: int,
+        ):
+            """Mock that queries our test SQLite and returns proper pages."""
+            nonlocal current_cursor
+
+            # Convert OpaqueCursorToken to string or None
+            cursor_str = str(scan_cursor) if scan_cursor else None
+            current_cursor = cursor_str
 
             conn = sqlite3.connect(sqlite_db_with_20_incidents)
             try:
+                # Decode cursor if provided
+                after_cursor = None
+                if cursor_str is not None:
+                    from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
+                        decode_cursor,
+                    )
+                    decoded, err = decode_cursor(cursor_str)
+                    if err is not None:
+                        conn.close()
+                        from k8s_diag_agent.collect.incident_diagnosis_pagination_results import (
+                            AutomaticPageCursorRejected,
+                        )
+                        return AutomaticPageCursorRejected(failure=err)
+
+                    # Convert decoded cursor to the format expected by list_incidents_for_diagnosis_page_impl
+                    after_cursor = decoded
+
                 page = list_incidents_for_diagnosis_page_impl(
                     conn=conn,
-                    active_only=active_only,
-                    limit=limit,
+                    active_only=True,
+                    limit=DiagnosisPageLimit(scan_bound),
                     after=after_cursor,
                 )
-                return page, None, None
+                return AutomaticPageListed(page=page)
             finally:
                 conn.close()
 
-        # Patch at the module level where collector imports it
-        import k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection as evidence_module
-
+        # Patch list_incidents_with_pagination where collector imports it
         monkeypatch.setattr(
-            evidence_module,
-            "list_incidents_for_diagnosis_page",
-            patched_list_incidents_for_diagnosis_page,
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination",
+            mock_list_incidents_with_pagination,
         )
 
         # ==== Mock expensive diagnosis work ====
@@ -247,13 +262,11 @@ class TestTwoRunCollectorIntegration:
             )
 
         monkeypatch.setattr(
-            evidence_module,
-            "_process_incident",
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
             mock_process_incident,
         )
 
         # ==== RUN 1: Collect with budget=10 ====
-        # Page size is max*3=30, but we limit to 10 for this test
         config_run1 = AutomaticDiagnosisLoopConfig(
             max_incidents_per_run=10,
         )
@@ -265,7 +278,7 @@ class TestTwoRunCollectorIntegration:
         )
 
         # Verify Run 1 processed exactly 10 incidents
-        assert result1.incidents_processed == 10
+        assert result1.incidents_processed == 10, f"Expected 10, got {result1.incidents_processed}"
         assert processed_incidents == [f"inc-{i:03d}" for i in range(10)]
         assert result1.incident_results[0]["incident_id"] == "inc-000"
         assert result1.incident_results[9]["incident_id"] == "inc-009"
@@ -286,7 +299,7 @@ class TestTwoRunCollectorIntegration:
         )
 
         # Verify Run 2 processed exactly 10 incidents starting from inc-010
-        assert result2.incidents_processed == 10
+        assert result2.incidents_processed == 10, f"Expected 10, got {result2.incidents_processed}"
         assert processed_incidents == [f"inc-{i:03d}" for i in range(10, 20)]
         assert result2.incident_results[0]["incident_id"] == "inc-010"
         assert result2.incident_results[9]["incident_id"] == "inc-019"
