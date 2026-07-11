@@ -139,6 +139,17 @@ ACT-Local: Use --act-local as the default close-check for local agent ACTs.
         action="store_true",
         help="Emit only JSON summary to stdout",
     )
+
+    parser.add_argument(
+        "--skip-gate-summary",
+        action="store_true",
+        help=(
+            "Skip the gate-summary-parser step (use when invoked from "
+            "scripts/factory/populate_gate_summary.py to break the circular "
+            "dependency between this verification and the artifact it is "
+            "populating)."
+        ),
+    )
     
     # Lock management commands (mutually exclusive with profile)
     lock_group = parser.add_mutually_exclusive_group()
@@ -333,8 +344,15 @@ def main(argv: list[str] | None = None) -> int:
                 assert exit_code is not None
                 return exit_code
         
-        act_result = run_act_local_verification(json_mode=args.json)
-        
+        # Forward the --skip-gate-summary flag so the populate -> verify ->
+        # populate circular dependency is broken when this verification is
+        # itself launched from the targeted-repository-gate step of
+        # scripts/factory/populate_gate_summary.py.
+        act_result = run_act_local_verification(
+            json_mode=args.json,
+            skip_gate_summary=args.skip_gate_summary,
+        )
+
         if args.json:
             print(act_local_format_json(act_result))
         else:

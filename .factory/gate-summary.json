@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "profile": "act-local",
+  "source_status": "present",
+  "overall_status": "pass",
+  "generated_at": "2026-07-11T14:30:08.899403+00:00",
+  "checks_total": 17,
+  "checks_failed": 0,
+  "checks": [
+    {
+      "name": "canonical-verifier-self-test",
+      "status": "pass",
+      "duration_ms": 48,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b/scripts/incident_lifecycle_boundary/redaction_types.py --self-test",
+      "exit_code": 0
+    },
+    {
+      "name": "standalone-production-verifier",
+      "status": "pass",
+      "duration_ms": 759,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b/scripts/incident_lifecycle_boundary/redaction_types.py --repo-root /Users/chistyakov/Projects/SPbNIX/k9b/src",
+      "exit_code": 0
+    },
+    {
+      "name": "production-mypy-positive",
+      "status": "pass",
+      "duration_ms": 1066,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_mypy_fixtures.py::TestMypyPositiveFixture",
+      "exit_code": 0
+    },
+    {
+      "name": "production-mypy-negative",
+      "status": "pass",
+      "duration_ms": 1058,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_mypy_fixtures.py::TestMypyNegativeFixture",
+      "exit_code": 0
+    },
+    {
+      "name": "full-gate-negative-proofs",
+      "status": "pass",
+      "duration_ms": 42574,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b/scripts/incident_lifecycle_boundary/redaction_full_gate_negative_proofs.py",
+      "exit_code": 0
+    },
+    {
+      "name": "opaque-bearer-regression",
+      "status": "pass",
+      "duration_ms": 365,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r11_sanitizer_opaque_bearer.py",
+      "exit_code": 0
+    },
+    {
+      "name": "sanitizer-regression-matrix",
+      "status": "pass",
+      "duration_ms": 355,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_sanitizer_credential.py::test_sentinel_secret_is_absent_from_every_sanitizer_path",
+      "exit_code": 0
+    },
+    {
+      "name": "credential-matrix",
+      "status": "pass",
+      "duration_ms": 330,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_sanitizer_credential.py::TestCredentialMatrix",
+      "exit_code": 0
+    },
+    {
+      "name": "omission-boundary",
+      "status": "pass",
+      "duration_ms": 338,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r8_omission_branch.py",
+      "exit_code": 0
+    },
+    {
+      "name": "serializer-multi-return",
+      "status": "pass",
+      "duration_ms": 375,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r12_serializer_multi_return.py",
+      "exit_code": 0
+    },
+    {
+      "name": "ruff",
+      "status": "pass",
+      "duration_ms": 25,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m ruff check scripts/act_local_checks.py scripts/act_local_verification.py scripts/factory/build_gate_summary.py scripts/factory/parse_gate_summary.py scripts/factory/populate_gate_summary.py scripts/incident_lifecycle_boundary/redaction_aliases.py scripts/incident_lifecycle_boundary/redaction_boundaries.py scripts/incident_lifecycle_boundary/redaction_constructors.py scripts/incident_lifecycle_boundary/redaction_full_gate_negative_proofs.py scripts/incident_lifecycle_boundary/redaction_self_test_aliases.py scripts/incident_lifecycle_boundary/redaction_self_test_boundaries.py scripts/incident_lifecycle_boundary/redaction_self_test_constructors.py scripts/incident_lifecycle_boundary/redaction_self_test_fixtures.py scripts/incident_lifecycle_boundary/redaction_self_test_projection.py scripts/incident_lifecycle_boundary/redaction_self_test_runner.py scripts/incident_lifecycle_boundary/redaction_self_test_serialization.py scripts/incident_lifecycle_boundary/redaction_self_test_sources.py scripts/incident_lifecycle_boundary/redaction_serialization.py scripts/incident_lifecycle_boundary/redaction_types.py scripts/incident_lifecycle_boundary/redaction_types_check.py scripts/incident_lifecycle_boundary/redaction_types_fixtures.py scripts/incident_lifecycle_boundary/redaction_types_self_test.py scripts/incident_lifecycle_boundary/redaction_types_serializer_fixtures.py scripts/verify_all.py src/k8s_diag_agent/collect/incident_evidence.py src/k8s_diag_agent/collect/incident_evidence_llm_safe.py src/k8s_diag_agent/collect/incident_evidence_redaction.py src/k8s_diag_agent/security/redaction_policy.py src/k8s_diag_agent/security/sanitizer.py tests/unit/test_gate_summary_population_r12.py tests/unit/test_incident_evidence_redaction_pipeline_core.py tests/unit/test_incident_evidence_redaction_pipeline_fail_closed.py tests/unit/test_incident_llm_safe_evidence_redaction.py tests/unit/test_incident_llm_safe_evidence_summary.py tests/unit/test_redaction_r11_sanitizer_opaque_bearer.py tests/unit/test_redaction_r12_serializer_multi_return.py tests/unit/test_redaction_r5_comprehensive.py tests/unit/test_redaction_r8_omission_branch.py tests/unit/test_redaction_r9_act_local_negative_proofs.py tests/unit/test_redaction_r9_mypy_fixtures.py tests/unit/test_redaction_r9_sanitizer_credential.py tests/unit/test_redaction_r9_unified_acceptance.py tests/unit/test_redaction_r9_unified_verifier_paths.py",
+      "exit_code": 0
+    },
+    {
+      "name": "mypy",
+      "status": "pass",
+      "duration_ms": 91,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m mypy src/k8s_diag_agent/collect/incident_evidence_redaction.py src/k8s_diag_agent/collect/incident_evidence_llm_safe.py src/k8s_diag_agent/security/redaction_policy.py src/k8s_diag_agent/security/sanitizer.py --ignore-missing-imports",
+      "exit_code": 0
+    },
+    {
+      "name": "git-diff-check",
+      "status": "pass",
+      "duration_ms": 8,
+      "error_message": null,
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "name": "git-diff-cached-check",
+      "status": "pass",
+      "duration_ms": 8,
+      "error_message": null,
+      "command": "git diff --cached --check",
+      "exit_code": 0
+    },
+    {
+      "name": "llm-friendly",
+      "status": "pass",
+      "duration_ms": 337,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b/scripts/check_llm_friendly_files.py --changed-only",
+      "exit_code": 0
+    },
+    {
+      "name": "no-new-llm-allowlist",
+      "status": "pass",
+      "duration_ms": 566,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b/scripts/verify_no_new_llm_allowlist.py",
+      "exit_code": 0
+    },
+    {
+      "name": "targeted-repository-gate",
+      "status": "pass",
+      "duration_ms": 5062,
+      "error_message": null,
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/scripts/verify_all.sh --act-local --skip-gate-summary",
+      "exit_code": 0
+    }
+  ],
+  "self_tests": {
+    "verifier_self_tests": {
+      "accepted": 7,
+      "rejected": 13,
+      "failed": 0
+    }
+  },
+  "r10_definition_of_done": {
+    "canonical_self_test_uses_production_verifiers": "redaction_types.py --self-test invokes check_trusted_constructor_usage, check_protected_boundary_imports, check_serializer_explicit_conversion, check_projector_parameter_type, check_privacy_state_factories, check_exception_definition, check_safe_omission_constant, check_alias_declarations, check_type_hierarchy via temp source trees",
+    "shared_evaluator": "accepted fixture: errors == []; rejected fixture: errors != [] AND every expected substring present AND unrelated diagnostic does NOT satisfy",
+    "postponed_annotations": "ast.Constant string annotations parsed via ast.parse(mode=eval); nested and qualified protected types rejected; 'list[X]' 'dict[K,V]' subscripts parsed recursively",
+    "act_local_negative_proofs": "Each violation invoked as subprocess of the canonical redaction_types.py --self-test wrapper; nonzero exit + diagnostic matched; clean rerun confirmed.",
+    "mypy_negative_uses_production": "Negative fixture imports the production incident_evidence_redaction.RedactedEvidenceText and incident_evidence_llm_safe.RedactedEvidenceSummary / evidence_artifact_to_llm_safe_summary; mirror NewType hierarchy NOT used as final acceptance proof.",
+    "gate_summary_canonical_contract": "scripts/factory/build_gate_summary.py is the SINGLE generator; scripts/factory/parse_gate_summary.py is the SINGLE parser."
+  },
+  "extras": {
+    "required_check_names": [
+      "canonical-verifier-self-test",
+      "standalone-production-verifier",
+      "production-mypy-positive",
+      "production-mypy-negative",
+      "full-gate-negative-proofs",
+      "opaque-bearer-regression",
+      "sanitizer-regression-matrix",
+      "credential-matrix",
+      "omission-boundary",
+      "serializer-multi-return",
+      "ruff",
+      "mypy",
+      "git-diff-check",
+      "git-diff-cached-check",
+      "llm-friendly",
+      "no-new-llm-allowlist",
+      "targeted-repository-gate",
+      "gate-summary-parser"
+    ]
+  }
+}

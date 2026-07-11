@@ -236,3 +236,130 @@ The slow timer (default 10s) transitions `selectedRun.status` from `"loading"` t
 - `src/k8s_diag_agent/ui/api.py` — API payload builders
 - `frontend/src/App.tsx` — Root component (3027 lines post-refactor)
 - `frontend/src/hooks/*.ts` — State ownership boundaries
+
+## Privacy-State Pipeline (ACT-K9B-HULK-SECRET-REDACTION-TYPES01)
+
+The privacy-state pipeline enforces the static distinction between raw, redacted,
+LLM-safe, and excerpt evidence text so that sensitive content cannot silently cross
+the LLM/case-file/review-packet boundary.
+
+### Type hierarchy
+
+The four statically distinct privacy-state types are declared once in the canonical
+projection module:
+
+```
+src/k8s_diag_agent/collect/incident_evidence_redaction.py
+    RawEvidenceText        = NewType("RawEvidenceText", str)
+    RedactedEvidenceText   = NewType("RedactedEvidenceText", str)
+    LLMSafeEvidenceText    = NewType("LLMSafeEvidenceText", RedactedEvidenceText)
+    SafeEvidenceExcerpt    = NewType("SafeEvidenceExcerpt", LLMSafeEvidenceText)
+```
+
+This hierarchy is **invariant**: `LLMSafeEvidenceText` is a strict subtype of
+`RedactedEvidenceText`, which is itself distinct from `RawEvidenceText`. The
+type system (with verifier enforcement) is what makes the distinction auditable.
+
+### Pipeline transitions (single source of truth)
+
+The only authorized path through the four states is the four exported factory
+functions, each of which returns the appropriate branded type:
+
+```
+raw:        RawEvidenceText         -> redact_evidence_text()           -> RedactedEvidenceText
+redacted:   RedactedEvidenceText    -> approve_redacted_evidence_text() -> LLMSafeEvidenceText
+safe:       RawEvidenceText         -> project_raw_evidence_text_for_llm() -> LLMSafeEvidenceText
+                                       (re-redact + residual-secret validate + truncate + re-validate)
+excerpt:    LLMSafeEvidenceText     -> make_safe_evidence_excerpt()     -> SafeEvidenceExcerpt
+```
+
+Direct constructor calls to any of the four types outside the canonical
+projection module are rejected by `check_trusted_constructor_usage()`. This
+keeps the type hierarchy **provenance-checked**: any value crossing the
+boundary went through one of the four trusted factories.
+
+### Boundary enforcement
+
+Three LLM-facing modules are protected by `check_protected_boundary_imports()`:
+
+* `incident_review_packet.py`
+* `incident_case_file.py`
+* `incident_llm_diagnosis.py`
+
+These modules MUST NOT import `RawEvidenceText` or `RedactedEvidenceText` directly.
+The boundary check covers:
+
+* direct `from … import RedactedEvidenceText`
+* re-exports through the `incident_evidence` or `incident_evidence_llm_safe`
+  facade modules
+* aliased imports (`RedactedEvidenceText as Text`)
+* qualified attributes (`evidence.RedactedEvidenceText`)
+* postponed string annotations (`"RedactedEvidenceText"`)
+* subscripted forms (`list[RedactedEvidenceText]`)
+* argument/return annotations and class field annotations
+
+### Summary serializer
+
+`RedactedEvidenceSummary.to_dict()` MUST emit
+`"summary": str(self.summary)`. The exact-string pattern is enforced by
+`check_serializer_explicit_conversion()`, which rejects:
+
+* missing `summary` field
+* `summary: self.summary` (no `str()` conversion)
+* `summary: str(other_field)` (wrong source)
+* bare `str(self.summary)` outside the return dict
+
+### Projector parameter
+
+The canonical projector
+`evidence_artifact_to_llm_safe_summary(artifact, *, safe_ref, summary)`
+requires `summary: LLMSafeEvidenceText` (keyword-only). The
+`check_projector_parameter_type()` function enforces both the annotation
+AND the keyword-only position, since positional `summary` would weaken
+call-site safety.
+
+### Verifier wiring
+
+The privacy-state verifier lives in:
+
+```
+scripts/incident_lifecycle_boundary/
+    redaction_aliases.py           -> check_alias_declarations / check_type_hierarchy
+    redaction_boundaries.py        -> check_protected_boundary_imports
+    redaction_constructors.py      -> check_trusted_constructor_usage
+    redaction_serialization.py     -> check_serializer_explicit_conversion
+    redaction_types_check.py       -> check_privacy_state_factories / check_exception_definition
+                                     / check_safe_omission_constant / check_projector_parameter_type
+    redaction_types.py             -> verify_redaction_types (aggregate)
+    redaction_types_self_test.py   -> shared evaluator + temp-tree helpers
+```
+
+All self-tests run through a single shared evaluator with these semantics:
+
+* **Accepted fixture**: errors MUST be empty.
+* **Rejected fixture**: errors MUST be non-empty AND every expected diagnostic
+  substring MUST appear AND an unrelated error MUST NOT satisfy the fixture.
+
+This guarantees verifier self-tests document, snapshot, and detect
+regressions consistently across aliases, hierarchy, factories, exceptions,
+omission, projector, constructors, boundaries, and serialization.
+
+### Sanitizer
+
+`src/k8s_diag_agent/security/sanitizer.py` delegates to the shared policy
+`src/k8s_diag_agent/security/redaction_policy.py`. The R9 audit restored
+the Kubernetes `KUBE_SECRET_TOKEN_*=value` and `*SECRET*=value` patterns
+that the existing live-lab regressions depended on; observability labels
+like `max_tokens: 2048` are explicitly preserved by requiring `=` (not
+`:`) in the new patterns.
+
+### Summary projection test contract
+
+All positive runtime summary tests must construct the `summary` field via
+`project_raw_evidence_text_for_llm()` so that the value is
+`LLMSafeEvidenceText` produced through the projection pipeline. Tests
+that pass `RedactedEvidenceText` (e.g. via `make_redacted_evidence_text()`)
+where `LLMSafeEvidenceText` is required are silently accepted at runtime
+(NewType is a runtime no-op) but are rejected by mypy and by the
+`check_trusted_constructor_usage()` AST scan when the underlying type is
+constructed directly.

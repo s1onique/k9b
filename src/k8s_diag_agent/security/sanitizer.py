@@ -1,4 +1,11 @@
-"""Sanitization helpers for logs, prompts, and exported payloads."""
+"""Sanitization helpers for logs, prompts, and exported payloads.
+
+This module delegates sensitive-text redaction to the canonical redaction policy
+defined in k8s_diag_agent.security.redaction_policy.
+
+For simple string redaction, it uses redact_sensitive_text() directly.
+For structured data sanitization, it applies the policy patterns.
+"""
 
 from __future__ import annotations
 
@@ -6,36 +13,28 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-REDACTION_PLACEHOLDER = "<scrubbed>"
-_SECRET_MANIFEST_RE = re.compile(r"kind\s*[:=]\s*Secret", re.IGNORECASE)
-_PROMPT_SENSITIVE_PATTERNS = [
-    # Catch standalone token variable names like KUBE_SECRET_TOKEN_abc123
-    # This must come before token= patterns to catch full token references
-    # NOTE: Does NOT use \b because underscore is a word character
-    re.compile(r"(?i)TOKEN[A-Za-z0-9_]{5,}"),
-    # Standard credential patterns
-    re.compile(r"(?i)bearer\s+[A-Za-z0-9\-_.=]+"),
-    re.compile(r"(?i)authorization\s*[:=]\s*\S+"),
-    re.compile(r"(?i)api[_-]?key\s*[:=]\s*\S+"),
-    re.compile(r"(?i)client_secret\s*[:=]\s*\S+"),
-    re.compile(r"(?i)access_token\s*[:=]\s*\S+"),
-    re.compile(r"(?i)kubeconfig\b"),
-    re.compile(r"(?i)token\s*[=:]\s*\S+"),
-]
-_SENSITIVE_KEYWORDS = (
-    "token",
-    "secret",
-    "password",
-    "auth",
-    "authorization",
-    "credential",
-    "kubeconfig",
-    "api_key",
-    "apikey",
-    "access_token",
-    "client_secret",
-)
+# REDACTION_PLACEHOLDER is imported from the policy module for consistency
+from k8s_diag_agent.security.redaction_policy import REDACTION_PLACEHOLDER as _REDACTION_PLACEHOLDER
+from k8s_diag_agent.security.redaction_policy import redact_sensitive_text as _raw_policy_redact
 
+# Re-export for backward compatibility
+REDACTION_PLACEHOLDER: str = str(_REDACTION_PLACEHOLDER)
+
+
+def _policy_redact(value: str) -> str:
+    """Typed wrapper around the shared redaction policy for file-path mypy runs."""
+    return str(_raw_policy_redact(value))
+
+
+_SECRET_MANIFEST_RE = re.compile(r"kind\s*[:=]\s*Secret", re.IGNORECASE)
+
+# Sentinel patterns for regression testing - these should NEVER appear in sanitized output
+_SENTINEL_PATTERNS = (
+    "KUBE_SECRET_TOKEN_abc123",
+    "bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+    "api_key=sk-abcdefghijk",
+    "client_secret=super_secret_value",
+)
 
 # Known-safe token-count field names that should NOT be scrubbed.
 # These are numeric budget/observability fields, not credentials.
@@ -52,6 +51,21 @@ _SAFE_TOKEN_COUNT_FIELDS = frozenset(
         "timeout_seconds",
         "response_content_chars",
     )
+)
+
+# Sensitive keywords for key-based scrubbing
+_SENSITIVE_KEYWORDS = (
+    "token",
+    "secret",
+    "password",
+    "auth",
+    "authorization",
+    "credential",
+    "kubeconfig",
+    "api_key",
+    "apikey",
+    "access_token",
+    "client_secret",
 )
 
 
@@ -75,6 +89,7 @@ def _is_safe_token_count_field(key: str) -> bool:
 
 
 def _is_sensitive_key(key: str) -> bool:
+    """Check if a key contains sensitive keywords."""
     normalized = key.replace("-", "_").lower()
     # Allowlist check first - safe token-count fields are never scrubbed
     if _is_safe_token_count_field(normalized):
@@ -83,18 +98,17 @@ def _is_sensitive_key(key: str) -> bool:
 
 
 def _sanitize_string(value: str) -> str:
+    """Sanitize a string value using the shared policy."""
     if not value:
         return value
-    sanitized = value
-    if _SECRET_MANIFEST_RE.search(sanitized):
+    if _SECRET_MANIFEST_RE.search(value):
         return REDACTION_PLACEHOLDER
-    for pattern in _PROMPT_SENSITIVE_PATTERNS:
-        if pattern.search(sanitized):
-            sanitized = pattern.sub(REDACTION_PLACEHOLDER, sanitized)
-    return sanitized
+    # Use the shared policy for redaction
+    return _policy_redact(value)
 
 
 def _is_secret_manifest(value: Mapping[str, Any]) -> bool:
+    """Check if a mapping represents a Kubernetes Secret manifest."""
     kind = value.get("kind")
     if not kind:
         return False
@@ -102,6 +116,7 @@ def _is_secret_manifest(value: Mapping[str, Any]) -> bool:
 
 
 def _sanitize_mapping(value: Mapping[str, Any], *, parent_key: str | None = None) -> dict[str, Any]:
+    """Sanitize a mapping (dict-like object)."""
     if _is_secret_manifest(value):
         metadata = value.get("metadata")
         return {
@@ -120,6 +135,7 @@ def _sanitize_mapping(value: Mapping[str, Any], *, parent_key: str | None = None
 
 
 def _sanitize_sequence(value: Iterable[Any]) -> Any:
+    """Sanitize a sequence (list, tuple, set)."""
     if isinstance(value, tuple):
         return tuple(sanitize_payload(item) for item in value)
     if isinstance(value, list):
@@ -130,6 +146,17 @@ def _sanitize_sequence(value: Iterable[Any]) -> Any:
 
 
 def sanitize_payload(value: Any, *, parent_key: str | None = None) -> Any:
+    """Sanitize a value for safe logging/display.
+
+    This function delegates to the shared redaction policy for string values.
+
+    Args:
+        value: The value to sanitize
+        parent_key: Optional parent key name for context
+
+    Returns:
+        The sanitized value safe for logging/display
+    """
     if isinstance(value, str):
         return _sanitize_string(value)
     if isinstance(value, Mapping):
@@ -140,6 +167,7 @@ def sanitize_payload(value: Any, *, parent_key: str | None = None) -> Any:
 
 
 def sanitize_log_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """Sanitize a log entry for operator-facing display."""
     sanitized = sanitize_payload(entry)
     if isinstance(sanitized, Mapping):
         return dict(sanitized)
@@ -147,21 +175,11 @@ def sanitize_log_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def sanitize_prompt(prompt: str) -> str:
-    sanitized = prompt
-    for pattern in _PROMPT_SENSITIVE_PATTERNS:
-        sanitized = pattern.sub(REDACTION_PLACEHOLDER, sanitized)
+    """Sanitize a prompt string using the shared policy."""
+    sanitized = _policy_redact(prompt)
     if _SECRET_MANIFEST_RE.search(sanitized):
-        sanitized = re.sub(r"(?is)^.*?kind\s*[:=]\s*Secret.*?(?:\n\s*\n|$)", "<scrubbed secret manifest>\n", sanitized)
+        return "<scrubbed secret manifest>"
     return sanitized
-
-
-# Sentinel patterns for regression testing - these should NEVER appear in sanitized output
-_SENTINEL_PATTERNS = (
-    "KUBE_SECRET_TOKEN_abc123",
-    "bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
-    "api_key=sk-abcdefghijk",
-    "client_secret=super_secret_value",
-)
 
 
 def _contains_sentinel(value: str | None) -> bool:
@@ -201,30 +219,20 @@ def sanitize_execution_output(
 
     # Sanitize raw_output BEFORE truncating to prevent credential pattern splitting
     if raw_output:
-        # First apply sanitization to the full string to catch any credentials
-        sanitized = sanitize_payload(raw_output)
-        if isinstance(sanitized, str) and _SECRET_MANIFEST_RE.search(sanitized):
-            sanitized = "<scrubbed>"
-        elif isinstance(sanitized, str):
-            # Apply all sensitive patterns iteratively
-            for pattern in _PROMPT_SENSITIVE_PATTERNS:
-                if pattern.search(sanitized):
-                    sanitized = pattern.sub(REDACTION_PLACEHOLDER, sanitized)
+        # Apply sanitization using the shared policy
+        sanitized = _policy_redact(raw_output)
+        if _SECRET_MANIFEST_RE.search(sanitized):
+            sanitized = REDACTION_PLACEHOLDER
         # Then truncate the already-sanitized string
         if sanitized and len(sanitized) > max_output_length:
             sanitized = sanitized[:max_output_length]
         sanitized_output = sanitized
 
-    # Sanitize error_summary: this may contain raw exception messages, stderr, or Kubernetes error bodies
+    # Sanitize error_summary using the shared policy
     if error_summary:
-        sanitized_error = sanitize_payload(error_summary)
-        if isinstance(sanitized_error, str) and _SECRET_MANIFEST_RE.search(sanitized_error):
-            sanitized_error = "<scrubbed>"
-        elif isinstance(sanitized_error, str):
-            # Apply all sensitive patterns iteratively
-            for pattern in _PROMPT_SENSITIVE_PATTERNS:
-                if pattern.search(sanitized_error):
-                    sanitized_error = pattern.sub(REDACTION_PLACEHOLDER, sanitized_error)
+        sanitized_error = _policy_redact(error_summary)
+        if _SECRET_MANIFEST_RE.search(sanitized_error):
+            sanitized_error = REDACTION_PLACEHOLDER
 
     return sanitized_output, sanitized_error
 
@@ -242,17 +250,13 @@ def sanitize_exception_message(exc: BaseException, max_length: int = 200) -> str
     exc_type = type(exc).__name__
     exc_message = str(exc)
 
-    # Apply sanitization to the message
-    sanitized_message = sanitize_payload(exc_message)
-    if isinstance(sanitized_message, str) and _SECRET_MANIFEST_RE.search(sanitized_message):
-        sanitized_message = "<scrubbed>"
-    elif isinstance(sanitized_message, str):
-        for pattern in _PROMPT_SENSITIVE_PATTERNS:
-            if pattern.search(sanitized_message):
-                sanitized_message = pattern.sub(REDACTION_PLACEHOLDER, sanitized_message)
+    # Apply sanitization using the shared policy
+    sanitized_message = _policy_redact(exc_message)
+    if _SECRET_MANIFEST_RE.search(sanitized_message):
+        sanitized_message = REDACTION_PLACEHOLDER
 
     # Build the sanitized message
-    if sanitized_message and isinstance(sanitized_message, str) and sanitized_message != "<scrubbed>":
+    if sanitized_message and sanitized_message != REDACTION_PLACEHOLDER:
         # Truncate message if too long
         if len(sanitized_message) > max_length:
             sanitized_message = sanitized_message[: max_length - 3] + "..."

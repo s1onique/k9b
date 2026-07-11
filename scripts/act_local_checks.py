@@ -327,9 +327,44 @@ def run_json_contract_check() -> CheckResult:
             duration_ms=0,
             exit_code=0,
         )
-    
+
     command = [str(REPO_ROOT / ".venv" / "bin" / "python"), str(contract_path)]
     return run_check("json-contract", command)
+
+
+def run_gate_summary_parser_check() -> CheckResult:
+    """Run the canonical gate-summary-parser against .factory/gate-summary.json.
+
+    This check is part of the canonical ACT-local close-check by default.
+    When ``verify_all.py`` is invoked via ``--skip-gate-summary`` (typically
+    from inside ``populate_gate_summary.py``), this check is omitted to break
+    the populate -> verify -> populate circular dependency.
+    """
+    artifact = REPO_ROOT / ".factory" / "gate-summary.json"
+    if not artifact.exists():
+        return CheckResult(
+            name="gate-summary-parser",
+            command=(
+                f"python scripts/factory/parse_gate_summary.py --target "
+                f"{artifact} --quiet"
+            ),
+            status="FAIL",
+            duration_ms=0,
+            exit_code=2,
+            error_message=(
+                f"CRITICAL: gate-summary artifact not found at {artifact}. "
+                "Run scripts/factory/populate_gate_summary.py first."
+            ),
+        )
+    parser_path = SCRIPTS_DIR / "factory" / "parse_gate_summary.py"
+    command = [
+        str(REPO_ROOT / ".venv" / "bin" / "python"),
+        str(parser_path),
+        "--target",
+        str(artifact),
+        "--quiet",
+    ]
+    return run_check("gate-summary-parser", command)
 
 
 def run_workflow_check() -> CheckResult:

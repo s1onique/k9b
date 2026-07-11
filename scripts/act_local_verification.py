@@ -23,6 +23,7 @@ from act_local_changed_files import filter_python_files, get_changed_files
 from act_local_checks import (
     run_doctrine_check,
     run_frontend_one_pass_diagnosis_check,
+    run_gate_summary_parser_check,
     run_incident_api_one_pass_diagnosis_check,
     run_incident_api_route_one_pass_diagnosis_check,
     run_json_contract_check,
@@ -54,10 +55,13 @@ from act_local_small_provider_checks import (
 # ACT-Local Verification
 # =============================================================================
 
-def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
+def run_act_local_verification(
+    json_mode: bool = False,
+    skip_gate_summary: bool = False,
+) -> ActLocalResult:
     """
     Run ACT-local verification.
-    
+
     This runs bounded checks on changed files only:
     - ruff on changed Python files
     - mypy on changed Python files
@@ -65,7 +69,10 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     - shell containment on changed shell files
     - doctrine checks
     - verification discipline guard
-    
+    - gate-summary-parser (skipped when ``skip_gate_summary`` is True;
+      this is set by ``verify_all.py --skip-gate-summary`` to break the
+      populate -> verify -> populate circular dependency)
+
     Forbidden by default:
     - pytest (broad)
     - full fast profile
@@ -204,18 +211,37 @@ def run_act_local_verification(json_mode: bool = False) -> ActLocalResult:
     checks.append(small_provider_artifact_result)
     if small_provider_artifact_result.status == "FAIL":
         failure_commands.append(small_provider_artifact_result.command)
-    
+
+    # Run the gate-summary-parser check unless explicitly skipped.
+    # Skipping is used by scripts/factory/populate_gate_summary.py to break
+    # the populate -> verify -> populate circular dependency.
+    if not skip_gate_summary:
+        gate_summary_result = run_gate_summary_parser_check()
+        checks.append(gate_summary_result)
+        if gate_summary_result.status == "FAIL":
+            failure_commands.append(gate_summary_result.command)
+
     # Determine overall success (all non-skipped checks must pass)
     non_skipped = [c for c in checks if c.status != "SKIP"]
     success = all(c.status == "PASS" for c in non_skipped) if non_skipped else True
-    
+
     # Build skipped checks list
-    skipped_checks = [
+    skipped_checks: list[dict[str, str]] = [
         {"id": "pytest-broad", "reason": "Broad pytest suite - use targeted pytest for changed tests"},
         {"id": "full-fast-gate", "reason": "Full fast profile - not evaluated by ACT-local"},
         {"id": "frontend-suite", "reason": "Frontend suite - not evaluated by ACT-local"},
         {"id": "expensive-docs", "reason": "Expensive docs checks - not evaluated by ACT-local"},
     ]
+    if skip_gate_summary:
+        skipped_checks.append(
+            {
+                "id": "gate-summary-parser",
+                "reason": (
+                    "Skipped via --skip-gate-summary to break populate -> verify -> populate "
+                    "circular dependency."
+                ),
+            }
+        )
     
     return ActLocalResult(
         success=success,
@@ -262,9 +288,13 @@ It SKIPS:
         return 0
     
     json_mode = "--json" in sys.argv
-    
+    skip_gate_summary = "--skip-gate-summary" in sys.argv
+
     try:
-        result = run_act_local_verification(json_mode=json_mode)
+        result = run_act_local_verification(
+            json_mode=json_mode,
+            skip_gate_summary=skip_gate_summary,
+        )
         
         if json_mode:
             print(format_json_output(result))
