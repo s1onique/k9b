@@ -188,6 +188,10 @@ class TestTwoRunCollectorIntegration:
             AutomaticPageListed,
         )
 
+        # Enable automatic diagnosis loop for this test (defaults to disabled)
+        # Use monkeypatch to ensure cleanup after test
+        monkeypatch.setenv("K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED", "true")
+
         # Clear any existing cursor state
         _clear_scan_cursor(runs_dir)
 
@@ -275,6 +279,12 @@ class TestTwoRunCollectorIntegration:
             external_analysis_dir=runs_dir / "run-001" / "external-analysis",
             config=config_run1,
             now=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
+        )
+
+        # Early assertion: verify loop is enabled (fails fast if env not set)
+        assert result1.enabled is True, (
+            "Automatic diagnosis loop is disabled. "
+            "Ensure K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true is set in the test environment."
         )
 
         # Verify Run 1 processed exactly 10 incidents
