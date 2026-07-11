@@ -1,6 +1,6 @@
 """Tests for exactly-one eligibility summary emission per collector run.
 
-Related to: ACT-K9B-AUTO-DIAGNOSIS-ELIGIBILITY-SUMMARY-PROD-PATH01
+Related to: ACT-K9B-AUTO-DIAGNOSIS-SKIP-REASON-OBSERVABILITY01
 """
 
 from __future__ import annotations
@@ -63,6 +63,7 @@ def capture_logs():
                 "incidents_processed": record_dict.get("incidents_processed"),
                 "incidents_eligible": record_dict.get("incidents_eligible"),
                 "incidents_skipped": record_dict.get("incidents_skipped"),
+                "incidents_ineligible": record_dict.get("incidents_ineligible"),
                 "incidents_with_errors": record_dict.get("incidents_with_errors"),
             })
 
@@ -169,8 +170,12 @@ class TestExactlyOneSummaryEmission:
 
             summary = summary_logs[0]
             assert summary["incidents_processed"] == 5
+            # ACT-K9B-AUTO-DIAGNOSIS-DISPOSITION-ADT01: terminal_status_* and
+            # inactive_status_* now route to ``IneligibleForAutomaticDiagnosis``
+            # rather than being conflated with skips.
             assert summary["incidents_eligible"] == 1
-            assert summary["incidents_skipped"] == 3
+            assert summary["incidents_skipped"] == 1
+            assert summary["incidents_ineligible"] == 2
             assert summary["incidents_with_errors"] == 1
 
         finally:

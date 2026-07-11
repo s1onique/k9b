@@ -1,6 +1,6 @@
 """Tests for per-incident skipped logs with collector_run_id.
 
-Related to: ACT-K9B-AUTO-DIAGNOSIS-ELIGIBILITY-SUMMARY-PROD-PATH01
+Related to: ACT-K9B-AUTO-DIAGNOSIS-SKIP-REASON-OBSERVABILITY01
 """
 
 from __future__ import annotations
@@ -58,6 +58,10 @@ def capture_logs():
                 "event": record_dict.get("event"),
                 "collector_run_id": record_dict.get("collector_run_id"),
                 "incident_id": record_dict.get("incident_id"),
+                "disposition": record_dict.get("disposition"),
+                "reason_code": record_dict.get("reason_code"),
+                "detail": record_dict.get("detail"),
+                "schema_version": record_dict.get("schema_version"),
                 "eligible": record_dict.get("eligible"),
                 "eligibility_reason": record_dict.get("eligibility_reason"),
                 "skip_reason": record_dict.get("skip_reason"),
@@ -109,8 +113,10 @@ class TestPerIncidentSkippedLogs:
             assert len(summary_logs) == 1
             expected_collector_run_id = summary_logs[0]["collector_run_id"]
 
-            # Find per-incident skipped log
-            skipped_logs = [log for log in capture_logs if log["event"] == "incident-skipped"]
+            # Find per-incident disposition log (new ACT contract:
+            # ``automatic-diagnosis-incident-disposition`` replaces the
+            # legacy ``incident-skipped`` name).
+            skipped_logs = [log for log in capture_logs if log["event"] == "automatic-diagnosis-incident-disposition"]
             assert len(skipped_logs) == 1
 
             skipped_log = skipped_logs[0]
@@ -118,8 +124,8 @@ class TestPerIncidentSkippedLogs:
                 "Per-incident skip log must have same collector_run_id as aggregate summary"
             )
             assert skipped_log["incident_id"] == incident_id
-            assert skipped_log["eligible"] is False
-            assert skipped_log["eligibility_reason"] == "budget_exhausted"
+            assert skipped_log["disposition"] == "skipped"
+            assert skipped_log["reason_code"] == "review_packet_budget_exhausted"
 
         finally:
             set_incident_store(None)

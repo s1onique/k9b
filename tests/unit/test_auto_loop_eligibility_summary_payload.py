@@ -1,6 +1,6 @@
 """Tests for automatic diagnosis loop eligibility summary payload builder.
 
-Related to: ACT-K9B-AUTO-DIAGNOSIS-ELIGIBILITY-SUMMARY-PROD-PATH01
+Related to: ACT-K9B-AUTO-DIAGNOSIS-SKIP-REASON-OBSERVABILITY01
 """
 
 from __future__ import annotations

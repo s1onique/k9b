@@ -206,6 +206,14 @@ def write_summary_artifact(
     total_checks_executed: int,
     stop_reason: str,
     incident_results: list[dict[str, Any]],
+    *,
+    skip_reasons: dict[str, int] | None = None,
+    ineligible_reasons: dict[str, int] | None = None,
+    error_reasons: dict[str, int] | None = None,
+    incidents_skipped: int = 0,
+    incidents_ineligible: int = 0,
+    incidents_with_errors: int = 0,
+    eligibility_schema_version: int = 2,
 ) -> dict[str, Any]:
     """Write loop summary artifact.
 
@@ -221,6 +229,13 @@ def write_summary_artifact(
         total_checks_executed: Total checks executed
         stop_reason: Overall stop reason
         incident_results: Per-incident results
+        skip_reasons: Aggregate counts keyed by closed vocabulary
+        ineligible_reasons: Aggregate counts keyed by closed vocabulary
+        error_reasons: Aggregate counts keyed by closed vocabulary
+        incidents_skipped: Scalar skip count
+        incidents_ineligible: Scalar ineligible count
+        incidents_with_errors: Scalar error count
+        eligibility_schema_version: Schema version for the reason maps
 
     Returns:
         Write result dict with 'written' and 'path'
@@ -234,15 +249,22 @@ def write_summary_artifact(
         "run_id": run_id,
         "collector_run_id": collector_run_id,
         "generated_at": datetime.now(UTC).isoformat(),
+        "eligibility_schema_version": eligibility_schema_version,
         "summary": {
             "incidents_seen": incidents_seen,
             "incidents_eligible": incidents_eligible,
+            "incidents_skipped": incidents_skipped,
+            "incidents_ineligible": incidents_ineligible,
+            "incidents_with_errors": incidents_with_errors,
             "incidents_processed": incidents_processed,
             "hypothesis_bursts_written": hypothesis_bursts_written,
             "total_passes_completed": total_passes_completed,
             "total_checks_executed": total_checks_executed,
             "stop_reason": stop_reason,
         },
+        "skip_reasons": dict(skip_reasons or {}),
+        "ineligible_reasons": dict(ineligible_reasons or {}),
+        "error_reasons": dict(error_reasons or {}),
         "incident_results": incident_results,
     }
 

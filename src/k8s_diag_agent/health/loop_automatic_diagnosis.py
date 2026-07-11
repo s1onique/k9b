@@ -11,11 +11,11 @@ Design constraints:
 - Idempotent: budget tracking prevents repeated passes
 - Failure isolation: collector errors do not crash the health loop
 
-This module does NOT:
-- Execute real Kubernetes collectors
-- Call kubectl/helm/subprocess/shell
-- Perform remediation or mutation
-- Run unbounded loops
+The completion event now includes ``skip_reasons`` / ``ineligible_reasons``
+/ ``error_reasons`` projected from the typed disposition summary, plus
+``eligibility_schema_version``. Operators who already inspect the
+"Automatic diagnosis loop completed" event now also see why incidents
+were skipped without having to read a separate aggregate event.
 """
 
 from __future__ import annotations
@@ -36,6 +36,29 @@ __all__ = [
 ]
 
 
+def _projection_from_result(result: Any) -> dict[str, Any]:
+    """Project reason maps from a typed ``disposition_summary`` (or fall back).
+
+    Falls back to empty maps when the collector did not produce a typed
+    summary (e.g. when invoked through compatibility shims that only
+    return scalar counters).
+    """
+    summary = getattr(result, "disposition_summary", None)
+    if summary is None:
+        return {
+            "skip_reasons": {},
+            "ineligible_reasons": {},
+            "error_reasons": {},
+            "eligibility_schema_version": 2,
+        }
+    return {
+        "skip_reasons": {k.value: v for k, v in summary.skip_reasons.items()},
+        "ineligible_reasons": {k.value: v for k, v in summary.ineligible_reasons.items()},
+        "error_reasons": {k.value: v for k, v in summary.error_reasons.items()},
+        "eligibility_schema_version": 2,
+    }
+
+
 def run_automatic_diagnosis_loop(
     *,
     external_analysis_dir: Path,
@@ -46,31 +69,7 @@ def run_automatic_diagnosis_loop(
 
     This is the health loop integration point for automatic evidence collection.
     It is gated by K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED environment variable.
-
-    Args:
-        external_analysis_dir: Path to the external-analysis directory
-        log_event_fn: Optional callback for logging events
-        scheduler_run_id: Optional scheduler run ID for correlation with other logs/artifacts
-
-    Returns:
-        Bounded result summary dict with:
-        - automatic_diagnosis_enabled: bool
-        - collector_run_id: str | None
-        - run_id: str | None (scheduler run_id if provided)
-        - incidents_processed: int
-        - incidents_eligible: int
-        - incidents_skipped: int
-        - incidents_with_errors: int
-        - total_review_packets_written: int
-
-    Safety guarantees:
-    - read_only: True
-    - no_kubectl: True
-    - no_shell: True
-    - no_remediation: True
-    - bounded: True
     """
-    # Check if automatic diagnosis is enabled
     enabled = is_automatic_diagnosis_loop_enabled()
 
     if not enabled:
@@ -89,6 +88,10 @@ def run_automatic_diagnosis_loop(
             "incidents_skipped": 0,
             "incidents_with_errors": 0,
             "total_review_packets_written": 0,
+            "skip_reasons": {},
+            "ineligible_reasons": {},
+            "error_reasons": {},
+            "eligibility_schema_version": 2,
         }
 
     # Log start of automatic diagnosis phase
@@ -100,7 +103,6 @@ def run_automatic_diagnosis_loop(
             event="start",
         )
 
-    # Use safe default config with hard bounds
     config = AutomaticDiagnosisLoopConfig(
         max_incidents_per_run=10,
         max_passes_per_incident=1,
@@ -109,8 +111,6 @@ def run_automatic_diagnosis_loop(
         write_ineligible_packets=False,
     )
 
-    # Run the collector with bounded error handling
-    # Lazy import to avoid circular dependency at module load time
     from ..collect.incident_diagnosis_auto_loop import run_automatic_diagnosis_loop_evidence_collection
 
     try:
@@ -120,7 +120,7 @@ def run_automatic_diagnosis_loop(
             scheduler_run_id=scheduler_run_id,
         )
 
-        # Extract bounded summary
+        projection = _projection_from_result(result)
         summary = {
             "automatic_diagnosis_enabled": True,
             "collector_run_id": result.run_id,
@@ -131,9 +131,12 @@ def run_automatic_diagnosis_loop(
             "incidents_ineligible": result.incidents_ineligible,
             "incidents_with_errors": result.incidents_with_errors,
             "total_review_packets_written": result.total_review_packets_written,
+            **projection,
         }
 
-        # Log completion with full eligibility summary for operator diagnostics
+        # Log completion with full eligibility summary for operator diagnostics.
+        # Operators already inspect this event; we include the reason maps
+        # directly so they do not need to cross-reference a separate aggregate.
         if log_event_fn:
             log_event_fn(
                 "automatic-diagnosis",
@@ -148,12 +151,12 @@ def run_automatic_diagnosis_loop(
                 incidents_ineligible=result.incidents_ineligible,
                 incidents_with_errors=result.incidents_with_errors,
                 total_review_packets_written=result.total_review_packets_written,
+                **projection,
             )
 
         return summary
 
     except Exception as exc:
-        # Catch any unexpected errors to prevent health loop crash
         if log_event_fn:
             log_event_fn(
                 "automatic-diagnosis",
@@ -171,4 +174,10 @@ def run_automatic_diagnosis_loop(
             "incidents_skipped": 0,
             "incidents_with_errors": 1,
             "total_review_packets_written": 0,
+            "skip_reasons": {},
+            "ineligible_reasons": {},
+            "error_reasons": {
+                "eligibility_evaluation_failed": 1,
+            },
+            "eligibility_schema_version": 2,
         }

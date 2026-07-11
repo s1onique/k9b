@@ -1,6 +1,6 @@
 """Tests for structured event field with hyphens.
 
-Related to: ACT-K9B-AUTO-DIAGNOSIS-ELIGIBILITY-SUMMARY-PROD-PATH01
+Related to: ACT-K9B-AUTO-DIAGNOSIS-SKIP-REASON-OBSERVABILITY01
 """
 
 from __future__ import annotations

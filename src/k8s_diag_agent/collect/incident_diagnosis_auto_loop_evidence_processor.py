@@ -359,6 +359,14 @@ def _write_loop_summary(
     stop_reason: str,
     incident_results: list[dict[str, Any]],
     run_id: str | None = None,
+    *,
+    skip_reasons: dict[str, int] | None = None,
+    ineligible_reasons: dict[str, int] | None = None,
+    error_reasons: dict[str, int] | None = None,
+    incidents_skipped: int = 0,
+    incidents_ineligible: int = 0,
+    incidents_with_errors: int = 0,
+    eligibility_schema_version: int = 2,
 ) -> dict[str, Any]:
     """Write loop summary artifact."""
     from .incident_automatic_diagnosis_loop import write_summary_artifact as _write_summary_artifact
@@ -378,6 +386,13 @@ def _write_loop_summary(
         total_checks_executed=total_checks_executed,
         stop_reason=stop_reason,
         incident_results=incident_results,
+        skip_reasons=skip_reasons,
+        ineligible_reasons=ineligible_reasons,
+        error_reasons=error_reasons,
+        incidents_skipped=incidents_skipped,
+        incidents_ineligible=incidents_ineligible,
+        incidents_with_errors=incidents_with_errors,
+        eligibility_schema_version=eligibility_schema_version,
     )
 
 

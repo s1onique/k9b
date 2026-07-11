@@ -10,6 +10,10 @@ Design constraints:
 - No remediation, no mutation, no execution
 - No unbounded loops
 - No imports from orchestration siblings
+
+The aggregate eligibility summary event is emitted via
+``emit_structured_log`` so it reaches the same JSON log stream the
+scheduler uses.
 """
 
 from __future__ import annotations
@@ -52,6 +56,11 @@ from .incident_diagnosis_dispatch import (
     fetch_incident_for_diagnosis,
 )
 from .incident_diagnosis_dispatch_page import IncidentDiagnosisPage
+from .incident_diagnosis_disposition import (
+    SCHEMA_VERSION,
+    DiagnosisDispositionSummary,
+    empty_disposition_summary,
+)
 from .incident_diagnosis_loop_runtime_single_pass import run_policy_enforced_loop_pass
 from .incident_diagnosis_pagination_types import OpaqueCursorToken
 from .incident_diagnosis_review_packet import write_diagnosis_review_packet
@@ -59,6 +68,55 @@ from .incident_read_only_check_artifacts import is_safe_run_id
 from .incident_store_provider import get_incident_store
 
 _logger = logging.getLogger(__name__)
+
+
+def _emit_summary_and_artifact(
+    *,
+    result: AutoLoopCollectorResult,
+    summary: DiagnosisDispositionSummary,
+    stop_reason: str,
+    external_analysis_dir: Path,
+    scheduler_run_id: str | None,
+    incidents_seen: int,
+    total_passes_completed: int,
+    total_checks_executed: int,
+    hypothesis_bursts_written: int,
+    first_incident_run_id: str | None,
+    incidents_with_errors: int = 0,
+) -> None:
+    """Single finalization boundary: emit the summary event and write artifact.
+
+    This replaces the previous pattern of emitting/writing at each return
+    site in ``run_automatic_diagnosis_loop_evidence_collection``.
+    """
+    result.disposition_summary = summary
+    _emit_eligibility_summary(
+        collector_run_id=result.run_id,
+        summary=summary,
+        stop_reason=stop_reason,
+        scheduler_run_id=scheduler_run_id,
+        incidents_with_errors_override=incidents_with_errors,
+    )
+    _write_loop_summary(
+        external_analysis_dir=external_analysis_dir,
+        collector_run_id=result.run_id,
+        incidents_seen=incidents_seen,
+        incidents_eligible=summary.eligible,
+        incidents_processed=summary.processed,
+        hypothesis_bursts_written=hypothesis_bursts_written,
+        total_passes_completed=total_passes_completed,
+        total_checks_executed=total_checks_executed,
+        stop_reason=stop_reason,
+        incident_results=list(result.incident_results),
+        run_id=first_incident_run_id,
+        skip_reasons={k.value: v for k, v in summary.skip_reasons.items()},
+        ineligible_reasons={k.value: v for k, v in summary.ineligible_reasons.items()},
+        error_reasons={k.value: v for k, v in summary.error_reasons.items()},
+        incidents_skipped=summary.skipped,
+        incidents_ineligible=summary.ineligible,
+        incidents_with_errors=incidents_with_errors,
+        eligibility_schema_version=SCHEMA_VERSION,
+    )
 
 
 def run_automatic_diagnosis_loop_evidence_collection(
@@ -69,15 +127,7 @@ def run_automatic_diagnosis_loop_evidence_collection(
     now: datetime | None = None,
     scheduler_run_id: str | None = None,
 ) -> AutoLoopCollectorResult:
-    """Run automatic diagnosis loop evidence collection for eligible incidents.
-
-    Args:
-        external_analysis_dir: Path to external-analysis directory
-        config: Optional custom configuration
-        incident_ids: Optional list of specific incident IDs to process
-        now: Optional datetime for testing
-        scheduler_run_id: Optional scheduler run ID for correlation with other logs/artifacts
-    """
+    """Run automatic diagnosis loop evidence collection for eligible incidents."""
     resolved_config = config or AutomaticDiagnosisLoopConfig()
     resolved_now = now if now is not None else datetime.now(UTC)
     collector_run_id = f"auto-diagnosis-{resolved_now.strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
@@ -95,23 +145,20 @@ def run_automatic_diagnosis_loop_evidence_collection(
     if not enabled:
         result.incident_results = [{
             "note": "Automatic diagnosis loop is disabled. Set K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true to enable.",
+            "eligibility_schema_version": SCHEMA_VERSION,
         }]
-        _emit_eligibility_summary(
-            collector_run_id=collector_run_id,
+        result.disposition_summary = empty_disposition_summary()
+        _emit_summary_and_artifact(
             result=result,
-            scheduler_run_id=scheduler_run_id,
-        )
-        _write_loop_summary(
+            summary=empty_disposition_summary(),
+            stop_reason="loop_disabled",
             external_analysis_dir=external_analysis_dir,
-            collector_run_id=collector_run_id,
+            scheduler_run_id=scheduler_run_id,
             incidents_seen=0,
-            incidents_eligible=0,
-            incidents_processed=0,
-            hypothesis_bursts_written=0,
             total_passes_completed=0,
             total_checks_executed=0,
-            stop_reason="loop_disabled",
-            incident_results=result.incident_results,
+            hypothesis_bursts_written=0,
+            first_incident_run_id=None,
         )
         return result
 
@@ -122,15 +169,13 @@ def run_automatic_diagnosis_loop_evidence_collection(
     max_diagnoses = resolved_config.max_incidents_per_run
     page: IncidentDiagnosisPage | None = None
     page_has_more = False
-    scan_cursor: OpaqueCursorToken | None = None  # Initialize for all branches
-    cursor_was_present = False  # Track whether cursor was loaded for disposition
+    scan_cursor: OpaqueCursorToken | None = None
+    cursor_was_present = False
 
     if incident_ids is not None:
-        # Explicit selection: use provided IDs directly, no cursor I/O
         scan_bound = max_diagnoses
         all_scanned_ids = incident_ids[:scan_bound]
     else:
-        # Automatic discovery: load persisted cursor for fair queuing
         scan_cursor, cursor_was_present = load_cursor_for_scan(runs_dir)
         scan_bound = max_diagnoses * 3
         page_result = list_incidents_with_pagination(scan_cursor, scan_bound)
@@ -148,44 +193,44 @@ def run_automatic_diagnosis_loop_evidence_collection(
                 page_has_more = page.has_more
             case AutomaticPageCursorRejected(failure=failure):
                 result.incident_results = [{
-                    "note": f"Cursor decode error: {failure.error_message}"
+                    "note": f"Cursor decode error: {failure.error_message}",
+                    "eligibility_schema_version": SCHEMA_VERSION,
                 }]
-                _emit_eligibility_summary(
-                    collector_run_id=collector_run_id,
+                result.disposition_summary = empty_disposition_summary()
+                _emit_summary_and_artifact(
                     result=result,
-                    scheduler_run_id=scheduler_run_id,
-                )
-                _write_loop_summary(
+                    summary=empty_disposition_summary(),
+                    stop_reason="cursor_error",
                     external_analysis_dir=external_analysis_dir,
-                    collector_run_id=collector_run_id,
-                    incidents_seen=0, incidents_eligible=0, incidents_processed=0,
-                    hypothesis_bursts_written=0, total_passes_completed=0,
-                    total_checks_executed=0, stop_reason="cursor_error",
-                    incident_results=result.incident_results,
+                    scheduler_run_id=scheduler_run_id,
+                    incidents_seen=0,
+                    total_passes_completed=0,
+                    total_checks_executed=0,
+                    hypothesis_bursts_written=0,
+                    first_incident_run_id=None,
                 )
                 return result
             case AutomaticPageListingFailed(failure=failure):
                 result.incident_results = [{
-                    "note": f"Failed to list incidents: {failure.message}"
+                    "note": f"Failed to list incidents: {failure.message}",
+                    "eligibility_schema_version": SCHEMA_VERSION,
                 }]
-                _emit_eligibility_summary(
-                    collector_run_id=collector_run_id,
+                result.disposition_summary = empty_disposition_summary()
+                _emit_summary_and_artifact(
                     result=result,
-                    scheduler_run_id=scheduler_run_id,
-                )
-                _write_loop_summary(
+                    summary=empty_disposition_summary(),
+                    stop_reason="incident_listing_failed",
                     external_analysis_dir=external_analysis_dir,
-                    collector_run_id=collector_run_id,
-                    incidents_seen=0, incidents_eligible=0, incidents_processed=0,
-                    hypothesis_bursts_written=0, total_passes_completed=0,
-                    total_checks_executed=0, stop_reason="incident_listing_failed",
-                    incident_results=result.incident_results,
+                    scheduler_run_id=scheduler_run_id,
+                    incidents_seen=0,
+                    total_passes_completed=0,
+                    total_checks_executed=0,
+                    hypothesis_bursts_written=0,
+                    first_incident_run_id=None,
                 )
                 return result
 
     if len(all_scanned_ids) == 0:
-        # Route empty successful page through cursor disposition algebra
-        # This ensures empty initial scan vs empty suffix after cursor are handled correctly
         if incident_ids is None:
             disposition = decide_cursor_disposition(
                 automatic_selection=True,
@@ -199,22 +244,18 @@ def run_automatic_diagnosis_loop_evidence_collection(
             handle_cursor_disposition(disposition, runs_dir)
         log_zero_incidents_diagnostic(resolved_config)
         result.incident_results = []
-        _emit_eligibility_summary(
-            collector_run_id=collector_run_id,
+        result.disposition_summary = empty_disposition_summary()
+        _emit_summary_and_artifact(
             result=result,
-            scheduler_run_id=scheduler_run_id,
-        )
-        _write_loop_summary(
+            summary=empty_disposition_summary(),
+            stop_reason="no_eligible_incidents",
             external_analysis_dir=external_analysis_dir,
-            collector_run_id=collector_run_id,
+            scheduler_run_id=scheduler_run_id,
             incidents_seen=0,
-            incidents_eligible=0,
-            incidents_processed=0,
-            hypothesis_bursts_written=0,
             total_passes_completed=0,
             total_checks_executed=0,
-            stop_reason="no_eligible_incidents",
-            incident_results=result.incident_results,
+            hypothesis_bursts_written=0,
+            first_incident_run_id=None,
         )
         return result
 
@@ -228,43 +269,38 @@ def run_automatic_diagnosis_loop_evidence_collection(
         collector_run_id=collector_run_id,
         external_analysis_dir=external_analysis_dir,
         resolved_now=resolved_now,
+        scheduler_run_id=scheduler_run_id,
     )
 
-    # Update result with batch results using named attributes
+    # Update result from typed batch outcome
     result.incident_results = list(batch_outcome.incident_results)
+    result.dispositions = batch_outcome.dispositions
+    result.disposition_summary = batch_outcome.disposition_summary
+    summary = batch_outcome.disposition_summary
     result.incidents_seen = len(batch_outcome.incident_results)
-    result.incidents_processed = len(batch_outcome.incident_results)
-    result.incidents_skipped = batch_outcome.incidents_skipped
+    result.incidents_processed = summary.processed
+    result.incidents_skipped = summary.skipped
     result.incidents_with_errors = batch_outcome.incidents_with_errors
-    result.incidents_eligible = batch_outcome.incidents_eligible
-    result.incidents_ineligible = batch_outcome.incidents_ineligible
+    result.incidents_eligible = summary.eligible
+    result.incidents_ineligible = summary.ineligible
     result.total_checks_run = batch_outcome.total_checks_run
     result.total_review_packets_written = batch_outcome.total_review_packets_written
-    total_passes_completed = batch_outcome.total_passes_completed
-    total_checks_executed = batch_outcome.total_checks_executed
-    hypothesis_bursts_written = batch_outcome.hypothesis_bursts_written
     overall_stop_reason = batch_outcome.stop_reason.value
     first_incident_run_id = batch_outcome.first_incident_run_id
     last_processed_cursor = batch_outcome.last_examined_cursor
 
-    _emit_eligibility_summary(
-        collector_run_id=collector_run_id,
+    _emit_summary_and_artifact(
         result=result,
-        scheduler_run_id=scheduler_run_id,
-    )
-
-    _write_loop_summary(
-        external_analysis_dir=external_analysis_dir,
-        collector_run_id=collector_run_id,
-        incidents_seen=result.incidents_processed,
-        incidents_eligible=result.incidents_eligible,
-        incidents_processed=result.incidents_processed,
-        hypothesis_bursts_written=hypothesis_bursts_written,
-        total_passes_completed=total_passes_completed,
-        total_checks_executed=total_checks_executed,
+        summary=summary,
         stop_reason=overall_stop_reason,
-        incident_results=result.incident_results,
-        run_id=first_incident_run_id,
+        external_analysis_dir=external_analysis_dir,
+        scheduler_run_id=scheduler_run_id,
+        incidents_seen=result.incidents_processed,
+        total_passes_completed=batch_outcome.total_passes_completed,
+        total_checks_executed=batch_outcome.total_checks_executed,
+        hypothesis_bursts_written=batch_outcome.hypothesis_bursts_written,
+        first_incident_run_id=first_incident_run_id,
+        incidents_with_errors=batch_outcome.incidents_with_errors,
     )
 
     # Cursor disposition using pure state machine

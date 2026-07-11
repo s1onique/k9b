@@ -1,6 +1,6 @@
 """Tests for scheduler path integration.
 
-Related to: ACT-K9B-AUTO-DIAGNOSIS-ELIGIBILITY-SUMMARY-PROD-PATH01
+Related to: ACT-K9B-AUTO-DIAGNOSIS-SKIP-REASON-OBSERVABILITY01
 """
 
 from __future__ import annotations
@@ -56,12 +56,15 @@ def capture_logs():
                 "event": record_dict.get("event"),
                 "collector_run_id": record_dict.get("collector_run_id"),
                 "eligibility_version": record_dict.get("eligibility_version"),
+                "schema_version": record_dict.get("schema_version"),
                 "incidents_processed": record_dict.get("incidents_processed"),
                 "incidents_eligible": record_dict.get("incidents_eligible"),
                 "incidents_skipped": record_dict.get("incidents_skipped"),
                 "incidents_ineligible": record_dict.get("incidents_ineligible"),
                 "incidents_with_errors": record_dict.get("incidents_with_errors"),
                 "skip_reasons": record_dict.get("skip_reasons"),
+                "ineligible_reasons": record_dict.get("ineligible_reasons"),
+                "error_reasons": record_dict.get("error_reasons"),
             })
 
     handler = LogCapture()
@@ -118,13 +121,19 @@ class TestSchedulerPathIntegration:
             # Verify production contract
             assert summary["event"] == "automatic-diagnosis-eligibility-summary"
             assert summary["collector_run_id"] is not None
-            assert summary["eligibility_version"] == 1
+            # ACT-K9B-AUTO-DIAGNOSIS-DISPOSITION-ADT01: schema version bumped
+            # to 2 because the disposition ADT now carries typed reason maps.
+            assert summary["eligibility_version"] == 2
+            assert summary["schema_version"] == 2
             assert summary["incidents_processed"] == 10
             assert summary["incidents_eligible"] == 0
             assert summary["incidents_skipped"] == 10
             assert summary["incidents_ineligible"] == 0
             assert summary["incidents_with_errors"] == 0
-            assert summary["skip_reasons"]["budget_exhausted"] == 10
+            # Closed vocabulary member ``review_packet_budget_exhausted``
+            # replaces the legacy ``budget_exhausted`` string used by the
+            # pre-ADT eligibility check.
+            assert summary["skip_reasons"]["review_packet_budget_exhausted"] == 10
 
             # Verify result matches
             assert result.incidents_processed == 10

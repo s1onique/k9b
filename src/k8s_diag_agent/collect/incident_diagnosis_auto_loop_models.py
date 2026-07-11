@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from .incident_diagnosis_auto_loop_config import DiagnosisBudgetDiagnostic
 
 if TYPE_CHECKING:
+    from .incident_diagnosis_disposition import DiagnosisDispositionSummary, IncidentDiagnosisDisposition
     from .incident_diagnosis_keyset_cursor import IncidentDiagnosisCursor
 
 __all__ = [
@@ -129,6 +130,14 @@ class AutoLoopCollectorResult:
     total_review_packets_written: int = 0
     incident_results: list[dict[str, Any]] = field(default_factory=list)
     safety_metadata: dict[str, Any] = field(default_factory=dict)
+    # Typed disposition summary and per-incident dispositions. Set by the
+    # collector when at least one incident was examined. Kept optional so
+    # that early-disable / empty-page paths (which legitimately never
+    # examined any incident) can leave it as ``None``.
+    # ``DiagnosisDispositionSummary | None`` lives in
+    # ``incident_diagnosis_disposition``; quoted to avoid an import cycle.
+    disposition_summary: DiagnosisDispositionSummary | None = None
+    dispositions: tuple[IncidentDiagnosisDisposition, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -184,7 +193,13 @@ class IncidentBatchOutcome:
     for better type safety and readability.
 
     Attributes:
-        incident_results: List of incident result dictionaries
+        incident_results: List of incident result dictionaries (legacy
+            projection of each incident's disposition; kept for external/API
+            compatibility).
+        disposition_summary: Typed disposition summary accumulated from the
+            per-incident dispositions (single source of truth for counters
+            and reason maps).
+        dispositions: Tuple of typed per-incident dispositions.
         incidents_skipped: Number of incidents skipped
         incidents_with_errors: Number of incidents that errored
         incidents_eligible: Number of eligible incidents processed
@@ -200,6 +215,8 @@ class IncidentBatchOutcome:
     """
 
     incident_results: tuple[dict[str, object], ...]
+    disposition_summary: DiagnosisDispositionSummary
+    dispositions: tuple[IncidentDiagnosisDisposition, ...]
     incidents_skipped: int
     incidents_with_errors: int
     incidents_eligible: int

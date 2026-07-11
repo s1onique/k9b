@@ -3,7 +3,7 @@
 This module tests that the health loop integration point (run_automatic_diagnosis_loop)
 correctly emits the eligibility summary event with proper correlation to the scheduler run.
 
-Related to: ACT-K9B-AUTO-DIAGNOSIS-ELIGIBILITY-SUMMARY-PROD-PATH01
+Related to: ACT-K9B-AUTO-DIAGNOSIS-SKIP-REASON-OBSERVABILITY01
 """
 
 from __future__ import annotations
