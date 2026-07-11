@@ -106,7 +106,7 @@ def get_changed_files() -> list[str]:
         full_path = REPO_ROOT / path
         if full_path.exists():
             existing_changed.append(path)
-    
+
     return existing_changed
 
 

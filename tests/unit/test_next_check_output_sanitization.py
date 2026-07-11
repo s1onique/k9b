@@ -130,6 +130,118 @@ data:
         self.assertIn("example.com", sanitized_error)
 
 
+class TestSanitizerEdgeCases(unittest.TestCase):
+    """Sanitizer edge cases covering token-tail leaks and case variants.
+
+    The canonical opaque-token pattern must be wide enough to catch
+    base64-style suffixes (``+``, ``/``, ``=``) so the post-redaction
+    surface does not leak a credential tail. Case-insensitive matching
+    for the canonical sentinel is also required because production
+    logs sometimes emit lowercase variants.
+    """
+
+    def test_token_with_base64_tail_is_fully_redacted(self) -> None:
+        """``KUBE_SECRET_TOKEN_abc123+/def==`` is matched in full; no tail leak."""
+        from k8s_diag_agent.security import sanitize_execution_output
+
+        out, _ = sanitize_execution_output(
+            "command output with KUBE_SECRET_TOKEN_abc123+/def== embedded",
+            None,
+        )
+        assert out is not None
+        self.assertNotIn("KUBE_SECRET_TOKEN", out)
+        self.assertNotIn("abc123", out)
+        self.assertNotIn("+/def==", out)
+        self.assertIn("<scrubbed>", out)
+
+    def test_lowercase_opaque_token_is_scrubbed(self) -> None:
+        """Lowercase ``kube_secret_token_abc123`` must be redacted (case-insensitive)."""
+        from k8s_diag_agent.security import sanitize_execution_output
+
+        out, _ = sanitize_execution_output(
+            "command output with kube_secret_token_abc123 leaked",
+            None,
+        )
+        assert out is not None
+        self.assertNotIn("kube_secret_token", out)
+        self.assertNotIn("abc123", out)
+        self.assertIn("<scrubbed>", out)
+
+    def test_lowercase_generic_token_is_scrubbed(self) -> None:
+        """Lowercase ``prefix_token_abc123`` must be redacted (case-insensitive)."""
+        from k8s_diag_agent.security import sanitize_execution_output
+
+        out, _ = sanitize_execution_output(
+            "command output with prefix_token_abc123 leaked",
+            None,
+        )
+        assert out is not None
+        self.assertNotIn("prefix_token", out)
+        self.assertNotIn("abc123", out)
+        self.assertIn("<scrubbed>", out)
+
+    def test_overlong_safe_exception_message_emits_ellipsis(self) -> None:
+        """``sanitize_exception_message`` keeps the ``...`` ellipsis contract."""
+        from k8s_diag_agent.security import sanitize_exception_message
+
+        # Build an overlong safe message so the truncation branch fires.
+        long_message = "x" * 500
+        exc = ValueError(long_message)
+        result = sanitize_exception_message(exc, max_length=80)
+        # Result must include the ``...`` ellipsis marker because the
+        # message exceeds max_length after redaction.
+        self.assertIn("...", result)
+        self.assertLessEqual(len(result), 80 + len("ValueError: "))
+        self.assertTrue(
+            result.endswith("..."),
+            f"Expected ellipsis tail; got {result!r}",
+        )
+
+    def test_secret_token_with_padding_tail_is_fully_redacted(self) -> None:
+        """``SECRET_TOKEN_abcdef==`` is matched in full."""
+        from k8s_diag_agent.security import sanitize_execution_output
+
+        out, _ = sanitize_execution_output(
+            "exec failed: SECRET_TOKEN_abcdef== attached",
+            None,
+        )
+        assert out is not None
+        self.assertNotIn("SECRET_TOKEN", out)
+        self.assertNotIn("abcdef", out)
+
+    def test_generic_token_with_separator_tail_is_fully_redacted(self) -> None:
+        """``PREFIX_TOKEN_abc123/remaining`` is matched in full."""
+        from k8s_diag_agent.security import sanitize_execution_output
+
+        out, _ = sanitize_execution_output(
+            "stack: PREFIX_TOKEN_abc123/remaining",
+            None,
+        )
+        assert out is not None
+        self.assertNotIn("PREFIX_TOKEN", out)
+        self.assertNotIn("abc123", out)
+
+    def test_redact_and_bound_returns_scrubbed_when_entire_string_is_secret(self) -> None:
+        """``redact_and_bound`` returns the placeholder when the entire input
+        is a single secret and redaction fully consumes it.
+        """
+        from k8s_diag_agent.security.sanitizer import redact_and_bound
+
+        secret = "KUBE_SECRET_TOKEN_xyz001"
+        result = redact_and_bound(secret, max_length=200)
+        self.assertEqual(result, "<scrubbed>")
+        self.assertNotIn("xyz001", result)
+        self.assertNotIn("KUBE_SECRET_TOKEN", result)
+
+    def test_redact_and_bound_returns_redacted_text_when_safe(self) -> None:
+        """``redact_and_bound`` returns the redacted text when no residue remains."""
+        from k8s_diag_agent.security.sanitizer import redact_and_bound
+
+        secret = "ERROR: KUBE_SECRET_TOKEN_abc123 was leaked"
+        result = redact_and_bound(secret, max_length=200)
+        self.assertEqual(result, "ERROR: <scrubbed> was leaked")
+
+
 class TestSanitizeExceptionMessage(unittest.TestCase):
     """Tests for sanitize_exception_message function."""
 

@@ -1,290 +1,228 @@
-"""LLM-safe evidence boundary verifier for the incident lifecycle.
+"""LLM-safe evidence boundary orchestrator.
 
-This module verifies that LLM/case-file/review-packet builders accept only:
-- LLMSafeArtifactRef
-- ReviewPacketStorageRef
-- RedactedEvidenceSummary
-- RedactedEvidenceText
-- SafeEvidenceExcerpt
+This module is the public entrypoint for the LLM-safe verifier. It is a
+thin orchestrator: each contract check lives in a dedicated sibling
+module so the file stays small enough for the LLM-friendly policy.
 
-And reject:
-- LocalArtifactPath
-- ExternalStorageRef
-- raw artifact content
-- direct EvidenceArtifact.storage_ref access
+The verifier enforces three independent contracts:
 
-Invariant: Raw artifact paths, storage refs, and unredacted content
-must NOT cross the LLM boundary without explicit redacted projection.
+1. **Canonical privacy-state definitions** (see
+   :mod:`llm_safe_alias_contract`) — every expected alias in
+   ``incident_evidence_redaction.py`` must be a ``NewType`` with the
+   exact expected direct supertype. Reshuffling the branded chain is
+   rejected even when the chain still terminates at ``str``.
+
+2. **Facade re-export contract** (see
+   :mod:`llm_safe_facade_contract`) — ``incident_evidence_llm_safe.py``
+   must re-export the canonical identities via top-level
+   ``from <canonical> import <name>`` statements and must NOT redefine
+   them locally with ``NewType(...)``. A facade with no canonical
+   imports, a facade whose ``NewType`` provenance is untrusted
+   (e.g. ``from fake import NewType``), or a facade that rebinds a
+   protected canonical name (e.g. ``RawEvidenceText = str``) is
+   rejected.
+
+3. **Strengthened dataclass + helper-signature contract** (see
+   :mod:`llm_safe_dataclass_contract`) — ``RedactedEvidenceSummary.summary``
+   must be ``LLMSafeEvidenceText``, ``safe_ref`` must be a closed union
+   of ``LLMSafeArtifactRef | ReviewPacketStorageRef | None``, and
+   ``evidence_artifact_to_llm_safe_summary`` must declare a ``summary``
+   parameter typed as ``LLMSafeEvidenceText``. A missing ``summary``
+   parameter is rejected.
+
+4. **LLM-boundary review scan** (see :mod:`llm_safe_review_boundary`)
+   — case-file, review-packet, and LLM diagnosis modules must not
+   leak raw artifact content via direct ``.storage_ref`` access or
+   absolute ``artifact_path`` literals.
+
+All four checks are aggregated by :func:`check_llm_safe_evidence_contract`.
 """
 
 from __future__ import annotations
 
-import ast
 import sys
 from pathlib import Path
 
 from scripts.incident_lifecycle_boundary._llm_safe_constants import (
+    CANONICAL_NEWTYPE_SUPERTYPES,
     LLM_REVIEW_MODULES,
     LLM_SAFE_TYPES,
     REQUIRED_DATACLASS,
     REQUIRED_HELPERS,
-    SAFE_REF_TYPES,
-    UNSAFE_PATTERNS,
-    UNSAFE_REF_TYPES,
 )
 from scripts.incident_lifecycle_boundary._llm_safe_extract import (
     extract_dataclass_names,
     extract_function_definitions,
     extract_newtype_aliases,
     extract_union_members,
+    is_pure_llm_safe_evidence_text_annotation,
+    is_safe_ref_shape,
+)
+from scripts.incident_lifecycle_boundary._llm_safe_provenance import (
+    build_newtype_bindings,
+    check_newtype_provenance,
+)
+from scripts.incident_lifecycle_boundary._llm_safe_traversal import (
+    collect_module_scope_rebindings,
+    iter_module_scope_statements,
+)
+from scripts.incident_lifecycle_boundary.llm_safe_alias_contract import (
+    check_canonical_redaction_aliases,
+    resolve_alias_base,
+)
+from scripts.incident_lifecycle_boundary.llm_safe_dataclass_contract import (
+    SUMMARY_REQUIRED_TYPE,
+    check_llm_safe_dataclass,
+    check_llm_safe_helper_signatures,
+    check_llm_safe_helpers,
+)
+from scripts.incident_lifecycle_boundary.llm_safe_facade_contract import (
+    check_llm_safe_canonical_imports,
+    check_llm_safe_type_aliases,
+)
+from scripts.incident_lifecycle_boundary.llm_safe_review_boundary import (
+    check_llm_review_unsafe_access,
 )
 
 
-def check_llm_safe_type_aliases(filepath: str) -> list[str]:
-    """Check that required NewType aliases exist for LLM-safe evidence.
+def _resolve_source_root(path: Path) -> Path:
+    """Resolve whether ``path`` is the repository root or the source root.
 
-    Verifies:
-    - RedactedEvidenceText exists
-    - SafeEvidenceExcerpt exists
-    - All are based on str
+    The negative-proofs harness creates a Python source-root-shaped temp
+    tree directly under ``<temp>/k8s_diag_agent/...`` and passes
+    ``<temp>`` as ``--repo-root``. The production CLI invokes this
+    function with ``Path("src")`` (the source root). Tests in this
+    codebase pass the actual repository root (containing ``.git`` and
+    ``src/``). All three contract forms must resolve to the same
+    canonical privacy-state module path.
     """
-    errors: list[str] = []
-
-    aliases = extract_newtype_aliases(filepath)
-
-    for expected_type in LLM_SAFE_TYPES:
-        if expected_type not in aliases:
-            errors.append(
-                f"{filepath}: Missing NewType alias '{expected_type}'. "
-                f"Expected NewType('{expected_type}', str)."
-            )
-        elif aliases[expected_type] != "str":
-            errors.append(
-                f"{filepath}: NewType alias '{expected_type}' is based on "
-                f"'{aliases[expected_type]}', expected 'str'."
-            )
-
-    return errors
-
-
-def _get_annotation_name(node: ast.AST) -> str | None:
-    """Extract the name from a type annotation node."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-        return _get_annotation_name(node.left)
-    return None
-
-
-def check_llm_safe_dataclass(filepath: str) -> list[str]:
-    """Check that RedactedEvidenceSummary dataclass exists with correct fields.
-
-    Verifies:
-    - RedactedEvidenceSummary dataclass exists
-    - It has 'summary' field typed as RedactedEvidenceText
-    - It has 'safe_ref' field typed as safe reference (NOT LocalArtifactPath/ExternalStorageRef)
-    """
-    errors: list[str] = []
-
-    try:
-        with open(filepath, encoding="utf-8") as f:
-            source = f.read()
-    except OSError as e:
-        return [f"Cannot read {filepath}: {e}"]
-
-    try:
-        tree = ast.parse(source, filename=filepath)
-    except SyntaxError:
-        return errors
-
-    # Find RedactedEvidenceSummary class
-    dataclass_node = None
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == REQUIRED_DATACLASS:
-            dataclass_node = node
-            break
-
-    if dataclass_node is None:
-        errors.append(
-            f"{filepath}: Missing dataclass '{REQUIRED_DATACLASS}'. "
-            f"Expected frozen dataclass with summary: RedactedEvidenceText field."
-        )
-        return errors
-
-    # Check for summary field
-    has_summary = False
-    summary_is_safe_type = False
-    has_safe_ref = False
-    safe_ref_has_unsafe_type = False
-    safe_ref_members: list[str] = []
-
-    for item in dataclass_node.body:
-        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
-            field_name = item.target.id
-
-            if field_name == "summary":
-                has_summary = True
-                annotation_name = _get_annotation_name(item.annotation)
-                if annotation_name == "RedactedEvidenceText":
-                    summary_is_safe_type = True
-
-            if field_name == "safe_ref":
-                has_safe_ref = True
-                safe_ref_members = extract_union_members(item.annotation)
-                for member in safe_ref_members:
-                    if member in UNSAFE_REF_TYPES:
-                        safe_ref_has_unsafe_type = True
-                        break
-
-    if not has_summary:
-        errors.append(f"{filepath}: RedactedEvidenceSummary missing 'summary' field.")
-    if has_summary and not summary_is_safe_type:
-        errors.append(f"{filepath}: RedactedEvidenceSummary.summary must be typed as RedactedEvidenceText.")
-    if not has_safe_ref:
-        errors.append(f"{filepath}: RedactedEvidenceSummary missing 'safe_ref' field.")
-    if safe_ref_has_unsafe_type:
-        errors.append(
-            f"{filepath}: RedactedEvidenceSummary.safe_ref contains unsafe type. "
-            f"Found: {safe_ref_members}. Allowed: LLMSafeArtifactRef, ReviewPacketStorageRef, None. "
-            f"Prohibited: LocalArtifactPath, ExternalStorageRef."
-        )
-    for member in safe_ref_members:
-        if member != "None" and member not in SAFE_REF_TYPES:
-            errors.append(
-                f"{filepath}: RedactedEvidenceSummary.safe_ref contains unknown type. "
-                f"Found: {member}. Allowed: LLMSafeArtifactRef, ReviewPacketStorageRef, None."
-            )
-
-    return errors
-
-
-def check_llm_safe_helpers(filepath: str) -> list[str]:
-    """Check that required helper functions exist."""
-    errors: list[str] = []
-    functions = extract_function_definitions(filepath)
-
-    for expected_helper in REQUIRED_HELPERS:
-        if expected_helper not in functions:
-            errors.append(f"{filepath}: Missing helper function '{expected_helper}'.")
-
-    return errors
-
-
-def check_llm_review_unsafe_access(repo_root: Path) -> list[str]:
-    """Scan LLM/review modules for unsafe access patterns."""
-    errors: list[str] = []
-
-    for module_path in LLM_REVIEW_MODULES:
-        full_path = repo_root / module_path
-        if not full_path.exists():
-            continue
-
-        try:
-            with open(full_path, encoding="utf-8") as f:
-                source = f.read()
-        except OSError:
-            continue
-
-        for pattern, description in UNSAFE_PATTERNS:
-            if pattern.search(source):
-                for i, line in enumerate(source.splitlines(), 1):
-                    if pattern.search(line):
-                        errors.append(f"{module_path}:{i}: Detected unsafe pattern: {description}")
-
-    return errors
+    if (path / "src" / "k8s_diag_agent").exists():
+        # Repository root layout: ``<root>/src/k8s_diag_agent/...``.
+        return path / "src"
+    if (path / "k8s_diag_agent").exists():
+        # Source-root layout: ``<root>/k8s_diag_agent/...``.
+        return path
+    # Fall back to the path unchanged so callers at least see a
+    # predictable diagnostic rather than a hidden resolution.
+    return path
 
 
 def check_llm_safe_evidence_contract(
     evidence_filepath: str,
     repo_root: Path,
+    *,
+    canonical_filepath: str | None = None,
 ) -> list[str]:
-    """Run all LLM-safe evidence contract checks."""
+    """Run all LLM-safe evidence contract checks.
+
+    R14 invariant: ``repo_root`` may be either the repository root
+    (containing ``.git`` and ``src/``) or the Python source root
+    (``<repo>/src``, where ``k8s_diag_agent/`` lives). The function
+    resolves both forms to the canonical privacy-state module path
+    via :func:`_resolve_source_root` so the negative-proofs harness
+    (which constructs a temp tree at source-root shape) and the
+    production CLI (which passes ``Path("src")``) and unit tests
+    (which pass the repository root) all locate the same canonical
+    file. ``canonical_filepath``, when provided, is interpreted
+    relative to the resolved source root.
+
+    Args:
+        evidence_filepath: Path to the facade module (re-exports).
+        repo_root: Repository root OR Python source root for module
+            scanning. The function auto-detects which form was
+            supplied via :func:`_resolve_source_root`.
+        canonical_filepath: Optional override for the canonical privacy-
+            state module path. When omitted, the path is computed as
+            ``<source_root>/k8s_diag_agent/collect/incident_evidence_redaction.py``.
+
+    Returns:
+        Combined list of error messages from all contract checks.
+    """
     errors: list[str] = []
 
-    alias_errors = check_llm_safe_type_aliases(evidence_filepath)
-    errors.extend(alias_errors)
+    source_root = _resolve_source_root(repo_root)
 
+    if canonical_filepath is None:
+        canonical_path = str(
+            source_root
+            / "k8s_diag_agent"
+            / "collect"
+            / "incident_evidence_redaction.py"
+        )
+    else:
+        canonical_path = canonical_filepath
+
+    # 1. Canonical privacy-state hierarchy must be declared correctly.
+    canonical_errors = check_canonical_redaction_aliases(canonical_path)
+    errors.extend(canonical_errors)
+
+    # 2. Facade must re-export, not redefine.
+    facade_errors = check_llm_safe_type_aliases(evidence_filepath)
+    errors.extend(facade_errors)
+
+    # 3. Facade must import every canonical alias from the canonical module.
+    canonical_import_errors = check_llm_safe_canonical_imports(
+        evidence_filepath,
+        canonical_module="k8s_diag_agent.collect.incident_evidence_redaction",
+    )
+    errors.extend(canonical_import_errors)
+
+    # 4. Dataclass summary field must be LLMSafeEvidenceText (not merely redacted).
     dataclass_errors = check_llm_safe_dataclass(evidence_filepath)
     errors.extend(dataclass_errors)
 
+    # 5. Required helpers must exist.
     helper_errors = check_llm_safe_helpers(evidence_filepath)
     errors.extend(helper_errors)
 
-    unsafe_errors = check_llm_review_unsafe_access(repo_root)
+    # 6. Helper signatures must declare the LLM-safe contract.
+    helper_sig_errors = check_llm_safe_helper_signatures(evidence_filepath)
+    errors.extend(helper_sig_errors)
+
+    # 7. LLM/review modules must not expose unsafe types. The review-
+    #    boundary paths in ``LLM_REVIEW_MODULES`` are written relative
+    #    to the source root, so the resolved source root is passed in.
+    unsafe_errors = check_llm_review_unsafe_access(source_root)
     errors.extend(unsafe_errors)
 
     return errors
 
 
-def check_llm_safe_helper_signatures(filepath: str) -> list[str]:
-    """Check that helper function signatures are type-safe.
-
-    Verifies:
-    - evidence_artifact_to_llm_safe_summary has safe_ref parameter typed as
-      LLMSafeArtifactRef | ReviewPacketStorageRef | None (NOT LocalArtifactPath)
-    - No unknown types are allowed in the safe_ref union
-    """
-    errors: list[str] = []
-
-    try:
-        with open(filepath, encoding="utf-8") as f:
-            source = f.read()
-    except OSError as e:
-        return [f"Cannot read {filepath}: {e}"]
-
-    try:
-        tree = ast.parse(source, filename=filepath)
-    except SyntaxError:
-        return errors
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "evidence_artifact_to_llm_safe_summary":
-            for arg in node.args.kwonlyargs:
-                if arg.arg == "safe_ref":
-                    if arg.annotation is None:
-                        continue
-                    members = extract_union_members(arg.annotation)
-                    for member in members:
-                        if member in UNSAFE_REF_TYPES:
-                            errors.append(
-                                f"{filepath}: evidence_artifact_to_llm_safe_summary has unsafe safe_ref type. "
-                                f"Found: {members}. Allowed: LLMSafeArtifactRef, ReviewPacketStorageRef, None. "
-                                f"Prohibited: LocalArtifactPath, ExternalStorageRef."
-                            )
-                            return errors
-                    for member in members:
-                        if member != "None" and member not in SAFE_REF_TYPES:
-                            errors.append(
-                                f"{filepath}: evidence_artifact_to_llm_safe_summary has unknown safe_ref type. "
-                                f"Found: {member}. Allowed: LLMSafeArtifactRef, ReviewPacketStorageRef, None."
-                            )
-                            return errors
-
-    return errors
-
-
 __all__ = [
+    "CANONICAL_NEWTYPE_SUPERTYPES",
+    "LLM_SAFE_TYPES",
+    "REQUIRED_DATACLASS",
+    "REQUIRED_HELPERS",
+    "SUMMARY_REQUIRED_TYPE",
+    "build_newtype_bindings",
+    "check_canonical_redaction_aliases",
+    "check_llm_review_unsafe_access",
+    "check_llm_safe_canonical_imports",
     "check_llm_safe_dataclass",
     "check_llm_safe_evidence_contract",
     "check_llm_safe_helper_signatures",
     "check_llm_safe_helpers",
     "check_llm_safe_type_aliases",
-    "check_llm_review_unsafe_access",
+    "check_newtype_provenance",
+    "collect_module_scope_rebindings",
     "extract_dataclass_names",
     "extract_function_definitions",
     "extract_newtype_aliases",
     "extract_union_members",
+    "is_pure_llm_safe_evidence_text_annotation",
+    "is_safe_ref_shape",
+    "iter_module_scope_statements",
+    "resolve_alias_base",
 ]
 
 
 if __name__ == "__main__":
-    print("LLM-safe evidence types required:")
+    print("LLM-safe evidence types required (canonical privacy-state hierarchy):")
     for alias in sorted(LLM_SAFE_TYPES):
-        print(f"  - {alias} = NewType('{alias}', str)")
-    print("\nRequired dataclass:")
-    print(f"  - {REQUIRED_DATACLASS} (frozen, slots, kw_only)")
+        supertype = CANONICAL_NEWTYPE_SUPERTYPES.get(alias, "?")
+        print(f"  - {alias} = NewType('{alias}', {supertype})")
+    print(f"\nSummary field type: {SUMMARY_REQUIRED_TYPE}")
+    print(f"\nRequired dataclass: {REQUIRED_DATACLASS}")
     print("\nRequired helpers:")
     for helper in sorted(REQUIRED_HELPERS):
         print(f"  - {helper}()")

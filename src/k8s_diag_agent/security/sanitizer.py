@@ -13,6 +13,10 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+from k8s_diag_agent.security.redaction_policy import (
+    REDACTION_PATTERNS as _REDACTION_PATTERNS,
+)
+
 # REDACTION_PLACEHOLDER is imported from the policy module for consistency
 from k8s_diag_agent.security.redaction_policy import REDACTION_PLACEHOLDER as _REDACTION_PLACEHOLDER
 from k8s_diag_agent.security.redaction_policy import redact_sensitive_text as _raw_policy_redact
@@ -24,6 +28,69 @@ REDACTION_PLACEHOLDER: str = str(_REDACTION_PLACEHOLDER)
 def _policy_redact(value: str) -> str:
     """Typed wrapper around the shared redaction policy for file-path mypy runs."""
     return str(_raw_policy_redact(value))
+
+
+def _contains_sensitive_material(value: str | None) -> bool:
+    """Return True if ``value`` still contains any canonical sensitive pattern.
+
+    Used as the fail-closed guard after redaction: if any redaction pattern
+    still matches the post-redaction text, the redaction was incomplete and
+    the caller must not trust the result.
+
+    The canonical detector catches every pattern defined in
+    :data:`k8s_diag_agent.security.redaction_policy.REDACTION_PATTERNS`,
+    including opaque sentinel identifiers like ``KUBE_SECRET_TOKEN_abc123``
+    that do not appear in a ``key=value`` assignment shape.
+    """
+    if not value:
+        return False
+    return any(pattern.search(value) for pattern in _REDACTION_PATTERNS)
+
+
+def _contains_sensitive_material_recursive(value: Any) -> bool:
+    """Recursively scan ``value`` (mapping / sequence / str) for sensitive patterns.
+
+    Used as the final defensive assertion right before serialization. If any
+    nested string still contains a canonical sensitive pattern the payload
+    is considered unsafe.
+    """
+    if isinstance(value, str):
+        return _contains_sensitive_material(value)
+    if isinstance(value, Mapping):
+        return any(_contains_sensitive_material_recursive(v) for v in value.values())
+    if isinstance(value, (list, tuple, set, frozenset)) and not isinstance(value, (bytes, bytearray)):
+        return any(_contains_sensitive_material_recursive(item) for item in value)
+    return False
+
+
+def redact_and_bound(value: str, *, max_length: int) -> str:
+    """Redact ``value`` using the canonical policy, fail closed if unsafe.
+
+    This is the canonical "redact, validate, then bound" operation for all
+    text surfaces that cross the operator / LLM / projection boundary:
+
+    1. Apply :func:`k8s_diag_agent.security.redaction_policy.redact_sensitive_text`
+       so known credential-shaped content is replaced by ``REDACTION_PLACEHOLDER``.
+    2. Re-scan the redacted text. If the canonical detector still considers
+       it unsafe (because no pattern matched a bare opaque token like
+       ``KUBE_SECRET_TOKEN_abc123``), return ``REDACTION_PLACEHOLDER`` and do
+       not expose a truncation-boundary fragment of the credential.
+    3. Bound the result to ``max_length`` characters.
+
+    Truncation must always happen *after* redaction so that a credential
+    straddling the truncation boundary cannot leak its suffix.
+    """
+    if not value:
+        return value
+    redacted = _policy_redact(value)
+    if _contains_sensitive_material(redacted):
+        # Fail closed: the canonical detector still sees a sensitive
+        # pattern, so we drop the entire surface rather than expose a
+        # partial credential at the truncation boundary.
+        return REDACTION_PLACEHOLDER
+    if len(redacted) > max_length:
+        return redacted[:max_length]
+    return redacted
 
 
 _SECRET_MANIFEST_RE = re.compile(r"kind\s*[:=]\s*Secret", re.IGNORECASE)
@@ -204,6 +271,13 @@ def sanitize_execution_output(
     - LLM prompt fragments
     - Sensitive credentials or tokens
 
+    The redact, validate, then bound sequence is delegated to
+    :func:`redact_and_bound`, which guarantees that if the canonical
+    detector still considers the post-redaction text unsafe (for
+    example, because an opaque-token tail like ``+/def==`` survived
+    redaction), the entire surface is replaced by the placeholder
+    instead of leaking a partial credential.
+
     Args:
         raw_output: Raw command output (may contain sensitive content)
         error_summary: Error message (may contain raw exception or stderr)
@@ -217,28 +291,47 @@ def sanitize_execution_output(
     sanitized_output: str | None = None
     sanitized_error: str | None = None
 
-    # Sanitize raw_output BEFORE truncating to prevent credential pattern splitting
+    # Sanitize raw_output BEFORE truncating to prevent credential
+    # pattern splitting at the truncation boundary.
     if raw_output:
-        # Apply sanitization using the shared policy
+        # Belt-and-braces: the SharedPolicy handles the Secret manifest
+        # shape (``kind: Secret``) before the canonical detector scans.
         sanitized = _policy_redact(raw_output)
         if _SECRET_MANIFEST_RE.search(sanitized):
             sanitized = REDACTION_PLACEHOLDER
-        # Then truncate the already-sanitized string
-        if sanitized and len(sanitized) > max_output_length:
-            sanitized = sanitized[:max_output_length]
-        sanitized_output = sanitized
+        # Run the canonical redact-and-bound flow. This re-scans the
+        # post-redaction text and bounds the result. If redaction
+        # leaves residual sensitive material (e.g., an opaque-token
+        # tail that the regex missed), ``redact_and_bound`` fail-closes
+        # the surface to REDACTION_PLACEHOLDER.
+        sanitized_output = redact_and_bound(
+            sanitized or "",
+            max_length=max_output_length,
+        ) or None
 
-    # Sanitize error_summary using the shared policy
+    # Sanitize error_summary using the canonical redact-and-bound flow
+    # so any tail leaks are closed too.
     if error_summary:
-        sanitized_error = _policy_redact(error_summary)
-        if _SECRET_MANIFEST_RE.search(sanitized_error):
-            sanitized_error = REDACTION_PLACEHOLDER
+        sanitized_error_candidate = _policy_redact(error_summary)
+        if _SECRET_MANIFEST_RE.search(sanitized_error_candidate):
+            sanitized_error_candidate = REDACTION_PLACEHOLDER
+        sanitized_error = redact_and_bound(
+            sanitized_error_candidate or "",
+            max_length=max_output_length,
+        ) or None
 
     return sanitized_output, sanitized_error
 
 
 def sanitize_exception_message(exc: BaseException, max_length: int = 200) -> str:
     """Sanitize an exception message for operator-facing display.
+
+    The fail-closed ``redact_and_bound`` helper is invoked with
+    ``max_length + 1`` so a sanitized message that is exactly at the
+    limit can be re-sliced to ``max_length - 3`` and have the stable
+    ``...`` ellipsis appended. The bounded length must therefore be
+    preserved on the output surface, and the overlong branch must be
+    reachable.
 
     Args:
         exc: The exception to sanitize
@@ -255,9 +348,15 @@ def sanitize_exception_message(exc: BaseException, max_length: int = 200) -> str
     if _SECRET_MANIFEST_RE.search(sanitized_message):
         sanitized_message = REDACTION_PLACEHOLDER
 
-    # Build the sanitized message
+    # Probe one extra character so the overlong branch below can fire
+    # when ``redact_and_bound`` returns the maximum length exactly.
+    # This preserves the stable ``...`` surface marker.
+    sanitized_message = redact_and_bound(
+        sanitized_message or "",
+        max_length=max_length + 1,
+    )
+
     if sanitized_message and sanitized_message != REDACTION_PLACEHOLDER:
-        # Truncate message if too long
         if len(sanitized_message) > max_length:
             sanitized_message = sanitized_message[: max_length - 3] + "..."
         return f"{exc_type}: {sanitized_message}"

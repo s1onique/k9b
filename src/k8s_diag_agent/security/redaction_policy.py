@@ -79,6 +79,37 @@ REDACTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     # `max_tokens: 2048` are NOT scrubbed.
     re.compile(r"(?i)\b[A-Za-z0-9_]*TOKEN[A-Za-z0-9_]*\s*=\s*['\"]?[^\s'\"]+['\"]?"),
     re.compile(r"(?i)\b[A-Za-z0-9_]*SECRET[A-Za-z0-9_]*\s*=\s*['\"]?[^\s'\"]+['\"]?"),
+    # Opaque secret tokens appearing without any assignment or quoting
+    # (e.g. error_summary strings, raw kubectl error messages, and
+    # projection payloads). The previous assignment-only patterns missed
+    # bare identifiers like ``KUBE_SECRET_TOKEN_abc123`` that occur
+    # outside a `key=value` shape.
+    #
+    # Canonical sentinel: ``KUBE_SECRET_TOKEN_<value>`` or
+    # ``SECRET_TOKEN_<value>``. The lookbehind prevents scrubbing
+    # legitimate identifiers like ``MY_SECRET_TOKENIZER``. The suffix
+    # character class includes base64-ish delimiters (``+``, ``/``,
+    # ``=``) so a single token straddled by delimiters such as
+    # ``KUBE_SECRET_TOKEN_abc123+/def==`` is matched in full instead
+    # of leaving ``+/def==`` exposed after ``<scrubbed>`` substitution.
+    # Case-insensitive because production logs sometimes emit
+    # ``kube_secret_token_abc123`` in lowercase.
+    re.compile(
+        r"(?i)(?<![A-Za-z0-9])(?:KUBE_)?SECRET_TOKEN_"
+        r"[A-Za-z0-9._~+/=\-]{6,}"
+    ),
+    # Generic opaque token identifier: catches identifiers like
+    # ``TOKEN_abc123`` (or lowercase ``token_abc123``) appearing
+    # anywhere in text (not just in a ``key=value`` shape). Requires
+    # the suffix to be 6+ chars to avoid false positives on benign
+    # identifiers like ``TOKEN_COUNT``. No word-boundary anchoring
+    # because credentials often appear embedded in surrounding
+    # error/log text (e.g., ``xxxTOKEN_abc123xxx``); the 6+ char
+    # suffix requirement keeps false positives on real identifiers
+    # rare. The character class extends to ``+``, ``/``, ``=`` so a
+    # base64-ish tail like ``TOKEN_abc123+/def==`` is matched in
+    # full.
+    re.compile(r"(?i)[A-Za-z0-9_]*TOKEN_[A-Za-z0-9._~+/=\-]{6,}"),
     # JSON-style token: "token": "<secret>"
     re.compile(r'"token"\s*:\s*"[^"]+"'),
     # Password assignments (various forms)

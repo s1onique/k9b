@@ -10,6 +10,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+from scripts.act_local_contract import CheckResult
 from scripts.factory.build_gate_summary import CheckOutcome, GateSummary
 from scripts.factory.parse_gate_summary import parse_gate_summary
 from scripts.factory.populate_gate_summary import (
@@ -232,81 +233,137 @@ def test_env_dedups_pythonpath_with_pathsep(tmp_path: Path) -> None:
     )
 
 
-def test_skip_gate_summary_flag_makes_verify_succeed_without_artifact() -> None:
-    """verify_all.sh --act-local --skip-gate-summary must succeed even when
-    .factory/gate-summary.json does NOT exist.
+def test_skip_gate_summary_flag_makes_verify_succeed_without_artifact(
+    tmp_path: Path,
+) -> None:
+    """``--skip-gate-summary`` must allow ACT-local verification to succeed
+    even when the gate-summary artifact does NOT exist.
 
-    This is the meaningful behavioral assertion: without the flag the
-    run_gate_summary_parser_check FAILS fast and verify_all exits nonzero;
-    with the flag the check is omitted so verification can complete while
-    populate_gate_summary is concurrently writing the artifact.
+    Hermeticity: this test never touches the real tracked artifact under
+    ``.factory/gate-summary.json``. Instead it injects a
+    ``tmp_path`` artifact via ``run_gate_summary_parser_check`` and
+    drives a controlled check registry that excludes the frontend
+    vitest check, golden-case checks, and any other check that depends
+    on local dependencies (Node modules, network access, provider smoke
+    checks, etc.). The contract under test is the gate-summary-parser
+    skip path, nothing more.
+
+    Behavioral assertions:
+
+    * With ``skip_gate_summary=True``: the gate-summary-parser check is
+      omitted from ``checks`` and listed in ``skipped_checks``; the
+      overall run succeeds because the parser is not evaluated.
+    * With ``skip_gate_summary=False`` (and no artifact present): the
+      gate-summary-parser check FAILS fast with the canonical
+      "gate-summary artifact not found" diagnostic, and the overall run
+      fails.
     """
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    factory_dir = repo_root / ".factory"
-    backup = None
-    existing_artifact = factory_dir / "gate-summary.json"
-    if existing_artifact.exists():
-        backup = factory_dir / "gate-summary.json.bak"
-        existing_artifact.rename(backup)
+    # The injected artifact lives ONLY in tmp_path. No real tracked
+    # artifact is renamed, deleted, or otherwise mutated.
+    tmp_artifact = tmp_path / "gate-summary.json"
+    assert not tmp_artifact.exists(), (
+        "tmp_path should not pre-create the artifact for this test"
+    )
 
-    try:
-        # With --skip-gate-summary: pass even though the artifact is absent.
-        skip_proc = subprocess.run(
-            [
-                "bash",
-                "scripts/verify_all.sh",
-                "--act-local",
-                "--skip-gate-summary",
-                "--json",
-            ],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=300,
-            check=False,
-        )
-        assert skip_proc.returncode == 0, (
-            f"exit_code={skip_proc.returncode}\nstdout={skip_proc.stdout}\n"
-            f"stderr={skip_proc.stderr}"
-        )
-        assert '"success": true' in skip_proc.stdout
-        data = json.loads(skip_proc.stdout)
-        names = [c.get("name") for c in data.get("checks", [])]
-        assert "gate-summary-parser" not in names, (
-            "--skip-gate-summary must omit the gate-summary-parser check from "
-            "the reported checks list"
-        )
-        skipped_ids = {s.get("id") for s in data.get("skipped_checks", [])}
-        assert "gate-summary-parser" in skipped_ids, (
-            "--skip-gate-summary must explicitly list the gate-summary-parser "
-            "check in skipped_checks"
-        )
+    # Import lazily so a missing dependency in unrelated tests cannot
+    # break the rest of the suite. The act_local_verification module
+    # uses absolute imports (``from act_local_changed_files import ...``)
+    # so we must add the ``scripts/`` directory to ``sys.path`` for
+    # those imports to resolve.
+    import sys as _sys
 
-        # Without the flag (and with the artifact absent): fail and emit the
-        # diagnostic that proves the check is now wired in.
-        no_skip_proc = subprocess.run(
-            [
-                "bash",
-                "scripts/verify_all.sh",
-                "--act-local",
-                "--json",
-            ],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=300,
-            check=False,
-        )
-        assert no_skip_proc.returncode != 0, (
-            "Without --skip-gate-summary and with no artifact present, "
-            "verify_all.sh must exit nonzero.\n"
-            f"stdout={no_skip_proc.stdout}\nstderr={no_skip_proc.stderr}"
-        )
-        assert "gate-summary-parser" in no_skip_proc.stdout
-        assert "gate-summary artifact not found" in no_skip_proc.stdout
-    finally:
-        if backup is not None and backup.exists():
-            backup.rename(existing_artifact)
+    _scripts_dir = str(Path(__file__).resolve().parent.parent.parent / "scripts")
+    if _scripts_dir not in _sys.path:
+        _sys.path.insert(0, _scripts_dir)
+    from scripts.act_local_verification import (
+        run_act_local_verification,
+    )
+
+    # A controlled registry: a few deterministic PASS checks. This
+    # proves the skip path is wired in WITHOUT running the frontend
+    # vitest check (which would require Node modules and network
+    # access) or any other unrelated ACT-local check.
+    def _passing_check(name: str) -> Callable[[list[str], list[str]], CheckResult]:
+        def _run(_py_files: list[str], _changed: list[str]) -> CheckResult:
+            return CheckResult(
+                name=name,
+                command=f"<controlled-pass:{name}>",
+                status="PASS",
+                duration_ms=0,
+                exit_code=0,
+                error_message=None,
+            )
+
+        return _run
+
+    controlled_registry: list[Callable[[list[str], list[str]], CheckResult]] = [
+        _passing_check("controlled-pass-ruff"),
+        _passing_check("controlled-pass-mypy"),
+    ]
+
+    # Path A: --skip-gate-summary means the parser is omitted from
+    # the executed-checks list and recorded as a skipped_check.
+    skip_result = run_act_local_verification(
+        check_registry=controlled_registry,
+        skip_gate_summary=True,
+        include_gate_summary_parser=False,
+        changed_files=[],
+        python_files=[],
+        gate_summary_artifact_path=tmp_artifact,
+    )
+
+    assert skip_result.success is True, (
+        f"Expected success with --skip-gate-summary; got errors: "
+        f"{[c.error_message for c in skip_result.checks if c.status != 'PASS']}"
+    )
+
+    executed_names = {c.name for c in skip_result.checks}
+    assert "gate-summary-parser" not in executed_names, (
+        f"--skip-gate-summary must omit the gate-summary-parser check from "
+        f"the reported checks list; got {executed_names}"
+    )
+    skipped_ids = {s.get("id") for s in skip_result.skipped_checks}
+    assert "gate-summary-parser" in skipped_ids, (
+        f"--skip-gate-summary must explicitly list the gate-summary-parser "
+        f"check in skipped_checks; got {skipped_ids}"
+    )
+
+    # Path B: without --skip-gate-summary and with no artifact at the
+    # injected path, the parser check FAILS fast with the canonical
+    # diagnostic. The real .factory/gate-summary.json is never read.
+    no_skip_result = run_act_local_verification(
+        check_registry=controlled_registry,
+        skip_gate_summary=False,
+        include_gate_summary_parser=True,
+        changed_files=[],
+        python_files=[],
+        gate_summary_artifact_path=tmp_artifact,
+    )
+
+    assert no_skip_result.success is False, (
+        "Without --skip-gate-summary and with no artifact present, "
+        "the parser check must FAIL and the overall run must fail."
+    )
+    parser_results = [
+        c for c in no_skip_result.checks
+        if c.name == "gate-summary-parser"
+    ]
+    assert len(parser_results) == 1, (
+        f"Expected exactly one gate-summary-parser check; got {parser_results}"
+    )
+    assert parser_results[0].status == "FAIL", (
+        f"gate-summary-parser should FAIL with no artifact; "
+        f"status={parser_results[0].status}"
+    )
+    assert "gate-summary artifact not found" in (
+        parser_results[0].error_message or ""
+    ), (
+        f"Expected canonical diagnostic; got {parser_results[0].error_message!r}"
+    )
+    assert str(tmp_artifact) in (parser_results[0].error_message or ""), (
+        f"Diagnostic must reference the injected path {tmp_artifact}; "
+        f"got {parser_results[0].error_message!r}"
+    )
 
 
 def test_parser_check_is_not_written_to_artifact(tmp_path: Path) -> None:
