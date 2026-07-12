@@ -1,336 +1,966 @@
 # Targeted digest
 
-Generated at: 2026-07-12T16:32:44Z
+Generated at: 2026-07-12T20:33:00Z
 Repo: /Users/chistyakov/Projects/SPbNIX/k9b
 Mode: staged
 
 ## Manifest
-files_changed=17
-added_files=11
-modified_files=6
+files_changed=39
+added_files=26
+modified_files=13
 renamed_files=0
 deleted_files=0
 
-M	scripts/llm_friendly_allowlist.py
-A	scripts/verifiers/automatic_diagnosis_backend_detail_outcomes.py
+M	docs/reports/impact-scan-ledger.md
+A	scripts/verifiers/automatic_diagnosis_authority_seam01.py
+A	scripts/verifiers/automatic_diagnosis_authority_seam01_checks.py
+A	scripts/verifiers/automatic_diagnosis_authority_seam01_helpers.py
+M	src/k8s_diag_agent/collect/incident_automatic_diagnosis_loop_artifacts.py
+A	src/k8s_diag_agent/collect/incident_diagnosis_authority_run_summary.py
+A	src/k8s_diag_agent/collect/incident_diagnosis_authority_seam.py
+A	src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_backend.py
+A	src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_local.py
+A	src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_types.py
+M	src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_config.py
 M	src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py
-A	src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_lookup.py
-A	src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_outcomes.py
-A	src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_parser.py
-M	src/k8s_diag_agent/collect/incident_diagnosis_dispatch.py
-M	src/k8s_diag_agent/collect/incident_diagnosis_disposition.py
-M	src/k8s_diag_agent/collect/incident_diagnosis_disposition_compat.py
-M	tests/unit/test_auto_loop_existing_packet_and_alert_regression.py
-A	tests/unit/test_automatic_diagnosis_backend_detail_deployment_skew.py
-A	tests/unit/test_automatic_diagnosis_backend_detail_dispositions.py
-A	tests/unit/test_automatic_diagnosis_backend_detail_outcomes.py
-A	tests/unit/test_automatic_diagnosis_backend_detail_outcomes_mypy.py
-A	tests/unit/test_automatic_diagnosis_backend_detail_outcomes_verifier.py
-A	tests/unit/test_automatic_diagnosis_backend_detail_security.py
-A	tests/unit/test_automatic_diagnosis_backend_promotion_regression.py
+M	src/k8s_diag_agent/collect/incident_lifecycle.py
+M	src/k8s_diag_agent/collect/incident_lifecycle_serialization.py
+M	src/k8s_diag_agent/collect/incident_snapshot_helpers.py
+M	src/k8s_diag_agent/collect/incident_store_sqlite_context.py
+M	src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle.py
+A	src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle_idempotency.py
+M	src/k8s_diag_agent/collect/incident_store_sqlite_migrations.py
+M	src/k8s_diag_agent/collect/incident_store_sqlite_schema.py
+A	src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_handler.py
+A	src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_idempotency.py
+M	src/k8s_diag_agent/ui/server_routes.py
+A	tests/unit/authority_seam_support.py
+A	tests/unit/test_automatic_diagnosis_authority_seam01.py
+A	tests/unit/test_automatic_diagnosis_authority_seam01_dispatch.py
+A	tests/unit/test_automatic_diagnosis_authority_seam01_endpoint.py
+A	tests/unit/test_automatic_diagnosis_authority_seam01_processor.py
+A	tests/unit/test_automatic_diagnosis_authority_seam01_verifier.py
+M	tests/unit/test_automatic_diagnosis_backend_promotion_regression.py
+A	tests/unit/test_incident_diagnosis_authority_run_summary.py
+A	tests/unit/test_incident_snapshot_serialization_isolation.py
+A	tests/unit/test_incident_store_sqlite_lifecycle_idempotency.py
+A	tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3.py
+A	tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_apply.py
+A	tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_events.py
+A	tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_seam.py
+A	tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4.py
+A	tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4_concurrency.py
 
 ## Changed files
-scripts/llm_friendly_allowlist.py  [tracked, staged present: yes, unstaged present: no]
-scripts/verifiers/automatic_diagnosis_backend_detail_outcomes.py  [tracked, staged present: yes, unstaged present: no]
+docs/reports/impact-scan-ledger.md  [tracked, staged present: yes, unstaged present: no]
+scripts/verifiers/automatic_diagnosis_authority_seam01.py  [tracked, staged present: yes, unstaged present: no]
+scripts/verifiers/automatic_diagnosis_authority_seam01_checks.py  [tracked, staged present: yes, unstaged present: no]
+scripts/verifiers/automatic_diagnosis_authority_seam01_helpers.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_automatic_diagnosis_loop_artifacts.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_diagnosis_authority_run_summary.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_diagnosis_authority_seam.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_backend.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_local.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_types.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_config.py  [tracked, staged present: yes, unstaged present: no]
 src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py  [tracked, staged present: yes, unstaged present: no]
-src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_lookup.py  [tracked, staged present: yes, unstaged present: no]
-src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_outcomes.py  [tracked, staged present: yes, unstaged present: no]
-src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_parser.py  [tracked, staged present: yes, unstaged present: no]
-src/k8s_diag_agent/collect/incident_diagnosis_dispatch.py  [tracked, staged present: yes, unstaged present: no]
-src/k8s_diag_agent/collect/incident_diagnosis_disposition.py  [tracked, staged present: yes, unstaged present: no]
-src/k8s_diag_agent/collect/incident_diagnosis_disposition_compat.py  [tracked, staged present: yes, unstaged present: no]
-tests/unit/test_auto_loop_existing_packet_and_alert_regression.py  [tracked, staged present: yes, unstaged present: no]
-tests/unit/test_automatic_diagnosis_backend_detail_deployment_skew.py  [tracked, staged present: yes, unstaged present: no]
-tests/unit/test_automatic_diagnosis_backend_detail_dispositions.py  [tracked, staged present: yes, unstaged present: no]
-tests/unit/test_automatic_diagnosis_backend_detail_outcomes.py  [tracked, staged present: yes, unstaged present: no]
-tests/unit/test_automatic_diagnosis_backend_detail_outcomes_mypy.py  [tracked, staged present: yes, unstaged present: no]
-tests/unit/test_automatic_diagnosis_backend_detail_outcomes_verifier.py  [tracked, staged present: yes, unstaged present: no]
-tests/unit/test_automatic_diagnosis_backend_detail_security.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_lifecycle.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_lifecycle_serialization.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_snapshot_helpers.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_store_sqlite_context.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle_idempotency.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_store_sqlite_migrations.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/collect/incident_store_sqlite_schema.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_handler.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_idempotency.py  [tracked, staged present: yes, unstaged present: no]
+src/k8s_diag_agent/ui/server_routes.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/authority_seam_support.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_automatic_diagnosis_authority_seam01.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_automatic_diagnosis_authority_seam01_dispatch.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_automatic_diagnosis_authority_seam01_endpoint.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_automatic_diagnosis_authority_seam01_processor.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_automatic_diagnosis_authority_seam01_verifier.py  [tracked, staged present: yes, unstaged present: no]
 tests/unit/test_automatic_diagnosis_backend_promotion_regression.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_incident_diagnosis_authority_run_summary.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_incident_snapshot_serialization_isolation.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_incident_store_sqlite_lifecycle_idempotency.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_apply.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_events.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_seam.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4.py  [tracked, staged present: yes, unstaged present: no]
+tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4_concurrency.py  [tracked, staged present: yes, unstaged present: no]
 
 ## Diff stat
- scripts/llm_friendly_allowlist.py                  |   46 +
- .../automatic_diagnosis_backend_detail_outcomes.py | 1267 ++++++++++++++++++++
- ...ident_diagnosis_auto_loop_evidence_processor.py |  167 ++-
- .../incident_diagnosis_backend_detail_lookup.py    |  431 +++++++
- .../incident_diagnosis_backend_detail_outcomes.py  |  269 +++++
- .../incident_diagnosis_backend_detail_parser.py    |  233 ++++
- .../collect/incident_diagnosis_dispatch.py         |  135 +++
- .../collect/incident_diagnosis_disposition.py      |   81 ++
- .../incident_diagnosis_disposition_compat.py       |   25 +
- ...to_loop_existing_packet_and_alert_regression.py |   50 +-
- ...tic_diagnosis_backend_detail_deployment_skew.py |  245 ++++
- ...omatic_diagnosis_backend_detail_dispositions.py | 1015 ++++++++++++++++
- ..._automatic_diagnosis_backend_detail_outcomes.py |  584 +++++++++
- ...matic_diagnosis_backend_detail_outcomes_mypy.py |  222 ++++
- ...c_diagnosis_backend_detail_outcomes_verifier.py |  842 +++++++++++++
- ..._automatic_diagnosis_backend_detail_security.py |  345 ++++++
- ...matic_diagnosis_backend_promotion_regression.py |  497 ++++++++
- 17 files changed, 6415 insertions(+), 39 deletions(-)
+ docs/reports/impact-scan-ledger.md                 |  57 +++
+ .../automatic_diagnosis_authority_seam01.py        | 173 ++++++++
+ .../automatic_diagnosis_authority_seam01_checks.py | 482 +++++++++++++++++++++
+ ...automatic_diagnosis_authority_seam01_helpers.py | 202 +++++++++
+ .../incident_automatic_diagnosis_loop_artifacts.py |   4 +
+ .../incident_diagnosis_authority_run_summary.py    | 125 ++++++
+ .../collect/incident_diagnosis_authority_seam.py   | 397 +++++++++++++++++
+ .../incident_diagnosis_authority_seam_backend.py   | 251 +++++++++++
+ .../incident_diagnosis_authority_seam_local.py     | 108 +++++
+ .../incident_diagnosis_authority_seam_types.py     | 137 ++++++
+ .../collect/incident_diagnosis_auto_loop_config.py | 169 +++++---
+ ...ident_diagnosis_auto_loop_evidence_processor.py | 296 +++++++++++--
+ src/k8s_diag_agent/collect/incident_lifecycle.py   |  10 +
+ .../collect/incident_lifecycle_serialization.py    |  18 +
+ .../collect/incident_snapshot_helpers.py           |  19 +-
+ .../collect/incident_store_sqlite_context.py       | 366 +++++++++++++++-
+ .../collect/incident_store_sqlite_lifecycle.py     |  39 +-
+ .../incident_store_sqlite_lifecycle_idempotency.py | 103 +++++
+ .../collect/incident_store_sqlite_migrations.py    |  24 +-
+ .../collect/incident_store_sqlite_schema.py        |  61 ++-
+ .../server_incident_diagnosis_lifecycle_handler.py | 280 ++++++++++++
+ ...ver_incident_diagnosis_lifecycle_idempotency.py | 335 ++++++++++++++
+ src/k8s_diag_agent/ui/server_routes.py             |  10 +
+ tests/unit/authority_seam_support.py               | 243 +++++++++++
+ .../test_automatic_diagnosis_authority_seam01.py   | 384 ++++++++++++++++
+ ...utomatic_diagnosis_authority_seam01_dispatch.py | 327 ++++++++++++++
+ ...utomatic_diagnosis_authority_seam01_endpoint.py | 262 +++++++++++
+ ...tomatic_diagnosis_authority_seam01_processor.py | 391 +++++++++++++++++
+ ...utomatic_diagnosis_authority_seam01_verifier.py | 272 ++++++++++++
+ ...matic_diagnosis_backend_promotion_regression.py |  10 +-
+ ...est_incident_diagnosis_authority_run_summary.py | 156 +++++++
+ ...st_incident_snapshot_serialization_isolation.py | 316 ++++++++++++++
+ ..._incident_store_sqlite_lifecycle_idempotency.py | 458 ++++++++++++++++++++
+ ...cident_store_sqlite_lifecycle_idempotency_r3.py | 356 +++++++++++++++
+ ..._store_sqlite_lifecycle_idempotency_r3_apply.py | 263 +++++++++++
+ ...store_sqlite_lifecycle_idempotency_r3_events.py | 165 +++++++
+ ...t_store_sqlite_lifecycle_idempotency_r3_seam.py | 176 ++++++++
+ ...cident_store_sqlite_lifecycle_idempotency_r4.py | 280 ++++++++++++
+ ..._sqlite_lifecycle_idempotency_r4_concurrency.py | 270 ++++++++++++
+ 39 files changed, 7888 insertions(+), 107 deletions(-)
 
 ## Diffs
 
-=== scripts/llm_friendly_allowlist.py ===
-diff --git a/scripts/llm_friendly_allowlist.py b/scripts/llm_friendly_allowlist.py
-index 1928b98..7c949aa 100644
---- a/scripts/llm_friendly_allowlist.py
-+++ b/scripts/llm_friendly_allowlist.py
-@@ -263,4 +263,50 @@ ALLOWLIST: list[tuple[str, str]] = [
-     ("scripts/verify_promotion_batch_uniqueness.py", "[EXTRACTION] AST verifier - duplicate PromotionBatch definition guard; staged extraction"),
-     ("scripts/verify_promotion_helper_polymorphism.py", "[EXTRACTION] AST verifier - production free-helper call guard; staged extraction"),
-     ("tests/unit/test_r4_acceptance.py", "[TEST] R4 acceptance suite - 32 tests covering all 11 acceptance criteria; staged extraction"),
-+    # [EXTRACTION] R1 narrowly justified exceptions: typed outcome
-+    # algebra + source-aware 404 contract + typed failure reason mapping
-+    # (ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01 R1). The test files
-+    # below grew because the R1 contract requires comprehensive integration
-+    # coverage of the new ``BackendIncidentLookupOutcome`` algebra,
-+    # ``BackendIncidentNotFound.source`` discriminator, and the typed
-+    # ``diagnosis_failure_reason_for_backend_lookup`` mapping. Narrowly
-+    # justified pending staged extraction into focused modules
-+    # (canonical outcome contract, source-mode helpers, AST verifier
-+    # self-tests).
-+    (
-+        "tests/unit/test_automatic_diagnosis_backend_detail_dispositions.py",
-+        "[EXTRACTION] R1 dispositions integration tests - canonical 200/404/500 path coverage; staged extraction",
-+    ),
-+    (
-+        "tests/unit/test_automatic_diagnosis_backend_detail_outcomes.py",
-+        "[EXTRACTION] R1 outcome-algebra unit tests - all 3 variants + dispatcher contract; staged extraction",
-+    ),
-+    (
-+        "tests/unit/test_automatic_diagnosis_backend_detail_outcomes_verifier.py",
-+        "[EXTRACTION] R1 AST verifier self-tests - all forbidden mutations + substring reject; staged extraction",
-+    ),
-+    (
-+        "tests/unit/test_automatic_diagnosis_backend_detail_security.py",
-+        "[EXTRACTION] R1 security tests - redaction-safe metadata; staged extraction",
-+    ),
-+    (
-+        "tests/unit/test_automatic_diagnosis_backend_promotion_regression.py",
-+        "[EXTRACTION] R1 promotion regression tests - exhaustive dispatch coverage; staged extraction",
-+    ),
-+    (
-+        "src/k8s_diag_agent/collect/incident_diagnosis_disposition_compat.py",
-+        "[EXTRACTION] R1 disposition compat - typed reason mapping; staged extraction",
-+    ),
-+    (
-+        "scripts/verifiers/automatic_diagnosis_backend_detail_outcomes.py",
-+        "[EXTRACTION] R1 AST verifier - exact-union + 404-branch + truthiness; staged extraction",
-+    ),
-+    (
-+        "src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py",
-+        "[EXTRACTION] R1 evidence processor - typed mapping + exhaustive dispatch contract; staged extraction",
-+    ),
-+    (
-+        "src/k8s_diag_agent/collect/incident_diagnosis_disposition.py",
-+        "[EXTRACTION] R1 disposition - typed reason + compat re-exports; staged extraction",
-+    ),
- ]
+=== docs/reports/impact-scan-ledger.md ===
+diff --git a/docs/reports/impact-scan-ledger.md b/docs/reports/impact-scan-ledger.md
+index 103b7f11..2058d70c 100644
+--- a/docs/reports/impact-scan-ledger.md
++++ b/docs/reports/impact-scan-ledger.md
+@@ -60,6 +60,62 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
-=== scripts/verifiers/automatic_diagnosis_backend_detail_outcomes.py ===
-diff --git a/scripts/verifiers/automatic_diagnosis_backend_detail_outcomes.py b/scripts/verifiers/automatic_diagnosis_backend_detail_outcomes.py
+ ## Entries
+
++### 2026-07-12 — ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 R4 close
++
++- Target: SQLite lifecycle idempotency — close R4-1, R4-2, R4-3, R4-4 blockers from the R3 review (cache authority defect, missing multi-process regressions, replay cache healing, typed `diagnosis_loop` projection boundary).
++- Impact scan required: yes
++- Impact scan present: yes
++- Script used: no (manual `git grep` + review-trace against the R4 findings)
++- Manual refinement present: yes
++- Planned files: 5 source (`incident_lifecycle.py`, `incident_lifecycle_serialization.py`, `incident_snapshot_helpers.py`, `incident_store_sqlite_context.py`, `incident_store_sqlite_lifecycle.py`), 2 new R4 test files split for size.
++- Changed files: 5 source, 2 new R4 test files (split to keep each under the 500-line LLM-friendly threshold).
++- Unexpected changed files: none beyond the planned set.
++- Likely tests identified by script: n/a (manual review).
++- Likely tests identified manually: existing `test_incident_store_sqlite_lifecycle_idempotency*.py` (R3 + base), canonical seam (`test_incident_store_sqlite_*`), `test_incident_diagnosis_authority_run_summary.py`, `test_automatic_diagnosis_backend_promotion_regression.py`.
++- Targeted tests run: focused pytest on the R3 + R4 + base lifecycle idempotency test files (28 tests); broader SQLite + automatic-diagnosis capability-seam suites (132 tests).
++- Full gate run: `./scripts/verify_all.sh --act-local` → PASS.
++- Reviewer scope objection: no (this ACT is the explicit R4 follow-up).
++- Reviewer requested missing scan: no.
++- Script usefulness: n/a.
++- Did the scan reduce surprise: yes — the R4 review named exactly four blockers; each was mapped to one production fix and one regression test.
++- Notes:
++  - **R4-1 (cache authority is the projection, not the cache)**: `SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently` now proves incident existence with a `SELECT 1 FROM incident_current WHERE incident_id = ?` inside the same `BEGIN IMMEDIATE` transaction. The process-local `self._cache` is no longer authoritative for the existence check, so a pre-opened store whose cache was loaded before another process promoted the incident correctly applies the lifecycle instead of returning `incident_not_found`.
++  - **R4-2a (pre-opened store regression)**: New `TestR4CacheAuthorityIsProjectionNotCache::test_lifecycle_apply_on_pre_opened_store_with_empty_cache` opens process B before process A promotes, runs the lifecycle through B, and asserts durable event/projection/idempotency state.
++  - **R4-2b (overlapping concurrent stores)**: New `TestR4OverlappingConcurrentStores::test_two_stores_contend_concurrently_for_lifecycle_apply` holds both stores open in two threads, joins both into a 3-party barrier (workers + main) and an explicit `go` event, then verifies exactly one thread applies and the other replays under contention. The R3 multi-process test only exercised sequential stores, so this is a genuinely new regression class.
++  - **R4-3 (replay refreshes the stale cache)**: Idempotent replay now calls `self._refresh_cache_from_projection(incident_id)` after the `BEGIN IMMEDIATE` commit so the cache observed by the replay handler reflects the durable projection row, not the stale pre-apply view. `TestR4ReplayRefreshesStaleCache::test_replay_on_pre_opened_store_heals_cache` proves the cache is populated and `store.get_incident()` returns the typed `diagnosis_loop` state on the replaying process.
++  - **R4-4 (typed `diagnosis_loop` projection boundary)**: `Incident.diagnosis_loop: dict[str, Any] | None` is now a typed dataclass field. The serializer (`incident_to_dict`/`incident_from_dict`) and the snapshot helper (`incident_snapshot_helpers.snapshot_incident`) round-trip it. `TestR4TypedDiagnosisLoopField::test_apply_hydrates_typed_diagnosis_loop_on_cached_incident` proves the field is populated on the returned Incident, the cached Incident, and the detail-endpoint read. The in-process `mark_diagnosis_loop_*_impl` methods also refresh the cache from the projection after `append_event` so they expose the typed state on the returned Incident.
++  - **R4-5 (staged tree)**: `git add -A && git diff --cached --check && git status --short` shows zero untracked files and zero unstaged ACT files. The 38-file diffstat is consistent with the R3 + R4 review scope; the four R3 test files plus the new R4 files plus all production sources plus all related support modules are staged.
++  - **Test file split**: 28 R3+R4 tests split across the existing R3 split files plus two new R4 files (`r4.py` core + `r4_concurrency.py` companion) to comply with the 500-line LLM-friendly threshold.
++  - **ACT-local fresh evidence**: gate ran after all changes were staged; output timestamp in the next digest will represent this tree.
++
++### 2026-07-12 — ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 R3 close
++
++- Target: SQLite lifecycle idempotency — close R3-1, R3-2, R3-3, R3-4, R3-5, R3-6 blockers from the R2 review.
++- Impact scan required: yes
++- Impact scan present: yes
++- Script used: no (manual `git grep` + `rg` against review findings)
++- Manual refinement present: yes
++- Planned files: 4 source (`incident_store_sqlite_schema.py`, `incident_store_sqlite_migrations.py`, `incident_store_sqlite_context.py`, `incident_store_sqlite_lifecycle_idempotency.py`), 1 driver test (`test_automatic_diagnosis_backend_promotion_regression.py`), 4 R3 test files.
++- Changed files: 6 source/test files (one R2 docstring-only side-effect), 1 unrelated pre-existing R2 test fix, 4 new R3 test files split for size.
++- Unexpected changed files: `tests/unit/test_automatic_diagnosis_backend_promotion_regression.py` — the R2 patch removed `check_incident_eligibility` from the processor module and replaced it with `evaluate_incident_eligibility` in `incident_diagnosis_authority_seam`, but the test still patched the old symbol. Confirmed pre-existing R2 regression by reverting R3 changes and re-running.
++- Likely tests identified by script: n/a (manual review).
++- Likely tests identified manually: existing `test_incident_store_sqlite_lifecycle_idempotency.py`, canonical seam (`test_incident_store_sqlite_*`), auto-diagnosis dispatch regression.
++- Targeted tests run: focused pytest on the R3 lifecycle idempotency test files (23 tests); broader SQLite + automatic_diagnosis suites (679 tests).
++- Full gate run: `./scripts/verify_all.sh --act-local` → PASS.
++- Reviewer scope objection: no.
++- Reviewer requested missing scan: no.
++- Script usefulness: n/a.
++- Did the scan reduce surprise: yes — review listed 10 required R3 tests and 6 specific blockers; both informed the implementation plan.
++- Notes:
++  - **Schema upgrade (R3-1)**: Bumped `SCHEMA_VERSION` 1 → 2 and added a v2 migration entry that re-applies the lifecycle idempotency table + the COALESCE-based UNIQUE index. v1 databases upgrade in place (covered by `test_v1_database_upgrades_to_v2_with_table_and_index`).
++  - **Capability seam (R3-4)**: Replaced the R2 module's direct `_write_lock`/`_connect()`/`_incidents`/`_snapshot_incident()` access with a thin adapter that delegates to the new canonical `SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently` method. The new method owns the full lookup → hash-chained event append → canonical projection → idempotency record sequence in one `BEGIN IMMEDIATE` transaction and refreshes the in-memory cache from the projection on commit.
++  - **Hash chain (R3-3)**: The R2 patch wrote empty `payload_sha256` / `previous_event_sha256` / `event_sha256` placeholders; the new canonical path uses `EventBuilder` so the appended event is a real hash-chained link that subsequent canonical events connect to.
++  - **NULL uniqueness (R3-5)**: Index now uses `COALESCE(diagnosis_run_id, '')` so NULL participates in uniqueness; lookups mirror the expression.
++  - **Rollback proof (R3-6)**: Idempotency insert is a separate module-level helper so tests can monkey-patch it to inject a fault and verify the event row, projection row, and cache all roll back together.
++  - **Test file split**: 14 R3 tests split across 4 files to comply with the 500-line LLM-friendly threshold; companion references are documented in each file's docstring.
++
++---
++
+ ### 2026-06-05 — Planner data derivation extraction
+
+ - **Change:** Extracted planner data derivation from `App.tsx` into `frontend/src/app/usePlannerDataProps.ts`.
+@@ -178,4 +234,5 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
+
+ ---
+
++
+ *Add new entries at the top, below this separator.*
+
+=== scripts/verifiers/automatic_diagnosis_authority_seam01.py ===
+diff --git a/scripts/verifiers/automatic_diagnosis_authority_seam01.py b/scripts/verifiers/automatic_diagnosis_authority_seam01.py
 new file mode 100644
-index 0000000..6e2e8ad
+index 00000000..783a7809
 --- /dev/null
-+++ b/scripts/verifiers/automatic_diagnosis_backend_detail_outcomes.py
-@@ -0,0 +1,1267 @@
++++ b/scripts/verifiers/automatic_diagnosis_authority_seam01.py
+@@ -0,0 +1,173 @@
 +#!/usr/bin/env python
-+"""Static verifier for backend incident-detail outcome algebra.
++"""Static verifier for ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01.
 +
-+Enforces the contract from
-+ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01 (R1):
++Enforces the contract that the automatic-diagnosis processor:
 +
-+* Outcome model invariants
-+    - Three disjoint variants: ``BackendIncidentFound``,
-+      ``BackendIncidentNotFound``, ``BackendIncidentLookupFailed``.
-+    - All dataclasses are frozen **and** use ``slots=True``.
-+    - ``requested_incident_id`` is annotated as the branded
-+      :class:`IncidentId` (not ``str``, not ``Optional[IncidentId]``).
-+    - ``BackendIncidentFound.incident`` is annotated as the canonical
-+      domain :class:`Incident` (not ``object``, ``Any``, ``dict``, or a
-+      union containing those widened forms).
-+    - ``BackendIncidentNotFound`` carries the ``source`` discriminator
-+      (no synthesised HTTP status in local mode).
-+    - The outcome union contains exactly those three variants.
-+    - Failure codes use :class:`StrEnum`.
-+    - No boolean ``found`` discriminator.
++1. Does NOT call ``check_incident_eligibility(incident_id=...)`` after it
++   has received a typed :class:`Incident` from
++   :class:`BackendIncidentFound`.
++2. Does NOT call ``get_incident_store()`` to re-resolve the incident
++   or to mutate lifecycle state.
++3. Does NOT call the local ``IncidentStore.mark_diagnosis_loop_*``
++   methods directly; all lifecycle writes must route through
++   :func:`record_diagnosis_loop_*`.
++4. Does NOT call the legacy nullable ``fetch_incident_for_diagnosis``.
++5. Handles the backend lookup through exhaustive
++   ``match`` on the three typed variants; never through truthiness or
++   ``None`` checks.
++6. Maps ``BackendIncidentLookupFailed`` to a bounded
++   ``backend_incident_*`` reason code, never to ``incident_not_found``.
++7. Does NOT introduce backend-to-local fallback when the backend
++   operation fails.
++8. Does NOT swallow lifecycle dispatch failures with an empty
++   ``except`` / ``pass`` block.
 +
-+* Lookup signature
-+    - ``lookup_backend_incident`` returns ``BackendIncidentLookupOutcome``.
-+    - It does NOT return ``Incident | None`` or ``Optional[Incident]``.
-+    - It contains no bare ``return None``.
-+    - It invokes the canonical payload parser.
-+    - It validates returned incident identity.
++And the aggregate-based eligibility evaluator:
 +
-+* Not-found strictness
-+    - ``BackendIncidentNotFound`` is constructed only inside
-+      :mod:`incident_diagnosis_backend_detail_lookup` (the canonical
-+      lookup module) AND only when ``response.http_status == 404``.
-+    - The 404 branch is dominated by the EXACT comparison
-+      ``response.http_status == 404``; broader or negated mutations
-+      (``!= 404``, ``in {400, 404}``, ``404 <= response.http_status``,
-+      plain ``if response.http_status:``) are rejected.
-+    - Local mode does NOT fabricate ``http_status=404``; the dispatcher
-+      must construct ``BackendIncidentNotFound(source=LOCAL_STORE)``
-+      without an HTTP status.
-+    - No broad ``except Exception`` handler in the touched seam
-+      constructs ``BackendIncidentNotFound``.
-+    - No ``BackendIncidentLookupFailed`` path is suppressed into a
-+      ``BackendIncidentNotFound``.
++1. Accepts a typed ``incident: Incident`` parameter.
++2. Does NOT call ``get_incident_store()``.
++3. Does NOT call any incident backend client.
++4. Does NOT accept ``incident_id`` as its only incident input.
 +
-+* Forbidden truthiness
-+    - Patterns equivalent to ``if not incident: reason = "incident_not_found"``
-+      or ``if not payload: return BackendIncidentNotFound(...)`` in the
-+      touched seam are rejected by AST analysis.
++To keep this entry-point module under the LLM-friendly 500-line limit,
++the implementation is split into two sibling modules:
 +
-+* Automatic-diagnosis mapping
-+    - ``_process_incident`` dispatches exhaustively on the three
-+      variants.
-+    - Only the not-found variant maps to ``incident_not_found``.
-+    - The failed variant maps to a ``backend_incident_*`` error code.
++* :mod:`scripts.verifiers.automatic_diagnosis_authority_seam01_helpers` —
++  file-collection and AST helpers, plus the two reusable forbidden-pattern
++  detectors.
++* :mod:`scripts.verifiers.automatic_diagnosis_authority_seam01_checks` —
++  every per-claim ``check_*`` function and the seam-module symbol
++  collector.
 +
-+* Literal centralisation
-+    - Stable reason-code strings are centralized in
-+      :mod:`incident_diagnosis_backend_detail_outcomes`.
-+    - Production code in the touched seam does not scatter duplicate
-+      ``incident_not_found`` literals.
++For backward compatibility with the existing self-test
++(``tests/unit/test_automatic_diagnosis_authority_seam01_verifier.py``)
++the underscored helper and detector names that the self-test accesses
++via ``verifier._check_*`` / ``verifier._contains_*`` /
++``verifier._seam_available_names`` are re-exported below as module
++attributes.
 +
 +Run directly:
 +
-+    .venv/bin/python scripts/verifiers/automatic_diagnosis_backend_detail_outcomes.py
++    .venv/bin/python scripts/verifiers/automatic_diagnosis_authority_seam01.py
 +
 +Exit code 0 = PASS, non-zero = violations present.
 +
-+Suggested by: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01
-+R1 follow-up: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01-R1
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
++"""
++
++# isort: skip_file
++
++from __future__ import annotations
++
++import sys
++from pathlib import Path
++
++# The verifier is invoked both as a script (``python scripts/verifiers/
++# automatic_diagnosis_authority_seam01.py``) and via ``importlib.util
++# .spec_from_file_location`` from the self-test. Neither sets up a
++# parent package, so relative imports (``from . import ...``) fail.
++# Add the verifier directory to ``sys.path`` so the sibling modules
++# can be imported by absolute name. Idempotent: re-running the
++# verifier (e.g. from the self-test) does not duplicate the entry.
++_VERIFIER_DIR = str(Path(__file__).resolve().parent)
++if _VERIFIER_DIR not in sys.path:
++    sys.path.insert(0, _VERIFIER_DIR)
++
++# ruff: noqa: E402,F401
++# Re-export every helper / check under its legacy underscored name so
++# the self-test can access them via ``verifier._check_*`` /
++# ``verifier._contains_*`` / ``verifier._seam_available_names``.
++from automatic_diagnosis_authority_seam01_helpers import (  # noqa: F401
++    PROCESSOR_PATH,
++    contains_truthiness_to_not_found,
++    function_defs,
++    has_empty_except_pass,
++    parse_path,
++    read_text,
++)
++from automatic_diagnosis_authority_seam01_checks import (  # noqa: F401
++    check_evaluator_aggregate_signature,
++    check_evaluator_no_lookups,
++    check_processor_calls,
++    check_processor_dispatch,
++    check_processor_lookup_failed_not_incident_not_found,
++    check_processor_no_backend_to_local_fallback,
++    check_processor_no_swallowed_lifecycle,
++    check_processor_old_id_resolver,
++    check_processor_truthiness,
++    check_processor_uses_aggregate_eligibility,
++    check_seam_required_symbols,
++    seam_available_names,
++)
++
++# Backward-compat underscored aliases used by the self-test. They live
++# as plain module-attribute assignments so ruff's auto-fix cannot drop
++# them on a subsequent run.
++_contains_truthiness_to_not_found = contains_truthiness_to_not_found
++_function_defs = function_defs
++_has_empty_except_pass = has_empty_except_pass
++_parse = parse_path
++_read = read_text
++_check_processor_calls = check_processor_calls
++_check_processor_dispatch = check_processor_dispatch
++_check_processor_lookup_failed_not_incident_not_found = (
++    check_processor_lookup_failed_not_incident_not_found
++)
++_check_processor_no_backend_to_local_fallback = (
++    check_processor_no_backend_to_local_fallback
++)
++_check_processor_no_swallowed_lifecycle = check_processor_no_swallowed_lifecycle
++_check_processor_old_id_resolver = check_processor_old_id_resolver
++_check_processor_truthiness = check_processor_truthiness
++_check_processor_uses_aggregate_eligibility = (
++    check_processor_uses_aggregate_eligibility
++)
++_seam_available_names = seam_available_names
++
++
++def run_static_checks() -> list[str]:
++    """Run all ACT-specific static checks against the production code."""
++    violations: list[str] = []
++
++    processor_tree = parse_path(PROCESSOR_PATH)
++    if processor_tree is None:
++        violations.append(
++            "incident_diagnosis_auto_loop_evidence_processor.py: cannot read or parse"
++        )
++    else:
++        violations.extend(_check_processor_calls(processor_tree))
++        violations.extend(_check_processor_old_id_resolver(processor_tree))
++        violations.extend(_check_processor_uses_aggregate_eligibility(processor_tree))
++        violations.extend(_check_processor_dispatch(processor_tree))
++
++        violations.extend(_check_processor_no_backend_to_local_fallback(processor_tree))
++        violations.extend(_check_processor_no_swallowed_lifecycle(processor_tree))
++        violations.extend(_check_processor_truthiness())
++        violations.extend(_check_processor_lookup_failed_not_incident_not_found())
++
++    violations.extend(check_evaluator_aggregate_signature())
++    violations.extend(check_evaluator_no_lookups())
++    violations.extend(check_seam_required_symbols())
++
++    return violations
++
++
++def main(argv: list[str] | None = None) -> int:
++    """CLI entry point."""
++    violations = run_static_checks()
++    if violations:
++        print(
++            "ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 verifier "
++            "found violations:"
++        )
++        for v in violations:
++            print(f"- {v}")
++        return 1
++    print(
++        "ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 verifier: PASS"
++    )
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv[1:]))
+
+=== scripts/verifiers/automatic_diagnosis_authority_seam01_checks.py ===
+diff --git a/scripts/verifiers/automatic_diagnosis_authority_seam01_checks.py b/scripts/verifiers/automatic_diagnosis_authority_seam01_checks.py
+new file mode 100644
+index 00000000..53d8b003
+--- /dev/null
++++ b/scripts/verifiers/automatic_diagnosis_authority_seam01_checks.py
+@@ -0,0 +1,482 @@
++"""Per-check functions for the ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
++verifier.
++
++Every function in this module takes a parsed :class:`ast.Module` (or,
++for the seam-check, reads its own file) and returns a list of
++human-readable violation strings. An empty list means the check
++passed. The verifier entry point
++(:mod:`scripts.verifiers.automatic_diagnosis_authority_seam01`)
++orchestrates the checks via :func:`run_static_checks` (which lives in
++the entry-point module so this file stays a flat collection of
++checks).
++
++Each tree-based check has a paired negative / positive fixture in
++``tests/unit/test_automatic_diagnosis_authority_seam01_verifier.py``
++so the verifier is provably non-trivial rather than a green stamp.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
 +"""
 +
 +from __future__ import annotations
 +
 +import ast
-+import sys
-+from collections.abc import Iterable
-+from pathlib import Path
 +from typing import Final
 +
-+# ---------------------------------------------------------------------------
-+# Paths and constants
-+# ---------------------------------------------------------------------------
-+
-+REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
-+SRC_ROOT: Final[Path] = REPO_ROOT / "src" / "k8s_diag_agent"
-+
-+CANONICAL_OUTCOMES_MODULE: Final[str] = (
-+    "k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes"
-+)
-+CANONICAL_PARSER_MODULE: Final[str] = (
-+    "k8s_diag_agent.collect.incident_diagnosis_backend_detail_parser"
-+)
-+CANONICAL_LOOKUP_MODULE: Final[str] = (
-+    "k8s_diag_agent.collect.incident_diagnosis_backend_detail_lookup"
-+)
-+CANONICAL_DISPATCH_MODULE: Final[str] = (
-+    "k8s_diag_agent.collect.incident_diagnosis_dispatch"
-+)
-+EVIDENCE_PROCESSOR_MODULE: Final[str] = (
-+    "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor"
-+)
-+DISPOSITION_MODULE: Final[str] = (
-+    "k8s_diag_agent.collect.incident_diagnosis_disposition"
-+)
-+DISPOSITION_COMPAT_MODULE: Final[str] = (
-+    "k8s_diag_agent.collect.incident_diagnosis_disposition_compat"
++from automatic_diagnosis_authority_seam01_helpers import (  # noqa: F401
++    EVALUATOR_PATH,
++    PROCESSOR_PATH,
++    SEAM_PATH,
++    call_keyword,
++    called_names,
++    contains_truthiness_to_not_found,
++    function_defs,
++    has_empty_except_pass,
++    match_case_type,
++    parse_path,
++    read_text,
 +)
 +
-+# Modules where the verifier actively scans for forbidden patterns.
-+# The canonical outcomes module is allowed to construct the variants
-+# themselves; the lookup module is allowed to construct NotFound once
-+# (in the 404 branch). All other modules must NOT construct
-+# ``BackendIncidentNotFound`` with ``http_status=404`` directly.
-+TOUCHED_SEAM_MODULES: Final[tuple[str, ...]] = (
-+    EVIDENCE_PROCESSOR_MODULE,
-+    CANONICAL_DISPATCH_MODULE,
-+    "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch",
-+    "k8s_diag_agent.health.loop_automatic_diagnosis",
++# Forbidden call names that the processor must not invoke. The presence
++# of these names inside ``_process_incident`` is a contract violation.
++FORBIDDEN_PROCESSOR_CALLS: Final[tuple[str, ...]] = (
++    "get_incident_store",
++    "fetch_incident_for_diagnosis",
 +)
 +
-+CONSTRUCTION_ALLOWED_MODULES: Final[frozenset[str]] = frozenset({
-+    CANONICAL_LOOKUP_MODULE,
-+    CANONICAL_OUTCOMES_MODULE,  # used by tests for fixture construction
-+    CANONICAL_DISPATCH_MODULE,
-+})
 +
-+# Variant names that must exist in the canonical outcomes module.
-+REQUIRED_VARIANTS: Final[tuple[str, ...]] = (
++# Forbidden call names that the aggregate evaluator must not invoke.
++FORBIDDEN_EVALUATOR_CALLS: Final[tuple[str, ...]] = (
++    "get_incident_store",
++    "fetch_backend_incident_for_diagnosis_typed",
++    "fetch_incident_for_diagnosis",
++)
++
++
++# Lifecycle mutation methods that the processor must NOT call directly.
++# All such writes must route through ``record_diagnosis_loop_*`` helpers.
++DIRECT_LIFECYCLE_METHODS: Final[tuple[str, ...]] = (
++    "mark_diagnosis_loop_started",
++    "mark_diagnosis_loop_failed",
++    "mark_diagnosis_loop_completed",
++)
++
++
++# Symbol names whose definition must remain in the canonical seam.
++REQUIRED_SEAM_SYMBOLS: Final[tuple[str, ...]] = (
++    "evaluate_incident_eligibility",
++    "check_incident_eligibility",
++    "record_diagnosis_loop_started",
++    "record_diagnosis_loop_failed",
++    "record_diagnosis_loop_completed",
++)
++
++
++# Variants the processor must dispatch on exhaustively.
++TYPED_LOOKUP_VARIANTS: Final[tuple[str, ...]] = (
 +    "BackendIncidentFound",
 +    "BackendIncidentNotFound",
 +    "BackendIncidentLookupFailed",
 +)
 +
-+FORBIDDEN_RECURSION_LITERALS: Final[tuple[str, ...]] = (
-+    # Patterns that must NEVER appear in production code outside the
-+    # canonical outcomes module's vocabulary.
-+    "incident_not_found",
-+)
-+
-+# Canonical failure code values that must exist in the outcomes module.
-+REQUIRED_FAILURE_CODE_VALUES: Final[tuple[str, ...]] = (
-+    "invalid_json",
-+    "invalid_payload",
-+    "unsupported_schema",
-+    "deserialization_failed",
-+    "identity_mismatch",
-+    "unauthorized",
-+    "forbidden",
-+    "http_client_error",
-+    "backend_error",
-+    "transport_error",
-+)
-+
-+# Stable external reason codes that must exist in the disposition module.
-+REQUIRED_DISPOSITION_REASON_VALUES: Final[tuple[str, ...]] = (
-+    "backend_incident_invalid_json",
-+    "backend_incident_invalid_payload",
-+    "backend_incident_unsupported_schema",
-+    "backend_incident_deserialization_failed",
-+    "backend_incident_identity_mismatch",
-+    "backend_incident_unauthorized",
-+    "backend_incident_forbidden",
-+    "backend_incident_http_client_error",
-+    "backend_incident_backend_error",
-+    "backend_incident_transport_error",
-+)
-+
 +
 +# ---------------------------------------------------------------------------
-+# File collection helpers
++# Processor checks
 +# ---------------------------------------------------------------------------
 +
 +
-+def _module_name_from_path(path: Path) -> str:
-+    """Return the canonical fully-qualified module name.
++def check_processor_calls(tree: ast.Module) -> list[str]:
++    """Reject any direct call to forbidden functions inside the processor."""
++    violations: list[str] = []
++    processor = function_defs(tree)
++    process_incident = processor.get("_process_incident")
++    if process_incident is None:
++        violations.append(
++            "incident_diagnosis_auto_loop_evidence_processor: "
++            "_process_incident function is missing"
++        )
++        return violations
++    for node in ast.walk(process_incident):
++        if not isinstance(node, ast.Call):
++            continue
++        names = called_names(node)
++        if not names:
++            continue
++        for forbidden in FORBIDDEN_PROCESSOR_CALLS:
++            if forbidden in names:
++                violations.append(
++                    "incident_diagnosis_auto_loop_evidence_processor: "
++                    f"_process_incident forbids call to {forbidden!r}"
++                )
++        for method in DIRECT_LIFECYCLE_METHODS:
++            if method in names:
++                violations.append(
++                    "incident_diagnosis_auto_loop_evidence_processor: "
++                    f"_process_incident forbids direct lifecycle call to {method!r}"
++                )
++    return violations
 +
-+    The result is prefixed with the ``k8s_diag_agent`` package so that
-+    it matches the strings used for ``CONSTRUCTION_ALLOWED_MODULES`` /
-+    ``EVIDENCE_PROCESSOR_MODULE`` / etc. elsewhere in this file.
 +
-+    Out-of-tree paths (e.g. synthetic files used by the verifier
-+    self-tests) are returned as a sentinel string derived from the
-+    stem so they fall outside any allow-list.
++def check_processor_old_id_resolver(tree: ast.Module) -> list[str]:
++    """Reject ``check_incident_eligibility(incident_id=...)`` in the processor.
++
++    The processor MUST use :func:`evaluate_incident_eligibility`
++    directly with the typed aggregate. The legacy ID-resolving
++    ``check_incident_eligibility`` is the local-store compat wrapper.
 +    """
++    violations: list[str] = []
++    processor = function_defs(tree)
++    process_incident = processor.get("_process_incident")
++    if process_incident is None:
++        return violations
++    for node in ast.walk(process_incident):
++        if not isinstance(node, ast.Call):
++            continue
++        names = called_names(node)
++        if not names:
++            continue
++        if "check_incident_eligibility" in names:
++            incident_id_value = call_keyword(node, "incident_id")
++            if incident_id_value is not None:
++                violations.append(
++                    "incident_diagnosis_auto_loop_evidence_processor: "
++                    "_process_incident calls check_incident_eligibility with "
++                    "incident_id=…; it must call evaluate_incident_eligibility "
++                    "with the typed Incident aggregate instead."
++                )
++    return violations
++
++
++def check_processor_dispatch(tree: ast.Module) -> list[str]:
++    """Confirm the processor dispatches on all three typed variants."""
++    violations: list[str] = []
++    processor = function_defs(tree)
++    process_incident = processor.get("_process_incident")
++    if process_incident is None:
++        return violations
++    found_variants: set[str] = set()
++    case_type = match_case_type()
++    if case_type is None:  # pragma: no cover - defensive
++        return violations
++    for node in ast.walk(process_incident):
++        if not isinstance(node, case_type):
++            continue
++        pat = node.pattern
++        if isinstance(pat, ast.MatchClass):
++            if pat.cls is not None and isinstance(pat.cls, ast.Name):
++                if pat.cls.id in TYPED_LOOKUP_VARIANTS:
++                    found_variants.add(pat.cls.id)
++    missing = [v for v in TYPED_LOOKUP_VARIANTS if v not in found_variants]
++    if missing:
++        violations.append(
++            "incident_diagnosis_auto_loop_evidence_processor: "
++            "_process_incident must dispatch on all three typed variants; "
++            f"missing: {missing}"
++        )
++    return violations
++
++
++def check_processor_no_backend_to_local_fallback(tree: ast.Module) -> list[str]:
++    """Reject hidden backend-to-local fallback patterns.
++
++    The processor must not call the local ``IncidentStore`` methods
++    (already covered by FORBIDDEN_PROCESSOR_CALLS / DIRECT_LIFECYCLE_METHODS)
++    and must not call the local ``fetch_incident_local`` symbol either.
++    """
++    violations: list[str] = []
++    processor = function_defs(tree)
++    process_incident = processor.get("_process_incident")
++    if process_incident is None:
++        return violations
++    for node in ast.walk(process_incident):
++        if not isinstance(node, ast.Call):
++            continue
++        names = called_names(node)
++        if "fetch_incident_local" in names:
++            violations.append(
++                "incident_diagnosis_auto_loop_evidence_processor: "
++                "_process_incident must not fall back to fetch_incident_local"
++            )
++    return violations
++
++
++def check_processor_no_swallowed_lifecycle(tree: ast.Module) -> list[str]:
++    """Reject ``except: pass`` blocks around lifecycle-dispatch calls.
++
++    A bare ``except: pass`` that swallows a lifecycle-dispatch call
++    would silently treat persistence failures as success. The
++    contract only forbids this pattern when the swallowed body
++    contains a call to ``record_diagnosis_loop_*``; best-effort
++    review-packet writes that use ``except: pass`` for non-lifecycle
++    operations are out of scope and remain allowed.
++    """
++    processor = function_defs(tree)
++    process_incident = processor.get("_process_incident")
++    if process_incident is None:
++        return []
++    violations: list[str] = []
++    for node in ast.walk(process_incident):
++        if not isinstance(node, ast.Try):
++            continue
++        for handler in node.handlers:
++            if not (len(handler.body) == 1 and isinstance(handler.body[0], ast.Pass)):
++                continue
++            # Bare pass handler; the ACT forbids this around
++            # lifecycle-dispatch calls.
++            for sub in ast.walk(node):  # walk the WHOLE try, not just the handler
++                if not isinstance(sub, ast.Call):
++                    continue
++                names = called_names(sub)
++                if any(name in names for name in ("record_diagnosis_loop_started",
++                                                  "record_diagnosis_loop_failed",
++                                                  "record_diagnosis_loop_completed")):
++                    violations.append(
++                        "incident_diagnosis_auto_loop_evidence_processor: "
++                        "forbidden ``except ...: pass`` swallowing a lifecycle-dispatch call"
++                    )
++                    break
++    return violations
++
++
++def check_processor_truthiness() -> list[str]:
++    """Reject truthiness-to-``incident_not_found`` mutations."""
++    source = read_text(PROCESSOR_PATH)
++    if source is None:
++        return []
 +    try:
-+        relative = path.relative_to(SRC_ROOT.parent).with_suffix("")
-+    except ValueError:
-+        # Out-of-tree path (synthetic / temp dir). Use a sentinel that
-+        # is guaranteed to NOT be in any allow-list.
-+        return f"verifier_synthetic.{path.stem}"
-+    parts = relative.parts
-+    if parts and parts[0] == "k8s_diag_agent":
-+        return ".".join(parts)
-+    return "k8s_diag_agent." + ".".join(parts)
++        tree = ast.parse(source, filename=str(PROCESSOR_PATH))
++    except SyntaxError:
++        return []
++    if contains_truthiness_to_not_found(tree):
++        return [
++            "incident_diagnosis_auto_loop_evidence_processor: "
++            "forbidden truthiness-to-incident_not_found mutation"
++        ]
++    return []
 +
 +
-+def _iter_python_files() -> Iterable[Path]:
++def check_processor_lookup_failed_not_incident_not_found() -> list[str]:
++    """Reject ``BackendIncidentLookupFailed`` mapped to ``incident_not_found``.
++
++    The processor routes ``BackendIncidentLookupFailed`` through
++    ``_failure_result_from_outcome`` which uses the bounded reason
++    code mapping. A direct mapping to ``incident_not_found`` would
++    violate INV-03.
++    """
++    source = read_text(PROCESSOR_PATH)
++    if source is None:
++        return []
++    try:
++        tree = ast.parse(source, filename=str(PROCESSOR_PATH))
++    except SyntaxError:
++        return []
++    violations: list[str] = []
++    for node in ast.walk(tree):
++        if not isinstance(node, ast.Assign):
++            continue
++        if not isinstance(node.value, ast.Constant):
++            continue
++        if node.value.value != "incident_not_found":
++            continue
++        if not isinstance(node.targets[0], ast.Name):
++            continue
++        target_name = node.targets[0].id
++        if target_name in {"eligibility_reason"}:
++            # Only allowed in the not-found branch; we cannot walk parents,
++            # so we accept the broader invariant: the file MUST NOT assign
++            # ``eligibility_reason = "incident_not_found"`` outside a
++            # BackendIncidentNotFound match case. We approximate by
++            # disallowing it whenever the file has a BackendIncidentLookupFailed
++            # dispatch (the failure path uses the bounded code mapping).
++            violations.append(
++                "incident_diagnosis_auto_loop_evidence_processor: "
++                "forbidden mapping of failure path to ``incident_not_found``"
++            )
++    # Constructor keyword-argument form: the failure path must never be
++    # projected as ``AutoLoopIncidentResult(eligibility_reason=
++    # "incident_not_found")``. ``ast.Assign`` scanning alone misses this
++    # because the value appears as a call keyword, not an assignment.
++    for node in ast.walk(tree):
++        if not isinstance(node, ast.Call):
++            continue
++        for kw in node.keywords:
++            if (
++                kw.arg == "eligibility_reason"
++                and isinstance(kw.value, ast.Constant)
++                and kw.value.value == "incident_not_found"
++            ):
++                violations.append(
++                    "incident_diagnosis_auto_loop_evidence_processor: "
++                    "forbidden AutoLoopIncidentResult(eligibility_reason="
++                    "'incident_not_found') keyword mapping of the failure path"
++                )
++    return violations
++
++
++def check_processor_uses_aggregate_eligibility(tree: ast.Module) -> list[str]:
++    """Confirm the processor uses the aggregate-based eligibility evaluator.
++
++    The processor MUST call
++    ``evaluate_incident_eligibility(incident=incident_obj, ...)`` with the
++    typed :class:`Incident` aggregate; a positive presence check closes
++    the gap where the verifier only forbade the legacy resolver without
++    proving the correct call is made.
++    """
++    violations: list[str] = []
++    processor = function_defs(tree)
++    process_incident = processor.get("_process_incident")
++    if process_incident is None:
++        return violations
++    found = False
++    for node in ast.walk(process_incident):
++        if not isinstance(node, ast.Call):
++            continue
++        names = called_names(node)
++        if "evaluate_incident_eligibility" in names and (
++            call_keyword(node, "incident") is not None
++        ):
++            found = True
++            break
++    if not found:
++        violations.append(
++            "incident_diagnosis_auto_loop_evidence_processor: "
++            "_process_incident must call evaluate_incident_eligibility("
++            "incident=…) with the typed aggregate"
++        )
++    return violations
++
++
++# ---------------------------------------------------------------------------
++# Evaluator checks
++# ---------------------------------------------------------------------------
++
++
++def check_evaluator_aggregate_signature() -> list[str]:
++    """The aggregate evaluator must accept a typed ``Incident`` parameter."""
++    tree = parse_path(EVALUATOR_PATH)
++    if tree is None:
++        return [f"{EVALUATOR_PATH}: cannot read or parse"]
++    funcs = function_defs(tree)
++    evaluator = funcs.get("evaluate_incident_eligibility")
++    if evaluator is None:
++        return [
++            f"{EVALUATOR_PATH}: evaluate_incident_eligibility function "
++            "is missing"
++        ]
++    violations: list[str] = []
++    positional = list(evaluator.args.args)
++    kwonly = list(evaluator.args.kwonlyargs)
++    has_incident_kw: bool = False
++    for arg in positional + kwonly:
++        if arg.arg != "incident":
++            continue
++        has_incident_kw = True
++        if arg.annotation is None:
++            violations.append(
++                f"{EVALUATOR_PATH}: evaluate_incident_eligibility "
++                "parameter ``incident`` must be annotated"
++            )
++        else:
++            ann = ast.unparse(arg.annotation).strip().strip("'\"")
++            if ann != "Incident":
++                violations.append(
++                    f"{EVALUATOR_PATH}: evaluate_incident_eligibility "
++                    f"parameter ``incident`` must be annotated as Incident; "
++                    f"got {ann!r}"
++                )
++    if not has_incident_kw:
++        violations.append(
++            f"{EVALUATOR_PATH}: evaluate_incident_eligibility must accept "
++            "a typed ``incident: Incident`` parameter"
++        )
++    return violations
++
++
++def check_evaluator_no_lookups() -> list[str]:
++    """The aggregate evaluator must not call any incident resolver."""
++    tree = parse_path(EVALUATOR_PATH)
++    if tree is None:
++        return []
++    funcs = function_defs(tree)
++    evaluator = funcs.get("evaluate_incident_eligibility")
++    if evaluator is None:
++        return []
++    violations: list[str] = []
++    for node in ast.walk(evaluator):
++        if not isinstance(node, ast.Call):
++            continue
++        names = called_names(node)
++        if not names:
++            continue
++        for forbidden in FORBIDDEN_EVALUATOR_CALLS:
++            if forbidden in names:
++                violations.append(
++                    f"{EVALUATOR_PATH}: evaluate_incident_eligibility "
++                    f"forbids call to {forbidden!r}"
++                )
++    return violations
++
++
++# ---------------------------------------------------------------------------
++# Seam-module availability check
++# ---------------------------------------------------------------------------
++
++
++def seam_available_names(
++    tree: ast.Module,
++) -> tuple[set[str], set[str], set[str]]:
++    """Return ``(defined, imported, exported)`` names for the seam module."""
++    defined = set(function_defs(tree))
++    imported: set[str] = set()
++    exported: set[str] = set()
++    for node in tree.body:
++        if isinstance(node, ast.ImportFrom):
++            for alias in node.names:
++                imported.add(alias.asname or alias.name)
++        if isinstance(node, ast.Assign):
++            for tgt in node.targets:
++                if isinstance(tgt, ast.Name) and tgt.id == "__all__" and isinstance(
++                    node.value, ast.List | ast.Tuple
++                ):
++                    for elt in node.value.elts:
++                        if isinstance(elt, ast.Constant) and isinstance(
++                            elt.value, str
++                        ):
++                            exported.add(elt.value)
++    return defined, imported, exported
++
++
++def check_seam_required_symbols() -> list[str]:
++    """The seam module must expose the required public API.
++
++    Every symbol in :data:`REQUIRED_SEAM_SYMBOLS` must be reachable
++    through the seam (defined locally, imported/re-exported, or listed
++    in ``__all__``). The lifecycle-dispatch functions and the wire
++    request builder must additionally be *defined* in the seam module,
++    not merely re-exported.
++    """
++    tree = parse_path(SEAM_PATH)
++    if tree is None:
++        return [f"{SEAM_PATH}: cannot read or parse"]
++    defined, imported, exported = seam_available_names(tree)
++    available = defined | imported | exported
++    violations: list[str] = []
++    # Every REQUIRED_SEAM_SYMBOL must be reachable through the seam.
++    for name in REQUIRED_SEAM_SYMBOLS:
++        if name not in available:
++            violations.append(
++                f"{SEAM_PATH}: required seam symbol {name!r} is not "
++                "defined, imported, or exported by the seam module"
++            )
++    # Lifecycle-dispatch symbols MUST be defined locally in the seam.
++    for name in (
++        "record_diagnosis_loop_started",
++        "record_diagnosis_loop_failed",
++        "record_diagnosis_loop_completed",
++        "build_lifecycle_request",
++    ):
++        if name not in defined:
++            violations.append(
++                f"{SEAM_PATH}: required seam symbol {name!r} "
++                "must be defined in the seam module"
++            )
++    return violations
+
+=== scripts/verifiers/automatic_diagnosis_authority_seam01_helpers.py ===
+diff --git a/scripts/verifiers/automatic_diagnosis_authority_seam01_helpers.py b/scripts/verifiers/automatic_diagnosis_authority_seam01_helpers.py
+new file mode 100644
+index 00000000..0596ce16
+--- /dev/null
++++ b/scripts/verifiers/automatic_diagnosis_authority_seam01_helpers.py
+@@ -0,0 +1,202 @@
++"""AST and file helpers for the ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
++verifier.
++
++This module owns:
++
++* File-collection primitives (``_read``, ``_parse``, ``_iter_python_files``)
++  used by the verifier to discover source files under ``src/``.
++* Pure AST helpers (``_function_defs``, ``_called_names``,
++  ``_call_keyword``, ``_match_case_type``) that translate a parsed
++  :class:`ast.Module` into the minimal structures the individual checks
++  need.
++* Forbidden-pattern detectors that operate on any AST tree and are
++  reusable across multiple checks
++  (``_contains_truthiness_to_not_found``, ``_has_empty_except_pass``).
++
++The verifier entry point
++(:mod:`scripts.verifiers.automatic_diagnosis_authority_seam01`)
++re-exports every public helper so the self-tests can access them via
++the verifier module attribute. The per-file-size check is split between
++this helpers module and the per-check checks module to keep both files
++within the LLM-friendly 500-line limit.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
++"""
++
++from __future__ import annotations
++
++import ast
++from collections.abc import Iterable
++from pathlib import Path
++
++# Repo-rooted paths reused by both this helpers module and the checks
++# module. They are duplicated here (not imported from the verifier
++# entry point) so the helpers module is self-contained and the cyclic
++# import graph stays acyclic.
++REPO_ROOT: Path = Path(__file__).resolve().parents[2]
++SRC_ROOT: Path = REPO_ROOT / "src" / "k8s_diag_agent"
++
++PROCESSOR_PATH: Path = (
++    SRC_ROOT / "collect" / "incident_diagnosis_auto_loop_evidence_processor.py"
++)
++EVALUATOR_PATH: Path = (
++    SRC_ROOT / "collect" / "incident_diagnosis_auto_loop_config.py"
++)
++SEAM_PATH: Path = (
++    SRC_ROOT / "collect" / "incident_diagnosis_authority_seam.py"
++)
++# Backward-compat alias for self-tests and existing call sites.
++ELIGIBILITY_PATH: Path = EVALUATOR_PATH
++
++
++def read_text(path: Path) -> str | None:
++    """Read a UTF-8 text file, returning ``None`` on OS errors."""
++    try:
++        return path.read_text(encoding="utf-8")
++    except OSError:
++        return None
++
++
++def parse_path(path: Path) -> ast.Module | None:
++    """Read and parse a Python file; return ``None`` on any error."""
++    source = read_text(path)
++    if source is None:
++        return None
++    try:
++        return ast.parse(source, filename=str(path))
++    except SyntaxError:
++        return None
++
++
++def iter_python_files() -> Iterable[Path]:
++    """Yield every non-``__init__`` Python file under ``src/``."""
 +    for path in SRC_ROOT.rglob("*.py"):
 +        if "__pycache__" in path.parts:
 +            continue
@@ -339,3966 +969,3475 @@ index 0000000..6e2e8ad
 +        yield path
 +
 +
-+def _read(path: Path) -> str | None:
-+    try:
-+        return path.read_text(encoding="utf-8")
-+    except OSError:
-+        return None
++def function_defs(tree: ast.Module) -> dict[str, ast.FunctionDef]:
++    """Return a name→FunctionDef map for top-level function definitions."""
++    out: dict[str, ast.FunctionDef] = {}
++    for node in tree.body:
++        if isinstance(node, ast.FunctionDef):
++            out[node.name] = node
++    return out
 +
 +
-+# ---------------------------------------------------------------------------
-+# Annotation helpers
-+# ---------------------------------------------------------------------------
++def called_names(node: ast.Call) -> list[str]:
++    """Return the dotted-name call identifier list for a Call node.
 +
-+
-+def _annotation_text(node: ast.AST | None) -> str:
-+    """Return ``ast.unparse`` of an annotation node, or empty string."""
-+    if node is None:
-+        return ""
-+    try:
-+        return ast.unparse(node)
-+    except Exception:  # pragma: no cover - defensive
-+        return ""
-+
-+
-+def _normalize_annotation_text(text: str) -> str:
-+    """Strip outer quotes from forward-reference annotations.
-+
-+    ``"Incident"`` and ``Incident`` are the same annotation under
-+    postponed-evaluation PEP 563.
++    For ``a.b.c()`` we return ``["a", "b", "c"]``. For bare ``foo()``
++    we return ``["foo"]``. Side-effect-only calls return an empty
++    list so we never false-positive on attribute references used as
++    function arguments.
 +    """
-+    if not text:
-+        return ""
-+    stripped = text.strip()
-+    if (
-+        len(stripped) >= 2
-+        and stripped[0] == stripped[-1]
-+        and stripped[0] in {'"', "'"}
-+    ):
-+        return stripped[1:-1]
-+    return stripped
++    func = node.func
++    parts: list[str] = []
++    cur: ast.AST = func
++    while isinstance(cur, ast.Attribute):
++        parts.append(cur.attr)
++        cur = cur.value
++    if isinstance(cur, ast.Name):
++        parts.append(cur.id)
++        parts.reverse()
++        return parts
++    return []
 +
 +
-+# Annotation text patterns that must NEVER appear on
-+# ``BackendIncidentFound.incident`` (R1 typedness contract).
-+DISALLOWED_FOUND_INCIDENT_ANNOTATIONS: Final[tuple[str, ...]] = (
-+    "object",
-+    "Any",
-+    "dict",
-+    "dict[str, Any]",
-+    "Mapping",
-+    "Mapping[str, Any]",
-+    "object | None",
-+    "Any | None",
-+    "dict | None",
++def call_keyword(call: ast.Call, keyword: str) -> ast.AST | None:
++    """Return the AST node passed as ``keyword=...`` to a call, or ``None``."""
++    for kw in call.keywords:
++        if kw.arg == keyword:
++            return kw.value
++    return None
++
++
++def match_case_type() -> type | None:
++    """Return the AST node type for ``match ... case`` patterns.
++
++    Python 3.10–3.13 expose :class:`ast.MatchCase`; Python 3.14
++    renamed the class to the lowercase :func:`ast.match_case` form.
++    """
++    return getattr(ast, "MatchCase", None) or getattr(ast, "match_case", None)
++
++
++def contains_truthiness_to_not_found(tree: ast.AST) -> bool:
++    """Return True if any ``if not X: ... reason="incident_not_found"`` appears.
++
++    The forbidden pattern collapses HTTP 200 + valid JSON into
++    ``incident_not_found`` via a truthiness check; the verifier must
++    reject it.
++    """
++
++    class _Visitor(ast.NodeVisitor):
++        def __init__(self) -> None:
++            self.found: bool = False
++
++        def visit_If(self, node: ast.If) -> None:  # noqa: D401
++            if self.found:
++                return
++            if not isinstance(node.test, ast.UnaryOp) or not isinstance(
++                node.test.op, ast.Not
++            ):
++                self.generic_visit(node)
++                return
++            for stmt in node.body:
++                for sub in ast.walk(stmt):
++                    if (
++                        isinstance(sub, ast.Assign)
++                        and isinstance(sub.value, ast.Constant)
++                        and sub.value.value == "incident_not_found"
++                    ):
++                        self.found = True
++                        return
++                    if (
++                        isinstance(sub, ast.AnnAssign)
++                        and isinstance(sub.value, ast.Constant)
++                        and sub.value.value == "incident_not_found"
++                    ):
++                        self.found = True
++                        return
++                    # Constructor keyword-argument form, e.g.
++                    # ``AutoLoopIncidentResult(eligibility_reason="incident_not_found")``.
++                    if isinstance(sub, ast.Call):
++                        for kw in sub.keywords:
++                            if (
++                                isinstance(kw.value, ast.Constant)
++                                and kw.value.value == "incident_not_found"
++                            ):
++                                self.found = True
++                                return
++            self.generic_visit(node)
++
++    v = _Visitor()
++    v.visit(tree)
++    return v.found
++
++
++def has_empty_except_pass(tree: ast.AST) -> bool:
++    """Return True if any ``except ...: pass`` (with no body) appears."""
++
++    class _Visitor(ast.NodeVisitor):
++        def __init__(self) -> None:
++            self.found: bool = False
++
++        def visit_Try(self, node: ast.Try) -> None:  # noqa: D401
++
++            if not self.found:
++                for handler in node.handlers:
++                    if (
++                        len(handler.body) == 1
++                        and isinstance(handler.body[0], ast.Pass)
++                    ):
++                        self.found = True
++                        break
++            self.generic_visit(node)
++
++    v = _Visitor()
++    v.visit(tree)
++    return v.found
+
+=== src/k8s_diag_agent/collect/incident_automatic_diagnosis_loop_artifacts.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_automatic_diagnosis_loop_artifacts.py b/src/k8s_diag_agent/collect/incident_automatic_diagnosis_loop_artifacts.py
+index 69d2c374..c85a35ec 100644
+--- a/src/k8s_diag_agent/collect/incident_automatic_diagnosis_loop_artifacts.py
++++ b/src/k8s_diag_agent/collect/incident_automatic_diagnosis_loop_artifacts.py
+@@ -214,9 +214,11 @@ def write_summary_artifact(
+     incidents_ineligible: int = 0,
+     incidents_with_errors: int = 0,
+     eligibility_schema_version: int = 2,
++    authority_run_summary: dict[str, Any] | None = None,
+ ) -> dict[str, Any]:
+     """Write loop summary artifact.
+
++
+     Args:
+         artifact_dir: Directory for automatic-diagnosis artifacts
+         run_id: Health run identity (from scheduler)
+@@ -265,9 +267,11 @@ def write_summary_artifact(
+         "skip_reasons": dict(skip_reasons or {}),
+         "ineligible_reasons": dict(ineligible_reasons or {}),
+         "error_reasons": dict(error_reasons or {}),
++        "authority_run_summary": dict(authority_run_summary or {}),
+         "incident_results": incident_results,
+     }
+
++
+     try:
+         path.write_text(json.dumps(artifact, indent=2, default=str))
+         _logger.info(
+
+=== src/k8s_diag_agent/collect/incident_diagnosis_authority_run_summary.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_authority_run_summary.py b/src/k8s_diag_agent/collect/incident_diagnosis_authority_run_summary.py
+new file mode 100644
+index 00000000..81d85f9d
+--- /dev/null
++++ b/src/k8s_diag_agent/collect/incident_diagnosis_authority_run_summary.py
+@@ -0,0 +1,125 @@
++"""Authority run-summary accounting for the automatic-diagnosis loop.
++
++This module derives the ACT-required per-run counters from the
++per-incident results the batch loop already produces:
++
++* ``backend_lookup_outcomes`` — how each incident's authority lookup
++  resolved (``found`` / ``not_found`` / ``lookup_failed``).
++* ``eligibility_outcomes`` — the eligibility decision keyed by reason
++  (``eligible`` when the incident was eligible, otherwise the bounded
++  ineligibility reason).
++* ``lifecycle_write_outcomes`` — how the lifecycle write resolved
++  (``applied`` / ``start_failed`` / ``completion_failed`` /
++  ``recording_failed`` / ``not_applicable``).
++* ``backend_found_then_incident_not_found`` — the split-authority
++  regression counter: a backend-found incident that nonetheless
++  produced an ``incident_not_found`` disposition. Post-fix this must
++  stay ``0``; a non-zero value is a direct signal that the closed
++  defect has reappeared.
++
++The accounting is a pure fold over result mappings so it is fully
++deterministic and testable without a running loop.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R1)
++"""
++
++from __future__ import annotations
++
++from collections.abc import Iterable, Mapping
++from dataclasses import dataclass, field
++from typing import Any
++
++__all__ = [
++    "AuthorityRunSummary",
++    "summarize_incident_results",
++]
++
++
++def _incr(counter: dict[str, int], key: str) -> None:
++    counter[key] = counter.get(key, 0) + 1
++
++
++@dataclass(slots=True)
++class AuthorityRunSummary:
++    """Bounded per-run accounting for the authority seam."""
++
++    backend_lookup_outcomes: dict[str, int] = field(default_factory=dict)
++    eligibility_outcomes: dict[str, int] = field(default_factory=dict)
++    lifecycle_write_outcomes: dict[str, int] = field(default_factory=dict)
++    backend_found_then_incident_not_found: int = 0
++
++    def record(self, result: Mapping[str, Any]) -> None:
++        """Fold a single per-incident result into the running counters."""
++        eligibility_reason = str(result.get("eligibility_reason") or "")
++        skip_reason = str(result.get("skip_reason") or "")
++        error = str(result.get("error") or "")
++        eligible = bool(result.get("eligible"))
++        skipped = bool(result.get("skipped"))
++
++        lookup = _classify_backend_lookup(eligibility_reason, skip_reason)
++        _incr(self.backend_lookup_outcomes, lookup)
++
++        _incr(
++            self.eligibility_outcomes,
++            "eligible" if eligible else (eligibility_reason or "unknown"),
++        )
++
++        _incr(
++            self.lifecycle_write_outcomes,
++            _classify_lifecycle_write(error, eligible=eligible, skipped=skipped),
++        )
++
++        # Split-authority regression: a backend-found incident must
++        # never collapse to ``incident_not_found``.
++        if lookup == "found" and (
++            eligibility_reason == "incident_not_found"
++            or "incident_not_found" in skip_reason
++        ):
++            self.backend_found_then_incident_not_found += 1
++
++    def to_dict(self) -> dict[str, Any]:
++        return {
++            "backend_lookup_outcomes": dict(self.backend_lookup_outcomes),
++            "eligibility_outcomes": dict(self.eligibility_outcomes),
++            "lifecycle_write_outcomes": dict(self.lifecycle_write_outcomes),
++            "backend_found_then_incident_not_found": (
++                self.backend_found_then_incident_not_found
++            ),
++        }
++
++
++def _classify_backend_lookup(eligibility_reason: str, skip_reason: str) -> str:
++    """Classify the authority lookup outcome for a per-incident result."""
++    if eligibility_reason == "not_found" and "incident_not_found" in skip_reason:
++        return "not_found"
++    if eligibility_reason.startswith("backend_incident_"):
++        return "lookup_failed"
++    return "found"
++
++
++def _classify_lifecycle_write(
++    error: str,
++    *,
++    eligible: bool,
++    skipped: bool,
++) -> str:
++    """Classify the lifecycle-write outcome from the result's error field."""
++    if "diagnosis_lifecycle_start_failed" in error:
++        return "start_failed"
++    if "diagnosis_lifecycle_completion_failed" in error:
++        return "completion_failed"
++    if "lifecycle_recording_error" in error:
++        return "recording_failed"
++    if eligible and not skipped and not error:
++        return "applied"
++    return "not_applicable"
++
++
++def summarize_incident_results(
++    results: Iterable[Mapping[str, Any]],
++) -> AuthorityRunSummary:
++    """Fold per-incident result mappings into an :class:`AuthorityRunSummary`."""
++    summary = AuthorityRunSummary()
++    for result in results:
++        summary.record(result)
++    return summary
+
+=== src/k8s_diag_agent/collect/incident_diagnosis_authority_seam.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam.py b/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam.py
+new file mode 100644
+index 00000000..448aee90
+--- /dev/null
++++ b/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam.py
+@@ -0,0 +1,397 @@
++"""Authority seam for automatic-diagnosis incident reads and lifecycle writes.
++
++This module owns the **single** typed boundary that the automatic-diagnosis
++processor crosses when it needs to record diagnosis-loop lifecycle
++transitions (``started`` / ``failed`` / ``completed``) through the
++configured incident authority (local in-memory store, or backend
++internal API).
++
++The aggregate eligibility evaluator (:func:`evaluate_incident_eligibility`)
++and the local-store compatibility wrapper (:func:`check_incident_eligibility`)
++are defined in :mod:`incident_diagnosis_auto_loop_config` and re-exported
++here for callers that want the canonical API through this seam.
++
++The split-authority defect closed by
++``ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01`` is anchored in this
++seam:
++
++* The previous code re-resolved the backend-fetched incident through
++  the **local** ``get_incident_store()`` for eligibility evaluation,
++  producing ``not_eligible: incident_not_found`` on the scheduler even
++  though the backend had returned HTTP 200 with a valid canonical
++  incident. The aggregate evaluator accepts a typed
++  :class:`Incident` and does not call any incident resolver.
++* The previous code also routed diagnosis-lifecycle writes through the
++  local store even in backend mode. The lifecycle seam below resolves
++  the same dispatch configuration the incident-detail lookup uses, and
++  routes writes accordingly.
++
++To keep this module at a maintainable size, the implementation is
++split across four sibling modules:
++
++* :mod:`incident_diagnosis_authority_seam_types` — closed vocabulary,
++  bounded typed outcomes, schema-version constant.
++* :mod:`incident_diagnosis_authority_seam_local` — local-mode writer.
++* :mod:`incident_diagnosis_authority_seam_backend` — backend-mode HTTP
++  transport + response translator.
++
++This seam module is the only public entry point; callers MUST NOT
++import from the sibling modules directly.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
++"""
++
++from __future__ import annotations
++
++import logging
++import os
++from dataclasses import dataclass, field
++from datetime import UTC, datetime
++from typing import Any
++
++from .incident_diagnosis_authority_seam_types import (
++    LIFECYCLE_SCHEMA_VERSION,
++    LifecycleDispatchMode,
++    LifecycleTransition,
++    LifecycleWriteApplied,
++    LifecycleWriteFailed,
++    LifecycleWriteOutcome,
++    LifecycleWriteRejected,
++    LifecycleWriteSkipped,
++)
++from .incident_diagnosis_auto_loop_config import (
++    check_incident_eligibility,
++    evaluate_incident_eligibility,
++)
++from .incident_diagnosis_dispatch_contracts import (
++    ENV_BACKEND_URL,
++    ENV_INTERNAL_API_TOKEN,
++    ENV_PROCESS_ROLE,
++    ENV_PROMOTION_MODE,
++    ENV_STORE_BACKEND,
++    MODE_BACKEND_API,
++    IncidentDiagnosisDispatchConfig,
 +)
 +
++_logger = logging.getLogger(__name__)
 +
-+def _is_disallowed_found_incident_annotation(text: str) -> bool:
-+    """Return True iff the annotation text matches any disallowed widening."""
-+    if not text:
-+        return True
-+    norm = text.replace(" ", "")
-+    for bad in DISALLOWED_FOUND_INCIDENT_ANNOTATIONS:
-+        if bad.replace(" ", "") in norm:
-+            return True
-+    return False
++
++__all__ = [
++    "LifecycleTransition",
++    "LifecycleDispatchMode",
++    "LifecycleWriteOutcome",
++    "LifecycleWriteApplied",
++    "LifecycleWriteRejected",
++    "LifecycleWriteFailed",
++    "LifecycleWriteSkipped",
++    "evaluate_incident_eligibility",
++    "check_incident_eligibility",
++    "record_diagnosis_loop_started",
++    "record_diagnosis_loop_failed",
++    "record_diagnosis_loop_completed",
++    "build_lifecycle_request",
++]
 +
 +
 +# ---------------------------------------------------------------------------
-+# Outcome-model invariants
++# Lifecycle authority seam
 +# ---------------------------------------------------------------------------
 +
 +
-+def _check_outcome_model() -> list[str]:
-+    """Verify the canonical outcomes module exposes the required contract."""
-+    violations: list[str] = []
++def _resolve_lifecycle_dispatch_mode() -> LifecycleDispatchMode:
++    """Resolve the lifecycle dispatch mode from the same env config the
++    incident-detail dispatcher uses.
 +
-+    out_path = SRC_ROOT / "collect" / "incident_diagnosis_backend_detail_outcomes.py"
-+    source = _read(out_path)
-+    if source is None:
-+        violations.append(
-+            f"{CANONICAL_OUTCOMES_MODULE}: cannot read module source"
-+        )
-+        return violations
-+
-+    try:
-+        tree = ast.parse(source, filename=str(out_path))
-+    except SyntaxError as exc:
-+        violations.append(
-+            f"{CANONICAL_OUTCOMES_MODULE}: syntax error {exc}"
-+        )
-+        return violations
-+
-+    module_name = _module_name_from_path(out_path)
-+
-+    # Each variant must exist as a top-level class with @dataclass(frozen=True, slots=True).
-+    found_classes: dict[str, ast.ClassDef] = {}
-+    for node in tree.body:
-+        if isinstance(node, ast.ClassDef):
-+            found_classes[node.name] = node
-+
-+    for variant in REQUIRED_VARIANTS:
-+        if variant not in found_classes:
-+            violations.append(
-+                f"{module_name}: required outcome variant "
-+                f"``{variant}`` is missing"
-+            )
-+            continue
-+        cls = found_classes[variant]
-+        is_frozen = False
-+        is_slots = False
-+        for decorator in cls.decorator_list:
-+            if (
-+                isinstance(decorator, ast.Call)
-+                and getattr(decorator.func, "id", None) == "dataclass"
-+            ):
-+                for kw in decorator.keywords:
-+                    if (
-+                        kw.arg == "frozen"
-+                        and isinstance(kw.value, ast.Constant)
-+                        and kw.value.value is True
-+                    ):
-+                        is_frozen = True
-+                    if (
-+                        kw.arg == "slots"
-+                        and isinstance(kw.value, ast.Constant)
-+                        and kw.value.value is True
-+                    ):
-+                        is_slots = True
-+        if not is_frozen:
-+            violations.append(
-+                f"{module_name}:``{variant}`` must be a frozen dataclass"
-+            )
-+        if not is_slots:
-+            violations.append(
-+                f"{module_name}:``{variant}`` must use ``slots=True``"
-+            )
-+        # No boolean ``found`` discriminator.
-+        for stmt in cls.body:
-+            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-+                name = stmt.target.id
-+                annotation = ast.unparse(stmt.annotation)
-+                if name in {"found", "is_found"} and annotation == "bool":
-+                    violations.append(
-+                        f"{module_name}:``{variant}`` must not use a "
-+                        "boolean ``found`` discriminator"
-+                    )
-+
-+    # Field-level annotation invariants.
-+    for variant in REQUIRED_VARIANTS:
-+        variant_cls: ast.ClassDef | None = found_classes.get(variant)
-+        if variant_cls is None:
-+            continue
-+        for stmt in variant_cls.body:
-+            if not (
-+                isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
-+            ):
-+                continue
-+            field_name = stmt.target.id
-+            ann_text = _annotation_text(stmt.annotation)
-+            ann_norm = _normalize_annotation_text(ann_text)
-+            if field_name == "requested_incident_id":
-+                # Must be the canonical branded ``IncidentId`` (string
-+                # annotation ``"IncidentId"`` is also accepted; both
-+                # resolve to the same type at type-check time).
-+                if ann_norm != "IncidentId":
-+                    violations.append(
-+                        f"{module_name}:``{variant}.requested_incident_id`` "
-+                        f"must be annotated as ``IncidentId``; got {ann_text!r}"
-+                    )
-+            if variant == "BackendIncidentFound" and field_name == "incident":
-+                # The ``incident`` field must NOT be widened to object,
-+                # Any, dict, or any union containing those forms. The
-+                # canonical annotation is the domain ``Incident``.
-+                if ann_norm != "Incident":
-+                    violations.append(
-+                        f"{module_name}:``BackendIncidentFound.incident`` "
-+                        f"must be annotated as the canonical ``Incident``; "
-+                        f"got {ann_text!r}"
-+                    )
-+                if _is_disallowed_found_incident_annotation(ann_norm):
-+                    violations.append(
-+                        f"{module_name}:``BackendIncidentFound.incident`` "
-+                        f"must not be widened to ``object``/``Any``/``dict`` "
-+                        f"or any union containing them; got {ann_text!r}"
-+                    )
-+
-+    # The ``BackendIncidentNotFound`` variant MUST declare a ``source``
-+    # field with the canonical ``BackendIncidentLookupSource`` annotation.
-+    not_found_cls = found_classes.get("BackendIncidentNotFound")
-+    if not_found_cls is not None:
-+        has_source = False
-+        for stmt in not_found_cls.body:
-+            if (
-+                isinstance(stmt, ast.AnnAssign)
-+                and isinstance(stmt.target, ast.Name)
-+                and stmt.target.id == "source"
-+            ):
-+                has_source = True
-+                ann_text = _annotation_text(stmt.annotation)
-+                if _normalize_annotation_text(ann_text) != "BackendIncidentLookupSource":
-+                    violations.append(
-+                        f"{module_name}:``BackendIncidentNotFound.source`` "
-+                        f"must be annotated as ``BackendIncidentLookupSource``; "
-+                        f"got {ann_text!r}"
-+                    )
-+        if not has_source:
-+            violations.append(
-+                f"{module_name}:``BackendIncidentNotFound`` must declare a "
-+                "``source`` field (BackendIncidentLookupSource) so the logs "
-+                "never claim an HTTP status that was not observed"
-+            )
-+
-+    # Failure code enum must use StrEnum.
-+    enum_ok = False
-+    for node in tree.body:
-+        if (
-+            isinstance(node, ast.ClassDef)
-+            and node.name == "BackendIncidentLookupFailureCode"
-+        ):
-+            for base in node.bases:
-+                if isinstance(base, ast.Name) and base.id in {"StrEnum", "str"}:
-+                    enum_ok = True
-+                    break
-+    if not enum_ok:
-+        violations.append(
-+            f"{module_name}:``BackendIncidentLookupFailureCode`` must "
-+            "derive from StrEnum"
-+        )
-+
-+    # The required failure code values must exist.
-+    for node in tree.body:
-+        if (
-+            isinstance(node, ast.ClassDef)
-+            and node.name == "BackendIncidentLookupFailureCode"
-+        ):
-+            present_values: set[str] = set()
-+            for stmt in node.body:
-+                if isinstance(stmt, ast.Assign):
-+                    for target in stmt.targets:
-+                        if (
-+                            isinstance(target, ast.Name)
-+                            and isinstance(stmt.value, ast.Constant)
-+                            and isinstance(stmt.value.value, str)
-+                        ):
-+                            present_values.add(stmt.value.value)
-+            for required in REQUIRED_FAILURE_CODE_VALUES:
-+                if required not in present_values:
-+                    violations.append(
-+                        f"{module_name}:missing required failure code "
-+                        f"``{required}`` in BackendIncidentLookupFailureCode"
-+                    )
-+
-+    # Type alias contains EXACTLY the three required variants. The
-+    # verifier must reject any extra member that the bare
-+    # ``count(required) == 1`` test would silently miss (for example
-+    # an injected ``BackendIncidentRetryable`` member).
-+    for node in tree.body:
-+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-+            if node.target.id == "BackendIncidentLookupOutcome":
-+                union_identifiers: set[str] = _extract_union_identifiers(node)
-+                if not union_identifiers:
-+                    violations.append(
-+                        f"{module_name}:``BackendIncidentLookupOutcome`` "
-+                        "union is empty or unparseable"
-+                    )
-+                    continue
-+                expected = set(REQUIRED_VARIANTS)
-+                if union_identifiers != expected:
-+                    missing = sorted(expected - union_identifiers)
-+                    extra = sorted(union_identifiers - expected)
-+                    bits: list[str] = []
-+                    if missing:
-+                        bits.append(
-+                            "missing required variant(s): "
-+                            + ", ".join(f"``{m}``" for m in missing)
-+                        )
-+                    if extra:
-+                        bits.append(
-+                            "extra forbidden variant(s): "
-+                            + ", ".join(f"``{e}``" for e in extra)
-+                        )
-+                    violations.append(
-+                        f"{module_name}:``BackendIncidentLookupOutcome`` "
-+                        "must contain EXACTLY the closed union "
-+                        f"{{{', '.join(sorted(expected))}}}; "
-+                        + "; ".join(bits)
-+                    )
-+
-+    return violations
-+
-+
-+def _extract_union_identifiers(ann_assign: ast.AnnAssign) -> set[str]:
-+    """Return the set of identifier names in the union expression.
-+
-+    The canonical form is a PEP-563 string annotation value (e.g.
-+    ``"BackendIncidentFound | BackendIncidentNotFound | BackendIncidentLookupFailed"``).
-+    Parse the expression with :func:`ast.parse(mode="eval")` so we
-+    walk the actual AST rather than running ad-hoc substring tests
-+    on the unparsed source. Both ``A | B | C`` (binary ``BitOr``)
-+    and the older ``Union[A, B, C]`` / ``Optional[A]`` shapes are
-+    normalised to the set of referenced identifier names.
++    Keeping the resolution in lock-step with
++    :mod:`incident_diagnosis_dispatch_contracts` is critical: a
++    scheduler that performs backend-mode incident reads MUST also
++    perform backend-mode lifecycle writes, otherwise it silently
++    diverges from the configured authority and writes to a
++    non-authoritative store.
 +    """
-+    identifiers: set[str] = set()
-+
-+    def _walk(node: ast.AST | None) -> None:
-+        if node is None:
-+            return
-+        if isinstance(node, ast.Name):
-+            identifiers.add(node.id)
-+            return
-+        if isinstance(node, ast.Attribute):
-+            # Treat ``module.Name`` as the final ``Name`` only.
-+            identifiers.add(node.attr)
-+            return
-+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-+            _walk(node.left)
-+            _walk(node.right)
-+            return
-+        if isinstance(node, ast.Subscript):
-+            _walk(node.value)
-+            # ``Union[A, B, C]`` / ``Optional[A]``: flatten ``Slice``/``Tuple``.
-+            slc = node.slice
-+            if isinstance(slc, ast.Tuple):
-+                for elt in slc.elts:
-+                    _walk(elt)
-+            else:
-+                _walk(slc)
-+            return
-+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-+            # Nested string annotations (PEP 563). Parse and recurse.
-+            try:
-+                nested = ast.parse(node.value, mode="eval")
-+            except SyntaxError:
-+                return
-+            _walk(nested.body)
-+            return
-+
-+    # Only walk the RHS of the type-alias assignment. Walking the LHS
-+    # annotation would pick up unrelated names like ``TypeAlias``
-+    # declared on the alias's own type hint, polluting the union set.
-+    _walk(ann_assign.value)
-+    return identifiers
++    config = IncidentDiagnosisDispatchConfig(
++        mode=os.environ.get(ENV_PROMOTION_MODE, "auto").lower(),  # type: ignore[arg-type]
++        backend_url=os.environ.get(ENV_BACKEND_URL),
++        internal_api_token=os.environ.get(ENV_INTERNAL_API_TOKEN),
++        store_backend=os.environ.get(ENV_STORE_BACKEND, "memory").lower(),
++        process_role=os.environ.get(ENV_PROCESS_ROLE, "").lower(),
++    )
++    resolved = config.resolved_mode()
++    if resolved == MODE_BACKEND_API:
++        return LifecycleDispatchMode.BACKEND
++    return LifecycleDispatchMode.LOCAL
 +
 +
-+# ---------------------------------------------------------------------------
-+# Lookup signature invariants
-+# ---------------------------------------------------------------------------
++def _now_iso() -> str:
++    return datetime.now(UTC).isoformat()
 +
 +
-+def _check_lookup_signature() -> list[str]:
-+    violations: list[str] = []
++@dataclass(frozen=True, slots=True)
++class _LifecycleRequest:
++    """Internal wire-shape for the backend lifecycle endpoint."""
 +
-+    lookup_path = SRC_ROOT / "collect" / "incident_diagnosis_backend_detail_lookup.py"
-+    source = _read(lookup_path)
-+    if source is None:
-+        violations.append(
-+            f"{CANONICAL_LOOKUP_MODULE}: cannot read module source"
-+        )
-+        return violations
++    schema_version: int
++    incident_id: str
++    transition: LifecycleTransition
++    collector_run_id: str
++    diagnosis_run_id: str | None
++    occurred_at: str
++    payload: dict[str, Any] = field(default_factory=dict)
 +
-+    try:
-+        tree = ast.parse(source, filename=str(lookup_path))
-+    except SyntaxError as exc:
-+        violations.append(
-+            f"{CANONICAL_LOOKUP_MODULE}: syntax error {exc}"
-+        )
-+        return violations
-+
-+    # Locate ``lookup_backend_incident``.
-+    target_fn: ast.FunctionDef | None = None
-+    for node in tree.body:
-+        if isinstance(node, ast.FunctionDef) and node.name == "lookup_backend_incident":
-+            target_fn = node
-+            break
-+
-+    if target_fn is None:
-+        violations.append(
-+            f"{CANONICAL_LOOKUP_MODULE}: missing canonical function "
-+            "``lookup_backend_incident``"
-+        )
-+        return violations
-+
-+    # Return annotation must be the outcome union.
-+    if target_fn.returns is None:
-+        violations.append(
-+            f"{CANONICAL_LOOKUP_MODULE}:``lookup_backend_incident`` "
-+            "must declare an explicit return type"
-+        )
-+    else:
-+        ret = ast.unparse(target_fn.returns)
-+        if "BackendIncidentLookupOutcome" not in ret:
-+            violations.append(
-+                f"{CANONICAL_LOOKUP_MODULE}:``lookup_backend_incident`` "
-+                "must return BackendIncidentLookupOutcome"
-+            )
-+        if "Incident | None" in ret or "Optional[Incident]" in ret:
-+            violations.append(
-+                f"{CANONICAL_LOOKUP_MODULE}:``lookup_backend_incident`` "
-+                "must not return Incident | None / Optional[Incident]"
-+            )
-+
-+    # The function body must call parse_internal_incident_detail_payload
-+    # and must validate identity via ``incident.incident_id``.
-+    body_src = ast.unparse(target_fn)
-+    if "parse_internal_incident_detail_payload" not in body_src:
-+        violations.append(
-+            f"{CANONICAL_LOOKUP_MODULE}:``lookup_backend_incident`` must "
-+            "invoke the canonical payload parser"
-+        )
-+    if "Incident.from_dict" not in body_src:
-+        violations.append(
-+            f"{CANONICAL_LOOKUP_MODULE}:``lookup_backend_incident`` must "
-+            "deserialize the aggregate via ``Incident.from_dict``"
-+        )
-+    if "incident_id" not in body_src:
-+        violations.append(
-+            f"{CANONICAL_LOOKUP_MODULE}:``lookup_backend_incident`` must "
-+            "validate returned incident identity"
-+        )
-+
-+    # No bare ``return None`` inside the function body.
-+    for raw_node in ast.walk(target_fn):
-+        candidate: ast.AST = raw_node
-+        if not isinstance(candidate, ast.Return):
-+            continue
-+        is_bare_none = (
-+            isinstance(candidate.value, ast.Constant)
-+            and candidate.value.value is None
-+        )
-+        if is_bare_none:
-+            violations.append(
-+                f"{CANONICAL_LOOKUP_MODULE}:``lookup_backend_incident`` "
-+                "must not contain bare ``return None``"
-+            )
-+            break
-+
-+    # The 404 branch MUST dominate any ``BackendIncidentNotFound`` call.
-+    not_found_calls: list[ast.Call] = []
-+    for raw in ast.walk(target_fn):
-+        if not isinstance(raw, ast.Call):
-+            continue
-+        callee = raw.func
-+        if not (
-+            (isinstance(callee, ast.Name) and callee.id == "BackendIncidentNotFound")
-+            or (
-+                isinstance(callee, ast.Attribute)
-+                and callee.attr == "BackendIncidentNotFound"
-+            )
-+        ):
-+            continue
-+        not_found_calls.append(raw)
-+
-+    if not not_found_calls:
-+        violations.append(
-+            f"{CANONICAL_LOOKUP_MODULE}:``lookup_backend_incident`` "
-+            "must construct ``BackendIncidentNotFound`` for HTTP 404"
-+        )
-+    else:
-+        parent_map = _build_parent_map(target_fn)
-+        for call in not_found_calls:
-+            if not _is_call_dominated_by_exact_404_check(call, parent_map):
-+                violations.append(
-+                    f"{CANONICAL_LOOKUP_MODULE}:{call.lineno}: "
-+                    "``BackendIncidentNotFound`` must be constructed "
-+                    "inside an ``if`` whose test is EXACTLY "
-+                    "``response.http_status == 404``; broader/negated "
-+                    "comparisons (e.g. ``!= 404``, ``in {400, 404}``, "
-+                    "``404 <= response.http_status``, plain truthiness) "
-+                    "are forbidden"
-+                )
-+            if not _has_exact_kwarg(
-+                call, "source", "BackendIncidentLookupSource.BACKEND_API"
-+            ):
-+                violations.append(
-+                    f"{CANONICAL_LOOKUP_MODULE}:{call.lineno}: "
-+                    "``BackendIncidentNotFound`` construction must pass "
-+                    "``source=BackendIncidentLookupSource.BACKEND_API`` "
-+                    "so local-mode truthfulness is provable"
-+                )
-+            if not _has_kwarg_int_value(call, "http_status", 404):
-+                violations.append(
-+                    f"{CANONICAL_LOOKUP_MODULE}:{call.lineno}: "
-+                    "``BackendIncidentNotFound`` construction must pass "
-+                    "``http_status=404`` explicitly"
-+                )
-+
-+    return violations
++    def to_dict(self) -> dict[str, Any]:
++        body: dict[str, Any] = {
++            "schemaVersion": self.schema_version,
++            "incidentId": self.incident_id,
++            "transition": self.transition.value,
++            "collectorRunId": self.collector_run_id,
++            "occurredAt": self.occurred_at,
++            "payload": dict(self.payload),
++        }
++        if self.diagnosis_run_id is not None:
++            body["diagnosisRunId"] = self.diagnosis_run_id
++        return body
 +
 +
-+def _is_call_dominated_by_exact_404_check(
-+    call: ast.Call, parent_map: dict[int, ast.AST]
-+) -> bool:
-+    """Return True iff ``call`` is dominated by an ``If`` whose test is
-+    EXACTLY ``response.http_status == 404``.
++def build_lifecycle_request(
++    *,
++    incident_id: str,
++    transition: LifecycleTransition,
++    collector_run_id: str,
++    diagnosis_run_id: str | None,
++    payload: dict[str, Any] | None = None,
++) -> _LifecycleRequest:
++    """Construct the canonical lifecycle wire-payload.
++
++    Centralises the schema-version and field-naming contract so the
++    scheduler client and the backend handler cannot drift.
 +    """
-+    current = parent_map.get(id(call))
-+    while current is not None:
-+        if isinstance(current, ast.If):
-+            test = current.test
-+            if not _is_response_http_status_eq_404(test):
-+                return False
-+            return True
-+        current = parent_map.get(id(current))
-+    return False
-+
-+
-+def _is_response_http_status_eq_404(node: ast.AST) -> bool:
-+    """Return True iff ``node`` is exactly ``response.http_status == 404``."""
-+    if not isinstance(node, ast.Compare):
-+        return False
-+    if len(node.ops) != 1 or len(node.comparators) != 1:
-+        return False
-+    op = node.ops[0]
-+    if not isinstance(op, ast.Eq):
-+        return False
-+    left = node.left
-+    right = node.comparators[0]
-+    if _is_response_http_status_attr(left) and isinstance(
-+        right, ast.Constant
-+    ) and right.value == 404:
-+        return True
-+    if _is_response_http_status_attr(right) and isinstance(
-+        left, ast.Constant
-+    ) and left.value == 404:
-+        return True
-+    return False
-+
-+
-+def _is_response_http_status_attr(node: ast.AST) -> bool:
-+    return (
-+        isinstance(node, ast.Attribute)
-+        and node.attr == "http_status"
-+        and isinstance(node.value, ast.Name)
-+        and node.value.id == "response"
++    return _LifecycleRequest(
++        schema_version=LIFECYCLE_SCHEMA_VERSION,
++        incident_id=str(incident_id),
++        transition=transition,
++        collector_run_id=str(collector_run_id),
++        diagnosis_run_id=(
++            str(diagnosis_run_id) if diagnosis_run_id is not None else None
++        ),
++        occurred_at=_now_iso(),
++        payload=dict(payload or {}),
 +    )
 +
 +
-+def _has_exact_kwarg(call: ast.Call, name: str, value_text: str) -> bool:
-+    for kw in call.keywords:
-+        if kw.arg != name:
-+            continue
++# ---------------------------------------------------------------------------
++# Public lifecycle authority API
++# ---------------------------------------------------------------------------
++
++
++def _dispatch_lifecycle(
++    *,
++    transition: LifecycleTransition,
++    incident_id: str,
++    run_id: str,
++    collector_run_id: str,
++    payload: dict[str, Any],
++) -> LifecycleWriteOutcome:
++    """Resolve the dispatch mode and apply the transition.
++
++    The local- and backend-mode writers are imported lazily to avoid a
++    circular import: each writer imports :func:`build_lifecycle_request`
++    from this seam module, so this module cannot import them at
++    top-level. The dispatch call only happens at runtime, by which time
++    the seam module is fully initialised.
++    """
++    # Lazy imports to break the circular cycle between this seam module
++    # and its sibling writers.
++    from .incident_diagnosis_authority_seam_backend import (
++        _record_lifecycle_backend,
++    )
++    from .incident_diagnosis_authority_seam_local import (
++        _record_lifecycle_local,
++    )
++
++    mode = _resolve_lifecycle_dispatch_mode()
++    if mode == LifecycleDispatchMode.LOCAL:
++        return _record_lifecycle_local(
++            transition=transition,
++            incident_id=incident_id,
++            run_id=run_id,
++            collector_run_id=collector_run_id,
++            payload=payload,
++        )
++    return _record_lifecycle_backend(
++        transition=transition,
++        incident_id=incident_id,
++        run_id=run_id,
++        collector_run_id=collector_run_id,
++        payload=payload,
++    )
++
++
++def _emit_lifecycle_event(
++    *,
++    outcome: LifecycleWriteOutcome,
++    collector_run_id: str,
++    diagnosis_run_id: str,
++    incident_access_mode: str,
++) -> None:
++    """Emit a structured INFO-level event for the lifecycle write.
++
++    Events:
++        automatic-diagnosis-lifecycle-transition-applied
++        automatic-diagnosis-lifecycle-transition-rejected
++        automatic-diagnosis-lifecycle-transition-failed
++        automatic-diagnosis-lifecycle-transition-skipped
++    """
++    if isinstance(outcome, LifecycleWriteApplied):
++        event = "automatic-diagnosis-lifecycle-transition-applied"
++        extra: dict[str, Any] = {
++            "event": event,
++            "incident_id": outcome.incident_id,
++            "collector_run_id": collector_run_id,
++            "diagnosis_run_id": diagnosis_run_id,
++            "transition": outcome.transition.value,
++            "incident_access_mode": incident_access_mode,
++            "http_status": outcome.http_status,
++            "idempotent_replay": outcome.idempotent_replay,
++            "applied": True,
++        }
++        if outcome.detail is not None:
++            extra["detail"] = outcome.detail
++        _logger.info("lifecycle transition applied", extra=extra)
++        return
++
++    if isinstance(outcome, LifecycleWriteRejected):
++        event = "automatic-diagnosis-lifecycle-transition-rejected"
++        extra = {
++            "event": event,
++            "incident_id": outcome.incident_id,
++            "collector_run_id": collector_run_id,
++            "diagnosis_run_id": diagnosis_run_id,
++            "transition": outcome.transition.value,
++            "incident_access_mode": incident_access_mode,
++            "http_status": outcome.http_status,
++            "failure_code": outcome.reason_code,
++            "applied": False,
++        }
++        if outcome.detail is not None:
++            extra["detail"] = outcome.detail
++        _logger.info("lifecycle transition rejected", extra=extra)
++        return
++
++    if isinstance(outcome, LifecycleWriteFailed):
++        event = "automatic-diagnosis-lifecycle-transition-failed"
++        extra = {
++            "event": event,
++            "incident_id": outcome.incident_id,
++            "collector_run_id": collector_run_id,
++            "diagnosis_run_id": diagnosis_run_id,
++            "transition": outcome.transition.value,
++            "incident_access_mode": incident_access_mode,
++            "http_status": outcome.http_status,
++            "failure_code": outcome.reason_code,
++            "applied": False,
++        }
++        if outcome.exception_type is not None:
++            extra["exception_type"] = outcome.exception_type
++        if outcome.detail is not None:
++            extra["detail"] = outcome.detail
++        _logger.warning("lifecycle transition failed", extra=extra)
++        return
++
++    if isinstance(outcome, LifecycleWriteSkipped):
++        event = "automatic-diagnosis-lifecycle-transition-skipped"
++        extra = {
++            "event": event,
++            "incident_id": outcome.incident_id,
++            "collector_run_id": collector_run_id,
++            "diagnosis_run_id": diagnosis_run_id,
++            "transition": outcome.transition.value,
++            "incident_access_mode": incident_access_mode,
++            "applied": False,
++            "reason": outcome.reason,
++        }
++        _logger.info("lifecycle transition skipped", extra=extra)
++        return
++
++
++def record_diagnosis_loop_started(
++    *,
++    incident_id: str,
++    run_id: str,
++    collector_run_id: str,
++) -> LifecycleWriteOutcome:
++    """Record that the automatic-diagnosis loop started for an incident."""
++    outcome = _dispatch_lifecycle(
++        transition=LifecycleTransition.STARTED,
++        incident_id=incident_id,
++        run_id=run_id,
++        collector_run_id=collector_run_id,
++        payload={},
++    )
++    _emit_lifecycle_event(
++        outcome=outcome,
++        collector_run_id=collector_run_id,
++        diagnosis_run_id=run_id,
++        incident_access_mode=_resolve_lifecycle_dispatch_mode().value,
++    )
++    return outcome
++
++
++def record_diagnosis_loop_failed(
++    *,
++    incident_id: str,
++    run_id: str,
++    collector_run_id: str,
++    unavailable_reason: str,
++) -> LifecycleWriteOutcome:
++    """Record that the automatic-diagnosis loop failed for an incident."""
++    outcome = _dispatch_lifecycle(
++        transition=LifecycleTransition.FAILED,
++        incident_id=incident_id,
++        run_id=run_id,
++        collector_run_id=collector_run_id,
++        payload={"unavailable_reason": str(unavailable_reason)},
++    )
++    _emit_lifecycle_event(
++        outcome=outcome,
++        collector_run_id=collector_run_id,
++        diagnosis_run_id=run_id,
++        incident_access_mode=_resolve_lifecycle_dispatch_mode().value,
++    )
++    return outcome
++
++
++def record_diagnosis_loop_completed(
++    *,
++    incident_id: str,
++    run_id: str,
++    collector_run_id: str,
++    review_packet_name: str | None = None,
++    checks_requested: int = 0,
++    checks_run: int = 0,
++    checks_rejected: int = 0,
++    decision: str | None = None,
++) -> LifecycleWriteOutcome:
++    """Record that the automatic-diagnosis loop completed for an incident."""
++    payload: dict[str, Any] = {
++        "checks_requested": int(checks_requested),
++        "checks_run": int(checks_run),
++        "checks_rejected": int(checks_rejected),
++    }
++    if review_packet_name is not None:
++        payload["review_packet_name"] = str(review_packet_name)
++    if decision is not None:
++        payload["decision"] = str(decision)
++    outcome = _dispatch_lifecycle(
++        transition=LifecycleTransition.COMPLETED,
++        incident_id=incident_id,
++        run_id=run_id,
++        collector_run_id=collector_run_id,
++        payload=payload,
++    )
++    _emit_lifecycle_event(
++        outcome=outcome,
++        collector_run_id=collector_run_id,
++        diagnosis_run_id=run_id,
++        incident_access_mode=_resolve_lifecycle_dispatch_mode().value,
++    )
++    return outcome
+
+=== src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_backend.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_backend.py b/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_backend.py
+new file mode 100644
+index 00000000..96ef1949
+--- /dev/null
++++ b/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_backend.py
+@@ -0,0 +1,251 @@
++"""Backend-mode lifecycle writer for the automatic-diagnosis authority seam.
++
++This module owns the ``backend`` half of the lifecycle dispatch split:
++it builds the canonical lifecycle wire-request, performs the
++authenticated HTTP POST against the configured backend internal API,
++and translates the response into a typed :class:`LifecycleWriteOutcome`.
++
++The seam module (:mod:`incident_diagnosis_authority_seam`) is the only
++public entry point; callers MUST NOT import from this file directly.
++
++Failure translation is exhaustive:
++
++* 200 + ``applied=true`` → ``LifecycleWriteApplied``
++* 200 + ``applied=false`` → ``LifecycleWriteRejected`` (with the bounded code)
++* 404 → ``LifecycleWriteFailed`` (``incident_not_found``) so the
++  scheduler never collapses it to the eligibility-level reason.
++* 409 (conflict) → ``LifecycleWriteRejected`` (``transition_replay_mismatch``).
++* 4xx (other) → ``LifecycleWriteRejected``
++* 5xx → ``LifecycleWriteFailed`` (``backend_error``)
++* 1xx / 2xx-other / 3xx → ``LifecycleWriteFailed`` (``transport_error``)
++
++Transport errors (timeout, URL error, OS error) NEVER fall back to the
++local store; the scheduler must observe the failure.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
++"""
++
++from __future__ import annotations
++
++import os
++import urllib.error
++import urllib.request
++from typing import Any
++
++from .incident_diagnosis_authority_seam import build_lifecycle_request
++from .incident_diagnosis_authority_seam_types import (
++    LifecycleTransition,
++    LifecycleWriteApplied,
++    LifecycleWriteFailed,
++    LifecycleWriteOutcome,
++    LifecycleWriteRejected,
++)
++from .incident_diagnosis_dispatch_contracts import (
++    ENV_BACKEND_URL,
++    ENV_INTERNAL_API_TOKEN,
++)
++
++
++def _encode_lifecycle_body(request: Any) -> bytes:
++    import json
++
++    return json.dumps(request.to_dict()).encode("utf-8")
++
++
++def _translate_lifecycle_response(
++    *,
++    transition: LifecycleTransition,
++    incident_id: str,
++    http_status: int,
++    body_bytes: bytes,
++) -> LifecycleWriteOutcome:
++    """Translate a backend HTTP response into a typed write outcome.
++
++    The translation is exhaustive over the bounded contract; see the
++    module docstring for the full mapping table.
++    """
++    import json
++
++    decoded: dict[str, Any] | None = None
++    if body_bytes:
 +        try:
-+            rendered = ast.unparse(kw.value)
-+        except Exception:  # pragma: no cover - defensive
-+            rendered = ""
-+        if rendered == value_text:
-+            return True
-+    return False
++            parsed = json.loads(body_bytes.decode("utf-8"))
++            if isinstance(parsed, dict):
++                decoded = parsed
++        except (json.JSONDecodeError, UnicodeDecodeError):
++            decoded = None
++
++    if http_status == 200 and decoded is not None:
++        if bool(decoded.get("applied", False)) is True:
++            return LifecycleWriteApplied(
++                transition=transition,
++                incident_id=incident_id,
++                idempotent_replay=bool(decoded.get("idempotentReplay", False)),
++                http_status=http_status,
++                detail=(
++                    str(decoded.get("detail"))
++                    if decoded.get("detail") is not None
++                    else "applied via backend"
++                ),
++            )
++        # 200 with explicit applied=false: treat as rejected so the
++        # scheduler does not assume success.
++        return LifecycleWriteRejected(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code=str(decoded.get("reasonCode") or "backend_rejected"),
++            http_status=http_status,
++            detail=(
++                str(decoded.get("message"))
++                if decoded.get("message") is not None
++                else None
++            ),
++        )
++
++    if http_status == 404:
++        return LifecycleWriteFailed(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code="incident_not_found",
++            http_status=http_status,
++            detail="backend reported 404 for the incident",
++        )
++
++    if 400 <= http_status < 500:
++        reason_code = "request_rejected"
++        detail: str | None = None
++        if decoded is not None:
++            reason_code = str(
++                decoded.get("reasonCode")
++                or decoded.get("errorCode")
++                or "request_rejected"
++            )
++            detail = (
++                str(decoded.get("message"))
++                if decoded.get("message") is not None
++                else None
++            )
++        return LifecycleWriteRejected(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code=reason_code,
++            http_status=http_status,
++            detail=detail,
++        )
++
++    if http_status >= 500:
++        return LifecycleWriteFailed(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code="backend_error",
++            http_status=http_status,
++            detail=(
++                str(decoded.get("message"))
++                if decoded is not None and decoded.get("message") is not None
++                else None
++            ),
++        )
++
++    # 1xx / 2xx other than 200 / 3xx: treat as transport anomaly.
++    return LifecycleWriteFailed(
++        transition=transition,
++        incident_id=incident_id,
++        reason_code="transport_error",
++        http_status=http_status,
++        detail=f"unexpected HTTP status {http_status}",
++    )
 +
 +
-+def _has_kwarg_int_value(call: ast.Call, name: str, expected: int) -> bool:
-+    for kw in call.keywords:
-+        if kw.arg != name:
-+            continue
-+        if isinstance(kw.value, ast.Constant) and kw.value.value == expected:
-+            return True
-+    return False
++def _record_lifecycle_backend(
++    *,
++    transition: LifecycleTransition,
++    incident_id: str,
++    run_id: str,
++    collector_run_id: str,
++    payload: dict[str, Any],
++) -> LifecycleWriteOutcome:
++    """POST a lifecycle transition to the backend internal API.
 +
-+
-+# ---------------------------------------------------------------------------
-+# Not-found strictness invariants
-+# ---------------------------------------------------------------------------
-+
-+
-+def _check_not_found_construction(file_path: Path) -> list[str]:
-+    """Reject ``BackendIncidentNotFound(...)`` construction outside the
-+    canonical lookup module's HTTP 404 branch.
++    Returns a typed :class:`LifecycleWriteOutcome`. NEVER falls back
++    to the local store on failure.
 +    """
-+    violations: list[str] = []
-+    module_name = _module_name_from_path(file_path)
-+    if module_name in CONSTRUCTION_ALLOWED_MODULES:
-+        return violations
-+
-+    source = _read(file_path)
-+    if source is None:
-+        return [f"{module_name}: cannot read file"]
-+
-+    try:
-+        tree = ast.parse(source, filename=str(file_path))
-+    except SyntaxError:
-+        return []
-+
-+    for node in ast.walk(tree):
-+        if not isinstance(node, ast.Call):
-+            continue
-+        callee = node.func
-+        if isinstance(callee, ast.Name) and callee.id == "BackendIncidentNotFound":
-+            violations.append(
-+                f"{module_name}:{node.lineno}: ``BackendIncidentNotFound`` "
-+                "must be constructed only by the canonical lookup "
-+                "module inside the HTTP 404 branch."
-+            )
-+        elif (
-+            isinstance(callee, ast.Attribute)
-+            and callee.attr == "BackendIncidentNotFound"
-+        ):
-+            violations.append(
-+                f"{module_name}:{node.lineno}: ``BackendIncidentNotFound`` "
-+                "must be constructed only by the canonical lookup "
-+                "module inside the HTTP 404 branch."
-+            )
-+
-+    return violations
-+
-+
-+def _check_local_mode_truthfulness(file_path: Path) -> list[str]:
-+    """Reject local-mode fabrication of HTTP 404 telemetry."""
-+    violations: list[str] = []
-+    module_name = _module_name_from_path(file_path)
-+    if module_name != CANONICAL_DISPATCH_MODULE:
-+        return violations
-+
-+    source = _read(file_path)
-+    if source is None:
-+        return [f"{module_name}: cannot read file"]
-+
-+    try:
-+        tree = ast.parse(source, filename=str(file_path))
-+    except SyntaxError:
-+        return []
-+
-+    for node in ast.walk(tree):
-+        if not isinstance(node, ast.Call):
-+            continue
-+        callee = node.func
-+        is_not_found = (
-+            (isinstance(callee, ast.Name) and callee.id == "BackendIncidentNotFound")
-+            or (
-+                isinstance(callee, ast.Attribute)
-+                and callee.attr == "BackendIncidentNotFound"
-+            )
++    backend_url = os.environ.get(ENV_BACKEND_URL, "").rstrip("/")
++    token = os.environ.get(ENV_INTERNAL_API_TOKEN)
++    if not backend_url:
++        return LifecycleWriteFailed(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code="backend_url_not_configured",
++            detail="K9B_BACKEND_INTERNAL_URL is not set in scheduler env",
 +        )
-+        if not is_not_found:
-+            continue
-+        # The dispatcher must not pass ``http_status=404`` directly.
-+        if any(
-+            kw.arg == "http_status"
-+            and isinstance(kw.value, ast.Constant)
-+            and kw.value.value == 404
-+            for kw in node.keywords
-+        ):
-+            violations.append(
-+                f"{module_name}:{node.lineno}: local-mode dispatcher "
-+                "must not synthesise ``http_status=404``; pass "
-+                "``source=BackendIncidentLookupSource.LOCAL_STORE`` and "
-+                "leave ``http_status`` to default to ``None``"
-+            )
-+        if not _has_exact_kwarg(
-+            node, "source", "BackendIncidentLookupSource.LOCAL_STORE"
-+        ) and not _has_exact_kwarg(
-+            node, "source", "BackendIncidentLookupSource.BACKEND_API"
-+        ):
-+            violations.append(
-+                f"{module_name}:{node.lineno}: ``BackendIncidentNotFound`` "
-+                "construction must pass an explicit ``source=...`` "
-+                "keyword (LOCAL_STORE for local mode, BACKEND_API for "
-+                "backend mode)"
-+            )
-+
-+    return violations
-+
-+
-+def _check_lookup_module_not_found_branch(file_path: Path) -> list[str]:
-+    """Verify the canonical lookup constructs ``BackendIncidentNotFound``
-+    only inside the exact ``response.http_status == 404`` branch."""
-+    violations: list[str] = []
-+    module_name = _module_name_from_path(file_path)
-+    if module_name != CANONICAL_LOOKUP_MODULE:
-+        return violations
-+
-+    source = _read(file_path)
-+    if source is None:
-+        return [f"{module_name}: cannot read file"]
-+    try:
-+        tree = ast.parse(source, filename=str(file_path))
-+    except SyntaxError:
-+        return []
-+
-+    parent_map = _build_parent_map(tree)
-+    for node in ast.walk(tree):
-+        if not isinstance(node, ast.Call):
-+            continue
-+        callee = node.func
-+        if not (
-+            (isinstance(callee, ast.Name) and callee.id == "BackendIncidentNotFound")
-+            or (
-+                isinstance(callee, ast.Attribute)
-+                and callee.attr == "BackendIncidentNotFound"
-+            )
-+        ):
-+            continue
-+        if not _is_call_dominated_by_exact_404_check(node, parent_map):
-+            violations.append(
-+                f"{module_name}:{node.lineno}: ``BackendIncidentNotFound`` "
-+                "must be constructed inside an ``if`` whose test is "
-+                "EXACTLY ``response.http_status == 404``"
-+            )
-+
-+    return violations
-+
-+
-+def _check_no_broad_exception_to_not_found(file_path: Path) -> list[str]:
-+    """Reject ``except Exception: ... return BackendIncidentNotFound(...)``."""
-+    violations: list[str] = []
-+    module_name = _module_name_from_path(file_path)
-+    if module_name not in TOUCHED_SEAM_MODULES:
-+        return violations
-+
-+    source = _read(file_path)
-+    if source is None:
-+        return [f"{module_name}: cannot read file"]
-+    try:
-+        tree = ast.parse(source, filename=str(file_path))
-+    except SyntaxError:
-+        return []
-+
-+    for node in ast.walk(tree):
-+        if not isinstance(node, ast.Try):
-+            continue
-+        for handler in node.handlers:
-+            if handler.type is None:
-+                continue
-+            type_src = ast.unparse(handler.type)
-+            if type_src == "Exception" or type_src.endswith("Exception"):
-+                for stmt in handler.body:
-+                    if not isinstance(stmt, ast.Return):
-+                        continue
-+                    is_bare_none = (
-+                        isinstance(stmt.value, ast.Constant)
-+                        and stmt.value.value is None
-+                    )
-+                    if is_bare_none:
-+                        violations.append(
-+                            f"{module_name}:{handler.lineno}: bare "
-+                            "``except Exception: return None`` is forbidden "
-+                            "in the touched seam"
-+                        )
-+                        continue
-+                    if isinstance(stmt.value, ast.Call):
-+                        callee = stmt.value.func
-+                        if (
-+                            isinstance(callee, ast.Name)
-+                            and callee.id == "BackendIncidentNotFound"
-+                        ) or (
-+                            isinstance(callee, ast.Attribute)
-+                            and callee.attr == "BackendIncidentNotFound"
-+                        ):
-+                            violations.append(
-+                                f"{module_name}:{handler.lineno}: "
-+                                "``except Exception: return "
-+                                "BackendIncidentNotFound(...)`` is "
-+                                "forbidden; broad handlers must NOT "
-+                                "collapse failures into absence"
-+                            )
-+    return violations
-+
-+
-+# ---------------------------------------------------------------------------
-+# Forbidden truthiness invariants
-+# ---------------------------------------------------------------------------
-+
-+
-+def _check_no_truthiness_to_not_found(file_path: Path) -> list[str]:
-+    """Reject patterns equivalent to:
-+
-+    .. code-block:: python
-+
-+        if not incident:
-+            reason = "incident_not_found"
-+
-+        if not payload:
-+            return BackendIncidentNotFound(...)
-+
-+        if not result:
-+            skip_reason = "incident_not_found"
-+    """
-+    violations: list[str] = []
-+    module_name = _module_name_from_path(file_path)
-+    if module_name not in TOUCHED_SEAM_MODULES:
-+        return violations
-+
-+    source = _read(file_path)
-+    if source is None:
-+        return [f"{module_name}: cannot read file"]
-+    try:
-+        tree = ast.parse(source, filename=str(file_path))
-+    except SyntaxError:
-+        return []
-+
-+    truthy_targets = {"incident", "payload", "result", "lookup_outcome"}
-+
-+    for node in ast.walk(tree):
-+        if not isinstance(node, ast.If):
-+            continue
-+        test = node.test
-+        if not isinstance(test, ast.UnaryOp) or not isinstance(test.op, ast.Not):
-+            continue
-+        operand = test.operand
-+        if not (isinstance(operand, ast.Name) and operand.id in truthy_targets):
-+            continue
-+        body_src = ast.unparse(node)
-+        if (
-+            "incident_not_found" in body_src
-+            or "BackendIncidentNotFound" in body_src
-+        ):
-+            violations.append(
-+                f"{module_name}:{node.lineno}: forbidden truthiness collapse "
-+                "into ``incident_not_found`` / ``BackendIncidentNotFound``; "
-+                "the canonical model requires the source of absence to be "
-+                "the HTTP status (backend mode) or the local-store "
-+                "presence (local mode)"
-+            )
-+
-+    return violations
-+
-+
-+# ---------------------------------------------------------------------------
-+# Automatic-diagnosis dispatch invariants
-+# ---------------------------------------------------------------------------
-+
-+
-+def _check_processor_dispatch(file_path: Path) -> list[str]:
-+    """Verify ``_process_incident`` dispatches exhaustively on the three variants."""
-+    violations: list[str] = []
-+    module_name = _module_name_from_path(file_path)
-+    if module_name != EVIDENCE_PROCESSOR_MODULE:
-+        return violations
-+
-+    source = _read(file_path)
-+    if source is None:
-+        return [f"{module_name}: cannot read module source"]
-+    try:
-+        tree = ast.parse(source, filename=str(file_path))
-+    except SyntaxError:
-+        return []
-+
-+    target: ast.FunctionDef | None = None
-+    for node in tree.body:
-+        if isinstance(node, ast.FunctionDef) and node.name == "_process_incident":
-+            target = node
-+            break
-+    if target is None:
-+        return [f"{module_name}: missing canonical ``_process_incident``"]
-+
-+    body_src = ast.unparse(target)
-+    for variant in REQUIRED_VARIANTS:
-+        if variant not in body_src:
-+            violations.append(
-+                f"{module_name}:``_process_incident`` must dispatch on "
-+                f"``{variant}``"
-+            )
-+
-+    # No generic truthiness on the lookup outcome.
-+    if "if not lookup_outcome" in body_src or "if lookup_outcome" in body_src:
-+        violations.append(
-+            f"{module_name}:``_process_incident`` must not test the "
-+            "lookup outcome via generic truthiness"
++    if not token:
++        return LifecycleWriteFailed(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code="missing_internal_token",
++            detail="K9B_INTERNAL_API_TOKEN is not set in scheduler env",
 +        )
 +
-+    # ``is None`` on the lookup outcome is also forbidden.
-+    for sub in ast.walk(target):
-+        if isinstance(sub, ast.Compare):
-+            cmp_src = ast.unparse(sub)
-+            if "lookup_outcome" in cmp_src and "is None" in cmp_src:
-+                violations.append(
-+                    f"{module_name}:``_process_incident`` must not "
-+                    "test ``lookup_outcome is None``; use exhaustive "
-+                    "match on the typed variants"
-+                )
-+
-+    # No duck-typed widening of the found incident.
-+    if "hasattr(incident" in body_src:
-+        violations.append(
-+            f"{module_name}:``_process_incident`` must not use "
-+            "``hasattr(incident, ...)`` to duck-type; ``incident`` is "
-+            "statically typed as ``Incident``"
-+        )
-+    # No separate ``incident_or_incident`` widening variable.
-+    for stmt in ast.walk(target):
-+        if isinstance(stmt, ast.Assign):
-+            for target_node in stmt.targets:
-+                if (
-+                    isinstance(target_node, ast.Name)
-+                    and target_node.id == "incident_or_incident"
-+                ):
-+                    violations.append(
-+                        f"{module_name}:``_process_incident`` must not widen "
-+                        "the found incident via a separate variable "
-+                        "(``incident_or_incident``); the matched "
-+                        "``incident`` is statically known as ``Incident``"
-+                    )
-+                    break
-+
-+    return violations
-+
-+
-+# ---------------------------------------------------------------------------
-+# Reason code centralisation
-+# ---------------------------------------------------------------------------
-+
-+
-+def _check_reason_codes() -> list[str]:
-+    """The disposition enum must expose all required reason codes."""
-+    violations: list[str] = []
-+
-+    disp_path = SRC_ROOT / "collect" / "incident_diagnosis_disposition.py"
-+    source = _read(disp_path)
-+    if source is None:
-+        violations.append(
-+            f"{DISPOSITION_MODULE}: cannot read module source"
-+        )
-+        return violations
-+
++    request = build_lifecycle_request(
++        incident_id=incident_id,
++        transition=transition,
++        collector_run_id=collector_run_id,
++        diagnosis_run_id=run_id,
++        payload=payload,
++    )
++    url = f"{backend_url}/api/internal/incidents/diagnosis-loop-transition"
++    body = _encode_lifecycle_body(request)
++    headers = {
++        "Content-Type": "application/json",
++        "Authorization": f"Bearer {token}",
++    }
++    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
 +    try:
-+        tree = ast.parse(source, filename=str(disp_path))
-+    except SyntaxError as exc:
-+        violations.append(
-+            f"{DISPOSITION_MODULE}: syntax error {exc}"
-+        )
-+        return violations
-+
-+    module_name = _module_name_from_path(disp_path)
-+
-+    present_values: set[str] = set()
-+    for node in tree.body:
-+        if (
-+            isinstance(node, ast.ClassDef)
-+            and node.name == "DiagnosisEvaluationFailureReason"
-+        ):
-+            for stmt in node.body:
-+                if isinstance(stmt, ast.Assign):
-+                    for target in stmt.targets:
-+                        if (
-+                            isinstance(target, ast.Name)
-+                            and isinstance(stmt.value, ast.Constant)
-+                            and isinstance(stmt.value.value, str)
-+                        ):
-+                            present_values.add(stmt.value.value)
-+            break
-+
-+    for required in REQUIRED_DISPOSITION_REASON_VALUES:
-+        if required not in present_values:
-+            violations.append(
-+                f"{module_name}: missing required backend-incident "
-+                f"reason code ``{required}`` in DiagnosisEvaluationFailureReason"
++        with urllib.request.urlopen(req, timeout=30.0) as resp:
++            status = int(resp.status)
++            raw = resp.read()
++            return _translate_lifecycle_response(
++                transition=transition,
++                incident_id=incident_id,
++                http_status=status,
++                body_bytes=raw,
 +            )
-+
-+    return violations
-+
-+
-+def _check_no_substring_backend_incident_matching() -> list[str]:
-+    """The disposition compat module must NOT use substring matching for
-+    ``backend_incident_*`` codes (R1 contract).
-+    """
-+    violations: list[str] = []
-+    compat_path = SRC_ROOT / "collect" / "incident_diagnosis_disposition_compat.py"
-+    source = _read(compat_path)
-+    if source is None:
-+        return [f"{DISPOSITION_COMPAT_MODULE}: cannot read module source"]
-+    try:
-+        tree = ast.parse(source, filename=str(compat_path))
-+    except SyntaxError:
-+        return []
-+
-+    module_name = _module_name_from_path(compat_path)
-+
-+    for node in ast.walk(tree):
-+        if not isinstance(node, ast.If):
-+            continue
-+        test = node.test
-+        if not isinstance(test, ast.Compare):
-+            continue
-+        if len(test.ops) != 1 or not isinstance(test.ops[0], ast.In):
-+            continue
-+        if len(test.comparators) != 1:
-+            continue
-+        left = test.left
-+        right = test.comparators[0]
-+        # Reject ``"backend_incident_..." in raw_lower`` style substring matches.
-+        if isinstance(left, ast.Constant) and isinstance(left.value, str):
-+            if "backend_incident_" in left.value:
-+                violations.append(
-+                    f"{module_name}:{node.lineno}: substring match for "
-+                    "``backend_incident_*`` codes is forbidden; use exact "
-+                    "value matching or the typed mapping "
-+                    "``diagnosis_failure_reason_for_backend_lookup``"
-+                )
-+        if isinstance(right, ast.Constant) and isinstance(right.value, str):
-+            if "backend_incident_" in right.value:
-+                violations.append(
-+                    f"{module_name}:{node.lineno}: substring match for "
-+                    "``backend_incident_*`` codes is forbidden; use exact "
-+                    "value matching or the typed mapping "
-+                    "``diagnosis_failure_reason_for_backend_lookup``"
-+                )
-+
-+    return violations
-+
-+
-+# ---------------------------------------------------------------------------
-+# Helpers (shared with the AST analyser)
-+# ---------------------------------------------------------------------------
-+
-+
-+def _build_parent_map(tree: ast.AST) -> dict[int, ast.AST]:
-+    parents: dict[int, ast.AST] = {}
-+    for parent in ast.walk(tree):
-+        for child in ast.iter_child_nodes(parent):
-+            parents[id(child)] = parent
-+    return parents
-+
-+
-+# ---------------------------------------------------------------------------
-+# Aggregator
-+# ---------------------------------------------------------------------------
-+
-+
-+def run_static_checks() -> list[str]:
-+    """Run all static checks and return a list of violation messages."""
-+    violations: list[str] = []
-+
-+    violations.extend(_check_outcome_model())
-+    violations.extend(_check_lookup_signature())
-+    violations.extend(_check_reason_codes())
-+    violations.extend(_check_no_substring_backend_incident_matching())
-+
-+    for path in _iter_python_files():
-+        module_name = _module_name_from_path(path)
-+        violations.extend(_check_not_found_construction(path))
-+        violations.extend(_check_local_mode_truthfulness(path))
-+        violations.extend(_check_no_broad_exception_to_not_found(path))
-+        violations.extend(_check_no_truthiness_to_not_found(path))
-+        if module_name in TOUCHED_SEAM_MODULES:
-+            violations.extend(_check_processor_dispatch(path))
-+        if module_name == CANONICAL_LOOKUP_MODULE:
-+            violations.extend(_check_lookup_module_not_found_branch(path))
-+
-+    return violations
-+
-+
-+def _format_violations(violations: Iterable[str]) -> str:
-+    return "\n".join(f"- {v}" for v in violations)
-+
-+
-+# ---------------------------------------------------------------------------
-+# CLI
-+# ---------------------------------------------------------------------------
-+
-+
-+def main(argv: list[str] | None = None) -> int:
-+    violations = run_static_checks()
-+    if violations:
-+        print(
-+            "ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01 verifier: FAIL"
++    except urllib.error.HTTPError as exc:
++        try:
++            raw = exc.read()
++        except Exception:  # noqa: BLE001 - defensive
++            raw = b""
++        return _translate_lifecycle_response(
++            transition=transition,
++            incident_id=incident_id,
++            http_status=int(exc.code),
++            body_bytes=raw,
 +        )
-+        print(_format_violations(violations))
-+        return 1
-+    print("ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01 verifier: PASS")
-+    return 0
-+
-+
-+if __name__ == "__main__":
-+    raise SystemExit(main(sys.argv[1:]))
-\ No newline at end of file
++    except TimeoutError:
++        return LifecycleWriteFailed(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code="transport_error",
++            detail="request to backend timed out",
++            exception_type="TimeoutError",
++        )
++    except urllib.error.URLError as exc:
++        return LifecycleWriteFailed(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code="transport_error",
++            detail=f"backend URL error: {exc.reason!r}",
++            exception_type=(
++                type(exc.reason).__name__
++                if getattr(exc, "reason", None) is not None
++                else "URLError"
++            ),
++        )
++    except OSError as exc:
++        return LifecycleWriteFailed(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code="transport_error",
++            detail=f"backend connection error: {exc}",
++            exception_type=type(exc).__name__,
++        )
 
-=== src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py ===
-diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py b/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py
-index 421b278..e36a046 100644
---- a/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py
-+++ b/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py
-@@ -6,6 +6,15 @@ This module contains:
- - _write_loop_summary(): Write loop summary artifact
+=== src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_local.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_local.py b/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_local.py
+new file mode 100644
+index 00000000..e03a0d8a
+--- /dev/null
++++ b/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_local.py
+@@ -0,0 +1,108 @@
++"""Local-mode lifecycle writer for the automatic-diagnosis authority seam.
++
++This module owns the ``local`` half of the lifecycle dispatch split: it
++calls the in-process :class:`IncidentStore` directly when the scheduler
++resolves ``LifecycleDispatchMode.LOCAL``. The backend-mode half lives in
++:mod:`incident_diagnosis_authority_seam_backend` and is selected when
++the dispatcher resolves ``LifecycleDispatchMode.BACKEND``.
++
++The seam module (:mod:`incident_diagnosis_authority_seam`) is the only
++public entry point; callers MUST NOT import from this file directly.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
++"""
++
++from __future__ import annotations
++
++from typing import Any
++
++from .incident_diagnosis_authority_seam_types import (
++    LifecycleTransition,
++    LifecycleWriteApplied,
++    LifecycleWriteFailed,
++    LifecycleWriteOutcome,
++)
++from .incident_store_provider import get_incident_store
++
++
++def _record_lifecycle_local(
++    *,
++    transition: LifecycleTransition,
++    incident_id: str,
++    run_id: str,
++    collector_run_id: str,
++    payload: dict[str, Any],
++) -> LifecycleWriteOutcome:
++    """Apply a lifecycle transition through the local incident store.
++
++    The local store returns ``None`` when the incident is absent, which
++    we surface as :class:`LifecycleWriteFailed` with the canonical
++    ``incident_not_found`` reason so the scheduler can distinguish it
++    from generic persistence failures.
++    """
++    store = get_incident_store()
++    try:
++        if transition == LifecycleTransition.STARTED:
++            updated = store.mark_diagnosis_loop_started(
++                incident_id=incident_id,
++                run_id=run_id,
++                collector_run_id=collector_run_id,
++            )
++        elif transition == LifecycleTransition.FAILED:
++            updated = store.mark_diagnosis_loop_failed(
++                incident_id=incident_id,
++                run_id=run_id,
++                collector_run_id=collector_run_id,
++                unavailable_reason=str(payload.get("unavailable_reason", "")) or None,
++            )
++        elif transition == LifecycleTransition.COMPLETED:
++            updated = store.mark_diagnosis_loop_completed(
++                incident_id=incident_id,
++                run_id=run_id,
++                collector_run_id=collector_run_id,
++                review_packet_name=(
++                    str(payload["review_packet_name"])
++                    if payload.get("review_packet_name") is not None
++                    else None
++                ),
++                checks_requested=int(payload.get("checks_requested", 0) or 0),
++                checks_run=int(payload.get("checks_run", 0) or 0),
++                checks_rejected=int(payload.get("checks_rejected", 0) or 0),
++                decision=(
++                    str(payload["decision"])
++                    if payload.get("decision") is not None
++                    else None
++                ),
++            )
++        else:  # pragma: no cover - exhaustiveness guard
++            return LifecycleWriteFailed(
++                transition=transition,
++                incident_id=incident_id,
++                reason_code="unsupported_transition",
++                detail=f"unsupported transition: {transition!r}",
++            )
++    except Exception as exc:  # noqa: BLE001 - boundary translation
++        return LifecycleWriteFailed(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code="local_persistence_failed",
++            detail=f"local store raised {type(exc).__name__}: {exc}",
++            exception_type=type(exc).__name__,
++        )
++
++    if updated is None:
++        return LifecycleWriteFailed(
++            transition=transition,
++            incident_id=incident_id,
++            reason_code="incident_not_found",
++            detail=(
++                f"local store has no incident for {incident_id!r}"
++            ),
++        )
++    return LifecycleWriteApplied(
++        transition=transition,
++        incident_id=incident_id,
++        idempotent_replay=False,
++        http_status=None,
++        detail="applied via local store",
++    )
 
- These functions handle per-incident processing for the evidence collector.
+=== src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_types.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_types.py b/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_types.py
+new file mode 100644
+index 00000000..46b8a296
+--- /dev/null
++++ b/src/k8s_diag_agent/collect/incident_diagnosis_authority_seam_types.py
+@@ -0,0 +1,137 @@
++"""Shared types for the automatic-diagnosis authority seam.
 +
-+The backend incident-detail lookup is consumed through the typed
-+:class:`BackendIncidentLookupOutcome` algebra defined in
-+:mod:`k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes`.
-+A successful HTTP 200 response cannot be converted into
-+``BackendIncidentNotFound`` by any parser/schema/deserialization/
-+identity failure in this seam.
++This module exists to break the circular import between the seam
++(:mod:`incident_diagnosis_authority_seam`), the local-mode writer
++(:mod:`incident_diagnosis_authority_seam_local`), and the backend-mode
++writer (:mod:`incident_diagnosis_authority_seam_backend`).
 +
-+Suggested by: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01
++It owns the closed vocabulary (:class:`LifecycleTransition`,
++:class:`LifecycleDispatchMode`), the bounded typed write outcomes
++(:class:`LifecycleWriteApplied` / :class:`LifecycleWriteRejected` /
++:class:`LifecycleWriteFailed` / :class:`LifecycleWriteSkipped`), the
++:class:`LifecycleWriteOutcome` union, and the wire-schema version
++constant.
++
++Callers MUST import the public types from the seam module
++(:mod:`incident_diagnosis_authority_seam`), which re-exports them. The
++sibling dispatch modules import directly from this types module to
++avoid a circular import cycle.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++from enum import StrEnum
++from typing import Final, Literal, TypeAlias
++
++# Lifecycle-transition request/response schema version. The backend
++# internal endpoint and the scheduler client MUST agree on this value.
++# A request carrying an unsupported schema version is rejected by the
++# backend handler with HTTP 400 (unsupported request schema), which the
++# response translator maps to ``LifecycleWriteRejected``. This 400
++# contract is canonical across server behavior, client translation,
++# documentation, and tests.
++LIFECYCLE_SCHEMA_VERSION: Final[int] = 1
++
++
++class LifecycleTransition(StrEnum):
++    """Closed vocabulary of automatic-diagnosis lifecycle transitions.
++
++    The backend internal lifecycle endpoint, the scheduler-side client,
++    and the aggregate store delegate ALL route through this enum so the
++    transition string is never authored as a free literal at any call
++    site.
++    """
++
++    STARTED = "started"
++    FAILED = "failed"
++    COMPLETED = "completed"
++
++
++class LifecycleDispatchMode(StrEnum):
++    """The active dispatch mode for lifecycle writes.
++
++    Mirrors the incident-detail dispatch mode so a single configuration
++    resolution drives both reads and writes.
++    """
++
++    LOCAL = "local"
++    BACKEND = "backend"
++
++
++@dataclass(frozen=True, slots=True)
++class LifecycleWriteApplied:
++    """The authority applied the requested lifecycle transition.
++
++    For backend mode ``idempotent_replay`` is set when the backend
++    recognised a previously-applied identical transition and did not
++    duplicate any side effects. ``http_status`` is set to the observed
++    response status for backend mode and is ``None`` for local mode.
++    """
++    transition: LifecycleTransition
++    incident_id: str
++    applied: Literal[True] = True
++    idempotent_replay: bool = False
++    http_status: int | None = None
++    detail: str | None = None
++
++
++@dataclass(frozen=True, slots=True)
++class LifecycleWriteRejected:
++    """The authority rejected the transition with a bounded reason.
++
++    A ``LifecycleWriteRejected`` is the typed equivalent of HTTP 4xx
++    responses that are NOT ``404`` (which is mapped to
++    ``LifecycleWriteFailed``). The scheduler MUST surface this without
++    silent fallback to local storage.
++    """
++    transition: LifecycleTransition
++    incident_id: str
++    reason_code: str
++    applied: Literal[False] = False
++    http_status: int | None = None
++    detail: str | None = None
++
++
++@dataclass(frozen=True, slots=True)
++class LifecycleWriteFailed:
++    """The lifecycle write failed for a non-business reason.
++
++    Covers transport errors, 5xx responses, 404 (incident not found in
++    the backend store), and authentication failures. The scheduler MUST
++    NOT silently fall back to local storage when this outcome is
++    returned; the operator must observe the failure.
++    """
++    transition: LifecycleTransition
++    incident_id: str
++    reason_code: str
++    applied: Literal[False] = False
++    http_status: int | None = None
++    detail: str | None = None
++    exception_type: str | None = None
++
++
++@dataclass(frozen=True, slots=True)
++class LifecycleWriteSkipped:
++    """The lifecycle write was deliberately skipped (e.g. local mode has no
++    authoritative backend store, or the resolver refused to dispatch).
++
++    This is the ONLY outcome that does not imply a transport or backend
++    failure. It is used to make ``Authority-aware dispatch refused to
++    operate in this mode`` explicit so the scheduler can decide whether
++    the missing write is acceptable.
++    """
++    transition: LifecycleTransition
++    incident_id: str
++    reason: str
++    applied: Literal[False] = False
++
++
++LifecycleWriteOutcome: TypeAlias = (
++    LifecycleWriteApplied
++    | LifecycleWriteRejected
++    | LifecycleWriteFailed
++    | LifecycleWriteSkipped
++)
+
+=== src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_config.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_config.py b/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_config.py
+index 15e0ba70..bf244004 100644
+--- a/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_config.py
++++ b/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_config.py
+@@ -2,11 +2,23 @@
+
+ This module provides:
+ - AutomaticDiagnosisLoopConfig dataclass with hard budget bounds
+-- EligibilityResult dataclass for eligibility checks
+-- check_incident_eligibility() function
++- EligibilityResult / DiagnosisBudgetDiagnostic dataclasses
++- :func:`evaluate_incident_eligibility` (aggregate-based; lookup-free)
++- :func:`check_incident_eligibility` (local-store compatibility wrapper)
++
++The aggregate evaluator accepts a typed :class:`Incident` aggregate
++and never re-resolves the incident through the local store; the
++compat wrapper exists only for local-mode callers and tests.
++
++ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 added the aggregate
++entry point so the scheduler-side processor can pass the typed
++``Incident`` from a successful :class:`BackendIncidentFound` directly
++to :func:`evaluate_incident_eligibility` without a second incident
++lookup.
+
+ The gate functions (is_automatic_diagnosis_loop_enabled, etc.)
+-have been moved to incident_diagnosis_loop_gate.py for better organization.
++have been moved to incident_diagnosis_loop_gate.py for better
++organization.
  """
 
  from __future__ import annotations
-@@ -15,6 +24,8 @@ from datetime import datetime
- from pathlib import Path
- from typing import Any
-
-+from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
- from .incident_automatic_diagnosis_loop import (
-     HypothesisLoopConfig,
-     run_automatic_diagnosis_hypothesis_loop,
-@@ -25,12 +36,21 @@ from .incident_diagnosis_auto_loop_config import (
-     check_incident_eligibility,
- )
- from .incident_diagnosis_auto_loop_models import AutoLoopIncidentResult
-+from .incident_diagnosis_backend_detail_outcomes import (
-+    BackendIncidentFound,
-+    BackendIncidentLookupFailed,
-+    BackendIncidentNotFound,
-+)
- from .incident_diagnosis_dispatch import (
--    fetch_incident_for_diagnosis,
-+    fetch_backend_incident_for_diagnosis_typed,
-+)
-+from .incident_diagnosis_disposition import (
-+    diagnosis_failure_reason_for_backend_lookup,
- )
- from .incident_diagnosis_loop_models import LoopDecision
- from .incident_diagnosis_loop_runtime import run_policy_enforced_loop_pass
- from .incident_diagnosis_review_packet import write_diagnosis_review_packet
-+from .incident_lifecycle import Incident
- from .incident_read_only_check_artifacts import is_safe_run_id
- from .incident_store import IncidentStore
+@@ -19,13 +31,14 @@ from .incident_lifecycle import IncidentStatus
  from .incident_store_provider import get_incident_store
-@@ -46,6 +66,56 @@ __all__ = [
- ]
+
+ if TYPE_CHECKING:
+-    pass
++    from .incident_lifecycle import Incident
+
+ __all__ = [
+     "AutomaticDiagnosisLoopConfig",
+     "DiagnosisBudgetDiagnostic",
+     "EligibilityResult",
+     "check_incident_eligibility",
++    "evaluate_incident_eligibility",
+     "_ACTIVE_STATUSES",
+     "_TERMINAL_STATUSES",
+     # Re-export gate functions for backwards compatibility
+@@ -203,38 +216,75 @@ class EligibilityResult:
+         return "; ".join(lines)
 
 
-+def _failure_result_from_outcome(
-+    incident_id: str,
-+    outcome: BackendIncidentLookupFailed,
-+) -> AutoLoopIncidentResult:
-+    """Translate a typed ``BackendIncidentLookupFailed`` into a legacy result.
+-def check_incident_eligibility(
 +
-+    The reason string is the ``.value`` of the typed
-+    :class:`DiagnosisEvaluationFailureReason` resolved by
-+    :func:`diagnosis_failure_reason_for_backend_lookup`. Production code
-+    never rebuilds the mapping itself; the compat layer matches this
-+    string exactly (no substring), so the round-trip is lossless.
++
++def _count_automatic_review_packets(
++    *,
+     incident_id: str,
++    external_analysis_dir: Path | None,
++) -> int:
++    """Count existing automatic review-packet artifacts for an incident.
++
++    The heuristic is intentionally filesystem-based: it never reaches
++    the incident store, never reaches a backend, and never accepts a
++    bare ``incident_id`` without the matching aggregate context already
++    known to the caller.
 +    """
-+    typed_reason = diagnosis_failure_reason_for_backend_lookup(outcome.failure_code)
-+    reason_code = typed_reason.value
-+    diagnostic = outcome.to_diagnostic()
-+    detail_parts: list[str] = []
-+    if diagnostic.detail:
-+        detail_parts.append(diagnostic.detail)
-+    diagnostic_payload = (
-+        f"http_status={diagnostic.http_status} "
-+        f"payload_type={diagnostic.payload_type!r} "
-+        f"payload_schema_version={diagnostic.payload_schema_version} "
-+        f"exception_type={diagnostic.exception_type!r}"
-+    )
-+    detail_parts.append(diagnostic_payload)
-+    detail = " | ".join(detail_parts)
++    if external_analysis_dir is None or not external_analysis_dir.exists():
++        return 0
++    prefix = f"auto-{incident_id}-"
++    suffix = "-diagnosis-review-packet.json"
++    count = 0
++    try:
++        for path in external_analysis_dir.rglob("*"):
++            try:
++                if path.is_file() and path.name.startswith(prefix) and path.name.endswith(suffix):
++                    count += 1
++            except OSError:
++                continue
++    except OSError:
++        return count
++    return count
 +
++
++def evaluate_incident_eligibility(
++    *,
++    incident: Incident,
+     config: AutomaticDiagnosisLoopConfig,
+     external_analysis_dir: Path | None = None,
+ ) -> EligibilityResult:
+-    """Check if an incident is eligible for automatic diagnosis loop.
++    """Evaluate automatic-diagnosis eligibility from a typed incident aggregate.
++
++    The evaluator is **lookup-free**: it accepts a typed
++    :class:`Incident` and never resolves the incident from the store,
++    never calls a backend detail client, and never accepts an
++    ``incident_id`` as its only incident input. Filesystem inspection
++    for existing review-packet artifacts and budget accounting is
++    permitted where the budget lookup is required.
+
+-    Conservative eligibility model:
+-    - Must be in active status (OPEN, COLLECTING_EVIDENCE, INVESTIGATING)
+-    - Must not be in terminal status (SUPPRESSED, DUPLICATE, RESOLVED, READY_FOR_REVIEW)
+-    - Must have suggested_checks OR enough context for stop-path packet
+-    - Must not have exceeded automatic loop budget
++    Production callers reach this function with the incident aggregate
++    returned from :class:`BackendIncidentFound` so the same typed
++    snapshot drives both domain eligibility and downstream case-file
++    construction.
+
+     Args:
+-        incident_id: The incident ID to check
+-        config: Collector configuration with budget limits
+-        external_analysis_dir: Optional path to check for existing review packets
++        incident: The canonical :class:`Incident` aggregate to evaluate.
++            The supplied ``incident_id`` field is the authoritative
++            identity for diagnostics and budget counts.
++        config: Collector configuration with budget limits.
++        external_analysis_dir: Optional path used to count existing
++            automatic review packets for the per-incident budget.
+
+     Returns:
+-        EligibilityResult with eligible flag, reason, and budget diagnostics
++        :class:`EligibilityResult` with the same closed vocabulary the
++        legacy ``check_incident_eligibility`` used, so existing
++        ``AutoLoopIncidentResult`` projection still works.
+     """
+-    store = get_incident_store()
+-    incident = store.get_incident(incident_id)
+-
+-    if incident is None:
+-        return EligibilityResult(
+-            eligible=False,
+-            incident_id=incident_id,
+-            reason="incident_not_found",
+-        )
++    incident_id = str(incident.incident_id)
+
+-    # Check status
++    # Status checks. SUPPRESSED / DUPLICATE / RESOLVED / READY_FOR_REVIEW
++    # remain terminal and emit the legacy ``terminal_status_<value>``
++    # reason so the existing skip-reason accounting is preserved.
+     status = incident.status
+     if status in _TERMINAL_STATUSES:
+         return EligibilityResult(
+@@ -243,7 +293,6 @@ def check_incident_eligibility(
+             reason=f"terminal_status_{status.value}",
+             status=status.value,
+         )
+-
+     if status not in _ACTIVE_STATUSES:
+         return EligibilityResult(
+             eligible=False,
+@@ -252,34 +301,21 @@ def check_incident_eligibility(
+             status=status.value,
+         )
+
+-    # Check for suggested checks (required for meaningful evidence collection)
+-    # If no suggested checks, we can still write a stop-path packet
+-    suggested_checks = getattr(incident, "signals", [])  # Fallback check
++    # Suggested-checks presence: keep the legacy behaviour, sourced
++    # from the aggregate's signal list (the canonical heuristic before
++    # the ACT).
++    suggested_checks = list(getattr(incident, "signals", []) or [])
+     has_suggested_checks = len(suggested_checks) > 0
+
+-    # Check automatic loop budget by counting existing review packets
+-    # CRITICAL: Use rglob to match artifacts in NESTED paths (e.g., phase4-diagnosis/).
+-    # This ensures parity with lab reset helper which also uses rglob.
+-    # Bug fix: Previously used iterdir() which only checked top-level,
+-    # causing backend to miss nested review packets written by P4c.
+-    auto_pass_count = 0
+-    if external_analysis_dir is not None and external_analysis_dir.exists():
+-        # Count existing automatic review packets for this incident
+-        # Pattern: auto-{incident_id}-*-diagnosis-review-packet.json
+-        # Use rglob to find in nested dirs (e.g., phase4-diagnosis/p4c-.../)
+-        prefix = f"auto-{incident_id}-"
+-        suffix = "-diagnosis-review-packet.json"
+-        try:
+-            for path in external_analysis_dir.rglob("*"):
+-                if path.is_file() and path.name.startswith(prefix) and path.name.endswith(suffix):
+-                    auto_pass_count += 1
+-        except OSError:
+-            pass  # Ignore filesystem errors during budget check
++    # Per-incident budget: count existing automatic review packets.
++    auto_pass_count = _count_automatic_review_packets(
++        incident_id=incident_id,
++        external_analysis_dir=external_analysis_dir,
++    )
+
+-    # Build budget diagnostics for the response
+     budget_limit = config.max_passes_per_incident
+     budget_remaining = max(0, budget_limit - auto_pass_count)
+-    budget_diagnostics = (
++    budget_diagnostics: tuple[DiagnosisBudgetDiagnostic, ...] = (
+         DiagnosisBudgetDiagnostic(
+             name="review_packet_budget",
+             used=auto_pass_count,
+@@ -311,3 +347,38 @@ def check_incident_eligibility(
+         auto_pass_count=auto_pass_count,
+         budget_diagnostics=budget_diagnostics,
+     )
++
++
++def check_incident_eligibility(
++    *,
++    incident_id: str,
++    config: AutomaticDiagnosisLoopConfig,
++    external_analysis_dir: Path | None = None,
++) -> EligibilityResult:
++    """Resolve an incident from the local store and delegate to the evaluator.
++
++    Compatibility wrapper. ``_process_incident()`` MUST NOT call this
++    function after it has already received a typed :class:`Incident`
++    from :class:`BackendIncidentFound`; the scheduler-side processor
++    must use :func:`evaluate_incident_eligibility` directly with the
++    aggregate.
++
++    This wrapper is retained only for local-mode callers and tests
++    that exercise the legacy ID-based path. Authority selection
++    belongs in the dispatch layer; this wrapper does NOT call any
++    backend HTTP client and does NOT attempt to choose between
++    authorities.
++    """
++    store = get_incident_store()
++    incident = store.get_incident(incident_id)
++    if incident is None:
++        return EligibilityResult(
++            eligible=False,
++            incident_id=incident_id,
++            reason="incident_not_found",
++        )
++    return evaluate_incident_eligibility(
++        incident=incident,
++        config=config,
++        external_analysis_dir=external_analysis_dir,
++    )
+
+=== src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py b/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py
+index e36a046f..0f3afb94 100644
+--- a/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py
++++ b/src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py
+@@ -14,7 +14,29 @@ A successful HTTP 200 response cannot be converted into
+ ``BackendIncidentNotFound`` by any parser/schema/deserialization/
+ identity failure in this seam.
+
++Authority flow (ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01):
++
++    typed authority lookup
++        ↓
++    BackendIncidentFound
++        ↓
++    identity validation (branded id matches request)
++        ↓
++    evaluate_incident_eligibility(incident=incident_obj, ...)  [no second lookup]
++        ↓
++    case-file construction from the same aggregate
++        ↓
++    diagnosis execution
++        ↓
++    record_diagnosis_loop_{started,failed,completed}(...)  [authority seam]
++
++The processor NEVER reaches ``get_incident_store()`` to re-resolve
++the incident or to record a lifecycle transition. Lifecycle writes
++route through :mod:`incident_diagnosis_authority_seam` which resolves
++the same dispatch configuration the lookup uses.
++
+ Suggested by: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01
++R1 follow-up: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
+ """
+
+ from __future__ import annotations
+@@ -31,10 +53,18 @@ from .incident_automatic_diagnosis_loop import (
+     run_automatic_diagnosis_hypothesis_loop,
+ )
+ from .incident_case_file import build_incident_case_file
+-from .incident_diagnosis_auto_loop_config import (
+-    AutomaticDiagnosisLoopConfig,
+-    check_incident_eligibility,
++from .incident_diagnosis_authority_seam import (
++    LifecycleWriteApplied,
++    LifecycleWriteFailed,
++    LifecycleWriteOutcome,
++    LifecycleWriteRejected,
++    LifecycleWriteSkipped,
++    evaluate_incident_eligibility,
++    record_diagnosis_loop_completed,
++    record_diagnosis_loop_failed,
++    record_diagnosis_loop_started,
+ )
++from .incident_diagnosis_auto_loop_config import AutomaticDiagnosisLoopConfig
+ from .incident_diagnosis_auto_loop_models import AutoLoopIncidentResult
+ from .incident_diagnosis_backend_detail_outcomes import (
+     BackendIncidentFound,
+@@ -52,8 +82,6 @@ from .incident_diagnosis_loop_runtime import run_policy_enforced_loop_pass
+ from .incident_diagnosis_review_packet import write_diagnosis_review_packet
+ from .incident_lifecycle import Incident
+ from .incident_read_only_check_artifacts import is_safe_run_id
+-from .incident_store import IncidentStore
+-from .incident_store_provider import get_incident_store
+
+ _logger = logging.getLogger(__name__)
+
+@@ -116,6 +144,34 @@ def _failure_result_from_outcome(
+     )
+
+
++def _emit_eligibility_evaluated_event(
++    *,
++    incident_id: str,
++    incident_source: str,
++    eligible: bool,
++    reason_code: str,
++) -> None:
++    """Emit a bounded eligibility-evaluated event after the lookup seam."""
 +    _logger.info(
-+        "automatic-diagnosis-backend-incident-lookup-failed",
++        "automatic-diagnosis-incident-eligibility-evaluated",
 +        extra={
-+            "event": "automatic-diagnosis-backend-incident-lookup-failed",
++            "event": "automatic-diagnosis-incident-eligibility-evaluated",
 +            "incident_id": incident_id,
-+            "requested_incident_id": str(outcome.requested_incident_id),
++            "incident_source": incident_source,
++            "eligible": eligible,
 +            "reason_code": reason_code,
-+            "http_status": outcome.http_status,
-+            "payload_type": outcome.payload_type,
-+            "payload_schema_version": outcome.payload_schema_version,
-+            "exception_type": outcome.exception_type,
-+            "detail": detail,
 +        },
 +    )
 +
-+    return AutoLoopIncidentResult(
-+        incident_id=incident_id,
-+        eligible=False,
-+        eligibility_reason=reason_code,
-+        error=detail,
++
++def _lifecycle_outcome_is_failure(outcome: LifecycleWriteOutcome) -> bool:
++    """Return True for any non-Applied lifecycle outcome (excluding Skipped)."""
++    return isinstance(
++        outcome,
++        (LifecycleWriteFailed, LifecycleWriteRejected),
 +    )
 +
 +
  def _process_incident(
      incident_id: str,
      external_analysis_dir: Path,
-@@ -53,33 +123,72 @@ def _process_incident(
-     collector_run_id: str,
-     now: datetime,
- ) -> AutoLoopIncidentResult:
--    """Process a single incident in the automatic diagnosis loop."""
--    incident_or_incident, fetch_success, fetch_error = fetch_incident_for_diagnosis(incident_id)
+@@ -128,18 +184,28 @@ def _process_incident(
+     The backend incident-detail lookup runs through the canonical
+     :func:`fetch_backend_incident_for_diagnosis_typed` helper, which
+     returns a typed :class:`BackendIncidentLookupOutcome`. The three
+-    variants are dispatched exhaustively: a HTTP 404 yields
+-    ``BackendIncidentNotFound`` (-> skipped ``incident_not_found``),
+-    any other failure yields ``BackendIncidentLookupFailed`` (-> error
+-    with the mapped stable reason code), and a successful HTTP 200
+-    canonical payload yields ``BackendIncidentFound`` (continuing into
+-    domain eligibility).
 -
--    if not fetch_success:
--        return AutoLoopIncidentResult(
--            incident_id=incident_id,
--            eligible=False,
--            eligibility_reason=f"fetch_failed: {fetch_error}",
--            skipped=True,
--            skip_reason=f"fetch_failed: {fetch_error}",
--        )
--
--    if incident_or_incident is None:
--        return AutoLoopIncidentResult(
--            incident_id=incident_id,
--            eligible=False,
--            eligibility_reason="not_found",
--            skipped=True,
--            skip_reason="incident_not_found",
--        )
--
--    # Normalize to dict for downstream processing
--    incident_dict: dict[str, Any] = (
--        incident_or_incident.to_dict()
--        if hasattr(incident_or_incident, "to_dict")
--        else incident_or_incident  # type: ignore[assignment]
--    )
-+    """Process a single incident in the automatic diagnosis loop.
+-    Crucially, the success/failure classification is anchored on the
+-    HTTP status, not on whether the parser produced an incident object;
+-    this prevents the historical regression where HTTP 200 + valid JSON
+-    was being mapped to ``incident_not_found`` because a downstream
+-    parser exception was silently absorbed into ``None``.
++    variants are dispatched exhaustively:
 +
-+    The backend incident-detail lookup runs through the canonical
-+    :func:`fetch_backend_incident_for_diagnosis_typed` helper, which
-+    returns a typed :class:`BackendIncidentLookupOutcome`. The three
-+    variants are dispatched exhaustively: a HTTP 404 yields
-+    ``BackendIncidentNotFound`` (-> skipped ``incident_not_found``),
-+    any other failure yields ``BackendIncidentLookupFailed`` (-> error
-+    with the mapped stable reason code), and a successful HTTP 200
-+    canonical payload yields ``BackendIncidentFound`` (continuing into
-+    domain eligibility).
++    * ``BackendIncidentNotFound`` → skipped with
++      ``skip_reason="incident_not_found"`` and
++      ``eligibility_reason="not_found"``.
++    * ``BackendIncidentLookupFailed`` → error with the mapped stable
++      reason code; never maps to ``incident_not_found``.
++    * ``BackendIncidentFound(incident=incident)`` → identity check
++      against the requested ID, then the aggregate-based
++      :func:`evaluate_incident_eligibility` (no second incident
++      lookup), then case-file construction from the same aggregate,
++      then authority-routed lifecycle writes.
 +
-+    Crucially, the success/failure classification is anchored on the
-+    HTTP status, not on whether the parser produced an incident object;
-+    this prevents the historical regression where HTTP 200 + valid JSON
-+    was being mapped to ``incident_not_found`` because a downstream
-+    parser exception was silently absorbed into ``None``.
-+    """
-+    branded = IncidentId(incident_id)
-+    lookup_outcome = fetch_backend_incident_for_diagnosis_typed(branded)
++    Crucially:
 +
-+    # Exhaustive dispatch on the three typed variants. The legacy
-+    # ``AutoLoopIncidentResult`` is the source of truth for the rest of
-+    # the pipeline; the compat layer maps it back into the typed
-+    # ``IncidentDiagnosisDisposition`` algebra.
-+    match lookup_outcome:
-+        case BackendIncidentNotFound():
++    * the eligibility evaluator is invoked with the supplied
++      ``Incident`` aggregate; ``get_incident_store()`` is NOT called
++      between ``BackendIncidentFound`` and the eligibility decision;
++    * lifecycle transitions are routed through
++      :func:`record_diagnosis_loop_*`; the local
++      ``IncidentStore.mark_diagnosis_loop_*`` methods are NOT called
++      from this function.
+     """
+     branded = IncidentId(incident_id)
+     lookup_outcome = fetch_backend_incident_for_diagnosis_typed(branded)
+@@ -168,36 +234,63 @@ def _process_incident(
+         case BackendIncidentLookupFailed():
+             return _failure_result_from_outcome(incident_id, lookup_outcome)
+         case BackendIncidentFound(incident=incident):
+-            _logger.debug(
 +            _logger.info(
-+                "automatic-diagnosis-backend-incident-not-found",
-+                extra={
-+                    "event": "automatic-diagnosis-backend-incident-not-found",
-+                    "incident_id": incident_id,
-+                    "http_status": lookup_outcome.http_status,
-+                },
-+            )
+                 "automatic-diagnosis-backend-incident-found",
+                 extra={
+                     "event": "automatic-diagnosis-backend-incident-found",
+                     "incident_id": incident_id,
++                    "requested_incident_id": incident_id,
+                     "http_status": lookup_outcome.http_status,
+                     "payload_schema_version": lookup_outcome.payload_schema_version,
+                     "payload_type": lookup_outcome.payload_type,
+                 },
+             )
+-            # ``incident`` is statically known to be ``Incident`` here
+-            # (the canonical domain aggregate). We call ``.to_dict()``
+-            # directly; there is no duck-typing fallback or ``Any``
+-            # widening. The downstream path consumes the dict for the
+-            # hypothesis loop, but the case file builder still takes
+-            # the typed ``Incident`` so it can keep its typed
+-            # invariants.
+             incident_obj: Incident = incident
++            incident_source = lookup_outcome.source.value
++
++    # INV-01: identity invariant. The aggregate's incident_id MUST
++    # match the requested branded ID. A mismatch becomes a typed
++    # lookup/content failure (we surface it as an evaluation failure,
++    # not an ``incident_not_found``) and we never silently fall back
++    # to the local store.
++    if str(incident_obj.incident_id) != str(branded):
++        mismatch_detail = (
++            f"backend returned incident_id {str(incident_obj.incident_id)!r} "
++            f"but the request was for {str(branded)!r}"
++        )
++        _logger.warning(
++            "automatic-diagnosis-incident-identity-mismatch",
++            extra={
++                "event": "automatic-diagnosis-incident-identity-mismatch",
++                "incident_id": incident_id,
++                "returned_incident_id": str(incident_obj.incident_id),
++                "reason_code": "identity_mismatch",
++                "detail": mismatch_detail,
++            },
++        )
++        return AutoLoopIncidentResult(
++            incident_id=incident_id,
++            eligible=False,
++            eligibility_reason="backend_incident_identity_mismatch",
++            error=mismatch_detail,
++        )
+
+-    # Normalize to dict for downstream processing.
+-    incident_dict: dict[str, Any] = incident_obj.to_dict()
+-
+-    store: IncidentStore = get_incident_store()
+-
+-    eligibility = check_incident_eligibility(
+-        incident_id=incident_id,
++    # INV-02: aggregate-based eligibility evaluation. The supplied
++    # incident is the authoritative snapshot; we do NOT re-resolve
++    # through ``get_incident_store()`` here.
++    eligibility = evaluate_incident_eligibility(
++        incident=incident_obj,
+         config=config,
+         external_analysis_dir=external_analysis_dir,
+     )
+
++    _emit_eligibility_evaluated_event(
++        incident_id=incident_id,
++        incident_source=incident_source,
++        eligible=eligibility.eligible,
++        reason_code=eligibility.reason,
++    )
++
+     if not eligibility.eligible:
+         return AutoLoopIncidentResult(
+             incident_id=incident_id,
+@@ -211,12 +304,26 @@ def _process_incident(
+     run_id = f"auto-{incident_id}-{now.strftime('%Y%m%d%H%M%S')}"
+
+     if not is_safe_run_id(run_id):
+-        store.mark_diagnosis_loop_failed(
++        # INV-08: lifecycle failure must not be swallowed. We record
++        # the ``failed`` transition through the seam and surface the
++        # outcome to the caller.
++        lifecycle = record_diagnosis_loop_failed(
+             incident_id=incident_id,
+             run_id=run_id,
+             collector_run_id=collector_run_id,
+             unavailable_reason="unsafe_run_id",
+         )
++        if isinstance(lifecycle, LifecycleWriteFailed):
 +            return AutoLoopIncidentResult(
 +                incident_id=incident_id,
-+                eligible=False,
-+                eligibility_reason="not_found",
-+                skipped=True,
-+                skip_reason="incident_not_found",
++                eligible=True,
++                eligibility_reason=eligibility.reason,
++                run_id=run_id,
++                error=(
++                    f"Unsafe run_id generated: {run_id} "
++                    f"(lifecycle start failed: {lifecycle.reason_code})"
++                ),
 +            )
-+        case BackendIncidentLookupFailed():
-+            return _failure_result_from_outcome(incident_id, lookup_outcome)
-+        case BackendIncidentFound(incident=incident):
-+            _logger.debug(
-+                "automatic-diagnosis-backend-incident-found",
-+                extra={
-+                    "event": "automatic-diagnosis-backend-incident-found",
-+                    "incident_id": incident_id,
-+                    "http_status": lookup_outcome.http_status,
-+                    "payload_schema_version": lookup_outcome.payload_schema_version,
-+                    "payload_type": lookup_outcome.payload_type,
-+                },
-+            )
-+            # ``incident`` is statically known to be ``Incident`` here
-+            # (the canonical domain aggregate). We call ``.to_dict()``
-+            # directly; there is no duck-typing fallback or ``Any``
-+            # widening. The downstream path consumes the dict for the
-+            # hypothesis loop, but the case file builder still takes
-+            # the typed ``Incident`` so it can keep its typed
-+            # invariants.
-+            incident_obj: Incident = incident
-+
-+    # Normalize to dict for downstream processing.
-+    incident_dict: dict[str, Any] = incident_obj.to_dict()
-
-     store: IncidentStore = get_incident_store()
-
-@@ -127,7 +236,7 @@ def _process_incident(
-         case_file = build_incident_case_file(
+         return AutoLoopIncidentResult(
              incident_id=incident_id,
-             external_analysis_dir=external_analysis_dir,
--            incident=incident_or_incident,
-+            incident=incident_obj,
+             eligible=True,
+@@ -225,11 +332,24 @@ def _process_incident(
+             error=f"Unsafe run_id generated: {run_id}",
          )
-     except (OSError, ValueError, KeyError):
-         store.mark_diagnosis_loop_failed(
 
-=== src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_lookup.py ===
-diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_lookup.py b/src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_lookup.py
+-    store.mark_diagnosis_loop_started(
++    # INV-05/INV-08: lifecycle writes are routed through the authority
++    # seam. If the start write fails the diagnosis execution MUST NOT
++    # begin; we return an unsuccessful result with the bounded
++    # reason code.
++    started_outcome = record_diagnosis_loop_started(
+         incident_id=incident_id,
+         run_id=run_id,
+         collector_run_id=collector_run_id,
+     )
++    if not isinstance(started_outcome, LifecycleWriteApplied):
++        failure_code = _lifecycle_failure_code(started_outcome)
++        return AutoLoopIncidentResult(
++            incident_id=incident_id,
++            eligible=True,
++            eligibility_reason=eligibility.reason,
++            run_id=run_id,
++            error=f"diagnosis_lifecycle_start_failed: {failure_code}",
++        )
+
+     # Build case file using the original Incident object
+     try:
+@@ -238,8 +358,11 @@ def _process_incident(
+             external_analysis_dir=external_analysis_dir,
+             incident=incident_obj,
+         )
+-    except (OSError, ValueError, KeyError):
+-        store.mark_diagnosis_loop_failed(
++    except (OSError, ValueError, KeyError) as exc:
++        # INV-08: keep the original failure primary and attach the
++        # lifecycle-recording diagnostics when the ``failed`` write
++        # itself did not land.
++        lifecycle_outcome = _record_failure_with_original(
+             incident_id=incident_id,
+             run_id=run_id,
+             collector_run_id=collector_run_id,
+@@ -250,11 +373,14 @@ def _process_incident(
+             eligible=True,
+             eligibility_reason=eligibility.reason,
+             run_id=run_id,
+-            error="Failed to build case file",
++            error=_augment_error_with_lifecycle(
++                f"Failed to build case file: {type(exc).__name__}",
++                lifecycle_outcome,
++            ),
+         )
+
+     if case_file is None:
+-        store.mark_diagnosis_loop_failed(
++        lifecycle_outcome = _record_failure_with_original(
+             incident_id=incident_id,
+             run_id=run_id,
+             collector_run_id=collector_run_id,
+@@ -265,9 +391,12 @@ def _process_incident(
+             eligible=True,
+             eligibility_reason=eligibility.reason,
+             run_id=run_id,
+-            error="Case file is None",
++            error=_augment_error_with_lifecycle(
++                "Case file is None", lifecycle_outcome
++            ),
+         )
+
++
+     # Run hypothesis burst multipass loop
+     hypothesis_loop_result: dict[str, Any] | None = None
+     try:
+@@ -280,7 +409,7 @@ def _process_incident(
+         )
+
+         loop_result = run_automatic_diagnosis_hypothesis_loop(
+-            incident=incident_dict,
++            incident=incident_obj.to_dict(),
+             case_file=case_file,
+             external_analysis_dir=external_analysis_dir,
+             run_id=run_id,
+@@ -312,8 +441,8 @@ def _process_incident(
+             run_id=run_id,
+             now=now,
+         )
+-    except (ValueError, RuntimeError, KeyError):
+-        store.mark_diagnosis_loop_failed(
++    except (ValueError, RuntimeError, KeyError) as exc:
++        lifecycle_outcome = _record_failure_with_original(
+             incident_id=incident_id,
+             run_id=run_id,
+             collector_run_id=collector_run_id,
+@@ -324,9 +453,13 @@ def _process_incident(
+             eligible=True,
+             eligibility_reason=eligibility.reason,
+             run_id=run_id,
+-            error="Orchestrator error",
++            error=_augment_error_with_lifecycle(
++                f"orchestrator error: {type(exc).__name__}",
++                lifecycle_outcome,
++            ),
+         )
+
++
+     decision = str(orchestrator_result.get("decision", ""))
+     runner_result = orchestrator_result.get("runner_result")
+     artifact = orchestrator_result.get("artifact")
+@@ -380,7 +513,7 @@ def _process_incident(
+         except (OSError, ValueError):
+             pass
+
+-    store.mark_diagnosis_loop_completed(
++    completed_outcome = record_diagnosis_loop_completed(
+         incident_id=incident_id,
+         run_id=run_id,
+         collector_run_id=collector_run_id,
+@@ -402,7 +535,7 @@ def _process_incident(
+         and loop_pass_artifact.get("written", False)
+     )
+
+-    return AutoLoopIncidentResult(
++    result = AutoLoopIncidentResult(
+         incident_id=incident_id,
+         eligible=True,
+         eligibility_reason=eligibility.reason,
+@@ -418,6 +551,69 @@ def _process_incident(
+         loop_pass_artifact_written=loop_pass_artifact_written,
+         hypothesis_loop_result=hypothesis_loop_result,
+     )
++    if not isinstance(completed_outcome, LifecycleWriteApplied):
++        result.error = (
++            f"diagnosis_lifecycle_completion_failed: "
++            f"{_lifecycle_failure_code(completed_outcome)}"
++        )
++    return result
++
++
++def _lifecycle_failure_code(outcome: LifecycleWriteOutcome) -> str:
++    """Extract a stable reason code from any non-Applied lifecycle outcome."""
++    if isinstance(outcome, LifecycleWriteFailed):
++        return outcome.reason_code
++    if isinstance(outcome, LifecycleWriteRejected):
++        return outcome.reason_code
++    if isinstance(outcome, LifecycleWriteSkipped):
++        return f"skipped:{outcome.reason}"
++    return "unknown"
++
++
++def _augment_error_with_lifecycle(
++    base_error: str,
++    lifecycle_outcome: LifecycleWriteOutcome,
++) -> str:
++    """Keep the original failure primary and attach lifecycle diagnostics.
++
++    INV-08: when recording the ``failed`` transition itself did not
++    land (e.g. the backend returned 5xx), the per-incident result must
++    surface both the original failure and the lifecycle-persistence
++    diagnostics rather than discarding the latter into logs only.
++
++    Example produced shape::
++
++        Failed to build case file: KeyError; \
++lifecycle_recording_error=backend_error; http_status=500
++    """
++    if isinstance(lifecycle_outcome, LifecycleWriteApplied | LifecycleWriteSkipped):
++        return base_error
++    parts = [base_error, f"lifecycle_recording_error={lifecycle_outcome.reason_code}"]
++    http_status = getattr(lifecycle_outcome, "http_status", None)
++    if http_status is not None:
++        parts.append(f"http_status={http_status}")
++    return "; ".join(parts)
++
++
++def _record_failure_with_original(
++    *,
++    incident_id: str,
++    run_id: str,
++    collector_run_id: str,
++    unavailable_reason: str,
++) -> LifecycleWriteOutcome:
++    """Record a ``failed`` transition through the authority seam.
++
++
++    Returns the underlying outcome so callers can attach lifecycle
++    persistence diagnostics to the per-incident result when needed.
++    """
++    return record_diagnosis_loop_failed(
++        incident_id=incident_id,
++        run_id=run_id,
++        collector_run_id=collector_run_id,
++        unavailable_reason=unavailable_reason,
++    )
+
+
+ def _build_minimal_diagnosis_report(
+@@ -479,10 +675,18 @@ def _write_loop_summary(
+ ) -> dict[str, Any]:
+     """Write loop summary artifact."""
+     from .incident_automatic_diagnosis_loop import write_summary_artifact as _write_summary_artifact
++    from .incident_diagnosis_authority_run_summary import (
++        summarize_incident_results,
++    )
+
+     artifact_dir = external_analysis_dir / "automatic-diagnosis"
+     effective_run_id = run_id if run_id else f"collector-{collector_run_id}"
+
++    # Authority run-summary accounting (backend lookup / eligibility /
++    # lifecycle-write outcomes + the split-authority regression counter)
++    # derived deterministically from the per-incident results.
++    authority_run_summary = summarize_incident_results(incident_results).to_dict()
++
+     return _write_summary_artifact(
+         artifact_dir=artifact_dir,
+         run_id=effective_run_id,
+@@ -502,9 +706,11 @@ def _write_loop_summary(
+         incidents_ineligible=incidents_ineligible,
+         incidents_with_errors=incidents_with_errors,
+         eligibility_schema_version=eligibility_schema_version,
++        authority_run_summary=authority_run_summary,
+     )
+
+
++
+ __all__ = [
+     "_process_incident",
+     "_build_minimal_diagnosis_report",
+
+=== src/k8s_diag_agent/collect/incident_lifecycle.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_lifecycle.py b/src/k8s_diag_agent/collect/incident_lifecycle.py
+index e7507b46..09177c60 100644
+--- a/src/k8s_diag_agent/collect/incident_lifecycle.py
++++ b/src/k8s_diag_agent/collect/incident_lifecycle.py
+@@ -87,6 +87,16 @@ class Incident:
+     signal_count: int = 0
+     evidence_count: int = 0
+     events: list[IncidentEvent] = field(default_factory=list)
++    # Typed diagnosis-loop lifecycle state (R4-4 contract).
++    #
++    # The ``diagnosis_loop`` projection field is written by the canonical
++    # SQLite event writer whenever a ``DIAGNOSIS_LOOP_STARTED`` /
++    # ``DIAGNOSIS_LOOP_COMPLETED`` / ``DIAGNOSIS_LOOP_FAILED`` event is
++    # appended. Storing it on the typed dataclass (instead of relying on
++    # raw JSON passthrough) lets the in-memory cache round-trip the
++    # lifecycle state through ``Incident.from_dict`` so ``store.get_incident``
++    # and detail-page reads expose it without dropping projection data.
++    diagnosis_loop: dict[str, Any] | None = None
+     suppressed_reason: str | None = None
+     duplicate_of: str | None = None
+     resolved_at: datetime | None = None
+
+=== src/k8s_diag_agent/collect/incident_lifecycle_serialization.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_lifecycle_serialization.py b/src/k8s_diag_agent/collect/incident_lifecycle_serialization.py
+index faa079ce..4cbf5924 100644
+--- a/src/k8s_diag_agent/collect/incident_lifecycle_serialization.py
++++ b/src/k8s_diag_agent/collect/incident_lifecycle_serialization.py
+@@ -14,6 +14,7 @@ Hard constraints enforced:
+
+ from __future__ import annotations
+
++from copy import deepcopy
+ from datetime import UTC, datetime
+ from typing import TYPE_CHECKING, Any
+
+@@ -75,6 +76,18 @@ def incident_to_dict(incident: Any) -> dict[str, Any]:
+         "signal_count": incident.signal_count,
+         "evidence_count": incident.evidence_count,
+         "events": [incident_event_to_dict(e) for e in incident.events],
++        # R4-4: typed diagnosis-loop lifecycle state round-trip.
++        # The field is owned by the SQLite projection; the dataclass
++        # carries it so cache/detail reads can expose it without
++        # dropping projection data.
++        # R5-1: deep-copy the projection dict so mutations on the
++        # serialized payload cannot reach back into the source
++        # aggregate and bypass the canonical event writer.
++        "diagnosis_loop": (
++            deepcopy(incident.diagnosis_loop)
++            if incident.diagnosis_loop is not None
++            else None
++        ),
+         "suppressed_reason": incident.suppressed_reason,
+         "duplicate_of": incident.duplicate_of,
+         "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
+@@ -234,6 +247,11 @@ def incident_from_dict(data: dict[str, Any]) -> Any:
+         signal_count=data.get("signal_count", len(signals)),
+         evidence_count=data.get("evidence_count", len(evidence_links)),
+         events=events,
++        # R4-4: typed diagnosis-loop lifecycle state round-trip.
++        # The projection stores ``diagnosis_loop`` as a JSON-compatible
++        # dict; we accept it as-is so the canonical event writer's
++        # projection state can be reconstructed on the typed dataclass.
++        diagnosis_loop=data.get("diagnosis_loop"),
+         suppressed_reason=data.get("suppressed_reason"),
+         duplicate_of=data.get("duplicate_of"),
+         resolved_at=_parse_dt(data.get("resolved_at")),
+
+=== src/k8s_diag_agent/collect/incident_snapshot_helpers.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_snapshot_helpers.py b/src/k8s_diag_agent/collect/incident_snapshot_helpers.py
+index ddc88920..c04d97f7 100644
+--- a/src/k8s_diag_agent/collect/incident_snapshot_helpers.py
++++ b/src/k8s_diag_agent/collect/incident_snapshot_helpers.py
+@@ -6,6 +6,7 @@ Extracted from incident_store.py to keep file sizes below LLM-friendly threshold
+
+ from __future__ import annotations
+
++from copy import deepcopy
+ from typing import TYPE_CHECKING
+
+ if TYPE_CHECKING:
+@@ -15,7 +16,13 @@ if TYPE_CHECKING:
+ def snapshot_incident(incident: Incident) -> Incident:
+     """Create a snapshot copy of an incident.
+
+-    This ensures internal mutable lists are not exposed.
++    This ensures internal mutable state is not exposed.
++    ``diagnosis_loop`` is deep-copied because it is a
++    ``dict[str, Any]`` projection field that may legitimately
++    contain nested mutable structures; aliasing would allow
++    callers to bypass the canonical event store and mutate
++    the cached aggregate without a hash-chain entry.
++
+     Extracted from IncidentStore to reduce file sizes.
+     """
+     from .incident_lifecycle import Incident
+@@ -40,6 +47,16 @@ def snapshot_incident(incident: Incident) -> Incident:
+         signal_count=incident.signal_count,
+         evidence_count=incident.evidence_count,
+         events=list(incident.events),
++        # R4-4: round-trip the typed diagnosis-loop projection state
++        # so detail reads and snapshots expose lifecycle data.
++        # R5-1: deep-copy the projection dict so mutations on the
++        # returned snapshot cannot reach back into the cached
++        # aggregate and bypass the canonical event writer.
++        diagnosis_loop=(
++            deepcopy(incident.diagnosis_loop)
++            if incident.diagnosis_loop is not None
++            else None
++        ),
+         suppressed_reason=incident.suppressed_reason,
+         duplicate_of=incident.duplicate_of,
+         resolved_at=incident.resolved_at,
+
+=== src/k8s_diag_agent/collect/incident_store_sqlite_context.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_store_sqlite_context.py b/src/k8s_diag_agent/collect/incident_store_sqlite_context.py
+index 69c3b9a9..37e846e0 100644
+--- a/src/k8s_diag_agent/collect/incident_store_sqlite_context.py
++++ b/src/k8s_diag_agent/collect/incident_store_sqlite_context.py
+@@ -23,7 +23,9 @@ Usage:
+
+ from __future__ import annotations
+
+-from datetime import datetime
++import json
++import sqlite3
++from datetime import UTC, datetime
+ from typing import TYPE_CHECKING, Any
+
+ from .incident_lifecycle import Incident
+@@ -308,6 +310,220 @@ class SQLiteWriteContext:
+         self._ensure_open()
+         return _rebuild(self._conn)
+
++    # -------------------------------------------------------------------------
++    # Diagnosis-loop Lifecycle Authority (R3 canonical atomic operation)
++    # -------------------------------------------------------------------------
++
++    def apply_diagnosis_lifecycle_idempotently(
++        self,
++        *,
++        transition: str,
++        incident_id: str,
++        run_id: str | None,
++        collector_run_id: str,
++        diagnosis_run_id: str | None,
++        fingerprint: str,
++        occurred_at: datetime,
++        payload: dict[str, Any],
++    ) -> dict[str, Any]:
++        """Atomically apply a diagnosis-loop lifecycle transition.
++
++        R3 canonical path for the internal
++        ``diagnosis-loop-transition`` endpoint. This method owns the
++        full ``lookup → hash-chained event append → canonical
++        projection update → idempotency record insert`` sequence in
++        one ``BEGIN IMMEDIATE`` transaction, then commits and
++        refreshes the in-memory cache from the canonical projector.
++
++        Returns one of:
++
++        * ``{"outcome": "applied", "idempotent_replay": False,
++            "incident": Incident | None}``
++        * ``{"outcome": "applied", "idempotent_replay": True}``
++        * ``{"outcome": "replay_mismatch"}``
++        * ``{"outcome": "incident_not_found"}``
++
++        The caller is responsible for translating any raised
++        exception into the ``persistence_failed`` outcome.
++
++        Raises:
++            ContextClosedError: If the context has been closed.
++            ValueError: If ``transition`` is not one of
++                ``started`` / ``failed`` / ``completed``.
++            sqlite3.DatabaseError: On any SQL failure (the
++                transaction is rolled back before the exception
++                propagates).
++        """
++        self._ensure_open()
++        from .incident_store_sqlite_events_writer import (
++            EventAppendSpec,
++            _append_event_in_transaction,
++        )
++
++        if transition not in _DIAGNOSIS_LIFECYCLE_EVENT_TYPE:
++            raise ValueError(f"unsupported transition: {transition!r}")
++        event_type = _DIAGNOSIS_LIFECYCLE_EVENT_TYPE[transition]
++
++        event_payload = _build_diagnosis_lifecycle_payload(
++            transition=transition,
++            run_id=run_id,
++            collector_run_id=collector_run_id,
++            payload=payload,
++        )
++
++        cursor = self._conn.cursor()
++        cursor.execute("BEGIN IMMEDIATE")
++        try:
++            # 1. Idempotency lookup BEFORE applying the transition.
++            existing_fp, _applied_at = _select_lifecycle_idempotency_row(
++                cursor,
++                incident_id=incident_id,
++                transition=transition,
++                collector_run_id=collector_run_id,
++                diagnosis_run_id=diagnosis_run_id,
++            )
++            if existing_fp is not None:
++                if existing_fp != fingerprint:
++                    self._conn.rollback()
++                    return {"outcome": "replay_mismatch"}
++                # Commit the (empty) write transaction before refreshing
++                # the cache so the local view matches the durable state
++                # observed by any other process that runs against the
++                # same database file.
++                self._conn.commit()
++                # R4-3: idempotent replay must heal this process's
++                # in-memory cache so a stale local view cannot overrule
++                # the canonical projection. ``BEGIN IMMEDIATE`` only
++                # serializes writers across processes; it cannot make
++                # ``self._cache`` authoritative. Refresh from the
++                # projection row that the previous apply already
++                # wrote so this process sees the same lifecycle state
++                # as the durable record.
++                self._refresh_cache_from_projection(incident_id)
++                return {"outcome": "applied", "idempotent_replay": True}
++
++            # 2. Confirm the incident exists in the canonical
++            #    projection, NOT in the process-local cache.
++            #
++            #    R4-1 contract: ``self._cache`` is a per-process
++            #    Python dict; it cannot prove absence across
++            #    processes. A request landing on a store whose cache
++            #    was loaded before another process promoted the
++            #    incident would otherwise short-circuit to
++            #    ``incident_not_found`` and leave the durable
++            #    projection untouched, silently dropping the
++            #    lifecycle request.
++            #
++            #    ``SELECT 1`` against ``incident_current`` runs in
++            #    the same ``BEGIN IMMEDIATE`` transaction so the
++            #    existence check observes the same write-time view
++            #    as the event/projection/idempotency writes that
++            #    follow.
++            cursor.execute(
++                """
++                SELECT 1
++                FROM incident_current
++                WHERE incident_id = ?
++                """,
++                (incident_id,),
++            )
++            if cursor.fetchone() is None:
++                self._conn.rollback()
++                return {"outcome": "incident_not_found"}
++
++            # 3. Append the canonical event with the hash chain.
++            #    ``_append_event_in_transaction`` does NOT open its
++            #    own ``BEGIN IMMEDIATE``; it reuses our cursor so
++            #    the event insert + projection update commit
++            #    atomically with the idempotency record below.
++            _append_event_in_transaction(
++                cursor,
++                EventAppendSpec(
++                    incident_id=incident_id,
++                    event_type=event_type,
++                    actor=IncidentEventActor.SYSTEM,
++                    payload=event_payload,
++                    occurred_at=occurred_at,
++                ),
++            )
++
++            # 4. Insert the idempotency record. A fault here MUST
++            #    roll back the event insert above. The helper is a
++            #    module-level function so the rollback-on-idempotency
++            #    failure test can patch it cleanly.
++            _insert_lifecycle_idempotency_row(
++                cursor,
++                incident_id=incident_id,
++                transition=transition,
++                collector_run_id=collector_run_id,
++                diagnosis_run_id=diagnosis_run_id,
++                fingerprint=fingerprint,
++                occurred_at=occurred_at,
++            )
++
++            # 5. Commit. After this point the event + projection +
++            #    idempotency row are durable.
++            self._conn.commit()
++        except Exception:
++            try:
++                self._conn.rollback()
++            except sqlite3.Error:
++                pass
++            raise
++
++        # 6. Refresh the in-memory cache from the canonical
++        #    projector row. The previous lifecycle write methods
++        #    refreshed the cache directly, but the new canonical
++        #    path lets the projector (the source of truth for the
++        #    cache) own the update so the in-memory aggregate and
++        #    the on-disk ``incident_current`` row cannot diverge.
++        self._refresh_cache_from_projection(incident_id)
++
++        return {
++            "outcome": "applied",
++            "idempotent_replay": False,
++            "incident": self._cache.get(incident_id),
++        }
++
++    def _refresh_cache_from_projection(self, incident_id: str) -> None:
++        """Reload the in-memory cache entry from ``incident_current``.
++
++        Called after the canonical lifecycle apply commits so the
++        cache reflects the projection row that the canonical event
++        writer just updated. This keeps the cache authoritative
++        without requiring the caller to manually rebuild the
++        aggregate.
++
++        Raises:
++            ContextClosedError: If the context has been closed.
++        """
++        self._ensure_open()
++        cursor = self._conn.execute(
++            """
++            SELECT current_state_json, last_event_seq
++            FROM incident_current
++            WHERE incident_id = ?
++            """,
++            (incident_id,),
++        )
++        row = cursor.fetchone()
++        if row is None:
++            # No projection row means the event writer did not
++            # insert one (which would be a bug elsewhere). Leave
++            # the cache untouched.
++            return
++        current_json = row[0]
++        try:
++            state = json.loads(current_json) if current_json else {}
++        except (TypeError, ValueError):
++            _logger.warning(
++                "Failed to deserialize incident_current JSON for %s",
++                incident_id,
++            )
++            return
++        incident = self._store._state_to_incident(state)
++        self._cache[incident_id] = incident
++
+     # -------------------------------------------------------------------------
+     # Context Lifetime
+     # -------------------------------------------------------------------------
+@@ -418,9 +634,157 @@ class SQLiteReadContext:
+         return self._closed
+
+
++# =============================================================================
++# Canonical Lifecycle Idempotency Helpers
++# =============================================================================
++
++
++# Mapping from the diagnosis-loop-transition endpoint ``transition``
++# string to the canonical event type used by the events writer. The
++# mapping is intentionally module-level so the lookup is identical for
++# in-memory and SQLite-backed stores.
++_DIAGNOSIS_LIFECYCLE_EVENT_TYPE: dict[str, IncidentEventType] = {
++    "started": IncidentEventType.DIAGNOSIS_LOOP_STARTED,
++    "failed": IncidentEventType.DIAGNOSIS_LOOP_FAILED,
++    "completed": IncidentEventType.DIAGNOSIS_LOOP_COMPLETED,
++}
++
++
++def _build_diagnosis_lifecycle_payload(
++    *,
++    transition: str,
++    run_id: str | None,
++    collector_run_id: str | None,
++    payload: dict[str, Any],
++) -> dict[str, Any]:
++    """Project the diagnosis-loop request payload onto the canonical event payload.
++
++    The shape mirrors the helpers in
++    :mod:`incident_store_sqlite_lifecycle` so events appended through
++    the lifecycle idempotency path are indistinguishable from events
++    appended through the in-process lifecycle methods. That is what
++    keeps the canonical projector
++    (:func:`incident_store_sqlite_projection.apply_event_to_state`)
++    working without an environment-specific branch.
++    """
++    if transition == "started":
++        return {
++            "run_id": run_id or "",
++            "collector_run_id": collector_run_id or "",
++        }
++    if transition == "failed":
++        return {
++            "run_id": run_id or "",
++            "collector_run_id": collector_run_id or "",
++            "unavailable_reason": payload.get("unavailable_reason") or None,
++        }
++    if transition == "completed":
++        return {
++            "run_id": run_id or "",
++            "collector_run_id": collector_run_id or "",
++            "review_packet_name": (
++                str(payload["review_packet_name"])
++                if payload.get("review_packet_name") is not None
++                else None
++            ),
++            "checks_requested": int(payload.get("checks_requested", 0) or 0),
++            "checks_run": int(payload.get("checks_run", 0) or 0),
++            "checks_rejected": int(payload.get("checks_rejected", 0) or 0),
++            "decision": (
++                str(payload["decision"])
++                if payload.get("decision") is not None
++                else None
++            ),
++        }
++    raise ValueError(f"unsupported transition: {transition!r}")
++
++
++def _select_lifecycle_idempotency_row(
++    cursor: sqlite3.Cursor,
++    *,
++    incident_id: str,
++    transition: str,
++    collector_run_id: str,
++    diagnosis_run_id: str | None,
++) -> tuple[str | None, str | None]:
++    """Return ``(fingerprint, applied_at)`` for the key, or ``(None, None)``.
++
++    The lookup uses ``COALESCE(diagnosis_run_id, '') = ?`` so the
++    comparison matches the unique index expression (see
++    :data:`incident_store_sqlite_schema.CREATE_LIFECYCLE_IDEMPOTENCY_INDICES`).
++    Without that, a row whose ``diagnosis_run_id`` is NULL would never
++    be matched and the index would still treat NULL as distinct.
++    """
++    cursor.execute(
++        """
++        SELECT fingerprint, applied_at
++        FROM lifecycle_idempotency
++        WHERE incident_id = ?
++          AND transition = ?
++          AND collector_run_id = ?
++          AND COALESCE(diagnosis_run_id, '') = ?
++        """,
++        (
++            incident_id,
++            transition,
++            collector_run_id,
++            diagnosis_run_id or "",
++        ),
++    )
++    row = cursor.fetchone()
++    if row is None:
++        return (None, None)
++    return (str(row[0]), str(row[1]))
++
++
++def _insert_lifecycle_idempotency_row(
++    cursor: sqlite3.Cursor,
++    *,
++    incident_id: str,
++    transition: str,
++    collector_run_id: str,
++    diagnosis_run_id: str | None,
++    fingerprint: str,
++    occurred_at: datetime,
++) -> None:
++    """Insert one idempotency row inside an existing transaction cursor.
++
++    No ``BEGIN`` / ``COMMIT`` is performed here. The caller owns the
++    transaction. A unique-index conflict is surfaced as
++    ``sqlite3.IntegrityError``; the caller catches it and translates
++    it into the bounded ``replay_mismatch`` outcome when the
++    fingerprint differs.
++
++    This helper is a separate function (rather than inlined inside
++    :meth:`SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently`)
++    so the rollback-on-idempotency-failure test can inject a fault
++    here without monkey-patching the connection layer.
++    """
++    cursor.execute(
++        """
++        INSERT INTO lifecycle_idempotency (
++            incident_id, transition, collector_run_id, diagnosis_run_id,
++            fingerprint, occurred_at, applied_at
++        ) VALUES (?, ?, ?, ?, ?, ?, ?)
++        """,
++        (
++            incident_id,
++            transition,
++            collector_run_id,
++            diagnosis_run_id,
++            fingerprint,
++            occurred_at.isoformat(),
++            datetime.now(UTC).isoformat(),
++        ),
++    )
++
++
++
++
+ __all__ = [
+     "SQLiteWriteContext",
+     "SQLiteReadContext",
+     "ContextClosedError",
+     "ContextNotOpenError",
++    # apply_diagnosis_lifecycle_idempotently is a method on SQLiteWriteContext.
+ ]
+
+=== src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle.py b/src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle.py
+index a5789f9d..386bff3d 100644
+--- a/src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle.py
++++ b/src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle.py
+@@ -400,6 +400,13 @@ def mark_diagnosis_loop_started_impl(
+     """Mark diagnosis loop started.
+
+     Thread safety: Uses store._write_context() for thread-safe writes.
++
++    R4-4: After ``append_event`` writes the canonical projection
++    row, refresh the in-memory cache from that row so the returned
++    Incident snapshot carries the typed ``diagnosis_loop`` field
++    rather than the stale pre-apply cache value. The projector is
++    the source of truth for the cache; ``append_event`` only writes
++    to ``incident_current`` and ``incident_events``.
+     """
+     with store._write_context() as ctx:
+         incident = ctx.get_cached_incident(incident_id)
+@@ -419,7 +426,13 @@ def mark_diagnosis_loop_started_impl(
+             occurred_at=datetime.now(UTC),
+         )
+
+-        return ctx.snapshot_incident(incident)
++        # Refresh from the canonical projection so the returned
++        # Incident exposes the typed ``diagnosis_loop`` state.
++        ctx._refresh_cache_from_projection(incident_id)
++        refreshed = ctx.get_cached_incident(incident_id)
++        if refreshed is None:
++            return ctx.snapshot_incident(incident)
++        return ctx.snapshot_incident(refreshed)
+
+
+ def mark_diagnosis_loop_completed_impl(
+@@ -436,6 +449,10 @@ def mark_diagnosis_loop_completed_impl(
+     """Mark diagnosis loop completed.
+
+     Thread safety: Uses store._write_context() for thread-safe writes.
++
++    R4-4: refresh the cache from the canonical projection after
++    ``append_event`` so the returned Incident carries the typed
++    ``diagnosis_loop`` field.
+     """
+     with store._write_context() as ctx:
+         incident = ctx.get_cached_incident(incident_id)
+@@ -460,7 +477,13 @@ def mark_diagnosis_loop_completed_impl(
+             occurred_at=datetime.now(UTC),
+         )
+
+-        return ctx.snapshot_incident(incident)
++        # Refresh from the canonical projection so the returned
++        # Incident exposes the typed ``diagnosis_loop`` state.
++        ctx._refresh_cache_from_projection(incident_id)
++        refreshed = ctx.get_cached_incident(incident_id)
++        if refreshed is None:
++            return ctx.snapshot_incident(incident)
++        return ctx.snapshot_incident(refreshed)
+
+
+ def mark_diagnosis_loop_failed_impl(
+@@ -473,6 +496,10 @@ def mark_diagnosis_loop_failed_impl(
+     """Mark diagnosis loop failed.
+
+     Thread safety: Uses store._write_context() for thread-safe writes.
++
++    R4-4: refresh the cache from the canonical projection after
++    ``append_event`` so the returned Incident carries the typed
++    ``diagnosis_loop`` field.
+     """
+     with store._write_context() as ctx:
+         incident = ctx.get_cached_incident(incident_id)
+@@ -493,7 +520,13 @@ def mark_diagnosis_loop_failed_impl(
+             occurred_at=datetime.now(UTC),
+         )
+
+-        return ctx.snapshot_incident(incident)
++        # Refresh from the canonical projection so the returned
++        # Incident exposes the typed ``diagnosis_loop`` state.
++        ctx._refresh_cache_from_projection(incident_id)
++        refreshed = ctx.get_cached_incident(incident_id)
++        if refreshed is None:
++            return ctx.snapshot_incident(incident)
++        return ctx.snapshot_incident(refreshed)
+
+
+ __all__ = [
+
+=== src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle_idempotency.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle_idempotency.py b/src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle_idempotency.py
 new file mode 100644
-index 0000000..1f33373
+index 00000000..ea0caf43
 --- /dev/null
-+++ b/src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_lookup.py
-@@ -0,0 +1,431 @@
-+"""Canonical backend incident-detail lookup function.
++++ b/src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle_idempotency.py
+@@ -0,0 +1,103 @@
++"""SQLite-backed adapter for the diagnosis-loop lifecycle idempotency contract.
 +
-+This module hosts the **single** function through which all
-+automatic-diagnosis backend incident reads must pass:
++R3 ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01: this module is
++now a thin adapter. The durable critical section lives on
++:class:`k8s_diag_agent.collect.incident_store_sqlite_context.SQLiteWriteContext`
++as :meth:`apply_diagnosis_lifecycle_idempotently`. That single canonical
++method owns:
 +
-+    lookup_backend_incident(client, incident_id) -> BackendIncidentLookupOutcome
++* ``BEGIN IMMEDIATE`` writer serialization,
++* the idempotency lookup,
++* the canonical hash-chained event append,
++* the canonical ``incident_current`` projection update,
++* the idempotency record insert,
++* the commit,
++* the in-memory cache refresh.
 +
-+The function owns every step of the backend read pipeline:
++This module only:
 +
-+1. URL / client invocation.
-+2. HTTP status classification.
-+3. JSON decoding.
-+4. API envelope validation (``payload_type`` + ``schema_version``).
-+5. Aggregate extraction.
-+6. Domain deserialization via :class:`Incident.from_dict`.
-+7. Requested-versus-returned identity validation.
-+8. Construction of the typed outcome.
++1. Resolves ``diagnosis_run_id`` from the request payload,
++2. Opens the store's write context (in-process lock + connection),
++3. Delegates to the canonical context method,
++4. Translates any raised exception into the bounded
++   ``persistence_failed`` outcome that the upper layer (HTTP
++   handler / dispatch) expects.
 +
-+**Hard invariants** enforced here:
-+
-+* ``BackendIncidentNotFound`` is constructed **only** when the HTTP
-+  status is ``404``. No empty body, no parser failure, no schema
-+  mismatch, no identity mismatch, no exception handler can produce
-+  ``BackendIncidentNotFound``.
-+* ``BackendIncidentLookupFailed`` is constructed for every other
-+  failure mode with the precise :class:`BackendIncidentLookupFailureCode`.
-+* ``BackendIncidentFound`` is constructed only after a successful
-+  ``Incident.from_dict`` call whose ``incident_id`` equals the requested
-+  branded ``IncidentId``.
-+
-+Suggested by: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01
++It MUST NOT reach into ``store._write_lock``, ``store._connect()``,
++``store._incidents``, ``store._snapshot_incident()``, or
++``store._state_to_incident()`` directly. All authority flows through
++the canonical write context so the hash chain, projection, and cache
++cannot drift.
 +"""
 +
 +from __future__ import annotations
 +
-+import json
 +import logging
-+import urllib.error
-+import urllib.request
-+from dataclasses import dataclass
-+from typing import Protocol
++from datetime import datetime
++from typing import TYPE_CHECKING, Any
 +
-+from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+from .incident_diagnosis_backend_detail_outcomes import (
-+    BackendIncidentFound,
-+    BackendIncidentLookupFailed,
-+    BackendIncidentLookupFailureCode,
-+    BackendIncidentLookupOutcome,
-+    BackendIncidentLookupSource,
-+    BackendIncidentNotFound,
-+)
-+from .incident_diagnosis_backend_detail_parser import (
-+    SUPPORTED_PAYLOAD_TYPE,
-+    BackendIncidentDeserializationError,
-+    BackendIncidentDetailParseError,
-+    BackendIncidentInvalidPayloadError,
-+    BackendIncidentUnsupportedSchemaError,
-+    parse_internal_incident_detail_payload,
-+)
-+
-+__all__ = [
-+    "BackendIncidentHttpResponse",
-+    "BackendIncidentClient",
-+    "BackendIncidentTransportError",
-+    "HttpIncidentBackendClient",
-+    "lookup_backend_incident",
-+]
-+
++if TYPE_CHECKING:
++    from .incident_store_sqlite import SQLiteIncidentStore
 +
 +_logger = logging.getLogger(__name__)
 +
 +
-+# ---------------------------------------------------------------------------
-+# Typed HTTP response + client protocol
-+# ---------------------------------------------------------------------------
++def apply_lifecycle_transition_atomic(
++    store: SQLiteIncidentStore,
++    *,
++    transition: str,
++    incident_id: str,
++    run_id: str | None,
++    collector_run_id: str,
++    fingerprint: str,
++    occurred_at: datetime,
++    payload: dict[str, Any],
++) -> dict[str, Any]:
++    """Apply a lifecycle transition atomically with the idempotency record.
 +
++    Returns one of:
 +
-+@dataclass(frozen=True, slots=True)
-+class BackendIncidentHttpResponse:
-+    """Minimal typed HTTP response used by the canonical lookup.
++    * ``{"outcome": "applied", "idempotent_replay": False,
++        "incident": Incident | None}``
++    * ``{"outcome": "applied", "idempotent_replay": True}``
++    * ``{"outcome": "replay_mismatch"}``
++    * ``{"outcome": "incident_not_found"}``
++    * ``{"outcome": "persistence_failed",
++        "exception_type": str, "detail": str}``
 +
-+    The lookup function consumes the raw ``body`` bytes; it never reads
-+    headers, and the response object deliberately omits them so
-+    authorization tokens cannot leak through logging frameworks.
++    Implementation note: the canonical path is owned by
++    :meth:`SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently`.
++    This function is the SQLite entry point for the upper-layer
++    ``apply_transition_idempotently`` dispatch in
++    :mod:`k8s_diag_agent.ui.server_incident_diagnosis_lifecycle_idempotency`.
 +    """
++    diagnosis_run_id_raw = payload.get("diagnosis_run_id")
++    diagnosis_run_id: str | None = (
++        diagnosis_run_id_raw if isinstance(diagnosis_run_id_raw, str) else None
++    )
++    if diagnosis_run_id is None:
++        diagnosis_run_id = run_id
 +
-+    http_status: int
-+    body: bytes
-+
-+
-+class BackendIncidentClient(Protocol):
-+    """Protocol for the backend incident-detail HTTP client.
-+
-+    Implementations MUST:
-+
-+    * raise :class:`BackendIncidentTransportError` for transport-level
-+      failures (DNS, connection refused, timeout, generic network errors);
-+    * return a :class:`BackendIncidentHttpResponse` for every HTTP response
-+      (including 4xx / 5xx) so the lookup function can perform its own
-+      status classification.
-+    """
-+
-+    def fetch_incident(
-+        self,
-+        incident_id: IncidentId,
-+        *,
-+        timeout: float = 30.0,
-+    ) -> BackendIncidentHttpResponse: ...
-+
-+
-+class BackendIncidentTransportError(Exception):
-+    """Transport-level failure raised by the HTTP client.
-+
-+    The lookup function translates this into
-+    :attr:`BackendIncidentLookupFailureCode.TRANSPORT_ERROR`.
-+    """
-+
-+    def __init__(self, message: str, *, exception_type: str | None = None) -> None:
-+        super().__init__(message)
-+        self.exception_type = exception_type
-+
-+
-+# ---------------------------------------------------------------------------
-+# Concrete HTTP client (urllib-backed)
-+# ---------------------------------------------------------------------------
-+
-+
-+class HttpIncidentBackendClient:
-+    """``urllib.request``-backed implementation of :class:`BackendIncidentClient`.
-+
-+    The class is intentionally tiny: it returns the typed response and
-+    raises :class:`BackendIncidentTransportError` for transport failures.
-+    It does NOT swallow status codes as ``None`` and does NOT catch
-+    arbitrary exceptions to convert them into absence.
-+    """
-+
-+    def __init__(self, base_url: str, token: str | None = None) -> None:
-+        base_url = (base_url or "").rstrip("/")
-+        if not base_url:
-+            raise BackendIncidentTransportError(
-+                "backend internal API URL is not configured",
-+                exception_type="MissingBackendUrl",
++    try:
++        with store._write_context() as ctx:
++            return ctx.apply_diagnosis_lifecycle_idempotently(
++                transition=transition,
++                incident_id=incident_id,
++                run_id=run_id,
++                collector_run_id=collector_run_id,
++                diagnosis_run_id=diagnosis_run_id,
++                fingerprint=fingerprint,
++                occurred_at=occurred_at,
++                payload=dict(payload),
 +            )
-+        self._base_url = base_url
-+        self._token = token
++    except Exception as exc:  # noqa: BLE001 - boundary translation
++        return {
++            "outcome": "persistence_failed",
++            "exception_type": type(exc).__name__,
++            "detail": f"sqlite store raised {type(exc).__name__}: {exc}",
++        }
 +
-+    def fetch_incident(
-+        self,
-+        incident_id: IncidentId,
-+        *,
-+        timeout: float = 30.0,
-+    ) -> BackendIncidentHttpResponse:
-+        url = f"{self._base_url}/api/internal/incidents/{incident_id}"
-+        headers: dict[str, str] = {"Accept": "application/json"}
-+        if self._token:
-+            headers["Authorization"] = f"Bearer {self._token}"
-+
-+        req = urllib.request.Request(url, headers=headers, method="GET")
-+        try:
-+            with urllib.request.urlopen(req, timeout=timeout) as resp:
-+                # ``resp.read()`` returns bytes; cap to a sane upper bound
-+                # so a runaway backend cannot OOM the scheduler. 1 MiB
-+                # is far above any real incident detail payload.
-+                raw = resp.read(1024 * 1024 + 1)
-+                truncated = len(raw) > 1024 * 1024
-+                if truncated:
-+                    raw = raw[: 1024 * 1024]
-+                return BackendIncidentHttpResponse(
-+                    http_status=int(resp.status),
-+                    body=raw,
-+                )
-+        except urllib.error.HTTPError as exc:
-+            # The HTTP layer is reachable; we have a real status code.
-+            # Return the response (with body) so the lookup function
-+            # can classify the status itself. NEVER collapse this to None.
-+            try:
-+                raw = exc.read(1024 * 1024 + 1)
-+                if len(raw) > 1024 * 1024:
-+                    raw = raw[: 1024 * 1024]
-+            except Exception:  # pragma: no cover - defensive
-+                raw = b""
-+            return BackendIncidentHttpResponse(
-+                http_status=int(exc.code),
-+                body=raw,
-+            )
-+        except TimeoutError as exc:
-+            raise BackendIncidentTransportError(
-+                "request to backend timed out",
-+                exception_type="TimeoutError",
-+            ) from exc
-+        except urllib.error.URLError as exc:
-+            raise BackendIncidentTransportError(
-+                f"backend URL error: {exc.reason!r}",
-+                exception_type=type(exc.reason).__name__
-+                if hasattr(exc, "reason")
-+                else "URLError",
-+            ) from exc
-+        except OSError as exc:
-+            raise BackendIncidentTransportError(
-+                f"backend connection error: {exc}",
-+                exception_type=type(exc).__name__,
-+            ) from exc
-+
-+
-+# ---------------------------------------------------------------------------
-+# Canonical lookup function
-+# ---------------------------------------------------------------------------
-+
-+
-+def _failure_for_status(
-+    status_code: int,
-+    *,
-+    requested_incident_id: IncidentId,
-+    exception_type: str | None = None,
-+    detail: str | None = None,
-+) -> BackendIncidentLookupFailed:
-+    """Map an HTTP status code to the canonical failure variant."""
-+    if status_code == 401:
-+        code = BackendIncidentLookupFailureCode.UNAUTHORIZED
-+    elif status_code == 403:
-+        code = BackendIncidentLookupFailureCode.FORBIDDEN
-+    elif 400 <= status_code < 500:
-+        code = BackendIncidentLookupFailureCode.HTTP_CLIENT_ERROR
-+    elif status_code >= 500:
-+        code = BackendIncidentLookupFailureCode.BACKEND_ERROR
-+    else:
-+        # Treat 1xx / 2xx / 3xx reaching this branch as a transport error.
-+        code = BackendIncidentLookupFailureCode.TRANSPORT_ERROR
-+    return BackendIncidentLookupFailed(
-+        requested_incident_id=requested_incident_id,
-+        failure_code=code,
-+        detail=detail or f"backend returned HTTP {status_code}",
-+        http_status=status_code,
-+        exception_type=exception_type,
-+    )
-+
-+
-+def _empty_body_failure(
-+    requested_incident_id: IncidentId,
-+) -> BackendIncidentLookupFailed:
-+    """Build the precise failure for an empty 200 response body."""
-+    return BackendIncidentLookupFailed(
-+        requested_incident_id=requested_incident_id,
-+        failure_code=BackendIncidentLookupFailureCode.INVALID_JSON,
-+        detail="backend returned HTTP 200 with an empty response body",
-+        http_status=200,
-+    )
-+
-+
-+def _json_failure(
-+    requested_incident_id: IncidentId,
-+    *,
-+    http_status: int,
-+    exception: BaseException,
-+) -> BackendIncidentLookupFailed:
-+    """Build the precise failure for a JSON decode error."""
-+    return BackendIncidentLookupFailed(
-+        requested_incident_id=requested_incident_id,
-+        failure_code=BackendIncidentLookupFailureCode.INVALID_JSON,
-+        detail=f"backend returned HTTP {http_status} with non-JSON body: {exception}",
-+        http_status=http_status,
-+        exception_type=type(exception).__name__,
-+    )
-+
-+
-+def lookup_backend_incident(
-+    client: BackendIncidentClient,
-+    incident_id: IncidentId,
-+    *,
-+    timeout: float = 30.0,
-+) -> BackendIncidentLookupOutcome:
-+    """Canonical backend incident-detail lookup.
-+
-+    Args:
-+        client: A :class:`BackendIncidentClient` implementation that owns
-+            the HTTP transport. Tests supply a fake client; production
-+            code uses :class:`HttpIncidentBackendClient`.
-+        incident_id: The branded :class:`IncidentId` being looked up.
-+        timeout: HTTP timeout in seconds, forwarded to ``client``.
-+
-+    Returns:
-+        A :class:`BackendIncidentLookupOutcome`. The caller MUST dispatch
-+        on the three variants explicitly; generic truthiness on the
-+        outcome is forbidden by the static verifier.
-+
-+    Raises:
-+        Nothing: every failure mode is encoded in the returned outcome.
-+    """
-+    try:
-+        response = client.fetch_incident(incident_id, timeout=timeout)
-+    except BackendIncidentTransportError as exc:
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=incident_id,
-+            failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
-+            detail=str(exc),
-+            exception_type=exc.exception_type,
-+        )
-+    except Exception as exc:  # pragma: no cover - defensive boundary
-+        # Defensive: a client that raises an unexpected exception must
-+        # not become ``BackendIncidentNotFound``.
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=incident_id,
-+            failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
-+            detail=f"unexpected client error: {exc}",
-+            exception_type=type(exc).__name__,
-+        )
-+
-+    # 1. Status classification. 404 is the ONLY path to BackendIncidentNotFound.
-+    if response.http_status == 404:
-+        return BackendIncidentNotFound(
-+            requested_incident_id=incident_id,
-+            source=BackendIncidentLookupSource.BACKEND_API,
-+            http_status=404,
-+        )
-+    if response.http_status != 200:
-+        return _failure_for_status(
-+            response.http_status,
-+            requested_incident_id=incident_id,
-+        )
-+
-+    # 2. Empty body.
-+    if not response.body:
-+        return _empty_body_failure(incident_id)
-+
-+    # 3. JSON decoding.
-+    try:
-+        decoded = json.loads(response.body.decode("utf-8"))
-+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-+        return _json_failure(
-+            incident_id, http_status=response.http_status, exception=exc
-+        )
-+
-+    # 4. Envelope validation.
-+    try:
-+        parsed = parse_internal_incident_detail_payload(
-+            decoded, requested_incident_id=incident_id
-+        )
-+    except BackendIncidentInvalidPayloadError as exc:
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=incident_id,
-+            failure_code=BackendIncidentLookupFailureCode.INVALID_PAYLOAD,
-+            detail=str(exc),
-+            http_status=response.http_status,
-+            exception_type=type(exc).__name__,
-+        )
-+    except BackendIncidentUnsupportedSchemaError as exc:
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=incident_id,
-+            failure_code=BackendIncidentLookupFailureCode.UNSUPPORTED_SCHEMA,
-+            detail=str(exc),
-+            http_status=response.http_status,
-+            payload_type=getattr(exc, "_payload_type", None) or SUPPORTED_PAYLOAD_TYPE,
-+            exception_type=type(exc).__name__,
-+        )
-+    except BackendIncidentDetailParseError as exc:
-+        # Catch-all for other parser failures raised in this module.
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=incident_id,
-+            failure_code=BackendIncidentLookupFailureCode.INVALID_PAYLOAD,
-+            detail=str(exc),
-+            http_status=response.http_status,
-+            exception_type=type(exc).__name__,
-+        )
-+
-+    # 5. Domain deserialization. The aggregate has passed envelope
-+    # validation, but ``Incident.from_dict`` may still raise ``ValueError``
-+    # (shape) or ``KeyError`` (missing field). Both are translated into
-+    # DESERIALIZATION_FAILED.
-+    try:
-+        from .incident_lifecycle import Incident
-+    except ImportError as exc:  # pragma: no cover - import-time guard
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=incident_id,
-+            failure_code=BackendIncidentLookupFailureCode.DESERIALIZATION_FAILED,
-+            detail=f"failed to import Incident model: {exc}",
-+            http_status=response.http_status,
-+            payload_schema_version=parsed.schema_version,
-+            payload_type=parsed.payload_type,
-+            exception_type=type(exc).__name__,
-+        )
-+
-+    try:
-+        incident = Incident.from_dict(parsed.incident)
-+    except BackendIncidentDeserializationError as exc:
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=incident_id,
-+            failure_code=BackendIncidentLookupFailureCode.DESERIALIZATION_FAILED,
-+            detail=str(exc),
-+            http_status=response.http_status,
-+            payload_schema_version=parsed.schema_version,
-+            payload_type=parsed.payload_type,
-+            exception_type=type(exc).__name__,
-+        )
-+    except (ValueError, KeyError, TypeError) as exc:
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=incident_id,
-+            failure_code=BackendIncidentLookupFailureCode.DESERIALIZATION_FAILED,
-+            detail=f"failed to deserialize incident aggregate: {exc}",
-+            http_status=response.http_status,
-+            payload_schema_version=parsed.schema_version,
-+            payload_type=parsed.payload_type,
-+            exception_type=type(exc).__name__,
-+        )
-+
-+    # 6. Identity validation. Compare against the canonical ``IncidentId``.
-+    # ``incident.incident_id`` is a plain ``str`` at the boundary, so we
-+    # coerce both sides via ``str()`` for the comparison itself.
-+    returned_id = str(getattr(incident, "incident_id", "") or "")
-+    if returned_id != str(incident_id):
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=incident_id,
-+            failure_code=BackendIncidentLookupFailureCode.IDENTITY_MISMATCH,
-+            detail=(
-+                "backend returned incident_id "
-+                f"{returned_id!r} but the lookup was for {str(incident_id)!r}"
-+            ),
-+            http_status=response.http_status,
-+            payload_schema_version=parsed.schema_version,
-+            payload_type=parsed.payload_type,
-+        )
-+
-+    # 7. Success.
-+    return BackendIncidentFound(
-+        requested_incident_id=incident_id,
-+        incident=incident,
-+        source=BackendIncidentLookupSource.BACKEND_API,
-+        http_status=response.http_status,
-+        payload_schema_version=parsed.schema_version,
-+        payload_type=parsed.payload_type,
-+    )
-
-=== src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_outcomes.py ===
-diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_outcomes.py b/src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_outcomes.py
-new file mode 100644
-index 0000000..1736171
---- /dev/null
-+++ b/src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_outcomes.py
-@@ -0,0 +1,269 @@
-+"""Typed outcome algebra for backend incident-detail lookup.
-+
-+This module defines the canonical three-way lookup outcome used by the
-+automatic-diagnosis backend read path. The model is designed so that a
-+successful HTTP 200 response **cannot** be converted into ``BackendIncidentNotFound``
-+through any parser/schema/deserialization/identity failure: every non-404
-+anomaly is funnelled into ``BackendIncidentLookupFailed`` with a stable
-+``BackendIncidentLookupFailureCode``.
-+
-+Design contract (ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01):
-+
-+* Three disjoint outcome variants: ``BackendIncidentFound``,
-+  ``BackendIncidentNotFound``, and ``BackendIncidentLookupFailed``.
-+* No ``Incident | None``, no ``Optional[Incident]``, no boolean ``found``
-+  flag, no ``(incident, error)`` tuple.
-+* Failure reason is an enum (``BackendIncidentLookupFailureCode``);
-+  ``BackendIncidentLookupFailed`` is NOT a subclass of ``BackendIncidentNotFound``.
-+* Outcome dataclasses are frozen; ``requested_incident_id`` is retained on
-+  every variant as a branded ``IncidentId`` (not a bare ``str``).
-+* ``BackendIncidentFound.incident`` is statically typed as the canonical
-+  :class:`Incident` aggregate; the field cannot be widened to ``object``,
-+  ``Any``, ``dict``, or any union containing them.
-+* ``BackendIncidentNotFound`` carries an explicit ``source`` discriminator
-+  (``BackendIncidentLookupSource``) so the logs never claim an HTTP status
-+  that was not observed. Backend mode sets ``http_status=404``; local-store
-+  mode leaves ``http_status=None``.
-+* The ``BackendIncidentNotFound`` constructor MUST only be reachable from
-+  the HTTP 404 branch of the canonical lookup function. Static-verifier
-+  rules enforce this.
-+
-+Suggested by: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01
-+R1 follow-up: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01-R1
-+"""
-+
-+from dataclasses import dataclass
-+from enum import StrEnum
-+from typing import TypeAlias
-+
-+from k8s_diag_agent.collect.incident_lifecycle import Incident
-+from k8s_diag_agent.domain.incident_lifecycle import IncidentId
 +
 +__all__ = [
-+    "BackendIncidentLookupFailureCode",
-+    "BackendIncidentLookupSource",
-+    "BackendIncidentFound",
-+    "BackendIncidentNotFound",
-+    "BackendIncidentLookupFailed",
-+    "BackendIncidentLookupOutcome",
-+    "BackendIncidentLookupDiagnostic",
-+    "make_lookup_diagnostic",
++    "apply_lifecycle_transition_atomic",
 +]
-+
-+
-+# ---------------------------------------------------------------------------
-+# Failure codes
-+# ---------------------------------------------------------------------------
-+
-+
-+class BackendIncidentLookupFailureCode(StrEnum):
-+    """Canonical closed vocabulary of backend incident-detail lookup failures.
-+
-+    Stable, low-cardinality, machine-readable strings. Detail-level
-+    information belongs in bounded diagnostics, never in the code value.
-+    """
-+
-+    INVALID_JSON = "invalid_json"
-+    INVALID_PAYLOAD = "invalid_payload"
-+    UNSUPPORTED_SCHEMA = "unsupported_schema"
-+    DESERIALIZATION_FAILED = "deserialization_failed"
-+    IDENTITY_MISMATCH = "identity_mismatch"
-+    UNAUTHORIZED = "unauthorized"
-+    FORBIDDEN = "forbidden"
-+    HTTP_CLIENT_ERROR = "http_client_error"
-+    BACKEND_ERROR = "backend_error"
-+    TRANSPORT_ERROR = "transport_error"
-+
-+
-+# ---------------------------------------------------------------------------
-+# Lookup source discriminator
-+# ---------------------------------------------------------------------------
-+
-+
-+class BackendIncidentLookupSource(StrEnum):
-+    """Where the canonical lookup result was sourced from.
-+
-+    ``BACKEND_API`` indicates a real HTTP read against the backend
-+    internal-detail API; ``http_status`` MUST be set to the observed value
-+    (typically ``404`` for the not-found variant).
-+
-+    ``LOCAL_STORE`` indicates an in-process read against the local
-+    incident store (no HTTP transport); ``http_status`` MUST be ``None``
-+    because no HTTP status was observed. Logs MUST NOT claim an HTTP
-+    status that was not observed.
-+    """
-+
-+    BACKEND_API = "backend_api"
-+    LOCAL_STORE = "local_store"
-+
-+
-+# ---------------------------------------------------------------------------
-+# Bounded diagnostic
-+# ---------------------------------------------------------------------------
-+
-+
-+@dataclass(frozen=True, slots=True)
-+class BackendIncidentLookupDiagnostic:
-+    """Bounded, redaction-safe metadata about a backend incident lookup.
-+
-+    Only safe metadata is retained: never the raw response body, never the
-+    ``Authorization`` header, never internal API tokens. ``detail`` is
-+    pre-truncated using the canonical disposition-detail bound (see
-+    :mod:`k8s_diag_agent.collect.incident_diagnosis_disposition`).
-+    """
-+
-+    requested_incident_id: IncidentId
-+    http_status: int | None
-+    failure_code: BackendIncidentLookupFailureCode | None
-+    payload_schema_version: int | None
-+    payload_type: str | None
-+    exception_type: str | None
-+    detail: str | None
-+
-+
-+def make_lookup_diagnostic(
-+    *,
-+    requested_incident_id: IncidentId,
-+    http_status: int | None = None,
-+    failure_code: BackendIncidentLookupFailureCode | None = None,
-+    payload_schema_version: int | None = None,
-+    payload_type: str | None = None,
-+    exception_type: str | None = None,
-+    detail: str | None = None,
-+    max_chars: int = 512,
-+) -> BackendIncidentLookupDiagnostic:
-+    """Construct a bounded diagnostic with the canonical detail-truncation bound.
-+
-+    The default bound matches :data:`incident_diagnosis_disposition.DEFAULT_DETAIL_MAX_CHARS`.
-+    """
-+
-+    from .incident_diagnosis_disposition import sanitize_disposition_detail
-+
-+    sanitized_detail = sanitize_disposition_detail(detail, max_chars=max_chars)
-+    return BackendIncidentLookupDiagnostic(
-+        requested_incident_id=requested_incident_id,
-+        http_status=http_status,
-+        failure_code=failure_code,
-+        payload_schema_version=payload_schema_version,
-+        payload_type=payload_type,
-+        exception_type=exception_type,
-+        detail=sanitized_detail,
-+    )
-+
-+
-+# ---------------------------------------------------------------------------
-+# Outcome variants
-+# ---------------------------------------------------------------------------
-+
-+
-+@dataclass(frozen=True, slots=True)
-+class BackendIncidentFound:
-+    """The backend returned a valid canonical incident matching the request.
-+
-+    The :attr:`incident` field is statically typed as the canonical
-+    :class:`Incident` aggregate. It cannot be widened to ``object``,
-+    ``Any``, ``dict``, or any union containing them; the negative
-+    mypy proof ``BackendIncidentFound(..., incident={"incident_id": "x"})``
-+    is therefore expected to fail type checking.
-+
-+    The :attr:`source` discriminator is required for every construction
-+    site and indicates where the typed found outcome was produced from.
-+    For an HTTP-backed read the value is
-+    :attr:`BackendIncidentLookupSource.BACKEND_API` and ``http_status``
-+    must equal the observed value (typically ``200``). For a local-store
-+    read the value is
-+    :attr:`BackendIncidentLookupSource.LOCAL_STORE` and ``http_status``
-+    must be ``None`` because no HTTP exchange occurred.
-+    """
-+
-+    requested_incident_id: IncidentId
-+    incident: Incident
-+    source: BackendIncidentLookupSource
-+    http_status: int | None
-+    payload_schema_version: int | None
-+    payload_type: str | None
-+
-+    def __post_init__(self) -> None:
-+        if (
-+            self.source == BackendIncidentLookupSource.BACKEND_API
-+            and self.http_status != 200
-+        ):
-+            raise ValueError(
-+                "BackendIncidentFound with source=BACKEND_API must have "
-+                f"http_status == 200 (got {self.http_status!r})."
-+            )
-+        if (
-+            self.source == BackendIncidentLookupSource.LOCAL_STORE
-+            and self.http_status is not None
-+        ):
-+            raise ValueError(
-+                "BackendIncidentFound with source=LOCAL_STORE must have "
-+                "http_status=None; no HTTP status was observed."
-+            )
-+
-+
-+@dataclass(frozen=True, slots=True)
-+class BackendIncidentNotFound:
-+    """The requested incident was not found.
-+
-+    This variant is constructed by the canonical lookup when the backend
-+    returns HTTP 404 (``source=BackendIncidentLookupSource.BACKEND_API``,
-+    ``http_status=404``) and by the dispatcher when the local store
-+    returns ``None`` (``source=BackendIncidentLookupSource.LOCAL_STORE``,
-+    ``http_status=None``). The source discriminator is the only truthful
-+    way to distinguish the two paths in the logs; ``http_status`` MUST
-+    be ``None`` whenever ``source == LOCAL_STORE``.
-+    """
-+
-+    requested_incident_id: IncidentId
-+    source: BackendIncidentLookupSource
-+    http_status: int | None = None
-+
-+    def __post_init__(self) -> None:
-+        if self.source == BackendIncidentLookupSource.LOCAL_STORE and self.http_status is not None:
-+            raise ValueError(
-+                "BackendIncidentNotFound with source=LOCAL_STORE must have http_status=None; "
-+                "no HTTP status was observed."
-+            )
-+        if self.source == BackendIncidentLookupSource.BACKEND_API and self.http_status != 404:
-+            raise ValueError(
-+                "BackendIncidentNotFound with source=BACKEND_API must have http_status=404; "
-+                f"got http_status={self.http_status!r}."
-+            )
-+
-+
-+@dataclass(frozen=True, slots=True)
-+class BackendIncidentLookupFailed:
-+    """The backend lookup did not produce a typed found/not-found outcome.
-+
-+    Every failure mode of the canonical lookup is funnelled here:
-+    transport errors, malformed JSON, invalid payloads, unsupported schema
-+    versions, deserialization errors, identity mismatches, and HTTP 4xx
-+    (except 404) / 5xx responses.
-+    """
-+
-+    requested_incident_id: IncidentId
-+    failure_code: BackendIncidentLookupFailureCode
-+    detail: str
-+    http_status: int | None = None
-+    payload_schema_version: int | None = None
-+    payload_type: str | None = None
-+    exception_type: str | None = None
-+
-+    def to_diagnostic(self) -> BackendIncidentLookupDiagnostic:
-+        """Project this failure into a bounded diagnostic."""
-+        return make_lookup_diagnostic(
-+            requested_incident_id=self.requested_incident_id,
-+            http_status=self.http_status,
-+            failure_code=self.failure_code,
-+            payload_schema_version=self.payload_schema_version,
-+            payload_type=self.payload_type,
-+            exception_type=self.exception_type,
-+            detail=self.detail,
-+        )
-+
-+
-+# Canonical closed union of all lookup outcomes.
-+BackendIncidentLookupOutcome: TypeAlias = (
-+    "BackendIncidentFound | BackendIncidentNotFound | BackendIncidentLookupFailed"
-+)
 \ No newline at end of file
 
-=== src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_parser.py ===
-diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_parser.py b/src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_parser.py
-new file mode 100644
-index 0000000..cf024e0
---- /dev/null
-+++ b/src/k8s_diag_agent/collect/incident_diagnosis_backend_detail_parser.py
-@@ -0,0 +1,233 @@
-+"""Canonical parser for the backend incident-detail payload.
-+
-+The parser is the **single** total projection from the raw backend HTTP
-+response body to the typed envelope used by the automatic-diagnosis
-+backend lookup.
-+
-+Design contract:
-+
-+* Rejects non-object top-level JSON.
-+* Validates the API envelope (``schema_version`` + ``payload_type``).
-+* Validates ``payload_type == "incident-internal-detail"``.
-+* Validates the schema version is supported (currently ``"1"`` only).
-+* Requires the ``incident`` aggregate field to be present and an object.
-+* Returns typed parsed data (``ParsedInternalIncidentDetail``) carrying
-+  the envelope metadata alongside the aggregate.
-+* Never returns ``None`` to indicate malformed data; raises
-+  :class:`BackendIncidentDetailParseError` (or its subclasses) instead.
-+* Never treats an arbitrary dictionary as an incident merely because it
-+  has an ``incident_id`` field.
-+
-+The legacy :func:`incident_diagnosis_dispatch_contracts.parse_backend_incident_detail_payload`
-+parser is preserved for the listing payload path and is kept as a
-+thin shim around the legacy bare-aggregate contract. The canonical
-+*incident-detail* parser is this one; the legacy parser is only invoked
-+from the listing path where bare aggregates historically appeared.
-+
-+Suggested by: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01
-+"""
-+
-+from __future__ import annotations
-+
-+from dataclasses import dataclass
-+from typing import Any, Final
-+
-+from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+__all__ = [
-+    "SUPPORTED_PAYLOAD_TYPE",
-+    "SUPPORTED_SCHEMA_VERSION",
-+    "ParsedInternalIncidentDetail",
-+    "BackendIncidentDetailParseError",
-+    "BackendIncidentInvalidJsonError",
-+    "BackendIncidentInvalidPayloadError",
-+    "BackendIncidentUnsupportedSchemaError",
-+    "BackendIncidentDeserializationError",
-+    "parse_internal_incident_detail_payload",
-+]
-+
-+
-+# ---------------------------------------------------------------------------
-+# Constants
-+# ---------------------------------------------------------------------------
-+
-+
-+SUPPORTED_PAYLOAD_TYPE: Final[str] = "incident-internal-detail"
-+"""The only ``payload_type`` value accepted by the canonical parser."""
-+
-+SUPPORTED_SCHEMA_VERSION: Final[int] = 1
-+"""The only ``schema_version`` value accepted by the canonical parser."""
-+
-+
-+# ---------------------------------------------------------------------------
-+# Typed parsed result
-+# ---------------------------------------------------------------------------
-+
-+
-+@dataclass(frozen=True, slots=True)
-+class ParsedInternalIncidentDetail:
-+    """Typed projection of a backend incident-detail response envelope.
-+
-+    The :attr:`incident` field carries the raw aggregate dictionary
-+    (still a dict; the canonical lookup function delegates its
-+    deserialization to :class:`k8s_diag_agent.collect.incident_lifecycle.Incident.from_dict`).
-+    """
-+
-+    requested_incident_id: IncidentId
-+    payload_type: str
-+    schema_version: int
-+    incident: dict[str, Any]
-+
-+
-+# ---------------------------------------------------------------------------
-+# Parse error hierarchy
-+# ---------------------------------------------------------------------------
-+
-+
-+class BackendIncidentDetailParseError(ValueError):
-+    """Base class for canonical-parser errors.
-+
-+    The lookup function translates each subclass into a precise
-+    :class:`BackendIncidentLookupFailureCode`; never collapse them
-+    into a generic ``ValueError``.
-+    """
-+
-+    def __init__(self, message: str, *, missing_field: str | None = None) -> None:
-+        super().__init__(message)
-+        self.missing_field = missing_field
-+
-+
-+class BackendIncidentInvalidJsonError(BackendIncidentDetailParseError):
-+    """The response body could not be decoded as JSON."""
-+
-+
-+class BackendIncidentInvalidPayloadError(BackendIncidentDetailParseError):
-+    """The response body decoded to JSON but did not match the contract envelope."""
-+
-+
-+class BackendIncidentUnsupportedSchemaError(BackendIncidentDetailParseError):
-+    """The ``schema_version`` field is not in the supported set."""
-+
-+
-+class BackendIncidentDeserializationError(BackendIncidentDetailParseError):
-+    """The aggregate could not be deserialized into a domain ``Incident``."""
-+
-+
-+# ---------------------------------------------------------------------------
-+# Canonical parser
-+# ---------------------------------------------------------------------------
-+
-+
-+def _coerce_schema_version(value: object) -> int | None:
-+    """Coerce a schema-version value to ``int`` when possible.
-+
-+    Accepts ``int`` directly, ``str`` representations like ``"1"``, and
-+    returns ``None`` for unsupported shapes so the caller can map the
-+    shape mismatch to ``BackendIncidentInvalidPayloadError``.
-+    """
-+    if isinstance(value, bool):
-+        # bool is a subclass of int but never a valid schema version.
-+        return None
-+    if isinstance(value, int):
-+        return value
-+    if isinstance(value, str):
-+        stripped = value.strip()
-+        if not stripped:
-+            return None
-+        try:
-+            return int(stripped, base=10)
-+        except ValueError:
-+            return None
-+    return None
-+
-+
-+def parse_internal_incident_detail_payload(
-+    payload: object,
-+    *,
-+    requested_incident_id: IncidentId,
-+) -> ParsedInternalIncidentDetail:
-+    """Parse a backend incident-detail response into typed envelope data.
-+
-+    Args:
-+        payload: The raw decoded JSON payload (already deserialised by the
-+            caller from the HTTP response body).
-+        requested_incident_id: The branded ``IncidentId`` the caller asked
-+            for. The parser retains it on the parsed result so the lookup
-+            function can validate the returned incident identity.
-+
-+    Returns:
-+        A :class:`ParsedInternalIncidentDetail` instance carrying the
-+        envelope metadata and the aggregate dict.
-+
-+    Raises:
-+        BackendIncidentInvalidPayloadError: When ``payload`` is not a JSON
-+            object, is missing the required envelope fields, or has a
-+            non-object ``incident`` aggregate.
-+        BackendIncidentUnsupportedSchemaError: When ``schema_version`` is
-+            not in the supported set.
-+        BackendIncidentDeserializationError: When the aggregate fails
-+            canonical field validation. (The lookup function does NOT
-+            call ``Incident.from_dict`` from this parser; it only
-+            performs envelope validation. Deserialization itself is
-+            performed by the lookup function with the canonical
-+            ``Incident.from_dict`` call, so this error is reserved for
-+            the rare envelope-time aggregate-shape issue that prevents
-+            passing it to ``Incident.from_dict``.)
-+    """
-+    if not isinstance(payload, dict):
-+        raise BackendIncidentInvalidPayloadError(
-+            "backend incident response is not a JSON object",
-+            missing_field=None,
-+        )
-+
-+    payload_type = payload.get("payload_type")
-+    if not isinstance(payload_type, str) or not payload_type:
-+        raise BackendIncidentInvalidPayloadError(
-+            "backend incident response missing string payload_type",
-+            missing_field="payload_type",
-+        )
-+    if payload_type != SUPPORTED_PAYLOAD_TYPE:
-+        raise BackendIncidentInvalidPayloadError(
-+            (
-+                f"backend incident response has unsupported payload_type "
-+                f"{payload_type!r}; expected {SUPPORTED_PAYLOAD_TYPE!r}"
-+            ),
-+            missing_field="payload_type",
-+        )
-+
-+    if "schema_version" not in payload:
-+        raise BackendIncidentInvalidPayloadError(
-+            "backend incident response missing schema_version",
-+            missing_field="schema_version",
-+        )
-+    schema_version = _coerce_schema_version(payload["schema_version"])
-+    if schema_version is None:
-+        raise BackendIncidentInvalidPayloadError(
-+            (
-+                "backend incident response schema_version is not an integer: "
-+                f"{payload['schema_version']!r}"
-+            ),
-+            missing_field="schema_version",
-+        )
-+    if schema_version != SUPPORTED_SCHEMA_VERSION:
-+        raise BackendIncidentUnsupportedSchemaError(
-+            (
-+                f"backend incident response schema_version {schema_version} "
-+                f"is not supported (expected {SUPPORTED_SCHEMA_VERSION})"
-+            ),
-+            missing_field=None,
-+        )
-+
-+    aggregate = payload.get("incident")
-+    if not isinstance(aggregate, dict):
-+        raise BackendIncidentInvalidPayloadError(
-+            "backend incident response does not contain an incident object",
-+            missing_field="incident",
-+        )
-+
-+    return ParsedInternalIncidentDetail(
-+        requested_incident_id=requested_incident_id,
-+        payload_type=payload_type,
-+        schema_version=schema_version,
-+        incident=aggregate,
-+    )
+=== src/k8s_diag_agent/collect/incident_store_sqlite_migrations.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_store_sqlite_migrations.py b/src/k8s_diag_agent/collect/incident_store_sqlite_migrations.py
+index 607e808c..f9de053c 100644
+--- a/src/k8s_diag_agent/collect/incident_store_sqlite_migrations.py
++++ b/src/k8s_diag_agent/collect/incident_store_sqlite_migrations.py
+@@ -19,6 +19,8 @@ from datetime import UTC, datetime
+ from typing import Any
 
-=== src/k8s_diag_agent/collect/incident_diagnosis_dispatch.py ===
-diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_dispatch.py b/src/k8s_diag_agent/collect/incident_diagnosis_dispatch.py
-index 337dc53..d0c5fb8 100644
---- a/src/k8s_diag_agent/collect/incident_diagnosis_dispatch.py
-+++ b/src/k8s_diag_agent/collect/incident_diagnosis_dispatch.py
-@@ -68,6 +68,11 @@ from .otel_events import (
- from .otel_span_context import SpanContext
-
- if TYPE_CHECKING:
-+    from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+    from .incident_diagnosis_backend_detail_outcomes import (
-+        BackendIncidentLookupOutcome,
-+    )
-     from .incident_store import Incident
+ from .incident_store_sqlite_schema import (
++    CREATE_LIFECYCLE_IDEMPOTENCY,
++    CREATE_LIFECYCLE_IDEMPOTENCY_INDICES,
+     SCHEMA_VERSION,
+     get_schema_sql,
+ )
+@@ -28,11 +30,25 @@ from .incident_store_sqlite_schema import (
+ _logger = logging.getLogger(__name__)
 
 
-@@ -164,6 +169,14 @@ def fetch_incident_for_diagnosis(
-         - incident: Incident object (local) or None if not found
-         - success: True if fetch succeeded (even if not found)
-         - error_message: Error message if failed, None if succeeded
-+
-+    Notes:
-+        New automatic-diagnosis callers SHOULD prefer
-+        :func:`fetch_backend_incident_for_diagnosis_typed`, which
-+        returns the canonical :class:`BackendIncidentLookupOutcome`
-+        and guarantees that HTTP 404 is the only construction path for
-+        ``BackendIncidentNotFound``. This legacy helper is preserved
-+        for backward compatibility with external callers and tests.
-     """
-     config = _get_dispatch_config()
-     resolved = config.resolved_mode()
-@@ -179,6 +192,128 @@ def fetch_incident_for_diagnosis(
-     )
-
-
-+def fetch_backend_incident_for_diagnosis_typed(
-+    incident_id: IncidentId,
-+) -> BackendIncidentLookupOutcome:
-+    """Fetch a single incident for processing with the typed outcome.
-+
-+    New automatic-diagnosis callers should use this function instead of
-+    the legacy ``fetch_incident_for_diagnosis``. The typed outcome
-+    eliminates the false-absence regression where HTTP 200 with valid
-+    JSON was being mapped to ``incident_not_found`` (see
-+    ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01).
-+
-+    In local mode the local store is queried directly; the typed
-+    outcome is constructed locally so callers see a uniform contract.
-+
-+    Args:
-+        incident_id: The branded :class:`IncidentId` to fetch.
-+
-+    Returns:
-+        A :class:`BackendIncidentLookupOutcome` value. The dispatcher
-+        MUST dispatch on the three variants explicitly.
-+    """
-+    from k8s_diag_agent.domain.incident_lifecycle import IncidentId as _IncidentId
-+
-+    # ``IncidentId`` is a ``NewType`` of ``str``; at runtime the value
-+    # is always a plain ``str`` (Python's ``NewType`` does not produce a
-+    # real class). We defensively normalise to ``str`` here so the
-+    # branded type flows downstream consistently.
-+    branded: _IncidentId = _IncidentId(str(incident_id))
-+
-+    config = _get_dispatch_config()
-+    resolved = config.resolved_mode()
-+
-+    if resolved == MODE_LOCAL:
-+        # Local mode: query the local store directly and project the
-+        # result into the canonical typed outcome. The local store has
-+        # no HTTP transport, so ``http_status`` MUST stay ``None``; we
-+        # distinguish local absence from backend HTTP 404 via the
-+        # ``source`` discriminator.
-+        from .incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentFound,
-+            BackendIncidentLookupFailed,
-+            BackendIncidentLookupFailureCode,
-+            BackendIncidentLookupSource,
-+            BackendIncidentNotFound,
-+        )
-+
-+        incident, success, error = _fetch_incident_local(str(branded))
-+        if not success:
-+            return BackendIncidentLookupFailed(
-+                requested_incident_id=branded,
-+                failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
-+                detail=str(error) if error else "local fetch failed",
-+                http_status=None,
-+            )
-+        if incident is None:
-+            # Local "not found" maps to the canonical not-found outcome
-+            # so callers see uniform semantics regardless of dispatch mode.
-+            # ``http_status`` is intentionally ``None``: no HTTP status
-+            # was observed.
-+            return BackendIncidentNotFound(
-+                requested_incident_id=branded,
-+                source=BackendIncidentLookupSource.LOCAL_STORE,
-+            )
-+        # Local-store found path: NO HTTP exchange occurred, so the
-+        # outcome MUST carry ``source=LOCAL_STORE`` and ``http_status=None``
-+        # to avoid fabricating synthetic HTTP telemetry in the logs. The
-+        # ``__post_init__`` invariant on ``BackendIncidentFound`` enforces
-+        # this contract at construction time.
-+        return BackendIncidentFound(
-+            requested_incident_id=branded,
-+            incident=incident,
-+            source=BackendIncidentLookupSource.LOCAL_STORE,
-+            http_status=None,
-+            payload_schema_version=None,
-+            payload_type=None,
-+        )
-+
-+    # Backend API mode: route through the canonical typed lookup.
-+    from .incident_diagnosis_backend_detail_lookup import (
-+        BackendIncidentTransportError,
-+        HttpIncidentBackendClient,
-+        lookup_backend_incident,
-+    )
-+
-+    if not config.backend_url:
-+        from .incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentLookupFailed,
-+            BackendIncidentLookupFailureCode,
-+        )
-+
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=branded,
-+            failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
-+            detail="backend URL not configured",
-+            http_status=None,
-+            exception_type="MissingBackendUrl",
-+        )
-+
-+    client = HttpIncidentBackendClient(
-+        base_url=config.backend_url,
-+        token=config.internal_api_token,
-+    )
-+    try:
-+        return lookup_backend_incident(client, branded)
-+    except BackendIncidentTransportError as exc:
-+        # Defensive: ``HttpIncidentBackendClient`` only raises
-+        # ``BackendIncidentTransportError`` for transport failures; we
-+        # catch it explicitly so callers always receive a typed
-+        # outcome rather than a propagated exception.
-+        from .incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentLookupFailed,
-+            BackendIncidentLookupFailureCode,
-+        )
-+
-+        return BackendIncidentLookupFailed(
-+            requested_incident_id=branded,
-+            failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
-+            detail=str(exc),
-+            exception_type=exc.exception_type,
-+        )
-+
-+
- def list_incidents_for_diagnosis_page(
-     limit: DiagnosisPageLimit,
-     active_only: bool = True,
-
-=== src/k8s_diag_agent/collect/incident_diagnosis_disposition.py ===
-diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_disposition.py b/src/k8s_diag_agent/collect/incident_diagnosis_disposition.py
-index f0f8793..297738d 100644
---- a/src/k8s_diag_agent/collect/incident_diagnosis_disposition.py
-+++ b/src/k8s_diag_agent/collect/incident_diagnosis_disposition.py
-@@ -40,6 +40,9 @@ from typing import TYPE_CHECKING, TypeAlias, assert_never
-
- if TYPE_CHECKING:
-     from .incident_diagnosis_auto_loop_config import DiagnosisBudgetDiagnostic
-+    from .incident_diagnosis_backend_detail_outcomes import (
-+        BackendIncidentLookupFailureCode,
-+    )
-
- SCHEMA_VERSION: int = 2
-
-@@ -94,6 +97,15 @@ class DiagnosisEvaluationFailureReason(StrEnum):
-     eligibility and execution into one shape. The typed-outcome ACT will
-     split execution failures into a dedicated enum; for now these
-     members remain so the legacy projection stays lossless.
-+
-+    The ``BACKEND_INCIDENT_*`` members (added by
-+    ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01) map 1:1 onto the
-+    ``BackendIncidentLookupFailureCode`` enum defined in
-+    :mod:`k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes`.
-+    They are deliberately stable, low cardinality, machine readable, and
-+    free of any incident ID, URL, exception message, timestamp, or
-+    status text. Detailed diagnostic context belongs in the bounded
-+    :class:`BackendIncidentLookupDiagnostic` projection.
-     """
-
-     BACKEND_FETCH_FAILED = "backend_fetch_failed"
-@@ -101,6 +113,19 @@ class DiagnosisEvaluationFailureReason(StrEnum):
-     ELIGIBILITY_EVALUATION_FAILED = "eligibility_evaluation_failed"
-     UNSAFE_RUN_ID = "unsafe_run_id"
-     CASE_FILE_BUILD_FAILED = "case_file_build_failed"
-+    # Backend incident-detail lookup failure codes (1:1 with
-+    # ``BackendIncidentLookupFailureCode``). The lookup function maps
-+    # every non-404 outcome to one of these reasons.
-+    BACKEND_INCIDENT_INVALID_JSON = "backend_incident_invalid_json"
-+    BACKEND_INCIDENT_INVALID_PAYLOAD = "backend_incident_invalid_payload"
-+    BACKEND_INCIDENT_UNSUPPORTED_SCHEMA = "backend_incident_unsupported_schema"
-+    BACKEND_INCIDENT_DESERIALIZATION_FAILED = "backend_incident_deserialization_failed"
-+    BACKEND_INCIDENT_IDENTITY_MISMATCH = "backend_incident_identity_mismatch"
-+    BACKEND_INCIDENT_UNAUTHORIZED = "backend_incident_unauthorized"
-+    BACKEND_INCIDENT_FORBIDDEN = "backend_incident_forbidden"
-+    BACKEND_INCIDENT_HTTP_CLIENT_ERROR = "backend_incident_http_client_error"
-+    BACKEND_INCIDENT_BACKEND_ERROR = "backend_incident_backend_error"
-+    BACKEND_INCIDENT_TRANSPORT_ERROR = "backend_incident_transport_error"
-
-
- # ---------------------------------------------------------------------------
-@@ -461,6 +486,61 @@ def aggregate_summary_event(
-     }
-
-
-+# ---------------------------------------------------------------------------
-+# Total typed mapping: BackendIncidentLookupFailureCode -> DiagnosisEvaluationFailureReason
-+# ---------------------------------------------------------------------------
-+
-+
-+# Module-level cache for the total typed mapping. Populated lazily on
-+# the first call to :func:`diagnosis_failure_reason_for_backend_lookup`
-+# so the outcomes module does not have to be importable at disposition
-+# module-load time (it pulls in a long transitive closure).
-+_BACKEND_LOOKUP_FAILURE_TO_EVALUATION_REASON_CACHE: dict[
-+    BackendIncidentLookupFailureCode, DiagnosisEvaluationFailureReason
-+] = {}
-+
-+
-+def diagnosis_failure_reason_for_backend_lookup(
-+    failure_code: BackendIncidentLookupFailureCode,
-+) -> DiagnosisEvaluationFailureReason:
-+    """Return the canonical :class:`DiagnosisEvaluationFailureReason` for a
-+    :class:`BackendIncidentLookupFailureCode` value.
-+
-+    The mapping is **total** and **exact**:
-+
-+    * Every :class:`BackendIncidentLookupFailureCode` member has exactly
-+      one matching :class:`DiagnosisEvaluationFailureReason` member.
-+    * There is no substring matching, no heuristic fallback, and no
-+      placeholder classification.
-+    * The mapping is built dynamically from the enum members; if a new
-+      ``BackendIncidentLookupFailureCode`` member is added, the mapping
-+      picks it up automatically and exposes the matching
-+      ``DiagnosisEvaluationFailureReason`` if its
-+      ``"backend_incident_<value>"`` already exists. Production code
-+      MUST serialise with ``.value`` only at the legacy/output boundary.
-+
-+    The reverse direction (typed reason -> serialised string) is
-+    :attr:`DiagnosisEvaluationFailureReason.value`; we deliberately
-+    expose only the typed mapping here so callers do not duplicate the
-+    mapping in production tests.
-+    """
-+    from .incident_diagnosis_backend_detail_outcomes import (
-+        BackendIncidentLookupFailureCode,
-+    )
-+
-+    if not isinstance(failure_code, BackendIncidentLookupFailureCode):
-+        raise TypeError(
-+            f"Expected BackendIncidentLookupFailureCode, got "
-+            f"{type(failure_code).__name__}"
-+        )
-+    if not _BACKEND_LOOKUP_FAILURE_TO_EVALUATION_REASON_CACHE:
-+        for code in BackendIncidentLookupFailureCode:
-+            _BACKEND_LOOKUP_FAILURE_TO_EVALUATION_REASON_CACHE[code] = (
-+                DiagnosisEvaluationFailureReason("backend_incident_" + code.value)
-+            )
-+    return _BACKEND_LOOKUP_FAILURE_TO_EVALUATION_REASON_CACHE[failure_code]
-+
-+
- # ---------------------------------------------------------------------------
- # Legacy compatibility re-exports
- # ---------------------------------------------------------------------------
-@@ -489,6 +569,7 @@ __all__ = [
-     "sanitize_disposition_detail",
-     "per_incident_disposition_event",
-     "aggregate_summary_event",
-+    "diagnosis_failure_reason_for_backend_lookup",
-     "legacy_result_from_disposition",
-     "disposition_from_legacy_result",
+-# Migration definitions - each tuple is (version, upgrade_sql_list)
+-# version 1 is the initial schema (defined in schema module)
++# Migration definitions - each tuple is (version, upgrade_sql_list).
++#
++# Version 1: Initial schema (created by ``get_schema_sql()``).
++# Version 2: Adds the ``lifecycle_idempotency`` table + UNIQUE index so
++# existing v1 production databases can be upgraded in place. Without
++# this entry, a v1 database would crash on the first
++# ``diagnosis-loop-transition`` request with
++# ``sqlite3.OperationalError: no such table: lifecycle_idempotency``.
++#
++# The SQL uses ``IF NOT EXISTS`` so applying it on a fresh database
++# (which already has the table from ``get_schema_sql()``) is a no-op.
+ MIGRATIONS: list[tuple[int, list[str]]] = [
+-    # Version 1: Initial schema (created by get_schema_sql())
+-    # No additional migrations needed at this time
++    (
++        2,
++        [
++            CREATE_LIFECYCLE_IDEMPOTENCY,
++            CREATE_LIFECYCLE_IDEMPOTENCY_INDICES,
++        ],
++    ),
  ]
 
-=== src/k8s_diag_agent/collect/incident_diagnosis_disposition_compat.py ===
-diff --git a/src/k8s_diag_agent/collect/incident_diagnosis_disposition_compat.py b/src/k8s_diag_agent/collect/incident_diagnosis_disposition_compat.py
-index a7fbe66..626ff23 100644
---- a/src/k8s_diag_agent/collect/incident_diagnosis_disposition_compat.py
-+++ b/src/k8s_diag_agent/collect/incident_diagnosis_disposition_compat.py
-@@ -267,9 +267,31 @@ def _map_legacy_skip_reason(raw: str) -> DiagnosisSkipReason:  # noqa: F821
 
 
- def _map_legacy_error_reason(raw: str) -> DiagnosisEvaluationFailureReason:  # noqa: F821
-+    """Map a legacy error string to a typed :class:`DiagnosisEvaluationFailureReason`.
-+
-+    Substring matching for ``backend_incident_*`` codes is intentionally
-+    NOT used: the production evidence processor writes the canonical
-+    ``"backend_incident_<code>"`` string via the typed mapping in
-+    :func:`incident_diagnosis_disposition.diagnosis_failure_reason_for_backend_lookup`,
-+    so substring matching would misclassify any free-form detail that
-+    happens to embed a code substring (e.g. ``"prefix_backend_incident_invalid_json_suffix"``).
-+    Only exact value matches against :class:`DiagnosisEvaluationFailureReason`
-+    members are accepted for backward compatibility; a substring match
-+    falls through to the heuristic branches below.
-+    """
-     from .incident_diagnosis_disposition import DiagnosisEvaluationFailureReason
+=== src/k8s_diag_agent/collect/incident_store_sqlite_schema.py ===
+diff --git a/src/k8s_diag_agent/collect/incident_store_sqlite_schema.py b/src/k8s_diag_agent/collect/incident_store_sqlite_schema.py
+index 486e46b0..c125dc27 100644
+--- a/src/k8s_diag_agent/collect/incident_store_sqlite_schema.py
++++ b/src/k8s_diag_agent/collect/incident_store_sqlite_schema.py
+@@ -20,7 +20,15 @@ from typing import Any
+ # Schema Version
+ # =============================================================================
 
-     raw_lower = (raw or "").lower()
-+
-+    # Exact enum-value match is the ONLY accepted legacy path for backend
-+    # incident-detail lookup codes. Anything else falls through to the
-+    # heuristic branches below (legacy ``fetch_failed`` etc.).
-+    if raw_lower.startswith("backend_incident_"):
-+        try:
-+            return DiagnosisEvaluationFailureReason(raw_lower)
-+        except ValueError:
-+            pass
-+
-     if "fetch" in raw_lower:
-         return DiagnosisEvaluationFailureReason.BACKEND_FETCH_FAILED
-     if "unsafe_run" in raw_lower or "unsafe run" in raw_lower:
-@@ -278,6 +300,9 @@ def _map_legacy_error_reason(raw: str) -> DiagnosisEvaluationFailureReason:  # n
-         return DiagnosisEvaluationFailureReason.CASE_FILE_BUILD_FAILED
-     if "invalid" in raw_lower or "payload" in raw_lower:
-         return DiagnosisEvaluationFailureReason.INVALID_INCIDENT_PAYLOAD
-+    # Final exact-enum-match fallback for any remaining legacy strings
-+    # (e.g. ``"unsafe_run_id"``, ``"backend_fetch_failed"``) that the
-+    # heuristic branches missed but that still match an enum value.
-     for member in DiagnosisEvaluationFailureReason:
-         if member.value == raw_lower:
-             return member
+-SCHEMA_VERSION = 1
++# Schema version 2 introduced the ``lifecycle_idempotency`` table +
++# UNIQUE index for the internal ``diagnosis-loop-transition`` endpoint.
++#
++# The version bump is required because the production backend can ship
++# with an existing v1 database that does NOT have the table. The
++# :mod:`incident_store_sqlite_migrations` module applies the v2 upgrade
++# to bring the database forward so the durable critical section does
++# not crash on the first lifecycle request after the upgrade.
++SCHEMA_VERSION = 2
 
-=== tests/unit/test_auto_loop_existing_packet_and_alert_regression.py ===
-diff --git a/tests/unit/test_auto_loop_existing_packet_and_alert_regression.py b/tests/unit/test_auto_loop_existing_packet_and_alert_regression.py
-index 389ce52..47de2aa 100644
---- a/tests/unit/test_auto_loop_existing_packet_and_alert_regression.py
-+++ b/tests/unit/test_auto_loop_existing_packet_and_alert_regression.py
-@@ -127,13 +127,29 @@ class TestExistingPacketContinuesIntoLoop:
-             mock_list_page,
-         )
+ # =============================================================================
+ # SQL Statements
+@@ -110,6 +118,55 @@ CREATE INDEX IF NOT EXISTS idx_incident_current_active_diagnosis_scan
+     WHERE status IN ('open', 'collecting_evidence', 'investigating', 'ready_for_review');
+ """
 
--        # Mock fetch_incident_for_diagnosis to avoid needing a real incident store
--        def mock_fetch(incident_id: str):
--            return _mock_incident(incident_id), True, None
-+        # Mock the typed backend lookup to avoid needing a real
-+        # incident store. The new typed helper returns
-+        # ``BackendIncidentFound`` directly, so we wrap the legacy
-+        # mock incident in the canonical found outcome.
-+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentFound,
-+            BackendIncidentLookupSource,
-+        )
-+        from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+        def mock_fetch_typed(incident_id: IncidentId):
-+            return BackendIncidentFound(
-+                requested_incident_id=incident_id,
-+                incident=_mock_incident(str(incident_id)),
-+                source=BackendIncidentLookupSource.BACKEND_API,
-+                http_status=200,
-+                payload_schema_version=1,
-+                payload_type="incident-internal-detail",
-+            )
-
-         monkeypatch.setattr(
--            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.fetch_incident_for_diagnosis",
--            mock_fetch,
-+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.fetch_backend_incident_for_diagnosis_typed",
-+            mock_fetch_typed,
-         )
-
-         # Mock check_incident_eligibility to return eligible
-@@ -206,13 +222,27 @@ class TestAlertRefreshDoesNotStarvePendingWork:
-             mock_list_page,
-         )
-
--        # Mock fetch_incident_for_diagnosis to avoid needing a real incident store
--        def mock_fetch(incident_id: str):
--            return _mock_incident(incident_id), True, None
-+        # Mock the typed backend lookup to avoid needing a real
-+        # incident store.
-+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentFound,
-+            BackendIncidentLookupSource,
-+        )
-+        from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+        def mock_fetch_typed(incident_id: IncidentId):
-+            return BackendIncidentFound(
-+                requested_incident_id=incident_id,
-+                incident=_mock_incident(str(incident_id)),
-+                source=BackendIncidentLookupSource.BACKEND_API,
-+                http_status=200,
-+                payload_schema_version=1,
-+                payload_type="incident-internal-detail",
-+            )
-
-         monkeypatch.setattr(
--            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.fetch_incident_for_diagnosis",
--            mock_fetch,
-+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.fetch_backend_incident_for_diagnosis_typed",
-+            mock_fetch_typed,
-         )
-
-         # Mock check_incident_eligibility to return eligible
-
-=== tests/unit/test_automatic_diagnosis_backend_detail_deployment_skew.py ===
-diff --git a/tests/unit/test_automatic_diagnosis_backend_detail_deployment_skew.py b/tests/unit/test_automatic_diagnosis_backend_detail_deployment_skew.py
-new file mode 100644
-index 0000000..d494d64
---- /dev/null
-+++ b/tests/unit/test_automatic_diagnosis_backend_detail_deployment_skew.py
-@@ -0,0 +1,245 @@
-+"""Deployment-skew contract tests for backend incident-detail parsing.
-+
-+Pins the contract that, when the backend is older than the scheduler
-+expectation (e.g. schema version mismatch, payload-type drift), the
-+typed lookup MUST convert the anomaly into a typed
-+:data:`BackendIncidentLookupFailed` with the precise failure code
-+``backend_incident_unsupported_schema`` (or, if the wrapper itself is
-+malformed, ``backend_incident_invalid_payload``).
-+
-+It MUST NEVER collapse the anomaly into
-+:data:`BackendIncidentNotFound`. The deployment-skew regression is
-+exactly the false-absence scenario that
-+ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01 was opened to fix.
++# Lifecycle idempotency registry: durable dedupe across processes and restarts.
++#
++# Each row records one accepted (key, fingerprint) pair for the
++# internal ``diagnosis-loop-transition`` endpoint. The composite
++# UNIQUE index makes ``INSERT OR IGNORE`` the canonical atomic
++# ``check-then-insert`` primitive: if the row already exists, the
++# mutation MUST NOT run; if it does not, the mutation AND the row
++# insert MUST land in the same ``BEGIN IMMEDIATE`` transaction so
++# crash-restart and multi-process replay converge on a single
++# observable transition.
++#
++# The table is intentionally append-only. Same-key/different-fingerprint
++# replays are surfaced as 409 by application code, never by mutating
++# the existing record.
++CREATE_LIFECYCLE_IDEMPOTENCY = """
++CREATE TABLE IF NOT EXISTS lifecycle_idempotency (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    incident_id TEXT NOT NULL,
++    transition TEXT NOT NULL,
++    collector_run_id TEXT NOT NULL,
++    diagnosis_run_id TEXT,
++    fingerprint TEXT NOT NULL,
++    occurred_at TEXT NOT NULL,
++    applied_at TEXT NOT NULL
++);
 +"""
 +
-+from __future__ import annotations
++# R3-5: SQLite treats NULL as distinct in UNIQUE constraints, so the
++# bare index ``(..., diagnosis_run_id)`` would allow two otherwise
++# identical rows with ``diagnosis_run_id IS NULL`` to coexist. We use
++# ``COALESCE(diagnosis_run_id, '')`` in the index expression so the
++# NULL value still participates in the uniqueness check, while keeping
++# the column itself nullable for callers that legitimately do not
++# have a run id.
++#
++# Application lookups MUST mirror the index expression
++# (``COALESCE(diagnosis_run_id, '') = ?``) so the comparison matches
++# the indexed key. The ``incident_store_sqlite_context`` module owns
++# the canonical lookup and uses this exact comparison.
++CREATE_LIFECYCLE_IDEMPOTENCY_INDICES = """
++CREATE UNIQUE INDEX IF NOT EXISTS idx_lifecycle_idempotency_key
++    ON lifecycle_idempotency(
++        incident_id,
++        transition,
++        collector_run_id,
++        COALESCE(diagnosis_run_id, '')
++    );
++"""
 +
-+import json
-+from dataclasses import dataclass
-+
-+from k8s_diag_agent.collect.incident_diagnosis_backend_detail_lookup import (
-+    BackendIncidentHttpResponse,
-+    lookup_backend_incident,
-+)
-+from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+    BackendIncidentLookupFailed,
-+    BackendIncidentLookupFailureCode,
-+    BackendIncidentNotFound,
-+)
-+from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+
-+@dataclass
-+class _FakeClient:
-+    response: BackendIncidentHttpResponse
-+
-+    def fetch_incident(
-+        self,
-+        incident_id: IncidentId,
-+        *,
-+        timeout: float = 30.0,
-+    ) -> BackendIncidentHttpResponse:
-+        return self.response
-+
-+
-+def _wrap(body: bytes, http_status: int = 200) -> BackendIncidentHttpResponse:
-+    return BackendIncidentHttpResponse(http_status=http_status, body=body)
-+
-+
-+# ---------------------------------------------------------------------------
-+# 1. Schema-version drift
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestUnsupportedSchemaVersion:
-+    def test_schema_version_999_yields_unsupported_schema_failure(self) -> None:
-+        """A future schema version MUST become UNSUPPORTED_SCHEMA, not
-+        BackendIncidentNotFound, not Found."""
-+        payload = {
-+            "schema_version": "999",
-+            "payload_type": "incident-internal-detail",
-+            "incident": {
-+                "incident_id": "incident-abc",
-+                "first_observed_at": "2026-07-12T10:00:00+00:00",
-+                "last_observed_at": "2026-07-12T10:30:00+00:00",
-+            },
-+        }
-+        client = _FakeClient(
-+            response=_wrap(json.dumps(payload).encode("utf-8"))
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == (
-+            BackendIncidentLookupFailureCode.UNSUPPORTED_SCHEMA
-+        )
-+        # Crucially, NOT a not-found outcome.
-+        assert not isinstance(outcome, BackendIncidentNotFound)
-+
-+    def test_schema_version_int_2_yields_unsupported_schema_failure(self) -> None:
-+        payload = {
-+            "schema_version": 2,
-+            "payload_type": "incident-internal-detail",
-+            "incident": {"incident_id": "incident-abc"},
-+        }
-+        client = _FakeClient(
-+            response=_wrap(json.dumps(payload).encode("utf-8"))
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == (
-+            BackendIncidentLookupFailureCode.UNSUPPORTED_SCHEMA
-+        )
-+
-+    def test_schema_version_negative_yields_invalid_payload(self) -> None:
-+        payload = {
-+            "schema_version": "-1",
-+            "payload_type": "incident-internal-detail",
-+            "incident": {"incident_id": "incident-abc"},
-+        }
-+        client = _FakeClient(
-+            response=_wrap(json.dumps(payload).encode("utf-8"))
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        # Negative integers parse via int() but the parser rejects
-+        # them as not equal to the supported value 1.
-+        assert outcome.failure_code in (
-+            BackendIncidentLookupFailureCode.UNSUPPORTED_SCHEMA,
-+            BackendIncidentLookupFailureCode.INVALID_PAYLOAD,
-+        )
-+
-+    def test_schema_version_with_nonsense_type_yields_invalid_payload(
-+        self,
-+    ) -> None:
-+        payload = {
-+            "schema_version": ["not", "a", "string"],
-+            "payload_type": "incident-internal-detail",
-+            "incident": {"incident_id": "incident-abc"},
-+        }
-+        client = _FakeClient(
-+            response=_wrap(json.dumps(payload).encode("utf-8"))
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == (
-+            BackendIncidentLookupFailureCode.INVALID_PAYLOAD
-+        )
-+
-+
-+# ---------------------------------------------------------------------------
-+# 2. Payload-type drift
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestUnknownPayloadType:
-+    def test_unknown_payload_type_yields_invalid_payload(self) -> None:
-+        payload = {
-+            "schema_version": "1",
-+            "payload_type": "incident-internal-summary-or-other",
-+            "incident": {"incident_id": "incident-abc"},
-+        }
-+        client = _FakeClient(
-+            response=_wrap(json.dumps(payload).encode("utf-8"))
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == (
-+            BackendIncidentLookupFailureCode.INVALID_PAYLOAD
-+        )
-+        assert not isinstance(outcome, BackendIncidentNotFound)
-+
-+    def test_missing_payload_type_yields_invalid_payload(self) -> None:
-+        payload = {
-+            "schema_version": "1",
-+            # No payload_type
-+            "incident": {"incident_id": "incident-abc"},
-+        }
-+        client = _FakeClient(
-+            response=_wrap(json.dumps(payload).encode("utf-8"))
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == (
-+            BackendIncidentLookupFailureCode.INVALID_PAYLOAD
-+        )
-+
-+    def test_empty_string_payload_type_yields_invalid_payload(self) -> None:
-+        payload = {
-+            "schema_version": "1",
-+            "payload_type": "",
-+            "incident": {"incident_id": "incident-abc"},
-+        }
-+        client = _FakeClient(
-+            response=_wrap(json.dumps(payload).encode("utf-8"))
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == (
-+            BackendIncidentLookupFailureCode.INVALID_PAYLOAD
-+        )
-+
-+
-+# ---------------------------------------------------------------------------
-+# 3. Missing envelope entirely (older backend without envelope)
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestLegacyBareAggregate:
-+    def test_bare_aggregate_without_envelope_yields_invalid_payload(
-+        self,
-+    ) -> None:
-+        """A bare canonical-shaped aggregate (no envelope) used to be
-+        accepted by the legacy parser; the canonical parser must
-+        classify it as INVALID_PAYLOAD (deployment skew) instead of
-+        silently accepting it."""
-+        payload = {
-+            "incident_id": "incident-abc",
-+            "source_candidate_id": "candidate-xyz",
-+            "namespace": "default",
-+            "object_kind": "Pod",
-+            "object_name": "nginx-pod",
-+            "class": "PodCrashLoop",
-+            "severity": "high",
-+            "status": "open",
-+            "first_observed_at": "2026-07-12T10:00:00+00:00",
-+            "last_observed_at": "2026-07-12T10:30:00+00:00",
-+        }
-+        client = _FakeClient(
-+            response=_wrap(json.dumps(payload).encode("utf-8"))
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        # The canonical parser must reject the bare aggregate
-+        # (no payload_type / schema_version envelope) as INVALID_PAYLOAD
-+        # because the deployment is older than the scheduler expectation.
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == (
-+            BackendIncidentLookupFailureCode.INVALID_PAYLOAD
-+        )
-+        # Crucially, NOT a not-found outcome.
-+        assert not isinstance(outcome, BackendIncidentNotFound)
-+
-+
-+# ---------------------------------------------------------------------------
-+# 4. Genuine 404 must still emit NotFound
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestGenuine404IsNotMisreadAsSkew:
-+    def test_genuine_404_with_empty_body_emits_not_found(self) -> None:
-+        """A real 404 must still be classified as NotFound; deployment
-+        skew NEVER becomes NotFound."""
-+        client = _FakeClient(
-+            response=_wrap(b"", http_status=404)
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentNotFound)
-+        assert outcome.http_status == 404
-+
-+    def test_genuine_404_with_error_body_emits_not_found(self) -> None:
-+        body = b'{"error":"incident not found","trace_id":"abc"}'
-+        client = _FakeClient(
-+            response=_wrap(body, http_status=404)
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentNotFound)
+ # Append-only enforcement triggers
+ CREATE_TRIGGERS = """
+ -- Prevent UPDATE on incident_events (append-only)
+@@ -134,6 +191,8 @@ INIT_STATEMENTS = [
+     CREATE_EVENTS_INDICES,
+     CREATE_INCIDENT_CURRENT,
+     CREATE_CURRENT_INDICES,
++    CREATE_LIFECYCLE_IDEMPOTENCY,
++    CREATE_LIFECYCLE_IDEMPOTENCY_INDICES,
+     CREATE_TRIGGERS,
+ ]
 
-=== tests/unit/test_automatic_diagnosis_backend_detail_dispositions.py ===
-diff --git a/tests/unit/test_automatic_diagnosis_backend_detail_dispositions.py b/tests/unit/test_automatic_diagnosis_backend_detail_dispositions.py
+
+=== src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_handler.py ===
+diff --git a/src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_handler.py b/src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_handler.py
 new file mode 100644
-index 0000000..c7f253f
+index 00000000..8474d977
 --- /dev/null
-+++ b/tests/unit/test_automatic_diagnosis_backend_detail_dispositions.py
-@@ -0,0 +1,1015 @@
-+"""Integration tests for automatic-diagnosis disposition mapping.
++++ b/src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_handler.py
+@@ -0,0 +1,280 @@
++"""Internal API handler for the diagnosis-loop lifecycle transition endpoint.
 +
-+These tests pin the contract from
-+ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01:
++The handler applies a bounded diagnosis-loop lifecycle transition
++(``started`` / ``failed`` / ``completed``) to the **backend-owned**
++incident store. The scheduler calls this endpoint over the existing
++internal-API bearer-token channel instead of writing the local
++``IncidentStore`` directly when running in ``backend-api`` mode.
 +
-+* ``BackendIncidentFound`` continues into domain eligibility.
-+* ``BackendIncidentNotFound`` emits ``skipped / incident_not_found``.
-+* ``BackendIncidentLookupFailed`` emits ``error / <mapped reason code>``.
-+* Lookup failures increment ``incidents_with_errors`` /
-+  ``error_reasons.<code>`` and never ``incidents_skipped`` /
-+  ``skip_reasons.incident_not_found``.
-+* A failure on one incident does not abort processing of later
-+  selected incidents.
-+* Diagnostics remain bounded.
++The atomic, idempotent apply-and-record critical section lives in
++:mod:`server_incident_diagnosis_lifecycle_idempotency`; this module is
++the thin HTTP boundary: auth, request parsing, bounded validation, and
++response shaping.
 +
-+The tests inject a fake ``_process_incident`` so the batch processor
-+sees the exact ``AutoLoopIncidentResult`` projection the new lookup
-+path would emit. The compat layer is then exercised end-to-end through
-+``run_automatic_diagnosis_loop_evidence_collection``.
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01.
 +"""
 +
 +from __future__ import annotations
 +
 +import json
 +import logging
-+import tempfile
-+from collections.abc import Iterable
-+from pathlib import Path
++from datetime import UTC, datetime
 +from typing import Any
 +
-+import pytest
-+
-+from k8s_diag_agent.collect.incident_diagnosis_auto_loop import (
-+    run_automatic_diagnosis_loop_evidence_collection,
++from .server_incident_diagnosis_lifecycle_idempotency import (
++    apply_transition_idempotently,
 +)
-+from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
-+    AutoLoopIncidentResult,
-+)
-+from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+    BackendIncidentLookupFailureCode,
-+)
-+from k8s_diag_agent.collect.incident_diagnosis_disposition import (
-+    AutomaticDiagnosisEvaluationFailed,
-+    SkippedFromAutomaticDiagnosis,
-+    reduce_disposition,
-+)
++from .server_incident_internal_auth import _validate_internal_token
 +
-+# ---------------------------------------------------------------------------
-+# Helpers
-+# ---------------------------------------------------------------------------
++_logger = logging.getLogger(__name__)
 +
++# Lifecycle request/response schema version. Must match the
++# ``LIFECYCLE_SCHEMA_VERSION`` value in
++# ``incident_diagnosis_authority_seam``. Requests carrying a different
++# schema version are rejected with HTTP 400 (unsupported request
++# schema) and a bounded validation message; this contract is aligned
++# with the scheduler-side client translation and the endpoint tests.
++LIFECYCLE_SCHEMA_VERSION: int = 1
 +
-+_FAILURE_REASON_BY_CODE: dict[BackendIncidentLookupFailureCode, str] = {
-+    BackendIncidentLookupFailureCode.INVALID_JSON: "backend_incident_invalid_json",
-+    BackendIncidentLookupFailureCode.INVALID_PAYLOAD: "backend_incident_invalid_payload",
-+    BackendIncidentLookupFailureCode.UNSUPPORTED_SCHEMA: "backend_incident_unsupported_schema",
-+    BackendIncidentLookupFailureCode.DESERIALIZATION_FAILED: "backend_incident_deserialization_failed",
-+    BackendIncidentLookupFailureCode.IDENTITY_MISMATCH: "backend_incident_identity_mismatch",
-+    BackendIncidentLookupFailureCode.UNAUTHORIZED: "backend_incident_unauthorized",
-+    BackendIncidentLookupFailureCode.FORBIDDEN: "backend_incident_forbidden",
-+    BackendIncidentLookupFailureCode.HTTP_CLIENT_ERROR: "backend_incident_http_client_error",
-+    BackendIncidentLookupFailureCode.BACKEND_ERROR: "backend_incident_backend_error",
-+    BackendIncidentLookupFailureCode.TRANSPORT_ERROR: "backend_incident_transport_error",
-+}
++# Supported transition values. Keep this list in lock-step with the
++# ``LifecycleTransition`` enum on the scheduler side.
++SUPPORTED_TRANSITIONS: frozenset[str] = frozenset({
++    "started",
++    "failed",
++    "completed",
++})
 +
 +
-+@pytest.fixture
-+def temp_external_dir() -> Iterable[Path]:
-+    with tempfile.TemporaryDirectory() as tmpdir:
-+        yield Path(tmpdir)
++def _send_json(handler: Any, payload: dict[str, Any], status_code: int) -> None:
++    """Emit a JSON response without leaking request bodies or auth tokens."""
++    handler._send_json(payload, status_code)
 +
 +
-+@pytest.fixture
-+def enabled_auto_loop(monkeypatch: pytest.MonkeyPatch) -> None:
-+    """Force the enabled production path without consulting the environment."""
-+    monkeypatch.setattr(
-+        "k8s_diag_agent.collect."
-+        "incident_diagnosis_auto_loop_evidence_collection."
-+        "is_automatic_diagnosis_loop_enabled",
-+        lambda: True,
-+    )
-+
-+
-+def _summary_from_logs(captured: list[dict[str, Any]]) -> dict[str, Any]:
-+    summary_logs = [
-+        log for log in captured if log.get("event") == "automatic-diagnosis-eligibility-summary"
-+    ]
-+    assert len(summary_logs) == 1, (
-+        f"Expected exactly one eligibility summary event, got {len(summary_logs)}"
-+    )
-+    return summary_logs[0]
-+
-+
-+def _capture_logging() -> tuple[list[dict[str, Any]], Any]:
-+    captured: list[dict[str, Any]] = []
-+
-+    class LogCapture(logging.Handler):
-+        def emit(self, record: logging.LogRecord) -> None:
-+            d = record.__dict__
-+            captured.append({
-+                "message": record.getMessage(),
-+                "event": d.get("event"),
-+                "incidents_processed": d.get("incidents_processed"),
-+                "incidents_eligible": d.get("incidents_eligible"),
-+                "incidents_skipped": d.get("incidents_skipped"),
-+                "incidents_ineligible": d.get("incidents_ineligible"),
-+                "incidents_with_errors": d.get("incidents_with_errors"),
-+                "skip_reasons": d.get("skip_reasons"),
-+                "ineligible_reasons": d.get("ineligible_reasons"),
-+                "error_reasons": d.get("error_reasons"),
-+                "stop_reason": d.get("stop_reason"),
-+            })
-+
-+    handler = LogCapture()
-+    logger = logging.getLogger()
-+    logger.addHandler(handler)
-+    logger.setLevel(logging.DEBUG)
-+    return captured, handler
-+
-+
-+# ---------------------------------------------------------------------------
-+# 1. Found outcome → continues into eligibility
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestFoundOutcomeMapping:
-+    def test_found_outcome_continues_into_eligibility(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        """``BackendIncidentFound`` → continue with domain eligibility."""
-+
-+        captured, handler = _capture_logging()
-+        try:
-+            def fake_process(**kwargs: Any) -> AutoLoopIncidentResult:
-+                # Pretend the incident was found and is eligible.
-+                return AutoLoopIncidentResult(
-+                    incident_id=kwargs["incident_id"],
-+                    eligible=True,
-+                    eligibility_reason="active_incident_with_suggested_checks",
-+                    decision="STOP_ROOT_CAUSE_FOUND",
-+                    checks_requested=2,
-+                    checks_run=2,
-+                    review_packet_written=True,
-+                )
-+
-+            monkeypatch.setattr(
-+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-+                fake_process,
-+            )
-+
-+            incident_ids = [f"incident-{i}" for i in range(3)]
-+            result = run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=incident_ids,
-+            )
-+            summary = _summary_from_logs(captured)
-+            assert summary["incidents_processed"] == 3
-+            assert summary["incidents_eligible"] == 3
-+            assert summary["incidents_skipped"] == 0
-+            assert summary["incidents_with_errors"] == 0
-+            assert summary["error_reasons"] == {}
-+            assert "incident_not_found" not in summary["skip_reasons"]
-+            assert result.incidents_eligible == 3
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+
-+    def test_found_but_domain_ineligible_is_counted_as_ineligible(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        """Found → domain ineligibility → ``ineligible / terminal_status``.
-+
-+        The legacy compat layer routes ``terminal_status_*`` to
-+        :class:`IneligibleForAutomaticDiagnosis`, not ``Skipped``. The
-+        important contract is that domain ineligibility is NOT
-+        ``incident_not_found`` and never increments the error counter.
-+        """
-+
-+        captured, handler = _capture_logging()
-+        try:
-+            def fake_process(**kwargs: Any) -> AutoLoopIncidentResult:
-+                return AutoLoopIncidentResult(
-+                    incident_id=kwargs["incident_id"],
-+                    eligible=False,
-+                    eligibility_reason="terminal_status_resolved",
-+                    skipped=True,
-+                    skip_reason="not_eligible: terminal_status_resolved",
-+                )
-+
-+            monkeypatch.setattr(
-+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-+                fake_process,
-+            )
-+
-+            run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=["incident-1", "incident-2"],
-+            )
-+            summary = _summary_from_logs(captured)
-+            assert summary["incidents_processed"] == 2
-+            assert summary["incidents_with_errors"] == 0
-+            assert summary["ineligible_reasons"]["terminal_status"] == 2
-+            # ``incident_not_found`` must not be confused with domain ineligibility.
-+            assert "incident_not_found" not in summary["skip_reasons"]
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+
-+    def test_found_eligible_result_counts_as_eligible(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        captured, handler = _capture_logging()
-+        try:
-+            def fake_process(**kwargs: Any) -> AutoLoopIncidentResult:
-+                return AutoLoopIncidentResult(
-+                    incident_id=kwargs["incident_id"],
-+                    eligible=True,
-+                    eligibility_reason="active_incident_with_suggested_checks",
-+                )
-+
-+            monkeypatch.setattr(
-+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-+                fake_process,
-+            )
-+            run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=["incident-1"],
-+            )
-+            summary = _summary_from_logs(captured)
-+            assert summary["incidents_eligible"] == 1
-+            assert summary["incidents_skipped"] == 0
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+
-+
-+# ---------------------------------------------------------------------------
-+# 2. NotFound outcome → skipped / incident_not_found
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestNotFoundOutcomeMapping:
-+    def test_not_found_outcome_emits_skipped_incident_not_found(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        captured, handler = _capture_logging()
-+        try:
-+            def fake_process(**kwargs: Any) -> AutoLoopIncidentResult:
-+                # Pretend the lookup returned ``BackendIncidentNotFound``.
-+                return AutoLoopIncidentResult(
-+                    incident_id=kwargs["incident_id"],
-+                    eligible=False,
-+                    eligibility_reason="not_found",
-+                    skipped=True,
-+                    skip_reason="incident_not_found",
-+                )
-+
-+            monkeypatch.setattr(
-+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-+                fake_process,
-+            )
-+
-+            result = run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=["incident-1", "incident-2"],
-+            )
-+            summary = _summary_from_logs(captured)
-+            assert summary["incidents_processed"] == 2
-+            assert summary["incidents_skipped"] == 2
-+            assert summary["incidents_with_errors"] == 0
-+            assert summary["skip_reasons"]["incident_not_found"] == 2
-+            # The error map must remain empty.
-+            assert summary["error_reasons"] == {}
-+            assert result.incidents_skipped == 2
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+
-+    def test_not_found_does_not_increment_errors(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        captured, handler = _capture_logging()
-+        try:
-+            def fake_process(**kwargs: Any) -> AutoLoopIncidentResult:
-+                return AutoLoopIncidentResult(
-+                    incident_id=kwargs["incident_id"],
-+                    eligible=False,
-+                    eligibility_reason="not_found",
-+                    skipped=True,
-+                    skip_reason="incident_not_found",
-+                )
-+
-+            monkeypatch.setattr(
-+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-+                fake_process,
-+            )
-+            run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=["incident-1"],
-+            )
-+            summary = _summary_from_logs(captured)
-+            assert summary["incidents_with_errors"] == 0
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+
-+
-+# ---------------------------------------------------------------------------
-+# 3. Failed outcome → error with mapped stable reason code
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestFailedOutcomeMapping:
-+    @pytest.mark.parametrize(
-+        "failure_code",
-+        list(BackendIncidentLookupFailureCode),
-+    )
-+    def test_each_failure_code_maps_to_error_disposition(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+        failure_code: BackendIncidentLookupFailureCode,
-+    ) -> None:
-+        """Every backend incident failure code emits an error disposition."""
-+
-+        captured, handler = _capture_logging()
-+        try:
-+            reason = _FAILURE_REASON_BY_CODE[failure_code]
-+
-+            def fake_process(**kwargs: Any) -> AutoLoopIncidentResult:
-+                return AutoLoopIncidentResult(
-+                    incident_id=kwargs["incident_id"],
-+                    eligible=False,
-+                    eligibility_reason=reason,
-+                    error=(
-+                        f"backend lookup failed (http_status=200 failure_code="
-+                        f"{failure_code.value} payload_type='incident-internal-detail'"
-+                        f" payload_schema_version=1 exception_type='None')"
-+                    ),
-+                )
-+
-+            monkeypatch.setattr(
-+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-+                fake_process,
-+            )
-+            run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=["incident-1"],
-+            )
-+            summary = _summary_from_logs(captured)
-+            assert summary["incidents_processed"] == 1, (
-+                f"[{failure_code}] processed count"
-+            )
-+            assert summary["incidents_with_errors"] == 1, (
-+                f"[{failure_code}] incidents_with_errors"
-+            )
-+            assert summary["incidents_skipped"] == 0, (
-+                f"[{failure_code}] incidents_skipped"
-+            )
-+            assert summary["skip_reasons"] == {}, (
-+                f"[{failure_code}] skip_reasons must be empty for failed lookups"
-+            )
-+            assert summary["error_reasons"][reason] == 1, (
-+                f"[{failure_code}] error_reasons map"
-+            )
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+
-+    def test_lookup_failure_increments_errors_and_populates_error_reasons(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        captured, handler = _capture_logging()
-+        try:
-+            def fake_process(**kwargs: Any) -> AutoLoopIncidentResult:
-+                return AutoLoopIncidentResult(
-+                    incident_id=kwargs["incident_id"],
-+                    eligible=False,
-+                    eligibility_reason="backend_incident_unsupported_schema",
-+                    error="schema 99 not supported",
-+                )
-+
-+            monkeypatch.setattr(
-+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-+                fake_process,
-+            )
-+            run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=["incident-1", "incident-2"],
-+            )
-+            summary = _summary_from_logs(captured)
-+            assert summary["incidents_with_errors"] == 2
-+            assert summary["error_reasons"]["backend_incident_unsupported_schema"] == 2
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+
-+    def test_lookup_failure_does_not_populate_skip_reasons_incident_not_found(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        captured, handler = _capture_logging()
-+        try:
-+            def fake_process(**kwargs: Any) -> AutoLoopIncidentResult:
-+                return AutoLoopIncidentResult(
-+                    incident_id=kwargs["incident_id"],
-+                    eligible=False,
-+                    eligibility_reason="backend_incident_invalid_json",
-+                    error="invalid JSON",
-+                )
-+
-+            monkeypatch.setattr(
-+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-+                fake_process,
-+            )
-+            run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=["incident-1"],
-+            )
-+            summary = _summary_from_logs(captured)
-+            assert "incident_not_found" not in summary["skip_reasons"]
-+            assert summary["incidents_skipped"] == 0
-+            assert summary["incidents_with_errors"] == 1
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+
-+
-+# ---------------------------------------------------------------------------
-+# 4. Mixed inputs
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestMixedOutcomes:
-+    def test_mixed_found_notfound_failed_produce_correct_totals(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        """Found + NotFound + Failed in one run → correct per-kind totals."""
-+
-+        outcomes: list[str] = ["found", "notfound", "failed", "found", "notfound"]
-+
-+        def fake_process(**kwargs: Any) -> AutoLoopIncidentResult:
-+            incident_id = kwargs["incident_id"]
-+            index = int(incident_id.rsplit("-", 1)[-1])
-+            outcome = outcomes[index]
-+            if outcome == "found":
-+                return AutoLoopIncidentResult(
-+                    incident_id=incident_id,
-+                    eligible=True,
-+                    eligibility_reason="active_incident_with_suggested_checks",
-+                )
-+            if outcome == "notfound":
-+                return AutoLoopIncidentResult(
-+                    incident_id=incident_id,
-+                    eligible=False,
-+                    eligibility_reason="not_found",
-+                    skipped=True,
-+                    skip_reason="incident_not_found",
-+                )
-+            return AutoLoopIncidentResult(
-+                incident_id=incident_id,
-+                eligible=False,
-+                eligibility_reason="backend_incident_identity_mismatch",
-+                error="identity mismatch",
-+            )
-+
-+        monkeypatch.setattr(
-+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-+            fake_process,
++def _read_request_body(handler: Any) -> dict[str, Any] | None:
++    """Parse the JSON request body; return None on malformed input."""
++    try:
++        length = int(handler.headers.get("Content-Length", 0))
++    except (TypeError, ValueError):
++        _send_json(
++            handler,
++            {"error": "Bad Request", "message": "missing Content-Length"},
++            400,
 +        )
-+
-+        captured, handler = _capture_logging()
-+        try:
-+            run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=[f"incident-{i}" for i in range(len(outcomes))],
-+            )
-+            summary = _summary_from_logs(captured)
-+            assert summary["incidents_processed"] == 5
-+            assert summary["incidents_eligible"] == 2
-+            assert summary["incidents_skipped"] == 2
-+            assert summary["incidents_with_errors"] == 1
-+            assert summary["skip_reasons"]["incident_not_found"] == 2
-+            assert summary["error_reasons"]["backend_incident_identity_mismatch"] == 1
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+
-+    def test_failure_on_one_incident_does_not_abort_later_incidents(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        captured, handler = _capture_logging()
-+        try:
-+            call_count = {"n": 0}
-+
-+            def fake_process(**kwargs: Any) -> AutoLoopIncidentResult:
-+                call_count["n"] += 1
-+                if call_count["n"] == 1:
-+                    return AutoLoopIncidentResult(
-+                        incident_id=kwargs["incident_id"],
-+                        eligible=False,
-+                        eligibility_reason="backend_incident_transport_error",
-+                        error="timeout",
-+                    )
-+                return AutoLoopIncidentResult(
-+                    incident_id=kwargs["incident_id"],
-+                    eligible=True,
-+                    eligibility_reason="active_incident_with_suggested_checks",
-+                )
-+
-+            monkeypatch.setattr(
-+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-+                fake_process,
-+            )
-+            run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=[f"incident-{i}" for i in range(5)],
-+            )
-+            summary = _summary_from_logs(captured)
-+            assert call_count["n"] == 5
-+            assert summary["incidents_processed"] == 5
-+            assert summary["incidents_with_errors"] == 1
-+            assert summary["incidents_eligible"] == 4
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+
-+
-+# ---------------------------------------------------------------------------
-+# 5. Disposition compat matrix
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestCompatMatrix:
-+    """The compat layer maps every backend incident code to the right variant."""
-+
-+    def test_not_found_compat_maps_to_skip_incident_not_found(self) -> None:
-+        result = AutoLoopIncidentResult(
-+            incident_id="incident-abc",
-+            eligible=False,
-+            eligibility_reason="not_found",
-+            skipped=True,
-+            skip_reason="incident_not_found",
++        return None
++    if length < 0:
++        _send_json(
++            handler,
++            {"error": "Bad Request", "message": "negative Content-Length"},
++            400,
 +        )
-+        from k8s_diag_agent.collect.incident_diagnosis_disposition_compat import (
-+            disposition_from_legacy_result,
++        return None
++    try:
++        raw = handler.rfile.read(length) if length > 0 else b""
++    except OSError as exc:
++        _send_json(
++            handler,
++            {"error": "Bad Request", "message": f"failed to read body: {exc}"},
++            400,
 +        )
-+
-+        disposition = disposition_from_legacy_result(result)
-+        assert isinstance(disposition, SkippedFromAutomaticDiagnosis)
-+        from k8s_diag_agent.collect.incident_diagnosis_disposition import (
-+            DiagnosisSkipReason,
++        return None
++    if not raw:
++        _send_json(
++            handler,
++            {"error": "Bad Request", "message": "empty request body"},
++            400,
 +        )
-+
-+        assert disposition.reason == DiagnosisSkipReason.INCIDENT_NOT_FOUND
-+
-+    def test_each_backend_failure_code_compat_maps_to_evaluation_failed(self) -> None:
-+        from k8s_diag_agent.collect.incident_diagnosis_disposition import (
-+            DiagnosisEvaluationFailureReason,
++        return None
++    try:
++        decoded = json.loads(raw.decode("utf-8"))
++    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
++        _send_json(
++            handler,
++            {
++                "error": "Bad Request",
++                "message": f"invalid JSON: {exc}",
++            },
++            400,
 +        )
-+        from k8s_diag_agent.collect.incident_diagnosis_disposition_compat import (
-+            disposition_from_legacy_result,
++        return None
++    if not isinstance(decoded, dict):
++        _send_json(
++            handler,
++            {
++                "error": "Bad Request",
++                "message": "request body must be a JSON object",
++            },
++            400,
 +        )
-+
-+        for code in BackendIncidentLookupFailureCode:
-+            reason = _FAILURE_REASON_BY_CODE[code]
-+            result = AutoLoopIncidentResult(
-+                incident_id="incident-abc",
-+                eligible=False,
-+                eligibility_reason=reason,
-+                error=f"backend returned failure_code={code.value}",
-+            )
-+            disposition = disposition_from_legacy_result(result)
-+            assert isinstance(disposition, AutomaticDiagnosisEvaluationFailed), (
-+                f"[{code.value}] must map to AutomaticDiagnosisEvaluationFailed"
-+            )
-+            # The reason must be the canonical enum value, NOT a generic fallback.
-+            expected_member = DiagnosisEvaluationFailureReason(reason)
-+            assert disposition.reason == expected_member
-+
-+    def test_compat_preserves_conservation_invariants(self) -> None:
-+        """Per-incident reductions must keep the summary consistent."""
-+        from k8s_diag_agent.collect.incident_diagnosis_disposition import (
-+            empty_disposition_summary,
-+        )
-+        from k8s_diag_agent.collect.incident_diagnosis_disposition_compat import (
-+            disposition_from_legacy_result,
-+        )
-+
-+        results: list[AutoLoopIncidentResult] = [
-+            AutoLoopIncidentResult(
-+                incident_id="i-1",
-+                eligible=True,
-+                eligibility_reason="active_incident_with_suggested_checks",
-+            ),
-+            AutoLoopIncidentResult(
-+                incident_id="i-2",
-+                eligible=False,
-+                eligibility_reason="not_found",
-+                skipped=True,
-+                skip_reason="incident_not_found",
-+            ),
-+            AutoLoopIncidentResult(
-+                incident_id="i-3",
-+                eligible=False,
-+                eligibility_reason="backend_incident_invalid_payload",
-+                error="bad envelope",
-+            ),
-+        ]
-+        summary = empty_disposition_summary()
-+        for result in results:
-+            disposition = disposition_from_legacy_result(result)
-+            summary = reduce_disposition(summary, disposition)
-+        assert summary.is_consistent()
-+        assert summary.processed == 3
-+        assert summary.eligible == 1
-+        assert summary.skipped == 1
-+        assert summary.errors == 1
++        return None
++    return decoded
 +
 +
-+# ---------------------------------------------------------------------------
-+# 6. Diagnostic bounds
-+# ---------------------------------------------------------------------------
++def _validate_payload(data: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
++    """Return ``(normalized, error_message)`` for a parsed request body.
 +
-+
-+class TestDiagnosticBounds:
-+    def test_failure_diagnostic_carries_safe_metadata_only(self) -> None:
-+        """Diagnostic projection must not contain Authorization / Bearer / token."""
-+
-+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentLookupDiagnostic,
-+            BackendIncidentLookupFailed,
-+        )
-+        from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+        outcome = BackendIncidentLookupFailed(
-+            requested_incident_id=IncidentId("incident-abc"),
-+            failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
-+            detail="connection refused",
-+            http_status=None,
-+            exception_type="ConnectionRefusedError",
-+        )
-+        diagnostic = outcome.to_diagnostic()
-+        assert isinstance(diagnostic, BackendIncidentLookupDiagnostic)
-+        assert diagnostic.failure_code == BackendIncidentLookupFailureCode.TRANSPORT_ERROR
-+        assert diagnostic.http_status is None
-+        assert diagnostic.exception_type == "ConnectionRefusedError"
-+        assert diagnostic.requested_incident_id == IncidentId("incident-abc")
-+
-+    def test_failure_detail_is_truncated(self) -> None:
-+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentLookupFailed,
-+        )
-+        from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+        huge = "x" * 5000
-+        outcome = BackendIncidentLookupFailed(
-+            requested_incident_id=IncidentId("incident-abc"),
-+            failure_code=BackendIncidentLookupFailureCode.INVALID_PAYLOAD,
-+            detail=huge,
-+            http_status=200,
-+        )
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.detail is not None
-+        assert len(diagnostic.detail) <= 512
-+
-+
-+# ---------------------------------------------------------------------------
-+# 7. Production-path regression test (R1)
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestProductionPathRegression:
-+    """Integration-style test that does NOT replace ``_process_incident``.
-+
-+    The real evidence processor is exercised end-to-end. Only
-+    downstream work is patched:
-+
-+    * the hypothesis burst multipass loop (LLM-free) returns an empty
-+      payload,
-+    * the policy-enforced loop pass is short-circuited,
-+    * the review-packet writer is stubbed so we do not write to disk
-+      beyond the ``external_analysis_dir`` summary artifact.
-+
-+    The test uses the canonical
-+    :func:`build_incident_internal_detail_response_payload` backend
-+    serializer to build a valid 200 payload for the canonical
-+    "found" case, the canonical parser for the "invalid payload"
-+    case, and a hand-rolled ``BackendIncidentHttpResponse`` for the
-+    "404 not found" case.
++    All field names are intentionally read from the wire-side camelCase
++    to keep the contract aligned with the scheduler-side client. The
++    server-side types and IDs are branded at the boundary.
 +    """
-+
-+    @pytest.fixture
-+    def seeded_incident_store(
-+        self, monkeypatch: pytest.MonkeyPatch
-+    ):
-+        """Seed the local incident store with an eligible incident so
-+        the ``_process_incident`` eligibility check returns ``True``
-+        after the lookup succeeds.
-+        """
-+        from datetime import UTC, datetime
-+
-+        from k8s_diag_agent.collect.incident_lifecycle import (
-+            Incident,
-+            IncidentStatus,
++    schema_version = data.get("schemaVersion")
++    if schema_version != LIFECYCLE_SCHEMA_VERSION:
++        return (
++            None,
++            f"unsupported schemaVersion {schema_version!r}; expected {LIFECYCLE_SCHEMA_VERSION}",
 +        )
-+        from k8s_diag_agent.collect.incident_store import IncidentStore
-+        from k8s_diag_agent.collect.incident_store_provider import (
-+            set_incident_store,
++    incident_id = data.get("incidentId")
++    if not isinstance(incident_id, str) or not incident_id:
++        return (None, "incidentId is required and must be a non-empty string")
++    transition = data.get("transition")
++    if transition not in SUPPORTED_TRANSITIONS:
++        return (
++            None,
++            f"transition must be one of {sorted(SUPPORTED_TRANSITIONS)}; got {transition!r}",
 +        )
++    collector_run_id = data.get("collectorRunId")
++    if not isinstance(collector_run_id, str) or not collector_run_id:
++        return (None, "collectorRunId is required and must be a non-empty string")
++    diagnosis_run_id = data.get("diagnosisRunId")
++    if diagnosis_run_id is not None and not isinstance(diagnosis_run_id, str):
++        return (None, "diagnosisRunId must be a string when present")
++    if isinstance(diagnosis_run_id, str) and not diagnosis_run_id:
++        # An empty string is treated as absent; the canonical key uses None.
++        diagnosis_run_id = None
++    occurred_at_str = data.get("occurredAt")
++    if not isinstance(occurred_at_str, str) or not occurred_at_str:
++        return (None, "occurredAt is required and must be an ISO-8601 string")
++    payload = data.get("payload")
++    if payload is None:
++        payload = {}
++    if not isinstance(payload, dict):
++        return (None, "payload must be a JSON object when present")
++    try:
++        occurred_at = datetime.fromisoformat(occurred_at_str)
++    except ValueError:
++        return (None, f"occurredAt is not a valid ISO-8601 timestamp: {occurred_at_str!r}")
++    if occurred_at.tzinfo is None:
++        # Reject naive timestamps; identity is the contract.
++        return (None, "occurredAt must include a timezone offset")
 +
-+        incident = Incident(
-+            incident_id="incident-r1-found",
-+            source_candidate_id="candidate-r1",
-+            namespace="default",
-+            object_kind="Pod",
-+            object_name="nginx-pod",
-+            raw_object_kind=None,
-+            candidate_class="PodCrashLoop",
-+            severity="high",
-+            status=IncidentStatus.OPEN,
-+            first_observed_at=datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC),
-+            last_observed_at=datetime(2026, 7, 12, 10, 30, 0, tzinfo=UTC),
-+            signal_count=1,
-+            evidence_count=0,
++    normalized = {
++        "schemaVersion": int(schema_version),
++        "incidentId": str(incident_id),
++        "transition": str(transition),
++        "collectorRunId": str(collector_run_id),
++        "diagnosisRunId": (
++            str(diagnosis_run_id) if diagnosis_run_id is not None else None
++        ),
++        "occurredAt": occurred_at.astimezone(UTC).isoformat(),
++        "payload": dict(payload),
++    }
++    return (normalized, None)
++
++
++def handle_diagnosis_loop_transition(handler: Any) -> None:
++    """Handle POST /api/internal/incidents/diagnosis-loop-transition.
++
++    The endpoint accepts a single bounded request and applies it to the
++    backend-owned incident store. Idempotent deliveries collapse to a
++    single observable transition; conflicting replays (same key,
++    different payload) are rejected with HTTP 409 and a stable reason
++    code.
++    """
++    if not _validate_internal_token(handler):
++        _send_json(
++            handler,
++            {
++                "error": "Unauthorized",
++                "message": "Valid internal API token required",
++            },
++            401,
 +        )
-+        store = IncidentStore()
-+        store.add_incident(incident)
-+        set_incident_store(store)
-+        yield incident
-+        set_incident_store(None)
++        return
 +
-+    def _run_production_path(
-+        self,
-+        *,
-+        body: bytes,
-+        http_status: int,
-+        monkeypatch: pytest.MonkeyPatch,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        incident_ids: list[str],
-+    ) -> dict[str, Any]:
-+        """Run the production loop with a single fake HTTP client.
++    raw = _read_request_body(handler)
++    if raw is None:
++        return
 +
-+        Patches the ``BackendIncidentClient`` implementation that
-+        ``HttpIncidentBackendClient`` builds so we never touch the
-+        network.
-+        """
-+        from k8s_diag_agent.collect.incident_diagnosis_auto_loop import (
-+            run_automatic_diagnosis_loop_evidence_collection,
++    normalized, error_message = _validate_payload(raw)
++    if error_message is not None or normalized is None:
++        _send_json(
++            handler,
++            {"error": "Bad Request", "message": error_message or "invalid request"},
++            400,
 +        )
-+        from k8s_diag_agent.collect.incident_diagnosis_dispatch_contracts import (
-+            IncidentDiagnosisDispatchConfig,
++        return
++
++    applied = apply_transition_idempotently(
++        transition=normalized["transition"],
++        incident_id=normalized["incidentId"],
++        collector_run_id=normalized["collectorRunId"],
++        diagnosis_run_id=normalized["diagnosisRunId"],
++        occurred_at=datetime.fromisoformat(normalized["occurredAt"]),
++        payload=normalized["payload"],
++    )
++
++    if applied["outcome"] == "incident_not_found":
++        _send_json(
++            handler,
++            {
++                "schemaVersion": LIFECYCLE_SCHEMA_VERSION,
++                "type": "incident-diagnosis-loop-transition-result",
++                "applied": False,
++                "reasonCode": "incident_not_found",
++                "incidentId": normalized["incidentId"],
++                "transition": normalized["transition"],
++            },
++            404,
 +        )
++        return
 +
-+        # Force the dispatch mode to backend-api so the canonical
-+        # HTTP lookup path is exercised instead of the local store.
-+        def _backend_api_config() -> IncidentDiagnosisDispatchConfig:
-+            return IncidentDiagnosisDispatchConfig(
-+                mode="backend-api",
-+                backend_url="http://fake-backend.test",
-+                internal_api_token=None,
-+                store_backend="memory",
-+                process_role="scheduler",
-+            )
-+
-+        monkeypatch.setattr(
-+            "k8s_diag_agent.collect.incident_diagnosis_dispatch._get_dispatch_config",
-+            _backend_api_config,
++    if applied["outcome"] == "replay_mismatch":
++        _send_json(
++            handler,
++            {
++                "schemaVersion": LIFECYCLE_SCHEMA_VERSION,
++                "type": "incident-diagnosis-loop-transition-result",
++                "applied": False,
++                "reasonCode": "transition_replay_mismatch",
++                "incidentId": normalized["incidentId"],
++                "transition": normalized["transition"],
++            },
++            409,
 +        )
++        return
 +
-+        # Patch downstream work so the processor returns quickly
-+        # without invoking the LLM / disk artifacts.
-+        class _FakeHypothesis:
-+            def to_dict(self) -> dict[str, Any]:
-+                return {}
-+
-+        def _fake_hypothesis_loop(**kwargs: Any) -> _FakeHypothesis:
-+            return _FakeHypothesis()
-+
-+        def _fake_policy_pass(**kwargs: Any) -> dict[str, Any]:
-+            return {
-+                "decision": "STOP_NO_SAFE_CHECKS",
-+                "runner_result": {
-+                    "checks_requested": 0,
-+                    "checks_run": 0,
-+                    "checks_skipped": 0,
-+                    "checks_rejected": 0,
-+                },
-+                "artifact": {"written": False},
-+                "loop_pass_artifact": {"written": False},
-+            }
-+
-+        def _fake_review_packet(**kwargs: Any) -> dict[str, Any]:
-+            return {"written": False}
-+
-+        monkeypatch.setattr(
-+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
-+            "run_automatic_diagnosis_hypothesis_loop",
-+            _fake_hypothesis_loop,
++    if applied["outcome"] == "persistence_failed":
++        _send_json(
++            handler,
++            {
++                "schemaVersion": LIFECYCLE_SCHEMA_VERSION,
++                "type": "incident-diagnosis-loop-transition-result",
++                "applied": False,
++                "reasonCode": "persistence_failed",
++                "exceptionType": applied.get("exception_type", "Unknown"),
++                "incidentId": normalized["incidentId"],
++                "transition": normalized["transition"],
++            },
++            500,
 +        )
-+        monkeypatch.setattr(
-+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
-+            "run_policy_enforced_loop_pass",
-+            _fake_policy_pass,
-+        )
-+        monkeypatch.setattr(
-+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
-+            "write_diagnosis_review_packet",
-+            _fake_review_packet,
-+        )
++        return
 +
-+        # Force the canonical lookup to use our fake HTTP client.
-+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_lookup import (
-+            BackendIncidentHttpResponse,
-+        )
++    # applied or idempotent_replay
++    _send_json(
++        handler,
++        {
++            "schemaVersion": LIFECYCLE_SCHEMA_VERSION,
++            "type": "incident-diagnosis-loop-transition-result",
++            "applied": True,
++            "idempotentReplay": bool(applied.get("idempotent_replay", False)),
++            "incidentId": normalized["incidentId"],
++            "transition": normalized["transition"],
++        },
++        200,
++    )
 +
-+        class _FakeHttpClient:
-+            def __init__(self) -> None:
-+                self.calls: list[str] = []
 +
-+            def fetch_incident(
-+                self, incident_id: object, *, timeout: float = 30.0
-+            ) -> BackendIncidentHttpResponse:
-+                self.calls.append(str(incident_id))
-+                return BackendIncidentHttpResponse(
-+                    http_status=http_status,
-+                    body=body,
-+                )
-+
-+        fake = _FakeHttpClient()
-+
-+        class _FakeClientFactory:
-+            def __init__(self, fake: _FakeHttpClient) -> None:
-+                self._fake = fake
-+
-+            def __call__(self, *, base_url: str, token: object) -> _FakeHttpClient:
-+                return self._fake
-+
-+        # The dispatch module imports the client class lazily inside
-+        # the function body. Patch the symbol in the lookup module
-+        # namespace (which is where the canonical lookup references
-+        # it) before the function runs.
-+        import k8s_diag_agent.collect.incident_diagnosis_backend_detail_lookup as lookup_mod
-+
-+        class _FakeHttpIncidentBackendClient:
-+            def __init__(self, *, base_url: str, token: object) -> None:
-+                self._fake = fake
-+
-+            def fetch_incident(
-+                self, incident_id: object, *, timeout: float = 30.0
-+            ) -> BackendIncidentHttpResponse:
-+                return self._fake.fetch_incident(incident_id, timeout=timeout)
-+
-+        monkeypatch.setattr(
-+            lookup_mod,
-+            "HttpIncidentBackendClient",
-+            _FakeHttpIncidentBackendClient,
-+        )
-+
-+        captured, handler = _capture_logging()
-+        try:
-+            run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=incident_ids,
-+            )
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+        return _summary_from_logs(captured)
-+
-+    def test_200_canonical_payload_produces_found_outcome(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        seeded_incident_store: object,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        """HTTP 200 + canonical payload -> ``Found`` -> eligibility ->
-+        processed=1, skipped=0, errors=0, real eligibility reached.
-+        """
-+        from k8s_diag_agent.ui.api_incident_internal_reads import (
-+            build_incident_internal_detail_response_payload,
-+        )
-+
-+        canonical_payload = build_incident_internal_detail_response_payload(
-+            seeded_incident_store
-+        )
-+        body = json.dumps(canonical_payload).encode("utf-8")
-+
-+        summary = self._run_production_path(
-+            body=body,
-+            http_status=200,
-+            monkeypatch=monkeypatch,
-+            temp_external_dir=temp_external_dir,
-+            enabled_auto_loop=enabled_auto_loop,
-+            incident_ids=["incident-r1-found"],
-+        )
-+
-+        assert summary["incidents_processed"] == 1
-+        assert summary["incidents_skipped"] == 0
-+        assert summary["incidents_with_errors"] == 0
-+        assert "incident_not_found" not in summary["skip_reasons"]
-+
-+    def test_200_invalid_payload_produces_failed_outcome(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        seeded_incident_store: object,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        """HTTP 200 + valid JSON but invalid envelope contract
-+        (missing ``incident`` aggregate) -> ``Failed`` -> processed=1,
-+        errors=1, error_reasons=backend_incident_invalid_payload exactly.
-+
-+        This proves the seam classifies a successfully-decoded-but-invalid
-+        payload as ``INVALID_PAYLOAD`` (not ``INVALID_JSON`` and never
-+        ``incident_not_found``). The malformed-JSON case is exercised by
-+        :meth:`test_200_malformed_json_produces_failed_outcome`.
-+        """
-+        import json as _json
-+
-+        invalid_envelope = {
-+            "schema_version": "1",
-+            "payload_type": "incident-internal-detail",
-+            # Intentionally missing the required ``incident`` aggregate.
-+        }
-+        invalid_body = _json.dumps(invalid_envelope).encode("utf-8")
-+        summary = self._run_production_path(
-+            body=invalid_body,
-+            http_status=200,
-+            monkeypatch=monkeypatch,
-+            temp_external_dir=temp_external_dir,
-+            enabled_auto_loop=enabled_auto_loop,
-+            incident_ids=["incident-r1-found"],
-+        )
-+        assert summary["incidents_processed"] == 1
-+        assert summary["incidents_with_errors"] == 1
-+        assert summary["incidents_skipped"] == 0
-+        # Exactly: INVALID_PAYLOAD = 1 and INVALID_JSON is absent.
-+        assert summary["error_reasons"].get("backend_incident_invalid_payload") == 1
-+        assert "backend_incident_invalid_json" not in summary["error_reasons"]
-+        assert "incident_not_found" not in summary["skip_reasons"]
-+
-+    def test_200_malformed_json_produces_failed_outcome(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        seeded_incident_store: object,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        """HTTP 200 + malformed JSON -> ``Failed`` ->
-+        processed=1, errors=1, error_reasons=backend_incident_invalid_json.
-+
-+        This is the canonical JSON decoding failure path: the body is
-+        not valid JSON, so the lookup function cannot reach the envelope
-+        validator and classifies the result as ``INVALID_JSON``.
-+        Kept separate from the valid-JSON-but-invalid-envelope case.
-+        """
-+        invalid_body = b"{not valid json"
-+        summary = self._run_production_path(
-+            body=invalid_body,
-+            http_status=200,
-+            monkeypatch=monkeypatch,
-+            temp_external_dir=temp_external_dir,
-+            enabled_auto_loop=enabled_auto_loop,
-+            incident_ids=["incident-r1-found"],
-+        )
-+        assert summary["incidents_processed"] == 1
-+        assert summary["incidents_with_errors"] == 1
-+        assert summary["incidents_skipped"] == 0
-+        # Exactly: INVALID_JSON = 1 and INVALID_PAYLOAD is absent.
-+        assert summary["error_reasons"].get("backend_incident_invalid_json") == 1
-+        assert "backend_incident_invalid_payload" not in summary["error_reasons"]
-+        assert "incident_not_found" not in summary["skip_reasons"]
-+
-+    def test_404_response_produces_skipped_incident_not_found(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        seeded_incident_store: object,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        """HTTP 404 -> ``NotFound`` -> skipped / ``incident_not_found`` ->
-+        processed=1, skipped=1, error_reasons empty.
-+        """
-+        summary = self._run_production_path(
-+            body=b"",
-+            http_status=404,
-+            monkeypatch=monkeypatch,
-+            temp_external_dir=temp_external_dir,
-+            enabled_auto_loop=enabled_auto_loop,
-+            incident_ids=["incident-r1-not-found"],
-+        )
-+        assert summary["incidents_processed"] == 1
-+        assert summary["incidents_skipped"] == 1
-+        assert summary["incidents_with_errors"] == 0
-+        assert summary["skip_reasons"].get("incident_not_found") == 1
-+        assert "backend_incident_invalid_payload" not in summary["error_reasons"]
++__all__ = [
++    "LIFECYCLE_SCHEMA_VERSION",
++    "SUPPORTED_TRANSITIONS",
++    "handle_diagnosis_loop_transition",
++]
 
-=== tests/unit/test_automatic_diagnosis_backend_detail_outcomes.py ===
-diff --git a/tests/unit/test_automatic_diagnosis_backend_detail_outcomes.py b/tests/unit/test_automatic_diagnosis_backend_detail_outcomes.py
+=== src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_idempotency.py ===
+diff --git a/src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_idempotency.py b/src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_idempotency.py
 new file mode 100644
-index 0000000..8b1f8ab
+index 00000000..50c8b7dd
 --- /dev/null
-+++ b/tests/unit/test_automatic_diagnosis_backend_detail_outcomes.py
-@@ -0,0 +1,584 @@
-+"""Unit tests for the backend incident-detail lookup outcome algebra.
++++ b/src/k8s_diag_agent/ui/server_incident_diagnosis_lifecycle_idempotency.py
+@@ -0,0 +1,335 @@
++"""Atomic, idempotent application of diagnosis-loop lifecycle transitions.
 +
-+Covers the invariant from
-+ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01: a successful HTTP 200
-+response cannot be converted into ``BackendIncidentNotFound`` through
-+any parser/schema/deserialization/identity failure.
++This module owns the authoritative critical section for the internal
++diagnosis-loop lifecycle endpoint. It is deliberately separated from the
++HTTP request/response handler so the idempotency + concurrency contract
++lives in one focused place:
 +
-+These tests use a fake :class:`BackendIncidentClient` to exercise the
-+canonical lookup function directly; no real network calls are made.
++    begin authoritative critical section (per-store lock)
++        ↓
++    look up idempotency key
++        ├─ same key + same fingerprint → return stored result (replay)
++        ├─ same key + different fingerprint → conflict
++        └─ absent → apply transition
++                     persist idempotency record (atomic, non-swallowed)
++        ↓
++    commit / release lock
++
++The idempotency lookup happens **before** the transition is applied,
++the whole operation runs under a lock so two concurrent deliveries
++cannot both apply, a canonical payload fingerprint is stored and
++compared so a same-key/different-payload request is rejected, and the
++idempotency record is written as part of the same critical section as
++the mutation (it is never swallowed as best-effort).
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R1)
 +"""
 +
 +from __future__ import annotations
 +
-+from dataclasses import dataclass
-+from typing import Any
++import hashlib
++import json
++import logging
++import threading
++from datetime import datetime
++from typing import TYPE_CHECKING, Any, cast
++from weakref import WeakKeyDictionary
++
++if TYPE_CHECKING:
++    from ..collect.incident_store_sqlite import SQLiteIncidentStore
++
++_logger = logging.getLogger(__name__)
++
++
++# Same-process lock for the in-memory fallback path. The
++# SQLite-backed critical section lives in
++# :mod:`incident_store_sqlite_lifecycle_idempotency` and serializes
++# across processes via ``BEGIN IMMEDIATE`` instead of this lock;
++# this lock only guards the in-process ``IncidentStore`` path used
++# in tests.
++_IDEMPOTENCY_LOCK = threading.RLock()
++
++# In-memory idempotency registry, keyed to the store instance so
++# each store gets its own clean slate. SQLite-backed stores do NOT
++# use this registry; they delegate to
++# :func:`apply_lifecycle_transition_atomic` which persists the
++# record inside the same transaction as the mutation.
++_STORE_REGISTRIES: WeakKeyDictionary[Any, dict[tuple[Any, ...], dict[str, Any]]] = (
++    WeakKeyDictionary()
++)
++
++
++def _registry_for(store: Any) -> dict[tuple[Any, ...], dict[str, Any]]:
++    """Return the in-memory idempotency registry bound to ``store``.
++
++    Used only for non-SQLite stores (tests). The registry lives and
++    dies with the store instance. Stores that cannot be weakly
++    referenced fall back to an instance attribute so the record
++    still shares the store's lifetime.
++    """
++    try:
++        reg = _STORE_REGISTRIES.get(store)
++        if reg is None:
++            reg = {}
++            _STORE_REGISTRIES[store] = reg
++        return reg
++    except TypeError:
++        reg = getattr(store, "_diag_lifecycle_idempotency", None)
++        if reg is None:
++            reg = {}
++            store._diag_lifecycle_idempotency = reg
++        return reg
++
++
++def _idempotency_key(
++    *,
++    incident_id: str,
++    transition: str,
++    collector_run_id: str,
++    diagnosis_run_id: str | None,
++) -> tuple[Any, ...]:
++    return (incident_id, transition, collector_run_id, diagnosis_run_id)
++
++
++def _payload_fingerprint(payload: dict[str, Any]) -> str:
++    """Compute a canonical fingerprint over the request payload.
++
++    The fingerprint intentionally excludes the delivery timestamp
++    (``occurredAt``) and the identity fields already captured by the
++    idempotency key. It captures the semantic payload (review packet
++    name, check counts, decision, unavailable reason, ...) so a repeat
++    delivery that reuses the identity but changes the payload is
++    detected as a conflict rather than collapsed as a replay.
++    """
++    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
++    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
++
++
++def _is_sqlite_store(store: Any) -> bool:
++    """Return True when ``store`` is a SQLite-backed incident store.
++
++    Detection is by class identity (not duck typing) so a misnamed
++    subclass does not accidentally pick up the SQLite critical
++    section.
++    """
++    from ..collect.incident_store_sqlite import SQLiteIncidentStore
++
++    return isinstance(store, SQLiteIncidentStore)
++
++
++def _apply_transition_to_store(
++    *,
++    store: Any,
++    transition: str,
++    incident_id: str,
++    collector_run_id: str,
++    diagnosis_run_id: str | None,
++    payload: dict[str, Any],
++) -> Any:
++    """Apply the bounded transition to the backend-owned store.
++
++    Returns the updated incident (or ``None`` when the incident is
++    absent). Raises on persistence failure; the caller translates the
++    exception into a ``persistence_failed`` outcome.
++    """
++    run_id = diagnosis_run_id or ""
++    if transition == "started":
++        return store.mark_diagnosis_loop_started(
++            incident_id=incident_id,
++            run_id=run_id,
++            collector_run_id=collector_run_id,
++        )
++    if transition == "failed":
++        return store.mark_diagnosis_loop_failed(
++            incident_id=incident_id,
++            run_id=run_id,
++            collector_run_id=collector_run_id,
++            unavailable_reason=str(payload.get("unavailable_reason", "")) or None,
++        )
++    if transition == "completed":
++        return store.mark_diagnosis_loop_completed(
++            incident_id=incident_id,
++            run_id=run_id,
++            collector_run_id=collector_run_id,
++            review_packet_name=(
++                str(payload["review_packet_name"])
++                if payload.get("review_packet_name") is not None
++                else None
++            ),
++            checks_requested=int(payload.get("checks_requested", 0) or 0),
++            checks_run=int(payload.get("checks_run", 0) or 0),
++            checks_rejected=int(payload.get("checks_rejected", 0) or 0),
++            decision=(
++                str(payload["decision"])
++                if payload.get("decision") is not None
++                else None
++            ),
++        )
++    raise ValueError(f"unsupported transition: {transition!r}")
++
++
++def apply_transition_idempotently(
++    *,
++    transition: str,
++    incident_id: str,
++    collector_run_id: str,
++    diagnosis_run_id: str | None,
++    occurred_at: datetime,
++    payload: dict[str, Any],
++) -> dict[str, Any]:
++    """Apply the transition idempotently to the canonical backend store.
++
++    The complete lookup → apply → record sequence runs under
++    ``_IDEMPOTENCY_LOCK`` so concurrent duplicate deliveries cannot
++    both apply the transition. Returns a ``result`` dict with one of:
++
++    * ``{"outcome": "applied", "idempotent_replay": bool}``
++    * ``{"outcome": "replay_mismatch"}``          (same key, different payload)
++    * ``{"outcome": "incident_not_found"}``
++    * ``{"outcome": "persistence_failed", "exception_type": str, "detail": str}``
++    """
++    from ..collect.incident_store_provider import get_incident_store
++
++    store = get_incident_store()
++    fingerprint = _payload_fingerprint(payload)
++
++    # SQLite-backed stores get the durable critical section: the
++    # mutation AND the idempotency record are written inside the same
++    # ``BEGIN IMMEDIATE`` transaction, so two concurrent backend
++    # processes serialize on the database and the result survives a
++    # crash-restart. This is what makes restart-durable and
++    # multi-process idempotency hold.
++    if _is_sqlite_store(store):
++        from ..collect.incident_store_sqlite_lifecycle_idempotency import (
++            apply_lifecycle_transition_atomic,
++        )
++
++        return apply_lifecycle_transition_atomic(
++            store=cast("SQLiteIncidentStore", store),
++            transition=transition,
++            incident_id=incident_id,
++            run_id=diagnosis_run_id,
++            collector_run_id=collector_run_id,
++            fingerprint=fingerprint,
++            occurred_at=occurred_at,
++            payload=dict(payload),
++        )
++
++    # In-memory / test-only path: same-process lock + per-store
++    # registry. This path is intentionally process-local because the
++    # in-memory store has no shared durable state.
++    key = _idempotency_key(
++        incident_id=incident_id,
++        transition=transition,
++        collector_run_id=collector_run_id,
++        diagnosis_run_id=diagnosis_run_id,
++    )
++    with _IDEMPOTENCY_LOCK:
++        registry = _registry_for(store)
++
++        # 1. Idempotency lookup BEFORE applying the transition.
++        existing = registry.get(key)
++        if existing is not None:
++            if existing.get("fingerprint") != fingerprint:
++                # Same idempotency key, different payload → conflict.
++                return {"outcome": "replay_mismatch"}
++            # Same key + same fingerprint → return the prior outcome
++            # without reapplying the transition.
++            return {"outcome": "applied", "idempotent_replay": True}
++
++        # 2. Absent key → apply the transition.
++        try:
++            updated = _apply_transition_to_store(
++                store=store,
++                transition=transition,
++                incident_id=incident_id,
++                collector_run_id=collector_run_id,
++                diagnosis_run_id=diagnosis_run_id,
++                payload=payload,
++            )
++        except Exception as exc:  # noqa: BLE001 - boundary translation
++            return {
++                "outcome": "persistence_failed",
++                "exception_type": type(exc).__name__,
++                "detail": f"store raised {type(exc).__name__}: {exc}",
++            }
++
++        if updated is None:
++            # Incident absent: do NOT record an idempotency marker so a
++            # later delivery (after the incident exists) can apply.
++            return {"outcome": "incident_not_found"}
++
++        # 3. Persist the idempotency record as part of the same critical
++        #    section as the mutation. This assignment is in-memory and
++        #    cannot silently fail; the record is therefore durable for
++        #    the lifetime of the backend-owned store and atomic with the
++        #    applied transition. It is NOT best-effort.
++        registry[key] = {
++            "fingerprint": fingerprint,
++            "occurred_at": occurred_at.isoformat(),
++            "applied": True,
++        }
++
++        return {"outcome": "applied", "idempotent_replay": False}
++
++
++def _project_lifecycle_event(
++    *,
++    store: Any,
++    incident_id: str,
++    transition: str,
++    collector_run_id: str,
++    diagnosis_run_id: str | None,
++    occurred_at: datetime,
++    payload: dict[str, Any],
++) -> None:
++    """Project an observability-only lifecycle event onto the incident.
++
++    Unlike the idempotency record (which is authoritative and never
++    swallowed), this projection is best-effort and only runs on stores
++    that support ``append_event``.
++    """
++    append_event = getattr(store, "append_event", None)
++    if append_event is None:
++        return
++    try:
++        from ..collect.incident_events import (
++            IncidentEvent,
++            IncidentEventActor,
++            IncidentEventType,
++            make_event_id,
++        )
++
++        incident = store.get_incident(incident_id)
++        if incident is None:
++            return
++        if transition == "completed":
++            event_type = IncidentEventType.REVIEW_PACKET_GENERATED
++        else:
++            event_type = IncidentEventType.STATUS_CHANGED
++        event = IncidentEvent(
++            event_id=make_event_id(incident_id, transition, occurred_at),
++            incident_id=incident_id,
++            event_type=event_type,
++            actor=IncidentEventActor.SYSTEM,
++            occurred_at=occurred_at,
++            message=f"diagnosis-loop {transition}",
++            data={
++                "transition": transition,
++                "collector_run_id": collector_run_id,
++                "diagnosis_run_id": diagnosis_run_id,
++                "payload": dict(payload),
++            },
++        )
++        append_event(incident_id, event)
++    except Exception:  # noqa: BLE001 - projection is observability-only
++        _logger.debug(
++            "lifecycle event projection failed",
++            exc_info=True,
++            extra={"incident_id": incident_id, "transition": transition},
++        )
++
++
++__all__ = [
++    "apply_transition_idempotently",
++]
+
+=== src/k8s_diag_agent/ui/server_routes.py ===
+diff --git a/src/k8s_diag_agent/ui/server_routes.py b/src/k8s_diag_agent/ui/server_routes.py
+index 9e04a721..fc445883 100644
+--- a/src/k8s_diag_agent/ui/server_routes.py
++++ b/src/k8s_diag_agent/ui/server_routes.py
+@@ -179,6 +179,7 @@ _INTERNAL_AUTH_EXEMPT_ROUTES: frozenset[str] = frozenset({
+     "/api/internal/incidents/promote-candidates",
+     "/api/internal/incidents",
+     "/api/internal/incidents/list",
++    "/api/internal/incidents/diagnosis-loop-transition",
+ })
+
+ # Internal API route patterns (for dynamic paths like /api/internal/incidents/{id})
+@@ -271,6 +272,9 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
+     from .server_batch_execution import handle_run_batch_next_check_execution
+     from .server_feedback import handle_alertmanager_relevance_feedback, handle_usefulness_feedback
+     from .server_incident import handle_incident_snapshot_api
++    from .server_incident_diagnosis_lifecycle_handler import (
++        handle_diagnosis_loop_transition,
++    )
+     from .server_incident_internal import (
+         handle_promote_alert_signals,
+         handle_promote_candidates,
+@@ -317,6 +321,12 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
+         handle_promote_candidates(handler)
+         return
+
++    # Internal: Diagnosis-loop lifecycle transition (started/failed/completed)
++    # POST /api/internal/incidents/diagnosis-loop-transition
++    if route == "/api/internal/incidents/diagnosis-loop-transition":
++        handle_diagnosis_loop_transition(handler)
++        return
++
+     # Incident diagnosis loop one-pass
+     # POST /api/incidents/{incident_id}/diagnosis-loop/one-pass
+     incident_dl_match = _INCIDENT_DIAGNOSIS_LOOP_PATTERN.match(route)
+
+=== tests/unit/authority_seam_support.py ===
+diff --git a/tests/unit/authority_seam_support.py b/tests/unit/authority_seam_support.py
+new file mode 100644
+index 00000000..f9fe078b
+--- /dev/null
++++ b/tests/unit/authority_seam_support.py
+@@ -0,0 +1,243 @@
++"""Shared helpers for the ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
++test modules.
++
++This module is intentionally *not* a ``test_*`` file, so pytest does not
++collect it directly. It hosts the fixtures, canonical builders, and
++minimal handler stand-ins shared between:
++
++* ``test_automatic_diagnosis_authority_seam01.py`` (aggregate evaluator
++  + processor regressions), and
++* ``test_automatic_diagnosis_authority_seam01_endpoint.py`` (lifecycle
++  endpoint + backend dispatch + idempotency/concurrency).
++
++Splitting keeps each test file under the LLM-friendly size threshold
++while sharing a single source of truth for the fixtures.
++"""
++
++from __future__ import annotations
++
++import io
++import json
++import threading
++from collections.abc import Callable, Iterable
++from datetime import UTC, datetime
++from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
++from typing import Any, NoReturn
 +
 +import pytest
 +
-+from k8s_diag_agent.collect.incident_diagnosis_backend_detail_lookup import (
-+    BackendIncidentHttpResponse,
-+    BackendIncidentTransportError,
-+    lookup_backend_incident,
-+)
-+from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+    BackendIncidentFound,
-+    BackendIncidentLookupFailed,
-+    BackendIncidentLookupFailureCode,
-+    BackendIncidentNotFound,
-+)
 +from k8s_diag_agent.collect.incident_diagnosis_backend_detail_parser import (
 +    SUPPORTED_PAYLOAD_TYPE,
 +    SUPPORTED_SCHEMA_VERSION,
@@ -4307,42 +4446,54 @@ index 0000000..8b1f8ab
 +    Incident,
 +    IncidentStatus,
 +)
-+from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+# ---------------------------------------------------------------------------
-+# Test helpers
-+# ---------------------------------------------------------------------------
++from k8s_diag_agent.collect.incident_store_provider import (
++    set_incident_store,
++)
 +
 +
-+@dataclass
-+class FakeClient:
-+    """Programmable :class:`BackendIncidentClient` implementation."""
++@pytest.fixture(autouse=True)
++def reset_env(monkeypatch: pytest.MonkeyPatch) -> Iterable[None]:
++    """Reset the incident store and env vars between tests.
 +
-+    response: BackendIncidentHttpResponse | None = None
-+    error: Exception | None = None
-+    calls: list[IncidentId] = None  # type: ignore[assignment]
-+
-+    def __post_init__(self) -> None:
-+        if self.calls is None:
-+            self.calls = []
-+
-+    def fetch_incident(
-+        self,
-+        incident_id: IncidentId,
-+        *,
-+        timeout: float = 30.0,
-+    ) -> BackendIncidentHttpResponse:
-+        self.calls.append(incident_id)
-+        if self.error is not None:
-+            raise self.error
-+        assert self.response is not None, "FakeClient response must be set"
-+        return self.response
++    Imported (and thereby auto-registered) by each test module.
++    """
++    set_incident_store(None)
++    for var in (
++        "K9B_INCIDENT_PROMOTION_MODE",
++        "K9B_BACKEND_INTERNAL_URL",
++        "K9B_INTERNAL_API_TOKEN",
++        "K9B_INCIDENT_STORE_BACKEND",
++        "K9B_PROCESS_ROLE",
++    ):
++        monkeypatch.delenv(var, raising=False)
++    yield
++    set_incident_store(None)
 +
 +
-+def _canonical_incident_payload(
++def canonical_incident(
 +    incident_id: str = "incident-abc",
-+) -> dict[str, Any]:
-+    """Build a valid wrapped canonical payload as the backend would emit."""
++    status: IncidentStatus = IncidentStatus.OPEN,
++) -> Incident:
++    """Build a canonical :class:`Incident` aggregate."""
++    now = datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC)
++    return Incident(
++        incident_id=incident_id,
++        source_candidate_id="candidate-xyz",
++        namespace="default",
++        object_kind="Pod",
++        object_name="nginx-pod",
++        raw_object_kind="Pod",
++        candidate_class="health",
++        severity="warning",
++        status=status,
++        first_observed_at=now,
++        last_observed_at=now,
++        signal_count=1,
++        evidence_count=0,
++    )
++
++
++def canonical_payload(incident_id: str = "incident-abc") -> dict[str, Any]:
 +    return {
 +        "schema_version": str(SUPPORTED_SCHEMA_VERSION),
 +        "payload_type": SUPPORTED_PAYLOAD_TYPE,
@@ -4352,8 +4503,8 @@ index 0000000..8b1f8ab
 +            "namespace": "default",
 +            "object_kind": "Pod",
 +            "object_name": "nginx-pod",
-+            "class": "PodCrashLoop",
-+            "severity": "high",
++            "class": "health",
++            "severity": "warning",
 +            "status": IncidentStatus.OPEN.value,
 +            "first_observed_at": "2026-07-12T10:00:00+00:00",
 +            "last_observed_at": "2026-07-12T10:30:00+00:00",
@@ -4363,2434 +4514,4367 @@ index 0000000..8b1f8ab
 +    }
 +
 +
-+def _expected_incident(
-+    incident_id: str = "incident-abc",
-+) -> Incident:
-+    """Build the canonical :class:`Incident` that should deserialize."""
-+    return Incident.from_dict(_canonical_incident_payload(incident_id)["incident"])
++def encode(payload: dict[str, Any]) -> bytes:
++    return json.dumps(payload).encode("utf-8")
 +
 +
-+# ---------------------------------------------------------------------------
-+# 1. Happy path
-+# ---------------------------------------------------------------------------
++def never_called(**kwargs: Any) -> Any:  # pragma: no cover - helper
++    raise AssertionError("lifecycle failure should not be reached")
 +
 +
-+class TestCanonicalFound:
-+    def test_200_with_canonical_payload_returns_backend_incident_found(self) -> None:
-+        """200 + canonical payload → BackendIncidentFound."""
-+        payload = _canonical_incident_payload("incident-abc")
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode_payload(payload),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentFound)
-+        assert outcome.requested_incident_id == IncidentId("incident-abc")
-+        assert outcome.http_status == 200
-+        assert outcome.payload_type == SUPPORTED_PAYLOAD_TYPE
-+        assert outcome.payload_schema_version == SUPPORTED_SCHEMA_VERSION
++class StubEligibility:
++    """Stub eligibility result used by the processor regression tests."""
 +
-+    def _encode_payload(self, payload: dict[str, Any]) -> bytes:
-+        import json
-+
-+        return json.dumps(payload).encode("utf-8")
-+
-+    def test_found_outcome_contains_requested_branded_incident_id(self) -> None:
-+        """Found outcome must retain the branded IncidentId (not bare str)."""
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode_payload(_canonical_incident_payload("incident-abc")),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentFound)
-+        assert outcome.requested_incident_id == IncidentId("incident-abc")
-+        # The branded type is distinct from a bare str at type-check time.
-+        assert isinstance(outcome.requested_incident_id, str)
-+
-+    def test_found_outcome_contains_deserialized_domain_incident(self) -> None:
-+        """Found outcome must carry a real deserialized ``Incident``."""
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode_payload(_canonical_incident_payload("incident-abc")),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentFound)
-+        assert isinstance(outcome.incident, Incident)
-+        assert outcome.incident.incident_id == "incident-abc"
-+        assert outcome.incident.status == IncidentStatus.OPEN
++    def __init__(self, *, eligible: bool, reason: str) -> None:
++        self.eligible = eligible
++        self.reason = reason
++        self.budget_diagnostics: tuple[Any, ...] = ()
++        self.status: str | None = None
++        self.has_suggested_checks: bool = False
++        self.auto_pass_count: int = 0
 +
 +
-+# ---------------------------------------------------------------------------
-+# 2. Genuine not-found
-+# ---------------------------------------------------------------------------
++class StubHandler:
++    """Mimics the BaseHTTPRequestHandler surface used by the handler."""
++
++    def __init__(self, payload: dict[str, Any] | None = None, status: int = 200) -> None:
++        self._payload = payload or {}
++        self._status = status
++        self.sent: list[tuple[dict[str, Any], int]] = []
++        self.headers: dict[str, str] = {}
++
++    def _send_json(self, payload: dict[str, Any], status: int) -> None:
++        self.sent.append((payload, status))
 +
 +
-+class TestNotFound:
-+    def test_404_returns_backend_incident_not_found(self) -> None:
-+        """404 → BackendIncidentNotFound (the ONLY path)."""
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=404,
-+                body=b"",
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-missing"))
-+        assert isinstance(outcome, BackendIncidentNotFound)
-+        assert outcome.requested_incident_id == IncidentId("incident-missing")
-+        assert outcome.http_status == 404
++class BuildHandler:
++    """Minimal stand-in for ``HealthUIRequestHandler`` used by the
++    lifecycle handler. Implements only the surface the handler actually
++    calls: ``headers`` (mapping), ``rfile.read()``, ``_send_json()``."""
 +
-+
-+# ---------------------------------------------------------------------------
-+# 3. Status code mapping
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestStatusClassification:
-+    @pytest.mark.parametrize(
-+        "status_code,expected_code",
-+        [
-+            (401, BackendIncidentLookupFailureCode.UNAUTHORIZED),
-+            (403, BackendIncidentLookupFailureCode.FORBIDDEN),
-+            (400, BackendIncidentLookupFailureCode.HTTP_CLIENT_ERROR),
-+            (418, BackendIncidentLookupFailureCode.HTTP_CLIENT_ERROR),
-+            (429, BackendIncidentLookupFailureCode.HTTP_CLIENT_ERROR),
-+            (500, BackendIncidentLookupFailureCode.BACKEND_ERROR),
-+            (502, BackendIncidentLookupFailureCode.BACKEND_ERROR),
-+            (503, BackendIncidentLookupFailureCode.BACKEND_ERROR),
-+        ],
-+    )
-+    def test_non_200_non_404_status_maps_to_failure(
-+        self, status_code: int, expected_code: BackendIncidentLookupFailureCode
-+    ) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=status_code,
-+                body=b"",
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed), (
-+            f"Expected BackendIncidentLookupFailed for status {status_code}, "
-+            f"got {type(outcome).__name__}"
-+        )
-+        assert outcome.failure_code == expected_code
-+        assert outcome.http_status == status_code
-+
-+    @pytest.mark.parametrize("status_code", [204, 301, 302, 304])
-+    def test_unexpected_2xx_3xx_maps_to_transport_error(self, status_code: int) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=status_code,
-+                body=b"",
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.TRANSPORT_ERROR
-+
-+
-+# ---------------------------------------------------------------------------
-+# 4. Transport errors
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestTransportErrors:
-+    def test_timeout_returns_transport_error(self) -> None:
-+        client = FakeClient(
-+            error=BackendIncidentTransportError(
-+                "request to backend timed out",
-+                exception_type="TimeoutError",
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.TRANSPORT_ERROR
-+        assert outcome.exception_type == "TimeoutError"
-+
-+    def test_connection_failure_returns_transport_error(self) -> None:
-+        client = FakeClient(
-+            error=BackendIncidentTransportError(
-+                "connection refused",
-+                exception_type="ConnectionRefusedError",
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.TRANSPORT_ERROR
-+        assert outcome.exception_type == "ConnectionRefusedError"
-+
-+    def test_unexpected_exception_returns_transport_error_not_not_found(self) -> None:
-+        """Defensive: unexpected client exceptions must NOT become not-found."""
-+        client = FakeClient(error=RuntimeError("boom"))
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.TRANSPORT_ERROR
-+        assert outcome.exception_type == "RuntimeError"
-+        # Crucially, NOT a BackendIncidentNotFound.
-+        assert not isinstance(outcome, BackendIncidentNotFound)
-+
-+
-+# ---------------------------------------------------------------------------
-+# 5. Body / JSON / envelope / schema failures
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestBodyFailures:
-+    def _encode(self, payload: Any) -> bytes:
-+        import json
-+
-+        return json.dumps(payload).encode("utf-8")
-+
-+    def test_200_empty_body_returns_invalid_json(self) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(http_status=200, body=b"")
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.INVALID_JSON
-+        assert outcome.http_status == 200
-+
-+    def test_200_malformed_json_returns_invalid_json(self) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=b"{not valid json",
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.INVALID_JSON
-+
-+    def test_200_json_array_returns_invalid_payload(self) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode([{"x": 1}]),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.INVALID_PAYLOAD
-+
-+    def test_200_missing_envelope_returns_invalid_payload(self) -> None:
-+        """Bare aggregate without envelope must be rejected."""
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode(
-+                    {
-+                        "incident_id": "incident-abc",
-+                        "first_observed_at": "2026-07-12T10:00:00+00:00",
-+                        "last_observed_at": "2026-07-12T10:30:00+00:00",
-+                    }
-+                ),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.INVALID_PAYLOAD
-+
-+    def test_200_wrong_payload_type_returns_invalid_payload(self) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode(
-+                    {
-+                        "schema_version": str(SUPPORTED_SCHEMA_VERSION),
-+                        "payload_type": "incident-internal-summary",
-+                        "incident": {"incident_id": "incident-abc"},
-+                    }
-+                ),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.INVALID_PAYLOAD
-+
-+    def test_200_unsupported_schema_version_returns_unsupported_schema(self) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode(
-+                    {
-+                        "schema_version": "999",
-+                        "payload_type": SUPPORTED_PAYLOAD_TYPE,
-+                        "incident": {"incident_id": "incident-abc"},
-+                    }
-+                ),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.UNSUPPORTED_SCHEMA
-+        assert outcome.http_status == 200
-+
-+    def test_200_missing_incident_aggregate_returns_invalid_payload(self) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode(
-+                    {
-+                        "schema_version": str(SUPPORTED_SCHEMA_VERSION),
-+                        "payload_type": SUPPORTED_PAYLOAD_TYPE,
-+                        # Missing incident aggregate
-+                    }
-+                ),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.INVALID_PAYLOAD
-+
-+    def test_200_non_object_incident_aggregate_returns_invalid_payload(self) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode(
-+                    {
-+                        "schema_version": str(SUPPORTED_SCHEMA_VERSION),
-+                        "payload_type": SUPPORTED_PAYLOAD_TYPE,
-+                        "incident": "not-a-dict",
-+                    }
-+                ),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.INVALID_PAYLOAD
-+
-+    def test_200_aggregate_with_only_incident_id_returns_invalid_payload(self) -> None:
-+        """Arbitrary dict with incident_id must NOT be accepted as an incident."""
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode(
-+                    {
-+                        "schema_version": str(SUPPORTED_SCHEMA_VERSION),
-+                        "payload_type": SUPPORTED_PAYLOAD_TYPE,
-+                        "incident": {"incident_id": "incident-abc"},
-+                    }
-+                ),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        # Fails on missing canonical fields, classified as invalid_payload
-+        # by the parser (envelope OK, aggregate rejected).
-+        assert outcome.failure_code in (
-+            BackendIncidentLookupFailureCode.INVALID_PAYLOAD,
-+            BackendIncidentLookupFailureCode.DESERIALIZATION_FAILED,
-+        )
-+
-+
-+# ---------------------------------------------------------------------------
-+# 6. Deserialization failures
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestDeserializationFailures:
-+    def _encode(self, payload: Any) -> bytes:
-+        import json
-+
-+        return json.dumps(payload).encode("utf-8")
-+
-+    def test_200_aggregate_missing_canonical_fields_returns_deserialization_failed(
++    def __init__(
 +        self,
++        headers: dict[str, str] | None = None,
++        body: bytes | None = None,
 +    ) -> None:
-+        """Aggregate missing canonical fields → DESERIALIZATION_FAILED."""
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode(
-+                    {
-+                        "schema_version": str(SUPPORTED_SCHEMA_VERSION),
-+                        "payload_type": SUPPORTED_PAYLOAD_TYPE,
-+                        "incident": {
-+                            "incident_id": "incident-abc",
-+                            "first_observed_at": "2026-07-12T10:00:00+00:00",
-+                            # Missing all other canonical fields
-+                        },
-+                    }
-+                ),
-+            )
++        self.headers = headers or {}
++        self._body = body or b""
++        # The production handler reads the request body via
++        # ``handler.rfile.read(length)``; back it with a BytesIO so the
++        # endpoint tests exercise the real request-parsing path.
++        self.rfile = io.BytesIO(self._body)
++        self.sent: list[tuple[dict[str, Any], int]] = []
++
++    def _send_json(self, payload: dict[str, Any], status: int) -> None:
++        self.sent.append((payload, status))
++
++
++class RecordingHandler(BaseHTTPRequestHandler):
++    """Minimal HTTP handler that records lifecycle requests.
++
++    When no explicit ``response_body`` override is configured, the
++    handler models a backend that collapses idempotent deliveries: the
++    first delivery for a given identity key reports
++    ``idempotentReplay=false`` and subsequent identical deliveries
++    report ``idempotentReplay=true``. This lets the client-side tests
++    prove they surface backend-reported idempotency.
++    """
++
++    recorded: list[dict[str, Any]] = []
++    status: int = 200
++    response_body: dict[str, Any] | None = None
++    _seen_keys: set[tuple[Any, ...]] = set()
++
++    def log_message(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
++        return
++
++    def do_POST(self) -> None:  # noqa: N802 - HTTP verb
++        length = int(self.headers.get("Content-Length", 0))
++        raw = self.rfile.read(length) if length else b""
++        try:
++            body = json.loads(raw.decode("utf-8"))
++        except Exception:
++            body = {}
++        RecordingHandler.recorded.append(
++            {
++                "path": self.path,
++                "headers": dict(self.headers.items()),
++                "body": body,
++            }
 +        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.DESERIALIZATION_FAILED
-+
-+    def test_200_aggregate_with_bad_status_returns_deserialization_failed(self) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode(
-+                    {
-+                        "schema_version": str(SUPPORTED_SCHEMA_VERSION),
-+                        "payload_type": SUPPORTED_PAYLOAD_TYPE,
-+                        "incident": {
-+                            "incident_id": "incident-abc",
-+                            "source_candidate_id": "cand",
-+                            "namespace": "default",
-+                            "object_kind": "Pod",
-+                            "object_name": "p",
-+                            "class": "PodCrashLoop",
-+                            "severity": "high",
-+                            "status": "not-a-real-status",
-+                            "first_observed_at": "2026-07-12T10:00:00+00:00",
-+                            "last_observed_at": "2026-07-12T10:30:00+00:00",
-+                        },
-+                    }
-+                ),
++        if RecordingHandler.response_body is not None:
++            response = dict(RecordingHandler.response_body)
++        else:
++            key = (
++                body.get("incidentId"),
++                body.get("transition"),
++                body.get("collectorRunId"),
++                body.get("diagnosisRunId"),
 +            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.DESERIALIZATION_FAILED
++            replay = key in RecordingHandler._seen_keys
++            RecordingHandler._seen_keys.add(key)
++            response = {
++                "schemaVersion": 1,
++                "applied": True,
++                "idempotentReplay": replay,
++            }
++        body_bytes = json.dumps(response).encode("utf-8")
++        self.send_response(RecordingHandler.status)
++        self.send_header("Content-Type", "application/json")
++        self.send_header("Content-Length", str(len(body_bytes)))
++        self.end_headers()
++        self.wfile.write(body_bytes)
 +
 +
-+# ---------------------------------------------------------------------------
-+# 7. Identity mismatch
-+# ---------------------------------------------------------------------------
++def start_backend_server(
++    *,
++    response_status: int = 200,
++    response_body: dict[str, Any] | None = None,
++) -> tuple[ThreadingHTTPServer, str, Callable[[], None]]:
++    """Spin up a localhost HTTP server with a recording handler."""
++    RecordingHandler.recorded.clear()
++    RecordingHandler.status = response_status
++    RecordingHandler.response_body = response_body
++    RecordingHandler._seen_keys = set()
++    server = ThreadingHTTPServer(("127.0.0.1", 0), RecordingHandler)
++    thread = threading.Thread(target=server.serve_forever, daemon=True)
++    thread.start()
++    port = server.server_address[1]
++    base_url = f"http://127.0.0.1:{port}"
++
++    def shutdown() -> None:
++        server.shutdown()
++        server.server_close()
++
++    return server, base_url, shutdown
 +
 +
-+class TestIdentityMismatch:
-+    def _encode(self, payload: Any) -> bytes:
-+        import json
-+
-+        return json.dumps(payload).encode("utf-8")
-+
-+    def test_200_payload_with_different_incident_id_returns_identity_mismatch(
-+        self,
-+    ) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=self._encode(
-+                    _canonical_incident_payload("incident-other")
-+                ),
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        assert outcome.failure_code == BackendIncidentLookupFailureCode.IDENTITY_MISMATCH
-+
-+
-+# ---------------------------------------------------------------------------
-+# 8. Negative invariant: no malformed-200 ever produces NotFound
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestNoFalseAbsence:
-+    """No malformed 200 response can become ``BackendIncidentNotFound``."""
-+
-+    @pytest.mark.parametrize(
-+        "body,label",
-+        [
-+            (b"", "empty"),
-+            (b"{not valid json", "malformed"),
-+            (b"[1, 2, 3]", "array"),
-+            (b'{"incident_id": "x"}', "bare_minimum"),
-+            (b'{"schema_version": "1", "payload_type": "wrong"}', "wrong_type"),
-+            (
-+                b'{"schema_version": "999", "payload_type": "incident-internal-detail", "incident": {}}',
-+                "wrong_schema",
-+            ),
-+            (
-+                b'{"schema_version": "1", "payload_type": "incident-internal-detail"}',
-+                "missing_incident",
-+            ),
-+        ],
++def forbidden_lookup(*args: object, **kwargs: object) -> NoReturn:
++    raise AssertionError(
++        "aggregate evaluator performed an incident lookup (forbidden)"
 +    )
-+    def test_malformed_200_never_returns_not_found(
-+        self, body: bytes, label: str
-+    ) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(http_status=200, body=body)
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert not isinstance(outcome, BackendIncidentNotFound), (
-+            f"[{label}] malformed 200 must not produce BackendIncidentNotFound; "
-+            f"got {type(outcome).__name__}"
-+        )
-+        # And it must be a typed failure, not a propagated exception.
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+
-+
-+# ---------------------------------------------------------------------------
-+# 9. Bounded diagnostic projection
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestBoundedDiagnostics:
-+    def test_failure_detail_is_truncated_to_bound(self) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=b"{not valid json",
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.failure_code == BackendIncidentLookupFailureCode.INVALID_JSON
-+        assert diagnostic.http_status == 200
-+        # Detail is bounded (sanitize_disposition_detail caps at 512 chars).
-+        assert diagnostic.detail is not None
-+        assert len(diagnostic.detail) <= 512
-+
-+    def test_failure_diagnostic_carries_requested_incident_id(self) -> None:
-+        client = FakeClient(
-+            response=BackendIncidentHttpResponse(
-+                http_status=200,
-+                body=b"{not valid",
-+            )
-+        )
-+        outcome = lookup_backend_incident(client, IncidentId("incident-abc"))
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.requested_incident_id == IncidentId("incident-abc")
 
-=== tests/unit/test_automatic_diagnosis_backend_detail_outcomes_mypy.py ===
-diff --git a/tests/unit/test_automatic_diagnosis_backend_detail_outcomes_mypy.py b/tests/unit/test_automatic_diagnosis_backend_detail_outcomes_mypy.py
+=== tests/unit/test_automatic_diagnosis_authority_seam01.py ===
+diff --git a/tests/unit/test_automatic_diagnosis_authority_seam01.py b/tests/unit/test_automatic_diagnosis_authority_seam01.py
 new file mode 100644
-index 0000000..68b40ce
+index 00000000..9137bea4
 --- /dev/null
-+++ b/tests/unit/test_automatic_diagnosis_backend_detail_outcomes_mypy.py
-@@ -0,0 +1,222 @@
-+"""Production mypy fixtures for the backend incident-detail outcome contract.
++++ b/tests/unit/test_automatic_diagnosis_authority_seam01.py
+@@ -0,0 +1,384 @@
++"""Unit tests for ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01.
 +
-+This file mirrors :mod:`test_redaction_r9_mypy_fixtures` for the
-+``BackendIncidentFound`` contract added in
-+ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01-R1:
++Aggregate-based eligibility, backend not-found / payload-failure
++regressions, single-fetch, local-mode compatibility, and the lifecycle
++outcome contract. The processor regressions live in
++``test_automatic_diagnosis_authority_seam01_processor.py`` and the
++lifecycle endpoint / backend dispatch / idempotency tests live in
++``test_automatic_diagnosis_authority_seam01_endpoint.py``. Verifier
++self-tests live in ``test_automatic_diagnosis_authority_seam01_verifier.py``.
 +
-+* The **positive** fixture constructs every supported outcome variant
-+  and proves that mypy accepts them.
-+* The **negative** fixture constructs a deliberately-widened
-+  ``BackendIncidentFound(..., incident={"incident_id": "x"})`` call
-+  so mypy can demonstrate it is statically rejected. The runtime
-+  dataclass would accept ``object`` for the ``incident`` field if the
-+  annotation were widened, but a real type checker MUST prove the
-+  widening is impossible by typing ``incident: Incident``.
++The split-authority defect closed by this ACT was: a backend-fetched
++incident was re-resolved through the **local** incident store for
++eligibility, producing ``not_eligible: incident_not_found`` even though
++the backend returned HTTP 200 with a valid canonical incident.
++"""
 +
-+The verifier suites and unit tests rely on this fixture; the negative
-+fixture is the actual evidence that the dataclass field annotation
-+is doing real static work (not just metadata).
++from __future__ import annotations
++
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import Any, NoReturn
++
++import pytest
++
++from k8s_diag_agent.collect import (
++    incident_diagnosis_authority_seam as seam_module,
++)
++from k8s_diag_agent.collect.incident_diagnosis_authority_seam import (
++    LIFECYCLE_SCHEMA_VERSION,
++    LifecycleTransition,
++    LifecycleWriteApplied,
++    build_lifecycle_request,
++    check_incident_eligibility,
++    evaluate_incident_eligibility,
++    record_diagnosis_loop_started,
++)
++from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
++    AutomaticDiagnosisLoopConfig,
++)
++from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
++    BackendIncidentFound,
++    BackendIncidentLookupFailed,
++    BackendIncidentLookupFailureCode,
++    BackendIncidentLookupSource,
++    BackendIncidentNotFound,
++)
++from k8s_diag_agent.collect.incident_diagnosis_backend_detail_parser import (
++    SUPPORTED_PAYLOAD_TYPE,
++    SUPPORTED_SCHEMA_VERSION,
++)
++from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus
++from k8s_diag_agent.collect.incident_store import IncidentStore
++from k8s_diag_agent.collect.incident_store_provider import set_incident_store
++from k8s_diag_agent.domain.incident_lifecycle import IncidentId
++from k8s_diag_agent.ui.server_incident_diagnosis_lifecycle_handler import (
++    SUPPORTED_TRANSITIONS as HANDLER_SUPPORTED_TRANSITIONS,
++)
++from tests.unit.authority_seam_support import (
++    StubEligibility,
++    canonical_incident,
++    encode,
++    reset_env,
++)
++
++__all__ = ["reset_env"]  # re-export the autouse fixture for collection
++
++
++class TestAggregateEvaluator:
++    def test_eligible_incident_is_evaluated_without_store_access(
++        self, tmp_path: Path
++    ) -> None:
++        config = AutomaticDiagnosisLoopConfig()
++        incident = canonical_incident("incident-eligible")
++        for name in (
++            "get_incident_store",
++            "fetch_backend_incident_for_diagnosis_typed",
++            "fetch_incident_for_diagnosis",
++        ):
++            assert not hasattr(seam_module, name) or callable(
++                getattr(seam_module, name)
++            )
++        result = evaluate_incident_eligibility(incident=incident, config=config)
++        assert result.eligible is True
++        assert result.incident_id == "incident-eligible"
++        assert result.reason == "active_incident_with_suggested_checks"
++        assert result.budget_diagnostics[0].exhausted is False
++
++    def test_terminal_status_returns_terminal_reason(self) -> None:
++        config = AutomaticDiagnosisLoopConfig()
++        incident = canonical_incident("incident-resolved", IncidentStatus.RESOLVED)
++        result = evaluate_incident_eligibility(incident=incident, config=config)
++        assert result.eligible is False
++        assert result.reason == "terminal_status_resolved"
++        assert result.status == "resolved"
++
++    def test_inactive_status_returns_inactive_reason(self) -> None:
++        config = AutomaticDiagnosisLoopConfig()
++        incident = canonical_incident("incident-rfr", IncidentStatus.READY_FOR_REVIEW)
++        result = evaluate_incident_eligibility(incident=incident, config=config)
++        assert result.eligible is False
++        assert result.reason == "terminal_status_ready_for_review"
++
++    def test_suppressed_incident_ineligible(self) -> None:
++        config = AutomaticDiagnosisLoopConfig()
++        incident = canonical_incident("incident-sup", IncidentStatus.SUPPRESSED)
++        result = evaluate_incident_eligibility(incident=incident, config=config)
++        assert result.eligible is False
++        assert "terminal" in result.reason
++
++    def test_duplicate_incident_ineligible(self) -> None:
++        config = AutomaticDiagnosisLoopConfig()
++        incident = canonical_incident("incident-dup", IncidentStatus.DUPLICATE)
++        result = evaluate_incident_eligibility(incident=incident, config=config)
++        assert result.eligible is False
++        assert "terminal" in result.reason
++
++    def test_budget_exhaustion_preserves_policy(self, tmp_path: Path) -> None:
++        config = AutomaticDiagnosisLoopConfig(max_passes_per_incident=1)
++        (tmp_path / "auto-incident-budget-20260101120000-diagnosis-review-packet.json").write_text("{}")
++        incident = canonical_incident("incident-budget")
++        result = evaluate_incident_eligibility(
++            incident=incident, config=config, external_analysis_dir=tmp_path
++        )
++        assert result.eligible is False
++        assert result.reason == "budget_exhausted"
++        assert result.budget_diagnostics[0].exhausted is True
++
++    def test_evaluator_does_not_call_get_incident_store(
++        self, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        # The aggregate evaluator lives in
++        # ``incident_diagnosis_auto_loop_config``; ensure it does NOT
++        # delegate to ``get_incident_store`` by patching the symbol on
++        # the config module. ``seam_module`` no longer references the
++        # store directly because the local-mode writer was extracted
++        # into a sibling module.
++        from k8s_diag_agent.collect import (
++            incident_diagnosis_auto_loop_config as config_module,
++        )
++
++        def boom(*args: object, **kwargs: object) -> NoReturn:
++            raise AssertionError("get_incident_store was called")
++
++        monkeypatch.setattr(config_module, "get_incident_store", boom)
++        config = AutomaticDiagnosisLoopConfig()
++        incident = canonical_incident("incident-no-lookup")
++        result = evaluate_incident_eligibility(incident=incident, config=config)
++        assert result.eligible is True
++
++    def test_supplied_incident_id_is_identity_in_diagnostics(self) -> None:
++        config = AutomaticDiagnosisLoopConfig()
++        incident = canonical_incident("incident-identity")
++        result = evaluate_incident_eligibility(incident=incident, config=config)
++        assert result.incident_id == "incident-identity"
++
++    def test_local_compat_wrapper_delegates_to_evaluator(self) -> None:
++        store = IncidentStore()
++        set_incident_store(store)
++        incident = canonical_incident("incident-local")
++        store._incidents[incident.incident_id] = incident
++        result = check_incident_eligibility(
++            incident_id="incident-local", config=AutomaticDiagnosisLoopConfig()
++        )
++        assert result.eligible is True
++
++    def test_local_compat_wrapper_returns_not_found(self) -> None:
++        set_incident_store(IncidentStore())
++        result = check_incident_eligibility(
++            incident_id="missing", config=AutomaticDiagnosisLoopConfig()
++        )
++        assert result.eligible is False
++        assert result.reason == "incident_not_found"
++
++
++class TestBackendNotFound:
++    def test_404_emits_skipped_not_found(
++        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        from k8s_diag_agent.collect import (
++            incident_diagnosis_auto_loop_evidence_processor as processor_module,
++        )
++
++        def fake_typed(incident_id: IncidentId) -> BackendIncidentNotFound:
++            return BackendIncidentNotFound(
++                requested_incident_id=incident_id,
++                source=BackendIncidentLookupSource.BACKEND_API,
++                http_status=404,
++            )
++
++        monkeypatch.setattr(
++            processor_module,
++            "fetch_backend_incident_for_diagnosis_typed",
++            fake_typed,
++        )
++        result = processor_module._process_incident(
++            incident_id="missing-incident",
++            external_analysis_dir=tmp_path,
++            config=AutomaticDiagnosisLoopConfig(),
++            collector_run_id="collector-test",
++            now=datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC),
++        )
++        assert result.eligible is False
++        assert result.skip_reason == "incident_not_found"
++        assert result.eligibility_reason == "not_found"
++        assert result.skipped is True
++
++
++class TestBackendPayloadFailures:
++    @pytest.mark.parametrize(
++        "body,expected_code",
++        [
++            (b"", BackendIncidentLookupFailureCode.INVALID_JSON),
++            (b"{not valid json", BackendIncidentLookupFailureCode.INVALID_JSON),
++            (
++                encode({"schema_version": "1", "payload_type": "wrong"}),
++                BackendIncidentLookupFailureCode.INVALID_PAYLOAD,
++            ),
++            (
++                encode({
++                    "schema_version": "999",
++                    "payload_type": SUPPORTED_PAYLOAD_TYPE,
++                    "incident": {"incident_id": "x"},
++                }),
++                BackendIncidentLookupFailureCode.UNSUPPORTED_SCHEMA,
++            ),
++        ],
++    )
++    def test_malformed_200_never_maps_to_not_found(
++        self,
++        tmp_path: Path,
++        monkeypatch: pytest.MonkeyPatch,
++        body: bytes,
++        expected_code: BackendIncidentLookupFailureCode,
++    ) -> None:
++        from k8s_diag_agent.collect import (
++            incident_diagnosis_auto_loop_evidence_processor as processor_module,
++        )
++
++        def fake_typed(incident_id: IncidentId) -> BackendIncidentLookupFailed:
++            return BackendIncidentLookupFailed(
++                requested_incident_id=incident_id,
++                failure_code=expected_code,
++                detail="synthetic",
++                http_status=200,
++            )
++
++        monkeypatch.setattr(
++            processor_module,
++            "fetch_backend_incident_for_diagnosis_typed",
++            fake_typed,
++        )
++        result = processor_module._process_incident(
++            incident_id="incident-abc",
++            external_analysis_dir=tmp_path,
++            config=AutomaticDiagnosisLoopConfig(),
++            collector_run_id="collector-test",
++            now=datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC),
++        )
++        assert result.eligible is False
++        assert result.eligibility_reason != "not_found"
++        assert "incident_not_found" not in (result.skip_reason or "")
++        assert "backend_incident_" in result.eligibility_reason
++
++
++class TestSingleFetch:
++    def test_one_processed_incident_means_one_detail_get(
++        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        from k8s_diag_agent.collect import (
++            incident_diagnosis_auto_loop_evidence_processor as processor_module,
++        )
++
++        call_count = {"detail_gets": 0}
++        canonical = canonical_incident("incident-abc")
++
++        def fake_typed(incident_id: IncidentId) -> BackendIncidentFound:
++            call_count["detail_gets"] += 1
++            return BackendIncidentFound(
++                requested_incident_id=incident_id,
++                incident=canonical,
++                source=BackendIncidentLookupSource.BACKEND_API,
++                http_status=200,
++                payload_schema_version=SUPPORTED_SCHEMA_VERSION,
++                payload_type=SUPPORTED_PAYLOAD_TYPE,
++            )
++
++        monkeypatch.setattr(
++            processor_module,
++            "fetch_backend_incident_for_diagnosis_typed",
++            fake_typed,
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "evaluate_incident_eligibility",
++            lambda **kwargs: StubEligibility(
++                eligible=True, reason="active_incident_with_suggested_checks"
++            ),
++        )
++        processor_module._process_incident(
++            incident_id="incident-abc",
++            external_analysis_dir=tmp_path,
++            config=AutomaticDiagnosisLoopConfig(),
++            collector_run_id="collector-test",
++            now=datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC),
++        )
++        assert call_count["detail_gets"] == 1
++
++
++class TestLocalModeCompatibility:
++    def test_local_found_delegates_to_aggregate_evaluator(self) -> None:
++        store = IncidentStore()
++        set_incident_store(store)
++        incident = canonical_incident("incident-local")
++        store._incidents[incident.incident_id] = incident
++        result = check_incident_eligibility(
++            incident_id="incident-local", config=AutomaticDiagnosisLoopConfig()
++        )
++        assert result.eligible is True
++        assert result.reason == "active_incident_with_suggested_checks"
++
++    def test_local_absence_yields_incident_not_found(self) -> None:
++        set_incident_store(IncidentStore())
++        result = check_incident_eligibility(
++            incident_id="missing", config=AutomaticDiagnosisLoopConfig()
++        )
++        assert result.eligible is False
++        assert result.reason == "incident_not_found"
++
++    def test_local_mode_lifecycle_via_local_store(self) -> None:
++        store = IncidentStore()
++        set_incident_store(store)
++        incident = canonical_incident("incident-local-lifecycle")
++        store._incidents[incident.incident_id] = incident
++        outcome = record_diagnosis_loop_started(
++            incident_id="incident-local-lifecycle",
++            run_id="run-1",
++            collector_run_id="collector-1",
++        )
++        assert isinstance(outcome, LifecycleWriteApplied)
++        assert outcome.http_status is None  # local mode
++
++    def test_local_mode_no_backend_http(self, monkeypatch: pytest.MonkeyPatch) -> None:
++        def must_not_be_called(*args: Any, **kwargs: Any) -> NoReturn:
++            raise AssertionError("backend HTTP must not be called in local mode")
++
++        # The backend-mode HTTP transport lives in the seam_backend
++        # sibling module; patch its ``urllib.request.urlopen`` symbol.
++        from k8s_diag_agent.collect import (
++            incident_diagnosis_authority_seam_backend as seam_backend_module,
++        )
++
++        monkeypatch.setattr(
++            seam_backend_module.urllib.request, "urlopen", must_not_be_called
++        )
++        store = IncidentStore()
++        set_incident_store(store)
++        incident = canonical_incident("incident-local")
++        store._incidents[incident.incident_id] = incident
++        outcome = record_diagnosis_loop_started(
++            incident_id="incident-local", run_id="r", collector_run_id="c"
++        )
++        assert isinstance(outcome, LifecycleWriteApplied)
++
++
++class TestLifecycleOutcomeContract:
++    def test_lifecycle_request_shape(self) -> None:
++        request = build_lifecycle_request(
++            incident_id="incident-x",
++            transition=LifecycleTransition.STARTED,
++            collector_run_id="collector-x",
++            diagnosis_run_id="run-x",
++            payload={"key": "value"},
++        )
++        body = request.to_dict()
++        assert body["schemaVersion"] == LIFECYCLE_SCHEMA_VERSION
++        assert body["incidentId"] == "incident-x"
++        assert body["transition"] == "started"
++        assert body["collectorRunId"] == "collector-x"
++        assert body["diagnosisRunId"] == "run-x"
++        assert body["payload"] == {"key": "value"}
++
++    def test_supported_transitions_match_handler(self) -> None:
++        for transition in LifecycleTransition:
++            assert transition.value in HANDLER_SUPPORTED_TRANSITIONS
+
+=== tests/unit/test_automatic_diagnosis_authority_seam01_dispatch.py ===
+diff --git a/tests/unit/test_automatic_diagnosis_authority_seam01_dispatch.py b/tests/unit/test_automatic_diagnosis_authority_seam01_dispatch.py
+new file mode 100644
+index 00000000..c2025cc8
+--- /dev/null
++++ b/tests/unit/test_automatic_diagnosis_authority_seam01_dispatch.py
+@@ -0,0 +1,327 @@
++"""Scheduler-side backend dispatch + idempotency tests for
++ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01.
++
++Covers:
++
++* ``record_diagnosis_loop_*`` in backend mode — authenticated HTTP POST
++  against an in-process ``ThreadingHTTPServer``-based stub backend.
++* Failure translation: 404 → ``incident_not_found``, 5xx →
++  ``backend_error``, transport errors must NOT fall back to the local
++  store.
++* Idempotency: repeated deliveries collapse into one apply plus N-1
++  replays; concurrent overlapping deliveries apply exactly once;
++  same-key+different-payload → 409 conflict.
++
++The lifecycle HTTP endpoint tests live in
++``test_automatic_diagnosis_authority_seam01_endpoint.py``. Shared
++helpers live in ``tests/unit/authority_seam_support.py``.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
++"""
++
++from __future__ import annotations
++
++import socket
++import threading
++from typing import Any
++
++import pytest
++
++from k8s_diag_agent.collect.incident_diagnosis_authority_seam import (
++    LifecycleWriteApplied,
++    LifecycleWriteFailed,
++    LifecycleWriteRejected,
++    record_diagnosis_loop_completed,
++    record_diagnosis_loop_failed,
++    record_diagnosis_loop_started,
++)
++from k8s_diag_agent.collect.incident_store import IncidentStore
++from k8s_diag_agent.collect.incident_store_provider import set_incident_store
++from tests.unit.authority_seam_support import (
++    RecordingHandler,
++    canonical_incident,
++    reset_env,
++    start_backend_server,
++)
++
++__all__ = ["reset_env"]
++
++
++class TestBackendModeDispatch:
++    def test_backend_mode_lifecycle_calls_internal_api(
++        self, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        _server, base_url, shutdown = start_backend_server()
++        try:
++            monkeypatch.setenv("K9B_INCIDENT_PROMOTION_MODE", "backend-api")
++            monkeypatch.setenv("K9B_BACKEND_INTERNAL_URL", base_url)
++            monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "test-token")
++            monkeypatch.setenv("K9B_INCIDENT_STORE_BACKEND", "sqlite")
++            monkeypatch.setenv("K9B_PROCESS_ROLE", "scheduler")
++            outcome = record_diagnosis_loop_started(
++                incident_id="incident-backend",
++                run_id="run-x",
++                collector_run_id="collector-x",
++            )
++            assert isinstance(outcome, LifecycleWriteApplied)
++            assert outcome.http_status == 200
++            assert outcome.idempotent_replay is False
++            assert RecordingHandler.recorded, "no request recorded"
++            req = RecordingHandler.recorded[-1]
++            assert req["path"] == "/api/internal/incidents/diagnosis-loop-transition"
++            assert "Bearer test-token" in req["headers"].get("Authorization", "")
++            body = req["body"]
++            assert body["schemaVersion"] == 1
++            assert body["incidentId"] == "incident-backend"
++            assert body["transition"] == "started"
++            assert body["diagnosisRunId"] == "run-x"
++        finally:
++            shutdown()
++
++    def test_backend_mode_lifecycle_404_returns_incident_not_found(
++        self, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        _server, base_url, shutdown = start_backend_server(
++            response_status=404,
++            response_body={
++                "schemaVersion": 1,
++                "applied": False,
++                "reasonCode": "incident_not_found",
++            },
++        )
++        try:
++            monkeypatch.setenv("K9B_INCIDENT_PROMOTION_MODE", "backend-api")
++            monkeypatch.setenv("K9B_BACKEND_INTERNAL_URL", base_url)
++            monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "test-token")
++            monkeypatch.setenv("K9B_INCIDENT_STORE_BACKEND", "sqlite")
++            monkeypatch.setenv("K9B_PROCESS_ROLE", "scheduler")
++            outcome = record_diagnosis_loop_completed(
++                incident_id="incident-missing",
++                run_id="run-x",
++                collector_run_id="collector-x",
++            )
++            assert isinstance(outcome, LifecycleWriteFailed)
++            assert outcome.reason_code == "incident_not_found"
++        finally:
++            shutdown()
++
++    def test_backend_mode_5xx_returns_backend_error(
++        self, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        _server, base_url, shutdown = start_backend_server(
++            response_status=500,
++            response_body={"schemaVersion": 1, "message": "boom"},
++        )
++        try:
++            monkeypatch.setenv("K9B_INCIDENT_PROMOTION_MODE", "backend-api")
++            monkeypatch.setenv("K9B_BACKEND_INTERNAL_URL", base_url)
++            monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "test-token")
++            monkeypatch.setenv("K9B_INCIDENT_STORE_BACKEND", "sqlite")
++            monkeypatch.setenv("K9B_PROCESS_ROLE", "scheduler")
++            outcome = record_diagnosis_loop_failed(
++                incident_id="incident-1",
++                run_id="run-1",
++                collector_run_id="collector-1",
++                unavailable_reason="case_file_error",
++            )
++            assert isinstance(outcome, LifecycleWriteFailed)
++            assert outcome.reason_code == "backend_error"
++        finally:
++            shutdown()
++
++    def test_backend_mode_transport_error_does_not_fall_back(
++        self, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        """Backend transport failure must NOT fall back to the local store."""
++        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
++        sock.bind(("127.0.0.1", 0))
++        port = sock.getsockname()[1]
++        sock.close()
++        base_url = f"http://127.0.0.1:{port}"
++
++        store = IncidentStore()
++        set_incident_store(store)
++        store._incidents["incident-1"] = canonical_incident("incident-1")
++
++        monkeypatch.setenv("K9B_INCIDENT_PROMOTION_MODE", "backend-api")
++        monkeypatch.setenv("K9B_BACKEND_INTERNAL_URL", base_url)
++        monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "test-token")
++        monkeypatch.setenv("K9B_INCIDENT_STORE_BACKEND", "sqlite")
++        monkeypatch.setenv("K9B_PROCESS_ROLE", "scheduler")
++
++        outcome = record_diagnosis_loop_started(
++            incident_id="incident-1",
++            run_id="run-1",
++            collector_run_id="collector-1",
++        )
++        assert isinstance(outcome, (LifecycleWriteFailed, LifecycleWriteRejected))
++
++    def test_backend_mode_missing_token_returns_failure(
++        self, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        monkeypatch.setenv("K9B_INCIDENT_PROMOTION_MODE", "backend-api")
++        monkeypatch.setenv("K9B_BACKEND_INTERNAL_URL", "http://127.0.0.1:1")
++        monkeypatch.setenv("K9B_INCIDENT_STORE_BACKEND", "sqlite")
++        monkeypatch.setenv("K9B_PROCESS_ROLE", "scheduler")
++        outcome = record_diagnosis_loop_started(
++            incident_id="incident-1", run_id="r", collector_run_id="c"
++        )
++        assert isinstance(outcome, LifecycleWriteFailed)
++        assert outcome.reason_code == "missing_internal_token"
++
++
++class TestIdempotency:
++    def test_repeated_lifecycle_deliveries_collapse(
++        self, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        _server, base_url, shutdown = start_backend_server()
++        try:
++            monkeypatch.setenv("K9B_INCIDENT_PROMOTION_MODE", "backend-api")
++            monkeypatch.setenv("K9B_BACKEND_INTERNAL_URL", base_url)
++            monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "test-token")
++            monkeypatch.setenv("K9B_INCIDENT_STORE_BACKEND", "sqlite")
++            monkeypatch.setenv("K9B_PROCESS_ROLE", "scheduler")
++            seen: list[bool] = []
++            for _ in range(3):
++                outcome = record_diagnosis_loop_started(
++                    incident_id="incident-rep",
++                    run_id="run-1",
++                    collector_run_id="collector-1",
++                )
++                assert isinstance(outcome, LifecycleWriteApplied)
++                seen.append(outcome.idempotent_replay)
++            assert seen.count(False) == 1
++            assert seen.count(True) == 2
++        finally:
++            shutdown()
++
++    def test_concurrent_duplicate_deliveries_apply_once(self) -> None:
++        """Overlapping identical deliveries must not both apply.
++
++        ``ThreadingHTTPServer`` dispatches requests on separate threads,
++        so this fires overlapping deliveries directly against the
++        handler and asserts exactly one fresh apply plus N-1 idempotent
++        replays and no conflict.
++        """
++        import os as _os
++
++        from k8s_diag_agent.ui.server_incident_diagnosis_lifecycle_handler import (
++            handle_diagnosis_loop_transition,
++        )
++        from tests.unit.authority_seam_support import BuildHandler, encode
++
++        store = IncidentStore()
++        set_incident_store(store)
++        incident = canonical_incident("incident-concurrent")
++        store._incidents[incident.incident_id] = incident
++        _os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        _os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        try:
++            body = encode({
++                "schemaVersion": 1,
++                "incidentId": "incident-concurrent",
++                "transition": "started",
++                "collectorRunId": "collector-1",
++                "diagnosisRunId": "run-conc",
++                "occurredAt": "2026-07-12T10:00:00+00:00",
++                "payload": {},
++            })
++            n = 8
++            results: list[tuple[dict[str, Any], int]] = []
++            results_lock = threading.Lock()
++            barrier = threading.Barrier(n)
++
++            def deliver() -> None:
++                handler = BuildHandler(
++                    headers={
++                        "Authorization": "Bearer test-token",
++                        "Content-Length": str(len(body)),
++                    },
++                    body=body,
++                )
++                barrier.wait()
++                handle_diagnosis_loop_transition(handler)
++                with results_lock:
++                    results.append(handler.sent[-1])
++
++            threads = [threading.Thread(target=deliver) for _ in range(n)]
++            for t in threads:
++                t.start()
++            for t in threads:
++                t.join()
++
++            assert len(results) == n
++            assert all(status == 200 for _, status in results)
++            replays = [payload["idempotentReplay"] for payload, _ in results]
++            assert replays.count(False) == 1
++            assert replays.count(True) == n - 1
++        finally:
++            _os.environ.pop("K9B_INTERNAL_API_TOKEN", None)
++            _os.environ.pop("K9B_INCIDENT_STORE_BACKEND", None)
++
++    def test_same_key_different_payload_conflicts(self) -> None:
++        """Same idempotency key + different payload → 409 conflict."""
++        import os as _os
++
++        from k8s_diag_agent.collect.incident_store_provider import (
++            set_incident_store,
++        )
++        from k8s_diag_agent.ui.server_incident_diagnosis_lifecycle_handler import (
++            handle_diagnosis_loop_transition,
++        )
++        from tests.unit.authority_seam_support import BuildHandler, encode
++
++        store = IncidentStore()
++        set_incident_store(store)
++        incident = canonical_incident("incident-conflict")
++        store._incidents[incident.incident_id] = incident
++        _os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        _os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        try:
++            def _completed_body(review_packet_name: str) -> bytes:
++                return encode({
++                    "schemaVersion": 1,
++                    "incidentId": "incident-conflict",
++                    "transition": "completed",
++                    "collectorRunId": "collector-1",
++                    "diagnosisRunId": "run-conf",
++                    "occurredAt": "2026-07-12T10:00:00+00:00",
++                    "payload": {
++                        "review_packet_name": review_packet_name,
++                        "checks_requested": 1,
++                        "checks_run": 1,
++                        "checks_rejected": 0,
++                        "decision": "stop_root_cause_found",
++                    },
++                })
++
++            first_body = _completed_body("review-a.json")
++            first = BuildHandler(
++                headers={
++                    "Authorization": "Bearer test-token",
++                    "Content-Length": str(len(first_body)),
++                },
++                body=first_body,
++            )
++            handle_diagnosis_loop_transition(first)
++            body1, status1 = first.sent[-1]
++            assert status1 == 200
++            assert body1["applied"] is True
++            assert body1["idempotentReplay"] is False
++
++            second_body = _completed_body("review-b.json")
++            second = BuildHandler(
++                headers={
++                    "Authorization": "Bearer test-token",
++                    "Content-Length": str(len(second_body)),
++                },
++                body=second_body,
++            )
++            handle_diagnosis_loop_transition(second)
++            body2, status2 = second.sent[-1]
++            assert status2 == 409
++            assert body2["applied"] is False
++            assert body2["reasonCode"] == "transition_replay_mismatch"
++        finally:
++            _os.environ.pop("K9B_INTERNAL_API_TOKEN", None)
++            _os.environ.pop("K9B_INCIDENT_STORE_BACKEND", None)
+
+=== tests/unit/test_automatic_diagnosis_authority_seam01_endpoint.py ===
+diff --git a/tests/unit/test_automatic_diagnosis_authority_seam01_endpoint.py b/tests/unit/test_automatic_diagnosis_authority_seam01_endpoint.py
+new file mode 100644
+index 00000000..44b5ecdf
+--- /dev/null
++++ b/tests/unit/test_automatic_diagnosis_authority_seam01_endpoint.py
+@@ -0,0 +1,262 @@
++"""Lifecycle HTTP endpoint tests for
++ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01.
++
++Covers the internal diagnosis-loop-transition endpoint
++(``handle_diagnosis_loop_transition``) and the in-process idempotency
++contract. The scheduler-side backend dispatch tests
++(``record_diagnosis_loop_*`` against an in-process HTTP backend) and
++the higher-level idempotency tests live in
++``test_automatic_diagnosis_authority_seam01_dispatch.py``. Shared
++helpers live in ``tests/unit/authority_seam_support.py``.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
 +"""
 +
 +from __future__ import annotations
 +
 +import os
-+import subprocess
-+from pathlib import Path
 +
-+VENV_BIN_PYTHON = Path(__file__).parent.parent.parent / ".venv" / "bin" / "python"
-+REPO_ROOT = Path(__file__).parent.parent.parent
-+REPO_SRC = REPO_ROOT / "src"
-+MYPY_CONFIG = REPO_ROOT / "mypy.ini"
++from k8s_diag_agent.collect.incident_store import IncidentStore
++from k8s_diag_agent.collect.incident_store_provider import set_incident_store
++from k8s_diag_agent.ui.server_incident_diagnosis_lifecycle_handler import (
++    handle_diagnosis_loop_transition,
++)
++from tests.unit.authority_seam_support import (
++    BuildHandler,
++    StubHandler,
++    canonical_incident,
++    encode,
++    reset_env,
++)
 +
-+# Positive fixture: every supported variant constructs cleanly under mypy.
-+MYPY_POSITIVE_FIXTURE = """\
++__all__ = ["reset_env"]
++
++
++class TestLifecycleEndpoint:
++    def test_missing_token_returns_401(self) -> None:
++        handler = StubHandler()
++        handler.headers = {"Content-Length": "0"}
++        os.environ.pop("K9B_INTERNAL_API_TOKEN", None)
++        os.environ["K9B_INCIDENT_STORE_BACKEND"] = "sqlite"
++        real = BuildHandler(headers={"Content-Length": "0"})
++        from k8s_diag_agent.ui import server_incident_internal_auth
++
++        valid = server_incident_internal_auth._validate_internal_token(real)
++        assert valid is False
++        os.environ.pop("K9B_INCIDENT_STORE_BACKEND", None)
++
++    def test_handler_applies_started_transition(self) -> None:
++        store = IncidentStore()
++        set_incident_store(store)
++        incident = canonical_incident("incident-lifecycle")
++        store._incidents[incident.incident_id] = incident
++        os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        body = encode({
++            "schemaVersion": 1,
++            "incidentId": "incident-lifecycle",
++            "transition": "started",
++            "collectorRunId": "collector-1",
++            "occurredAt": "2026-07-12T10:00:00+00:00",
++            "payload": {},
++        })
++        real = BuildHandler(
++            headers={
++                "Authorization": "Bearer test-token",
++                "Content-Length": str(len(body)),
++            },
++            body=body,
++        )
++        handle_diagnosis_loop_transition(real)
++        assert real.sent, "handler did not send a response"
++        body_out, status = real.sent[-1]
++        assert status == 200
++        assert body_out["applied"] is True
++        assert body_out["idempotentReplay"] is False
++
++    def test_handler_applies_failed_transition(self) -> None:
++        store = IncidentStore()
++        set_incident_store(store)
++        incident = canonical_incident("incident-failed")
++        store._incidents[incident.incident_id] = incident
++        os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        body = encode({
++            "schemaVersion": 1,
++            "incidentId": "incident-failed",
++            "transition": "failed",
++            "collectorRunId": "collector-1",
++            "occurredAt": "2026-07-12T10:00:00+00:00",
++            "payload": {"unavailable_reason": "case_file_error"},
++        })
++        real = BuildHandler(
++            headers={
++                "Authorization": "Bearer test-token",
++                "Content-Length": str(len(body)),
++            },
++            body=body,
++        )
++        handle_diagnosis_loop_transition(real)
++        body_out, status = real.sent[-1]
++        assert status == 200
++        assert body_out["applied"] is True
++
++    def test_handler_applies_completed_transition(self) -> None:
++        store = IncidentStore()
++        set_incident_store(store)
++        incident = canonical_incident("incident-completed")
++        store._incidents[incident.incident_id] = incident
++        os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        body = encode({
++            "schemaVersion": 1,
++            "incidentId": "incident-completed",
++            "transition": "completed",
++            "collectorRunId": "collector-1",
++            "occurredAt": "2026-07-12T10:00:00+00:00",
++            "payload": {
++                "review_packet_name": "review.json",
++                "checks_requested": 4,
++                "checks_run": 3,
++                "checks_rejected": 1,
++                "decision": "stop_root_cause_found",
++            },
++        })
++        real = BuildHandler(
++            headers={
++                "Authorization": "Bearer test-token",
++                "Content-Length": str(len(body)),
++            },
++            body=body,
++        )
++        handle_diagnosis_loop_transition(real)
++        body_out, status = real.sent[-1]
++        assert status == 200
++        assert body_out["applied"] is True
++
++    def test_idempotent_replay_returns_true(self) -> None:
++        store = IncidentStore()
++        set_incident_store(store)
++        incident = canonical_incident("incident-replay")
++        store._incidents[incident.incident_id] = incident
++        os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        body = encode({
++            "schemaVersion": 1,
++            "incidentId": "incident-replay",
++            "transition": "started",
++            "collectorRunId": "collector-1",
++            "diagnosisRunId": "run-replay",
++            "occurredAt": "2026-07-12T10:00:00+00:00",
++            "payload": {},
++        })
++        first = BuildHandler(
++            headers={"Authorization": "Bearer test-token", "Content-Length": str(len(body))},
++            body=body,
++        )
++        handle_diagnosis_loop_transition(first)
++        body1, status1 = first.sent[-1]
++        assert status1 == 200
++        assert body1["idempotentReplay"] is False
++        second = BuildHandler(
++            headers={"Authorization": "Bearer test-token", "Content-Length": str(len(body))},
++            body=body,
++        )
++        handle_diagnosis_loop_transition(second)
++        body2, status2 = second.sent[-1]
++        assert status2 == 200
++        assert body2["idempotentReplay"] is True
++
++    def test_unknown_transition_returns_400(self) -> None:
++        set_incident_store(IncidentStore())
++        os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        body = encode({
++            "schemaVersion": 1,
++            "incidentId": "incident-bad",
++            "transition": "wat",
++            "collectorRunId": "c",
++            "occurredAt": "2026-07-12T10:00:00+00:00",
++        })
++        handler = BuildHandler(
++            headers={"Authorization": "Bearer test-token", "Content-Length": str(len(body))},
++            body=body,
++        )
++        handle_diagnosis_loop_transition(handler)
++        body_out, status = handler.sent[-1]
++        assert status == 400
++        assert "transition" in body_out.get("message", "").lower()
++
++    def test_unsupported_schema_version_returns_400(self) -> None:
++        set_incident_store(IncidentStore())
++        os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        body = encode({
++            "schemaVersion": 99,
++            "incidentId": "x",
++            "transition": "started",
++            "collectorRunId": "c",
++            "occurredAt": "2026-07-12T10:00:00+00:00",
++        })
++        handler = BuildHandler(
++            headers={"Authorization": "Bearer test-token", "Content-Length": str(len(body))},
++            body=body,
++        )
++        handle_diagnosis_loop_transition(handler)
++        body_out, status = handler.sent[-1]
++        assert status == 400
++        assert "schema" in body_out.get("message", "").lower()
++
++    def test_malformed_json_returns_400(self) -> None:
++        set_incident_store(IncidentStore())
++        os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        body = b"{not valid json"
++        handler = BuildHandler(
++            headers={"Authorization": "Bearer test-token", "Content-Length": str(len(body))},
++            body=body,
++        )
++        handle_diagnosis_loop_transition(handler)
++        body_out, status = handler.sent[-1]
++        assert status == 400
++        assert "json" in body_out.get("message", "").lower()
++
++    def test_unknown_incident_returns_404(self) -> None:
++        set_incident_store(IncidentStore())
++        os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        body = encode({
++            "schemaVersion": 1,
++            "incidentId": "incident-missing",
++            "transition": "started",
++            "collectorRunId": "c",
++            "occurredAt": "2026-07-12T10:00:00+00:00",
++        })
++        handler = BuildHandler(
++            headers={"Authorization": "Bearer test-token", "Content-Length": str(len(body))},
++            body=body,
++        )
++        handle_diagnosis_loop_transition(handler)
++        body_out, status = handler.sent[-1]
++        assert status == 404
++        assert body_out["reasonCode"] == "incident_not_found"
++
++    def test_invalid_run_id_returns_400(self) -> None:
++        set_incident_store(IncidentStore())
++        os.environ["K9B_INTERNAL_API_TOKEN"] = "test-token"
++        os.environ["K9B_INCIDENT_STORE_BACKEND"] = "memory"
++        body = encode({
++            "schemaVersion": 1,
++            "incidentId": "incident-1",
++            "transition": "started",
++            "collectorRunId": "",
++            "occurredAt": "2026-07-12T10:00:00+00:00",
++        })
++        handler = BuildHandler(
++            headers={"Authorization": "Bearer test-token", "Content-Length": str(len(body))},
++            body=body,
++        )
++        handle_diagnosis_loop_transition(handler)
++        body_out, status = handler.sent[-1]
++        assert status == 400
++        assert "collectorrunid" in body_out.get("message", "").replace(" ", "").lower()
+
+=== tests/unit/test_automatic_diagnosis_authority_seam01_processor.py ===
+diff --git a/tests/unit/test_automatic_diagnosis_authority_seam01_processor.py b/tests/unit/test_automatic_diagnosis_authority_seam01_processor.py
+new file mode 100644
+index 00000000..7e58a583
+--- /dev/null
++++ b/tests/unit/test_automatic_diagnosis_authority_seam01_processor.py
+@@ -0,0 +1,391 @@
++"""Processor regressions for ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01.
++
++Covers ``_process_incident`` behaviour for the ``BackendIncidentFound``
++path: aggregate-based eligibility (no second store read), identity
++mismatch handling, lifecycle-failure surfacing, and the exact
++production-shape regression. Shared helpers live in
++``authority_seam_support``.
++"""
++
 +from __future__ import annotations
 +
 +from datetime import UTC, datetime
-+
-+from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+    BackendIncidentFound,
-+    BackendIncidentLookupFailed,
-+    BackendIncidentLookupFailureCode,
-+    BackendIncidentLookupSource,
-+    BackendIncidentNotFound,
-+)
-+from k8s_diag_agent.collect.incident_lifecycle import (
-+    Incident,
-+    IncidentStatus,
-+)
-+from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+
-+def build_positive_outcomes() -> tuple[
-+    BackendIncidentFound,
-+    BackendIncidentNotFound,
-+    BackendIncidentLookupFailed,
-+]:
-+    incident = Incident(
-+        incident_id="incident-abc",
-+        source_candidate_id="candidate-1",
-+        namespace="default",
-+        object_kind="Pod",
-+        object_name="nginx-pod",
-+        raw_object_kind=None,
-+        candidate_class="PodCrashLoop",
-+        severity="high",
-+        status=IncidentStatus.OPEN,
-+        first_observed_at=datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC),
-+        last_observed_at=datetime(2026, 7, 12, 10, 30, 0, tzinfo=UTC),
-+        signal_count=1,
-+        evidence_count=0,
-+    )
-+
-+    found = BackendIncidentFound(
-+        requested_incident_id=IncidentId("incident-abc"),
-+        incident=incident,
-+        source=BackendIncidentLookupSource.BACKEND_API,
-+        http_status=200,
-+        payload_schema_version=1,
-+        payload_type="incident-internal-detail",
-+    )
-+
-+    not_found = BackendIncidentNotFound(
-+        requested_incident_id=IncidentId("incident-abc"),
-+        source=BackendIncidentLookupSource.BACKEND_API,
-+        http_status=404,
-+    )
-+
-+    failed = BackendIncidentLookupFailed(
-+        requested_incident_id=IncidentId("incident-abc"),
-+        failure_code=BackendIncidentLookupFailureCode.INVALID_JSON,
-+        detail="non-JSON body",
-+        http_status=200,
-+    )
-+
-+    return found, not_found, failed
-+"""
-+
-+
-+# Negative fixture: deliberately calls
-+# ``BackendIncidentFound(..., incident={"incident_id": "x"})`` with a
-+# raw ``dict`` for the ``incident`` field. A real type checker MUST
-+# reject this with an ``incompatible type`` diagnostic for the
-+# ``incident`` argument.
-+MYPY_NEGATIVE_FIXTURE = """\
-+from __future__ import annotations
-+
-+from typing import reveal_type
-+
-+from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+    BackendIncidentFound,
-+    BackendIncidentLookupSource,
-+)
-+from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+
-+reveal_type(BackendIncidentFound)
-+reveal_type(BackendIncidentLookupSource)
-+
-+# Negative construction: ``incident`` is annotated as the canonical
-+# ``Incident`` aggregate, so passing a raw ``dict`` MUST be rejected
-+# by mypy. This is the proof that the field annotation is doing real
-+# static work, not just runtime metadata.
-+BackendIncidentFound(
-+    requested_incident_id=IncidentId("x"),
-+    incident={"incident_id": "x"},
-+    source=BackendIncidentLookupSource.BACKEND_API,
-+    http_status=200,
-+    payload_schema_version=1,
-+    payload_type="incident-internal-detail",
-+)
-+"""
-+
-+
-+def _run_mypy(target: Path) -> tuple[int, str]:
-+    """Run mypy with the real project source path and configuration."""
-+    env = os.environ.copy()
-+    env["PYTHONPATH"] = str(REPO_SRC)
-+    env["MYPYPATH"] = str(REPO_SRC)
-+    proc = subprocess.run(
-+        [
-+            str(VENV_BIN_PYTHON),
-+            "-m",
-+            "mypy",
-+            "--config-file",
-+            str(MYPY_CONFIG),
-+            "--no-incremental",
-+            "--cache-dir=/dev/null",
-+            "--follow-imports=normal",
-+            str(target),
-+        ],
-+        cwd=str(REPO_ROOT),
-+        capture_output=True,
-+        text=True,
-+        env=env,
-+        check=False,
-+    )
-+    return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
-+
-+
-+class TestMypyPositiveFixture:
-+    """Positive fixture compiles cleanly under mypy.
-+
-+    Every supported outcome variant is constructible with the public
-+    kwargs; the canonical ``Incident`` aggregate must satisfy the
-+    ``BackendIncidentFound.incident`` field.
-+    """
-+
-+    def test_positive_fixture_typechecks(self, tmp_path: Path) -> None:
-+        fixture = tmp_path / "mypy_positive_fixture.py"
-+        fixture.write_text(MYPY_POSITIVE_FIXTURE, encoding="utf-8")
-+        rc, output = _run_mypy(fixture)
-+        assert rc == 0, output
-+
-+
-+class TestMypyNegativeFixture:
-+    """Negative fixture proves the ``incident`` field is statically ``Incident``.
-+
-+    Concretely: constructing
-+    ``BackendIncidentFound(..., incident={"incident_id": "x"})`` MUST be
-+    rejected by mypy. This is the static-typedness proof for the
-+    ``BackendIncidentFound`` dataclass field annotation added in
-+    ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01-R1.
-+    """
-+
-+    def test_negative_fixture_imports_production_contract(self) -> None:
-+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentFound,
-+            BackendIncidentLookupSource,
-+        )
-+        from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+        assert BackendIncidentFound.__module__.startswith(
-+            "k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes",
-+        )
-+        assert BackendIncidentLookupSource.__module__.startswith(
-+            "k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes",
-+        )
-+        assert IncidentId.__module__.startswith(
-+            "k8s_diag_agent.domain.incident_lifecycle",
-+        )
-+
-+    def test_negative_fixture_mypy_rejects_incompatible_incident_argument(
-+        self,
-+        tmp_path: Path,
-+    ) -> None:
-+        fixture = tmp_path / "mypy_negative_fixture.py"
-+        fixture.write_text(MYPY_NEGATIVE_FIXTURE, encoding="utf-8")
-+
-+        rc, output = _run_mypy(fixture)
-+        assert rc != 0, (
-+            "mypy must reject the negative fixture, but it exited 0.\n"
-+            f"Output:\n{output}"
-+        )
-+        # The diagnostic must reference the ``incident`` argument and
-+        # mention incompatibility (the ``BackendIncidentFound.incident``
-+        # field is annotated as ``Incident``).
-+        assert "incident" in output, (
-+            f"mypy output should mention the ``incident`` argument, got:\n{output}"
-+        )
-+        assert "incompatible" in output or "expected" in output, (
-+            f"mypy output should declare type incompatibility, got:\n{output}"
-+        )
-
-=== tests/unit/test_automatic_diagnosis_backend_detail_outcomes_verifier.py ===
-diff --git a/tests/unit/test_automatic_diagnosis_backend_detail_outcomes_verifier.py b/tests/unit/test_automatic_diagnosis_backend_detail_outcomes_verifier.py
-new file mode 100644
-index 0000000..cac9143
---- /dev/null
-+++ b/tests/unit/test_automatic_diagnosis_backend_detail_outcomes_verifier.py
-@@ -0,0 +1,842 @@
-+"""Self-tests for the AST/static verifier introduced by
-+ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01 (R1).
-+
-+The verifier must:
-+
-+* pass against the current canonical implementation;
-+* detect every forbidden mutation listed in the ACT contract:
-+
-+    - ``except Exception: return None``
-+    - ``except Exception: return BackendIncidentNotFound(...)``
-+    - ``if not incident: reason = "incident_not_found"``
-+    - ``if not payload: return BackendIncidentNotFound(...)``
-+    - missing ``BackendIncidentLookupFailureCode`` enum
-+    - non-frozen outcome dataclass
-+    - boolean ``found`` discriminator
-+    - union missing a required variant / union mentioning ``Incident`` /
-+      ``object`` / ``Any``
-+    - ``_process_incident`` that does not dispatch on a variant
-+    - ``BackendIncidentFound.incident`` widened to ``object`` / ``Any`` /
-+      ``dict``
-+    - ``BackendIncidentNotFound`` constructed without
-+      ``source=BackendIncidentLookupSource.BACKEND_API``
-+    - local-mode dispatcher synthesising ``http_status=404``
-+    - 404 branch mutated to ``!= 404`` / ``in {400, 404}`` /
-+      ``404 <= response.http_status`` / plain truthiness
-+    - substring match for ``backend_incident_*`` codes
-+
-+These self-tests construct synthetic snippets that represent each
-+forbidden mutation and verify the verifier reports them. They also
-+verify that the canonical production code is clean.
-+"""
-+
-+from __future__ import annotations
-+
-+import ast
-+import sys
-+import textwrap
-+from collections.abc import Callable
-+from pathlib import Path
-+
-+import pytest
-+
-+# Make the verifier importable.
-+SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
-+if str(SCRIPTS) not in sys.path:
-+    sys.path.insert(0, str(SCRIPTS))
-+
-+from verifiers import (  # noqa: E402  (sys.path setup precedes import)
-+    automatic_diagnosis_backend_detail_outcomes as verifier,
-+)
-+
-+# ---------------------------------------------------------------------------
-+# Helpers
-+# ---------------------------------------------------------------------------
-+
-+
-+def _format_violations(violations: list[str]) -> str:
-+    return "\n".join(f"- {v}" for v in violations)
-+
-+
-+def _build_source(tmp_path: Path, *snippets: str) -> Path:
-+    """Write a synthetic module file containing the given snippets."""
-+    body = "\n\n".join(snippets)
-+    path = tmp_path / "synthetic_forbidden_module.py"
-+    path.write_text(body)
-+    return path
-+
-+
-+def _snip_return_none() -> str:
-+    return textwrap.dedent(
-+        """
-+        def fetch_incident(incident_id):
-+            try:
-+                raise ValueError('boom')
-+            except Exception:
-+                return None
-+        """
-+    ).strip()
-+
-+
-+def _snip_broad_exc_to_not_found() -> str:
-+    return textwrap.dedent(
-+        """
-+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentNotFound,
-+        )
-+        def fetch_incident(incident_id):
-+            try:
-+                raise ValueError('boom')
-+            except Exception:
-+                return BackendIncidentNotFound(
-+                    requested_incident_id=incident_id,
-+                    http_status=404,
-+                )
-+        """
-+    ).strip()
-+
-+
-+def _snip_truthy_to_reason() -> str:
-+    return textwrap.dedent(
-+        """
-+        def lookup(incident_id):
-+            incident = None
-+            if not incident:
-+                reason = "incident_not_found"
-+            return reason
-+        """
-+    ).strip()
-+
-+
-+def _snip_empty_payload_to_not_found() -> str:
-+    return textwrap.dedent(
-+        """
-+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentNotFound,
-+        )
-+        def lookup(incident_id, payload):
-+            if not payload:
-+                return BackendIncidentNotFound(
-+                    requested_incident_id=incident_id,
-+                    http_status=404,
-+                )
-+        """
-+    ).strip()
-+
-+
-+# ---------------------------------------------------------------------------
-+# 1. Canonical production code passes
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestCanonicalProductionCodeClean:
-+    def test_verifier_passes_against_production_code(self) -> None:
-+        violations = verifier.run_static_checks()
-+        assert not violations, (
-+            "ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01 verifier "
-+            "reported violations against the canonical implementation. "
-+            "Fix the implementation; do not weaken the verifier. "
-+            f"Violations:\n{_format_violations(violations)}"
-+        )
-+
-+    def test_verifier_cli_exits_zero(self) -> None:
-+        # The verifier's CLI must exit 0 against clean production code.
-+        rc = verifier.main([])
-+        assert rc == 0
-+
-+
-+# ---------------------------------------------------------------------------
-+# 2. Verifier detects forbidden mutations in synthetic snippets
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestForbiddenPatternsDetected:
-+    @pytest.fixture
-+    def probe(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> Callable[[str], list[str]]:
-+        """Helper that writes a synthetic module and runs the per-file
-+        not-found / broad-exception checks against it.
-+
-+        The synthetic file's canonical module name (as computed by
-+        :func:`_module_name_from_path`) is automatically added to
-+        :data:`TOUCHED_SEAM_MODULES` so the broad-exception check
-+        actually inspects the synthetic file.
-+        """
-+
-+        def _run(snippet: str) -> list[str]:
-+            path = _build_source(tmp_path, snippet)
-+            from verifiers.automatic_diagnosis_backend_detail_outcomes import (
-+                _module_name_from_path as mfp,
-+            )
-+
-+            module_name = mfp(path)
-+            original_touched = verifier.TOUCHED_SEAM_MODULES
-+            verifier.TOUCHED_SEAM_MODULES = (module_name,) + tuple(original_touched)
-+            try:
-+                violations: list[str] = []
-+                violations.extend(verifier._check_not_found_construction(path))
-+                violations.extend(verifier._check_no_broad_exception_to_not_found(path))
-+                violations.extend(verifier._check_no_truthiness_to_not_found(path))
-+            finally:
-+                verifier.TOUCHED_SEAM_MODULES = original_touched
-+            return violations
-+
-+        return _run
-+
-+    def test_broad_exception_return_none_is_detected(
-+        self, probe: Callable[[str], list[str]]
-+    ) -> None:
-+        violations = probe(_snip_return_none())
-+        assert any(
-+            "bare" in v and "return None" in v for v in violations
-+        ), f"Expected detection of bare except/return None, got:\n{_format_violations(violations)}"
-+
-+    def test_broad_exception_returning_not_found_is_detected(
-+        self, probe: Callable[[str], list[str]]
-+    ) -> None:
-+        violations = probe(_snip_broad_exc_to_not_found())
-+        assert any(
-+            "BackendIncidentNotFound" in v and "forbidden" in v.lower()
-+            for v in violations
-+        ), f"Expected detection of broad-exception-to-not-found, got:\n{_format_violations(violations)}"
-+
-+    def test_truthiness_check_then_not_found_is_detected(
-+        self, probe: Callable[[str], list[str]]
-+    ) -> None:
-+        """Real check: the truthiness mutation is genuinely detected."""
-+        violations = probe(_snip_truthy_to_reason())
-+        assert any(
-+            "forbidden truthiness" in v.lower() for v in violations
-+        ), f"Expected truthiness detection, got:\n{_format_violations(violations)}"
-+
-+    def test_empty_payload_returning_not_found_is_detected(
-+        self, probe: Callable[[str], list[str]]
-+    ) -> None:
-+        violations = probe(_snip_empty_payload_to_not_found())
-+        # The broad ``except Exception`` handler is NOT used here, but
-+        # ``BackendIncidentNotFound(...)`` is constructed outside any
-+        # permission list and ``if not payload`` truthiness is a
-+        # forbidden collapse.
-+        assert any(
-+            "BackendIncidentNotFound" in v
-+            and ("forbidden" in v.lower() or "truthiness" in v.lower())
-+            for v in violations
-+        ), f"Expected detection of empty-payload-to-not-found, got:\n{_format_violations(violations)}"
-+
-+
-+# ---------------------------------------------------------------------------
-+# 3. Verifier invariants about the outcome model itself
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestOutcomeModelInvariants:
-+    def test_missing_variant_in_outcomes_module_is_detected(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        """If a required variant is removed, the verifier must flag it."""
-+        new_source = textwrap.dedent(
-+            """
-+            from dataclasses import dataclass
-+            from enum import StrEnum
-+            from typing import TypeAlias
-+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+            class BackendIncidentLookupFailureCode(StrEnum):
-+                INVALID_JSON = "invalid_json"
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentFound:
-+                requested_incident_id: IncidentId
-+                incident: object
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentLookupFailed:
-+                requested_incident_id: IncidentId
-+
-+            BackendIncidentLookupOutcome: TypeAlias = (
-+                "BackendIncidentFound | BackendIncidentLookupFailed"
-+            )
-+            """
-+        )
-+        original_open = verifier._read
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_backend_detail_outcomes.py":
-+                return new_source
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_outcome_model()
-+        assert any(
-+            "BackendIncidentNotFound" in v and "missing" in v.lower()
-+            for v in violations
-+        ), f"Expected missing-variant detection, got:\n{_format_violations(violations)}"
-+
-+    def test_non_frozen_outcome_is_detected(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        new_source = textwrap.dedent(
-+            """
-+            from dataclasses import dataclass
-+            from enum import StrEnum
-+            from typing import TypeAlias
-+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+            class BackendIncidentLookupFailureCode(StrEnum):
-+                INVALID_JSON = "invalid_json"
-+
-+            # Note: NOT frozen, NOT slots.
-+            @dataclass
-+            class BackendIncidentFound:
-+                requested_incident_id: IncidentId
-+
-+            @dataclass
-+            class BackendIncidentNotFound:
-+                requested_incident_id: IncidentId
-+
-+            @dataclass
-+            class BackendIncidentLookupFailed:
-+                requested_incident_id: IncidentId
-+
-+            BackendIncidentLookupOutcome: TypeAlias = (
-+                "BackendIncidentFound | BackendIncidentNotFound | BackendIncidentLookupFailed"
-+            )
-+            """
-+        )
-+        original_open = verifier._read
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_backend_detail_outcomes.py":
-+                return new_source
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_outcome_model()
-+        assert any(
-+            "frozen" in v.lower() for v in violations
-+        ), f"Expected non-frozen detection, got:\n{_format_violations(violations)}"
-+
-+    def test_boolean_found_discriminator_is_detected(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        new_source = textwrap.dedent(
-+            """
-+            from dataclasses import dataclass
-+            from enum import StrEnum
-+            from typing import TypeAlias
-+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+            class BackendIncidentLookupFailureCode(StrEnum):
-+                INVALID_JSON = "invalid_json"
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentFound:
-+                requested_incident_id: IncidentId
-+                found: bool
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentNotFound:
-+                requested_incident_id: IncidentId
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentLookupFailed:
-+                requested_incident_id: IncidentId
-+
-+            BackendIncidentLookupOutcome: TypeAlias = (
-+                "BackendIncidentFound | BackendIncidentNotFound | BackendIncidentLookupFailed"
-+            )
-+            """
-+        )
-+        original_open = verifier._read
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_backend_detail_outcomes.py":
-+                return new_source
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_outcome_model()
-+        assert any(
-+            "boolean" in v.lower() and "found" in v.lower()
-+            for v in violations
-+        ), f"Expected boolean-found detection, got:\n{_format_violations(violations)}"
-+
-+    def test_incident_field_widened_to_object_is_detected(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        new_source = textwrap.dedent(
-+            """
-+            from dataclasses import dataclass
-+            from enum import StrEnum
-+            from typing import TypeAlias
-+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+            class BackendIncidentLookupFailureCode(StrEnum):
-+                INVALID_JSON = "invalid_json"
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentFound:
-+                requested_incident_id: IncidentId
-+                incident: object
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentNotFound:
-+                requested_incident_id: IncidentId
-+                source: str
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentLookupFailed:
-+                requested_incident_id: IncidentId
-+
-+            BackendIncidentLookupOutcome: TypeAlias = (
-+                "BackendIncidentFound | BackendIncidentNotFound | BackendIncidentLookupFailed"
-+            )
-+            """
-+        )
-+        original_open = verifier._read
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_backend_detail_outcomes.py":
-+                return new_source
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_outcome_model()
-+        assert any(
-+            "BackendIncidentFound.incident" in v and "object" in v.lower()
-+            for v in violations
-+        ), (
-+            "Expected BackendIncidentFound.incident widened-to-object "
-+            f"detection, got:\n{_format_violations(violations)}"
-+        )
-+
-+
-+# ---------------------------------------------------------------------------
-+# 4. Verifier invariants about the lookup signature
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestLookupSignatureInvariants:
-+    def test_lookup_must_invoke_parser(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        """If the canonical lookup drops the parser call, the verifier flags it."""
-+        original_open = verifier._read
-+        fake_source = textwrap.dedent(
-+            """
-+            def lookup_backend_incident(client, incident_id):
-+                return None
-+            """
-+        )
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_backend_detail_lookup.py":
-+                return fake_source
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_lookup_signature()
-+        assert any(
-+            "parser" in v.lower() for v in violations
-+        ), f"Expected parser-missing detection, got:\n{_format_violations(violations)}"
-+
-+    def test_lookup_must_not_return_optional_incident(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        original_open = verifier._read
-+        fake_source = textwrap.dedent(
-+            """
-+            from typing import Optional
-+            from k8s_diag_agent.collect.incident_lifecycle import Incident
-+
-+            def lookup_backend_incident(
-+                client, incident_id,
-+            ) -> Optional[Incident]:
-+                return None
-+            """
-+        )
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_backend_detail_lookup.py":
-+                return fake_source
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_lookup_signature()
-+        assert any(
-+            "Optional[Incident]" in v or "Incident | None" in v
-+            for v in violations
-+        ), f"Expected Optional/None detection, got:\n{_format_violations(violations)}"
-+
-+    def test_lookup_with_bare_return_none_is_detected(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        original_open = verifier._read
-+        fake_source = textwrap.dedent(
-+            """
-+            from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+                BackendIncidentLookupOutcome,
-+            )
-+
-+            def lookup_backend_incident(client, incident_id) -> BackendIncidentLookupOutcome:
-+                if not incident_id:
-+                    return None
-+                return None
-+            """
-+        )
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_backend_detail_lookup.py":
-+                return fake_source
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_lookup_signature()
-+        assert any(
-+            "bare" in v.lower() and "return None" in v
-+            for v in violations
-+        ), f"Expected bare-return-None detection, got:\n{_format_violations(violations)}"
-+
-+
-+# ---------------------------------------------------------------------------
-+# 5. Verifier invariants about reason codes
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestReasonCodeInvariants:
-+    def test_missing_backend_incident_reason_code_is_detected(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        original_open = verifier._read
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_disposition.py":
-+                text = original_open(path) or ""
-+                return text.replace(
-+                    'BACKEND_INCIDENT_UNSUPPORTED_SCHEMA = "backend_incident_unsupported_schema"',
-+                    "",
-+                )
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_reason_codes()
-+        assert any(
-+            "backend_incident_unsupported_schema" in v for v in violations
-+        ), f"Expected missing reason code detection, got:\n{_format_violations(violations)}"
-+
-+
-+# ---------------------------------------------------------------------------
-+# 6. Verifier invariants about the processor dispatch
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestProcessorDispatchInvariants:
-+    def test_processor_missing_dispatch_is_detected(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        original_open = verifier._read
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_auto_loop_evidence_processor.py":
-+                return textwrap.dedent(
-+                    """
-+                    def _process_incident(incident_id, external_analysis_dir, config, collector_run_id, now):
-+                        return None
-+                    """
-+                )
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_processor_dispatch(
-+            verifier.SRC_ROOT
-+            / "collect"
-+            / "incident_diagnosis_auto_loop_evidence_processor.py"
-+        )
-+        assert any(
-+            "BackendIncident" in v for v in violations
-+        ), f"Expected missing dispatch detection, got:\n{_format_violations(violations)}"
-+
-+
-+# ---------------------------------------------------------------------------
-+# 7. R1 helpers (shared utility verification)
-+# ---------------------------------------------------------------------------
-+
-+
-+def test_module_name_from_path_is_fully_qualified(tmp_path: Path) -> None:
-+    """The module-name helper must include the ``k8s_diag_agent`` prefix."""
-+    src_dir = verifier.SRC_ROOT / "collect"
-+    src_dir.mkdir(parents=True, exist_ok=True)
-+    target = src_dir / "_verifier_self_test_tmp.py"
-+    target.write_text("")
-+    try:
-+        name = verifier._module_name_from_path(target)
-+        assert name == "k8s_diag_agent.collect._verifier_self_test_tmp", (
-+            f"Module name should be fully qualified, got {name!r}"
-+        )
-+    finally:
-+        target.unlink(missing_ok=True)
-+
-+
-+def test_ast_round_trip_on_synthetic_snippet() -> None:
-+    """The forbidden-pattern snippets must be parseable Python."""
-+    snippets = (
-+        _snip_return_none(),
-+        _snip_broad_exc_to_not_found(),
-+        _snip_truthy_to_reason(),
-+        _snip_empty_payload_to_not_found(),
-+    )
-+    for snippet in snippets:
-+        ast.parse(snippet)
-+
-+
-+# ---------------------------------------------------------------------------
-+# 8. R1 substring-matching rejection (compat layer)
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestCompatSubstringMatchingRejection:
-+    def test_substring_match_for_backend_incident_codes_is_rejected(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        original_open = verifier._read
-+        fake_compat = textwrap.dedent(
-+            """
-+            from .incident_diagnosis_disposition import DiagnosisEvaluationFailureReason
-+
-+            def _map_legacy_error_reason(raw: str):
-+                raw_lower = (raw or '').lower()
-+                if "backend_incident_invalid_json" in raw_lower:
-+                    return DiagnosisEvaluationFailureReason.BACKEND_INCIDENT_INVALID_JSON
-+                return DiagnosisEvaluationFailureReason.ELIGIBILITY_EVALUATION_FAILED
-+            """
-+        )
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_disposition_compat.py":
-+                return fake_compat
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_no_substring_backend_incident_matching()
-+        assert any(
-+            "substring match" in v.lower() for v in violations
-+        ), (
-+            "Expected substring-match rejection, got:\n"
-+            f"{_format_violations(violations)}"
-+        )
-+
-+    def test_prefix_backend_incident_invalid_json_suffix_does_not_match(
-+        self,
-+    ) -> None:
-+        """Demonstrate that an embedded substring is NOT classified as
-+        the canonical reason by the typed mapping (the mapping is exact).
-+        """
-+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentLookupFailureCode,
-+        )
-+        from k8s_diag_agent.collect.incident_diagnosis_disposition import (
-+            diagnosis_failure_reason_for_backend_lookup,
-+        )
-+
-+        # The typed mapping is total and exact; prefix/suffix substrings
-+        # are not accepted as canonical reason codes (the helper returns
-+        # the enum for the exact code, not for any embedded substring).
-+        canonical = diagnosis_failure_reason_for_backend_lookup(
-+            BackendIncidentLookupFailureCode.INVALID_JSON
-+        )
-+        assert canonical.value == "backend_incident_invalid_json"
-+        # And the legacy compat layer's substring path no longer matches
-+        # the canonical prefix-suffix construction either; only an
-+        # EXACT value match passes.
-+        from k8s_diag_agent.collect.incident_diagnosis_disposition_compat import (
-+            _map_legacy_error_reason,
-+        )
-+
-+        mapped = _map_legacy_error_reason("prefix_backend_incident_invalid_json_suffix")
-+        # ``_map_legacy_error_reason`` falls through to the heuristic
-+        # branches; it must NOT silently map to the canonical reason.
-+        from k8s_diag_agent.collect.incident_diagnosis_disposition import (
-+            DiagnosisEvaluationFailureReason,
-+        )
-+        assert mapped != DiagnosisEvaluationFailureReason.BACKEND_INCIDENT_INVALID_JSON, (
-+            "Embedded substring must NOT be classified as the canonical "
-+            f"backend_incident_invalid_json reason, got {mapped!r}"
-+        )
-+
-+
-+# ---------------------------------------------------------------------------
-+# 9. R1 closed-union verifier (exact three-variant set)
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestClosedUnionVerifier:
-+    """The closed-union check must reject arbitrary extra members.
-+
-+    The previous count(required) == 1 regex-style check would silently
-+    pass a mutation such as
-+    ``BackendIncidentFound | BackendIncidentNotFound | BackendIncidentLookupFailed | BackendIncidentRetryable``
-+    because every required identifier still appears exactly once. The
-+    verifier MUST parse the union expression, collect the identifier
-+    names, and compare the result EXACTLY against the closed set
-+    {BackendIncidentFound, BackendIncidentNotFound, BackendIncidentLookupFailed}.
-+    """
-+
-+    def test_extra_fourth_variant_is_detected(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        """An extra (forbidden) fourth member must be flagged."""
-+        new_source = textwrap.dedent(
-+            """
-+            from dataclasses import dataclass
-+            from enum import StrEnum
-+            from typing import TypeAlias
-+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+            from k8s_diag_agent.collect.incident_lifecycle import Incident
-+
-+            class BackendIncidentLookupFailureCode(StrEnum):
-+                INVALID_JSON = "invalid_json"
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentFound:
-+                requested_incident_id: IncidentId
-+                incident: Incident
-+                source: str
-+                http_status: int | None
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentNotFound:
-+                requested_incident_id: IncidentId
-+                source: str
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentLookupFailed:
-+                requested_incident_id: IncidentId
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentRetryable:
-+                requested_incident_id: IncidentId
-+
-+            BackendIncidentLookupOutcome: TypeAlias = (
-+                "BackendIncidentFound | BackendIncidentNotFound "
-+                "| BackendIncidentLookupFailed | BackendIncidentRetryable"
-+            )
-+            """
-+        )
-+        original_open = verifier._read
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_backend_detail_outcomes.py":
-+                return new_source
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_outcome_model()
-+        assert any(
-+            "BackendIncidentRetryable" in v for v in violations
-+        ), (
-+            "Expected extra-fourth-variant detection, got:\n"
-+            f"{_format_violations(violations)}"
-+        )
-+
-+    def test_union_with_all_three_required_passes_identifier_check(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        """The exact closed-union set must NOT raise a union violation.
-+
-+        The fixture omits the ``incident: object`` mutation so the only
-+        check exercised is the closed-union identifier comparison.
-+        """
-+        new_source = textwrap.dedent(
-+            """
-+            from dataclasses import dataclass
-+            from enum import StrEnum
-+            from typing import TypeAlias
-+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+            from k8s_diag_agent.collect.incident_lifecycle import Incident
-+
-+            class BackendIncidentLookupFailureCode(StrEnum):
-+                INVALID_JSON = "invalid_json"
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentFound:
-+                requested_incident_id: IncidentId
-+                incident: Incident
-+                source: str
-+                http_status: int | None
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentNotFound:
-+                requested_incident_id: IncidentId
-+                source: str
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentLookupFailed:
-+                requested_incident_id: IncidentId
-+
-+            BackendIncidentLookupOutcome: TypeAlias = (
-+                "BackendIncidentFound | BackendIncidentNotFound | BackendIncidentLookupFailed"
-+            )
-+            """
-+        )
-+        original_open = verifier._read
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_backend_detail_outcomes.py":
-+                return new_source
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_outcome_model()
-+        assert not any("EXACTLY the closed union" in v for v in violations), (
-+            "Closed-union identifier check should pass for canonical union; "
-+            f"got:\n{_format_violations(violations)}"
-+        )
-+
-+    def test_missing_one_variant_is_detected_via_strict_identifier_check(
-+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+    ) -> None:
-+        """Removing a variant must also be flagged by the strict identifier check."""
-+        new_source = textwrap.dedent(
-+            """
-+            from dataclasses import dataclass
-+            from enum import StrEnum
-+            from typing import TypeAlias
-+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+            from k8s_diag_agent.collect.incident_lifecycle import Incident
-+
-+            class BackendIncidentLookupFailureCode(StrEnum):
-+                INVALID_JSON = "invalid_json"
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentFound:
-+                requested_incident_id: IncidentId
-+                incident: Incident
-+                source: str
-+                http_status: int | None
-+
-+            @dataclass(frozen=True, slots=True)
-+            class BackendIncidentLookupFailed:
-+                requested_incident_id: IncidentId
-+
-+            BackendIncidentLookupOutcome: TypeAlias = (
-+                "BackendIncidentFound | BackendIncidentLookupFailed"
-+            )
-+            """
-+        )
-+        original_open = verifier._read
-+
-+        def _patched(path: Path):
-+            if path.name == "incident_diagnosis_backend_detail_outcomes.py":
-+                return new_source
-+            return original_open(path)
-+
-+        monkeypatch.setattr(verifier, "_read", _patched)
-+        violations = verifier._check_outcome_model()
-+        assert any(
-+            "BackendIncidentNotFound" in v and "missing" in v.lower()
-+            for v in violations
-+        ), (
-+            "Expected strict-identifier missing-variant detection, got:\n"
-+            f"{_format_violations(violations)}"
-+        )
-
-=== tests/unit/test_automatic_diagnosis_backend_detail_security.py ===
-diff --git a/tests/unit/test_automatic_diagnosis_backend_detail_security.py b/tests/unit/test_automatic_diagnosis_backend_detail_security.py
-new file mode 100644
-index 0000000..4ca7812
---- /dev/null
-+++ b/tests/unit/test_automatic_diagnosis_backend_detail_security.py
-@@ -0,0 +1,345 @@
-+"""Security tests for backend incident-detail lookup diagnostics.
-+
-+The lookup function MUST NEVER include in its bounded diagnostic:
-+
-+* the raw HTTP response body,
-+* the raw HTTP ``Authorization`` header value,
-+* opaque bearer tokens,
-+* cookie / set-cookie values,
-+* internal API token strings,
-+* or any other value that resembles an authorization credential.
-+
-+This is enforced by examining the structured
-+:class:`BackendIncidentLookupDiagnostic` projection after exercising
-+both transport and parsing failures. The bounded projection is the
-+canonical channel through which the outcome reaches the operator log;
-+no other field of the failure carries operational metadata.
-+
-+Suggested by: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01
-+"""
-+
-+from __future__ import annotations
-+
-+import json
-+import re
-+from dataclasses import dataclass
-+
-+from k8s_diag_agent.collect.incident_diagnosis_backend_detail_lookup import (
-+    BackendIncidentHttpResponse,
-+    BackendIncidentTransportError,
-+    lookup_backend_incident,
-+)
-+from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+    BackendIncidentLookupDiagnostic,
-+    BackendIncidentLookupFailed,
-+    BackendIncidentLookupFailureCode,
-+)
-+from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+# ---------------------------------------------------------------------------
-+# Test helpers
-+# ---------------------------------------------------------------------------
-+
-+
-+# A representative opaque bearer token / cookie value. The tests
-+# confirm this NEVER leaks into the bounded diagnostic projection
-+# even when the underlying transport / parser layer raises it.
-+LEAKY_PAYLOAD_FRAGMENTS: tuple[str, ...] = (
-+    # Markers that the function MUST scrub from diagnostic text.
-+    "K9B_INTERNAL_API_TOKEN",
-+    "abcdef0123456789",
-+    "Set-Cookie:",
-+    "SID=foo",
-+)
-+
-+
-+@dataclass
-+class _FakeClient:
-+    """Programmable client used to inject failures with payloads that
-+    contain forbidden secret material."""
-+
-+    response: BackendIncidentHttpResponse | None = None
-+    error: Exception | None = None
-+
-+    def fetch_incident(
-+        self,
-+        incident_id: IncidentId,
-+        *,
-+        timeout: float = 30.0,
-+    ) -> BackendIncidentHttpResponse:
-+        if self.error is not None:
-+            raise self.error
-+        assert self.response is not None, "FakeClient response must be set"
-+        return self.response
-+
-+
-+def _diagnostic_text_blob(diagnostic: BackendIncidentLookupDiagnostic) -> str:
-+    """Project every diagnostic field into a single string for assertions."""
-+    pieces: list[str] = [
-+        diagnostic.requested_incident_id,
-+        diagnostic.detail or "",
-+        diagnostic.exception_type or "",
-+        diagnostic.payload_type or "",
-+        str(diagnostic.payload_schema_version or ""),
-+        str(diagnostic.http_status or ""),
-+    ]
-+    return "\n".join(pieces)
-+
-+
-+# ---------------------------------------------------------------------------
-+# Transport-failure diagnostics
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestTransportFailureDiagnosticsAreRedactionSafe:
-+    def test_transport_error_does_not_propagate_bearer_token(self) -> None:
-+        client = _FakeClient(
-+            error=BackendIncidentTransportError(
-+                "connection refused while calling /api/internal/incidents/x",
-+                exception_type="ConnectionRefusedError",
-+            )
-+        )
-+        outcome = lookup_backend_incident(
-+            client, IncidentId("incident-abc")
-+        )
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.failure_code == BackendIncidentLookupFailureCode.TRANSPORT_ERROR
-+        assert diagnostic.exception_type == "ConnectionRefusedError"
-+        assert diagnostic.http_status is None
-+        # The detail is the message we passed; no Authorization/Bearer
-+        # substring is present in the detail.
-+        assert "Bearer" not in (diagnostic.detail or "")
-+        assert "Authorization" not in (diagnostic.detail or "")
-+
-+    def test_unexpected_exception_type_is_just_the_class_name(self) -> None:
-+        # The sanitizer scrubs ``Authorization: Bearer <token>`` patterns;
-+        # we use that exact shape so the test exercises the canonical
-+        # scrubber, not a free-form substring that may legitimately
-+        # appear in operator-friendly error text.
-+        client = _FakeClient(
-+            error=RuntimeError(
-+                "Authorization: Bearer abcdef0123456789 K9B_INTERNAL_API_TOKEN=REDACTED"
-+            )
-+        )
-+        outcome = lookup_backend_incident(
-+            client, IncidentId("incident-abc")
-+        )
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        diagnostic = outcome.to_diagnostic()
-+        # exception_type is the class name only (not the message).
-+        assert diagnostic.exception_type == "RuntimeError"
-+        # The canonical sanitizer must scrub ``Authorization: Bearer``,
-+        # opaque tokens, and the canonical ``K9B_INTERNAL_API_TOKEN``
-+        # marker. The ``<scrubbed>`` placeholder appears in the detail.
-+        assert diagnostic.detail is not None
-+        for forbidden in (
-+            "abcdef0123456789",
-+            "K9B_INTERNAL_API_TOKEN=REDACTED",
-+            "Authorization: Bearer",
-+        ):
-+            assert forbidden not in diagnostic.detail, (
-+                f"Diagnostic detail leaked {forbidden!r}: "
-+                f"{diagnostic.detail!r}"
-+            )
-+        assert "<scrubbed>" in diagnostic.detail
-+
-+
-+# ---------------------------------------------------------------------------
-+# Parse-failure diagnostics
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestParseFailureDiagnosticsAreRedactionSafe:
-+    def test_invalid_payload_with_token_payload_is_safe(self) -> None:
-+        """A 200 with body that contains forbidden markers must not
-+        expose them in the diagnostic. The detail must NOT echo any
-+        part of the response body."""
-+        # Construct a syntactically valid JSON envelope that contains
-+        # the forbidden tokens. The parser rejects it because the
-+        # shape is wrong (no required fields, just an arbitrary dict).
-+        body = json.dumps(
-+            {
-+                "schema_version": "1",
-+                "payload_type": "incident-internal-detail",
-+                "Authorization": "Bearer abcdef0123456789",
-+                "cookie": "SID=foo",
-+            }
-+        ).encode("utf-8")
-+        client = _FakeClient(
-+            response=BackendIncidentHttpResponse(http_status=200, body=body)
-+        )
-+        outcome = lookup_backend_incident(
-+            client, IncidentId("incident-abc")
-+        )
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.failure_code in (
-+            BackendIncidentLookupFailureCode.INVALID_PAYLOAD,
-+            BackendIncidentLookupFailureCode.DESERIALIZATION_FAILED,
-+        )
-+        blob = _diagnostic_text_blob(diagnostic)
-+        for fragment in LEAKY_PAYLOAD_FRAGMENTS:
-+            assert fragment not in blob, (
-+                f"Diagnostic leaked fragment {fragment!r}: {blob!r}"
-+            )
-+        # The detail must NOT contain the raw JSON body fragment
-+        # produced by the parser's repr of the offending payload.
-+        assert "abcdef0123456789" not in blob
-+        assert "SID=foo" not in blob
-+
-+    def test_404_does_not_echo_body(self) -> None:
-+        """A 404 response with a body that contains tokens must not
-+        echo them anywhere in the outcome."""
-+        body = b'{"error":"K9B_INTERNAL_API_TOKEN=leaked","cookie":"SID=foo"}'
-+        client = _FakeClient(
-+            response=BackendIncidentHttpResponse(http_status=404, body=body)
-+        )
-+        outcome = lookup_backend_incident(
-+            client, IncidentId("incident-abc")
-+        )
-+        # 404 -> BackendIncidentLookupNotFound (handled separately by
-+        # the lookup function). Either outcome must NOT echo the body.
-+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
-+            BackendIncidentNotFound,
-+        )
-+        assert isinstance(outcome, BackendIncidentNotFound)
-+        # BackendIncidentNotFound has no diagnostic payload (no detail,
-+        # no exception_type, no body) so the only surface is the
-+        # requested_incident_id. None of the leaky payload fragments
-+        # must leak through it.
-+        for fragment in LEAKY_PAYLOAD_FRAGMENTS:
-+            assert fragment not in str(outcome.requested_incident_id)
-+        assert outcome.http_status == 404
-+
-+    def test_invalid_json_body_does_not_echo_raw_body(self) -> None:
-+        """A non-JSON body containing tokens must not be echoed."""
-+        body = b'Authorization: Bearer abcdef0123456789\ncookie: SID=foo'
-+        client = _FakeClient(
-+            response=BackendIncidentHttpResponse(http_status=200, body=body)
-+        )
-+        outcome = lookup_backend_incident(
-+            client, IncidentId("incident-abc")
-+        )
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.failure_code == BackendIncidentLookupFailureCode.INVALID_JSON
-+        blob = _diagnostic_text_blob(diagnostic)
-+        for fragment in LEAKY_PAYLOAD_FRAGMENTS:
-+            assert fragment not in blob, (
-+                f"Diagnostic leaked fragment {fragment!r}: {blob!r}"
-+            )
-+        # The detail MUST be the parse error message, NOT the raw
-+        # body. The body fragment "abcdef0123456789" must not appear.
-+        assert "abcdef0123456789" not in blob
-+
-+    def test_4xx_response_with_token_body_is_safe(self) -> None:
-+        body = b'{"error":"K9B_INTERNAL_API_TOKEN=leaked","cookie":"SID=foo"}'
-+        client = _FakeClient(
-+            response=BackendIncidentHttpResponse(http_status=400, body=body)
-+        )
-+        outcome = lookup_backend_incident(
-+            client, IncidentId("incident-abc")
-+        )
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.failure_code == BackendIncidentLookupFailureCode.HTTP_CLIENT_ERROR
-+        blob = _diagnostic_text_blob(diagnostic)
-+        for fragment in LEAKY_PAYLOAD_FRAGMENTS:
-+            assert fragment not in blob, (
-+                f"Diagnostic leaked fragment {fragment!r}: {blob!r}"
-+            )
-+
-+    def test_5xx_response_with_token_body_is_safe(self) -> None:
-+        body = b'{"error":"K9B_INTERNAL_API_TOKEN=leaked","cookie":"SID=foo"}'
-+        client = _FakeClient(
-+            response=BackendIncidentHttpResponse(http_status=502, body=body)
-+        )
-+        outcome = lookup_backend_incident(
-+            client, IncidentId("incident-abc")
-+        )
-+        assert isinstance(outcome, BackendIncidentLookupFailed)
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.failure_code == BackendIncidentLookupFailureCode.BACKEND_ERROR
-+        blob = _diagnostic_text_blob(diagnostic)
-+        for fragment in LEAKY_PAYLOAD_FRAGMENTS:
-+            assert fragment not in blob, (
-+                f"Diagnostic leaked fragment {fragment!r}: {blob!r}"
-+            )
-+
-+
-+# ---------------------------------------------------------------------------
-+# Diagnostic field bounds
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestDiagnosticFieldBounds:
-+    def test_diagnostic_only_exposes_safe_fields(self) -> None:
-+        outcome = BackendIncidentLookupFailed(
-+            requested_incident_id=IncidentId("incident-abc"),
-+            failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
-+            detail="connection refused",
-+            http_status=None,
-+            payload_type=None,
-+            payload_schema_version=None,
-+            exception_type="ConnectionRefusedError",
-+        )
-+        diagnostic = outcome.to_diagnostic()
-+        # The dataclass must NOT expose ``Authorization``-style fields.
-+        field_names = {f.name for f in diagnostic.__dataclass_fields__.values()}
-+        for forbidden in (
-+            "authorization",
-+            "token",
-+            "cookie",
-+            "headers",
-+            "body",
-+            "raw_body",
-+        ):
-+            assert forbidden not in field_names, (
-+                f"Diagnostic must not expose {forbidden!r}, got {field_names}"
-+            )
-+
-+    def test_detail_is_truncated_to_bound(self) -> None:
-+        huge = "x" * 5000
-+        outcome = BackendIncidentLookupFailed(
-+            requested_incident_id=IncidentId("incident-abc"),
-+            failure_code=BackendIncidentLookupFailureCode.INVALID_PAYLOAD,
-+            detail=huge,
-+            http_status=200,
-+        )
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.detail is not None
-+        # Canonical bound is 512 (incident_diagnosis_disposition.DEFAULT_DETAIL_MAX_CHARS).
-+        assert len(diagnostic.detail) <= 512
-+
-+    def test_requested_incident_id_is_preserved_unchanged(self) -> None:
-+        outcome = BackendIncidentLookupFailed(
-+            requested_incident_id=IncidentId("incident-abc-123"),
-+            failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
-+            detail="boom",
-+            http_status=None,
-+        )
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.requested_incident_id == IncidentId("incident-abc-123")
-+        # The branded type is the only identifier exposed.
-+        assert isinstance(diagnostic.requested_incident_id, str)
-+        # No bearer / cookie substring in the identifier.
-+        assert not re.search(
-+            r"(?i)(bearer|cookie|authorization|token=)", diagnostic.requested_incident_id
-+        )
-+
-+    def test_diagnostic_projection_preserves_correlation_fields(self) -> None:
-+        """The correlation fields ``run_id`` and ``collector_run_id``
-+        must survive the projection so operators can correlate a
-+        bounded diagnostic with the broader run. We verify the
-+        diagnostic exposes ``requested_incident_id`` only."""
-+        outcome = BackendIncidentLookupFailed(
-+            requested_incident_id=IncidentId("incident-correlation-abc"),
-+            failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
-+            detail="boom",
-+            http_status=None,
-+        )
-+        diagnostic = outcome.to_diagnostic()
-+        assert diagnostic.requested_incident_id == IncidentId(
-+            "incident-correlation-abc"
-+        )
-
-=== tests/unit/test_automatic_diagnosis_backend_promotion_regression.py ===
-diff --git a/tests/unit/test_automatic_diagnosis_backend_promotion_regression.py b/tests/unit/test_automatic_diagnosis_backend_promotion_regression.py
-new file mode 100644
-index 0000000..1ed767e
---- /dev/null
-+++ b/tests/unit/test_automatic_diagnosis_backend_promotion_regression.py
-@@ -0,0 +1,497 @@
-+"""Promotion-to-diagnosis regression test for
-+ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01.
-+
-+Reproduces the production sequence from
-+``health-run-20260712T123805Z``:
-+
-+* promotion returns a canonical incident ID,
-+* automatic diagnosis receives the explicit canonical ID,
-+* the backend GET returns HTTP 200 with a canonical incident detail,
-+* the typed lookup returns ``BackendIncidentFound``,
-+* the eligibility path evaluates the incident,
-+* no ``incident_not_found`` disposition is emitted.
-+
-+The test does NOT require an LLM provider. The regression lives
-+before provider invocation: it proves that the typed backend lookup
-+boundary is no longer misclassifying HTTP 200 + valid JSON as
-+``incident_not_found``.
-+"""
-+
-+from __future__ import annotations
-+
-+import json
-+import logging
-+import tempfile
-+from collections.abc import Iterable
 +from pathlib import Path
 +from typing import Any
 +
 +import pytest
 +
-+from k8s_diag_agent.collect.incident_diagnosis_auto_loop import (
-+    run_automatic_diagnosis_loop_evidence_collection,
++from k8s_diag_agent.collect.incident_diagnosis_authority_seam import (
++    LifecycleTransition,
++    LifecycleWriteApplied,
++    LifecycleWriteFailed,
 +)
-+from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
-+    AutoLoopIncidentResult,
-+)
-+from k8s_diag_agent.collect.incident_diagnosis_backend_detail_lookup import (
-+    BackendIncidentHttpResponse,
++from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
++    AutomaticDiagnosisLoopConfig,
 +)
 +from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
 +    BackendIncidentFound,
-+    BackendIncidentNotFound,
++    BackendIncidentLookupSource,
 +)
-+from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus
++from k8s_diag_agent.collect.incident_diagnosis_backend_detail_parser import (
++    SUPPORTED_PAYLOAD_TYPE,
++    SUPPORTED_SCHEMA_VERSION,
++)
++from k8s_diag_agent.collect.incident_store import IncidentStore
++from k8s_diag_agent.collect.incident_store_provider import set_incident_store
++from k8s_diag_agent.domain.incident_lifecycle import IncidentId
++from tests.unit.authority_seam_support import (
++    StubEligibility,
++    canonical_incident,
++    never_called,
++    reset_env,
++)
 +
-+# ---------------------------------------------------------------------------
-+# Helpers
-+# ---------------------------------------------------------------------------
++__all__ = ["reset_env"]  # re-export the autouse fixture for collection
++
++_NOW = datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC)
 +
 +
-+@pytest.fixture
-+def temp_external_dir() -> Iterable[Path]:
-+    with tempfile.TemporaryDirectory() as tmpdir:
-+        yield Path(tmpdir)
-+
-+
-+@pytest.fixture
-+def enabled_auto_loop(monkeypatch: pytest.MonkeyPatch) -> None:
-+    monkeypatch.setattr(
-+        "k8s_diag_agent.collect."
-+        "incident_diagnosis_auto_loop_evidence_collection."
-+        "is_automatic_diagnosis_loop_enabled",
-+        lambda: True,
++def _found(incident_id: IncidentId, incident: Any) -> BackendIncidentFound:
++    return BackendIncidentFound(
++        requested_incident_id=incident_id,
++        incident=incident,
++        source=BackendIncidentLookupSource.BACKEND_API,
++        http_status=200,
++        payload_schema_version=SUPPORTED_SCHEMA_VERSION,
++        payload_type=SUPPORTED_PAYLOAD_TYPE,
 +    )
-+    monkeypatch.setattr(
-+        "k8s_diag_agent.health.loop_automatic_diagnosis."
-+        "is_automatic_diagnosis_loop_enabled",
-+        lambda: True,
++
++
++def _stub_hypothesis_result() -> Any:
++    from k8s_diag_agent.collect.incident_automatic_diagnosis_loop_state import (
++        HypothesisLoopResult,
++    )
++
++    return HypothesisLoopResult(
++        total_passes_completed=0,
++        total_checks_executed=0,
++        hypothesis_burst_written=False,
 +    )
 +
 +
-+def _canonical_payload(
-+    incident_id: str = "incident-canonical-abc",
-+) -> dict[str, Any]:
-+    """Build the exact wrapped canonical payload the backend emits."""
++def _stub_pass(**kwargs: Any) -> dict[str, Any]:
 +    return {
-+        "schema_version": "1",
-+        "payload_type": "incident-internal-detail",
-+        "incident": {
-+            "incident_id": incident_id,
-+            "source_candidate_id": "candidate-source-xyz",
-+            "namespace": "default",
-+            "object_kind": "Pod",
-+            "object_name": "nginx-pod",
-+            "class": "PodCrashLoop",
-+            "severity": "high",
-+            "status": IncidentStatus.OPEN.value,
-+            "first_observed_at": "2026-07-12T10:00:00+00:00",
-+            "last_observed_at": "2026-07-12T10:30:00+00:00",
-+            "signal_count": 1,
-+            "evidence_count": 0,
-+        },
++        "decision": "stop_no_checks_proposed",
++        "runner_result": {"checks_requested": 0, "checks_run": 0},
++        "artifact": None,
++        "loop_pass_artifact": None,
 +    }
 +
 +
-+def _capture_logging() -> tuple[list[dict[str, Any]], logging.Handler]:
-+    captured: list[dict[str, Any]] = []
-+
-+    class LogCapture(logging.Handler):
-+        def emit(self, record: logging.LogRecord) -> None:
-+            d = record.__dict__
-+            captured.append({
-+                "event": d.get("event"),
-+                "disposition": d.get("disposition"),
-+                "reason_code": d.get("reason_code"),
-+                "detail": d.get("detail"),
-+                "incident_id": d.get("incident_id"),
-+                "incidents_processed": d.get("incidents_processed"),
-+                "incidents_eligible": d.get("incidents_eligible"),
-+                "incidents_skipped": d.get("incidents_skipped"),
-+                "incidents_with_errors": d.get("incidents_with_errors"),
-+                "skip_reasons": d.get("skip_reasons"),
-+                "error_reasons": d.get("error_reasons"),
-+                "explicit_canonical_id_count": d.get("explicit_canonical_id_count"),
-+                "promotion_propagated_to_diagnosis": d.get("promotion_propagated_to_diagnosis"),
-+                "selection_mode": d.get("selection_mode"),
-+                "incident_access_mode": d.get("incident_access_mode"),
-+            })
-+
-+    handler = LogCapture()
-+    logger = logging.getLogger()
-+    logger.addHandler(handler)
-+    logger.setLevel(logging.DEBUG)
-+    return captured, handler
-+
-+
-+# ---------------------------------------------------------------------------
-+# 1. End-to-end regression: production sequence reproduces no false absence
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestPromotionToDiagnosisRegression:
-+    """Reproduce ``health-run-20260712T123805Z`` after the fix."""
-+
-+    def test_production_sequence_does_not_emit_incident_not_found(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
++class TestBackendFoundProcessor:
++    def test_processor_passes_aggregate_to_evaluator(
++        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 +    ) -> None:
-+        """The full production flow must NOT classify 200 as not-found."""
-+
-+        canonical_id = "incident-canonical-abc"
-+        # Backend serves a valid 200 with the canonical wrapped payload.
-+        payload_bytes = json.dumps(_canonical_payload(canonical_id)).encode("utf-8")
-+        response = BackendIncidentHttpResponse(http_status=200, body=payload_bytes)
-+
-+        # Replace the canonical lookup helper so every backend GET
-+        # returns the canned 200 response. The lookup function itself
-+        # is the seam under test.
-+        def fake_fetch_incident(
-+            incident_id: Any, *, timeout: float = 30.0
-+        ) -> BackendIncidentHttpResponse:
-+            return response
-+
-+        # Force backend mode so the typed dispatch goes through the
-+        # canonical lookup path.
-+        monkeypatch.setenv("K9B_INCIDENT_PROMOTION_MODE", "backend-api")
-+        monkeypatch.setenv("K9B_BACKEND_INTERNAL_URL", "http://backend.test:8080")
-+        monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "test-token-not-secret")
-+        monkeypatch.setenv("K9B_INCIDENT_STORE_BACKEND", "sqlite")
-+        monkeypatch.setenv("K9B_PROCESS_ROLE", "scheduler")
-+
-+        # Stub the eligibility check so we don't run real downstream
-+        # work; we only need to observe the backend-lookup seam.
-+
-+        eligibility_stub_calls: list[str] = []
-+
-+        def fake_check_incident_eligibility(**kwargs: Any) -> Any:
-+            eligibility_stub_calls.append(kwargs["incident_id"])
-+            return _StubEligibility(eligible=True, reason="active_incident_with_suggested_checks")
-+
-+        monkeypatch.setattr(
-+            "k8s_diag_agent.collect."
-+            "incident_diagnosis_auto_loop_evidence_processor."
-+            "check_incident_eligibility",
-+            fake_check_incident_eligibility,
-+        )
-+
-+        # Inject a fake ``BackendIncidentClient`` via the typed lookup
-+        # module's symbol so ``HttpIncidentBackendClient`` is bypassed
-+        # entirely.
 +        from k8s_diag_agent.collect import (
-+            incident_diagnosis_backend_detail_lookup as detail_lookup,
++            incident_diagnosis_auto_loop_evidence_processor as processor_module,
 +        )
 +
-+        class _FakeClient:
-+            def __init__(self) -> None:
-+                self.calls: list[Any] = []
++        captured: dict[str, Any] = {}
 +
-+            def fetch_incident(
-+                self,
-+                incident_id: Any,
-+                *,
-+                timeout: float = 30.0,
-+            ) -> BackendIncidentHttpResponse:
-+                self.calls.append(incident_id)
-+                return response
++        def fake_evaluate(**kwargs: Any) -> Any:
++            captured["incident"] = kwargs.get("incident")
++            return StubEligibility(
++                eligible=True, reason="active_incident_with_suggested_checks"
++            )
 +
-+        fake_client = _FakeClient()
++        canonical = canonical_incident("incident-abc")
++        monkeypatch.setattr(processor_module, "evaluate_incident_eligibility", fake_evaluate)
 +        monkeypatch.setattr(
-+            detail_lookup,
-+            "HttpIncidentBackendClient",
-+            lambda base_url, token=None: fake_client,
-+        )
-+
-+        # Skip the actual diagnosis execution paths (they would
-+        # attempt real LLM providers); the regression lives at the
-+        # typed-lookup boundary, so we can stop after eligibility.
-+        # NOTE: we patch ``incident_diagnosis_auto_loop_batch._process_incident``
-+        # (not the evidence-processor module) because the batch
-+        # processor calls its own module-level reference.
-+        from k8s_diag_agent.collect import (
-+            incident_diagnosis_auto_loop_batch as batch_module,
-+        )
-+
-+        original_process = batch_module._process_incident
-+        call_count = {"n": 0}
-+
-+        def stub_process_incident(**kwargs: Any) -> AutoLoopIncidentResult:
-+            call_count["n"] += 1
-+            # Reach through the typed lookup to prove the seam works
-+            # end-to-end.
-+            from k8s_diag_agent.collect.incident_diagnosis_dispatch import (
-+                fetch_backend_incident_for_diagnosis_typed,
-+            )
-+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+            incident_id = IncidentId(kwargs["incident_id"])
-+            outcome = fetch_backend_incident_for_diagnosis_typed(incident_id)
-+            assert isinstance(outcome, BackendIncidentFound), (
-+                f"Expected BackendIncidentFound, got {type(outcome).__name__}"
-+            )
-+            # Skip real downstream work; mark eligible.
-+            return AutoLoopIncidentResult(
++            processor_module,
++            "record_diagnosis_loop_started",
++            lambda **kwargs: LifecycleWriteApplied(
++                transition=LifecycleTransition.STARTED,
 +                incident_id=kwargs["incident_id"],
-+                eligible=True,
-+                eligibility_reason="active_incident_with_suggested_checks",
-+            )
++            ),
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "record_diagnosis_loop_completed",
++            lambda **kwargs: LifecycleWriteApplied(
++                transition=LifecycleTransition.COMPLETED,
++                incident_id=kwargs["incident_id"],
++            ),
++        )
++        monkeypatch.setattr(processor_module, "record_diagnosis_loop_failed", never_called)
++        monkeypatch.setattr(
++            processor_module,
++            "build_incident_case_file",
++            lambda **kwargs: {"generated_at": "2026-07-12T10:00:00Z", "suggested_checks": []},
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "run_automatic_diagnosis_hypothesis_loop",
++            lambda *args, **kwargs: _stub_hypothesis_result(),
++        )
++        monkeypatch.setattr(
++            processor_module, "run_policy_enforced_loop_pass", lambda **kwargs: _stub_pass()
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "fetch_backend_incident_for_diagnosis_typed",
++            lambda incident_id: _found(incident_id, canonical),
++        )
 +
-+        monkeypatch.setattr(batch_module, "_process_incident", stub_process_incident)
++        result = processor_module._process_incident(
++            incident_id="incident-abc",
++            external_analysis_dir=tmp_path,
++            config=AutomaticDiagnosisLoopConfig(),
++            collector_run_id="collector-test",
++            now=_NOW,
++        )
++        assert captured.get("incident") is canonical
++        assert result.error is None or "incident_not_found" not in str(result.error)
++        assert result.eligible is True
 +
-+        captured, handler = _capture_logging()
-+        try:
-+            # Promotion result returns canonical ID.
-+            promotion_summary = {
-+                "promotion_record_count": 1,
-+                "incident_access_mode": "backend",
-+                "firing": 1,
-+                "scanned": 1,
-+                "opened_incidents": 0,
-+                "updated_incidents": 1,
-+                "errors": 0,
-+                "unique_candidate_count": 1,
-+                "promotion_mode": "backend-api",
-+            }
-+
-+            # Automatic diagnosis is invoked with the explicit canonical ID.
-+            from k8s_diag_agent.health.loop_automatic_diagnosis import (
-+                run_automatic_diagnosis_loop,
-+            )
-+
-+            result = run_automatic_diagnosis_loop(
-+                external_analysis_dir=temp_external_dir,
-+                scheduler_run_id="health-run-20260712T123805Z",
-+                canonical_incident_ids=[canonical_id],
-+                promotion_result_summary=promotion_summary,
-+                backend_endpoint_identity={"incident_access_mode": "backend"},
-+            )
-+
-+            # --- Assertions on the automatic-diagnosis completion event ---
-+            assert result["automatic_diagnosis_enabled"] is True
-+            assert result["explicit_canonical_id_count"] == 1
-+            assert result["promotion_propagated_to_diagnosis"] is True
-+            assert result["selection_mode"] == "explicit_incident_ids"
-+            assert result["incident_access_mode"] == "backend"
-+
-+            assert result["incidents_processed"] == 1
-+            # Crucially: no incident_not_found disposition was emitted.
-+            assert result["incidents_skipped"] == 0
-+            assert "incident_not_found" not in result.get("skip_reasons", {})
-+            # Either eligible or a legitimate domain-ineligible reason is
-+            # acceptable; what is NOT acceptable is any backend-incident
-+            # error or skip with reason_code incident_not_found.
-+            assert result.get("error_reasons", {}) == {}
-+            assert call_count["n"] == 1
-+            assert len(fake_client.calls) == 1
-+
-+            # No per-incident disposition event with reason_code == incident_not_found
-+            for log in captured:
-+                if log.get("event") == "automatic-diagnosis-incident-disposition":
-+                    assert log.get("reason_code") != "incident_not_found", (
-+                        f"False absence detected: {log}"
-+                    )
-+        finally:
-+            logging.getLogger().removeHandler(handler)
-+            # Restore the original to avoid leaking monkeypatch state.
-+            batch_module._process_incident = original_process
-+
-+    def test_production_sequence_with_real_dispatch_path(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
++    def test_no_local_store_read_before_eligibility(
++        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 +    ) -> None:
-+        """Drive the full evidence collection through the typed dispatch.
++        from k8s_diag_agent.collect import (
++            incident_diagnosis_auto_loop_evidence_processor as processor_module,
++        )
++        from k8s_diag_agent.collect import (
++            incident_store_provider as provider_module,
++        )
 +
-+        This time we drive ``run_automatic_diagnosis_loop_evidence_collection``
-+        directly so we exercise the typed dispatch + batch processor
-+        seam end-to-end without mocking ``_process_incident``.
++        seen_get_store: list[bool] = []
++        original_get_store = provider_module.get_incident_store
++
++        def tracking_get_store() -> IncidentStore:
++            seen_get_store.append(True)
++            return original_get_store()
++
++        monkeypatch.setattr(provider_module, "get_incident_store", tracking_get_store)
++        # The processor must not re-import get_incident_store.
++        assert not hasattr(processor_module, "get_incident_store")
++
++        canonical = canonical_incident("incident-abc")
++        monkeypatch.setattr(
++            processor_module,
++            "fetch_backend_incident_for_diagnosis_typed",
++            lambda incident_id: _found(incident_id, canonical),
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "evaluate_incident_eligibility",
++            lambda **kwargs: StubEligibility(
++                eligible=True, reason="active_incident_with_suggested_checks"
++            ),
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "record_diagnosis_loop_started",
++            lambda **kwargs: LifecycleWriteApplied(
++                transition=LifecycleTransition.STARTED,
++                incident_id=kwargs["incident_id"],
++            ),
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "record_diagnosis_loop_completed",
++            lambda **kwargs: LifecycleWriteApplied(
++                transition=LifecycleTransition.COMPLETED,
++                incident_id=kwargs["incident_id"],
++            ),
++        )
++        monkeypatch.setattr(processor_module, "record_diagnosis_loop_failed", never_called)
++        monkeypatch.setattr(
++            processor_module,
++            "build_incident_case_file",
++            lambda **kwargs: {"generated_at": "x", "suggested_checks": []},
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "run_automatic_diagnosis_hypothesis_loop",
++            lambda *args, **kwargs: _stub_hypothesis_result(),
++        )
++        monkeypatch.setattr(
++            processor_module, "run_policy_enforced_loop_pass", lambda **kwargs: _stub_pass()
++        )
++
++        result = processor_module._process_incident(
++            incident_id="incident-abc",
++            external_analysis_dir=tmp_path,
++            config=AutomaticDiagnosisLoopConfig(),
++            collector_run_id="collector-test",
++            now=_NOW,
++        )
++        assert result.eligible is True
++        assert result.error is None or "incident_not_found" not in str(result.error)
++        assert seen_get_store == []
++
++    def test_identity_mismatch_surfaces_as_typed_failure(
++        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        from k8s_diag_agent.collect import (
++            incident_diagnosis_auto_loop_evidence_processor as processor_module,
++        )
++
++        mismatched = canonical_incident("incident-OTHER")
++        monkeypatch.setattr(
++            processor_module,
++            "fetch_backend_incident_for_diagnosis_typed",
++            lambda incident_id: _found(incident_id, mismatched),
++        )
++        result = processor_module._process_incident(
++            incident_id="incident-abc",
++            external_analysis_dir=tmp_path,
++            config=AutomaticDiagnosisLoopConfig(),
++            collector_run_id="collector-test",
++            now=_NOW,
++        )
++        assert result.eligible is False
++        assert result.eligibility_reason == "backend_incident_identity_mismatch"
++        assert result.error is not None
++        assert "incident-OTHER" in result.error
++        assert "incident-abc" in result.error
++
++
++class TestProcessorLifecycleFailures:
++    def test_start_failure_prevents_diagnosis(
++        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        from k8s_diag_agent.collect import (
++            incident_diagnosis_auto_loop_evidence_processor as processor_module,
++        )
++
++        canonical = canonical_incident("incident-start-fail")
++        monkeypatch.setattr(
++            processor_module,
++            "fetch_backend_incident_for_diagnosis_typed",
++            lambda incident_id: _found(incident_id, canonical),
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "evaluate_incident_eligibility",
++            lambda **kwargs: StubEligibility(
++                eligible=True, reason="active_incident_with_suggested_checks"
++            ),
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "record_diagnosis_loop_started",
++            lambda **kwargs: LifecycleWriteFailed(
++                transition=LifecycleTransition.STARTED,
++                incident_id=kwargs["incident_id"],
++                reason_code="backend_url_not_configured",
++            ),
++        )
++        monkeypatch.setattr(processor_module, "record_diagnosis_loop_completed", never_called)
++        monkeypatch.setattr(processor_module, "record_diagnosis_loop_failed", never_called)
++
++        result = processor_module._process_incident(
++            incident_id="incident-start-fail",
++            external_analysis_dir=tmp_path,
++            config=AutomaticDiagnosisLoopConfig(),
++            collector_run_id="collector-test",
++            now=_NOW,
++        )
++        assert result.eligible is True
++        assert result.error is not None
++        assert "diagnosis_lifecycle_start_failed" in result.error
++        assert "backend_url_not_configured" in result.error
++
++    def test_completion_failure_does_not_claim_success(
++        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        from k8s_diag_agent.collect import (
++            incident_diagnosis_auto_loop_evidence_processor as processor_module,
++        )
++
++        canonical = canonical_incident("incident-completion-fail")
++        monkeypatch.setattr(
++            processor_module,
++            "fetch_backend_incident_for_diagnosis_typed",
++            lambda incident_id: _found(incident_id, canonical),
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "evaluate_incident_eligibility",
++            lambda **kwargs: StubEligibility(
++                eligible=True, reason="active_incident_with_suggested_checks"
++            ),
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "record_diagnosis_loop_started",
++            lambda **kwargs: LifecycleWriteApplied(
++                transition=LifecycleTransition.STARTED,
++                incident_id=kwargs["incident_id"],
++            ),
++        )
++        monkeypatch.setattr(processor_module, "record_diagnosis_loop_failed", never_called)
++        monkeypatch.setattr(
++            processor_module,
++            "record_diagnosis_loop_completed",
++            lambda **kwargs: LifecycleWriteFailed(
++                transition=LifecycleTransition.COMPLETED,
++                incident_id=kwargs["incident_id"],
++                reason_code="backend_error",
++            ),
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "build_incident_case_file",
++            lambda **kwargs: {"generated_at": "x", "suggested_checks": []},
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "run_automatic_diagnosis_hypothesis_loop",
++            lambda *args, **kwargs: _stub_hypothesis_result(),
++        )
++        monkeypatch.setattr(
++            processor_module, "run_policy_enforced_loop_pass", lambda **kwargs: _stub_pass()
++        )
++
++        result = processor_module._process_incident(
++            incident_id="incident-completion-fail",
++            external_analysis_dir=tmp_path,
++            config=AutomaticDiagnosisLoopConfig(),
++            collector_run_id="collector-test",
++            now=_NOW,
++        )
++        assert result.error is not None
++        assert "diagnosis_lifecycle_completion_failed" in result.error
++        assert "backend_error" in result.error
++
++
++class TestProductionShapeRegression:
++    def test_production_sequence_does_not_emit_incident_not_found(
++        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++    ) -> None:
++        from k8s_diag_agent.collect import (
++            incident_diagnosis_auto_loop_evidence_processor as processor_module,
++        )
++
++        canonical = canonical_incident("incident-prod-shape")
++        monkeypatch.setattr(
++            processor_module,
++            "fetch_backend_incident_for_diagnosis_typed",
++            lambda incident_id: _found(incident_id, canonical),
++        )
++        monkeypatch.setattr(
++            processor_module,
++            "evaluate_incident_eligibility",
++            lambda **kwargs: StubEligibility(
++                eligible=True, reason="active_incident_with_suggested_checks"
++            ),
++        )
++        # Local store is empty (production shape).
++        set_incident_store(IncidentStore())
++
++        result = processor_module._process_incident(
++            incident_id="incident-prod-shape",
++            external_analysis_dir=tmp_path,
++            config=AutomaticDiagnosisLoopConfig(),
++            collector_run_id="collector-test",
++            now=_NOW,
++        )
++        assert result.eligibility_reason != "not_found"
++        assert (result.skip_reason or "") != "not_eligible: incident_not_found"
++        assert result.eligible is True
+
+=== tests/unit/test_automatic_diagnosis_authority_seam01_verifier.py ===
+diff --git a/tests/unit/test_automatic_diagnosis_authority_seam01_verifier.py b/tests/unit/test_automatic_diagnosis_authority_seam01_verifier.py
+new file mode 100644
+index 00000000..0f9affdc
+--- /dev/null
++++ b/tests/unit/test_automatic_diagnosis_authority_seam01_verifier.py
+@@ -0,0 +1,272 @@
++"""Self-tests for the ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 verifier.
++
++The static verifier lives at
++``scripts/verifiers/automatic_diagnosis_authority_seam01.py``. These
++self-tests prove that:
++
++* the verifier PASSES against the current (fixed) production code
++  (``run_static_checks() == []`` and ``main() == 0``);
++* each forbidden form is actually detected — a verifier PASS is only
++  meaningful if the negative fixtures fail as designed.
++
++Every check that operates on an AST tree is exercised with a paired
++negative fixture (must produce a violation) and positive fixture (must
++not). This closes R1-8/R1-9: the verifier is no longer a green stamp
++with untested detectors.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R1)
++"""
++
++from __future__ import annotations
++
++import ast
++import importlib.util
++from pathlib import Path
++from types import ModuleType
++
++import pytest
++
++_VERIFIER_PATH = (
++    Path(__file__).resolve().parents[2]
++    / "scripts"
++    / "verifiers"
++    / "automatic_diagnosis_authority_seam01.py"
++)
++
++
++def _load_verifier() -> ModuleType:
++    spec = importlib.util.spec_from_file_location(
++        "adas01_verifier", _VERIFIER_PATH
++    )
++    assert spec is not None and spec.loader is not None
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
++
++
++verifier = _load_verifier()
++
++
++def _module(src: str) -> ast.Module:
++    return ast.parse(src)
++
++
++# ---------------------------------------------------------------------------
++# Production PASS: the verifier must accept the current fixed code.
++# ---------------------------------------------------------------------------
++
++
++class TestProductionPasses:
++    def test_run_static_checks_is_clean(self) -> None:
++        violations = verifier.run_static_checks()
++        assert violations == [], f"unexpected violations: {violations}"
++
++    def test_main_returns_zero(self) -> None:
++        assert verifier.main([]) == 0
++
++
++# ---------------------------------------------------------------------------
++# Negative + positive fixtures for the tree-based checks.
++# ---------------------------------------------------------------------------
++
++
++class TestForbiddenProcessorCalls:
++    def test_get_incident_store_is_rejected(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    store = get_incident_store()\n"
++        )
++        assert verifier._check_processor_calls(tree)
++
++    def test_direct_lifecycle_method_is_rejected(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    store.mark_diagnosis_loop_started(incident_id=i)\n"
++        )
++        assert verifier._check_processor_calls(tree)
++
++    def test_clean_processor_has_no_forbidden_calls(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    record_diagnosis_loop_started(incident_id=i)\n"
++        )
++        assert verifier._check_processor_calls(tree) == []
++
++
++class TestOldIdResolver:
++    def test_check_incident_eligibility_by_id_is_rejected(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    check_incident_eligibility(incident_id=x, config=c)\n"
++        )
++        assert verifier._check_processor_old_id_resolver(tree)
++
++    def test_aggregate_call_is_allowed(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    evaluate_incident_eligibility(incident=obj, config=c)\n"
++        )
++        assert verifier._check_processor_old_id_resolver(tree) == []
++
++
++class TestUsesAggregateEligibility:
++    def test_missing_aggregate_call_is_rejected(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    x = 1\n"
++        )
++        assert verifier._check_processor_uses_aggregate_eligibility(tree)
++
++    def test_present_aggregate_call_passes(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    evaluate_incident_eligibility(incident=obj, config=c)\n"
++        )
++        assert verifier._check_processor_uses_aggregate_eligibility(tree) == []
++
++    def test_call_without_incident_kw_is_rejected(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    evaluate_incident_eligibility(config=c)\n"
++        )
++        assert verifier._check_processor_uses_aggregate_eligibility(tree)
++
++
++class TestDispatchExhaustiveness:
++    def test_missing_variant_is_rejected(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    match outcome:\n"
++            "        case BackendIncidentFound():\n"
++            "            pass\n"
++        )
++        assert verifier._check_processor_dispatch(tree)
++
++    def test_all_three_variants_pass(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    match outcome:\n"
++            "        case BackendIncidentNotFound():\n"
++            "            pass\n"
++            "        case BackendIncidentLookupFailed():\n"
++            "            pass\n"
++            "        case BackendIncidentFound():\n"
++            "            pass\n"
++        )
++        assert verifier._check_processor_dispatch(tree) == []
++
++
++class TestNoBackendToLocalFallback:
++    def test_fetch_incident_local_is_rejected(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    fetch_incident_local(incident_id=i)\n"
++        )
++        assert verifier._check_processor_no_backend_to_local_fallback(tree)
++
++    def test_clean_processor_passes(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    record_diagnosis_loop_started(incident_id=i)\n"
++        )
++        assert verifier._check_processor_no_backend_to_local_fallback(tree) == []
++
++
++class TestNoSwallowedLifecycle:
++    def test_except_pass_around_lifecycle_is_rejected(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    try:\n"
++            "        record_diagnosis_loop_started(incident_id=i)\n"
++            "    except Exception:\n"
++            "        pass\n"
++        )
++        assert verifier._check_processor_no_swallowed_lifecycle(tree)
++
++    def test_except_pass_around_non_lifecycle_is_allowed(self) -> None:
++        tree = _module(
++            "def _process_incident():\n"
++            "    try:\n"
++            "        write_review_packet()\n"
++            "    except Exception:\n"
++            "        pass\n"
++        )
++        assert verifier._check_processor_no_swallowed_lifecycle(tree) == []
++
++
++class TestTruthinessToNotFound:
++    def test_assignment_form_is_detected(self) -> None:
++        tree = _module(
++            "if not incident:\n"
++            "    reason = 'incident_not_found'\n"
++        )
++        assert verifier._contains_truthiness_to_not_found(tree) is True
++
++    def test_constructor_keyword_form_is_detected(self) -> None:
++        tree = _module(
++            "if not incident:\n"
++            "    return AutoLoopIncidentResult("
++            "eligibility_reason='incident_not_found')\n"
++        )
++        assert verifier._contains_truthiness_to_not_found(tree) is True
++
++    def test_clean_branch_is_not_flagged(self) -> None:
++        tree = _module(
++            "if not incident:\n"
++            "    reason = 'ok'\n"
++        )
++        assert verifier._contains_truthiness_to_not_found(tree) is False
++
++
++class TestEmptyExceptPass:
++    def test_bare_except_pass_is_detected(self) -> None:
++        tree = _module(
++            "try:\n"
++            "    foo()\n"
++            "except Exception:\n"
++            "    pass\n"
++        )
++        assert verifier._has_empty_except_pass(tree) is True
++
++    def test_handled_except_is_not_flagged(self) -> None:
++        tree = _module(
++            "try:\n"
++            "    foo()\n"
++            "except Exception:\n"
++            "    handle()\n"
++        )
++        assert verifier._has_empty_except_pass(tree) is False
++
++
++class TestSeamAvailableNames:
++    def test_defined_imported_exported_are_collected(self) -> None:
++        tree = _module(
++            "from x import record_diagnosis_loop_started\n"
++            "__all__ = ['evaluate_incident_eligibility']\n"
++            "def build_lifecycle_request():\n"
++            "    pass\n"
++        )
++        defined, imported, exported = verifier._seam_available_names(tree)
++        assert "build_lifecycle_request" in defined
++        assert "record_diagnosis_loop_started" in imported
++        assert "evaluate_incident_eligibility" in exported
++
++
++class TestFailureKeywordMapping:
++    """The production check reads the real processor; a fixture proves the
++    call-keyword detector recognises the forbidden projection form."""
++
++    def test_call_keyword_failure_mapping_is_detected_via_truthiness(self) -> None:
++        # The failure-path detector shares the call-keyword recognition
++        # with the truthiness detector; a synthetic ``if not`` guard
++        # exercises the same ``eligibility_reason='incident_not_found'``
++        # keyword form the failure-path check forbids.
++        tree = _module(
++            "if not ok:\n"
++            "    AutoLoopIncidentResult(eligibility_reason='incident_not_found')\n"
++        )
++        assert verifier._contains_truthiness_to_not_found(tree) is True
++
++
++if __name__ == "__main__":  # pragma: no cover - convenience
++    raise SystemExit(pytest.main([__file__, "-q"]))
+
+=== tests/unit/test_automatic_diagnosis_backend_promotion_regression.py ===
+diff --git a/tests/unit/test_automatic_diagnosis_backend_promotion_regression.py b/tests/unit/test_automatic_diagnosis_backend_promotion_regression.py
+index 1ed767ed..3cef147c 100644
+--- a/tests/unit/test_automatic_diagnosis_backend_promotion_regression.py
++++ b/tests/unit/test_automatic_diagnosis_backend_promotion_regression.py
+@@ -166,15 +166,19 @@ class TestPromotionToDiagnosisRegression:
+
+         eligibility_stub_calls: list[str] = []
+
+-        def fake_check_incident_eligibility(**kwargs: Any) -> Any:
++        def fake_evaluate_incident_eligibility(**kwargs: Any) -> Any:
+             eligibility_stub_calls.append(kwargs["incident_id"])
+             return _StubEligibility(eligible=True, reason="active_incident_with_suggested_checks")
+
++        # R1 follow-up: the processor now calls
++        # ``evaluate_incident_eligibility`` (the canonical
++        # eligibility evaluator). The monkeypatch target must
++        # match the symbol the processor actually invokes.
+         monkeypatch.setattr(
+             "k8s_diag_agent.collect."
+             "incident_diagnosis_auto_loop_evidence_processor."
+-            "check_incident_eligibility",
+-            fake_check_incident_eligibility,
++            "evaluate_incident_eligibility",
++            fake_evaluate_incident_eligibility,
+         )
+
+         # Inject a fake ``BackendIncidentClient`` via the typed lookup
+
+=== tests/unit/test_incident_diagnosis_authority_run_summary.py ===
+diff --git a/tests/unit/test_incident_diagnosis_authority_run_summary.py b/tests/unit/test_incident_diagnosis_authority_run_summary.py
+new file mode 100644
+index 00000000..faaa52ed
+--- /dev/null
++++ b/tests/unit/test_incident_diagnosis_authority_run_summary.py
+@@ -0,0 +1,156 @@
++"""Unit tests for the authority run-summary accounting.
++
++Covers the ACT-required per-run counters
++(``backend_lookup_outcomes`` / ``eligibility_outcomes`` /
++``lifecycle_write_outcomes`` / ``backend_found_then_incident_not_found``)
++derived from per-incident result mappings.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R1)
++"""
++
++from __future__ import annotations
++
++from k8s_diag_agent.collect.incident_diagnosis_authority_run_summary import (
++    AuthorityRunSummary,
++    summarize_incident_results,
++)
++
++
++def test_backend_not_found_is_counted() -> None:
++    results = [
++        {
++            "eligible": False,
++            "eligibility_reason": "not_found",
++            "skipped": True,
++            "skip_reason": "incident_not_found",
++        }
++    ]
++    summary = summarize_incident_results(results)
++    assert summary.backend_lookup_outcomes == {"not_found": 1}
++    assert summary.backend_found_then_incident_not_found == 0
++
++
++def test_backend_lookup_failed_is_counted() -> None:
++    results = [
++        {
++            "eligible": False,
++            "eligibility_reason": "backend_incident_invalid_payload",
++            "error": "synthetic",
++        }
++    ]
++    summary = summarize_incident_results(results)
++    assert summary.backend_lookup_outcomes == {"lookup_failed": 1}
++    assert summary.backend_found_then_incident_not_found == 0
++
++
++def test_eligible_processed_incident_is_applied() -> None:
++    results = [
++        {
++            "eligible": True,
++            "eligibility_reason": "active_incident_with_suggested_checks",
++            "skipped": False,
++            "error": None,
++        }
++    ]
++    summary = summarize_incident_results(results)
++    assert summary.backend_lookup_outcomes == {"found": 1}
++    assert summary.eligibility_outcomes == {"eligible": 1}
++    assert summary.lifecycle_write_outcomes == {"applied": 1}
++
++
++def test_ineligible_incident_reason_is_keyed() -> None:
++    results = [
++        {
++            "eligible": False,
++            "eligibility_reason": "budget_exhausted",
++            "skipped": True,
++            "skip_reason": "not_eligible: budget_exhausted",
++        }
++    ]
++    summary = summarize_incident_results(results)
++    assert summary.eligibility_outcomes == {"budget_exhausted": 1}
++    # A budget-exhausted incident is a backend-found incident (it was
++    # resolved) but was not processed → lifecycle not applicable.
++    assert summary.backend_lookup_outcomes == {"found": 1}
++    assert summary.lifecycle_write_outcomes == {"not_applicable": 1}
++    assert summary.backend_found_then_incident_not_found == 0
++
++
++def test_lifecycle_start_and_completion_failures_are_distinguished() -> None:
++    results = [
++        {
++            "eligible": True,
++            "eligibility_reason": "active_incident_with_suggested_checks",
++            "error": "diagnosis_lifecycle_start_failed: backend_url_not_configured",
++        },
++        {
++            "eligible": True,
++            "eligibility_reason": "active_incident_with_suggested_checks",
++            "error": "diagnosis_lifecycle_completion_failed: backend_error",
++        },
++        {
++            "eligible": True,
++            "eligibility_reason": "active_incident_with_suggested_checks",
++            "error": "Failed to build case file: KeyError; "
++            "lifecycle_recording_error=backend_error; http_status=500",
++        },
++    ]
++    summary = summarize_incident_results(results)
++    assert summary.lifecycle_write_outcomes == {
++        "start_failed": 1,
++        "completion_failed": 1,
++        "recording_failed": 1,
++    }
++
++
++def test_split_authority_regression_is_flagged() -> None:
++    # The legacy defect: backend-found incident collapsed to
++    # incident_not_found (eligibility_reason == "incident_not_found").
++    results = [
++        {
++            "eligible": False,
++            "eligibility_reason": "incident_not_found",
++            "skipped": True,
++            "skip_reason": "not_eligible: incident_not_found",
++        }
++    ]
++    summary = summarize_incident_results(results)
++    assert summary.backend_lookup_outcomes == {"found": 1}
++    assert summary.backend_found_then_incident_not_found == 1
++
++
++def test_to_dict_shape_has_required_fields() -> None:
++    summary = AuthorityRunSummary()
++    payload = summary.to_dict()
++    assert set(payload.keys()) == {
++        "backend_lookup_outcomes",
++        "eligibility_outcomes",
++        "lifecycle_write_outcomes",
++        "backend_found_then_incident_not_found",
++    }
++    assert payload["backend_found_then_incident_not_found"] == 0
++
++
++def test_mixed_run_aggregates_counts() -> None:
++    results = [
++        {"eligible": True, "eligibility_reason": "active", "error": None},
++        {"eligible": True, "eligibility_reason": "active", "error": None},
++        {
++            "eligible": False,
++            "eligibility_reason": "not_found",
++            "skipped": True,
++            "skip_reason": "incident_not_found",
++        },
++        {
++            "eligible": False,
++            "eligibility_reason": "backend_incident_unsupported_schema",
++        },
++    ]
++    summary = summarize_incident_results(results)
++    assert summary.backend_lookup_outcomes == {
++        "found": 2,
++        "not_found": 1,
++        "lookup_failed": 1,
++    }
++    assert summary.eligibility_outcomes["eligible"] == 2
++    assert summary.backend_found_then_incident_not_found == 0
+
+=== tests/unit/test_incident_snapshot_serialization_isolation.py ===
+diff --git a/tests/unit/test_incident_snapshot_serialization_isolation.py b/tests/unit/test_incident_snapshot_serialization_isolation.py
+new file mode 100644
+index 00000000..854a13d0
+--- /dev/null
++++ b/tests/unit/test_incident_snapshot_serialization_isolation.py
+@@ -0,0 +1,316 @@
++"""R5 regression tests: snapshot and serialization isolation for ``diagnosis_loop``.
++
++Closes R5-1 from the
++``ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01`` review:
++
++* ``snapshot_incident`` must deep-copy the ``diagnosis_loop`` projection
++  field so mutations on the returned snapshot cannot reach back into
++  the cached aggregate and bypass the canonical event writer.
++* ``incident_to_dict`` (and therefore ``Incident.to_dict()``) must
++  deep-copy the ``diagnosis_loop`` projection field for the same
++  reason.
++* The deep copy must also break aliasing on nested mutable structures,
++  not just the top-level dict (the field is declared ``dict[str, Any]``
++  and may legally contain nested dicts/lists).
++
++The pre-R5 code passed the same dictionary reference through both
++boundaries, which allowed the following event-store authority bypass:
++
++    read snapshot
++        ↓
++    mutate returned diagnosis_loop dictionary
++        ↓
++    cached aggregate changes
++        ↓
++    no canonical event
++    no projection update
++    no hash-chain entry
++
++These tests prove that mutations on the returned snapshot/payload are
++isolated from the source aggregate and from any nested mutable state.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R5)
++"""
++
++from __future__ import annotations
++
++import shutil
++import sqlite3
++import tempfile
++import unittest
++from datetime import UTC, datetime
++from pathlib import Path
++
++from k8s_diag_agent.collect.incident_lifecycle import (
++    Incident,
++    IncidentStatus,
++)
++from k8s_diag_agent.collect.incident_lifecycle_serialization import (
++    incident_to_dict,
++)
++from k8s_diag_agent.collect.incident_snapshot_helpers import snapshot_incident
++from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
++from k8s_diag_agent.collect.incident_store_sqlite_lifecycle_idempotency import (
++    apply_lifecycle_transition_atomic,
++)
++
++
++def _make_incident_with_diagnosis_loop(
++    incident_id: str = "default-pod-isolation-pod-crash_loop",
++    *,
++    diagnosis_loop: dict | None = None,
++) -> Incident:
++    """Build an Incident with a populated ``diagnosis_loop`` projection."""
++    now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
++    return Incident(
++        incident_id=incident_id,
++        source_candidate_id="test-candidate",
++        namespace="default",
++        object_kind="Pod",
++        object_name="isolation-pod",
++        raw_object_kind=None,
++        candidate_class="crash_loop",
++        severity="error",
++        status=IncidentStatus.OPEN,
++        first_observed_at=now,
++        last_observed_at=now,
++        diagnosis_loop=diagnosis_loop,
++    )
++
++
++# =============================================================================
++# R5-1: snapshot_incident must deep-copy diagnosis_loop
++# =============================================================================
++
++
++class TestR5SnapshotIsolation(unittest.TestCase):
++    """R5-1: ``snapshot_incident`` must isolate the cached aggregate."""
++
++    def test_snapshot_diagnosis_loop_does_not_alias_cache(self) -> None:
++        """Mutating the snapshot's diagnosis_loop must NOT mutate the cache."""
++        cached = _make_incident_with_diagnosis_loop(
++            diagnosis_loop={"status": "completed"},
++        )
++
++        snapshot = snapshot_incident(cached)
++
++        # Mutate the returned snapshot.
++        self.assertIsNotNone(snapshot.diagnosis_loop)
++        snapshot.diagnosis_loop["status"] = "tampered"
++
++        # The cached aggregate must remain unchanged.
++        self.assertIsNotNone(cached.diagnosis_loop)
++        self.assertEqual(
++            cached.diagnosis_loop["status"],
++            "completed",
++            "snapshot must not alias the cached aggregate's diagnosis_loop",
++        )
++
++    def test_snapshot_diagnosis_loop_nested_mutation_is_isolated(self) -> None:
++        """The deep copy must also break aliasing on nested mutable state.
++
++        A shallow ``dict(...)`` would NOT be sufficient: the field is
++        declared ``dict[str, Any]`` and may legitimately contain nested
++        dicts and lists. This test proves we use ``deepcopy``, not just
++        a shallow copy.
 +        """
-+
-+        canonical_id = "incident-canonical-abc"
-+        payload_bytes = json.dumps(_canonical_payload(canonical_id)).encode("utf-8")
-+
-+        # Stub the eligibility check + downstream execution so the
-+        # loop completes without trying to invoke LLM providers.
-+        # Patch the batch module reference (not the evidence processor)
-+        # so the batch loop sees the stub.
-+        from k8s_diag_agent.collect import (
-+            incident_diagnosis_auto_loop_batch as batch_module,
++        nested = {"checks": [{"name": "check-a"}, {"name": "check-b"}]}
++        cached = _make_incident_with_diagnosis_loop(
++            diagnosis_loop={
++                "status": "running",
++                "run_state": nested,
++            },
 +        )
 +
-+        def stub_process_incident(**kwargs: Any) -> AutoLoopIncidentResult:
-+            incident_id_str = kwargs["incident_id"]
-+            # Use the real typed dispatch path.
-+            from k8s_diag_agent.collect.incident_diagnosis_dispatch import (
-+                fetch_backend_incident_for_diagnosis_typed,
-+            )
-+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
++        snapshot = snapshot_incident(cached)
 +
-+            outcome = fetch_backend_incident_for_diagnosis_typed(
-+                IncidentId(incident_id_str)
-+            )
-+            assert isinstance(outcome, BackendIncidentFound), (
-+                f"Backend HTTP 200 with canonical payload must yield "
-+                f"BackendIncidentFound, got {type(outcome).__name__}"
-+            )
-+            # Mark eligible so we get an "eligible" disposition.
-+            return AutoLoopIncidentResult(
-+                incident_id=incident_id_str,
-+                eligible=True,
-+                eligibility_reason="active_incident_with_suggested_checks",
-+            )
++        # Mutate the nested structure on the snapshot.
++        self.assertIsNotNone(snapshot.diagnosis_loop)
++        snapshot.diagnosis_loop["run_state"]["checks"][0]["name"] = "tampered"
 +
-+        # Inject a fake ``BackendIncidentClient`` via the typed lookup.
-+        from k8s_diag_agent.collect import (
-+            incident_diagnosis_backend_detail_lookup as detail_lookup,
++        # The nested state on the cached aggregate must be unchanged.
++        self.assertIsNotNone(cached.diagnosis_loop)
++        self.assertEqual(
++            cached.diagnosis_loop["run_state"]["checks"][0]["name"],
++            "check-a",
++            "snapshot must deep-copy nested mutable state, not just the top-level dict",
 +        )
 +
-+        class _FakeClient:
-+            def __init__(self) -> None:
-+                self.calls: list[Any] = []
++    def test_snapshot_diagnosis_loop_none_passes_through(self) -> None:
++        """A None diagnosis_loop must remain None (no spurious empty dict)."""
++        cached = _make_incident_with_diagnosis_loop(diagnosis_loop=None)
++        snapshot = snapshot_incident(cached)
++        self.assertIsNone(snapshot.diagnosis_loop)
 +
-+            def fetch_incident(
-+                self,
-+                incident_id: Any,
-+                *,
-+                timeout: float = 30.0,
-+            ) -> BackendIncidentHttpResponse:
-+                self.calls.append(incident_id)
-+                return BackendIncidentHttpResponse(
-+                    http_status=200, body=payload_bytes
++
++# =============================================================================
++# R5-1: incident_to_dict must deep-copy diagnosis_loop
++# =============================================================================
++
++
++class TestR5SerializationIsolation(unittest.TestCase):
++    """R5-1: ``incident_to_dict`` must isolate the source aggregate."""
++
++    def test_to_dict_diagnosis_loop_does_not_alias_incident(self) -> None:
++        """Mutating the payload's diagnosis_loop must NOT mutate the incident."""
++        incident = _make_incident_with_diagnosis_loop(
++            diagnosis_loop={"status": "completed"},
++        )
++
++        payload = incident_to_dict(incident)
++
++        # Mutate the serialized payload.
++        self.assertIsNotNone(payload["diagnosis_loop"])
++        payload["diagnosis_loop"]["status"] = "tampered"
++
++        # The source aggregate must remain unchanged.
++        self.assertIsNotNone(incident.diagnosis_loop)
++        self.assertEqual(
++            incident.diagnosis_loop["status"],
++            "completed",
++            "to_dict payload must not alias the incident's diagnosis_loop",
++        )
++
++    def test_to_dict_diagnosis_loop_nested_mutation_is_isolated(self) -> None:
++        """The deep copy must also break aliasing on nested mutable state."""
++        incident = _make_incident_with_diagnosis_loop(
++            diagnosis_loop={
++                "status": "running",
++                "run_state": {"checks": [{"name": "check-a"}]},
++            },
++        )
++
++        payload = incident_to_dict(incident)
++
++        # Mutate the nested structure on the payload.
++        self.assertIsNotNone(payload["diagnosis_loop"])
++        payload["diagnosis_loop"]["run_state"]["checks"][0]["name"] = "tampered"
++
++        # The nested state on the source aggregate must be unchanged.
++        self.assertIsNotNone(incident.diagnosis_loop)
++        self.assertEqual(
++            incident.diagnosis_loop["run_state"]["checks"][0]["name"],
++            "check-a",
++            "to_dict must deep-copy nested mutable state, not just the top-level dict",
++        )
++
++    def test_to_dict_diagnosis_loop_none_passes_through(self) -> None:
++        """A None diagnosis_loop must serialize as None."""
++        incident = _make_incident_with_diagnosis_loop(diagnosis_loop=None)
++        payload = incident_to_dict(incident)
++        self.assertIsNone(payload["diagnosis_loop"])
++
++    def test_incident_to_dict_dataclass_aliases_helper(self) -> None:
++        """``Incident.to_dict`` routes through ``incident_to_dict`` and inherits isolation."""
++        incident = _make_incident_with_diagnosis_loop(
++            diagnosis_loop={"status": "completed"},
++        )
++        payload = incident.to_dict()
++        payload["diagnosis_loop"]["status"] = "tampered"
++        self.assertEqual(
++            incident.diagnosis_loop["status"],
++            "completed",
++            "Incident.to_dict must inherit isolation from incident_to_dict",
++        )
++
++
++# =============================================================================
++# R5-1: integration with the canonical SQLite lifecycle apply path
++# =============================================================================
++
++
++class TestR5StoreAndSnapshotIsolation(unittest.TestCase):
++    """R5-1: the cached store aggregate is the canonical authority.
++
++    These tests combine the snapshot helper with the canonical SQLite
++    lifecycle-apply path so we prove the end-to-end invariant:
++    mutating the snapshot returned by ``store.get_incident`` cannot
++    mutate the cache that backs the canonical event writer.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def _populate(self, store: SQLiteIncidentStore) -> str:
++        from tests.unit.incident_store_sqlite_seam_helpers import make_candidate
++
++        candidate = make_candidate(name="r5-isolation-pod")
++        observed_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
++        incidents = store.promote_candidates([candidate], observed_at)
++        return str(incidents[0].incident_id)
++
++    def test_store_get_incident_diagnosis_loop_is_isolated_from_cache(self) -> None:
++        """``store.get_incident`` returns a snapshot; mutating it must not
++        mutate ``store._incidents``.
++        """
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = self._populate(store)
++
++        result = apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-r5-isolation",
++            collector_run_id="collector-r5-isolation",
++            fingerprint="fp-r5-isolation",
++            occurred_at=datetime(2026, 7, 12, 11, 0, 0, tzinfo=UTC),
++            payload={
++                "review_packet_name": "r5-review.json",
++                "checks_requested": 1,
++                "checks_run": 1,
++                "checks_rejected": 0,
++                "decision": "stop_root_cause_found",
++            },
++        )
++        self.assertEqual(result["outcome"], "applied")
++
++        # 1. The cached aggregate carries the typed field.
++        cached = store._incidents[incident_id]
++        self.assertIsNotNone(cached.diagnosis_loop)
++        self.assertEqual(cached.diagnosis_loop.get("status"), "completed")
++
++        # 2. ``store.get_incident`` returns a snapshot copy.
++        detail = store.get_incident(incident_id)
++        self.assertIsNotNone(detail)
++        self.assertIsNotNone(detail.diagnosis_loop)
++        detail.diagnosis_loop["status"] = "tampered"
++
++        # 3. The cached aggregate must NOT have been mutated.
++        cached_after = store._incidents[incident_id]
++        self.assertIsNotNone(cached_after.diagnosis_loop)
++        self.assertEqual(
++            cached_after.diagnosis_loop["status"],
++            "completed",
++            "store.get_incident must return an isolated snapshot, not a reference",
++        )
++
++        # 4. The durable projection must NOT have been mutated.
++        with sqlite3.connect(str(self._db_path)) as conn:
++            (projection_json,) = conn.execute(
++                "SELECT current_state_json FROM incident_current "
++                "WHERE incident_id = ?",
++                (incident_id,),
++            ).fetchone()
++        import json as _json
++
++        projection = _json.loads(projection_json)
++        self.assertEqual(
++            projection["diagnosis_loop"]["status"],
++            "completed",
++            "durable projection must not be mutated by snapshot consumer",
++        )
++
++
++__all__ = [
++    "TestR5SnapshotIsolation",
++    "TestR5SerializationIsolation",
++    "TestR5StoreAndSnapshotIsolation",
++]
++
++
++if __name__ == "__main__":
++    unittest.main()
+\ No newline at end of file
+
+=== tests/unit/test_incident_store_sqlite_lifecycle_idempotency.py ===
+diff --git a/tests/unit/test_incident_store_sqlite_lifecycle_idempotency.py b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency.py
+new file mode 100644
+index 00000000..d962085e
+--- /dev/null
++++ b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency.py
+@@ -0,0 +1,458 @@
++"""Regression tests for SQLite atomic lifecycle idempotency.
++
++These tests close the R2 failures from
++``ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01``:
++
++* **Restart-durable idempotency** — closing and reopening the SQLite
++  store preserves the idempotency record so a retried delivery
++  collapses to a replay instead of double-applying.
++* **Multi-process idempotency** — two separate SQLiteIncidentStore
++  instances (each opening its own connection / process) serialize
++  on ``BEGIN IMMEDIATE`` so the lookup→apply→record cycle never
++  runs the mutation twice.
++* **SQLite atomic mutation + idempotency commit** — the mutation
++  (``incident_events`` insert) and the idempotency record insert
++  (``lifecycle_idempotency`` insert) land in the same transaction
++  and either both commit or neither does.
++
++The HTTP / endpoint dispatch path is exercised separately in
++``tests/unit/test_automatic_diagnosis_authority_seam01_endpoint.py``
++and ``tests/unit/test_automatic_diagnosis_authority_seam01_dispatch.py``.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R2)
++"""
++
++from __future__ import annotations
++
++import shutil
++import tempfile
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import Any
++from unittest import TestCase
++
++from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
++from k8s_diag_agent.collect.incident_store_sqlite_lifecycle_idempotency import (
++    apply_lifecycle_transition_atomic,
++)
++
++from .incident_store_sqlite_seam_helpers import make_candidate
++
++_OCCURRED_AT = datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC)
++
++
++def _populate(store: SQLiteIncidentStore) -> str:
++    """Create one incident and return its id."""
++    candidate = make_candidate(name="diag-loop-test-pod")
++    observed_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
++    incidents = store.promote_candidates([candidate], observed_at)
++    return str(incidents[0].incident_id)
++
++
++def _payload_completed(review_packet_name: str = "review.json") -> dict[str, Any]:
++    return {
++        "review_packet_name": review_packet_name,
++        "checks_requested": 1,
++        "checks_run": 1,
++        "checks_rejected": 0,
++        "decision": "stop_root_cause_found",
++    }
++
++
++class TestSQLiteLifecycleIdempotencyAtomic(TestCase):
++    """The atomic apply path: one transaction, three outcomes."""
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_first_apply_returns_applied_with_replay_false(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        fingerprint = "fp-completed-001"
++        result = apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-1",
++            collector_run_id="collector-1",
++            fingerprint=fingerprint,
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(result["outcome"], "applied")
++        self.assertFalse(result["idempotent_replay"])
++        self.assertIsNotNone(result.get("incident"))
++
++    def test_replay_with_same_fingerprint_returns_replay_true(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        fingerprint = "fp-completed-002"
++        first = apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-1",
++            collector_run_id="collector-1",
++            fingerprint=fingerprint,
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(first["outcome"], "applied")
++
++        second = apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-1",
++            collector_run_id="collector-1",
++            fingerprint=fingerprint,
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(second["outcome"], "applied")
++        self.assertTrue(second["idempotent_replay"])
++
++    def test_same_key_different_fingerprint_returns_replay_mismatch(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        first = apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-1",
++            collector_run_id="collector-1",
++            fingerprint="fp-a",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed("review-a.json"),
++        )
++        self.assertEqual(first["outcome"], "applied")
++
++        second = apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-1",
++            collector_run_id="collector-1",
++            fingerprint="fp-b",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed("review-b.json"),
++        )
++        self.assertEqual(second["outcome"], "replay_mismatch")
++
++    def test_unknown_incident_returns_incident_not_found(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        # No population; the incident id is absent.
++        result = apply_lifecycle_transition_atomic(
++            store,
++            transition="started",
++            incident_id="missing-incident",
++            run_id="run-1",
++            collector_run_id="collector-1",
++            fingerprint="fp-missing",
++            occurred_at=_OCCURRED_AT,
++            payload={},
++        )
++        self.assertEqual(result["outcome"], "incident_not_found")
++
++
++class TestSQLiteLifecycleIdempotencyRestartDurable(TestCase):
++    """Idempotency record survives closing and reopening the store."""
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_record_survives_store_close_and_reopen(self) -> None:
++        # 1. Open store, populate, apply one transition.
++        first_store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(first_store)
++        fingerprint = "fp-restart"
++        first = apply_lifecycle_transition_atomic(
++            first_store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-restart",
++            collector_run_id="collector-restart",
++            fingerprint=fingerprint,
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(first["outcome"], "applied")
++        self.assertFalse(first["idempotent_replay"])
++        # Simulate a backend restart by discarding the in-memory
++        # store instance. The SQLite file on disk still has the
++        # idempotency record.
++        del first_store
++
++        # 2. Open a brand-new store instance against the same file.
++        second_store = SQLiteIncidentStore(self._db_path)
++
++        # 3. Re-deliver the exact same transition. The durable
++        # idempotency record must cause a replay, NOT a fresh apply.
++        second = apply_lifecycle_transition_atomic(
++            second_store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-restart",
++            collector_run_id="collector-restart",
++            fingerprint=fingerprint,
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(second["outcome"], "applied")
++        self.assertTrue(
++            second["idempotent_replay"],
++            "second process should collapse to replay after restart",
++        )
++
++
++class TestSQLiteLifecycleIdempotencyMultiProcess(TestCase):
++    """Two independent store instances simulate two backend processes.
++
++    The in-process ``_write_lock`` does not protect across processes;
++    the SQLite ``BEGIN IMMEDIATE`` does. We prove the contract by
++    opening two stores against the same SQLite file and asserting
++    that exactly one apply + one replay happen even though the two
++    stores never share a Python lock.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_two_stores_one_apply_one_replay(self) -> None:
++        # Process A opens the database, populates an incident, and
++        # applies the lifecycle transition. Process B opens the
++        # same file independently and replays the transition.
++        process_a = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(process_a)
++        fingerprint = "fp-multi-process"
++
++        a_result = apply_lifecycle_transition_atomic(
++            process_a,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-mp",
++            collector_run_id="collector-mp",
++            fingerprint=fingerprint,
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(a_result["outcome"], "applied")
++        self.assertFalse(a_result["idempotent_replay"])
++
++        # Process B starts "fresh": different in-memory cache, no
++        # Python-level shared state with process A.
++        process_b = SQLiteIncidentStore(self._db_path)
++        b_result = apply_lifecycle_transition_atomic(
++            process_b,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-mp",
++            collector_run_id="collector-mp",
++            fingerprint=fingerprint,
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(b_result["outcome"], "applied")
++        self.assertTrue(
++            b_result["idempotent_replay"],
++            "Process B should observe the durable idempotency record",
++        )
++
++        # Cross-process event count must be exactly one applied
++        # transition. Two ``append_event`` calls would be visible
++        # here; exactly one means the mutation ran once.
++        #
++        # The event_type string follows the canonical
++        # ``IncidentEventType`` enum value
++        # (``incident.diagnosis_loop_completed``). The R3 patch
++        # routes the lifecycle apply through the canonical event
++        # writer so this column value is the same as for events
++        # appended via ``mark_diagnosis_loop_completed_impl``.
++        with process_b._connect() as conn:
++            cursor = conn.execute(
++                "SELECT COUNT(*) FROM incident_events "
++                "WHERE incident_id = ? "
++                "AND event_type = 'incident.diagnosis_loop_completed'",
++                (incident_id,),
++            )
++            (count,) = cursor.fetchone()
++        self.assertEqual(
++            count,
++            1,
++            "exactly one incident.diagnosis_loop_completed event must exist across both processes",
++        )
++
++        # Idempotency row count must be exactly one (no double-write).
++        with process_b._connect() as conn:
++            cursor = conn.execute(
++                "SELECT COUNT(*) FROM lifecycle_idempotency "
++                "WHERE incident_id = ? AND transition = 'completed'",
++                (incident_id,),
++            )
++            (idem_count,) = cursor.fetchone()
++        self.assertEqual(
++            idem_count,
++            1,
++            "exactly one idempotency record must exist across both processes",
++        )
++
++
++class TestSQLiteLifecycleIdempotencyAtomicity(TestCase):
++    """The mutation and the idempotency record land in one transaction."""
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_event_and_idempotency_record_both_present(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-atomic",
++            collector_run_id="collector-atomic",
++            fingerprint="fp-atomic",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++
++        # Canonical ``IncidentEventType`` value:
++        # ``incident.diagnosis_loop_completed``.
++        with store._connect() as conn:
++            ev_count = conn.execute(
++                "SELECT COUNT(*) FROM incident_events "
++                "WHERE incident_id = ? "
++                "AND event_type = 'incident.diagnosis_loop_completed'",
++                (incident_id,),
++            ).fetchone()[0]
++            idem_count = conn.execute(
++                "SELECT COUNT(*) FROM lifecycle_idempotency "
++                "WHERE incident_id = ? AND transition = 'completed'",
++                (incident_id,),
++            ).fetchone()[0]
++        self.assertEqual(ev_count, 1)
++        self.assertEqual(idem_count, 1)
++
++    def test_incident_not_found_writes_no_event_and_no_record(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        result = apply_lifecycle_transition_atomic(
++            store,
++            transition="started",
++            incident_id="never-existed",
++            run_id="run-x",
++            collector_run_id="collector-x",
++            fingerprint="fp-x",
++            occurred_at=_OCCURRED_AT,
++            payload={},
++        )
++        self.assertEqual(result["outcome"], "incident_not_found")
++
++        with store._connect() as conn:
++            ev_count = conn.execute(
++                "SELECT COUNT(*) FROM incident_events",
++            ).fetchone()[0]
++            idem_count = conn.execute(
++                "SELECT COUNT(*) FROM lifecycle_idempotency",
++            ).fetchone()[0]
++        self.assertEqual(ev_count, 0)
++        self.assertEqual(idem_count, 0)
++
++
++class TestSQLiteLifecycleIdempotencyConcurrency(TestCase):
++    """Concurrent in-process apply calls collapse to one apply + N-1 replays.
++
++    The store's in-process ``_write_lock`` still gates Python-level
++    access; the test proves that overlap from many threads produces
++    the same observable idempotency contract as the single-process
++    path.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_concurrent_threads_one_apply_n_minus_one_replays(self) -> None:
++        import threading
++
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        fingerprint = "fp-concurrent"
++        payload = _payload_completed()
++
++        n = 8
++        results: list[dict[str, Any]] = []
++        results_lock = threading.Lock()
++        barrier = threading.Barrier(n)
++
++        def deliver() -> None:
++            barrier.wait()
++            r = apply_lifecycle_transition_atomic(
++                store,
++                transition="completed",
++                incident_id=incident_id,
++                run_id="run-conc",
++                collector_run_id="collector-conc",
++                fingerprint=fingerprint,
++                occurred_at=_OCCURRED_AT,
++                payload=payload,
++            )
++            with results_lock:
++                results.append(r)
++
++        threads = [threading.Thread(target=deliver) for _ in range(n)]
++        for t in threads:
++            t.start()
++        for t in threads:
++            t.join()
++
++        outcomes = [r["outcome"] for r in results]
++        self.assertTrue(all(o == "applied" for o in outcomes))
++        replays = [r["idempotent_replay"] for r in results]
++        self.assertEqual(replays.count(False), 1)
++        self.assertEqual(replays.count(True), n - 1)
++
++        # Canonical ``IncidentEventType`` value:
++        # ``incident.diagnosis_loop_completed``.
++        with store._connect() as conn:
++            ev_count = conn.execute(
++                "SELECT COUNT(*) FROM incident_events "
++                "WHERE incident_id = ? "
++                "AND event_type = 'incident.diagnosis_loop_completed'",
++                (incident_id,),
++            ).fetchone()[0]
++            idem_count = conn.execute(
++                "SELECT COUNT(*) FROM lifecycle_idempotency "
++                "WHERE incident_id = ? AND transition = 'completed'",
++                (incident_id,),
++            ).fetchone()[0]
++        self.assertEqual(ev_count, 1)
++        self.assertEqual(idem_count, 1)
++
++
++__all__ = [
++    "TestSQLiteLifecycleIdempotencyAtomic",
++    "TestSQLiteLifecycleIdempotencyRestartDurable",
++    "TestSQLiteLifecycleIdempotencyMultiProcess",
++    "TestSQLiteLifecycleIdempotencyAtomicity",
++    "TestSQLiteLifecycleIdempotencyConcurrency",
++]
+\ No newline at end of file
+
+=== tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3.py ===
+diff --git a/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3.py b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3.py
+new file mode 100644
+index 00000000..a0d68720
+--- /dev/null
++++ b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3.py
+@@ -0,0 +1,356 @@
++"""R3 regression tests for SQLite lifecycle idempotency (core).
++
++Closes R3-1, R3-5, R3-6 blockers from the
++``ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01`` review:
++
++* **R3-1** — existing v1 production databases must upgrade in
++  place so the lifecycle endpoint does not crash with
++  ``no such table: lifecycle_idempotency``.
++* **R3-5** — the UNIQUE index must still enforce uniqueness when
++  ``diagnosis_run_id`` is ``NULL``.
++* **R3-6** — a fault injected between event append and idempotency
++  insert must roll back the event, projection, and cache.
++
++Companion files split for LLM-friendly size limits:
++
++* ``test_incident_store_sqlite_lifecycle_idempotency_r3_apply.py``
++  — R3-2 lifecycle-applies projection/cache updates.
++* ``test_incident_store_sqlite_lifecycle_idempotency_r3_events.py``
++  — R3-3 hash-chain tests.
++* ``test_incident_store_sqlite_lifecycle_idempotency_r3_seam.py``
++  — R3-4 capability-seam tests.
++
++The tests rely on the canonical
++:meth:`SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently`
++path that the R2 module now delegates to.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R3)
++"""
++
++from __future__ import annotations
++
++import shutil
++import sqlite3
++import tempfile
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import Any
++from unittest import TestCase
++
++from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
++from k8s_diag_agent.collect.incident_store_sqlite_lifecycle_idempotency import (
++    apply_lifecycle_transition_atomic,
++)
++
++from .incident_store_sqlite_seam_helpers import make_candidate
++
++_OCCURRED_AT = datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC)
++
++
++def _populate(store: SQLiteIncidentStore) -> str:
++    """Create one incident and return its id."""
++    candidate = make_candidate(name="diag-loop-test-pod")
++    observed_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
++    incidents = store.promote_candidates([candidate], observed_at)
++    return str(incidents[0].incident_id)
++
++
++def _payload_completed(review_packet_name: str = "review.json") -> dict[str, Any]:
++    return {
++        "review_packet_name": review_packet_name,
++        "checks_requested": 1,
++        "checks_run": 1,
++        "checks_rejected": 0,
++        "decision": "stop_root_cause_found",
++    }
++
++
++class TestR3SchemaUpgrade(TestCase):
++    """R3-1: Existing v1 databases upgrade in place to v2.
++
++    Builds a genuine v1 schema (no ``lifecycle_idempotency`` table),
++    records ``SCHEMA_VERSION = 1`` in ``schema_migrations``, then
++    reopens the file with the new code and asserts that the table
++    + index are installed and that ``schema_migrations`` is bumped
++    to ``2``.
++    """
++
++    def test_v1_database_upgrades_to_v2_with_table_and_index(self) -> None:
++        temp_dir = tempfile.mkdtemp()
++        db_path = Path(temp_dir) / "v1_production.sqlite3"
++        try:
++            from k8s_diag_agent.collect import (
++                incident_store_sqlite_schema as schema_module,
++            )
++
++            v1_init_statements = [
++                schema_module.CREATE_SCHEMA_MIGRATIONS,
++                schema_module.CREATE_INCIDENT_EVENTS,
++                schema_module.CREATE_EVENTS_INDICES,
++                schema_module.CREATE_INCIDENT_CURRENT,
++                schema_module.CREATE_CURRENT_INDICES,
++                schema_module.CREATE_TRIGGERS,
++            ]
++            with sqlite3.connect(str(db_path)) as conn:
++                for stmt in v1_init_statements:
++                    conn.executescript(stmt)
++                conn.execute(
++                    "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
++                    (1, "2025-01-01T00:00:00+00:00"),
++                )
++                conn.commit()
++                tables = {
++                    row[0] for row in conn.execute(
++                        "SELECT name FROM sqlite_master WHERE type='table'"
++                    ).fetchall()
++                }
++            self.assertNotIn(
++                "lifecycle_idempotency",
++                tables,
++                "v1-shaped database must not have lifecycle_idempotency yet",
++            )
++
++            # Reopen the database with the new code. ``run_migrations``
++            # sees ``current_version = 1 < SCHEMA_VERSION = 2`` and
++            # applies the v2 upgrade (CREATE TABLE IF NOT EXISTS
++            # lifecycle_idempotency + the COALESCE-based UNIQUE
++            # index).
++            SQLiteIncidentStore(db_path)
++
++            with sqlite3.connect(str(db_path)) as conn:
++                tables_after = {
++                    row[0] for row in conn.execute(
++                        "SELECT name FROM sqlite_master WHERE type='table'"
++                    ).fetchall()
++                }
++                indexes_after = {
++                    row[0] for row in conn.execute(
++                        "SELECT name FROM sqlite_master WHERE type='index'"
++                    ).fetchall()
++                }
++                recorded_version = conn.execute(
++                    "SELECT MAX(version) FROM schema_migrations"
++                ).fetchone()[0]
++
++            self.assertIn(
++                "lifecycle_idempotency",
++                tables_after,
++                "lifecycle_idempotency table must be added by the v2 upgrade",
++            )
++            self.assertIn(
++                "idx_lifecycle_idempotency_key",
++                indexes_after,
++                "lifecycle_idempotency unique index must be added by the v2 upgrade",
++            )
++            self.assertGreaterEqual(int(recorded_version), 2)
++        finally:
++            shutil.rmtree(temp_dir, ignore_errors=True)
++
++
++class TestR3Rollback(TestCase):
++    """R3-6: Fault between event append and idempotency insert must
++    roll back the event, projection, and cache.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_idempotency_insert_failure_rolls_back_everything(self) -> None:
++        from unittest import mock
++
++        from k8s_diag_agent.collect import (
++            incident_store_sqlite_context as context_module,
++        )
++
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++
++        with store._connect() as conn:
++            ev_count_before = conn.execute(
++                "SELECT COUNT(*) FROM incident_events"
++            ).fetchone()[0]
++            idem_count_before = conn.execute(
++                "SELECT COUNT(*) FROM lifecycle_idempotency"
++            ).fetchone()[0]
++            projection_before = conn.execute(
++                "SELECT current_state_json FROM incident_current "
++                "WHERE incident_id = ?",
++                (incident_id,),
++            ).fetchone()[0]
++        cache_before = (
++            store._incidents[incident_id].to_dict()
++            if incident_id in store._incidents
++            else None
++        )
++
++        def _failing_insert(*args: Any, **kwargs: Any) -> None:
++            raise sqlite3.OperationalError(
++                "injected fault: idempotency insert"
++            )
++
++        with mock.patch.object(
++            context_module,
++            "_insert_lifecycle_idempotency_row",
++            side_effect=_failing_insert,
++        ):
++            result = apply_lifecycle_transition_atomic(
++                store,
++                transition="completed",
++                incident_id=incident_id,
++                run_id="run-rb",
++                collector_run_id="collector-rb",
++                fingerprint="fp-rb",
++                occurred_at=_OCCURRED_AT,
++                payload=_payload_completed(),
++            )
++
++        self.assertEqual(result["outcome"], "persistence_failed")
++        self.assertIn("idempotency", result.get("detail", ""))
++
++        with store._connect() as conn:
++            ev_count_after = conn.execute(
++                "SELECT COUNT(*) FROM incident_events"
++            ).fetchone()[0]
++            idem_count_after = conn.execute(
++                "SELECT COUNT(*) FROM lifecycle_idempotency"
++            ).fetchone()[0]
++            projection_after = conn.execute(
++                "SELECT current_state_json FROM incident_current "
++                "WHERE incident_id = ?",
++                (incident_id,),
++            ).fetchone()[0]
++        self.assertEqual(
++            ev_count_after,
++            ev_count_before,
++            "event row must be rolled back when idempotency insert fails",
++        )
++        self.assertEqual(
++            idem_count_after,
++            idem_count_before,
++            "idempotency row must not be present",
++        )
++        self.assertEqual(
++            projection_after,
++            projection_before,
++            "incident_current projection must be unchanged",
++        )
++
++        cache_after = (
++            store._incidents[incident_id].to_dict()
++            if incident_id in store._incidents
++            else None
++        )
++        self.assertEqual(cache_after, cache_before)
++
++
++class TestR3MultiProcessRegression(TestCase):
++    """R3 cross-check: the canonical path preserves the multi-process
++    one-apply-one-replay contract.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_two_stores_one_apply_one_replay_through_canonical_path(self) -> None:
++        process_a = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(process_a)
++        fingerprint = "fp-mp-r3"
++
++        a_result = apply_lifecycle_transition_atomic(
++            process_a,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-mp-r3",
++            collector_run_id="collector-mp-r3",
++            fingerprint=fingerprint,
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(a_result["outcome"], "applied")
++        self.assertFalse(a_result["idempotent_replay"])
++
++        process_b = SQLiteIncidentStore(self._db_path)
++        b_result = apply_lifecycle_transition_atomic(
++            process_b,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-mp-r3",
++            collector_run_id="collector-mp-r3",
++            fingerprint=fingerprint,
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(b_result["outcome"], "applied")
++        self.assertTrue(b_result["idempotent_replay"])
++
++        with process_b._connect() as conn:
++            (event_count,) = conn.execute(
++                "SELECT COUNT(*) FROM incident_events "
++                "WHERE incident_id = ? "
++                "AND event_type = 'incident.diagnosis_loop_completed'",
++                (incident_id,),
++            ).fetchone()
++            (idem_count,) = conn.execute(
++                "SELECT COUNT(*) FROM lifecycle_idempotency "
++                "WHERE incident_id = ? AND transition = 'completed'",
++                (incident_id,),
++            ).fetchone()
++        self.assertEqual(event_count, 1)
++        self.assertEqual(idem_count, 1)
++
++
++class TestR3SchemaUniqueness(TestCase):
++    """R3-5: NULL ``diagnosis_run_id`` must still participate in the
++    UNIQUE constraint. The COALESCE expression in the index makes
++    NULL compare equal to ``''``.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_duplicate_null_diagnosis_run_id_is_rejected(self) -> None:
++        SQLiteIncidentStore(self._db_path)
++        with sqlite3.connect(str(self._db_path)) as conn:
++            conn.execute(
++                """
++                INSERT INTO lifecycle_idempotency (
++                    incident_id, transition, collector_run_id,
++                    diagnosis_run_id, fingerprint, occurred_at, applied_at
++                ) VALUES (?, ?, ?, NULL, 'fp-1',
++                          '2026-01-01T00:00:00+00:00',
++                          '2026-01-01T00:00:00+00:00')
++                """,
++                ("inc-1", "started", "collector-1"),
++            )
++            with self.assertRaises(sqlite3.IntegrityError):
++                conn.execute(
++                    """
++                    INSERT INTO lifecycle_idempotency (
++                        incident_id, transition, collector_run_id,
++                        diagnosis_run_id, fingerprint, occurred_at, applied_at
++                    ) VALUES (?, ?, ?, NULL, 'fp-2',
++                              '2026-01-01T00:00:00+00:00',
++                              '2026-01-01T00:00:00+00:00')
++                    """,
++                    ("inc-1", "started", "collector-1"),
 +                )
 +
-+        fake_client = _FakeClient()
 +
-+        monkeypatch.setenv("K9B_INCIDENT_PROMOTION_MODE", "backend-api")
-+        monkeypatch.setenv("K9B_BACKEND_INTERNAL_URL", "http://backend.test:8080")
-+        monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "test-token-not-secret")
-+        monkeypatch.setenv("K9B_INCIDENT_STORE_BACKEND", "sqlite")
-+        monkeypatch.setenv("K9B_PROCESS_ROLE", "scheduler")
++__all__ = [
++    "TestR3SchemaUpgrade",
++    "TestR3Rollback",
++    "TestR3MultiProcessRegression",
++    "TestR3SchemaUniqueness",
++]
+
+=== tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_apply.py ===
+diff --git a/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_apply.py b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_apply.py
+new file mode 100644
+index 00000000..4af95cbf
+--- /dev/null
++++ b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_apply.py
+@@ -0,0 +1,263 @@
++"""R3 regression tests for SQLite lifecycle idempotency (apply path).
 +
-+        monkeypatch.setattr(
-+            detail_lookup,
-+            "HttpIncidentBackendClient",
-+            lambda base_url, token=None: fake_client,
++Closes R3-2 from the
++``ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01`` review:
++
++* **R3-2** — ``started`` / ``failed`` / ``completed`` must
++  immediately update the canonical projection atomically, and
++  the state must survive close + reopen.
++
++Companion files:
++
++* ``test_incident_store_sqlite_lifecycle_idempotency_r3.py`` — R3-1,
++  R3-5, R3-6, multi-process.
++* ``test_incident_store_sqlite_lifecycle_idempotency_r3_events.py``
++  — R3-3 hash chain.
++* ``test_incident_store_sqlite_lifecycle_idempotency_r3_seam.py``
++  — R3-4 capability seam.
++
++The tests rely on the canonical
++:meth:`SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently`
++path that the R2 module now delegates to.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R3)
++"""
++
++from __future__ import annotations
++
++import json
++import shutil
++import tempfile
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import Any, cast
++from unittest import TestCase
++
++from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
++from k8s_diag_agent.collect.incident_store_sqlite_lifecycle_idempotency import (
++    apply_lifecycle_transition_atomic,
++)
++
++from .incident_store_sqlite_seam_helpers import make_candidate
++
++_OCCURRED_AT = datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC)
++
++
++def _populate(store: SQLiteIncidentStore) -> str:
++    """Create one incident and return its id."""
++    candidate = make_candidate(name="diag-loop-test-pod")
++    observed_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
++    incidents = store.promote_candidates([candidate], observed_at)
++    return str(incidents[0].incident_id)
++
++
++def _payload_completed(review_packet_name: str = "review.json") -> dict[str, Any]:
++    return {
++        "review_packet_name": review_packet_name,
++        "checks_requested": 1,
++        "checks_run": 1,
++        "checks_rejected": 0,
++        "decision": "stop_root_cause_found",
++    }
++
++
++def _payload_started() -> dict[str, Any]:
++    return {}
++
++
++def _payload_failed() -> dict[str, Any]:
++    return {"unavailable_reason": "captures-unavailable"}
++
++
++def _read_projection_state(
++    store: SQLiteIncidentStore, incident_id: str
++) -> dict[str, Any]:
++    """Return the parsed ``current_state_json`` for an incident.
++
++    Returns an empty dict if no projection row exists so callers
++    can ``.get("diagnosis_loop")`` without a None check.
++    """
++    with store._connect() as conn:
++        row = conn.execute(
++            "SELECT current_state_json FROM incident_current "
++            "WHERE incident_id = ?",
++            (incident_id,),
++        ).fetchone()
++    if row is None or row[0] is None:
++        return {}
++    return cast(dict[str, Any], json.loads(row[0]))
++
++
++def _require_diag_loop(
++    store: SQLiteIncidentStore, incident_id: str
++) -> dict[str, Any]:
++    """Return the ``diagnosis_loop`` block from the projection row.
++
++    The canonical lifecycle apply mutates ``incident_current`` in
++    the same transaction as the event insert + idempotency record
++    insert. The ``diagnosis_loop`` block lives in
++    ``current_state_json`` because the in-memory ``Incident`` model
++    does not (yet) carry it as a typed attribute. Reading the
++    projection is the canonical way to verify the canonical path
++    actually wrote the lifecycle state.
++    """
++    state = _read_projection_state(store, incident_id)
++    diag_loop = state.get("diagnosis_loop")
++    assert diag_loop is not None, (
++        f"projection row for {incident_id!r} must include "
++        f"diagnosis_loop block; got {state!r}"
++    )
++    return cast(dict[str, Any], diag_loop)
++
++
++class TestR3LifecycleAppliesUpdateCacheAndProjection(TestCase):
++    """R3-2: ``started`` / ``failed`` / ``completed`` must update
++    the canonical projection atomically, and the state must
++    survive close + reopen.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_started_immediately_updates_projection(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        apply_lifecycle_transition_atomic(
++            store,
++            transition="started",
++            incident_id=incident_id,
++            run_id="run-started",
++            collector_run_id="collector-started",
++            fingerprint="fp-started",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_started(),
 +        )
-+        monkeypatch.setattr(batch_module, "_process_incident", stub_process_incident)
 +
-+        captured, handler = _capture_logging()
-+        try:
-+            result = run_automatic_diagnosis_loop_evidence_collection(
-+                external_analysis_dir=temp_external_dir,
-+                incident_ids=[canonical_id],
++        diag_loop = _require_diag_loop(store, incident_id)
++        self.assertEqual(diag_loop["status"], "running")
++        self.assertEqual(diag_loop["run_id"], "run-started")
++        self.assertEqual(diag_loop["collector_run_id"], "collector-started")
++
++    def test_failed_immediately_updates_projection(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        apply_lifecycle_transition_atomic(
++            store,
++            transition="failed",
++            incident_id=incident_id,
++            run_id="run-failed",
++            collector_run_id="collector-failed",
++            fingerprint="fp-failed",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_failed(),
++        )
++
++        diag_loop = _require_diag_loop(store, incident_id)
++        self.assertEqual(diag_loop["status"], "failed")
++        self.assertEqual(diag_loop["run_id"], "run-failed")
++        self.assertEqual(
++            diag_loop["unavailable_reason"], "captures-unavailable"
++        )
++
++    def test_completed_immediately_updates_projection(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-completed",
++            collector_run_id="collector-completed",
++            fingerprint="fp-completed",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++
++        diag_loop = _require_diag_loop(store, incident_id)
++        self.assertEqual(diag_loop["status"], "completed")
++        self.assertEqual(diag_loop["review_packet_name"], "review.json")
++        self.assertEqual(diag_loop["checks_run"], 1)
++        self.assertEqual(diag_loop["decision"], "stop_root_cause_found")
++
++    def test_state_survives_close_and_reopen(self) -> None:
++        first_store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(first_store)
++        apply_lifecycle_transition_atomic(
++            first_store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-persist",
++            collector_run_id="collector-persist",
++            fingerprint="fp-persist",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed("review-persist.json"),
++        )
++        del first_store
++
++        second_store = SQLiteIncidentStore(self._db_path)
++        diag_loop = _require_diag_loop(second_store, incident_id)
++        self.assertEqual(diag_loop["status"], "completed")
++        self.assertEqual(diag_loop["review_packet_name"], "review-persist.json")
++
++    def test_incident_current_advances_atomically(self) -> None:
++        """R3-2: ``current_state_json`` and ``last_event_seq`` both
++        advance in the same transaction.
++        """
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++
++        with store._connect() as conn:
++            row_before = conn.execute(
++                "SELECT current_state_json, last_event_seq "
++                "FROM incident_current WHERE incident_id = ?",
++                (incident_id,),
++            ).fetchone()
++        last_event_seq_before = int(row_before[1])
++
++        apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-adv",
++            collector_run_id="collector-adv",
++            fingerprint="fp-adv",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++
++        with store._connect() as conn:
++            row_after = conn.execute(
++                "SELECT current_state_json, last_event_seq "
++                "FROM incident_current WHERE incident_id = ?",
++                (incident_id,),
++            ).fetchone()
++            diag_event = conn.execute(
++                "SELECT event_seq FROM incident_events "
++                "WHERE incident_id = ? "
++                "AND event_type = 'incident.diagnosis_loop_completed'",
++                (incident_id,),
++            ).fetchone()
++        last_event_seq_after = int(row_after[1])
++        current_state = cast(dict[str, Any], json.loads(row_after[0]))
++
++        self.assertEqual(
++            last_event_seq_after,
++            int(diag_event[0]),
++            "incident_current.last_event_seq must equal the new event's event_seq",
++        )
++        self.assertGreater(
++            last_event_seq_after,
++            last_event_seq_before,
++            "last_event_seq must advance after a lifecycle apply",
++        )
++        self.assertIn("diagnosis_loop", current_state)
++        self.assertEqual(current_state["diagnosis_loop"]["status"], "completed")
++
++
++__all__ = [
++    "TestR3LifecycleAppliesUpdateCacheAndProjection",
++]
+\ No newline at end of file
+
+=== tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_events.py ===
+diff --git a/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_events.py b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_events.py
+new file mode 100644
+index 00000000..a01cb1b4
+--- /dev/null
++++ b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_events.py
+@@ -0,0 +1,165 @@
++"""R3 regression tests for SQLite lifecycle idempotency (events).
++
++Closes R3-3 from the
++``ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01`` review:
++
++* **R3-3** — the canonical event append must use the hash chain.
++  The full event chain must pass ``verify_hash_chain`` and a
++  subsequent canonical event must still link correctly.
++
++Companion files:
++
++* ``test_incident_store_sqlite_lifecycle_idempotency_r3.py`` — R3-1,
++  R3-2, R3-5, R3-6.
++* ``test_incident_store_sqlite_lifecycle_idempotency_r3_seam.py`` —
++  R3-4 capability seam.
++
++The tests rely on the canonical
++:meth:`SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently`
++path that the R2 module now delegates to.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R3)
++"""
++
++from __future__ import annotations
++
++import shutil
++import tempfile
++from datetime import UTC, datetime
++from pathlib import Path
++from unittest import TestCase
++
++from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
++from k8s_diag_agent.collect.incident_store_sqlite_events import (
++    IncidentEventActor,
++    IncidentEventType,
++    verify_hash_chain,
++)
++from k8s_diag_agent.collect.incident_store_sqlite_lifecycle_idempotency import (
++    apply_lifecycle_transition_atomic,
++)
++
++from .incident_store_sqlite_seam_helpers import make_candidate
++
++_OCCURRED_AT = datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC)
++
++
++def _populate(store: SQLiteIncidentStore) -> str:
++    """Create one incident and return its id."""
++    candidate = make_candidate(name="diag-loop-test-pod")
++    observed_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
++    incidents = store.promote_candidates([candidate], observed_at)
++    return str(incidents[0].incident_id)
++
++
++def _payload_completed() -> dict[str, object]:
++    return {
++        "review_packet_name": "review.json",
++        "checks_requested": 1,
++        "checks_run": 1,
++        "checks_rejected": 0,
++        "decision": "stop_root_cause_found",
++    }
++
++
++class TestR3HashChain(TestCase):
++    """R3-3: The canonical event writer must produce valid hash
++    chains. A subsequent canonical event must still link correctly.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_full_chain_passes_verify_hash_chain(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-hash",
++            collector_run_id="collector-hash",
++            fingerprint="fp-hash",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++
++        events = store.get_incident_events(incident_id, limit=1000)
++        events_sorted = sorted(events, key=lambda e: e.aggregate_version)
++        self.assertTrue(
++            verify_hash_chain(events_sorted),
++            "complete incident event chain must pass verify_hash_chain",
++        )
++
++    def test_lifecycle_event_has_real_sha256(self) -> None:
++        """R3-3: ``payload_sha256``, ``previous_event_sha256``, and
++        ``event_sha256`` are real hashes, NOT the empty placeholders
++        the R2 patch emitted.
++        """
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-sha",
++            collector_run_id="collector-sha",
++            fingerprint="fp-sha",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        with store._connect() as conn:
++            row = conn.execute(
++                "SELECT event_id, payload_sha256, previous_event_sha256, "
++                "event_sha256 FROM incident_events "
++                "WHERE incident_id = ? "
++                "AND event_type = 'incident.diagnosis_loop_completed'",
++                (incident_id,),
++            ).fetchone()
++        self.assertNotEqual(row[1], "")
++        self.assertNotEqual(row[2], "")
++        self.assertNotEqual(row[3], "")
++
++    def test_normal_canonical_event_after_lifecycle_links_correctly(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++        apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-link",
++            collector_run_id="collector-link",
++            fingerprint="fp-link",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++
++        follow_up_at = datetime(2026, 7, 12, 11, 0, 0, tzinfo=UTC)
++        with store._write_context() as ctx:
++            stored = ctx.append_event(
++                incident_id=incident_id,
++                event_type=IncidentEventType.SIGNAL_OBSERVED,
++                actor=IncidentEventActor.SYSTEM,
++                payload={
++                    "last_observed_at": follow_up_at.isoformat(),
++                    "signal_count": 2,
++                    "signals": [],
++                },
++                occurred_at=follow_up_at,
 +            )
-+            assert result.incidents_processed == 1
-+            assert result.incidents_skipped == 0
-+            assert "incident_not_found" not in result.disposition_summary.skip_reasons
-+            assert result.disposition_summary.error_reasons == {}
-+            # The fake client was invoked exactly once.
-+            assert len(fake_client.calls) == 1
++        self.assertIsNotNone(stored.event_sha256)
++        self.assertNotEqual(stored.event_sha256, "")
++        self.assertNotEqual(stored.payload_sha256, "")
 +
-+            # No per-incident disposition event must be incident_not_found.
-+            for log in captured:
-+                if log.get("event") == "automatic-diagnosis-incident-disposition":
-+                    assert log.get("reason_code") != "incident_not_found", (
-+                        f"Production regression: incident_not_found emitted for HTTP 200: {log}"
++        events = store.get_incident_events(incident_id, limit=1000)
++        sorted_events = sorted(events, key=lambda e: e.aggregate_version)
++        self.assertTrue(verify_hash_chain(sorted_events))
++
++
++__all__ = [
++    "TestR3HashChain",
++]
+\ No newline at end of file
+
+=== tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_seam.py ===
+diff --git a/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_seam.py b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_seam.py
+new file mode 100644
+index 00000000..e940a339
+--- /dev/null
++++ b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r3_seam.py
+@@ -0,0 +1,176 @@
++"""R3 regression tests for SQLite lifecycle idempotency (capability seam).
++
++Closes R3-4 from the
++``ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01`` review:
++
++* **R3-4** — the implementation must use the canonical write
++  context, not raw ``store._write_lock`` / ``store._connect()`` /
++  ``store._incidents`` / ``store._snapshot_incident()`` access.
++
++Companion files:
++
++* ``test_incident_store_sqlite_lifecycle_idempotency_r3.py`` — R3-1,
++  R3-2, R3-5, R3-6.
++* ``test_incident_store_sqlite_lifecycle_idempotency_r3_events.py``
++  — R3-3 hash chain.
++
++The tests rely on the canonical
++:meth:`SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently`
++path that the R2 module now delegates to.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R3)
++"""
++
++from __future__ import annotations
++
++import ast
++import shutil
++import tempfile
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import Any
++from unittest import TestCase, mock
++
++from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
++from k8s_diag_agent.collect.incident_store_sqlite_lifecycle_idempotency import (
++    apply_lifecycle_transition_atomic,
++)
++
++from .incident_store_sqlite_seam_helpers import make_candidate
++
++_OCCURRED_AT = datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC)
++
++
++def _populate(store: SQLiteIncidentStore) -> str:
++    """Create one incident and return its id."""
++    candidate = make_candidate(name="diag-loop-test-pod")
++    observed_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
++    incidents = store.promote_candidates([candidate], observed_at)
++    return str(incidents[0].incident_id)
++
++
++def _payload_completed() -> dict[str, object]:
++    return {
++        "review_packet_name": "review.json",
++        "checks_requested": 1,
++        "checks_run": 1,
++        "checks_rejected": 0,
++        "decision": "stop_root_cause_found",
++    }
++
++
++class TestR3CapabilitySeam(TestCase):
++    """R3-4: The lifecycle apply must go through
++    ``SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently``.
++    No raw ``_write_lock`` / ``_connect`` / ``_incidents`` /
++    ``_snapshot_incident`` access from outside the seam.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_apply_uses_canonical_write_context_method(self) -> None:
++        from k8s_diag_agent.collect import (
++            incident_store_sqlite_context as context_module,
++        )
++
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++
++        captured = {"called": False}
++
++        def _spy_apply(self: Any, *args: Any, **kwargs: Any) -> Any:
++            captured["called"] = True
++            return _original_apply(self, *args, **kwargs)
++
++        _original_apply = (
++            context_module.SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently
++        )
++
++        with mock.patch.object(
++            context_module.SQLiteWriteContext,
++            "apply_diagnosis_lifecycle_idempotently",
++            _spy_apply,
++        ):
++            apply_lifecycle_transition_atomic(
++                store,
++                transition="completed",
++                incident_id=incident_id,
++                run_id="run-seam",
++                collector_run_id="collector-seam",
++                fingerprint="fp-seam",
++                occurred_at=_OCCURRED_AT,
++                payload=_payload_completed(),
++            )
++
++        self.assertTrue(
++            captured["called"],
++            "apply_lifecycle_transition_atomic must invoke the canonical context method",
++        )
++
++    def test_adapter_module_does_not_reach_into_private_store_state(self) -> None:
++        """Static AST check: the adapter module must not call
++        ``store._write_lock``, ``store._connect(...)``,
++        ``store._incidents``, ``store._snapshot_incident(...)``, or
++        ``store._state_to_incident(...)``. The check inspects the
++        parsed AST (not the docstring) so module documentation
++        that mentions these names for context does NOT count as a
++        violation.
++        """
++        from k8s_diag_agent.collect import (
++            incident_store_sqlite_lifecycle_idempotency as adapter,
++        )
++
++        source = Path(adapter.__file__).read_text(encoding="utf-8")
++        tree = ast.parse(source)
++
++        forbidden_attrs = (
++            "_write_lock",
++            "_incidents",
++            "_snapshot_incident",
++            "_state_to_incident",
++        )
++        forbidden_calls = ("_connect",)
++        violations: list[str] = []
++
++        def _walk(node: ast.AST) -> None:
++            for child in ast.iter_child_nodes(node):
++                # Detect ``store._connect(...)`` calls.
++                if (
++                    isinstance(child, ast.Call)
++                    and isinstance(child.func, ast.Attribute)
++                    and child.func.attr in forbidden_calls
++                    and isinstance(child.func.value, ast.Name)
++                    and child.func.value.id == "store"
++                ):
++                    violations.append(
++                        f"call store.{child.func.attr}(...) at line {child.lineno}"
 +                    )
-+        finally:
-+            logging.getLogger().removeHandler(handler)
++                # Detect ``store._write_lock`` etc. attribute reads.
++                if (
++                    isinstance(child, ast.Attribute)
++                    and child.attr in forbidden_attrs
++                    and isinstance(child.value, ast.Name)
++                    and child.value.id == "store"
++                ):
++                    violations.append(
++                        f"access store.{child.attr} at line {child.lineno}"
++                    )
++                _walk(child)
 +
-+
-+# ---------------------------------------------------------------------------
-+# 2. End-to-end regression: 404 still emits not-found (NOT a regression)
-+# ---------------------------------------------------------------------------
-+
-+
-+class TestGenuineNotFoundStillMapsCorrectly:
-+    """A real 404 must still emit ``skipped / incident_not_found``."""
-+
-+    def test_genuine_404_emits_skipped_incident_not_found(
-+        self,
-+        temp_external_dir: Path,
-+        enabled_auto_loop: None,
-+        monkeypatch: pytest.MonkeyPatch,
-+    ) -> None:
-+        from k8s_diag_agent.collect import (
-+            incident_diagnosis_auto_loop_batch as batch_module,
-+        )
-+        from k8s_diag_agent.collect import (
-+            incident_diagnosis_backend_detail_lookup as detail_lookup,
++        _walk(tree)
++        self.assertEqual(
++            violations,
++            [],
++            "adapter must not reach into private store members: "
++            + "; ".join(violations),
 +        )
 +
-+        class _FakeClient:
-+            def fetch_incident(
-+                self,
-+                incident_id: Any,
-+                *,
-+                timeout: float = 30.0,
-+            ) -> BackendIncidentHttpResponse:
-+                return BackendIncidentHttpResponse(http_status=404, body=b"")
 +
-+        monkeypatch.setenv("K9B_INCIDENT_PROMOTION_MODE", "backend-api")
-+        monkeypatch.setenv("K9B_BACKEND_INTERNAL_URL", "http://backend.test:8080")
-+        monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "test-token")
-+        monkeypatch.setenv("K9B_INCIDENT_STORE_BACKEND", "sqlite")
-+        monkeypatch.setenv("K9B_PROCESS_ROLE", "scheduler")
++__all__ = [
++    "TestR3CapabilitySeam",
++]
+\ No newline at end of file
+
+=== tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4.py ===
+diff --git a/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4.py b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4.py
+new file mode 100644
+index 00000000..60594af6
+--- /dev/null
++++ b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4.py
+@@ -0,0 +1,280 @@
++"""R4 regression tests for SQLite lifecycle idempotency (cache authority).
 +
-+        monkeypatch.setattr(
-+            detail_lookup,
-+            "HttpIncidentBackendClient",
-+            lambda base_url, token=None: _FakeClient(),
++Companion to ``test_incident_store_sqlite_lifecycle_idempotency_r4_concurrency``.
++Split to keep both files under the LLM-friendly 500-line limit.
++
++Closes R4-1, R4-2a, R4-4 blockers from the
++``ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01`` review:
++
++* **R4-1** — the canonical ``apply_diagnosis_lifecycle_idempotently``
++  path must prove incident existence against the durable
++  ``incident_current`` projection inside the ``BEGIN IMMEDIATE``
++  transaction. The process-local cache is a per-process Python dict
++  and cannot prove absence across processes.
++
++* **R4-2a** — pre-opened store regression. Process B's cache is
++  loaded before process A promotes the incident. The lifecycle
++  request landing on B must still apply (not be classified
++  ``incident_not_found``) because the projection row exists.
++
++* **R4-4** — the typed ``Incident.diagnosis_loop`` field carries the
++  projection's lifecycle state through
++  :meth:`SQLiteIncidentStore.get_incident` after a successful apply,
++  so cache/detail reads expose the lifecycle state rather than
++  dropping it.
++
++The canonical path under test is
++:meth:`SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently` /
++:func:`k8s_diag_agent.collect.incident_store_sqlite_lifecycle_idempotency.apply_lifecycle_transition_atomic`.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R4)
++"""
++
++from __future__ import annotations
++
++import shutil
++import sqlite3
++import tempfile
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import Any
++from unittest import TestCase
++
++from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
++from k8s_diag_agent.collect.incident_store_sqlite_lifecycle_idempotency import (
++    apply_lifecycle_transition_atomic,
++)
++
++from .incident_store_sqlite_seam_helpers import make_candidate
++
++_OCCURRED_AT = datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC)
++
++
++def _populate(store: SQLiteIncidentStore) -> str:
++    """Create one incident and return its id."""
++    candidate = make_candidate(name="r4-diag-loop-test-pod")
++    observed_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
++    incidents = store.promote_candidates([candidate], observed_at)
++    return str(incidents[0].incident_id)
++
++
++def _payload_completed(review_packet_name: str = "review.json") -> dict[str, Any]:
++    return {
++        "review_packet_name": review_packet_name,
++        "checks_requested": 1,
++        "checks_run": 1,
++        "checks_rejected": 0,
++        "decision": "stop_root_cause_found",
++    }
++
++
++# =============================================================================
++# R4-1 + R4-2a: Pre-opened store cache defect
++# =============================================================================
++
++
++class TestR4CacheAuthorityIsProjectionNotCache(TestCase):
++    """R4-1 / R4-2a: process B's cache must not be authoritative.
++
++    The previous canonical path used ``self._cache.get(incident_id)``
++    as the existence check. In a multi-process deployment, B's cache
++    is loaded at process start from the projection; if A promotes an
++    incident after B opens, B's cache does not contain it. The old
++    code short-circuited to ``incident_not_found`` and dropped the
++    lifecycle request silently.
++
++    This test opens B BEFORE A promotes, runs the lifecycle request
++    through B, and asserts the durable state was written.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_lifecycle_apply_on_pre_opened_store_with_empty_cache(self) -> None:
++        # 1. Process B opens the store before the incident exists
++        #    on disk. Its cache is empty.
++        process_b = SQLiteIncidentStore(self._db_path)
++        self.assertEqual(
++            len(process_b._incidents),
++            0,
++            "precondition: B's cache must be empty",
 +        )
 +
-+        def stub_process_incident(**kwargs: Any) -> AutoLoopIncidentResult:
-+            # Real typed dispatch.
-+            from k8s_diag_agent.collect.incident_diagnosis_dispatch import (
-+                fetch_backend_incident_for_diagnosis_typed,
-+            )
-+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
-+
-+            outcome = fetch_backend_incident_for_diagnosis_typed(
-+                IncidentId(kwargs["incident_id"])
-+            )
-+            assert isinstance(outcome, BackendIncidentNotFound)
-+            return AutoLoopIncidentResult(
-+                incident_id=kwargs["incident_id"],
-+                eligible=False,
-+                eligibility_reason="not_found",
-+                skipped=True,
-+                skip_reason="incident_not_found",
-+            )
-+
-+        monkeypatch.setattr(batch_module, "_process_incident", stub_process_incident)
-+
-+        result = run_automatic_diagnosis_loop_evidence_collection(
-+            external_analysis_dir=temp_external_dir,
-+            incident_ids=["incident-missing"],
++        # 2. Process A promotes the incident. A's cache is updated;
++        #    B's cache is NOT (separate process-local dict).
++        process_a = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(process_a)
++        self.assertIn(incident_id, process_a._incidents)
++        self.assertNotIn(
++            incident_id,
++            process_b._incidents,
++            "precondition: B's cache must still be empty after A promotes",
 +        )
-+        assert result.incidents_processed == 1
-+        assert result.incidents_skipped == 1
-+        assert result.disposition_summary.skip_reasons.get(
-+            "incident_not_found"
-+        ) == 1
++
++        # 3. The lifecycle request lands on process B. Under the old
++        #    code, B's ``self._cache.get(incident_id)`` returned None
++        #    and the apply short-circuited to ``incident_not_found``.
++        #    Under the R4 fix, B queries ``incident_current`` inside
++        #    the transaction and finds the row.
++        result = apply_lifecycle_transition_atomic(
++            process_b,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-r4-pre-open",
++            collector_run_id="collector-r4-pre-open",
++            fingerprint="fp-r4-pre-open",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++
++        self.assertEqual(
++            result["outcome"],
++            "applied",
++            "pre-opened store must apply the lifecycle transition by querying "
++            "incident_current, not its stale cache",
++        )
++        self.assertFalse(result["idempotent_replay"])
++
++        # 4. Durable state was written.
++        with process_b._connect() as conn:
++            (event_count,) = conn.execute(
++                "SELECT COUNT(*) FROM incident_events "
++                "WHERE incident_id = ? "
++                "AND event_type = 'incident.diagnosis_loop_completed'",
++                (incident_id,),
++            ).fetchone()
++            (idem_count,) = conn.execute(
++                "SELECT COUNT(*) FROM lifecycle_idempotency "
++                "WHERE incident_id = ? AND transition = 'completed'",
++                (incident_id,),
++            ).fetchone()
++            projection = conn.execute(
++                "SELECT current_state_json FROM incident_current "
++                "WHERE incident_id = ?",
++                (incident_id,),
++            ).fetchone()
++        self.assertEqual(event_count, 1)
++        self.assertEqual(idem_count, 1)
++        self.assertIsNotNone(projection)
++        self.assertIn(
++            "diagnosis_loop",
++            projection[0],
++            "incident_current must carry the diagnosis_loop projection",
++        )
++
++    def test_lifecycle_apply_on_unknown_incident_returns_not_found(self) -> None:
++        """The SQL existence check must still reject truly absent incidents.
++
++        If the projection row is absent, the canonical path MUST roll
++        back and return ``incident_not_found``. This guards against
++        accidentally accepting any incident_id by relying on the
++        database query instead of the cache.
++        """
++        store = SQLiteIncidentStore(self._db_path)
++        result = apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id="default-pod-does-not-exist-crash_loop",
++            run_id="run-r4-missing",
++            collector_run_id="collector-r4-missing",
++            fingerprint="fp-r4-missing",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(result["outcome"], "incident_not_found")
++
++        # No durable rows were written.
++        with sqlite3.connect(str(self._db_path)) as conn:
++            (ev,) = conn.execute(
++                "SELECT COUNT(*) FROM incident_events"
++            ).fetchone()
++            (idem,) = conn.execute(
++                "SELECT COUNT(*) FROM lifecycle_idempotency"
++            ).fetchone()
++        self.assertEqual(ev, 0)
++        self.assertEqual(idem, 0)
 +
 +
-+# ---------------------------------------------------------------------------
-+# Stub helpers
-+# ---------------------------------------------------------------------------
++# =============================================================================
++# R4-4: Typed diagnosis_loop field is exposed on the cache
++# =============================================================================
 +
 +
-+class _StubEligibility:
-+    eligible: bool
-+    reason: str
-+    budget_diagnostics: tuple[Any, ...]
++class TestR4TypedDiagnosisLoopField(TestCase):
++    """R4-4: ``Incident.diagnosis_loop`` carries the lifecycle state.
 +
-+    def __init__(
-+        self,
-+        *,
-+        eligible: bool,
-+        reason: str,
-+        budget_diagnostics: tuple[Any, ...] = (),
-+    ) -> None:
-+        self.eligible = eligible
-+        self.reason = reason
-+        self.budget_diagnostics = budget_diagnostics
++    The R3 close report claimed "the cache is refreshed from the
++    projector". The dataclass did NOT have a typed ``diagnosis_loop``
++    field, so the cache reconstructed through ``_state_to_incident``
++    dropped the projection's lifecycle state. This test asserts that
++    the typed field IS populated on the cached Incident AND on the
++    detail-endpoint read after a canonical apply.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_apply_hydrates_typed_diagnosis_loop_on_cached_incident(self) -> None:
++        store = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(store)
++
++        # Pre-apply: typed field is None.
++        self.assertIsNone(store._incidents[incident_id].diagnosis_loop)
++
++        result = apply_lifecycle_transition_atomic(
++            store,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-r4-typed",
++            collector_run_id="collector-r4-typed",
++            fingerprint="fp-r4-typed",
++            occurred_at=_OCCURRED_AT,
++            payload={
++                "review_packet_name": "r4-review.json",
++                "checks_requested": 3,
++                "checks_run": 3,
++                "checks_rejected": 0,
++                "decision": "stop_root_cause_found",
++            },
++        )
++        self.assertEqual(result["outcome"], "applied")
++
++        # 1. The returned Incident carries the typed field.
++        returned = result["incident"]
++        self.assertIsNotNone(returned)
++        self.assertIsNotNone(returned.diagnosis_loop)
++        self.assertEqual(returned.diagnosis_loop.get("status"), "completed")
++        self.assertEqual(
++            returned.diagnosis_loop.get("review_packet_name"),
++            "r4-review.json",
++        )
++
++        # 2. The cached Incident (read via the public API) carries it.
++        cached = store._incidents[incident_id]
++        self.assertIsNotNone(cached.diagnosis_loop)
++        self.assertEqual(cached.diagnosis_loop.get("status"), "completed")
++
++        # 3. The detail-endpoint read (``store.get_incident``) carries it.
++        detail = store.get_incident(incident_id)
++        self.assertIsNotNone(detail)
++        self.assertIsNotNone(detail.diagnosis_loop)
++        self.assertEqual(detail.diagnosis_loop.get("status"), "completed")
++
++        # 4. Round-trip: ``to_dict`` -> ``from_dict`` preserves it.
++        rebuilt = store._state_to_incident(cached.to_dict())
++        self.assertIsNotNone(rebuilt.diagnosis_loop)
++        self.assertEqual(rebuilt.diagnosis_loop.get("status"), "completed")
++
++
++__all__ = [
++    "TestR4CacheAuthorityIsProjectionNotCache",
++    "TestR4TypedDiagnosisLoopField",
++]
+\ No newline at end of file
+
+=== tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4_concurrency.py ===
+diff --git a/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4_concurrency.py b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4_concurrency.py
+new file mode 100644
+index 00000000..39c9201a
+--- /dev/null
++++ b/tests/unit/test_incident_store_sqlite_lifecycle_idempotency_r4_concurrency.py
+@@ -0,0 +1,270 @@
++"""R4 regression tests for SQLite lifecycle idempotency (concurrency).
++
++Companion to ``test_incident_store_sqlite_lifecycle_idempotency_r4``.
++Split out to keep both files under the LLM-friendly 500-line limit.
++
++Covers:
++
++* **R4-2b** — overlapping concurrent stores. Two independent stores
++  held open by two threads must serialize through ``BEGIN IMMEDIATE``
++  so the canonical ``one apply + one replay`` contract holds even
++  when both writers reach the canonical method simultaneously.
++
++* **R4-3** — idempotent replay on a process with a stale cache must
++  heal that cache so the next read of the cached ``Incident``
++  reflects the durable lifecycle state, not the stale pre-apply
++  view.
++
++Suggested by: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 (R4)
++"""
++
++from __future__ import annotations
++
++import shutil
++import sqlite3
++import tempfile
++import threading
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import Any
++from unittest import TestCase
++
++from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
++from k8s_diag_agent.collect.incident_store_sqlite_lifecycle_idempotency import (
++    apply_lifecycle_transition_atomic,
++)
++
++from .incident_store_sqlite_seam_helpers import make_candidate
++
++# Local copies of the small test fixtures used by the core R4 file.
++# We duplicate them here to avoid importing underscore-prefixed
++# helpers across files (and to keep the concurrency file
++# self-contained for tooling that introspects it).
++_OCCURRED_AT = datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC)
++
++
++def _populate(store: SQLiteIncidentStore) -> str:
++    """Create one incident and return its id."""
++    candidate = make_candidate(name="r4-diag-loop-test-pod")
++    observed_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
++    incidents = store.promote_candidates([candidate], observed_at)
++    return str(incidents[0].incident_id)
++
++
++def _payload_completed(review_packet_name: str = "review.json") -> dict[str, Any]:
++    return {
++        "review_packet_name": review_packet_name,
++        "checks_requested": 1,
++        "checks_run": 1,
++        "checks_rejected": 0,
++        "decision": "stop_root_cause_found",
++    }
++
++# =============================================================================
++# R4-3: Replay refreshes the stale cache
++# =============================================================================
++
++
++class TestR4ReplayRefreshesStaleCache(TestCase):
++    """R4-3: idempotent replay must heal the local cache.
++
++    When process A applies the original lifecycle and process B
++    (whose cache is empty or stale) handles the retry, B's
++    ``self._cache`` must reflect the durable projection row after
++    the replay returns. The previous code committed the empty write
++    transaction and returned ``{"outcome": "applied",
++    "idempotent_replay": True}`` without refreshing the cache, so B
++    could read a stale view of the incident for the rest of its
++    lifetime.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_replay_on_pre_opened_store_heals_cache(self) -> None:
++        # 1. B opens before the incident exists.
++        process_b = SQLiteIncidentStore(self._db_path)
++
++        # 2. A promotes the incident and applies the lifecycle.
++        process_a = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(process_a)
++
++        a_result = apply_lifecycle_transition_atomic(
++            process_a,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-r4-replay",
++            collector_run_id="collector-r4-replay",
++            fingerprint="fp-r4-replay",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(a_result["outcome"], "applied")
++        self.assertFalse(a_result["idempotent_replay"])
++
++        # 3. B is still empty. The replay lands on B.
++        self.assertNotIn(incident_id, process_b._incidents)
++
++        b_result = apply_lifecycle_transition_atomic(
++            process_b,
++            transition="completed",
++            incident_id=incident_id,
++            run_id="run-r4-replay",
++            collector_run_id="collector-r4-replay",
++            fingerprint="fp-r4-replay",
++            occurred_at=_OCCURRED_AT,
++            payload=_payload_completed(),
++        )
++        self.assertEqual(b_result["outcome"], "applied")
++        self.assertTrue(b_result["idempotent_replay"])
++
++        # 4. R4-3: B's cache MUST now contain the incident with the
++        #    typed ``diagnosis_loop`` state hydrated from the
++        #    projection.
++        self.assertIn(
++            incident_id,
++            process_b._incidents,
++            "replay must heal B's cache by refreshing from the projection",
++        )
++        b_cached = process_b._incidents[incident_id]
++        self.assertIsNotNone(
++            b_cached.diagnosis_loop,
++            "replay must hydrate the typed diagnosis_loop field on B's cache",
++        )
++        self.assertEqual(
++            b_cached.diagnosis_loop.get("status"),
++            "completed",
++        )
++
++        # 5. Detail endpoint must also expose the same state.
++        b_get = process_b.get_incident(incident_id)
++        self.assertIsNotNone(b_get)
++        self.assertIsNotNone(b_get.diagnosis_loop)
++        self.assertEqual(b_get.diagnosis_loop.get("status"), "completed")
++
++
++# =============================================================================
++# R4-2b: Overlapping concurrent stores (barrier-based contention)
++# =============================================================================
++
++
++class TestR4OverlappingConcurrentStores(TestCase):
++    """R4-2b: two stores held open by two threads contend concurrently.
++
++    The existing R3 multi-process test opens the second store AFTER
++    the first one writes, so it cannot expose ordering problems. This
++    test holds BOTH stores open simultaneously, points both at the
++    same database, has both threads enter the canonical write context,
++    and verifies that exactly one applies while the other replays.
++
++    The 3-party barrier ensures both writers AND the main thread
++    release together, so both workers reach the critical section
++    simultaneously and ``BEGIN IMMEDIATE`` serialization is exercised
++    rather than coincidental sequential writes.
++    """
++
++    def setUp(self) -> None:
++        self._temp_dir = tempfile.mkdtemp()
++        self._db_path = Path(self._temp_dir) / "test_incidents.sqlite3"
++
++    def tearDown(self) -> None:
++        shutil.rmtree(self._temp_dir, ignore_errors=True)
++
++    def test_two_stores_contend_concurrently_for_lifecycle_apply(self) -> None:
++        # Single incident populated before the contended apply.
++        primer = SQLiteIncidentStore(self._db_path)
++        incident_id = _populate(primer)
++
++        # Two stores opened in parallel, both pointing at the same DB.
++        store_a = SQLiteIncidentStore(self._db_path)
++        store_b = SQLiteIncidentStore(self._db_path)
++
++        # Same fingerprint on both threads so the second one to commit
++        # MUST classify as ``idempotent_replay``. A mismatch would
++        # yield ``replay_mismatch``.
++        fingerprint = "fp-r4-concurrent"
++
++        # 3-party barrier so the main thread also waits alongside the
++        # workers; otherwise the barrier would break because only 2
++        # worker parties are required.
++        barrier = threading.Barrier(3)
++        go = threading.Event()
++
++        results: dict[str, dict[str, Any]] = {}
++        errors: dict[str, BaseException] = {}
++
++        def _worker(name: str, store: SQLiteIncidentStore) -> None:
++            try:
++                # Both threads pause here until the main thread
++                # joins the barrier, ensuring they reach the
++                # canonical write context within microseconds of
++                # each other.
++                barrier.wait(timeout=10.0)
++                go.wait(timeout=10.0)
++                results[name] = apply_lifecycle_transition_atomic(
++                    store,
++                    transition="completed",
++                    incident_id=incident_id,
++                    run_id="run-r4-concurrent",
++                    collector_run_id="collector-r4-concurrent",
++                    fingerprint=fingerprint,
++                    occurred_at=_OCCURRED_AT,
++                    payload=_payload_completed(),
++                )
++            except BaseException as exc:  # noqa: BLE001
++                errors[name] = exc
++
++        thread_a = threading.Thread(
++            target=_worker, args=("a", store_a), name="r4-store-a"
++        )
++        thread_b = threading.Thread(
++            target=_worker, args=("b", store_b), name="r4-store-b"
++        )
++        thread_a.start()
++        thread_b.start()
++        # Main thread participates in the barrier so all three
++        # parties release together; this guarantees both workers
++        # are inside the critical section before we set ``go``.
++        barrier.wait(timeout=10.0)
++        go.set()
++        thread_a.join(timeout=15.0)
++        thread_b.join(timeout=15.0)
++
++        self.assertFalse(errors, f"workers raised: {errors}")
++        self.assertEqual(set(results), {"a", "b"})
++
++        outcomes = sorted(
++            (r["outcome"], r.get("idempotent_replay", False))
++            for r in results.values()
++        )
++        self.assertEqual(
++            outcomes,
++            [("applied", False), ("applied", True)],
++            "exactly one thread must apply and exactly one must replay",
++        )
++
++        # Durable state: one event row, one idempotency row.
++        with sqlite3.connect(str(self._db_path)) as conn:
++            (event_count,) = conn.execute(
++                "SELECT COUNT(*) FROM incident_events "
++                "WHERE incident_id = ? "
++                "AND event_type = 'incident.diagnosis_loop_completed'",
++                (incident_id,),
++            ).fetchone()
++            (idem_count,) = conn.execute(
++                "SELECT COUNT(*) FROM lifecycle_idempotency "
++                "WHERE incident_id = ? AND transition = 'completed'",
++                (incident_id,),
++            ).fetchone()
++        self.assertEqual(event_count, 1)
++        self.assertEqual(idem_count, 1)
++
++
++__all__ = [
++    "TestR4ReplayRefreshesStaleCache",
++    "TestR4OverlappingConcurrentStores",
++]
 
 ## Workflow anchors

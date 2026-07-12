@@ -14,6 +14,7 @@ Hard constraints enforced:
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -75,6 +76,18 @@ def incident_to_dict(incident: Any) -> dict[str, Any]:
         "signal_count": incident.signal_count,
         "evidence_count": incident.evidence_count,
         "events": [incident_event_to_dict(e) for e in incident.events],
+        # R4-4: typed diagnosis-loop lifecycle state round-trip.
+        # The field is owned by the SQLite projection; the dataclass
+        # carries it so cache/detail reads can expose it without
+        # dropping projection data.
+        # R5-1: deep-copy the projection dict so mutations on the
+        # serialized payload cannot reach back into the source
+        # aggregate and bypass the canonical event writer.
+        "diagnosis_loop": (
+            deepcopy(incident.diagnosis_loop)
+            if incident.diagnosis_loop is not None
+            else None
+        ),
         "suppressed_reason": incident.suppressed_reason,
         "duplicate_of": incident.duplicate_of,
         "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
@@ -234,6 +247,11 @@ def incident_from_dict(data: dict[str, Any]) -> Any:
         signal_count=data.get("signal_count", len(signals)),
         evidence_count=data.get("evidence_count", len(evidence_links)),
         events=events,
+        # R4-4: typed diagnosis-loop lifecycle state round-trip.
+        # The projection stores ``diagnosis_loop`` as a JSON-compatible
+        # dict; we accept it as-is so the canonical event writer's
+        # projection state can be reconstructed on the typed dataclass.
+        diagnosis_loop=data.get("diagnosis_loop"),
         suppressed_reason=data.get("suppressed_reason"),
         duplicate_of=data.get("duplicate_of"),
         resolved_at=_parse_dt(data.get("resolved_at")),
