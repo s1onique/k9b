@@ -3,14 +3,14 @@
   "profile": "act-local",
   "source_status": "present",
   "overall_status": "pass",
-  "generated_at": "2026-07-12T09:55:19.883192+00:00",
+  "generated_at": "2026-07-12T16:13:57.342061+00:00",
   "checks_total": 17,
   "checks_failed": 0,
   "checks": [
     {
       "name": "canonical-verifier-self-test",
       "status": "pass",
-      "duration_ms": 45,
+      "duration_ms": 47,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b/scripts/incident_lifecycle_boundary/redaction_types.py --self-test",
       "exit_code": 0
@@ -18,7 +18,7 @@
     {
       "name": "standalone-production-verifier",
       "status": "pass",
-      "duration_ms": 982,
+      "duration_ms": 953,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b/scripts/incident_lifecycle_boundary/redaction_types.py --repo-root /Users/chistyakov/Projects/SPbNIX/k9b/src",
       "exit_code": 0
@@ -26,7 +26,7 @@
     {
       "name": "production-mypy-positive",
       "status": "pass",
-      "duration_ms": 1154,
+      "duration_ms": 1170,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_mypy_fixtures.py::TestMypyPositiveFixture",
       "exit_code": 0
@@ -34,7 +34,7 @@
     {
       "name": "production-mypy-negative",
       "status": "pass",
-      "duration_ms": 1112,
+      "duration_ms": 1085,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_mypy_fixtures.py::TestMypyNegativeFixture",
       "exit_code": 0
@@ -42,7 +42,7 @@
     {
       "name": "full-gate-negative-proofs",
       "status": "pass",
-      "duration_ms": 47885,
+      "duration_ms": 41526,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b/scripts/incident_lifecycle_boundary/redaction_full_gate_negative_proofs.py",
       "exit_code": 0
@@ -50,7 +50,7 @@
     {
       "name": "opaque-bearer-regression",
       "status": "pass",
-      "duration_ms": 445,
+      "duration_ms": 337,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r11_sanitizer_opaque_bearer.py",
       "exit_code": 0
@@ -58,7 +58,7 @@
     {
       "name": "sanitizer-regression-matrix",
       "status": "pass",
-      "duration_ms": 536,
+      "duration_ms": 351,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_sanitizer_credential.py::test_sentinel_secret_is_absent_from_every_sanitizer_path",
       "exit_code": 0
@@ -66,7 +66,7 @@
     {
       "name": "credential-matrix",
       "status": "pass",
-      "duration_ms": 401,
+      "duration_ms": 330,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_sanitizer_credential.py::TestCredentialMatrix",
       "exit_code": 0
@@ -74,7 +74,7 @@
     {
       "name": "omission-boundary",
       "status": "pass",
-      "duration_ms": 411,
+      "duration_ms": 346,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r8_omission_branch.py",
       "exit_code": 0
@@ -82,7 +82,7 @@
     {
       "name": "serializer-multi-return",
       "status": "pass",
-      "duration_ms": 402,
+      "duration_ms": 341,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m pytest -q tests/unit/test_redaction_r12_serializer_multi_return.py",
       "exit_code": 0
@@ -90,15 +90,15 @@
     {
       "name": "ruff",
       "status": "pass",
-      "duration_ms": 31,
+      "duration_ms": 25,
       "error_message": null,
-      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m ruff check scripts/llm_friendly_allowlist.py scripts/verify_promotion_batch_uniqueness.py scripts/verify_promotion_helper_polymorphism.py src/k8s_diag_agent/collect/incident_identity_hardening.py src/k8s_diag_agent/collect/incident_promotion_accumulator.py src/k8s_diag_agent/collect/incident_promotion_backend.py src/k8s_diag_agent/collect/incident_promotion_batch.py src/k8s_diag_agent/collect/incident_promotion_dispatch.py src/k8s_diag_agent/collect/incident_promotion_local.py src/k8s_diag_agent/collect/incident_store.py src/k8s_diag_agent/collect/incident_store_promotion_helpers.py src/k8s_diag_agent/collect/incident_store_sqlite.py src/k8s_diag_agent/collect/incident_store_sqlite_context.py src/k8s_diag_agent/collect/incident_store_sqlite_events_writer.py src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle.py src/k8s_diag_agent/health/loop_alertmanager_snapshot_impl.py src/k8s_diag_agent/health/loop_alertmanager_snapshot_signals.py src/k8s_diag_agent/health/loop_automatic_diagnosis.py src/k8s_diag_agent/health/loop_runner.py src/k8s_diag_agent/health/loop_runner_compatibility.py src/k8s_diag_agent/health/loop_runner_execute.py src/k8s_diag_agent/health/loop_runner_monitoring.py src/k8s_diag_agent/incident_alert_promotion.py src/k8s_diag_agent/incident_alertmanager_webhook.py src/k8s_diag_agent/ui/server_incident_internal_handlers.py src/k8s_diag_agent/ui/server_incident_internal_models.py tests/unit/test_act_local_auto_diagnosis_identity_ast.py tests/unit/test_auto_diagnosis_backend_authoritative_identity.py tests/unit/test_incident_identity_hardening.py tests/unit/test_incident_store_sqlite_capability_seam_context.py tests/unit/test_r1_root_cause_regression.py tests/unit/test_r4_acceptance.py tests/unit/test_r5_atomic_batch_rollback.py tests/unit/test_r5_batch_metric_truth.py tests/unit/test_r5_fail_closed_response_validation.py tests/unit/test_r5_orchestration_proof.py tests/unit/test_r5_verifier_negative_fixtures.py",
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m ruff check scripts/llm_friendly_allowlist.py src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py src/k8s_diag_agent/collect/incident_diagnosis_dispatch.py src/k8s_diag_agent/collect/incident_diagnosis_disposition.py src/k8s_diag_agent/collect/incident_diagnosis_disposition_compat.py tests/unit/test_auto_loop_existing_packet_and_alert_regression.py",
       "exit_code": 0
     },
     {
       "name": "mypy",
       "status": "pass",
-      "duration_ms": 101,
+      "duration_ms": 85,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python -m mypy src/k8s_diag_agent/collect/incident_evidence_redaction.py src/k8s_diag_agent/collect/incident_evidence_llm_safe.py src/k8s_diag_agent/security/redaction_policy.py src/k8s_diag_agent/security/sanitizer.py --ignore-missing-imports",
       "exit_code": 0
@@ -106,7 +106,7 @@
     {
       "name": "git-diff-check",
       "status": "pass",
-      "duration_ms": 15,
+      "duration_ms": 8,
       "error_message": null,
       "command": "git diff --check",
       "exit_code": 0
@@ -114,7 +114,7 @@
     {
       "name": "git-diff-cached-check",
       "status": "pass",
-      "duration_ms": 8,
+      "duration_ms": 5,
       "error_message": null,
       "command": "git diff --cached --check",
       "exit_code": 0
@@ -122,7 +122,7 @@
     {
       "name": "llm-friendly",
       "status": "pass",
-      "duration_ms": 351,
+      "duration_ms": 175,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b/scripts/check_llm_friendly_files.py --changed-only",
       "exit_code": 0
@@ -130,7 +130,7 @@
     {
       "name": "no-new-llm-allowlist",
       "status": "pass",
-      "duration_ms": 2273,
+      "duration_ms": 553,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b/scripts/verify_no_new_llm_allowlist.py",
       "exit_code": 0
@@ -138,7 +138,7 @@
     {
       "name": "targeted-repository-gate",
       "status": "pass",
-      "duration_ms": 5347,
+      "duration_ms": 4634,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b/scripts/verify_all.sh --act-local --skip-gate-summary",
       "exit_code": 0

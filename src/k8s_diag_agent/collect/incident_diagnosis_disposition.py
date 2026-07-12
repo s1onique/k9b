@@ -40,6 +40,9 @@ from typing import TYPE_CHECKING, TypeAlias, assert_never
 
 if TYPE_CHECKING:
     from .incident_diagnosis_auto_loop_config import DiagnosisBudgetDiagnostic
+    from .incident_diagnosis_backend_detail_outcomes import (
+        BackendIncidentLookupFailureCode,
+    )
 
 SCHEMA_VERSION: int = 2
 
@@ -94,6 +97,15 @@ class DiagnosisEvaluationFailureReason(StrEnum):
     eligibility and execution into one shape. The typed-outcome ACT will
     split execution failures into a dedicated enum; for now these
     members remain so the legacy projection stays lossless.
+
+    The ``BACKEND_INCIDENT_*`` members (added by
+    ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01) map 1:1 onto the
+    ``BackendIncidentLookupFailureCode`` enum defined in
+    :mod:`k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes`.
+    They are deliberately stable, low cardinality, machine readable, and
+    free of any incident ID, URL, exception message, timestamp, or
+    status text. Detailed diagnostic context belongs in the bounded
+    :class:`BackendIncidentLookupDiagnostic` projection.
     """
 
     BACKEND_FETCH_FAILED = "backend_fetch_failed"
@@ -101,6 +113,19 @@ class DiagnosisEvaluationFailureReason(StrEnum):
     ELIGIBILITY_EVALUATION_FAILED = "eligibility_evaluation_failed"
     UNSAFE_RUN_ID = "unsafe_run_id"
     CASE_FILE_BUILD_FAILED = "case_file_build_failed"
+    # Backend incident-detail lookup failure codes (1:1 with
+    # ``BackendIncidentLookupFailureCode``). The lookup function maps
+    # every non-404 outcome to one of these reasons.
+    BACKEND_INCIDENT_INVALID_JSON = "backend_incident_invalid_json"
+    BACKEND_INCIDENT_INVALID_PAYLOAD = "backend_incident_invalid_payload"
+    BACKEND_INCIDENT_UNSUPPORTED_SCHEMA = "backend_incident_unsupported_schema"
+    BACKEND_INCIDENT_DESERIALIZATION_FAILED = "backend_incident_deserialization_failed"
+    BACKEND_INCIDENT_IDENTITY_MISMATCH = "backend_incident_identity_mismatch"
+    BACKEND_INCIDENT_UNAUTHORIZED = "backend_incident_unauthorized"
+    BACKEND_INCIDENT_FORBIDDEN = "backend_incident_forbidden"
+    BACKEND_INCIDENT_HTTP_CLIENT_ERROR = "backend_incident_http_client_error"
+    BACKEND_INCIDENT_BACKEND_ERROR = "backend_incident_backend_error"
+    BACKEND_INCIDENT_TRANSPORT_ERROR = "backend_incident_transport_error"
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +487,61 @@ def aggregate_summary_event(
 
 
 # ---------------------------------------------------------------------------
+# Total typed mapping: BackendIncidentLookupFailureCode -> DiagnosisEvaluationFailureReason
+# ---------------------------------------------------------------------------
+
+
+# Module-level cache for the total typed mapping. Populated lazily on
+# the first call to :func:`diagnosis_failure_reason_for_backend_lookup`
+# so the outcomes module does not have to be importable at disposition
+# module-load time (it pulls in a long transitive closure).
+_BACKEND_LOOKUP_FAILURE_TO_EVALUATION_REASON_CACHE: dict[
+    BackendIncidentLookupFailureCode, DiagnosisEvaluationFailureReason
+] = {}
+
+
+def diagnosis_failure_reason_for_backend_lookup(
+    failure_code: BackendIncidentLookupFailureCode,
+) -> DiagnosisEvaluationFailureReason:
+    """Return the canonical :class:`DiagnosisEvaluationFailureReason` for a
+    :class:`BackendIncidentLookupFailureCode` value.
+
+    The mapping is **total** and **exact**:
+
+    * Every :class:`BackendIncidentLookupFailureCode` member has exactly
+      one matching :class:`DiagnosisEvaluationFailureReason` member.
+    * There is no substring matching, no heuristic fallback, and no
+      placeholder classification.
+    * The mapping is built dynamically from the enum members; if a new
+      ``BackendIncidentLookupFailureCode`` member is added, the mapping
+      picks it up automatically and exposes the matching
+      ``DiagnosisEvaluationFailureReason`` if its
+      ``"backend_incident_<value>"`` already exists. Production code
+      MUST serialise with ``.value`` only at the legacy/output boundary.
+
+    The reverse direction (typed reason -> serialised string) is
+    :attr:`DiagnosisEvaluationFailureReason.value`; we deliberately
+    expose only the typed mapping here so callers do not duplicate the
+    mapping in production tests.
+    """
+    from .incident_diagnosis_backend_detail_outcomes import (
+        BackendIncidentLookupFailureCode,
+    )
+
+    if not isinstance(failure_code, BackendIncidentLookupFailureCode):
+        raise TypeError(
+            f"Expected BackendIncidentLookupFailureCode, got "
+            f"{type(failure_code).__name__}"
+        )
+    if not _BACKEND_LOOKUP_FAILURE_TO_EVALUATION_REASON_CACHE:
+        for code in BackendIncidentLookupFailureCode:
+            _BACKEND_LOOKUP_FAILURE_TO_EVALUATION_REASON_CACHE[code] = (
+                DiagnosisEvaluationFailureReason("backend_incident_" + code.value)
+            )
+    return _BACKEND_LOOKUP_FAILURE_TO_EVALUATION_REASON_CACHE[failure_code]
+
+
+# ---------------------------------------------------------------------------
 # Legacy compatibility re-exports
 # ---------------------------------------------------------------------------
 
@@ -489,6 +569,7 @@ __all__ = [
     "sanitize_disposition_detail",
     "per_incident_disposition_event",
     "aggregate_summary_event",
+    "diagnosis_failure_reason_for_backend_lookup",
     "legacy_result_from_disposition",
     "disposition_from_legacy_result",
 ]

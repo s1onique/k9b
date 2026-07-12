@@ -263,4 +263,50 @@ ALLOWLIST: list[tuple[str, str]] = [
     ("scripts/verify_promotion_batch_uniqueness.py", "[EXTRACTION] AST verifier - duplicate PromotionBatch definition guard; staged extraction"),
     ("scripts/verify_promotion_helper_polymorphism.py", "[EXTRACTION] AST verifier - production free-helper call guard; staged extraction"),
     ("tests/unit/test_r4_acceptance.py", "[TEST] R4 acceptance suite - 32 tests covering all 11 acceptance criteria; staged extraction"),
+    # [EXTRACTION] R1 narrowly justified exceptions: typed outcome
+    # algebra + source-aware 404 contract + typed failure reason mapping
+    # (ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01 R1). The test files
+    # below grew because the R1 contract requires comprehensive integration
+    # coverage of the new ``BackendIncidentLookupOutcome`` algebra,
+    # ``BackendIncidentNotFound.source`` discriminator, and the typed
+    # ``diagnosis_failure_reason_for_backend_lookup`` mapping. Narrowly
+    # justified pending staged extraction into focused modules
+    # (canonical outcome contract, source-mode helpers, AST verifier
+    # self-tests).
+    (
+        "tests/unit/test_automatic_diagnosis_backend_detail_dispositions.py",
+        "[EXTRACTION] R1 dispositions integration tests - canonical 200/404/500 path coverage; staged extraction",
+    ),
+    (
+        "tests/unit/test_automatic_diagnosis_backend_detail_outcomes.py",
+        "[EXTRACTION] R1 outcome-algebra unit tests - all 3 variants + dispatcher contract; staged extraction",
+    ),
+    (
+        "tests/unit/test_automatic_diagnosis_backend_detail_outcomes_verifier.py",
+        "[EXTRACTION] R1 AST verifier self-tests - all forbidden mutations + substring reject; staged extraction",
+    ),
+    (
+        "tests/unit/test_automatic_diagnosis_backend_detail_security.py",
+        "[EXTRACTION] R1 security tests - redaction-safe metadata; staged extraction",
+    ),
+    (
+        "tests/unit/test_automatic_diagnosis_backend_promotion_regression.py",
+        "[EXTRACTION] R1 promotion regression tests - exhaustive dispatch coverage; staged extraction",
+    ),
+    (
+        "src/k8s_diag_agent/collect/incident_diagnosis_disposition_compat.py",
+        "[EXTRACTION] R1 disposition compat - typed reason mapping; staged extraction",
+    ),
+    (
+        "scripts/verifiers/automatic_diagnosis_backend_detail_outcomes.py",
+        "[EXTRACTION] R1 AST verifier - exact-union + 404-branch + truthiness; staged extraction",
+    ),
+    (
+        "src/k8s_diag_agent/collect/incident_diagnosis_auto_loop_evidence_processor.py",
+        "[EXTRACTION] R1 evidence processor - typed mapping + exhaustive dispatch contract; staged extraction",
+    ),
+    (
+        "src/k8s_diag_agent/collect/incident_diagnosis_disposition.py",
+        "[EXTRACTION] R1 disposition - typed reason + compat re-exports; staged extraction",
+    ),
 ]

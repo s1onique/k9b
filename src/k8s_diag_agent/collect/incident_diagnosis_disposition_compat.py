@@ -267,9 +267,31 @@ def _map_legacy_skip_reason(raw: str) -> DiagnosisSkipReason:  # noqa: F821
 
 
 def _map_legacy_error_reason(raw: str) -> DiagnosisEvaluationFailureReason:  # noqa: F821
+    """Map a legacy error string to a typed :class:`DiagnosisEvaluationFailureReason`.
+
+    Substring matching for ``backend_incident_*`` codes is intentionally
+    NOT used: the production evidence processor writes the canonical
+    ``"backend_incident_<code>"`` string via the typed mapping in
+    :func:`incident_diagnosis_disposition.diagnosis_failure_reason_for_backend_lookup`,
+    so substring matching would misclassify any free-form detail that
+    happens to embed a code substring (e.g. ``"prefix_backend_incident_invalid_json_suffix"``).
+    Only exact value matches against :class:`DiagnosisEvaluationFailureReason`
+    members are accepted for backward compatibility; a substring match
+    falls through to the heuristic branches below.
+    """
     from .incident_diagnosis_disposition import DiagnosisEvaluationFailureReason
 
     raw_lower = (raw or "").lower()
+
+    # Exact enum-value match is the ONLY accepted legacy path for backend
+    # incident-detail lookup codes. Anything else falls through to the
+    # heuristic branches below (legacy ``fetch_failed`` etc.).
+    if raw_lower.startswith("backend_incident_"):
+        try:
+            return DiagnosisEvaluationFailureReason(raw_lower)
+        except ValueError:
+            pass
+
     if "fetch" in raw_lower:
         return DiagnosisEvaluationFailureReason.BACKEND_FETCH_FAILED
     if "unsafe_run" in raw_lower or "unsafe run" in raw_lower:
@@ -278,6 +300,9 @@ def _map_legacy_error_reason(raw: str) -> DiagnosisEvaluationFailureReason:  # n
         return DiagnosisEvaluationFailureReason.CASE_FILE_BUILD_FAILED
     if "invalid" in raw_lower or "payload" in raw_lower:
         return DiagnosisEvaluationFailureReason.INVALID_INCIDENT_PAYLOAD
+    # Final exact-enum-match fallback for any remaining legacy strings
+    # (e.g. ``"unsafe_run_id"``, ``"backend_fetch_failed"``) that the
+    # heuristic branches missed but that still match an enum value.
     for member in DiagnosisEvaluationFailureReason:
         if member.value == raw_lower:
             return member

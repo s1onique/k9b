@@ -68,6 +68,11 @@ from .otel_events import (
 from .otel_span_context import SpanContext
 
 if TYPE_CHECKING:
+    from k8s_diag_agent.domain.incident_lifecycle import IncidentId
+
+    from .incident_diagnosis_backend_detail_outcomes import (
+        BackendIncidentLookupOutcome,
+    )
     from .incident_store import Incident
 
 
@@ -164,6 +169,14 @@ def fetch_incident_for_diagnosis(
         - incident: Incident object (local) or None if not found
         - success: True if fetch succeeded (even if not found)
         - error_message: Error message if failed, None if succeeded
+
+    Notes:
+        New automatic-diagnosis callers SHOULD prefer
+        :func:`fetch_backend_incident_for_diagnosis_typed`, which
+        returns the canonical :class:`BackendIncidentLookupOutcome`
+        and guarantees that HTTP 404 is the only construction path for
+        ``BackendIncidentNotFound``. This legacy helper is preserved
+        for backward compatibility with external callers and tests.
     """
     config = _get_dispatch_config()
     resolved = config.resolved_mode()
@@ -177,6 +190,128 @@ def fetch_incident_for_diagnosis(
         internal_api_token=config.internal_api_token,
         incident_id=incident_id,
     )
+
+
+def fetch_backend_incident_for_diagnosis_typed(
+    incident_id: IncidentId,
+) -> BackendIncidentLookupOutcome:
+    """Fetch a single incident for processing with the typed outcome.
+
+    New automatic-diagnosis callers should use this function instead of
+    the legacy ``fetch_incident_for_diagnosis``. The typed outcome
+    eliminates the false-absence regression where HTTP 200 with valid
+    JSON was being mapped to ``incident_not_found`` (see
+    ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01).
+
+    In local mode the local store is queried directly; the typed
+    outcome is constructed locally so callers see a uniform contract.
+
+    Args:
+        incident_id: The branded :class:`IncidentId` to fetch.
+
+    Returns:
+        A :class:`BackendIncidentLookupOutcome` value. The dispatcher
+        MUST dispatch on the three variants explicitly.
+    """
+    from k8s_diag_agent.domain.incident_lifecycle import IncidentId as _IncidentId
+
+    # ``IncidentId`` is a ``NewType`` of ``str``; at runtime the value
+    # is always a plain ``str`` (Python's ``NewType`` does not produce a
+    # real class). We defensively normalise to ``str`` here so the
+    # branded type flows downstream consistently.
+    branded: _IncidentId = _IncidentId(str(incident_id))
+
+    config = _get_dispatch_config()
+    resolved = config.resolved_mode()
+
+    if resolved == MODE_LOCAL:
+        # Local mode: query the local store directly and project the
+        # result into the canonical typed outcome. The local store has
+        # no HTTP transport, so ``http_status`` MUST stay ``None``; we
+        # distinguish local absence from backend HTTP 404 via the
+        # ``source`` discriminator.
+        from .incident_diagnosis_backend_detail_outcomes import (
+            BackendIncidentFound,
+            BackendIncidentLookupFailed,
+            BackendIncidentLookupFailureCode,
+            BackendIncidentLookupSource,
+            BackendIncidentNotFound,
+        )
+
+        incident, success, error = _fetch_incident_local(str(branded))
+        if not success:
+            return BackendIncidentLookupFailed(
+                requested_incident_id=branded,
+                failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
+                detail=str(error) if error else "local fetch failed",
+                http_status=None,
+            )
+        if incident is None:
+            # Local "not found" maps to the canonical not-found outcome
+            # so callers see uniform semantics regardless of dispatch mode.
+            # ``http_status`` is intentionally ``None``: no HTTP status
+            # was observed.
+            return BackendIncidentNotFound(
+                requested_incident_id=branded,
+                source=BackendIncidentLookupSource.LOCAL_STORE,
+            )
+        # Local-store found path: NO HTTP exchange occurred, so the
+        # outcome MUST carry ``source=LOCAL_STORE`` and ``http_status=None``
+        # to avoid fabricating synthetic HTTP telemetry in the logs. The
+        # ``__post_init__`` invariant on ``BackendIncidentFound`` enforces
+        # this contract at construction time.
+        return BackendIncidentFound(
+            requested_incident_id=branded,
+            incident=incident,
+            source=BackendIncidentLookupSource.LOCAL_STORE,
+            http_status=None,
+            payload_schema_version=None,
+            payload_type=None,
+        )
+
+    # Backend API mode: route through the canonical typed lookup.
+    from .incident_diagnosis_backend_detail_lookup import (
+        BackendIncidentTransportError,
+        HttpIncidentBackendClient,
+        lookup_backend_incident,
+    )
+
+    if not config.backend_url:
+        from .incident_diagnosis_backend_detail_outcomes import (
+            BackendIncidentLookupFailed,
+            BackendIncidentLookupFailureCode,
+        )
+
+        return BackendIncidentLookupFailed(
+            requested_incident_id=branded,
+            failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
+            detail="backend URL not configured",
+            http_status=None,
+            exception_type="MissingBackendUrl",
+        )
+
+    client = HttpIncidentBackendClient(
+        base_url=config.backend_url,
+        token=config.internal_api_token,
+    )
+    try:
+        return lookup_backend_incident(client, branded)
+    except BackendIncidentTransportError as exc:
+        # Defensive: ``HttpIncidentBackendClient`` only raises
+        # ``BackendIncidentTransportError`` for transport failures; we
+        # catch it explicitly so callers always receive a typed
+        # outcome rather than a propagated exception.
+        from .incident_diagnosis_backend_detail_outcomes import (
+            BackendIncidentLookupFailed,
+            BackendIncidentLookupFailureCode,
+        )
+
+        return BackendIncidentLookupFailed(
+            requested_incident_id=branded,
+            failure_code=BackendIncidentLookupFailureCode.TRANSPORT_ERROR,
+            detail=str(exc),
+            exception_type=exc.exception_type,
+        )
 
 
 def list_incidents_for_diagnosis_page(

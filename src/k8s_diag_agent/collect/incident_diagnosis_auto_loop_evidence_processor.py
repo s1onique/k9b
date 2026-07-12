@@ -6,6 +6,15 @@ This module contains:
 - _write_loop_summary(): Write loop summary artifact
 
 These functions handle per-incident processing for the evidence collector.
+
+The backend incident-detail lookup is consumed through the typed
+:class:`BackendIncidentLookupOutcome` algebra defined in
+:mod:`k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes`.
+A successful HTTP 200 response cannot be converted into
+``BackendIncidentNotFound`` by any parser/schema/deserialization/
+identity failure in this seam.
+
+Suggested by: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01
 """
 
 from __future__ import annotations
@@ -14,6 +23,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from k8s_diag_agent.domain.incident_lifecycle import IncidentId
 
 from .incident_automatic_diagnosis_loop import (
     HypothesisLoopConfig,
@@ -25,12 +36,21 @@ from .incident_diagnosis_auto_loop_config import (
     check_incident_eligibility,
 )
 from .incident_diagnosis_auto_loop_models import AutoLoopIncidentResult
+from .incident_diagnosis_backend_detail_outcomes import (
+    BackendIncidentFound,
+    BackendIncidentLookupFailed,
+    BackendIncidentNotFound,
+)
 from .incident_diagnosis_dispatch import (
-    fetch_incident_for_diagnosis,
+    fetch_backend_incident_for_diagnosis_typed,
+)
+from .incident_diagnosis_disposition import (
+    diagnosis_failure_reason_for_backend_lookup,
 )
 from .incident_diagnosis_loop_models import LoopDecision
 from .incident_diagnosis_loop_runtime import run_policy_enforced_loop_pass
 from .incident_diagnosis_review_packet import write_diagnosis_review_packet
+from .incident_lifecycle import Incident
 from .incident_read_only_check_artifacts import is_safe_run_id
 from .incident_store import IncidentStore
 from .incident_store_provider import get_incident_store
@@ -46,6 +66,56 @@ __all__ = [
 ]
 
 
+def _failure_result_from_outcome(
+    incident_id: str,
+    outcome: BackendIncidentLookupFailed,
+) -> AutoLoopIncidentResult:
+    """Translate a typed ``BackendIncidentLookupFailed`` into a legacy result.
+
+    The reason string is the ``.value`` of the typed
+    :class:`DiagnosisEvaluationFailureReason` resolved by
+    :func:`diagnosis_failure_reason_for_backend_lookup`. Production code
+    never rebuilds the mapping itself; the compat layer matches this
+    string exactly (no substring), so the round-trip is lossless.
+    """
+    typed_reason = diagnosis_failure_reason_for_backend_lookup(outcome.failure_code)
+    reason_code = typed_reason.value
+    diagnostic = outcome.to_diagnostic()
+    detail_parts: list[str] = []
+    if diagnostic.detail:
+        detail_parts.append(diagnostic.detail)
+    diagnostic_payload = (
+        f"http_status={diagnostic.http_status} "
+        f"payload_type={diagnostic.payload_type!r} "
+        f"payload_schema_version={diagnostic.payload_schema_version} "
+        f"exception_type={diagnostic.exception_type!r}"
+    )
+    detail_parts.append(diagnostic_payload)
+    detail = " | ".join(detail_parts)
+
+    _logger.info(
+        "automatic-diagnosis-backend-incident-lookup-failed",
+        extra={
+            "event": "automatic-diagnosis-backend-incident-lookup-failed",
+            "incident_id": incident_id,
+            "requested_incident_id": str(outcome.requested_incident_id),
+            "reason_code": reason_code,
+            "http_status": outcome.http_status,
+            "payload_type": outcome.payload_type,
+            "payload_schema_version": outcome.payload_schema_version,
+            "exception_type": outcome.exception_type,
+            "detail": detail,
+        },
+    )
+
+    return AutoLoopIncidentResult(
+        incident_id=incident_id,
+        eligible=False,
+        eligibility_reason=reason_code,
+        error=detail,
+    )
+
+
 def _process_incident(
     incident_id: str,
     external_analysis_dir: Path,
@@ -53,33 +123,72 @@ def _process_incident(
     collector_run_id: str,
     now: datetime,
 ) -> AutoLoopIncidentResult:
-    """Process a single incident in the automatic diagnosis loop."""
-    incident_or_incident, fetch_success, fetch_error = fetch_incident_for_diagnosis(incident_id)
+    """Process a single incident in the automatic diagnosis loop.
 
-    if not fetch_success:
-        return AutoLoopIncidentResult(
-            incident_id=incident_id,
-            eligible=False,
-            eligibility_reason=f"fetch_failed: {fetch_error}",
-            skipped=True,
-            skip_reason=f"fetch_failed: {fetch_error}",
-        )
+    The backend incident-detail lookup runs through the canonical
+    :func:`fetch_backend_incident_for_diagnosis_typed` helper, which
+    returns a typed :class:`BackendIncidentLookupOutcome`. The three
+    variants are dispatched exhaustively: a HTTP 404 yields
+    ``BackendIncidentNotFound`` (-> skipped ``incident_not_found``),
+    any other failure yields ``BackendIncidentLookupFailed`` (-> error
+    with the mapped stable reason code), and a successful HTTP 200
+    canonical payload yields ``BackendIncidentFound`` (continuing into
+    domain eligibility).
 
-    if incident_or_incident is None:
-        return AutoLoopIncidentResult(
-            incident_id=incident_id,
-            eligible=False,
-            eligibility_reason="not_found",
-            skipped=True,
-            skip_reason="incident_not_found",
-        )
+    Crucially, the success/failure classification is anchored on the
+    HTTP status, not on whether the parser produced an incident object;
+    this prevents the historical regression where HTTP 200 + valid JSON
+    was being mapped to ``incident_not_found`` because a downstream
+    parser exception was silently absorbed into ``None``.
+    """
+    branded = IncidentId(incident_id)
+    lookup_outcome = fetch_backend_incident_for_diagnosis_typed(branded)
 
-    # Normalize to dict for downstream processing
-    incident_dict: dict[str, Any] = (
-        incident_or_incident.to_dict()
-        if hasattr(incident_or_incident, "to_dict")
-        else incident_or_incident  # type: ignore[assignment]
-    )
+    # Exhaustive dispatch on the three typed variants. The legacy
+    # ``AutoLoopIncidentResult`` is the source of truth for the rest of
+    # the pipeline; the compat layer maps it back into the typed
+    # ``IncidentDiagnosisDisposition`` algebra.
+    match lookup_outcome:
+        case BackendIncidentNotFound():
+            _logger.info(
+                "automatic-diagnosis-backend-incident-not-found",
+                extra={
+                    "event": "automatic-diagnosis-backend-incident-not-found",
+                    "incident_id": incident_id,
+                    "http_status": lookup_outcome.http_status,
+                },
+            )
+            return AutoLoopIncidentResult(
+                incident_id=incident_id,
+                eligible=False,
+                eligibility_reason="not_found",
+                skipped=True,
+                skip_reason="incident_not_found",
+            )
+        case BackendIncidentLookupFailed():
+            return _failure_result_from_outcome(incident_id, lookup_outcome)
+        case BackendIncidentFound(incident=incident):
+            _logger.debug(
+                "automatic-diagnosis-backend-incident-found",
+                extra={
+                    "event": "automatic-diagnosis-backend-incident-found",
+                    "incident_id": incident_id,
+                    "http_status": lookup_outcome.http_status,
+                    "payload_schema_version": lookup_outcome.payload_schema_version,
+                    "payload_type": lookup_outcome.payload_type,
+                },
+            )
+            # ``incident`` is statically known to be ``Incident`` here
+            # (the canonical domain aggregate). We call ``.to_dict()``
+            # directly; there is no duck-typing fallback or ``Any``
+            # widening. The downstream path consumes the dict for the
+            # hypothesis loop, but the case file builder still takes
+            # the typed ``Incident`` so it can keep its typed
+            # invariants.
+            incident_obj: Incident = incident
+
+    # Normalize to dict for downstream processing.
+    incident_dict: dict[str, Any] = incident_obj.to_dict()
 
     store: IncidentStore = get_incident_store()
 
@@ -127,7 +236,7 @@ def _process_incident(
         case_file = build_incident_case_file(
             incident_id=incident_id,
             external_analysis_dir=external_analysis_dir,
-            incident=incident_or_incident,
+            incident=incident_obj,
         )
     except (OSError, ValueError, KeyError):
         store.mark_diagnosis_loop_failed(

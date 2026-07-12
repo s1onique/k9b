@@ -127,13 +127,29 @@ class TestExistingPacketContinuesIntoLoop:
             mock_list_page,
         )
 
-        # Mock fetch_incident_for_diagnosis to avoid needing a real incident store
-        def mock_fetch(incident_id: str):
-            return _mock_incident(incident_id), True, None
+        # Mock the typed backend lookup to avoid needing a real
+        # incident store. The new typed helper returns
+        # ``BackendIncidentFound`` directly, so we wrap the legacy
+        # mock incident in the canonical found outcome.
+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
+            BackendIncidentFound,
+            BackendIncidentLookupSource,
+        )
+        from k8s_diag_agent.domain.incident_lifecycle import IncidentId
+
+        def mock_fetch_typed(incident_id: IncidentId):
+            return BackendIncidentFound(
+                requested_incident_id=incident_id,
+                incident=_mock_incident(str(incident_id)),
+                source=BackendIncidentLookupSource.BACKEND_API,
+                http_status=200,
+                payload_schema_version=1,
+                payload_type="incident-internal-detail",
+            )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.fetch_incident_for_diagnosis",
-            mock_fetch,
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.fetch_backend_incident_for_diagnosis_typed",
+            mock_fetch_typed,
         )
 
         # Mock check_incident_eligibility to return eligible
@@ -206,13 +222,27 @@ class TestAlertRefreshDoesNotStarvePendingWork:
             mock_list_page,
         )
 
-        # Mock fetch_incident_for_diagnosis to avoid needing a real incident store
-        def mock_fetch(incident_id: str):
-            return _mock_incident(incident_id), True, None
+        # Mock the typed backend lookup to avoid needing a real
+        # incident store.
+        from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
+            BackendIncidentFound,
+            BackendIncidentLookupSource,
+        )
+        from k8s_diag_agent.domain.incident_lifecycle import IncidentId
+
+        def mock_fetch_typed(incident_id: IncidentId):
+            return BackendIncidentFound(
+                requested_incident_id=incident_id,
+                incident=_mock_incident(str(incident_id)),
+                source=BackendIncidentLookupSource.BACKEND_API,
+                http_status=200,
+                payload_schema_version=1,
+                payload_type="incident-internal-detail",
+            )
 
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.fetch_incident_for_diagnosis",
-            mock_fetch,
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.fetch_backend_incident_for_diagnosis_typed",
+            mock_fetch_typed,
         )
 
         # Mock check_incident_eligibility to return eligible
