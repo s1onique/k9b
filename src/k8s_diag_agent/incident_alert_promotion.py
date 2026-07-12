@@ -60,7 +60,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class AlertIncidentPromotionResult:
-    """Result of an alert-to-incident promotion scan."""
+    """Result of an alert-to-incident promotion scan.
+
+    In addition to the aggregate counts, this result exposes per-candidate
+    records (``opened_incident_ids`` / ``updated_incident_ids`` /
+    ``promotion_records``) so that downstream callers (notably automatic
+    diagnosis) can consume canonical ``incident_id`` values directly rather
+    than synthesizing IDs from namespace, object kind, object name,
+    candidate class, or alert labels.
+
+    Suggested by: ACT-K9B-AUTO-DIAGNOSIS-BACKEND-INCIDENT-IDENTITY01
+    """
 
     scanned_signal_count: int = 0
     firing_signal_count: int = 0
@@ -72,6 +82,14 @@ class AlertIncidentPromotionResult:
     malformed_artifact_count: int = 0
     error_count: int = 0
     errors: tuple[str, ...] = field(default_factory=tuple)
+    # Canonical identity propagation. ``opened_incident_ids`` and
+    # ``updated_incident_ids`` are derived from ``promotion_records`` and
+    # are kept as separate convenience lists for log/response consumers.
+    opened_incident_ids: tuple[str, ...] = field(default_factory=tuple)
+    updated_incident_ids: tuple[str, ...] = field(default_factory=tuple)
+    promotion_records: tuple[dict[str, str | None], ...] = field(default_factory=tuple)
+    unique_candidate_count: int = 0
+    promotion_scan_scope: str = "alert_signals_run_dir"
 
     def to_dict(self) -> dict[str, object]:
         """Convert to dict for serialization."""
@@ -88,6 +106,11 @@ class AlertIncidentPromotionResult:
             "malformed_artifact_count": self.malformed_artifact_count,
             "error_count": self.error_count,
             "errors": list(self.errors),
+            "opened_incident_ids": list(self.opened_incident_ids),
+            "updated_incident_ids": list(self.updated_incident_ids),
+            "promotion_records": [dict(r) for r in self.promotion_records],
+            "unique_candidate_count": self.unique_candidate_count,
+            "promotion_scan_scope": self.promotion_scan_scope,
         }
 
 
@@ -324,6 +347,15 @@ def attach_alert_signal_to_incident(
 # =============================================================================
 
 
+# Track per-incident promotion outcomes so callers (notably the auto-diagnosis
+# loop) can consume canonical ``incident_id`` values directly. The tuples are
+# populated alongside the aggregate counts in the helpers below.
+_FIRING_OUTCOME_OPENED = "opened"
+_FIRING_OUTCOME_UPDATED = "updated"
+_FIRING_OUTCOME_DUPLICATE = "skipped_duplicate"
+_FIRING_OUTCOME_ERROR = "error"
+
+
 def promote_alert_signals_to_incidents(
     *,
     incident_store: IncidentStore,
@@ -345,7 +377,10 @@ def promote_alert_signals_to_incidents(
         now: Current timestamp (defaults to now)
 
     Returns:
-        AlertIncidentPromotionResult with promotion statistics
+        AlertIncidentPromotionResult with promotion statistics. The result
+        exposes per-candidate ``promotion_records`` and canonical
+        ``opened_incident_ids`` / ``updated_incident_ids`` for callers to
+        consume directly without re-deriving incident IDs.
     """
     if now is None:
         now = datetime.now(UTC)
@@ -359,9 +394,16 @@ def promote_alert_signals_to_incidents(
     skipped_dup = 0
     skipped_resolved = 0
     malformed_count = 0
+    unique_keys: set[str] = set()
+    firing_outcomes: list[tuple[str, str | None, str]] = []
 
     # Scan alert signal artifacts
     artifacts = scan_alert_signal_artifacts(runs_dir)
+    scan_scope = (
+        f"alert_signal_artifacts:dir={runs_dir}"
+        if runs_dir is not None
+        else "alert_signal_artifacts:no_dir"
+    )
 
     for artifact in artifacts:
         try:
@@ -377,19 +419,26 @@ def promote_alert_signals_to_incidents(
 
             # Build correlation key
             correlation_key = build_alert_incident_correlation_key(signal, classification)
+            unique_keys.add(correlation_key)
 
             if signal.status == AlertStatus.FIRING:
                 firing_count += 1
-                opened_count, updated_count, skipped_dup = _handle_firing_alert(
+                outcome_record = _handle_firing_alert_with_outcome(
                     incident_store=incident_store,
                     signal=signal,
                     correlation_key=correlation_key,
                     observed_at=signal.received_at,
                     errors=errors,
-                    opened_count=opened_count,
-                    updated_count=updated_count,
-                    skipped_dup=skipped_dup,
                 )
+                if outcome_record is not None:
+                    firing_outcomes.append(outcome_record)
+                    outcome = outcome_record[2]
+                    if outcome == _FIRING_OUTCOME_OPENED:
+                        opened_count += 1
+                    elif outcome == _FIRING_OUTCOME_UPDATED:
+                        updated_count += 1
+                    elif outcome == _FIRING_OUTCOME_DUPLICATE:
+                        skipped_dup += 1
             elif signal.status == AlertStatus.RESOLVED:
                 resolved_count += 1
                 skipped_resolved = _handle_resolved_alert(
@@ -405,6 +454,41 @@ def promote_alert_signals_to_incidents(
             error_msg = f"Error processing artifact {artifact.identity}: {e}"
             logger.exception(error_msg)
             errors.append(error_msg)
+            firing_outcomes.append((
+                getattr(artifact, "identity", "<unknown>"),
+                None,
+                _FIRING_OUTCOME_ERROR,
+            ))
+
+    opened_ids: list[str] = []
+    updated_ids: list[str] = []
+    promotion_records: list[dict[str, str | None]] = []
+    for source_candidate_id, canonical_incident_id, outcome in firing_outcomes:
+        promotion_records.append({
+            "source_candidate_id": source_candidate_id,
+            "canonical_incident_id": canonical_incident_id,
+            "promotion_outcome": outcome,
+        })
+        if outcome == _FIRING_OUTCOME_OPENED and canonical_incident_id is not None:
+            opened_ids.append(canonical_incident_id)
+        elif outcome == _FIRING_OUTCOME_UPDATED and canonical_incident_id is not None:
+            updated_ids.append(canonical_incident_id)
+
+    # Log promotion scan scope and unique candidate count for observability.
+    # This is observed by both webhook and scheduler health-loop emission paths.
+    logger.info(
+        "Alert signal promotion scan complete",
+        extra={
+            "event": "alert-signal-promotion-scan",
+            "promotion_scan_scope": scan_scope,
+            "unique_candidate_count": len(unique_keys),
+            "scanned_signal_count": scanned,
+            "opened_incident_count": opened_count,
+            "updated_incident_count": updated_count,
+            "skipped_duplicate_count": skipped_dup,
+            "promoted_canonical_incident_count": len(opened_ids) + len(updated_ids),
+        },
+    )
 
     return AlertIncidentPromotionResult(
         scanned_signal_count=scanned,
@@ -417,20 +501,22 @@ def promote_alert_signals_to_incidents(
         malformed_artifact_count=malformed_count,
         error_count=len(errors),
         errors=tuple(errors),
+        opened_incident_ids=tuple(opened_ids),
+        updated_incident_ids=tuple(updated_ids),
+        promotion_records=tuple(promotion_records),
+        unique_candidate_count=len(unique_keys),
+        promotion_scan_scope=scan_scope,
     )
 
 
-def _handle_firing_alert(
+def _handle_firing_alert_with_outcome(
     incident_store: IncidentStore,
     signal: AlertSignal,
     correlation_key: str,
     observed_at: datetime,
     errors: list[str],
-    opened_count: int,
-    updated_count: int,
-    skipped_dup: int,
-) -> tuple[int, int, int]:
-    """Handle a firing alert - open or update incident. Returns (opened, updated, skipped_dup)."""
+) -> tuple[str, str | None, str] | None:
+    """Open or update incident, returning the per-candidate promotion outcome."""
     # Check if incident already exists
     existing = incident_store.get_incident(correlation_key)
 
@@ -444,22 +530,47 @@ def _handle_firing_alert(
             observed_at=observed_at,
         )
         incident_store.add_incident(new_incident)
-        opened_count += 1
-    else:
-        # Check if this is a duplicate signal
-        if any(s.fingerprint == signal.signal_id for s in existing.signals):
-            skipped_dup += 1
-            return opened_count, updated_count, skipped_dup
+        return (correlation_key, new_incident.incident_id, _FIRING_OUTCOME_OPENED)
 
-        # Update existing incident
-        updated = attach_alert_signal_to_incident(
-            incident=existing,
-            signal=signal,
-            correlation_key=correlation_key,
-            observed_at=observed_at,
-        )
-        incident_store.add_incident(updated)
+    if any(s.fingerprint == signal.signal_id for s in existing.signals):
+        return (correlation_key, existing.incident_id, _FIRING_OUTCOME_DUPLICATE)
+
+    updated = attach_alert_signal_to_incident(
+        incident=existing,
+        signal=signal,
+        correlation_key=correlation_key,
+        observed_at=observed_at,
+    )
+    incident_store.add_incident(updated)
+    return (correlation_key, updated.incident_id, _FIRING_OUTCOME_UPDATED)
+
+
+def _handle_firing_alert(
+    incident_store: IncidentStore,
+    signal: AlertSignal,
+    correlation_key: str,
+    observed_at: datetime,
+    errors: list[str],
+    opened_count: int,
+    updated_count: int,
+    skipped_dup: int,
+) -> tuple[int, int, int]:
+    """Handle a firing alert - open or update incident. Returns (opened, updated, skipped_dup)."""
+    outcome = _handle_firing_alert_with_outcome(
+        incident_store=incident_store,
+        signal=signal,
+        correlation_key=correlation_key,
+        observed_at=observed_at,
+        errors=errors,
+    )
+    if outcome is None:
+        return opened_count, updated_count, skipped_dup
+    if outcome[2] == _FIRING_OUTCOME_OPENED:
+        opened_count += 1
+    elif outcome[2] == _FIRING_OUTCOME_UPDATED:
         updated_count += 1
+    elif outcome[2] == _FIRING_OUTCOME_DUPLICATE:
+        skipped_dup += 1
     return opened_count, updated_count, skipped_dup
 
 
@@ -493,5 +604,3 @@ def _handle_resolved_alert(
     )
     incident_store.add_incident(updated)
     return skipped_resolved
-
-

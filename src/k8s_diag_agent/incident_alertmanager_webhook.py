@@ -32,7 +32,18 @@ class WebhookError:
 
 @dataclass
 class WebhookPromotionSummary:
-    """Summary of promotion attempt - included in response when auto-promotion is enabled."""
+    """Summary of promotion attempt - included in response when auto-promotion is enabled.
+
+    The summary exposes per-canonical-incident ``opened_incident_ids`` and
+    ``updated_incident_ids`` plus a per-candidate ``promotion_records`` list
+    so that the scheduler (in backend-authoritative mode) can feed canonical
+    IDs directly into automatic diagnosis. ``source_candidate_id`` is
+    emitted as correlation metadata only and MUST NOT be used as the
+    ``incident_id`` for downstream lookup.
+
+    Suggested by: ACT-K9B-AUTO-DIAGNOSIS-BACKEND-INCIDENT-IDENTITY01
+    """
+
     enabled: bool
     scanned_signal_count: int = 0
     firing_signal_count: int = 0
@@ -42,6 +53,11 @@ class WebhookPromotionSummary:
     skipped_duplicate_count: int = 0
     skipped_resolved_without_open_incident_count: int = 0
     error_count: int = 0
+    opened_incident_ids: tuple[str, ...] = field(default_factory=tuple)
+    updated_incident_ids: tuple[str, ...] = field(default_factory=tuple)
+    promotion_records: tuple[dict[str, str | None], ...] = field(default_factory=tuple)
+    unique_candidate_count: int = 0
+    promotion_scan_scope: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         if not self.enabled:
@@ -56,6 +72,11 @@ class WebhookPromotionSummary:
             "skipped_duplicate_count": self.skipped_duplicate_count,
             "skipped_resolved_without_open_incident_count": self.skipped_resolved_without_open_incident_count,
             "error_count": self.error_count,
+            "opened_incident_ids": list(self.opened_incident_ids),
+            "updated_incident_ids": list(self.updated_incident_ids),
+            "promotion_records": [dict(r) for r in self.promotion_records],
+            "unique_candidate_count": self.unique_candidate_count,
+            "promotion_scan_scope": self.promotion_scan_scope,
         }
 
 
@@ -148,7 +169,19 @@ def parse_payload(raw_body: bytes, max_bytes: int) -> dict[str, Any]:
 
 
 def _promote_signals_to_incidents(incident_store: IncidentStore, runs_dir: Path, now: datetime | None = None) -> WebhookPromotionSummary:
-    """Promote signals to incidents using the promotion service."""
+    """Promote signals to incidents using the promotion service.
+
+    The returned summary exposes canonical incident IDs and per-candidate
+    promotion records so that the scheduler (in backend-authoritative mode)
+    can feed them directly into automatic diagnosis without having to
+    re-derive incident IDs from namespace, kind, or label values.
+
+    Returns a WebhookPromotionSummary with ``error_count=1`` if promotion
+    itself raised. We deliberately return a synthetic ``error_count=1`` only
+    summary in that case (without per-candidate records) so that callers
+    can still detect the failure and so the canonical-identity propagation
+    stays truthful on success.
+    """
     from .incident_alert_promotion import AlertIncidentPromotionResult, promote_alert_signals_to_incidents
     try:
         result: AlertIncidentPromotionResult = promote_alert_signals_to_incidents(
@@ -163,6 +196,11 @@ def _promote_signals_to_incidents(incident_store: IncidentStore, runs_dir: Path,
             skipped_duplicate_count=result.skipped_duplicate_count,
             skipped_resolved_without_open_incident_count=result.skipped_resolved_without_open_incident_count,
             error_count=result.error_count,
+            opened_incident_ids=result.opened_incident_ids,
+            updated_incident_ids=result.updated_incident_ids,
+            promotion_records=result.promotion_records,
+            unique_candidate_count=result.unique_candidate_count,
+            promotion_scan_scope=result.promotion_scan_scope,
         )
     except Exception:
         logger.exception("Error during signal promotion")

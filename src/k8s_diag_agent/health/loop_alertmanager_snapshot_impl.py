@@ -20,6 +20,7 @@ from .loop_alertmanager_snapshot_collection import (
 from .loop_alertmanager_snapshot_signals import _ingest_alert_signals
 
 if TYPE_CHECKING:
+    from ..collect.incident_promotion_accumulator import RunPromotionAccumulator
     from ..collect.incident_store import IncidentStore
     from ..external_analysis.alertmanager_discovery import AlertmanagerSourceInventory
 
@@ -33,6 +34,7 @@ def run_alertmanager_snapshot_collection(
     start_port_forward: Callable[..., tuple[subprocess.Popen[str], int]],
     stop_port_forward: Callable[..., None],
     incident_store: IncidentStore | None = None,
+    promotion_accumulator: RunPromotionAccumulator | None = None,
 ) -> None:
     """Collect Alertmanager snapshot and compact artifacts for tracked sources.
 
@@ -184,7 +186,12 @@ def run_alertmanager_snapshot_collection(
     )
 
     # --- Alert Signal Ingestion ---
-    # Convert snapshot alerts to AlertSignal artifacts and promote to incidents
+    # Convert snapshot alerts to AlertSignal artifacts and promote to incidents.
+    # The ``promotion_accumulator`` is the typed run-scoped handoff that
+    # captures canonical ``incident_id`` values emitted by the dispatcher
+    # so the orchestrator can aggregate them deterministically without
+    # relying on the legacy ``directories["__last_promotion_result__"]``
+    # sentinel.
     _ingest_alert_signals(
         snapshot=snapshot,
         selected_source=selected_source,
@@ -195,4 +202,5 @@ def run_alertmanager_snapshot_collection(
         run_id=run_id,
         run_label=run_label,
         effective_cluster_context=effective_cluster_context,
+        promotion_accumulator=promotion_accumulator,
     )

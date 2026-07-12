@@ -59,7 +59,12 @@ from .incident_store_diagnosis_loop_helpers import (
     mark_diagnosis_loop_started_for_store,
 )
 from .incident_store_in_memory_pagination import in_memory_pagination
-from .incident_store_promotion_helpers import promote_candidates_for_store
+from .incident_store_promotion_helpers import (
+    PromotionOutcome,
+)
+from .incident_store_promotion_helpers import (
+    promote_candidates_with_records as _promote_candidates_with_records,
+)
 
 # Import pagination types used in list_incidents_for_diagnosis_page
 if TYPE_CHECKING:
@@ -104,26 +109,33 @@ class IncidentStore:
     ) -> tuple[Incident, ...]:
         """Promote candidates into incidents.
 
-        For each candidate:
-        - If no matching incident exists, opens a new incident
-          - With bundle_id provided: COLLECTING_EVIDENCE state
-          - Without bundle_id: OPEN state (current behavior)
-        - If matching incident exists (same dedupe key), merges signals into it
-          - Status transitions based on terminal-ish status rules:
-            - SUPPRESSED/DUPLICATE/RESOLVED: no status change
-            - READY_FOR_REVIEW: no status change (no downgrade)
-            - OPEN/COLLECTING_EVIDENCE/INVESTIGATING: transitions to COLLECTING_EVIDENCE
-          - latest_snapshot_bundle_id updates to latest bundle ID when transitioning
+        R3 contract: the legacy ``promote_candidates`` shape is now a
+        thin wrapper around ``promote_candidates_with_records`` so both
+        the typed and legacy paths share a single truth source. The
+        returned snapshots come straight out of the
+        ``PromotionOutcome`` objects emitted by the typed boundary,
+        preventing drift between the typed and legacy paths.
 
         Args:
             candidates: Sequence of incident candidates to promote
             observed_at: When these candidates were observed
-            snapshot_bundle_id: Optional ID of the snapshot bundle containing evidence.
-                When provided, new incidents start in COLLECTING_EVIDENCE state.
+            snapshot_bundle_id: Optional ID of the snapshot bundle
+                containing evidence.
         Returns:
-            Tuple of all incidents (both new and updated), sorted by incident_id
+            Tuple of all incidents (both new and updated), sorted by
+            incident_id.
         """
-        return promote_candidates_for_store(self, candidates, observed_at, snapshot_bundle_id)
+        outcomes = self.promote_candidates_with_records(
+            candidates,
+            observed_at,
+            snapshot_bundle_id,
+        )
+        all_updated = [
+            outcome.incident
+            for outcome in outcomes
+            if outcome.incident is not None
+        ]
+        return tuple(sorted(all_updated, key=lambda i: i.incident_id))
 
     def promote_candidates_from_bundle(
         self,
@@ -143,6 +155,47 @@ class IncidentStore:
             Tuple of all incidents (both new and updated), sorted by incident_id
         """
         return self.promote_candidates(candidates, observed_at, snapshot_bundle_id=bundle_id)
+
+    def promote_candidates_with_records(
+        self,
+        candidates: list[IncidentCandidate] | tuple[IncidentCandidate, ...],
+        observed_at: datetime,
+        snapshot_bundle_id: str | None = None,
+    ) -> list[PromotionOutcome]:
+        """Promote candidates and return typed per-candidate outcomes.
+
+        This is the canonical store-owned promotion boundary. It returns
+        a ``list[PromotionOutcome]`` (one per input candidate, in input
+        order) so callers do not have to correlate ``candidates`` with
+        ``promoted incidents`` via ``zip(..., strict=False)``. Each
+        ``PromotionOutcome`` carries the typed ``PromotionRecord``
+        alongside the resulting ``Incident`` snapshot so callers can
+        consume the canonical ``incident_id`` directly.
+
+        Use this method when you need the per-candidate promotion mapping
+        for downstream canonical-id consumption (e.g. automatic
+        diagnosis, internal API handlers). Use the simpler
+        :meth:`promote_candidates` when you only need the resulting
+        incidents.
+
+        Args:
+            candidates: Sequence of incident candidates to promote.
+            observed_at: When these candidates were observed.
+            snapshot_bundle_id: Optional ID of the snapshot bundle
+                containing evidence.
+
+        Returns:
+            A list of ``PromotionOutcome`` values, one per input candidate,
+            in input order. The list may contain entries whose incident
+            is ``None`` when the store could not materialize an
+            incident; callers should treat those as no-op outcomes.
+        """
+        return _promote_candidates_with_records(
+            self,
+            candidates,
+            observed_at,
+            snapshot_bundle_id,
+        )
 
     def list_incidents(
         self,

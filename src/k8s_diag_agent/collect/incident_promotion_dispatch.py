@@ -36,6 +36,9 @@ from .incident_candidates import (
     CandidateSignal,
     IncidentCandidate,
 )
+from .incident_identity_hardening import PromotionRecord
+from .incident_promotion_accumulator import RunPromotionAccumulator
+from .incident_promotion_batch import PromotionBatch
 
 _logger = logging.getLogger(__name__)
 
@@ -54,6 +57,21 @@ MODE_AUTO: Literal["auto"] = "auto"
 # Process roles
 ROLE_BACKEND = "backend"
 ROLE_SCHEDULER = "scheduler"
+
+# Incident access modes
+INCIDENT_ACCESS_MODE_LOCAL = "local"
+INCIDENT_ACCESS_MODE_BACKEND = "backend"
+
+
+def _incident_access_mode_for_promotion_mode(
+    promotion_mode: Literal["local", "backend-api"],
+) -> str:
+    """Derive the canonical incident access mode for a promotion mode."""
+    return (
+        INCIDENT_ACCESS_MODE_LOCAL
+        if promotion_mode == MODE_LOCAL
+        else INCIDENT_ACCESS_MODE_BACKEND
+    )
 
 
 @dataclass(frozen=True)
@@ -78,6 +96,10 @@ class IncidentPromotionDispatchConfig:
         if self.process_role == ROLE_SCHEDULER:
             return MODE_BACKEND_API
         return MODE_LOCAL
+
+    def resolved_incident_access_mode(self) -> str:
+        """Resolve the access mode that corresponds to the resolved mode."""
+        return _incident_access_mode_for_promotion_mode(self.resolved_mode())
 
     def requires_backend_api(self) -> bool:
         """Check if backend API is required for promotion."""
@@ -104,7 +126,16 @@ class IncidentPromotionDispatchConfig:
 
 @dataclass(frozen=True)
 class IncidentPromotionResult:
-    """Result of an incident promotion operation."""
+    """Result of an incident promotion operation.
+
+    The result exposes per-canonical-incident ``opened_incident_ids`` /
+    ``updated_incident_ids`` plus a per-candidate ``promotion_records``
+    mapping so that downstream callers (notably automatic diagnosis) can
+    consume canonical ``incident_id`` values directly without
+    re-deriving them from candidate attributes.
+
+    Suggested by: ACT-K9B-AUTO-DIAGNOSIS-BACKEND-INCIDENT-IDENTITY01
+    """
 
     ok: bool = True
     scanned: int = 0
@@ -116,6 +147,13 @@ class IncidentPromotionResult:
     error_messages: tuple[str, ...] = field(default_factory=tuple)
     # Track the mode used for correct event logging
     promotion_mode: Literal["local", "backend-api"] = "local"
+    # Canonical identity propagation
+    opened_incident_ids: tuple[str, ...] = field(default_factory=tuple)
+    updated_incident_ids: tuple[str, ...] = field(default_factory=tuple)
+    promotion_records: tuple[dict[str, str | None], ...] = field(default_factory=tuple)
+    unique_candidate_count: int = 0
+    promotion_scan_scope: str = ""
+    incident_access_mode: str = "local"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for logging/response."""
@@ -129,7 +167,17 @@ class IncidentPromotionResult:
             "errors": self.errors,
             "error_messages": list(self.error_messages),
             "promotion_mode": self.promotion_mode,
+            "opened_incident_ids": list(self.opened_incident_ids),
+            "updated_incident_ids": list(self.updated_incident_ids),
+            "promotion_records": [dict(r) for r in self.promotion_records],
+            "unique_candidate_count": self.unique_candidate_count,
+            "promotion_scan_scope": self.promotion_scan_scope,
+            "incident_access_mode": self.incident_access_mode,
         }
+
+    def canonical_incident_ids(self) -> tuple[str, ...]:
+        """Return opened + updated canonical incident IDs as one tuple."""
+        return tuple(list(self.opened_incident_ids) + list(self.updated_incident_ids))
 
 
 def _get_dispatch_config() -> IncidentPromotionDispatchConfig:
@@ -146,7 +194,13 @@ def _get_dispatch_config() -> IncidentPromotionDispatchConfig:
 def _result_from_dict(
     d: dict[str, Any], promotion_mode: Literal["local", "backend-api"] = "local"
 ) -> IncidentPromotionResult:
-    """Convert promotion dict to IncidentPromotionResult."""
+    """Convert promotion dict to IncidentPromotionResult.
+
+    Carries the canonical incident IDs and per-candidate mapping (when the
+    upstream provider exposes them) so callers can consume ``incident_id``
+    values directly without re-deriving them from candidate attributes.
+    """
+    default_access_mode = _incident_access_mode_for_promotion_mode(promotion_mode)
     return IncidentPromotionResult(
         ok=d.get("ok", False),
         scanned=d.get("scanned", 0),
@@ -157,6 +211,16 @@ def _result_from_dict(
         errors=d.get("errors", 0),
         error_messages=tuple(d.get("error_messages", [])),
         promotion_mode=promotion_mode,
+        opened_incident_ids=tuple(d.get("opened_incident_ids") or ()),
+        updated_incident_ids=tuple(d.get("updated_incident_ids") or ()),
+        promotion_records=tuple(
+            dict(record) for record in (d.get("promotion_records") or ())
+        ),
+        unique_candidate_count=int(d.get("unique_candidate_count") or 0),
+        promotion_scan_scope=str(d.get("promotion_scan_scope") or ""),
+        incident_access_mode=str(
+            d.get("incident_access_mode") or default_access_mode
+        ),
     )
 
 
@@ -436,15 +500,278 @@ def promote_alert_signals_from_artifacts(
     )
 
 
+class PromotionResponseValidationError(ValueError):
+    """Raised when a promotion response payload is fail-closed invalid.
+
+    The strict backend contract (R4 task 8) rejects:
+      * Malformed ``promotion_outcome`` values not in the typed enum.
+      * Missing ``canonical_incident_id`` for non-zero opened/updated counts.
+      * Synthesized ``<aggregate>`` candidate IDs in strict backend mode.
+
+    These errors MUST surface as typed contracts so the orchestrator can
+    detect dispatcher regressions deterministically.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        promotion_records: tuple[dict[str, str | None], ...] = (),
+        opened_incident_ids: tuple[str, ...] = (),
+        updated_incident_ids: tuple[str, ...] = (),
+        promotion_mode: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.promotion_records = promotion_records
+        self.opened_incident_ids = opened_incident_ids
+        self.updated_incident_ids = updated_incident_ids
+        self.promotion_mode = promotion_mode
+
+
+_ALLOWED_PROMOTION_OUTCOMES: frozenset[str] = frozenset({
+    "opened",
+    "updated",
+    "skipped_duplicate",
+    "noop",
+})
+
+
+def validate_promotion_response_records(
+    *,
+    promotion_mode: str,
+    promotion_records: tuple[dict[str, str | None], ...],
+    opened_incident_ids: tuple[str, ...] = (),
+    updated_incident_ids: tuple[str, ...] = (),
+) -> None:
+    """Validate a promotion response payload under the strict R4 contract.
+
+    Failure modes:
+
+    * ``promotion_mode == 'backend-api'``: reject synthesized
+      ``<aggregate>`` source IDs -- every record MUST map back to a real
+      candidate/incident pair (no inferred placeholders).
+    * Any ``promotion_outcome`` not in the allowed set raises.
+    * Non-zero opened/updated counts require at least one
+      ``canonical_incident_id`` to be carried by ``promotion_records``.
+    * Empty ``promotion_records`` is permitted only when both opened and
+      updated counts are zero.
+    """
+    if promotion_mode == MODE_BACKEND_API:
+        for raw in promotion_records:
+            source_id = raw.get("source_candidate_id") or ""
+            if source_id.startswith("<") and source_id.endswith(">"):
+                raise PromotionResponseValidationError(
+                    "Backend strict contract forbids synthesized aggregate "
+                    "candidate_id mapping.",
+                    promotion_records=promotion_records,
+                    opened_incident_ids=opened_incident_ids,
+                    updated_incident_ids=updated_incident_ids,
+                    promotion_mode=promotion_mode,
+                )
+
+    seen_canonical: set[str] = set()
+    for raw in promotion_records:
+        outcome = str(raw.get("promotion_outcome") or "")
+        if outcome not in _ALLOWED_PROMOTION_OUTCOMES:
+            raise PromotionResponseValidationError(
+                f"Unknown promotion_outcome: {outcome!r} not in "
+                f"{sorted(_ALLOWED_PROMOTION_OUTCOMES)}",
+                promotion_records=promotion_records,
+                opened_incident_ids=opened_incident_ids,
+                updated_incident_ids=updated_incident_ids,
+                promotion_mode=promotion_mode,
+            )
+        canonical = raw.get("canonical_incident_id")
+        if canonical:
+            seen_canonical.add(str(canonical))
+
+    non_zero_counts = bool(opened_incident_ids) or bool(updated_incident_ids)
+    if non_zero_counts and not seen_canonical:
+        raise PromotionResponseValidationError(
+            "Non-zero opened/updated counts require authoritative canonical "
+            "incident IDs on promotion_records.",
+            promotion_records=promotion_records,
+            opened_incident_ids=opened_incident_ids,
+            updated_incident_ids=updated_incident_ids,
+            promotion_mode=promotion_mode,
+        )
+
+
+def promote_alert_signals_for_accumulator(
+    runs_dir: Path,
+    accumulator: RunPromotionAccumulator | None,
+    snapshot_bundle_id: str | None = None,
+    *,
+    cluster_context: str | None = None,
+) -> PromotionBatch:
+    """Promote alert signals and feed typed ``PromotionRecord`` values
+    directly into ``RunPromotionAccumulator``.
+
+    R4 contract:
+
+    1. Scans alert-signal artifacts in ``runs_dir``.
+    2. Routes promotion through the dispatcher (local or backend-api mode).
+    3. Returns a typed ``PromotionBatch`` carrying the dispatcher result,
+       the per-candidate ``PromotionRecord`` values, and source/cluster
+       provenance. The same batch is appended to ``accumulator`` via
+       ``accumulator.add_batch(...)`` so the orchestrator can aggregate
+       canonical IDs deterministically without inferring
+       ``promotion_mode`` from emptiness.
+    4. Resolves ``promotion_mode`` AND ``incident_access_mode`` from the
+       dispatch configuration. A backend-configured empty batch carries
+       ``promotion_mode='backend-api'`` and ``incident_access_mode='backend'``
+       just like a populated batch would; the same is true for local
+       configuration. The accumulator MUST consume this verbatim.
+    5. Backend-mode records pass through ``validate_promotion_response_records``
+       so malformed outcomes and missing canonical IDs surface as
+       ``PromotionResponseValidationError`` before any state mutation.
+
+    Returns:
+        ``PromotionBatch`` carrying the dispatcher result and typed
+        ``PromotionRecord`` values. The same batch is also appended to
+        ``accumulator`` when the accumulator is not ``None``.
+    """
+    from datetime import UTC
+
+    config = _get_dispatch_config()
+    resolved_mode = config.resolved_mode()
+    resolved_access_mode = config.resolved_incident_access_mode()
+
+    candidates = scan_alert_signals_as_candidates(runs_dir)
+    if not candidates:
+        # R4 task 2: a zero-candidate batch MUST carry the resolved
+        # dispatcher mode verbatim. Backend-configured empty batches
+        # stay backend; local-configured empty batches stay local. The
+        # caller cannot tell these apart from a missing ``promotion_mode``
+        # alone.
+        empty_result = IncidentPromotionResult(
+            ok=True,
+            scanned=0,
+            firing=0,
+            opened_incidents=0,
+            updated_incidents=0,
+            skipped_duplicates=0,
+            errors=0,
+            promotion_mode=resolved_mode,
+            promotion_scan_scope=(
+                f"alert_signal_artifacts:dir={runs_dir}"
+            ),
+            incident_access_mode=resolved_access_mode,
+        )
+        empty_batch = PromotionBatch(
+            promotion_result=empty_result,
+            promotion_records=(),
+            source_kind="alertmanager",
+            cluster_context=cluster_context,
+            snapshot_bundle_id=snapshot_bundle_id,
+        )
+        if accumulator is not None:
+            accumulator.add_batch(empty_batch)
+        return empty_batch
+
+    result = promote_alert_signals(
+        candidates=candidates,
+        observed_at=datetime.now(UTC),
+        snapshot_bundle_id=snapshot_bundle_id,
+    )
+
+    # R4 task 8: fail-closed validation. Backend-mode rejections surface
+    # as ``PromotionResponseValidationError`` so the orchestrator can
+    # detect dispatcher regressions deterministically. We validate the
+    # raw record payloads (not the synthesized typed list) so backend
+    # outcomes match the wire contract.
+    validate_promotion_response_records(
+        promotion_mode=result.promotion_mode,
+        promotion_records=result.promotion_records,
+        opened_incident_ids=result.opened_incident_ids,
+        updated_incident_ids=result.updated_incident_ids,
+    )
+
+    records = tuple(promotion_records_from_result(result))
+    batch = PromotionBatch(
+        promotion_result=result,
+        promotion_records=records,
+        source_kind="alertmanager",
+        cluster_context=cluster_context,
+        snapshot_bundle_id=snapshot_bundle_id,
+    )
+    if accumulator is not None:
+        accumulator.add_batch(batch)
+    return batch
+
+
+def promotion_records_from_result(
+    result: IncidentPromotionResult,
+) -> list[PromotionRecord]:
+    """Translate an ``IncidentPromotionResult`` into typed ``PromotionRecord`` values.
+
+    Helper used by both ``promote_alert_signals_for_accumulator`` (forward
+    path) and the consistency check (reverse path) so we never have to
+    re-parse a free-form dict downstream. The result's
+    ``promotion_records`` field is treated as authoritative; when it is
+    empty, we synthesize one record per ``opened`` / ``updated`` aggregate
+    so the accumulator still receives typed entries (with
+    ``canonical_incident_id`` populated and ``promotion_outcome`` matching
+    the aggregate counts).
+    """
+    records: list[PromotionRecord] = []
+    raw_records = list(result.promotion_records)
+    if raw_records:
+        for raw in raw_records:
+            records.append(
+                PromotionRecord(
+                    source_candidate_id=str(
+                        raw.get("source_candidate_id") or "<unknown>"
+                    ),
+                    canonical_incident_id=(
+                        str(raw["canonical_incident_id"])
+                        if isinstance(raw.get("canonical_incident_id"), str)
+                        else None
+                    ),
+                    promotion_outcome=str(
+                        raw.get("promotion_outcome") or "opened"
+                    ),
+                )
+            )
+        return records
+
+    # Fall back to synthesising from aggregate lists. Without the typed
+    # promotion_records field we can still populate typed entries; the
+    # ``source_candidate_id`` is unknown but the canonical_id is exact.
+    for canonical_id in result.opened_incident_ids:
+        records.append(
+            PromotionRecord(
+                source_candidate_id="<aggregate>",
+                canonical_incident_id=canonical_id,
+                promotion_outcome="opened",
+            )
+        )
+    for canonical_id in result.updated_incident_ids:
+        records.append(
+            PromotionRecord(
+                source_candidate_id="<aggregate>",
+                canonical_incident_id=canonical_id,
+                promotion_outcome="updated",
+            )
+        )
+    return records
+
+
 __all__ = [
     "IncidentPromotionDispatchConfig",
     "IncidentPromotionResult",
+    "INCIDENT_ACCESS_MODE_BACKEND",
+    "INCIDENT_ACCESS_MODE_LOCAL",
     "MODE_AUTO",
     "MODE_BACKEND_API",
     "MODE_LOCAL",
+    "PromotionResponseValidationError",
     "promote_alert_signals",
+    "promote_alert_signals_for_accumulator",
     "promote_alert_signals_from_artifacts",
     "promote_candidates",
     "log_promotion_config",
+    "promotion_records_from_result",
     "scan_alert_signals_as_candidates",
+    "validate_promotion_response_records",
 ]

@@ -42,6 +42,7 @@ if TYPE_CHECKING:
         IncidentDiagnosisCursor,
     )
     from .incident_store_sqlite import SQLiteIncidentStore
+    from .incident_store_sqlite_events_writer import EventAppendSpec
 
 import logging
 
@@ -127,6 +128,12 @@ class SQLiteWriteContext:
     ) -> StoredEvent:
         """Append an event to the incident events table atomically.
 
+        R4 task 7 contract: each ``append_event`` call opens its own
+        ``BEGIN IMMEDIATE`` transaction and commits on success. Two
+        consecutive ``append_event`` calls are NOT one transaction.
+        Use :meth:`append_events_atomic` for the multi-event batch
+        boundary.
+
         This method owns the event append authority. It uses BEGIN IMMEDIATE
         to acquire a write lock immediately and updates the projection
         within the same transaction.
@@ -157,6 +164,41 @@ class SQLiteWriteContext:
             occurred_at=occurred_at,
             actor_id=actor_id,
         )
+
+    def append_events_atomic(
+        self,
+        specs: tuple[EventAppendSpec, ...],
+    ) -> list[StoredEvent]:
+        """Append multiple events into one atomic transaction.
+
+        R4 task 7 contract: callers requiring ``OPENED`` plus
+        ``COLLECTING_EVIDENCE_STARTED`` (or any other paired state) to
+        land in one durable transaction use this method. Either every
+        spec commits together or none of them do.
+
+        Args:
+            specs: Iterable of :class:`EventAppendSpec` items. Pass a
+                tuple / list to keep the input immutable.
+
+        Returns:
+            The list of stored events in input order. ``event_seq``
+            reflects the actual insertion order on the auto-increment
+            primary key.
+        """
+        self._ensure_open()
+        from .incident_store_sqlite_events_writer import (
+            EventAppendSpec,
+        )
+        from .incident_store_sqlite_events_writer import (
+            append_events_atomic as _impl,
+        )
+
+        concrete_specs: tuple[EventAppendSpec, ...] = tuple(specs)
+        if not all(isinstance(s, EventAppendSpec) for s in concrete_specs):
+            raise TypeError(
+                "append_events_atomic specs must be EventAppendSpec instances"
+            )
+        return _impl(self._conn, concrete_specs)
 
     # -------------------------------------------------------------------------
     # Cache Authority

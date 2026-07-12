@@ -12,6 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from ..collect.incident_promotion_accumulator import RunPromotionAccumulator
 from .loop_alertmanager_discovery import run_alertmanager_discovery as _run_alertmanager_discovery_impl
 from .loop_alertmanager_port_forward import (
     start_alertmanager_port_forward,
@@ -137,8 +138,16 @@ def run_alertmanager_snapshot_collection(
     start_port_forward: Callable[..., tuple[subprocess.Popen[str], int]],
     stop_port_forward: Callable[..., None],
     incident_store: IncidentStore | None = None,
+    promotion_accumulator: RunPromotionAccumulator | None = None,
 ) -> None:
     """Collect Alertmanager snapshot and compact artifacts for tracked sources.
+
+    ``promotion_accumulator`` is the typed run-scoped handoff. When
+    provided, every ``RunPromotionAccumulator.add_record`` call records
+    the canonical ``incident_id`` against the originating source. This
+    replaces the legacy ``directories["__last_promotion_result__"]``
+    smuggling so the orchestrator can collect results from multiple
+    Alertmanager sources without a typed handoff.
 
     Delegates to loop_alertmanager_snapshot module.
     """
@@ -151,6 +160,7 @@ def run_alertmanager_snapshot_collection(
         start_port_forward=start_port_forward,
         stop_port_forward=stop_port_forward,
         incident_store=incident_store,
+        promotion_accumulator=promotion_accumulator,
     )
 
 

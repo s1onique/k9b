@@ -39,6 +39,7 @@ from .incident_lifecycle import (
     Incident,
 )
 from .incident_store import IncidentStore
+from .incident_store_promotion_helpers import PromotionOutcome
 from .incident_store_sqlite_config import (
     DEFAULT_JOURNAL_MODE,
     DEFAULT_SQLITE_PATH,
@@ -65,6 +66,7 @@ from .incident_store_sqlite_lifecycle import (
     mark_diagnosis_loop_failed_impl,
     mark_diagnosis_loop_started_impl,
     promote_candidates_impl,
+    promote_candidates_with_records_impl,
 )
 from .incident_store_sqlite_migrations import run_migrations
 from .incident_store_sqlite_state import (
@@ -284,6 +286,33 @@ class SQLiteIncidentStore(IncidentStore):
     ) -> tuple[Incident, ...]:
         """Promote candidates to incidents with event sourcing."""
         return promote_candidates_impl(self, candidates, observed_at, snapshot_bundle_id)
+
+    def promote_candidates_with_records(
+        self,
+        candidates: list[IncidentCandidate] | tuple[IncidentCandidate, ...],
+        observed_at: datetime,
+        snapshot_bundle_id: str | None = None,
+    ) -> list[PromotionOutcome]:
+        """R3 typed promotion boundary for the SQLite store.
+
+        This override delegates to ``promote_candidates_with_records_impl``
+        so the SQLite write context, append-only event path, and
+        canonical projector are reused. The implementation lives next
+        to ``promote_candidates_impl`` so both paths share a single
+        truth source and cannot drift in durability or lifecycle
+        semantics.
+
+        The store does NOT mutate ``_incidents`` from a generic helper;
+        every append goes through ``ctx.append_event`` and every cache
+        write goes through ``ctx.put_cached_incident`` inside the
+        store's atomic ``_write_context``.
+        """
+        return promote_candidates_with_records_impl(
+            self,
+            candidates,
+            observed_at,
+            snapshot_bundle_id,
+        )
 
     def add_incident(self, incident: Incident) -> None:
         """Add an incident by appending an OPENED event."""

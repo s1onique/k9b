@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..collect.cluster_snapshot import ClusterSnapshot
+from ..collect.incident_promotion_accumulator import RunPromotionAccumulator
 from ..collect.live_snapshot import collect_cluster_snapshot, list_kube_contexts
 from ..compare.two_cluster import ClusterComparison, compare_snapshots
 from ..external_analysis.adapter import build_external_analysis_adapters
@@ -277,8 +278,17 @@ class HealthLoopRunner:
         self,
         records: list[HealthSnapshotRecord],
         directories: dict[str, Path],
+        promotion_accumulator: RunPromotionAccumulator | None = None,
     ) -> None:
-        """Run Alertmanager and vmalert discovery and collection."""
+        """Run Alertmanager and vmalert discovery and collection.
+
+        ``promotion_accumulator`` is the typed run-scoped handoff that
+        stores canonical incident IDs aggregated across every
+        Alertmanager source. It is optional so legacy callers that do
+        not need canonical-id propagation can pass ``None``; passing
+        ``None`` causes the dispatcher to use the process-local store
+        for promotion without ever consuming the accumulator at all.
+        """
         from ..collect.incident_store_provider import get_incident_store
         from .loop_runner_monitoring import (
             run_alertmanager_discovery,
@@ -304,6 +314,7 @@ class HealthLoopRunner:
             start_port_forward=self._start_alertmanager_port_forward,
             stop_port_forward=self._stop_alertmanager_port_forward,
             incident_store=incident_store,
+            promotion_accumulator=promotion_accumulator,
         )
         self._vmalert_inventory = run_vmalert_discovery(
             records=records,
@@ -409,6 +420,11 @@ class HealthLoopRunner:
     def _run_automatic_diagnosis_loop(
         self,
         external_analysis_dir: Path,
+        *,
+        canonical_incident_ids: list[str] | tuple[str, ...] | None = None,
+        promotion_result_summary: dict[str, Any] | None = None,
+        backend_endpoint_identity: dict[str, Any] | None = None,
+        incident_selection_mode: str | None = None,
     ) -> dict[str, Any]:
         """Run automatic diagnosis loop evidence collection.
 
@@ -416,10 +432,34 @@ class HealthLoopRunner:
         from loop_automatic_diagnosis, providing the instance-based interface
         expected by existing tests and production call sites.
 
+        Args:
+            external_analysis_dir: External analysis directory.
+            canonical_incident_ids: Optional explicit canonical ``incident_id``
+                values from a recent Alertmanager promotion. When non-empty,
+                the dispatcher MUST NOT synthesize IDs from candidate
+                attributes.
+            promotion_result_summary: Optional structured promotion result
+                metadata to attach to the auto-diagnosis summary.
+            backend_endpoint_identity: Optional backend endpoint identity (no
+                credentials) to forward to auto-diagnosis for diagnostics.
+            incident_selection_mode: Optional R7 selection mode forwarded
+                verbatim to the diagnosis collector. When ``"blocked"``
+                the collector emits a typed
+                ``automatic_diagnosis_blocked`` event and returns a
+                bounded payload without touching the underlying evidence
+                collection.
+
         Returns:
             Bounded result summary dict.
         """
-        return run_automatic_diagnosis_loop_compat(self, external_analysis_dir)
+        return run_automatic_diagnosis_loop_compat(
+            self,
+            external_analysis_dir,
+            canonical_incident_ids=canonical_incident_ids,
+            promotion_result_summary=promotion_result_summary,
+            backend_endpoint_identity=backend_endpoint_identity,
+            incident_selection_mode=incident_selection_mode,
+        )
 
     @staticmethod
     def _failure_metadata_field(

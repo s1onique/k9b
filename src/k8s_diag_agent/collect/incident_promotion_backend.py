@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from ..ui.server_incident_internal_client import SchedulerClient
+from ..ui.server_incident_internal_models import PromotionResponse
 from .incident_candidate_serialization import incident_candidates_to_dict_list
 from .incident_candidates import IncidentCandidate
 
@@ -18,6 +19,35 @@ _logger = logging.getLogger(__name__)
 
 # Backend API mode
 MODE_BACKEND_API = "backend-api"
+
+
+def _extract_canonical_ids(response: PromotionResponse | object) -> dict[str, Any]:
+    """Return canonical IDs / records from a PromotionResponse-like object.
+
+    SchedulerClient promotes return dataclass-based PromotionResponse
+    instances. We duck-attach to avoid coupling to internal-field renaming,
+    defaulting to empty values when the backend predates the
+    canonical-id propagation contract.
+    """
+    return {
+        "opened_incident_ids": list(getattr(response, "opened_incident_ids", []) or []),
+        "updated_incident_ids": list(
+            getattr(response, "updated_incident_ids", []) or []
+        ),
+        "promotion_records": [
+            dict(record)
+            for record in (getattr(response, "promotion_records", []) or [])
+        ],
+        "unique_candidate_count": int(
+            getattr(response, "unique_candidate_count", 0) or 0
+        ),
+        "promotion_scan_scope": str(
+            getattr(response, "promotion_scan_scope", "") or ""
+        ),
+        "incident_access_mode": str(
+            getattr(response, "incident_access_mode", "backend") or "backend"
+        ),
+    }
 
 
 def promote_via_backend_api(
@@ -33,8 +63,10 @@ def promote_via_backend_api(
         snapshot_bundle_id: Optional snapshot bundle ID
 
     Returns:
-        Dict with promotion counts from backend: ok, scanned, firing, opened_incidents,
-        updated_incidents, skipped_duplicates, errors, error_messages
+        Dict with promotion counts from backend plus per-canonical-incident
+        IDs and records: ok, scanned, firing, opened_incidents,
+        updated_incidents, skipped_duplicates, errors, error_messages,
+        opened_incident_ids, updated_incident_ids, promotion_records.
     """
     import os
 
@@ -53,6 +85,12 @@ def promote_via_backend_api(
             "error_messages": [
                 "Backend API configuration incomplete: missing backend_url or internal_api_token"
             ],
+            "opened_incident_ids": [],
+            "updated_incident_ids": [],
+            "promotion_records": [],
+            "unique_candidate_count": 0,
+            "promotion_scan_scope": "",
+            "incident_access_mode": "backend",
         }
 
     client = SchedulerClient(base_url=backend_url, token=internal_api_token)
@@ -68,6 +106,7 @@ def promote_via_backend_api(
             snapshot_bundle_id=snapshot_bundle_id,
         )
 
+        canonical = _extract_canonical_ids(response)
         return {
             "ok": response.ok,
             "scanned": response.scanned,
@@ -77,6 +116,7 @@ def promote_via_backend_api(
             "skipped_duplicates": response.skipped_duplicates,
             "errors": response.errors,
             "error_messages": list(response.error_messages),
+            **canonical,
         }
     except Exception as exc:
         _logger.exception("Backend API promotion failed")
@@ -89,6 +129,12 @@ def promote_via_backend_api(
             "skipped_duplicates": 0,
             "errors": 1,
             "error_messages": [str(exc)],
+            "opened_incident_ids": [],
+            "updated_incident_ids": [],
+            "promotion_records": [],
+            "unique_candidate_count": 0,
+            "promotion_scan_scope": "",
+            "incident_access_mode": "backend",
         }
 
 
@@ -100,7 +146,10 @@ def promote_alert_signals_via_backend_api(
     """Promote alert signal candidates via backend internal API.
 
     This function posts to the /promote-alert-signals endpoint which is
-    optimized for alert signal processing.
+    optimized for alert signal processing. The returned dict exposes the
+    canonical backend ``incident_id`` for every opened/updated candidate
+    so the scheduler can feed those IDs directly into automatic diagnosis
+    without re-deriving them from label values.
 
     Args:
         candidates: List of alert signal candidates to promote
@@ -108,8 +157,7 @@ def promote_alert_signals_via_backend_api(
         snapshot_bundle_id: Optional snapshot bundle ID
 
     Returns:
-        Dict with promotion counts from backend: ok, scanned, firing, opened_incidents,
-        updated_incidents, skipped_duplicates, errors, error_messages
+        Dict with promotion counts and per-canonical-incident IDs.
     """
     import os
 
@@ -128,6 +176,12 @@ def promote_alert_signals_via_backend_api(
             "error_messages": [
                 "Backend API configuration incomplete: missing backend_url or internal_api_token"
             ],
+            "opened_incident_ids": [],
+            "updated_incident_ids": [],
+            "promotion_records": [],
+            "unique_candidate_count": 0,
+            "promotion_scan_scope": "",
+            "incident_access_mode": "backend",
         }
 
     client = SchedulerClient(base_url=backend_url, token=internal_api_token)
@@ -143,6 +197,7 @@ def promote_alert_signals_via_backend_api(
             snapshot_bundle_id=snapshot_bundle_id,
         )
 
+        canonical = _extract_canonical_ids(response)
         return {
             "ok": response.ok,
             "scanned": response.scanned,
@@ -152,6 +207,7 @@ def promote_alert_signals_via_backend_api(
             "skipped_duplicates": response.skipped_duplicates,
             "errors": response.errors,
             "error_messages": list(response.error_messages),
+            **canonical,
         }
     except Exception as exc:
         _logger.exception("Backend API alert signal promotion failed")
@@ -164,4 +220,10 @@ def promote_alert_signals_via_backend_api(
             "skipped_duplicates": 0,
             "errors": 1,
             "error_messages": [str(exc)],
+            "opened_incident_ids": [],
+            "updated_incident_ids": [],
+            "promotion_records": [],
+            "unique_candidate_count": 0,
+            "promotion_scan_scope": "",
+            "incident_access_mode": "backend",
         }

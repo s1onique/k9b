@@ -200,11 +200,11 @@ class TestSQLiteWriteContextEventAppend(TestCase):
     def test_context_append_event_updates_projection(self) -> None:
         """Test that append_event through context updates the projection."""
         store = SQLiteIncidentStore(self._db_path)
-        observed_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
+        first_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
 
         # First, promote to create an incident
         candidate = make_candidate(name="test-pod")
-        incidents = store.promote_candidates([candidate], observed_at)
+        incidents = store.promote_candidates([candidate], first_at)
         self.assertEqual(len(incidents), 1)
         incident_id = incidents[0].incident_id
 
@@ -212,8 +212,13 @@ class TestSQLiteWriteContextEventAppend(TestCase):
         initial_events = store.get_incident_events(incident_id)
         initial_count = len(initial_events)
 
-        # Promote again to trigger a SIGNAL_OBSERVED event
-        store.promote_candidates([candidate], observed_at)
+        # Promote again with a later observed_at so the truthful
+        # duplicate detection (no-op on identical signals) does NOT
+        # suppress the SIGNAL_OBSERVED event. R4 raises the contract
+        # that duplicate detection only fires when the merge would
+        # produce no observable change.
+        later_at = datetime(2024, 1, 1, 12, 5, 0, tzinfo=UTC)
+        store.promote_candidates([candidate], later_at)
 
         # Verify event was added
         events = store.get_incident_events(incident_id)

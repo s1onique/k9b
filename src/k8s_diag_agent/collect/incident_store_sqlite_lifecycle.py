@@ -10,6 +10,12 @@ These methods use SQLiteWriteContext to encapsulate write authority:
 - Cache access goes through ctx.get_cached_incident() and ctx.put_cached_incident()
 
 The store provides _write_context() context manager for thread-safe writes.
+
+R3 contract: ``promote_candidates_with_records_impl`` is the typed
+boundary for SQLite-backed promotion. It returns typed
+``PromotionRecord`` values alongside the resulting ``Incident``
+snapshots, distinguishing real no-op duplicates (no signal change)
+from genuine ``updated`` outcomes.
 """
 
 from __future__ import annotations
@@ -24,12 +30,19 @@ from .incident_bundle_promotion import (
 )
 from .incident_candidates import IncidentCandidate
 from .incident_evidence import ArtifactId, EvidenceLink, EvidenceRole
+from .incident_identity_hardening import (
+    PROMOTION_OUTCOME_OPENED,
+    PROMOTION_OUTCOME_SKIPPED_DUPLICATE,
+    PROMOTION_OUTCOME_UPDATED,
+    PromotionRecord,
+)
 from .incident_lifecycle import (
     Incident,
     incident_id_from_candidate,
     merge_candidate_into_incident,
     open_incident_from_candidate,
 )
+from .incident_store_promotion_helpers import PromotionOutcome
 from .incident_store_sqlite_events import (
     IncidentEventActor,
     IncidentEventType,
@@ -41,50 +54,91 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
-def promote_candidates_impl(
+def promote_candidates_with_records_impl(
     store: SQLiteIncidentStore,
     candidates: list[IncidentCandidate] | tuple[IncidentCandidate, ...],
     observed_at: datetime,
     snapshot_bundle_id: str | None = None,
-) -> tuple[Incident, ...]:
-    """Promote candidates to incidents with event sourcing.
+) -> list[PromotionOutcome]:
+    """Typed SQLite promotion boundary returning ``PromotionOutcome``.
 
-    This implementation uses the store's _write_context() to ensure
-    thread-safe writes. The write context owns:
-    - Event append authority
-    - Cache read/write authority
-    - Snapshot helper access
+    R3 contract: this is the canonical typed boundary for SQLite-backed
+    promotion. It uses ``store._write_context()`` so every event append
+    and projection update goes through the existing SQLite write context
+    (append-only events, canonical projector, atomic transaction). It
+    does NOT mutate ``store._incidents`` directly from a generic helper.
+
+    Duplicate outcomes are truthful: a candidate whose signals are an
+    exact superset of the existing signals produces
+    ``PROMOTION_OUTCOME_SKIPPED_DUPLICATE``; a candidate whose signals
+    actually change the incident produces ``PROMOTION_OUTCOME_UPDATED``.
+    Existing-incident fall-through is no longer classified as ``updated``
+    for genuine duplicates.
     """
     with store._write_context() as ctx:
-        updated_incidents: dict[str, Incident] = {}
-
+        outcomes: list[PromotionOutcome] = []
         for candidate in candidates:
             incident_id = incident_id_from_candidate(candidate)
+            candidate_signatures = {
+                (s.source, s.reason, s.message)
+                for s in candidate.signals
+            }
 
             if ctx.has_incident(incident_id):
-                # Merge into existing
                 existing = ctx.get_cached_incident(incident_id)
                 if existing is None:
-                    # Should not happen if has_incident is True, but be safe
+                    continue
+
+                existing_signatures = {
+                    (s.source, s.reason, s.message)
+                    for s in existing.signals
+                }
+                # Truthful duplicate detection: only classify as
+                # ``updated`` when the merge would actually change state
+                # (new signals, different last_observed_at, etc.).
+                new_signatures = candidate_signatures - existing_signatures
+                is_no_op_duplicate = (
+                    not new_signatures
+                    and (snapshot_bundle_id is None)
+                    and existing.last_observed_at >= observed_at
+                )
+
+                if is_no_op_duplicate:
+                    # No state change; emit no event and report a
+                    # truthful skipped-duplicate outcome.
+                    outcomes.append(
+                        PromotionOutcome(
+                            record=PromotionRecord(
+                                source_candidate_id=candidate.candidate_id,
+                                canonical_incident_id=existing.incident_id,
+                                promotion_outcome=PROMOTION_OUTCOME_SKIPPED_DUPLICATE,
+                            ),
+                            incident=ctx.snapshot_incident(existing),
+                        )
+                    )
                     continue
 
                 if snapshot_bundle_id is not None:
-                    updated = merge_candidate_into_incident_with_bundle(existing, candidate, observed_at, snapshot_bundle_id)
+                    updated = merge_candidate_into_incident_with_bundle(
+                        existing, candidate, observed_at, snapshot_bundle_id
+                    )
                 else:
-                    updated = merge_candidate_into_incident(existing, candidate, observed_at)
+                    updated = merge_candidate_into_incident(
+                        existing, candidate, observed_at
+                    )
 
-                # Create event for signal merge
                 payload = {
-                    "signal_count": len(candidate.signals),
+                    "signal_count": len(updated.signals),
                     "candidate_id": candidate.candidate_id,
                     "last_observed_at": observed_at.isoformat(),
                     "signals": [s.to_dict() for s in updated.signals],
                 }
-
                 if snapshot_bundle_id is not None:
                     payload["bundle_id"] = snapshot_bundle_id
                     payload["status"] = updated.status.value
-                    payload["evidence_links"] = [e.to_dict() for e in updated.evidence_links]
+                    payload["evidence_links"] = [
+                        e.to_dict() for e in updated.evidence_links
+                    ]
                     ctx.append_event(
                         incident_id=incident_id,
                         event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
@@ -100,68 +154,139 @@ def promote_candidates_impl(
                         payload=payload,
                         occurred_at=observed_at,
                     )
-
                 ctx.put_cached_incident(updated)
-                updated_incidents[incident_id] = updated
+                outcomes.append(
+                    PromotionOutcome(
+                        record=PromotionRecord(
+                            source_candidate_id=candidate.candidate_id,
+                            canonical_incident_id=updated.incident_id,
+                            promotion_outcome=PROMOTION_OUTCOME_UPDATED,
+                        ),
+                        incident=ctx.snapshot_incident(updated),
+                    )
+                )
+                continue
+
+            # Open new incident
+            if snapshot_bundle_id is not None:
+                new_incident = open_incident_from_candidate_with_bundle(
+                    candidate, observed_at, snapshot_bundle_id
+                )
             else:
-                # Open new incident
-                if snapshot_bundle_id is not None:
-                    new_incident = open_incident_from_candidate_with_bundle(candidate, observed_at, snapshot_bundle_id)
-                else:
-                    new_incident = open_incident_from_candidate(candidate, observed_at)
-
-                # Create OPENED event (ALWAYS first event for correct projection)
-                opened_payload = {
-                    "source_candidate_id": candidate.candidate_id,
-                    "namespace": candidate.namespace,
-                    "object_kind": candidate.object_kind.value,
-                    "object_name": candidate.object_name,
-                    "raw_object_kind": candidate.raw_object_kind,
-                    "candidate_class": candidate.candidate_class.value,
-                    "severity": candidate.severity.value,
-                    "first_observed_at": observed_at.isoformat(),
-                    "last_observed_at": observed_at.isoformat(),
-                    "signals": [s.to_dict() for s in new_incident.signals],
-                    "evidence_needed": list(new_incident.evidence_needed),
-                    "signal_count": new_incident.signal_count,
-                    "evidence_count": new_incident.evidence_count,
-                    "status": "open",  # Start with OPEN status
-                }
-
-                ctx.append_event(
-                    incident_id=incident_id,
-                    event_type=IncidentEventType.OPENED,
-                    actor=IncidentEventActor.SYSTEM,
-                    payload=opened_payload,
-                    occurred_at=observed_at,
+                new_incident = open_incident_from_candidate(
+                    candidate, observed_at
                 )
 
-                # If snapshot bundle provided, also emit COLLECTING_EVIDENCE_STARTED
-                # NOTE: Each ctx.append_event() call starts its own BEGIN IMMEDIATE transaction
-                # and commits independently. These are two durable events, not one atomic op.
-                if snapshot_bundle_id is not None:
-                    collecting_payload = {
-                        "bundle_id": snapshot_bundle_id,
-                        "status": "collecting_evidence",
-                        "last_observed_at": observed_at.isoformat(),
-                        "evidence_links": [e.to_dict() for e in new_incident.evidence_links],
-                        "evidence_count": new_incident.evidence_count,
-                        "latest_snapshot_bundle_id": snapshot_bundle_id,
-                    }
+            opened_payload = {
+                "source_candidate_id": candidate.candidate_id,
+                "namespace": candidate.namespace,
+                "object_kind": candidate.object_kind.value,
+                "object_name": candidate.object_name,
+                "raw_object_kind": candidate.raw_object_kind,
+                "candidate_class": candidate.candidate_class.value,
+                "severity": candidate.severity.value,
+                "first_observed_at": observed_at.isoformat(),
+                "last_observed_at": observed_at.isoformat(),
+                "signals": [s.to_dict() for s in new_incident.signals],
+                "evidence_needed": list(new_incident.evidence_needed),
+                "signal_count": new_incident.signal_count,
+                "evidence_count": new_incident.evidence_count,
+                "status": "open",
+            }
+            if snapshot_bundle_id is not None:
+                collecting_payload = {
+                    "bundle_id": snapshot_bundle_id,
+                    "status": "collecting_evidence",
+                    "last_observed_at": observed_at.isoformat(),
+                    "evidence_links": [
+                        e.to_dict() for e in new_incident.evidence_links
+                    ],
+                    "evidence_count": new_incident.evidence_count,
+                    "latest_snapshot_bundle_id": snapshot_bundle_id,
+                }
+                # R4 task 7: OPENED and COLLECTING_EVIDENCE_STARTED
+                # MUST commit atomically when a snapshot bundle is in
+                # scope. We use ``ctx.append_events_atomic`` so the
+                # two events share one transaction with their
+                # projection updates.
+                from .incident_store_sqlite_events_writer import EventAppendSpec
 
-                    ctx.append_event(
-                        incident_id=incident_id,
-                        event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
-                        actor=IncidentEventActor.SYSTEM,
-                        payload=collecting_payload,
-                        occurred_at=observed_at,
+                ctx.append_events_atomic(
+                    (
+                        EventAppendSpec(
+                            incident_id=incident_id,
+                            event_type=IncidentEventType.OPENED,
+                            actor=IncidentEventActor.SYSTEM,
+                            payload=opened_payload,
+                            occurred_at=observed_at,
+                        ),
+                        EventAppendSpec(
+                            incident_id=incident_id,
+                            event_type=IncidentEventType.COLLECTING_EVIDENCE_STARTED,
+                            actor=IncidentEventActor.SYSTEM,
+                            payload=collecting_payload,
+                            occurred_at=observed_at,
+                        ),
                     )
+                )
+            else:
+                # No bundle: only the OPENED event is required. We
+                # still go through the single-event atomic helper for
+                # consistency with the bundled path.
+                from .incident_store_sqlite_events_writer import EventAppendSpec
 
-                ctx.put_cached_incident(new_incident)
-                updated_incidents[incident_id] = new_incident
+                ctx.append_events_atomic(
+                    (
+                        EventAppendSpec(
+                            incident_id=incident_id,
+                            event_type=IncidentEventType.OPENED,
+                            actor=IncidentEventActor.SYSTEM,
+                            payload=opened_payload,
+                            occurred_at=observed_at,
+                        ),
+                    )
+                )
+            ctx.put_cached_incident(new_incident)
+            outcomes.append(
+                PromotionOutcome(
+                    record=PromotionRecord(
+                        source_candidate_id=candidate.candidate_id,
+                        canonical_incident_id=new_incident.incident_id,
+                        promotion_outcome=PROMOTION_OUTCOME_OPENED,
+                    ),
+                    incident=ctx.snapshot_incident(new_incident),
+                )
+            )
+        return outcomes
 
-        all_updated = [ctx.snapshot_incident(i) for i in updated_incidents.values()]
-        return tuple(sorted(all_updated, key=lambda i: i.incident_id))
+
+def promote_candidates_impl(
+    store: SQLiteIncidentStore,
+    candidates: list[IncidentCandidate] | tuple[IncidentCandidate, ...],
+    observed_at: datetime,
+    snapshot_bundle_id: str | None = None,
+) -> tuple[Incident, ...]:
+    """Promote candidates to incidents with event sourcing.
+
+    This implementation uses the store's _write_context() to ensure
+    thread-safe writes. The write context owns:
+    - Event append authority
+    - Cache read/write authority
+    - Snapshot helper access
+
+    R3: this is now a thin wrapper around
+    ``promote_candidates_with_records_impl``. The typed path is the
+    authoritative boundary; this entry point exists for callers that
+    only need the resulting ``Incident`` snapshots.
+    """
+    outcomes = promote_candidates_with_records_impl(
+        store,
+        candidates,
+        observed_at,
+        snapshot_bundle_id,
+    )
+    all_updated = [outcome.incident for outcome in outcomes if outcome.incident is not None]
+    return tuple(sorted(all_updated, key=lambda i: i.incident_id))
 
 
 def add_incident_impl(
@@ -373,6 +498,7 @@ def mark_diagnosis_loop_failed_impl(
 
 __all__ = [
     "promote_candidates_impl",
+    "promote_candidates_with_records_impl",
     "add_incident_impl",
     "attach_evidence_impl",
     "mark_diagnosis_loop_started_impl",

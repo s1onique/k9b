@@ -197,23 +197,50 @@ def handle_promote_alert_signals(handler: HealthUIRequestHandler) -> None:
 
         store = get_incident_store()
 
-        # Track which incidents existed before promotion
-        existing_ids = set(store._incidents.keys())
-
-        promoted = store.promote_candidates(
+        # Use the typed store-owned promotion boundary. This avoids
+        # ``zip(candidates, promoted, strict=False)`` reconstruction and
+        # returns ``PromotionRecord`` values directly from the same
+        # transaction that performs the promotion. Each outcome carries
+        # both the ``PromotionRecord`` (with the authoritative
+        # canonical ``incident_id``) and the resulting ``Incident``
+        # snapshot, so the per-candidate mapping is preserved.
+        outcomes = store.promote_candidates_with_records(
             candidates=incident_candidates,
             observed_at=observed_at,
             snapshot_bundle_id=request.snapshot_bundle_id,
         )
 
-        # Count opened vs updated based on pre-existing incidents
+        # Aggregate opened/updated counts directly from the typed
+        # records. We no longer reconstruct the mapping from separate
+        # candidate and incident collections.
         opened_count = 0
         updated_count = 0
-        for incident in promoted:
-            if incident.incident_id in existing_ids:
-                updated_count += 1
-            else:
+        skipped_duplicate_count = 0
+        opened_incident_ids: list[str] = []
+        updated_incident_ids: list[str] = []
+        promotion_records: list[dict[str, str | None]] = []
+        for outcome in outcomes:
+            record = outcome.record
+            promotion_records.append(record.to_dict())
+            if record.canonical_incident_id is None:
+                continue
+            from ..collect.incident_identity_hardening import (
+                PROMOTION_OUTCOME_OPENED,
+                PROMOTION_OUTCOME_SKIPPED_DUPLICATE,
+                PROMOTION_OUTCOME_UPDATED,
+            )
+            if record.promotion_outcome == PROMOTION_OUTCOME_OPENED:
                 opened_count += 1
+                opened_incident_ids.append(record.canonical_incident_id)
+            elif record.promotion_outcome == PROMOTION_OUTCOME_UPDATED:
+                updated_count += 1
+                updated_incident_ids.append(record.canonical_incident_id)
+            elif record.promotion_outcome == PROMOTION_OUTCOME_SKIPPED_DUPLICATE:
+                skipped_duplicate_count += 1
+
+        unique_candidate_count = len(
+            {c.candidate_id for c in incident_candidates}
+        )
 
         response = PromotionResponse(
             ok=True,
@@ -221,8 +248,16 @@ def handle_promote_alert_signals(handler: HealthUIRequestHandler) -> None:
             firing=len(incident_candidates),
             opened_incidents=opened_count,
             updated_incidents=updated_count,
-            skipped_duplicates=0,
+            skipped_duplicates=skipped_duplicate_count,
             errors=0,
+            opened_incident_ids=opened_incident_ids,
+            updated_incident_ids=updated_incident_ids,
+            promotion_records=promotion_records,
+            unique_candidate_count=unique_candidate_count,
+            promotion_scan_scope=(
+                f"internal_api_alert_signals:bundle={request.snapshot_bundle_id or 'none'}"
+            ),
+            incident_access_mode="backend",
         )
 
         _logger.info(
@@ -233,6 +268,11 @@ def handle_promote_alert_signals(handler: HealthUIRequestHandler) -> None:
                 "scanned": response.scanned,
                 "opened_incidents": response.opened_incidents,
                 "updated_incidents": response.updated_incidents,
+                "opened_incident_ids": list(response.opened_incident_ids),
+                "updated_incident_ids": list(response.updated_incident_ids),
+                "unique_candidate_count": response.unique_candidate_count,
+                "promotion_scan_scope": response.promotion_scan_scope,
+                "incident_access_mode": response.incident_access_mode,
                 "store_kind": getattr(store, "store_kind", "unknown"),
             },
         )
@@ -328,31 +368,66 @@ def handle_promote_candidates(handler: HealthUIRequestHandler) -> None:
 
         store = get_incident_store()
 
-        # Track which incidents existed before promotion
-        existing_ids = set(store._incidents.keys())
-
-        promoted = store.promote_candidates(
+        # Use the typed store-owned promotion boundary. This avoids
+        # ``zip(candidates, promoted, strict=False)`` reconstruction and
+        # returns ``PromotionRecord`` values directly from the same
+        # transaction that performs the promotion. Each outcome carries
+        # both the ``PromotionRecord`` (with the authoritative
+        # canonical ``incident_id``) and the resulting ``Incident``
+        # snapshot, so the per-candidate mapping is preserved.
+        outcomes = store.promote_candidates_with_records(
             candidates=incident_candidates,
             observed_at=observed_at,
             snapshot_bundle_id=request.snapshot_bundle_id,
         )
 
-        # Count opened vs updated based on pre-existing incidents
+        # Aggregate opened/updated counts directly from the typed
+        # records. We no longer reconstruct the mapping from separate
+        # candidate and incident collections.
         opened_count = 0
         updated_count = 0
-        for incident in promoted:
-            if incident.incident_id in existing_ids:
-                updated_count += 1
-            else:
+        skipped_duplicate_count = 0
+        opened_incident_ids: list[str] = []
+        updated_incident_ids: list[str] = []
+        promotion_records: list[dict[str, str | None]] = []
+        for outcome in outcomes:
+            record = outcome.record
+            promotion_records.append(record.to_dict())
+            if record.canonical_incident_id is None:
+                continue
+            from ..collect.incident_identity_hardening import (
+                PROMOTION_OUTCOME_OPENED,
+                PROMOTION_OUTCOME_SKIPPED_DUPLICATE,
+                PROMOTION_OUTCOME_UPDATED,
+            )
+            if record.promotion_outcome == PROMOTION_OUTCOME_OPENED:
                 opened_count += 1
+                opened_incident_ids.append(record.canonical_incident_id)
+            elif record.promotion_outcome == PROMOTION_OUTCOME_UPDATED:
+                updated_count += 1
+                updated_incident_ids.append(record.canonical_incident_id)
+            elif record.promotion_outcome == PROMOTION_OUTCOME_SKIPPED_DUPLICATE:
+                skipped_duplicate_count += 1
+
+        unique_candidate_count = len(
+            {c.candidate_id for c in incident_candidates}
+        )
 
         response = PromotionResponse(
             ok=True,
             scanned=len(incident_candidates),
             opened_incidents=opened_count,
             updated_incidents=updated_count,
-            skipped_duplicates=0,
+            skipped_duplicates=skipped_duplicate_count,
             errors=0,
+            opened_incident_ids=opened_incident_ids,
+            updated_incident_ids=updated_incident_ids,
+            promotion_records=promotion_records,
+            unique_candidate_count=unique_candidate_count,
+            promotion_scan_scope=(
+                f"internal_api_candidates:bundle={request.snapshot_bundle_id or 'none'}"
+            ),
+            incident_access_mode="backend",
         )
 
         _logger.info(
@@ -363,6 +438,11 @@ def handle_promote_candidates(handler: HealthUIRequestHandler) -> None:
                 "scanned": response.scanned,
                 "opened_incidents": response.opened_incidents,
                 "updated_incidents": response.updated_incidents,
+                "opened_incident_ids": list(response.opened_incident_ids),
+                "updated_incident_ids": list(response.updated_incident_ids),
+                "unique_candidate_count": response.unique_candidate_count,
+                "promotion_scan_scope": response.promotion_scan_scope,
+                "incident_access_mode": response.incident_access_mode,
                 "store_kind": getattr(store, "store_kind", "unknown"),
             },
         )

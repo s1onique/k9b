@@ -231,4 +231,36 @@ ALLOWLIST: list[tuple[str, str]] = [
     # [TEST] Incident lifecycle domain tests - comprehensive transition coverage
     ("tests/unit/domain/test_incident_lifecycle.py", "[TEST] Incident lifecycle tests - all transitions, edge cases, and immutability checks"),
 
+    # [TEST] Backend-authoritative identity regression - comprehensive contract coverage
+    ("tests/unit/test_auto_diagnosis_backend_authoritative_identity.py", "[TEST] Backend-authoritative identity regression - canonical ID propagation, lookup outcomes, AST verifier, integration"),
+
+    # [EXTRACTION] R3 narrowly justified exceptions: typed promotion boundary,
+    # SQLite typed override, IPv6 re-bracketing, batch semantics. Each file
+    # below grew as part of the R3 work and is on the staged-extraction list
+    # because the canonical-incident-identity seam is being closed end to
+    # end (typed accumulator, typed dispatcher batch, SQLite durable
+    # override). Narrowly justified pending staged extraction.
+    ("src/k8s_diag_agent/collect/incident_promotion_dispatch.py", "[EXTRACTION] Dispatcher carries PromotionBatch + typed records - staged extraction"),
+    ("src/k8s_diag_agent/collect/incident_identity_hardening.py", "[EXTRACTION] Identity hardening - bounded diagnostic shapes; staged extraction"),
+    ("src/k8s_diag_agent/collect/incident_store.py", "[EXTRACTION] Incident store - typed promotion boundary; staged extraction"),
+    ("src/k8s_diag_agent/collect/incident_store_sqlite.py", "[EXTRACTION] SQLite store - typed promotion override; staged extraction"),
+    ("src/k8s_diag_agent/health/loop_runner.py", "[EXTRACTION] Health loop runner - typed accumulator threading; staged extraction"),
+    ("src/k8s_diag_agent/health/loop_runner_execute.py", "[EXTRACTION] Health loop execute - orchestrator + batch dispatch; staged extraction"),
+    ("src/k8s_diag_agent/incident_alert_promotion.py", "[EXTRACTION] Alert promotion - canonical record propagation; staged extraction"),
+    ("tests/unit/test_incident_identity_hardening.py", "[TEST] Identity hardening tests - R3 IPv6 rendering tests added; staged extraction"),
+    # [EXTRACTION] R4 narrowly justified exceptions: validate-before-mutate
+    # accumulator, typed dispatch + reopen tests, AST verifier scripts, and
+    # SQLite append_events_atomic + lifecycle changes. Each file below grew
+    # as part of the R4 work. Narrowly justified pending staged extraction
+    # into focused modules (verification scripts, accumulator seam, SQLite
+    # batch + lifecycle helpers).
+    ("src/k8s_diag_agent/collect/incident_promotion_accumulator.py", "[EXTRACTION] Accumulator - validate-before-mutate + access-mode seam; staged extraction"),
+    ("src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle.py", "[EXTRACTION] SQLite lifecycle - typed atomic batches + reopened transactional helpers; staged extraction"),
+    ("src/k8s_diag_agent/collect/incident_store_sqlite_events_writer.py", "[EXTRACTION] SQLite event writer - explicit append_events_atomic batch boundary; staged extraction"),
+    ("src/k8s_diag_agent/collect/incident_store_sqlite_context.py", "[EXTRACTION] SQLite write context - batch event API surface; staged extraction"),
+    ("src/k8s_diag_agent/collect/incident_promotion_local.py", "[EXTRACTION] Local promotion - polymorphic store delegation contract; staged extraction"),
+    ("src/k8s_diag_agent/health/loop_alertmanager_snapshot_signals.py", "[EXTRACTION] Snapshot signals - PromotionBatch aggregate log fields; staged extraction"),
+    ("scripts/verify_promotion_batch_uniqueness.py", "[EXTRACTION] AST verifier - duplicate PromotionBatch definition guard; staged extraction"),
+    ("scripts/verify_promotion_helper_polymorphism.py", "[EXTRACTION] AST verifier - production free-helper call guard; staged extraction"),
+    ("tests/unit/test_r4_acceptance.py", "[TEST] R4 acceptance suite - 32 tests covering all 11 acceptance criteria; staged extraction"),
 ]

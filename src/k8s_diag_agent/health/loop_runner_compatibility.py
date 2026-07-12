@@ -127,6 +127,11 @@ def run_vmalert_discovery_compat(
 def run_automatic_diagnosis_loop_compat(
     runner: Any,
     external_analysis_dir: Path,
+    *,
+    canonical_incident_ids: list[str] | tuple[str, ...] | None = None,
+    promotion_result_summary: dict[str, Any] | None = None,
+    backend_endpoint_identity: dict[str, Any] | None = None,
+    incident_selection_mode: str | None = None,
 ) -> dict[str, Any]:
     """Compatibility wrapper for automatic diagnosis loop.
 
@@ -137,6 +142,21 @@ def run_automatic_diagnosis_loop_compat(
     Args:
         runner: HealthLoopRunner instance
         external_analysis_dir: Path to the external-analysis directory
+        canonical_incident_ids: Optional explicit canonical ``incident_id``
+            values from a recent promotion. When non-empty, the collector
+            is invoked in ``incident_ids`` mode and the dispatcher MUST
+            NOT synthesize IDs from candidate attributes.
+        promotion_result_summary: Optional structured promotion-result
+            metadata to attach to the auto-diagnosis summary.
+        backend_endpoint_identity: Optional backend endpoint identity (no
+            credentials) to forward to auto-diagnosis for diagnostics.
+        incident_selection_mode: Optional R7 selection mode. When
+            ``"blocked"`` the collector emits a typed
+            ``automatic_diagnosis_blocked`` event and returns a bounded
+            payload without touching the underlying evidence
+            collection. When ``"explicit_incident_ids"`` or
+            ``"store_scan"`` the collector invokes the underlying
+            collector in the matching mode.
 
     Returns:
         Bounded result summary dict with:
@@ -157,6 +177,10 @@ def run_automatic_diagnosis_loop_compat(
         external_analysis_dir=external_analysis_dir,
         log_event_fn=runner._log_event,
         scheduler_run_id=runner.run_id,
+        canonical_incident_ids=canonical_incident_ids,
+        promotion_result_summary=promotion_result_summary,
+        backend_endpoint_identity=backend_endpoint_identity,
+        incident_selection_mode=incident_selection_mode,
     )
 
 

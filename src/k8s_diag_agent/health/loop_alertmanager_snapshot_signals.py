@@ -6,6 +6,17 @@ domain objects and their promotion to incidents.
 This module is intentionally isolated from collection logic to keep the
 ingestion path testable independently.
 
+R1 hardening:
+
+* The promotion dispatcher returns typed ``PromotionRecord`` values via
+  ``promote_alert_signals_for_accumulator``. We translate those records
+  directly into ``RunPromotionAccumulator.add_record`` calls so we never
+  smuggle ``IncidentPromotionResult`` instances through a heterogeneous
+  ``dict``.
+* The accumulated records are observable to the rest of the run via
+  the same accumulator instance, replacing the legacy
+  ``directories["__last_promotion_result__"]`` smuggling.
+
 Promotion routing:
 - K9B_INCIDENT_PROMOTION_MODE=local: Direct store promotion (memory/file backends)
 - K9B_INCIDENT_PROMOTION_MODE=backend-api: POST to backend internal API (sqlite backend)
@@ -26,6 +37,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ..collect.incident_promotion_accumulator import RunPromotionAccumulator
     from ..collect.incident_store import IncidentStore
     from ..external_analysis.alertmanager_discovery import AlertmanagerSource
     from ..external_analysis.alertmanager_snapshot import AlertmanagerSnapshot
@@ -41,6 +53,7 @@ def _ingest_alert_signals(
     run_id: str,
     run_label: str,
     effective_cluster_context: str | None,
+    promotion_accumulator: RunPromotionAccumulator | None = None,
 ) -> None:
     """Ingest Alertmanager alerts as AlertSignal artifacts and promote to incidents.
 
@@ -48,6 +61,13 @@ def _ingest_alert_signals(
     1. Converts NormalizedAlert objects to AlertSignal domain model
     2. Persists alert signal artifacts for idempotency
     3. Promotes firing alerts into IncidentStore when available
+
+    R1 contract:
+
+    * Pass ``promotion_accumulator`` (typed run-scoped handoff) so the
+      canonical incident IDs propagate to the diagnosis dispatcher.
+    * Translates the dispatcher's typed ``PromotionRecord`` values
+      directly into ``RunPromotionAccumulator.add_record`` calls.
 
     Args:
         snapshot: The Alertmanager snapshot with normalized alerts
@@ -59,6 +79,10 @@ def _ingest_alert_signals(
         run_id: Run identifier
         run_label: Run label
         effective_cluster_context: Cluster context for logging
+        promotion_accumulator: Typed run-scoped accumulator that captures
+            canonical incident IDs for the diagnosis dispatcher. When
+            ``None``, the scheduler still promotes but the canonical
+            incident IDs are NOT propagated to automatic diagnosis.
     """
     from ..incident_alert_signal_snapshot_adapter import (
         adapt_snapshot_to_alert_signals,
@@ -109,7 +133,7 @@ def _ingest_alert_signals(
     # Persist alert signals
     if signals:
         root = directories["root"]
-        persist_result, written_signals = persist_alert_signals(
+        persist_result, _written_signals = persist_alert_signals(
             signals=signals,
             root=root,
             raw_payload_artifact_id=raw_payload_artifact_id,
@@ -129,28 +153,48 @@ def _ingest_alert_signals(
             cluster_context=effective_cluster_context,
         )
 
-        # Promote firing signals to incidents
-        # The dispatcher selects the appropriate path (local vs backend-api) based on config.
-        # In backend-api mode, we scan artifacts and POST to backend internal API.
-        # In local mode, we use the provided incident_store directly.
+        # Promote firing signals to incidents via the dispatcher.
+        # The dispatcher selects the appropriate path (local vs
+        # backend-api) based on configuration. In backend-api mode the
+        # scheduler posts to backend internal API; in local mode it uses
+        # the process-local store directly.
         try:
-            # Import dispatcher at runtime to avoid circular imports
+            # Import dispatcher at runtime to avoid circular imports.
+            # ``promote_alert_signals_for_accumulator`` returns typed
+            # ``PromotionRecord`` values which we copy straight into the
+            # accumulator.
             from ..collect.incident_promotion_dispatch import (
-                promote_alert_signals_from_artifacts,
+                promote_alert_signals_for_accumulator,
             )
 
-            # Use the dispatcher which handles both local and backend-api modes
-            promotion_result = promote_alert_signals_from_artifacts(
+            # R3: the dispatcher hands us a typed ``PromotionBatch``. We
+            # consume its aggregates verbatim and never infer
+            # ``promotion_mode`` from whether records are empty.
+            batch = promote_alert_signals_for_accumulator(
                 runs_dir=root,
+                accumulator=promotion_accumulator,
                 snapshot_bundle_id=None,
             )
 
-            # Map dispatcher result to log format - use actual promotion_mode
+            # R4 task 5: use the batch aggregates VERBATIM. The batch
+            # is the dispatcher-reported truth source; we do NOT
+            # reconstruct scanned/firing/opened/updated/skipped_duplicates
+            # /errors from the typed record list (which can contain
+            # ``<aggregate>`` synthesized entries) or from persisted
+            # artifact counts.
+            promotion_mode = batch.promotion_mode
             log_event_name = (
                 "alert-signals-promoted-via-backend"
-                if promotion_result.promotion_mode == "backend-api"
+                if promotion_mode == "backend-api"
                 else "alert-signals-promoted"
             )
+
+            # Bounded error messages from the batch; the dispatcher
+            # already enforces bounded diagnostics, but we cap here
+            # defensively to keep the log payload bounded.
+            error_messages = list(batch.error_messages)
+            bounded_error_messages = error_messages[:5]
+
             log_event(
                 "alertmanager-snapshot",
                 "INFO",
@@ -159,12 +203,20 @@ def _ingest_alert_signals(
                 run_id=run_id,
                 run_label=run_label,
                 source_identity=source_instance,
-                scanned=promotion_result.scanned,
-                firing=promotion_result.firing,
-                opened_incidents=promotion_result.opened_incidents,
-                updated_incidents=promotion_result.updated_incidents,
-                skipped_duplicates=promotion_result.skipped_duplicates,
-                errors=promotion_result.errors,
+                scanned=batch.scanned,
+                firing=batch.firing,
+                opened_incidents=batch.opened_incidents,
+                updated_incidents=batch.updated_incidents,
+                skipped_duplicates=batch.skipped_duplicates,
+                errors=batch.errors,
+                error_messages=bounded_error_messages,
+                opened_incident_ids=list(batch.opened_incident_ids),
+                updated_incident_ids=list(batch.updated_incident_ids),
+                unique_candidate_count=batch.unique_candidate_count,
+                promotion_scan_scope=batch.promotion_scan_scope,
+                incident_access_mode=batch.incident_access_mode,
+                promotion_mode=batch.promotion_mode,
+                promotion_record_count=len(batch.promotion_records),
                 cluster_context=effective_cluster_context,
             )
         except Exception as exc:
