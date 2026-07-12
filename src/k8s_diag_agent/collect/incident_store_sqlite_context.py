@@ -23,7 +23,9 @@ Usage:
 
 from __future__ import annotations
 
-from datetime import datetime
+import json
+import sqlite3
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from .incident_lifecycle import Incident
@@ -309,6 +311,220 @@ class SQLiteWriteContext:
         return _rebuild(self._conn)
 
     # -------------------------------------------------------------------------
+    # Diagnosis-loop Lifecycle Authority (R3 canonical atomic operation)
+    # -------------------------------------------------------------------------
+
+    def apply_diagnosis_lifecycle_idempotently(
+        self,
+        *,
+        transition: str,
+        incident_id: str,
+        run_id: str | None,
+        collector_run_id: str,
+        diagnosis_run_id: str | None,
+        fingerprint: str,
+        occurred_at: datetime,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Atomically apply a diagnosis-loop lifecycle transition.
+
+        R3 canonical path for the internal
+        ``diagnosis-loop-transition`` endpoint. This method owns the
+        full ``lookup → hash-chained event append → canonical
+        projection update → idempotency record insert`` sequence in
+        one ``BEGIN IMMEDIATE`` transaction, then commits and
+        refreshes the in-memory cache from the canonical projector.
+
+        Returns one of:
+
+        * ``{"outcome": "applied", "idempotent_replay": False,
+            "incident": Incident | None}``
+        * ``{"outcome": "applied", "idempotent_replay": True}``
+        * ``{"outcome": "replay_mismatch"}``
+        * ``{"outcome": "incident_not_found"}``
+
+        The caller is responsible for translating any raised
+        exception into the ``persistence_failed`` outcome.
+
+        Raises:
+            ContextClosedError: If the context has been closed.
+            ValueError: If ``transition`` is not one of
+                ``started`` / ``failed`` / ``completed``.
+            sqlite3.DatabaseError: On any SQL failure (the
+                transaction is rolled back before the exception
+                propagates).
+        """
+        self._ensure_open()
+        from .incident_store_sqlite_events_writer import (
+            EventAppendSpec,
+            _append_event_in_transaction,
+        )
+
+        if transition not in _DIAGNOSIS_LIFECYCLE_EVENT_TYPE:
+            raise ValueError(f"unsupported transition: {transition!r}")
+        event_type = _DIAGNOSIS_LIFECYCLE_EVENT_TYPE[transition]
+
+        event_payload = _build_diagnosis_lifecycle_payload(
+            transition=transition,
+            run_id=run_id,
+            collector_run_id=collector_run_id,
+            payload=payload,
+        )
+
+        cursor = self._conn.cursor()
+        cursor.execute("BEGIN IMMEDIATE")
+        try:
+            # 1. Idempotency lookup BEFORE applying the transition.
+            existing_fp, _applied_at = _select_lifecycle_idempotency_row(
+                cursor,
+                incident_id=incident_id,
+                transition=transition,
+                collector_run_id=collector_run_id,
+                diagnosis_run_id=diagnosis_run_id,
+            )
+            if existing_fp is not None:
+                if existing_fp != fingerprint:
+                    self._conn.rollback()
+                    return {"outcome": "replay_mismatch"}
+                # Commit the (empty) write transaction before refreshing
+                # the cache so the local view matches the durable state
+                # observed by any other process that runs against the
+                # same database file.
+                self._conn.commit()
+                # R4-3: idempotent replay must heal this process's
+                # in-memory cache so a stale local view cannot overrule
+                # the canonical projection. ``BEGIN IMMEDIATE`` only
+                # serializes writers across processes; it cannot make
+                # ``self._cache`` authoritative. Refresh from the
+                # projection row that the previous apply already
+                # wrote so this process sees the same lifecycle state
+                # as the durable record.
+                self._refresh_cache_from_projection(incident_id)
+                return {"outcome": "applied", "idempotent_replay": True}
+
+            # 2. Confirm the incident exists in the canonical
+            #    projection, NOT in the process-local cache.
+            #
+            #    R4-1 contract: ``self._cache`` is a per-process
+            #    Python dict; it cannot prove absence across
+            #    processes. A request landing on a store whose cache
+            #    was loaded before another process promoted the
+            #    incident would otherwise short-circuit to
+            #    ``incident_not_found`` and leave the durable
+            #    projection untouched, silently dropping the
+            #    lifecycle request.
+            #
+            #    ``SELECT 1`` against ``incident_current`` runs in
+            #    the same ``BEGIN IMMEDIATE`` transaction so the
+            #    existence check observes the same write-time view
+            #    as the event/projection/idempotency writes that
+            #    follow.
+            cursor.execute(
+                """
+                SELECT 1
+                FROM incident_current
+                WHERE incident_id = ?
+                """,
+                (incident_id,),
+            )
+            if cursor.fetchone() is None:
+                self._conn.rollback()
+                return {"outcome": "incident_not_found"}
+
+            # 3. Append the canonical event with the hash chain.
+            #    ``_append_event_in_transaction`` does NOT open its
+            #    own ``BEGIN IMMEDIATE``; it reuses our cursor so
+            #    the event insert + projection update commit
+            #    atomically with the idempotency record below.
+            _append_event_in_transaction(
+                cursor,
+                EventAppendSpec(
+                    incident_id=incident_id,
+                    event_type=event_type,
+                    actor=IncidentEventActor.SYSTEM,
+                    payload=event_payload,
+                    occurred_at=occurred_at,
+                ),
+            )
+
+            # 4. Insert the idempotency record. A fault here MUST
+            #    roll back the event insert above. The helper is a
+            #    module-level function so the rollback-on-idempotency
+            #    failure test can patch it cleanly.
+            _insert_lifecycle_idempotency_row(
+                cursor,
+                incident_id=incident_id,
+                transition=transition,
+                collector_run_id=collector_run_id,
+                diagnosis_run_id=diagnosis_run_id,
+                fingerprint=fingerprint,
+                occurred_at=occurred_at,
+            )
+
+            # 5. Commit. After this point the event + projection +
+            #    idempotency row are durable.
+            self._conn.commit()
+        except Exception:
+            try:
+                self._conn.rollback()
+            except sqlite3.Error:
+                pass
+            raise
+
+        # 6. Refresh the in-memory cache from the canonical
+        #    projector row. The previous lifecycle write methods
+        #    refreshed the cache directly, but the new canonical
+        #    path lets the projector (the source of truth for the
+        #    cache) own the update so the in-memory aggregate and
+        #    the on-disk ``incident_current`` row cannot diverge.
+        self._refresh_cache_from_projection(incident_id)
+
+        return {
+            "outcome": "applied",
+            "idempotent_replay": False,
+            "incident": self._cache.get(incident_id),
+        }
+
+    def _refresh_cache_from_projection(self, incident_id: str) -> None:
+        """Reload the in-memory cache entry from ``incident_current``.
+
+        Called after the canonical lifecycle apply commits so the
+        cache reflects the projection row that the canonical event
+        writer just updated. This keeps the cache authoritative
+        without requiring the caller to manually rebuild the
+        aggregate.
+
+        Raises:
+            ContextClosedError: If the context has been closed.
+        """
+        self._ensure_open()
+        cursor = self._conn.execute(
+            """
+            SELECT current_state_json, last_event_seq
+            FROM incident_current
+            WHERE incident_id = ?
+            """,
+            (incident_id,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            # No projection row means the event writer did not
+            # insert one (which would be a bug elsewhere). Leave
+            # the cache untouched.
+            return
+        current_json = row[0]
+        try:
+            state = json.loads(current_json) if current_json else {}
+        except (TypeError, ValueError):
+            _logger.warning(
+                "Failed to deserialize incident_current JSON for %s",
+                incident_id,
+            )
+            return
+        incident = self._store._state_to_incident(state)
+        self._cache[incident_id] = incident
+
+    # -------------------------------------------------------------------------
     # Context Lifetime
     # -------------------------------------------------------------------------
 
@@ -418,9 +634,157 @@ class SQLiteReadContext:
         return self._closed
 
 
+# =============================================================================
+# Canonical Lifecycle Idempotency Helpers
+# =============================================================================
+
+
+# Mapping from the diagnosis-loop-transition endpoint ``transition``
+# string to the canonical event type used by the events writer. The
+# mapping is intentionally module-level so the lookup is identical for
+# in-memory and SQLite-backed stores.
+_DIAGNOSIS_LIFECYCLE_EVENT_TYPE: dict[str, IncidentEventType] = {
+    "started": IncidentEventType.DIAGNOSIS_LOOP_STARTED,
+    "failed": IncidentEventType.DIAGNOSIS_LOOP_FAILED,
+    "completed": IncidentEventType.DIAGNOSIS_LOOP_COMPLETED,
+}
+
+
+def _build_diagnosis_lifecycle_payload(
+    *,
+    transition: str,
+    run_id: str | None,
+    collector_run_id: str | None,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Project the diagnosis-loop request payload onto the canonical event payload.
+
+    The shape mirrors the helpers in
+    :mod:`incident_store_sqlite_lifecycle` so events appended through
+    the lifecycle idempotency path are indistinguishable from events
+    appended through the in-process lifecycle methods. That is what
+    keeps the canonical projector
+    (:func:`incident_store_sqlite_projection.apply_event_to_state`)
+    working without an environment-specific branch.
+    """
+    if transition == "started":
+        return {
+            "run_id": run_id or "",
+            "collector_run_id": collector_run_id or "",
+        }
+    if transition == "failed":
+        return {
+            "run_id": run_id or "",
+            "collector_run_id": collector_run_id or "",
+            "unavailable_reason": payload.get("unavailable_reason") or None,
+        }
+    if transition == "completed":
+        return {
+            "run_id": run_id or "",
+            "collector_run_id": collector_run_id or "",
+            "review_packet_name": (
+                str(payload["review_packet_name"])
+                if payload.get("review_packet_name") is not None
+                else None
+            ),
+            "checks_requested": int(payload.get("checks_requested", 0) or 0),
+            "checks_run": int(payload.get("checks_run", 0) or 0),
+            "checks_rejected": int(payload.get("checks_rejected", 0) or 0),
+            "decision": (
+                str(payload["decision"])
+                if payload.get("decision") is not None
+                else None
+            ),
+        }
+    raise ValueError(f"unsupported transition: {transition!r}")
+
+
+def _select_lifecycle_idempotency_row(
+    cursor: sqlite3.Cursor,
+    *,
+    incident_id: str,
+    transition: str,
+    collector_run_id: str,
+    diagnosis_run_id: str | None,
+) -> tuple[str | None, str | None]:
+    """Return ``(fingerprint, applied_at)`` for the key, or ``(None, None)``.
+
+    The lookup uses ``COALESCE(diagnosis_run_id, '') = ?`` so the
+    comparison matches the unique index expression (see
+    :data:`incident_store_sqlite_schema.CREATE_LIFECYCLE_IDEMPOTENCY_INDICES`).
+    Without that, a row whose ``diagnosis_run_id`` is NULL would never
+    be matched and the index would still treat NULL as distinct.
+    """
+    cursor.execute(
+        """
+        SELECT fingerprint, applied_at
+        FROM lifecycle_idempotency
+        WHERE incident_id = ?
+          AND transition = ?
+          AND collector_run_id = ?
+          AND COALESCE(diagnosis_run_id, '') = ?
+        """,
+        (
+            incident_id,
+            transition,
+            collector_run_id,
+            diagnosis_run_id or "",
+        ),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return (None, None)
+    return (str(row[0]), str(row[1]))
+
+
+def _insert_lifecycle_idempotency_row(
+    cursor: sqlite3.Cursor,
+    *,
+    incident_id: str,
+    transition: str,
+    collector_run_id: str,
+    diagnosis_run_id: str | None,
+    fingerprint: str,
+    occurred_at: datetime,
+) -> None:
+    """Insert one idempotency row inside an existing transaction cursor.
+
+    No ``BEGIN`` / ``COMMIT`` is performed here. The caller owns the
+    transaction. A unique-index conflict is surfaced as
+    ``sqlite3.IntegrityError``; the caller catches it and translates
+    it into the bounded ``replay_mismatch`` outcome when the
+    fingerprint differs.
+
+    This helper is a separate function (rather than inlined inside
+    :meth:`SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently`)
+    so the rollback-on-idempotency-failure test can inject a fault
+    here without monkey-patching the connection layer.
+    """
+    cursor.execute(
+        """
+        INSERT INTO lifecycle_idempotency (
+            incident_id, transition, collector_run_id, diagnosis_run_id,
+            fingerprint, occurred_at, applied_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            incident_id,
+            transition,
+            collector_run_id,
+            diagnosis_run_id,
+            fingerprint,
+            occurred_at.isoformat(),
+            datetime.now(UTC).isoformat(),
+        ),
+    )
+
+
+
+
 __all__ = [
     "SQLiteWriteContext",
     "SQLiteReadContext",
     "ContextClosedError",
     "ContextNotOpenError",
+    # apply_diagnosis_lifecycle_idempotently is a method on SQLiteWriteContext.
 ]

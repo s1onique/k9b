@@ -87,6 +87,16 @@ class Incident:
     signal_count: int = 0
     evidence_count: int = 0
     events: list[IncidentEvent] = field(default_factory=list)
+    # Typed diagnosis-loop lifecycle state (R4-4 contract).
+    #
+    # The ``diagnosis_loop`` projection field is written by the canonical
+    # SQLite event writer whenever a ``DIAGNOSIS_LOOP_STARTED`` /
+    # ``DIAGNOSIS_LOOP_COMPLETED`` / ``DIAGNOSIS_LOOP_FAILED`` event is
+    # appended. Storing it on the typed dataclass (instead of relying on
+    # raw JSON passthrough) lets the in-memory cache round-trip the
+    # lifecycle state through ``Incident.from_dict`` so ``store.get_incident``
+    # and detail-page reads expose it without dropping projection data.
+    diagnosis_loop: dict[str, Any] | None = None
     suppressed_reason: str | None = None
     duplicate_of: str | None = None
     resolved_at: datetime | None = None

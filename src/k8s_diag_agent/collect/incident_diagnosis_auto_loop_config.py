@@ -2,11 +2,23 @@
 
 This module provides:
 - AutomaticDiagnosisLoopConfig dataclass with hard budget bounds
-- EligibilityResult dataclass for eligibility checks
-- check_incident_eligibility() function
+- EligibilityResult / DiagnosisBudgetDiagnostic dataclasses
+- :func:`evaluate_incident_eligibility` (aggregate-based; lookup-free)
+- :func:`check_incident_eligibility` (local-store compatibility wrapper)
+
+The aggregate evaluator accepts a typed :class:`Incident` aggregate
+and never re-resolves the incident through the local store; the
+compat wrapper exists only for local-mode callers and tests.
+
+ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 added the aggregate
+entry point so the scheduler-side processor can pass the typed
+``Incident`` from a successful :class:`BackendIncidentFound` directly
+to :func:`evaluate_incident_eligibility` without a second incident
+lookup.
 
 The gate functions (is_automatic_diagnosis_loop_enabled, etc.)
-have been moved to incident_diagnosis_loop_gate.py for better organization.
+have been moved to incident_diagnosis_loop_gate.py for better
+organization.
 """
 
 from __future__ import annotations
@@ -19,13 +31,14 @@ from .incident_lifecycle import IncidentStatus
 from .incident_store_provider import get_incident_store
 
 if TYPE_CHECKING:
-    pass
+    from .incident_lifecycle import Incident
 
 __all__ = [
     "AutomaticDiagnosisLoopConfig",
     "DiagnosisBudgetDiagnostic",
     "EligibilityResult",
     "check_incident_eligibility",
+    "evaluate_incident_eligibility",
     "_ACTIVE_STATUSES",
     "_TERMINAL_STATUSES",
     # Re-export gate functions for backwards compatibility
@@ -203,38 +216,75 @@ class EligibilityResult:
         return "; ".join(lines)
 
 
-def check_incident_eligibility(
+
+
+def _count_automatic_review_packets(
+    *,
     incident_id: str,
+    external_analysis_dir: Path | None,
+) -> int:
+    """Count existing automatic review-packet artifacts for an incident.
+
+    The heuristic is intentionally filesystem-based: it never reaches
+    the incident store, never reaches a backend, and never accepts a
+    bare ``incident_id`` without the matching aggregate context already
+    known to the caller.
+    """
+    if external_analysis_dir is None or not external_analysis_dir.exists():
+        return 0
+    prefix = f"auto-{incident_id}-"
+    suffix = "-diagnosis-review-packet.json"
+    count = 0
+    try:
+        for path in external_analysis_dir.rglob("*"):
+            try:
+                if path.is_file() and path.name.startswith(prefix) and path.name.endswith(suffix):
+                    count += 1
+            except OSError:
+                continue
+    except OSError:
+        return count
+    return count
+
+
+def evaluate_incident_eligibility(
+    *,
+    incident: Incident,
     config: AutomaticDiagnosisLoopConfig,
     external_analysis_dir: Path | None = None,
 ) -> EligibilityResult:
-    """Check if an incident is eligible for automatic diagnosis loop.
+    """Evaluate automatic-diagnosis eligibility from a typed incident aggregate.
 
-    Conservative eligibility model:
-    - Must be in active status (OPEN, COLLECTING_EVIDENCE, INVESTIGATING)
-    - Must not be in terminal status (SUPPRESSED, DUPLICATE, RESOLVED, READY_FOR_REVIEW)
-    - Must have suggested_checks OR enough context for stop-path packet
-    - Must not have exceeded automatic loop budget
+    The evaluator is **lookup-free**: it accepts a typed
+    :class:`Incident` and never resolves the incident from the store,
+    never calls a backend detail client, and never accepts an
+    ``incident_id`` as its only incident input. Filesystem inspection
+    for existing review-packet artifacts and budget accounting is
+    permitted where the budget lookup is required.
+
+    Production callers reach this function with the incident aggregate
+    returned from :class:`BackendIncidentFound` so the same typed
+    snapshot drives both domain eligibility and downstream case-file
+    construction.
 
     Args:
-        incident_id: The incident ID to check
-        config: Collector configuration with budget limits
-        external_analysis_dir: Optional path to check for existing review packets
+        incident: The canonical :class:`Incident` aggregate to evaluate.
+            The supplied ``incident_id`` field is the authoritative
+            identity for diagnostics and budget counts.
+        config: Collector configuration with budget limits.
+        external_analysis_dir: Optional path used to count existing
+            automatic review packets for the per-incident budget.
 
     Returns:
-        EligibilityResult with eligible flag, reason, and budget diagnostics
+        :class:`EligibilityResult` with the same closed vocabulary the
+        legacy ``check_incident_eligibility`` used, so existing
+        ``AutoLoopIncidentResult`` projection still works.
     """
-    store = get_incident_store()
-    incident = store.get_incident(incident_id)
+    incident_id = str(incident.incident_id)
 
-    if incident is None:
-        return EligibilityResult(
-            eligible=False,
-            incident_id=incident_id,
-            reason="incident_not_found",
-        )
-
-    # Check status
+    # Status checks. SUPPRESSED / DUPLICATE / RESOLVED / READY_FOR_REVIEW
+    # remain terminal and emit the legacy ``terminal_status_<value>``
+    # reason so the existing skip-reason accounting is preserved.
     status = incident.status
     if status in _TERMINAL_STATUSES:
         return EligibilityResult(
@@ -243,7 +293,6 @@ def check_incident_eligibility(
             reason=f"terminal_status_{status.value}",
             status=status.value,
         )
-
     if status not in _ACTIVE_STATUSES:
         return EligibilityResult(
             eligible=False,
@@ -252,34 +301,21 @@ def check_incident_eligibility(
             status=status.value,
         )
 
-    # Check for suggested checks (required for meaningful evidence collection)
-    # If no suggested checks, we can still write a stop-path packet
-    suggested_checks = getattr(incident, "signals", [])  # Fallback check
+    # Suggested-checks presence: keep the legacy behaviour, sourced
+    # from the aggregate's signal list (the canonical heuristic before
+    # the ACT).
+    suggested_checks = list(getattr(incident, "signals", []) or [])
     has_suggested_checks = len(suggested_checks) > 0
 
-    # Check automatic loop budget by counting existing review packets
-    # CRITICAL: Use rglob to match artifacts in NESTED paths (e.g., phase4-diagnosis/).
-    # This ensures parity with lab reset helper which also uses rglob.
-    # Bug fix: Previously used iterdir() which only checked top-level,
-    # causing backend to miss nested review packets written by P4c.
-    auto_pass_count = 0
-    if external_analysis_dir is not None and external_analysis_dir.exists():
-        # Count existing automatic review packets for this incident
-        # Pattern: auto-{incident_id}-*-diagnosis-review-packet.json
-        # Use rglob to find in nested dirs (e.g., phase4-diagnosis/p4c-.../)
-        prefix = f"auto-{incident_id}-"
-        suffix = "-diagnosis-review-packet.json"
-        try:
-            for path in external_analysis_dir.rglob("*"):
-                if path.is_file() and path.name.startswith(prefix) and path.name.endswith(suffix):
-                    auto_pass_count += 1
-        except OSError:
-            pass  # Ignore filesystem errors during budget check
+    # Per-incident budget: count existing automatic review packets.
+    auto_pass_count = _count_automatic_review_packets(
+        incident_id=incident_id,
+        external_analysis_dir=external_analysis_dir,
+    )
 
-    # Build budget diagnostics for the response
     budget_limit = config.max_passes_per_incident
     budget_remaining = max(0, budget_limit - auto_pass_count)
-    budget_diagnostics = (
+    budget_diagnostics: tuple[DiagnosisBudgetDiagnostic, ...] = (
         DiagnosisBudgetDiagnostic(
             name="review_packet_budget",
             used=auto_pass_count,
@@ -310,4 +346,39 @@ def check_incident_eligibility(
         has_suggested_checks=has_suggested_checks,
         auto_pass_count=auto_pass_count,
         budget_diagnostics=budget_diagnostics,
+    )
+
+
+def check_incident_eligibility(
+    *,
+    incident_id: str,
+    config: AutomaticDiagnosisLoopConfig,
+    external_analysis_dir: Path | None = None,
+) -> EligibilityResult:
+    """Resolve an incident from the local store and delegate to the evaluator.
+
+    Compatibility wrapper. ``_process_incident()`` MUST NOT call this
+    function after it has already received a typed :class:`Incident`
+    from :class:`BackendIncidentFound`; the scheduler-side processor
+    must use :func:`evaluate_incident_eligibility` directly with the
+    aggregate.
+
+    This wrapper is retained only for local-mode callers and tests
+    that exercise the legacy ID-based path. Authority selection
+    belongs in the dispatch layer; this wrapper does NOT call any
+    backend HTTP client and does NOT attempt to choose between
+    authorities.
+    """
+    store = get_incident_store()
+    incident = store.get_incident(incident_id)
+    if incident is None:
+        return EligibilityResult(
+            eligible=False,
+            incident_id=incident_id,
+            reason="incident_not_found",
+        )
+    return evaluate_incident_eligibility(
+        incident=incident,
+        config=config,
+        external_analysis_dir=external_analysis_dir,
     )

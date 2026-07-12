@@ -214,8 +214,10 @@ def write_summary_artifact(
     incidents_ineligible: int = 0,
     incidents_with_errors: int = 0,
     eligibility_schema_version: int = 2,
+    authority_run_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write loop summary artifact.
+
 
     Args:
         artifact_dir: Directory for automatic-diagnosis artifacts
@@ -265,8 +267,10 @@ def write_summary_artifact(
         "skip_reasons": dict(skip_reasons or {}),
         "ineligible_reasons": dict(ineligible_reasons or {}),
         "error_reasons": dict(error_reasons or {}),
+        "authority_run_summary": dict(authority_run_summary or {}),
         "incident_results": incident_results,
     }
+
 
     try:
         path.write_text(json.dumps(artifact, indent=2, default=str))

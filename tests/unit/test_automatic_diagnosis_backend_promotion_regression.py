@@ -166,15 +166,19 @@ class TestPromotionToDiagnosisRegression:
 
         eligibility_stub_calls: list[str] = []
 
-        def fake_check_incident_eligibility(**kwargs: Any) -> Any:
+        def fake_evaluate_incident_eligibility(**kwargs: Any) -> Any:
             eligibility_stub_calls.append(kwargs["incident_id"])
             return _StubEligibility(eligible=True, reason="active_incident_with_suggested_checks")
 
+        # R1 follow-up: the processor now calls
+        # ``evaluate_incident_eligibility`` (the canonical
+        # eligibility evaluator). The monkeypatch target must
+        # match the symbol the processor actually invokes.
         monkeypatch.setattr(
             "k8s_diag_agent.collect."
             "incident_diagnosis_auto_loop_evidence_processor."
-            "check_incident_eligibility",
-            fake_check_incident_eligibility,
+            "evaluate_incident_eligibility",
+            fake_evaluate_incident_eligibility,
         )
 
         # Inject a fake ``BackendIncidentClient`` via the typed lookup

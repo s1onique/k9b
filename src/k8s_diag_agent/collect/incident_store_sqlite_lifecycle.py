@@ -400,6 +400,13 @@ def mark_diagnosis_loop_started_impl(
     """Mark diagnosis loop started.
 
     Thread safety: Uses store._write_context() for thread-safe writes.
+
+    R4-4: After ``append_event`` writes the canonical projection
+    row, refresh the in-memory cache from that row so the returned
+    Incident snapshot carries the typed ``diagnosis_loop`` field
+    rather than the stale pre-apply cache value. The projector is
+    the source of truth for the cache; ``append_event`` only writes
+    to ``incident_current`` and ``incident_events``.
     """
     with store._write_context() as ctx:
         incident = ctx.get_cached_incident(incident_id)
@@ -419,7 +426,13 @@ def mark_diagnosis_loop_started_impl(
             occurred_at=datetime.now(UTC),
         )
 
-        return ctx.snapshot_incident(incident)
+        # Refresh from the canonical projection so the returned
+        # Incident exposes the typed ``diagnosis_loop`` state.
+        ctx._refresh_cache_from_projection(incident_id)
+        refreshed = ctx.get_cached_incident(incident_id)
+        if refreshed is None:
+            return ctx.snapshot_incident(incident)
+        return ctx.snapshot_incident(refreshed)
 
 
 def mark_diagnosis_loop_completed_impl(
@@ -436,6 +449,10 @@ def mark_diagnosis_loop_completed_impl(
     """Mark diagnosis loop completed.
 
     Thread safety: Uses store._write_context() for thread-safe writes.
+
+    R4-4: refresh the cache from the canonical projection after
+    ``append_event`` so the returned Incident carries the typed
+    ``diagnosis_loop`` field.
     """
     with store._write_context() as ctx:
         incident = ctx.get_cached_incident(incident_id)
@@ -460,7 +477,13 @@ def mark_diagnosis_loop_completed_impl(
             occurred_at=datetime.now(UTC),
         )
 
-        return ctx.snapshot_incident(incident)
+        # Refresh from the canonical projection so the returned
+        # Incident exposes the typed ``diagnosis_loop`` state.
+        ctx._refresh_cache_from_projection(incident_id)
+        refreshed = ctx.get_cached_incident(incident_id)
+        if refreshed is None:
+            return ctx.snapshot_incident(incident)
+        return ctx.snapshot_incident(refreshed)
 
 
 def mark_diagnosis_loop_failed_impl(
@@ -473,6 +496,10 @@ def mark_diagnosis_loop_failed_impl(
     """Mark diagnosis loop failed.
 
     Thread safety: Uses store._write_context() for thread-safe writes.
+
+    R4-4: refresh the cache from the canonical projection after
+    ``append_event`` so the returned Incident carries the typed
+    ``diagnosis_loop`` field.
     """
     with store._write_context() as ctx:
         incident = ctx.get_cached_incident(incident_id)
@@ -493,7 +520,13 @@ def mark_diagnosis_loop_failed_impl(
             occurred_at=datetime.now(UTC),
         )
 
-        return ctx.snapshot_incident(incident)
+        # Refresh from the canonical projection so the returned
+        # Incident exposes the typed ``diagnosis_loop`` state.
+        ctx._refresh_cache_from_projection(incident_id)
+        refreshed = ctx.get_cached_incident(incident_id)
+        if refreshed is None:
+            return ctx.snapshot_incident(incident)
+        return ctx.snapshot_incident(refreshed)
 
 
 __all__ = [

@@ -14,7 +14,29 @@ A successful HTTP 200 response cannot be converted into
 ``BackendIncidentNotFound`` by any parser/schema/deserialization/
 identity failure in this seam.
 
+Authority flow (ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01):
+
+    typed authority lookup
+        ↓
+    BackendIncidentFound
+        ↓
+    identity validation (branded id matches request)
+        ↓
+    evaluate_incident_eligibility(incident=incident_obj, ...)  [no second lookup]
+        ↓
+    case-file construction from the same aggregate
+        ↓
+    diagnosis execution
+        ↓
+    record_diagnosis_loop_{started,failed,completed}(...)  [authority seam]
+
+The processor NEVER reaches ``get_incident_store()`` to re-resolve
+the incident or to record a lifecycle transition. Lifecycle writes
+route through :mod:`incident_diagnosis_authority_seam` which resolves
+the same dispatch configuration the lookup uses.
+
 Suggested by: ACT-K9B-HULK-AUTO-DIAG-BACKEND-DETAIL-OUTCOME01
+R1 follow-up: ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01
 """
 
 from __future__ import annotations
@@ -31,10 +53,18 @@ from .incident_automatic_diagnosis_loop import (
     run_automatic_diagnosis_hypothesis_loop,
 )
 from .incident_case_file import build_incident_case_file
-from .incident_diagnosis_auto_loop_config import (
-    AutomaticDiagnosisLoopConfig,
-    check_incident_eligibility,
+from .incident_diagnosis_authority_seam import (
+    LifecycleWriteApplied,
+    LifecycleWriteFailed,
+    LifecycleWriteOutcome,
+    LifecycleWriteRejected,
+    LifecycleWriteSkipped,
+    evaluate_incident_eligibility,
+    record_diagnosis_loop_completed,
+    record_diagnosis_loop_failed,
+    record_diagnosis_loop_started,
 )
+from .incident_diagnosis_auto_loop_config import AutomaticDiagnosisLoopConfig
 from .incident_diagnosis_auto_loop_models import AutoLoopIncidentResult
 from .incident_diagnosis_backend_detail_outcomes import (
     BackendIncidentFound,
@@ -52,8 +82,6 @@ from .incident_diagnosis_loop_runtime import run_policy_enforced_loop_pass
 from .incident_diagnosis_review_packet import write_diagnosis_review_packet
 from .incident_lifecycle import Incident
 from .incident_read_only_check_artifacts import is_safe_run_id
-from .incident_store import IncidentStore
-from .incident_store_provider import get_incident_store
 
 _logger = logging.getLogger(__name__)
 
@@ -116,6 +144,34 @@ def _failure_result_from_outcome(
     )
 
 
+def _emit_eligibility_evaluated_event(
+    *,
+    incident_id: str,
+    incident_source: str,
+    eligible: bool,
+    reason_code: str,
+) -> None:
+    """Emit a bounded eligibility-evaluated event after the lookup seam."""
+    _logger.info(
+        "automatic-diagnosis-incident-eligibility-evaluated",
+        extra={
+            "event": "automatic-diagnosis-incident-eligibility-evaluated",
+            "incident_id": incident_id,
+            "incident_source": incident_source,
+            "eligible": eligible,
+            "reason_code": reason_code,
+        },
+    )
+
+
+def _lifecycle_outcome_is_failure(outcome: LifecycleWriteOutcome) -> bool:
+    """Return True for any non-Applied lifecycle outcome (excluding Skipped)."""
+    return isinstance(
+        outcome,
+        (LifecycleWriteFailed, LifecycleWriteRejected),
+    )
+
+
 def _process_incident(
     incident_id: str,
     external_analysis_dir: Path,
@@ -128,18 +184,28 @@ def _process_incident(
     The backend incident-detail lookup runs through the canonical
     :func:`fetch_backend_incident_for_diagnosis_typed` helper, which
     returns a typed :class:`BackendIncidentLookupOutcome`. The three
-    variants are dispatched exhaustively: a HTTP 404 yields
-    ``BackendIncidentNotFound`` (-> skipped ``incident_not_found``),
-    any other failure yields ``BackendIncidentLookupFailed`` (-> error
-    with the mapped stable reason code), and a successful HTTP 200
-    canonical payload yields ``BackendIncidentFound`` (continuing into
-    domain eligibility).
+    variants are dispatched exhaustively:
 
-    Crucially, the success/failure classification is anchored on the
-    HTTP status, not on whether the parser produced an incident object;
-    this prevents the historical regression where HTTP 200 + valid JSON
-    was being mapped to ``incident_not_found`` because a downstream
-    parser exception was silently absorbed into ``None``.
+    * ``BackendIncidentNotFound`` → skipped with
+      ``skip_reason="incident_not_found"`` and
+      ``eligibility_reason="not_found"``.
+    * ``BackendIncidentLookupFailed`` → error with the mapped stable
+      reason code; never maps to ``incident_not_found``.
+    * ``BackendIncidentFound(incident=incident)`` → identity check
+      against the requested ID, then the aggregate-based
+      :func:`evaluate_incident_eligibility` (no second incident
+      lookup), then case-file construction from the same aggregate,
+      then authority-routed lifecycle writes.
+
+    Crucially:
+
+    * the eligibility evaluator is invoked with the supplied
+      ``Incident`` aggregate; ``get_incident_store()`` is NOT called
+      between ``BackendIncidentFound`` and the eligibility decision;
+    * lifecycle transitions are routed through
+      :func:`record_diagnosis_loop_*`; the local
+      ``IncidentStore.mark_diagnosis_loop_*`` methods are NOT called
+      from this function.
     """
     branded = IncidentId(incident_id)
     lookup_outcome = fetch_backend_incident_for_diagnosis_typed(branded)
@@ -168,34 +234,61 @@ def _process_incident(
         case BackendIncidentLookupFailed():
             return _failure_result_from_outcome(incident_id, lookup_outcome)
         case BackendIncidentFound(incident=incident):
-            _logger.debug(
+            _logger.info(
                 "automatic-diagnosis-backend-incident-found",
                 extra={
                     "event": "automatic-diagnosis-backend-incident-found",
                     "incident_id": incident_id,
+                    "requested_incident_id": incident_id,
                     "http_status": lookup_outcome.http_status,
                     "payload_schema_version": lookup_outcome.payload_schema_version,
                     "payload_type": lookup_outcome.payload_type,
                 },
             )
-            # ``incident`` is statically known to be ``Incident`` here
-            # (the canonical domain aggregate). We call ``.to_dict()``
-            # directly; there is no duck-typing fallback or ``Any``
-            # widening. The downstream path consumes the dict for the
-            # hypothesis loop, but the case file builder still takes
-            # the typed ``Incident`` so it can keep its typed
-            # invariants.
             incident_obj: Incident = incident
+            incident_source = lookup_outcome.source.value
 
-    # Normalize to dict for downstream processing.
-    incident_dict: dict[str, Any] = incident_obj.to_dict()
+    # INV-01: identity invariant. The aggregate's incident_id MUST
+    # match the requested branded ID. A mismatch becomes a typed
+    # lookup/content failure (we surface it as an evaluation failure,
+    # not an ``incident_not_found``) and we never silently fall back
+    # to the local store.
+    if str(incident_obj.incident_id) != str(branded):
+        mismatch_detail = (
+            f"backend returned incident_id {str(incident_obj.incident_id)!r} "
+            f"but the request was for {str(branded)!r}"
+        )
+        _logger.warning(
+            "automatic-diagnosis-incident-identity-mismatch",
+            extra={
+                "event": "automatic-diagnosis-incident-identity-mismatch",
+                "incident_id": incident_id,
+                "returned_incident_id": str(incident_obj.incident_id),
+                "reason_code": "identity_mismatch",
+                "detail": mismatch_detail,
+            },
+        )
+        return AutoLoopIncidentResult(
+            incident_id=incident_id,
+            eligible=False,
+            eligibility_reason="backend_incident_identity_mismatch",
+            error=mismatch_detail,
+        )
 
-    store: IncidentStore = get_incident_store()
-
-    eligibility = check_incident_eligibility(
-        incident_id=incident_id,
+    # INV-02: aggregate-based eligibility evaluation. The supplied
+    # incident is the authoritative snapshot; we do NOT re-resolve
+    # through ``get_incident_store()`` here.
+    eligibility = evaluate_incident_eligibility(
+        incident=incident_obj,
         config=config,
         external_analysis_dir=external_analysis_dir,
+    )
+
+    _emit_eligibility_evaluated_event(
+        incident_id=incident_id,
+        incident_source=incident_source,
+        eligible=eligibility.eligible,
+        reason_code=eligibility.reason,
     )
 
     if not eligibility.eligible:
@@ -211,12 +304,26 @@ def _process_incident(
     run_id = f"auto-{incident_id}-{now.strftime('%Y%m%d%H%M%S')}"
 
     if not is_safe_run_id(run_id):
-        store.mark_diagnosis_loop_failed(
+        # INV-08: lifecycle failure must not be swallowed. We record
+        # the ``failed`` transition through the seam and surface the
+        # outcome to the caller.
+        lifecycle = record_diagnosis_loop_failed(
             incident_id=incident_id,
             run_id=run_id,
             collector_run_id=collector_run_id,
             unavailable_reason="unsafe_run_id",
         )
+        if isinstance(lifecycle, LifecycleWriteFailed):
+            return AutoLoopIncidentResult(
+                incident_id=incident_id,
+                eligible=True,
+                eligibility_reason=eligibility.reason,
+                run_id=run_id,
+                error=(
+                    f"Unsafe run_id generated: {run_id} "
+                    f"(lifecycle start failed: {lifecycle.reason_code})"
+                ),
+            )
         return AutoLoopIncidentResult(
             incident_id=incident_id,
             eligible=True,
@@ -225,11 +332,24 @@ def _process_incident(
             error=f"Unsafe run_id generated: {run_id}",
         )
 
-    store.mark_diagnosis_loop_started(
+    # INV-05/INV-08: lifecycle writes are routed through the authority
+    # seam. If the start write fails the diagnosis execution MUST NOT
+    # begin; we return an unsuccessful result with the bounded
+    # reason code.
+    started_outcome = record_diagnosis_loop_started(
         incident_id=incident_id,
         run_id=run_id,
         collector_run_id=collector_run_id,
     )
+    if not isinstance(started_outcome, LifecycleWriteApplied):
+        failure_code = _lifecycle_failure_code(started_outcome)
+        return AutoLoopIncidentResult(
+            incident_id=incident_id,
+            eligible=True,
+            eligibility_reason=eligibility.reason,
+            run_id=run_id,
+            error=f"diagnosis_lifecycle_start_failed: {failure_code}",
+        )
 
     # Build case file using the original Incident object
     try:
@@ -238,8 +358,11 @@ def _process_incident(
             external_analysis_dir=external_analysis_dir,
             incident=incident_obj,
         )
-    except (OSError, ValueError, KeyError):
-        store.mark_diagnosis_loop_failed(
+    except (OSError, ValueError, KeyError) as exc:
+        # INV-08: keep the original failure primary and attach the
+        # lifecycle-recording diagnostics when the ``failed`` write
+        # itself did not land.
+        lifecycle_outcome = _record_failure_with_original(
             incident_id=incident_id,
             run_id=run_id,
             collector_run_id=collector_run_id,
@@ -250,11 +373,14 @@ def _process_incident(
             eligible=True,
             eligibility_reason=eligibility.reason,
             run_id=run_id,
-            error="Failed to build case file",
+            error=_augment_error_with_lifecycle(
+                f"Failed to build case file: {type(exc).__name__}",
+                lifecycle_outcome,
+            ),
         )
 
     if case_file is None:
-        store.mark_diagnosis_loop_failed(
+        lifecycle_outcome = _record_failure_with_original(
             incident_id=incident_id,
             run_id=run_id,
             collector_run_id=collector_run_id,
@@ -265,8 +391,11 @@ def _process_incident(
             eligible=True,
             eligibility_reason=eligibility.reason,
             run_id=run_id,
-            error="Case file is None",
+            error=_augment_error_with_lifecycle(
+                "Case file is None", lifecycle_outcome
+            ),
         )
+
 
     # Run hypothesis burst multipass loop
     hypothesis_loop_result: dict[str, Any] | None = None
@@ -280,7 +409,7 @@ def _process_incident(
         )
 
         loop_result = run_automatic_diagnosis_hypothesis_loop(
-            incident=incident_dict,
+            incident=incident_obj.to_dict(),
             case_file=case_file,
             external_analysis_dir=external_analysis_dir,
             run_id=run_id,
@@ -312,8 +441,8 @@ def _process_incident(
             run_id=run_id,
             now=now,
         )
-    except (ValueError, RuntimeError, KeyError):
-        store.mark_diagnosis_loop_failed(
+    except (ValueError, RuntimeError, KeyError) as exc:
+        lifecycle_outcome = _record_failure_with_original(
             incident_id=incident_id,
             run_id=run_id,
             collector_run_id=collector_run_id,
@@ -324,8 +453,12 @@ def _process_incident(
             eligible=True,
             eligibility_reason=eligibility.reason,
             run_id=run_id,
-            error="Orchestrator error",
+            error=_augment_error_with_lifecycle(
+                f"orchestrator error: {type(exc).__name__}",
+                lifecycle_outcome,
+            ),
         )
+
 
     decision = str(orchestrator_result.get("decision", ""))
     runner_result = orchestrator_result.get("runner_result")
@@ -380,7 +513,7 @@ def _process_incident(
         except (OSError, ValueError):
             pass
 
-    store.mark_diagnosis_loop_completed(
+    completed_outcome = record_diagnosis_loop_completed(
         incident_id=incident_id,
         run_id=run_id,
         collector_run_id=collector_run_id,
@@ -402,7 +535,7 @@ def _process_incident(
         and loop_pass_artifact.get("written", False)
     )
 
-    return AutoLoopIncidentResult(
+    result = AutoLoopIncidentResult(
         incident_id=incident_id,
         eligible=True,
         eligibility_reason=eligibility.reason,
@@ -417,6 +550,69 @@ def _process_incident(
         read_only_check_artifact_written=read_only_check_artifact_written,
         loop_pass_artifact_written=loop_pass_artifact_written,
         hypothesis_loop_result=hypothesis_loop_result,
+    )
+    if not isinstance(completed_outcome, LifecycleWriteApplied):
+        result.error = (
+            f"diagnosis_lifecycle_completion_failed: "
+            f"{_lifecycle_failure_code(completed_outcome)}"
+        )
+    return result
+
+
+def _lifecycle_failure_code(outcome: LifecycleWriteOutcome) -> str:
+    """Extract a stable reason code from any non-Applied lifecycle outcome."""
+    if isinstance(outcome, LifecycleWriteFailed):
+        return outcome.reason_code
+    if isinstance(outcome, LifecycleWriteRejected):
+        return outcome.reason_code
+    if isinstance(outcome, LifecycleWriteSkipped):
+        return f"skipped:{outcome.reason}"
+    return "unknown"
+
+
+def _augment_error_with_lifecycle(
+    base_error: str,
+    lifecycle_outcome: LifecycleWriteOutcome,
+) -> str:
+    """Keep the original failure primary and attach lifecycle diagnostics.
+
+    INV-08: when recording the ``failed`` transition itself did not
+    land (e.g. the backend returned 5xx), the per-incident result must
+    surface both the original failure and the lifecycle-persistence
+    diagnostics rather than discarding the latter into logs only.
+
+    Example produced shape::
+
+        Failed to build case file: KeyError; \
+lifecycle_recording_error=backend_error; http_status=500
+    """
+    if isinstance(lifecycle_outcome, LifecycleWriteApplied | LifecycleWriteSkipped):
+        return base_error
+    parts = [base_error, f"lifecycle_recording_error={lifecycle_outcome.reason_code}"]
+    http_status = getattr(lifecycle_outcome, "http_status", None)
+    if http_status is not None:
+        parts.append(f"http_status={http_status}")
+    return "; ".join(parts)
+
+
+def _record_failure_with_original(
+    *,
+    incident_id: str,
+    run_id: str,
+    collector_run_id: str,
+    unavailable_reason: str,
+) -> LifecycleWriteOutcome:
+    """Record a ``failed`` transition through the authority seam.
+
+
+    Returns the underlying outcome so callers can attach lifecycle
+    persistence diagnostics to the per-incident result when needed.
+    """
+    return record_diagnosis_loop_failed(
+        incident_id=incident_id,
+        run_id=run_id,
+        collector_run_id=collector_run_id,
+        unavailable_reason=unavailable_reason,
     )
 
 
@@ -479,9 +675,17 @@ def _write_loop_summary(
 ) -> dict[str, Any]:
     """Write loop summary artifact."""
     from .incident_automatic_diagnosis_loop import write_summary_artifact as _write_summary_artifact
+    from .incident_diagnosis_authority_run_summary import (
+        summarize_incident_results,
+    )
 
     artifact_dir = external_analysis_dir / "automatic-diagnosis"
     effective_run_id = run_id if run_id else f"collector-{collector_run_id}"
+
+    # Authority run-summary accounting (backend lookup / eligibility /
+    # lifecycle-write outcomes + the split-authority regression counter)
+    # derived deterministically from the per-incident results.
+    authority_run_summary = summarize_incident_results(incident_results).to_dict()
 
     return _write_summary_artifact(
         artifact_dir=artifact_dir,
@@ -502,7 +706,9 @@ def _write_loop_summary(
         incidents_ineligible=incidents_ineligible,
         incidents_with_errors=incidents_with_errors,
         eligibility_schema_version=eligibility_schema_version,
+        authority_run_summary=authority_run_summary,
     )
+
 
 
 __all__ = [

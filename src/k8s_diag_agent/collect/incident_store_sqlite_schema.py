@@ -20,7 +20,15 @@ from typing import Any
 # Schema Version
 # =============================================================================
 
-SCHEMA_VERSION = 1
+# Schema version 2 introduced the ``lifecycle_idempotency`` table +
+# UNIQUE index for the internal ``diagnosis-loop-transition`` endpoint.
+#
+# The version bump is required because the production backend can ship
+# with an existing v1 database that does NOT have the table. The
+# :mod:`incident_store_sqlite_migrations` module applies the v2 upgrade
+# to bring the database forward so the durable critical section does
+# not crash on the first lifecycle request after the upgrade.
+SCHEMA_VERSION = 2
 
 # =============================================================================
 # SQL Statements
@@ -110,6 +118,55 @@ CREATE INDEX IF NOT EXISTS idx_incident_current_active_diagnosis_scan
     WHERE status IN ('open', 'collecting_evidence', 'investigating', 'ready_for_review');
 """
 
+# Lifecycle idempotency registry: durable dedupe across processes and restarts.
+#
+# Each row records one accepted (key, fingerprint) pair for the
+# internal ``diagnosis-loop-transition`` endpoint. The composite
+# UNIQUE index makes ``INSERT OR IGNORE`` the canonical atomic
+# ``check-then-insert`` primitive: if the row already exists, the
+# mutation MUST NOT run; if it does not, the mutation AND the row
+# insert MUST land in the same ``BEGIN IMMEDIATE`` transaction so
+# crash-restart and multi-process replay converge on a single
+# observable transition.
+#
+# The table is intentionally append-only. Same-key/different-fingerprint
+# replays are surfaced as 409 by application code, never by mutating
+# the existing record.
+CREATE_LIFECYCLE_IDEMPOTENCY = """
+CREATE TABLE IF NOT EXISTS lifecycle_idempotency (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id TEXT NOT NULL,
+    transition TEXT NOT NULL,
+    collector_run_id TEXT NOT NULL,
+    diagnosis_run_id TEXT,
+    fingerprint TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    applied_at TEXT NOT NULL
+);
+"""
+
+# R3-5: SQLite treats NULL as distinct in UNIQUE constraints, so the
+# bare index ``(..., diagnosis_run_id)`` would allow two otherwise
+# identical rows with ``diagnosis_run_id IS NULL`` to coexist. We use
+# ``COALESCE(diagnosis_run_id, '')`` in the index expression so the
+# NULL value still participates in the uniqueness check, while keeping
+# the column itself nullable for callers that legitimately do not
+# have a run id.
+#
+# Application lookups MUST mirror the index expression
+# (``COALESCE(diagnosis_run_id, '') = ?``) so the comparison matches
+# the indexed key. The ``incident_store_sqlite_context`` module owns
+# the canonical lookup and uses this exact comparison.
+CREATE_LIFECYCLE_IDEMPOTENCY_INDICES = """
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lifecycle_idempotency_key
+    ON lifecycle_idempotency(
+        incident_id,
+        transition,
+        collector_run_id,
+        COALESCE(diagnosis_run_id, '')
+    );
+"""
+
 # Append-only enforcement triggers
 CREATE_TRIGGERS = """
 -- Prevent UPDATE on incident_events (append-only)
@@ -134,6 +191,8 @@ INIT_STATEMENTS = [
     CREATE_EVENTS_INDICES,
     CREATE_INCIDENT_CURRENT,
     CREATE_CURRENT_INDICES,
+    CREATE_LIFECYCLE_IDEMPOTENCY,
+    CREATE_LIFECYCLE_IDEMPOTENCY_INDICES,
     CREATE_TRIGGERS,
 ]
 

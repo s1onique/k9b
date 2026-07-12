@@ -179,6 +179,7 @@ _INTERNAL_AUTH_EXEMPT_ROUTES: frozenset[str] = frozenset({
     "/api/internal/incidents/promote-candidates",
     "/api/internal/incidents",
     "/api/internal/incidents/list",
+    "/api/internal/incidents/diagnosis-loop-transition",
 })
 
 # Internal API route patterns (for dynamic paths like /api/internal/incidents/{id})
@@ -271,6 +272,9 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
     from .server_batch_execution import handle_run_batch_next_check_execution
     from .server_feedback import handle_alertmanager_relevance_feedback, handle_usefulness_feedback
     from .server_incident import handle_incident_snapshot_api
+    from .server_incident_diagnosis_lifecycle_handler import (
+        handle_diagnosis_loop_transition,
+    )
     from .server_incident_internal import (
         handle_promote_alert_signals,
         handle_promote_candidates,
@@ -315,6 +319,12 @@ def _dispatch_post_route(handler: HealthUIRequestHandler, route: str) -> None:
     # POST /api/internal/incidents/promote-candidates
     if route == "/api/internal/incidents/promote-candidates":
         handle_promote_candidates(handler)
+        return
+
+    # Internal: Diagnosis-loop lifecycle transition (started/failed/completed)
+    # POST /api/internal/incidents/diagnosis-loop-transition
+    if route == "/api/internal/incidents/diagnosis-loop-transition":
+        handle_diagnosis_loop_transition(handler)
         return
 
     # Incident diagnosis loop one-pass

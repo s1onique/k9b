@@ -19,6 +19,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .incident_store_sqlite_schema import (
+    CREATE_LIFECYCLE_IDEMPOTENCY,
+    CREATE_LIFECYCLE_IDEMPOTENCY_INDICES,
     SCHEMA_VERSION,
     get_schema_sql,
 )
@@ -28,11 +30,25 @@ from .incident_store_sqlite_schema import (
 _logger = logging.getLogger(__name__)
 
 
-# Migration definitions - each tuple is (version, upgrade_sql_list)
-# version 1 is the initial schema (defined in schema module)
+# Migration definitions - each tuple is (version, upgrade_sql_list).
+#
+# Version 1: Initial schema (created by ``get_schema_sql()``).
+# Version 2: Adds the ``lifecycle_idempotency`` table + UNIQUE index so
+# existing v1 production databases can be upgraded in place. Without
+# this entry, a v1 database would crash on the first
+# ``diagnosis-loop-transition`` request with
+# ``sqlite3.OperationalError: no such table: lifecycle_idempotency``.
+#
+# The SQL uses ``IF NOT EXISTS`` so applying it on a fresh database
+# (which already has the table from ``get_schema_sql()``) is a no-op.
 MIGRATIONS: list[tuple[int, list[str]]] = [
-    # Version 1: Initial schema (created by get_schema_sql())
-    # No additional migrations needed at this time
+    (
+        2,
+        [
+            CREATE_LIFECYCLE_IDEMPOTENCY,
+            CREATE_LIFECYCLE_IDEMPOTENCY_INDICES,
+        ],
+    ),
 ]
 
 

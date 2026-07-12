@@ -60,6 +60,62 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
 ## Entries
 
+### 2026-07-12 — ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 R4 close
+
+- Target: SQLite lifecycle idempotency — close R4-1, R4-2, R4-3, R4-4 blockers from the R3 review (cache authority defect, missing multi-process regressions, replay cache healing, typed `diagnosis_loop` projection boundary).
+- Impact scan required: yes
+- Impact scan present: yes
+- Script used: no (manual `git grep` + review-trace against the R4 findings)
+- Manual refinement present: yes
+- Planned files: 5 source (`incident_lifecycle.py`, `incident_lifecycle_serialization.py`, `incident_snapshot_helpers.py`, `incident_store_sqlite_context.py`, `incident_store_sqlite_lifecycle.py`), 2 new R4 test files split for size.
+- Changed files: 5 source, 2 new R4 test files (split to keep each under the 500-line LLM-friendly threshold).
+- Unexpected changed files: none beyond the planned set.
+- Likely tests identified by script: n/a (manual review).
+- Likely tests identified manually: existing `test_incident_store_sqlite_lifecycle_idempotency*.py` (R3 + base), canonical seam (`test_incident_store_sqlite_*`), `test_incident_diagnosis_authority_run_summary.py`, `test_automatic_diagnosis_backend_promotion_regression.py`.
+- Targeted tests run: focused pytest on the R3 + R4 + base lifecycle idempotency test files (28 tests); broader SQLite + automatic-diagnosis capability-seam suites (132 tests).
+- Full gate run: `./scripts/verify_all.sh --act-local` → PASS.
+- Reviewer scope objection: no (this ACT is the explicit R4 follow-up).
+- Reviewer requested missing scan: no.
+- Script usefulness: n/a.
+- Did the scan reduce surprise: yes — the R4 review named exactly four blockers; each was mapped to one production fix and one regression test.
+- Notes:
+  - **R4-1 (cache authority is the projection, not the cache)**: `SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently` now proves incident existence with a `SELECT 1 FROM incident_current WHERE incident_id = ?` inside the same `BEGIN IMMEDIATE` transaction. The process-local `self._cache` is no longer authoritative for the existence check, so a pre-opened store whose cache was loaded before another process promoted the incident correctly applies the lifecycle instead of returning `incident_not_found`.
+  - **R4-2a (pre-opened store regression)**: New `TestR4CacheAuthorityIsProjectionNotCache::test_lifecycle_apply_on_pre_opened_store_with_empty_cache` opens process B before process A promotes, runs the lifecycle through B, and asserts durable event/projection/idempotency state.
+  - **R4-2b (overlapping concurrent stores)**: New `TestR4OverlappingConcurrentStores::test_two_stores_contend_concurrently_for_lifecycle_apply` holds both stores open in two threads, joins both into a 3-party barrier (workers + main) and an explicit `go` event, then verifies exactly one thread applies and the other replays under contention. The R3 multi-process test only exercised sequential stores, so this is a genuinely new regression class.
+  - **R4-3 (replay refreshes the stale cache)**: Idempotent replay now calls `self._refresh_cache_from_projection(incident_id)` after the `BEGIN IMMEDIATE` commit so the cache observed by the replay handler reflects the durable projection row, not the stale pre-apply view. `TestR4ReplayRefreshesStaleCache::test_replay_on_pre_opened_store_heals_cache` proves the cache is populated and `store.get_incident()` returns the typed `diagnosis_loop` state on the replaying process.
+  - **R4-4 (typed `diagnosis_loop` projection boundary)**: `Incident.diagnosis_loop: dict[str, Any] | None` is now a typed dataclass field. The serializer (`incident_to_dict`/`incident_from_dict`) and the snapshot helper (`incident_snapshot_helpers.snapshot_incident`) round-trip it. `TestR4TypedDiagnosisLoopField::test_apply_hydrates_typed_diagnosis_loop_on_cached_incident` proves the field is populated on the returned Incident, the cached Incident, and the detail-endpoint read. The in-process `mark_diagnosis_loop_*_impl` methods also refresh the cache from the projection after `append_event` so they expose the typed state on the returned Incident.
+  - **R4-5 (staged tree)**: `git add -A && git diff --cached --check && git status --short` shows zero untracked files and zero unstaged ACT files. The 38-file diffstat is consistent with the R3 + R4 review scope; the four R3 test files plus the new R4 files plus all production sources plus all related support modules are staged.
+  - **Test file split**: 28 R3+R4 tests split across the existing R3 split files plus two new R4 files (`r4.py` core + `r4_concurrency.py` companion) to comply with the 500-line LLM-friendly threshold.
+  - **ACT-local fresh evidence**: gate ran after all changes were staged; output timestamp in the next digest will represent this tree.
+
+### 2026-07-12 — ACT-K9B-HULK-AUTO-DIAG-INCIDENT-AUTHORITY-SEAM01 R3 close
+
+- Target: SQLite lifecycle idempotency — close R3-1, R3-2, R3-3, R3-4, R3-5, R3-6 blockers from the R2 review.
+- Impact scan required: yes
+- Impact scan present: yes
+- Script used: no (manual `git grep` + `rg` against review findings)
+- Manual refinement present: yes
+- Planned files: 4 source (`incident_store_sqlite_schema.py`, `incident_store_sqlite_migrations.py`, `incident_store_sqlite_context.py`, `incident_store_sqlite_lifecycle_idempotency.py`), 1 driver test (`test_automatic_diagnosis_backend_promotion_regression.py`), 4 R3 test files.
+- Changed files: 6 source/test files (one R2 docstring-only side-effect), 1 unrelated pre-existing R2 test fix, 4 new R3 test files split for size.
+- Unexpected changed files: `tests/unit/test_automatic_diagnosis_backend_promotion_regression.py` — the R2 patch removed `check_incident_eligibility` from the processor module and replaced it with `evaluate_incident_eligibility` in `incident_diagnosis_authority_seam`, but the test still patched the old symbol. Confirmed pre-existing R2 regression by reverting R3 changes and re-running.
+- Likely tests identified by script: n/a (manual review).
+- Likely tests identified manually: existing `test_incident_store_sqlite_lifecycle_idempotency.py`, canonical seam (`test_incident_store_sqlite_*`), auto-diagnosis dispatch regression.
+- Targeted tests run: focused pytest on the R3 lifecycle idempotency test files (23 tests); broader SQLite + automatic_diagnosis suites (679 tests).
+- Full gate run: `./scripts/verify_all.sh --act-local` → PASS.
+- Reviewer scope objection: no.
+- Reviewer requested missing scan: no.
+- Script usefulness: n/a.
+- Did the scan reduce surprise: yes — review listed 10 required R3 tests and 6 specific blockers; both informed the implementation plan.
+- Notes:
+  - **Schema upgrade (R3-1)**: Bumped `SCHEMA_VERSION` 1 → 2 and added a v2 migration entry that re-applies the lifecycle idempotency table + the COALESCE-based UNIQUE index. v1 databases upgrade in place (covered by `test_v1_database_upgrades_to_v2_with_table_and_index`).
+  - **Capability seam (R3-4)**: Replaced the R2 module's direct `_write_lock`/`_connect()`/`_incidents`/`_snapshot_incident()` access with a thin adapter that delegates to the new canonical `SQLiteWriteContext.apply_diagnosis_lifecycle_idempotently` method. The new method owns the full lookup → hash-chained event append → canonical projection → idempotency record sequence in one `BEGIN IMMEDIATE` transaction and refreshes the in-memory cache from the projection on commit.
+  - **Hash chain (R3-3)**: The R2 patch wrote empty `payload_sha256` / `previous_event_sha256` / `event_sha256` placeholders; the new canonical path uses `EventBuilder` so the appended event is a real hash-chained link that subsequent canonical events connect to.
+  - **NULL uniqueness (R3-5)**: Index now uses `COALESCE(diagnosis_run_id, '')` so NULL participates in uniqueness; lookups mirror the expression.
+  - **Rollback proof (R3-6)**: Idempotency insert is a separate module-level helper so tests can monkey-patch it to inject a fault and verify the event row, projection row, and cache all roll back together.
+  - **Test file split**: 14 R3 tests split across 4 files to comply with the 500-line LLM-friendly threshold; companion references are documented in each file's docstring.
+
+---
+
 ### 2026-06-05 — Planner data derivation extraction
 
 - **Change:** Extracted planner data derivation from `App.tsx` into `frontend/src/app/usePlannerDataProps.ts`.
@@ -177,5 +233,6 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 - Notes: Script confirmed the target but was weak for broad target name `App`; manual refinement found relevant tests and narrowed the edit to dead comments only. The final diff stayed surgical.
 
 ---
+
 
 *Add new entries at the top, below this separator.*
