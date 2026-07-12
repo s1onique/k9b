@@ -19,7 +19,7 @@ from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from k8s_diag_agent.collect.incident_diagnosis_auto_loop_cursor_ops import (
     handle_cursor_disposition,
@@ -294,14 +294,16 @@ class TestSQLiteCursorLifecycle(TestCase):
         store = SQLiteIncidentStore(self._db_path)
         ext_analysis = self._mock_external_analysis_dir()
 
-        mock_process_incident = MagicMock(
-            to_dict=MagicMock(return_value={
-                "incident_id": "test",
-                "eligible": True,
-                "eligibility_reason": "test",
-                "skipped": False,
-            })
-        )
+        def make_process_result(
+            incident_id: str,
+            **_: object,
+        ) -> AutoLoopIncidentResult:
+            return AutoLoopIncidentResult(
+                incident_id=incident_id,
+                eligible=True,
+                eligibility_reason="test",
+                skipped=False,
+            )
 
         env_patch = patch.dict("os.environ", {
             "K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED": "true",
@@ -322,7 +324,7 @@ class TestSQLiteCursorLifecycle(TestCase):
                                             with patch.object(SQLiteIncidentStore, "mark_diagnosis_loop_completed", return_value=None):
                                                 with patch(
                                                     "k8s_diag_agent.collect.incident_diagnosis_auto_loop_batch._process_incident",
-                                                    mock_process_incident,
+                                                    side_effect=make_process_result,
                                                 ):
                                                     run_automatic_diagnosis_loop_evidence_collection(
                                                         external_analysis_dir=ext_analysis,
