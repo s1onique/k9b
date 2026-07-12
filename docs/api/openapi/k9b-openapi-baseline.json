@@ -937,10 +937,77 @@
         ]
       }
     },
-    "/api/runs/{run_id}/alertmanager-sources/{source_id}/action": {
+    "/api/runs/{run_id}/alertmanager-sources/action": {
       "post": {
-        "description": "Perform an action (promote/disable) on an AlertManager source.",
+        "description": "Perform an action (promote/disable) on an AlertManager source. The sourceId is transported in the JSON request body so opaque identifiers that contain '/' do not need URL encoding.",
         "operationId": "perform_alertmanager_source_action",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "description": "AlertManager source action request. sourceId is in body to support slashes in identifiers.",
+                "properties": {
+                  "action": {
+                    "description": "Action to perform (promote, disable)",
+                    "type": "string"
+                  },
+                  "clusterLabel": {
+                    "description": "Cluster label for override persistence",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "description": "Optional reason for audit trail",
+                    "type": "string"
+                  },
+                  "sourceId": {
+                    "description": "AlertManager source identifier (may contain slashes)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "sourceId",
+                  "action",
+                  "clusterLabel"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Action performed"
+          }
+        },
+        "summary": "Perform AlertManager source action",
+        "tags": [
+          "alertmanager"
+        ]
+      }
+    },
+    "/api/runs/{run_id}/alertmanager-sources/debug-packet": {
+      "get": {
+        "description": "Get a debug packet for a specific AlertManager source with probe and discovery details. The sourceId is supplied via the required ``sourceId`` query parameter so the URL path does not need to be slashed-encoded.",
+        "operationId": "get_alertmanager_source_debug_packet",
         "parameters": [
           {
             "in": "path",
@@ -951,8 +1018,8 @@
             }
           },
           {
-            "in": "path",
-            "name": "source_id",
+            "in": "query",
+            "name": "sourceId",
             "required": true,
             "schema": {
               "type": "string"
@@ -968,12 +1035,137 @@
                 }
               }
             },
-            "description": "Action performed"
+            "description": "Debug packet generated"
           }
         },
-        "summary": "Perform AlertManager source action",
+        "summary": "Get AlertManager source debug packet",
         "tags": [
-          "incidents"
+          "alertmanager"
+        ]
+      }
+    },
+    "/api/runs/{run_id}/alertmanager-sources/debug-packet/probe": {
+      "post": {
+        "description": "Run a live probe on the AlertManager source and return the updated debug packet. The sourceId is supplied in the JSON request body.",
+        "operationId": "probe_alertmanager_source",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "description": "AlertManager source probe request. sourceId is in body to keep the POST path stable regardless of the source identifier content.",
+                "properties": {
+                  "sourceId": {
+                    "description": "AlertManager source identifier (may contain slashes)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "sourceId"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Probe completed"
+          }
+        },
+        "summary": "Probe AlertManager source now",
+        "tags": [
+          "alertmanager"
+        ]
+      }
+    },
+    "/api/runs/{run_id}/alertmanager-sources/promotion-review": {
+      "get": {
+        "description": "Get a pre-promotion review assessing risk before promoting a source to manual. The sourceId is supplied via the required ``sourceId`` query parameter so the URL path does not need to be slashed-encoded.",
+        "operationId": "get_alertmanager_source_promotion_review",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Promotion review generated"
+          }
+        },
+        "summary": "Get AlertManager source promotion review",
+        "tags": [
+          "alertmanager"
+        ]
+      }
+    },
+    "/api/runs/{run_id}/alertmanager-sources/review-packet": {
+      "get": {
+        "description": "Get the review packet explaining why multiple AlertManager sources were discovered.",
+        "operationId": "get_alertmanager_sources_review_packet",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Review packet generated"
+          }
+        },
+        "summary": "Get AlertManager sources review packet",
+        "tags": [
+          "alertmanager"
         ]
       }
     },
@@ -1025,6 +1217,10 @@
     {
       "description": "Runtime status and diagnostics endpoints.",
       "name": "runtime"
+    },
+    {
+      "description": "AlertManager source discovery, review, debug, and action endpoints. All AlertManager-source operations live under this single tag.",
+      "name": "alertmanager"
     }
   ]
 }

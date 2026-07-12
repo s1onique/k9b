@@ -1,7 +1,7 @@
 
 # PerformAlertmanagerSourceActionRequest
 
-AlertManager source action request
+AlertManager source action request. sourceId is in body to support slashes in identifiers.
 
 ## Properties
 
@@ -10,6 +10,7 @@ Name | Type
 `action` | string
 `clusterLabel` | string
 `reason` | string
+`sourceId` | string
 
 ## Example
 
@@ -21,6 +22,7 @@ const example = {
   "action": null,
   "clusterLabel": null,
   "reason": null,
+  "sourceId": null,
 } satisfies PerformAlertmanagerSourceActionRequest
 
 console.log(example)
@@ -35,5 +37,3 @@ console.log(exampleParsed)
 ```
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-
-

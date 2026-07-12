@@ -31,5 +31,9 @@ GET /api/proposals get_proposals
 GET /api/run get_run_detail
 POST /api/run-batch-next-check-execution run_batch_next_check_execution
 GET /api/runs list_runs
-POST /api/runs/{run_id}/alertmanager-sources/{source_id}/action perform_alertmanager_source_action
+POST /api/runs/{run_id}/alertmanager-sources/action perform_alertmanager_source_action
+GET /api/runs/{run_id}/alertmanager-sources/debug-packet get_alertmanager_source_debug_packet
+POST /api/runs/{run_id}/alertmanager-sources/debug-packet/probe probe_alertmanager_source
+GET /api/runs/{run_id}/alertmanager-sources/promotion-review get_alertmanager_source_promotion_review
+GET /api/runs/{run_id}/alertmanager-sources/review-packet get_alertmanager_sources_review_packet
 GET /api/runtime-status get_runtime_status

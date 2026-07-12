@@ -69,6 +69,14 @@ def build_openapi_schema() -> dict[str, Any]:
                 "description": "Read-only automatic/manual diagnosis loop endpoints.",
             },
             {"name": "runtime", "description": "Runtime status and diagnostics endpoints."},
+            {
+                "name": "alertmanager",
+                "description": (
+                    "AlertManager source discovery, review, debug, and action "
+                    "endpoints. All AlertManager-source operations live under "
+                    "this single tag."
+                ),
+            },
         ],
     }
 
@@ -110,14 +118,18 @@ def _build_operation_dict(op: APIOperation) -> dict[str, Any]:
             for param in op.path_params
         ]
 
-    # Add query params
+    # Add query params. Anything listed in `required_query_params` is emitted
+    # with `required: True`; the rest are optional. This lets the generated
+    # TypeScript client treat mandatory query parameters (e.g. AlertManager
+    # sourceId) as required positional arguments instead of optional ones.
     if op.query_params:
         params = operation.get("parameters", [])
+        required_set = set(op.required_query_params)
         for param in op.query_params:
             params.append({
                 "name": param,
                 "in": "query",
-                "required": False,
+                "required": param in required_set,
                 "schema": {"type": "string"},
             })
         operation["parameters"] = params

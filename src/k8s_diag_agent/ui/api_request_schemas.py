@@ -300,3 +300,21 @@ ALERTMANAGER_SOURCE_ACTION_REQUEST_SCHEMA = object_schema(
     required=("sourceId", "action", "clusterLabel"),
     description="AlertManager source action request. sourceId is in body to support slashes in identifiers.",
 )
+
+
+# -----------------------------------------------------------------------------
+# AlertManager source probe
+# -----------------------------------------------------------------------------
+
+ALERTMANAGER_SOURCE_PROBE_REQUEST_SCHEMA = object_schema(
+    properties={
+        "sourceId": string_schema(
+            "AlertManager source identifier (may contain slashes)"
+        ),
+    },
+    required=("sourceId",),
+    description=(
+        "AlertManager source probe request. sourceId is in body to keep the "
+        "POST path stable regardless of the source identifier content."
+    ),
+)

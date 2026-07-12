@@ -33,7 +33,7 @@ GENERATED_DIR="frontend/src/generated/k9b-api"
 echo "=== Generating frontend API client ==="
 
 # Step 1: Export OpenAPI schema
-echo "[1/3] Exporting OpenAPI schema..."
+echo "[1/4] Exporting OpenAPI schema..."
 cd "$REPO_ROOT"
 .venv/bin/python scripts/export_openapi_schema.py --output "$SCHEMA_PATH"
 if [ $? -ne 0 ]; then
@@ -43,7 +43,7 @@ fi
 echo "Schema exported to $SCHEMA_PATH"
 
 # Step 2: Generate TypeScript client
-echo "[2/3] Generating TypeScript client..."
+echo "[2/4] Generating TypeScript client..."
 
 # Check if schema exists
 if [ ! -f "$SCHEMA_PATH" ]; then
@@ -71,8 +71,12 @@ fi
 
 echo "Generated client written to $GENERATED_DIR"
 
-# Step 3: Verify generated files
-echo "[3/3] Verifying generated files..."
+# Step 3: Normalise generated output (deterministic trailing-whitespace pass)
+echo "[3/4] Normalising generated client output..."
+.venv/bin/python scripts/normalize_generated_client.py --root "$GENERATED_DIR"
+
+# Step 4: Verify generated files
+echo "[4/4] Verifying generated files..."
 if [ ! -f "$GENERATED_DIR/index.ts" ]; then
     echo "ERROR: Generated index.ts not found" >&2
     exit 3

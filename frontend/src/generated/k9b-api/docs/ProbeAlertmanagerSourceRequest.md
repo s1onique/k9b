@@ -1,25 +1,23 @@
 
-# RunBatchNextCheckExecutionRequest
+# ProbeAlertmanagerSourceRequest
 
-Batch next-check execution request
+AlertManager source probe request. sourceId is in body to keep the POST path stable regardless of the source identifier content.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`dryRun` | boolean
-`runId` | string
+`sourceId` | string
 
 ## Example
 
 ```typescript
-import type { RunBatchNextCheckExecutionRequest } from ''
+import type { ProbeAlertmanagerSourceRequest } from ''
 
 // TODO: Update the object below with actual values
 const example = {
-  "dryRun": null,
-  "runId": null,
-} satisfies RunBatchNextCheckExecutionRequest
+  "sourceId": null,
+} satisfies ProbeAlertmanagerSourceRequest
 
 console.log(example)
 
@@ -28,7 +26,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as RunBatchNextCheckExecutionRequest
+const exampleParsed = JSON.parse(exampleJSON) as ProbeAlertmanagerSourceRequest
 console.log(exampleParsed)
 ```
 

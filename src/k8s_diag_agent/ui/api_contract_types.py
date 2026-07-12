@@ -47,6 +47,11 @@ class APIOperation:
     responses: tuple[APIResponse, ...] = ()
     path_params: tuple[str, ...] = ()  # Param names in path
     query_params: tuple[str, ...] = ()  # Param names in query string
+    # Subset of query_params that must be supplied. Used by OpenAPI generation to
+    # emit `required: True` so callers (including the generated TypeScript client)
+    # treat the parameter as mandatory. Defaults to empty so existing optional
+    # query params (limit/page/etc.) keep their existing semantics.
+    required_query_params: tuple[str, ...] = ()
     # Dispatch metadata - use string import paths to avoid circular imports
     handler: str = ""  # Lazy import path, e.g., "k8s_diag_agent.ui.api_openapi:handle_openapi_json"
     match: str = "exact"  # "exact" or "template"

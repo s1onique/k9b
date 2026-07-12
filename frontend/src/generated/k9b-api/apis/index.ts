@@ -1,5 +1,6 @@
 /* tslint:disable */
 /* eslint-disable */
+export * from './AlertmanagerApi';
 export * from './AuthApi';
 export * from './DiagnosisApi';
 export * from './HealthApi';

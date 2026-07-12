@@ -1,3 +1,4 @@
+apis/AlertmanagerApi.ts
 apis/AuthApi.ts
 apis/DiagnosisApi.ts
 apis/HealthApi.ts
@@ -5,6 +6,7 @@ apis/IncidentsApi.ts
 apis/OpenapiApi.ts
 apis/RuntimeApi.ts
 apis/index.ts
+docs/AlertmanagerApi.md
 docs/ApproveNextCheckRequest.md
 docs/AuthApi.md
 docs/CaptureIncidentSnapshot200Response.md
@@ -26,6 +28,7 @@ docs/OpenapiApi.md
 docs/PerformAlertmanagerSourceActionRequest.md
 docs/PostAuthLogin200Response.md
 docs/PostAuthLoginRequest.md
+docs/ProbeAlertmanagerSourceRequest.md
 docs/PromoteDeterministicNextCheckRequest.md
 docs/RecordAlertmanagerRelevanceFeedbackRequest.md
 docs/RecordNextCheckUsefulnessRequest.md
@@ -48,6 +51,7 @@ models/ListRuns200Response.ts
 models/PerformAlertmanagerSourceActionRequest.ts
 models/PostAuthLogin200Response.ts
 models/PostAuthLoginRequest.ts
+models/ProbeAlertmanagerSourceRequest.ts
 models/PromoteDeterministicNextCheckRequest.ts
 models/RecordAlertmanagerRelevanceFeedbackRequest.ts
 models/RecordNextCheckUsefulnessRequest.ts

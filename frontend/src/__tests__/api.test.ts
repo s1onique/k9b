@@ -563,12 +563,15 @@ describe("performAlertmanagerSourceAction", () => {
         }),
       })
     );
+    // The wrapper routes through the generated AlertmanagerApi client and
+    // ``normalizeGeneratedApiError`` falls back to a ``Request failed with
+    // status <code>`` message when the response body has no ``error`` field.
     await expect(
       performAlertmanagerSourceAction(
         { sourceId: "src-123", clusterLabel: "cluster-a", action: "promote" },
         "run-456"
       )
-    ).rejects.toThrow("HTTP 500:");
+    ).rejects.toThrow("Request failed with status 500");
   });
 
   test("sends sourceId with special characters in request body", async () => {

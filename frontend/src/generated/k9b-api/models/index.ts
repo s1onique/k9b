@@ -16,6 +16,7 @@ export * from './ListRuns200Response';
 export * from './PerformAlertmanagerSourceActionRequest';
 export * from './PostAuthLogin200Response';
 export * from './PostAuthLoginRequest';
+export * from './ProbeAlertmanagerSourceRequest';
 export * from './PromoteDeterministicNextCheckRequest';
 export * from './RecordAlertmanagerRelevanceFeedbackRequest';
 export * from './RecordNextCheckUsefulnessRequest';

@@ -17,7 +17,6 @@ All URIs are relative to *http://localhost*
 | [**listIncidents**](IncidentsApi.md#listincidents) | **GET** /api/incidents | List incidents |
 | [**listNotifications**](IncidentsApi.md#listnotifications) | **GET** /api/notifications | List notifications |
 | [**listRuns**](IncidentsApi.md#listruns) | **GET** /api/runs | List runs |
-| [**performAlertmanagerSourceAction**](IncidentsApi.md#performalertmanagersourceactionoperation) | **POST** /api/runs/{run_id}/alertmanager-sources/{source_id}/action | Perform AlertManager source action |
 | [**promoteDeterministicNextCheck**](IncidentsApi.md#promotedeterministicnextcheckoperation) | **POST** /api/deterministic-next-check/promote | Promote deterministic next-check |
 | [**recordAlertmanagerRelevanceFeedback**](IncidentsApi.md#recordalertmanagerrelevancefeedbackoperation) | **POST** /api/alertmanager-relevance-feedback | Record AlertManager relevance feedback |
 | [**recordNextCheckUsefulness**](IncidentsApi.md#recordnextcheckusefulnessoperation) | **POST** /api/next-check-execution-usefulness | Record next-check usefulness feedback |
@@ -909,79 +908,6 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## performAlertmanagerSourceAction
-
-> object performAlertmanagerSourceAction(runId, sourceId, performAlertmanagerSourceActionRequest)
-
-Perform AlertManager source action
-
-Perform an action (promote/disable) on an AlertManager source.
-
-### Example
-
-```ts
-import {
-  Configuration,
-  IncidentsApi,
-} from '';
-import type { PerformAlertmanagerSourceActionOperationRequest } from '';
-
-async function example() {
-  console.log("🚀 Testing  SDK...");
-  const api = new IncidentsApi();
-
-  const body = {
-    // string
-    runId: runId_example,
-    // string
-    sourceId: sourceId_example,
-    // PerformAlertmanagerSourceActionRequest
-    performAlertmanagerSourceActionRequest: ...,
-  } satisfies PerformAlertmanagerSourceActionOperationRequest;
-
-  try {
-    const data = await api.performAlertmanagerSourceAction(body);
-    console.log(data);
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-// Run the test
-example().catch(console.error);
-```
-
-### Parameters
-
-
-| Name | Type | Description  | Notes |
-|------------- | ------------- | ------------- | -------------|
-| **runId** | `string` |  | [Defaults to `undefined`] |
-| **sourceId** | `string` |  | [Defaults to `undefined`] |
-| **performAlertmanagerSourceActionRequest** | [PerformAlertmanagerSourceActionRequest](PerformAlertmanagerSourceActionRequest.md) |  | |
-
-### Return type
-
-**object**
-
-### Authorization
-
-No authorization required
-
-### HTTP request headers
-
-- **Content-Type**: `application/json`
-- **Accept**: `application/json`
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-| **200** | Action performed |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-
-
 ## promoteDeterministicNextCheck
 
 > object promoteDeterministicNextCheck(promoteDeterministicNextCheckRequest)
@@ -1449,4 +1375,3 @@ No authorization required
 | **200** | Diagnosis completed |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-
