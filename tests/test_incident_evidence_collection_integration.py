@@ -51,6 +51,11 @@ class TestCollectorEntrypointIntegration:
             from k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection import (
                 run_automatic_diagnosis_loop_evidence_collection,
             )
+            from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
+                BackendIncidentFound,
+                BackendIncidentLookupSource,
+            )
+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
 
             # Create mock page with one incident
             mock_page = self._make_page("inc-123")
@@ -60,7 +65,7 @@ class TestCollectorEntrypointIntegration:
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination"
             ) as mock_list, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
-                "fetch_incident_for_diagnosis"
+                "fetch_backend_incident_for_diagnosis_typed"
             ) as mock_fetch, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
                 "check_incident_eligibility"
@@ -92,8 +97,17 @@ class TestCollectorEntrypointIntegration:
                 mock_incident_obj.incident_id = "inc-123"
                 mock_incident_obj.to_dict.return_value = {"incident_id": "inc-123", "title": "Test"}
 
+                expected_loop_result = {"status": "success"}
+
                 mock_list.return_value = AutomaticPageListed(page=mock_page)
-                mock_fetch.return_value = (mock_incident_obj, True, None)
+                mock_fetch.return_value = BackendIncidentFound(
+                    requested_incident_id=IncidentId("inc-123"),
+                    incident=mock_incident_obj,
+                    source=BackendIncidentLookupSource.LOCAL_STORE,
+                    http_status=None,
+                    payload_schema_version=None,
+                    payload_type=None,
+                )
                 mock_eligibility.return_value = MagicMock(eligible=True, reason="test")
                 mock_safe.return_value = True
                 mock_case_file.return_value = {"suggested_checks": []}
@@ -104,7 +118,8 @@ class TestCollectorEntrypointIntegration:
                     "loop_pass_artifact": None,
                 }
                 mock_review.return_value = {"written": False}
-                mock_hypothesis_loop.return_value = MagicMock(to_dict=MagicMock(return_value={"status": "success"}))
+                mock_hypothesis_loop.return_value = MagicMock(to_dict=MagicMock(return_value=dict(expected_loop_result)))
+
 
                 # Run the collector with one incident
                 now = datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
@@ -122,18 +137,18 @@ class TestCollectorEntrypointIntegration:
                     now=now,
                 )
 
-                # Verify the hypothesis loop was called
-                # It should be called once (for the one incident)
+                # Verify the seams were actually exercised (no dead mocks)
+                mock_fetch.assert_called_once()
+                mock_hypothesis_loop.assert_called_once()
+
+                # Verify the hypothesis loop result is propagated to the
+                # collector result via the legacy ``hypothesis_loop_result``
+                # field. This is the real behavioral assertion: the loop
+                # ran and its result dict landed on the incident outcome.
                 assert len(result.incident_results) >= 1
-
-                # Check that hypothesis_loop_result is present in incident result
                 incident_result = result.incident_results[0]
-                assert "hypothesis_loop_result" in incident_result
+                assert incident_result.get("hypothesis_loop_result") == expected_loop_result
 
-                # hypothesis_loop_result should be a dict (or None if loop failed)
-                # The fact that it's in the dict means the field is being assigned
-                loop_result = incident_result.get("hypothesis_loop_result")
-                assert loop_result is None or isinstance(loop_result, dict)
 
     def test_collector_summary_uses_real_health_run_id(self, tmp_path: Path) -> None:
         """Collector summary uses first incident's real health run_id, not collector-{id}."""
@@ -230,6 +245,12 @@ class TestCollectorEntrypointIntegration:
             from k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection import (
                 run_automatic_diagnosis_loop_evidence_collection,
             )
+            from k8s_diag_agent.collect.incident_diagnosis_backend_detail_outcomes import (
+                BackendIncidentFound,
+                BackendIncidentLookupSource,
+            )
+            from k8s_diag_agent.domain.incident_lifecycle import IncidentId
+
 
             # Create mock page with signal incident
             mock_page = self._make_page("signal-inc-456")
@@ -268,7 +289,7 @@ class TestCollectorEntrypointIntegration:
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_collection.list_incidents_with_pagination"
             ) as mock_list, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
-                "fetch_incident_for_diagnosis"
+                "fetch_backend_incident_for_diagnosis_typed"
             ) as mock_fetch, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
                 "check_incident_eligibility"
@@ -299,7 +320,14 @@ class TestCollectorEntrypointIntegration:
                 mock_hypothesis_loop.return_value = mock_loop_result
 
                 mock_list.return_value = AutomaticPageListed(page=mock_page)
-                mock_fetch.return_value = (mock_incident_obj, True, None)
+                mock_fetch.return_value = BackendIncidentFound(
+                    requested_incident_id=IncidentId("signal-inc-456"),
+                    incident=mock_incident_obj,
+                    source=BackendIncidentLookupSource.LOCAL_STORE,
+                    http_status=None,
+                    payload_schema_version=None,
+                    payload_type=None,
+                )
                 mock_eligibility.return_value = MagicMock(
                     eligible=True,
                     reason="has_signals",
@@ -318,6 +346,7 @@ class TestCollectorEntrypointIntegration:
                 }
                 mock_review.return_value = {"written": True}
 
+
                 now = datetime(2024, 1, 20, 14, 0, 0, tzinfo=UTC)
                 result = run_automatic_diagnosis_loop_evidence_collection(
                     external_analysis_dir=tmp_path,
@@ -333,12 +362,14 @@ class TestCollectorEntrypointIntegration:
                     now=now,
                 )
 
-                # Verify hypothesis loop was called with signal-bearing incident
+                # Verify the seams were actually exercised (no dead mocks)
+                mock_fetch.assert_called_once()
                 mock_hypothesis_loop.assert_called_once()
                 call_kwargs = mock_hypothesis_loop.call_args.kwargs
                 incident_arg = call_kwargs.get("incident") or call_kwargs.get("incident_arg")
                 assert incident_arg is not None
                 assert incident_arg.get("signals") is not None
+
 
                 # Verify result contains hypothesis loop result
                 assert len(result.incident_results) >= 1
