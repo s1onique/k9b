@@ -213,7 +213,10 @@ class TestEligibilityModel:
     def test_active_status_is_eligible(self, clean_store, sample_open_incident):
         """Prove open incident is eligible."""
         config = AutomaticDiagnosisLoopConfig()
-        result = check_incident_eligibility(sample_open_incident.incident_id, config)
+        result = check_incident_eligibility(
+            incident_id=sample_open_incident.incident_id,
+            config=config,
+        )
         assert result.eligible is True
         assert "active" in result.reason
 
@@ -236,7 +239,10 @@ class TestEligibilityModel:
         clean_store._incidents[incident.incident_id] = incident
 
         config = AutomaticDiagnosisLoopConfig()
-        result = check_incident_eligibility(incident.incident_id, config)
+        result = check_incident_eligibility(
+            incident_id=incident.incident_id,
+            config=config,
+        )
         assert result.eligible is True
 
     def test_investigating_status_is_eligible(self, clean_store):
@@ -258,7 +264,10 @@ class TestEligibilityModel:
         clean_store._incidents[incident.incident_id] = incident
 
         config = AutomaticDiagnosisLoopConfig()
-        result = check_incident_eligibility(incident.incident_id, config)
+        result = check_incident_eligibility(
+            incident_id=incident.incident_id,
+            config=config,
+        )
         assert result.eligible is True
 
     def test_resolved_incident_not_eligible(self, clean_store, sample_open_incident):
@@ -266,7 +275,10 @@ class TestEligibilityModel:
         sample_open_incident.status = IncidentStatus.RESOLVED
 
         config = AutomaticDiagnosisLoopConfig()
-        result = check_incident_eligibility(sample_open_incident.incident_id, config)
+        result = check_incident_eligibility(
+            incident_id=sample_open_incident.incident_id,
+            config=config,
+        )
         assert result.eligible is False
         assert "terminal" in result.reason
 
@@ -290,7 +302,10 @@ class TestEligibilityModel:
         clean_store._incidents[incident.incident_id] = incident
 
         config = AutomaticDiagnosisLoopConfig()
-        result = check_incident_eligibility(incident.incident_id, config)
+        result = check_incident_eligibility(
+            incident_id=incident.incident_id,
+            config=config,
+        )
         assert result.eligible is False
         assert "terminal" in result.reason
 
@@ -314,7 +329,10 @@ class TestEligibilityModel:
         clean_store._incidents[incident.incident_id] = incident
 
         config = AutomaticDiagnosisLoopConfig()
-        result = check_incident_eligibility(incident.incident_id, config)
+        result = check_incident_eligibility(
+            incident_id=incident.incident_id,
+            config=config,
+        )
         assert result.eligible is False
         assert "terminal" in result.reason
 
@@ -337,13 +355,19 @@ class TestEligibilityModel:
         clean_store._incidents[incident.incident_id] = incident
 
         config = AutomaticDiagnosisLoopConfig()
-        result = check_incident_eligibility(incident.incident_id, config)
+        result = check_incident_eligibility(
+            incident_id=incident.incident_id,
+            config=config,
+        )
         assert result.eligible is False
 
     def test_nonexistent_incident_not_eligible(self, clean_store):
         """Prove nonexistent incident returns not eligible."""
         config = AutomaticDiagnosisLoopConfig()
-        result = check_incident_eligibility("nonexistent-incident-id", config)
+        result = check_incident_eligibility(
+            incident_id="nonexistent-incident-id",
+            config=config,
+        )
         assert result.eligible is False
         assert result.reason == "incident_not_found"
 

@@ -101,7 +101,11 @@ class TestBudgetDiscoveryParity:
 
         # Check eligibility - must find nested artifact
         config = AutomaticDiagnosisLoopConfig()
-        result = check_incident_eligibility(incident_id, config, temp_external_dir)
+        result = check_incident_eligibility(
+            incident_id=incident_id,
+            config=config,
+            external_analysis_dir=temp_external_dir,
+        )
 
         assert result.eligible is False
         assert result.reason == "budget_exhausted"

@@ -36,6 +36,7 @@ class TestInternalApiAuthAllowlist:
             "/api/internal/incidents/promote-candidates",
             "/api/internal/incidents",
             "/api/internal/incidents/list",
+            "/api/internal/incidents/diagnosis-loop-transition",
         }
         assert _INTERNAL_AUTH_EXEMPT_ROUTES == expected_routes
 

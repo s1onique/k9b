@@ -152,9 +152,9 @@ class TestExistingPacketContinuesIntoLoop:
             mock_fetch_typed,
         )
 
-        # Mock check_incident_eligibility to return eligible
+        # Mock evaluate_incident_eligibility to return eligible (aggregate path used by the processor)
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.check_incident_eligibility",
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.evaluate_incident_eligibility",
             lambda *args, **kwargs: MagicMock(eligible=True, reason="active_incident"),
         )
 
@@ -245,9 +245,9 @@ class TestAlertRefreshDoesNotStarvePendingWork:
             mock_fetch_typed,
         )
 
-        # Mock check_incident_eligibility to return eligible
+        # Mock evaluate_incident_eligibility to return eligible (aggregate path used by the processor)
         monkeypatch.setattr(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.check_incident_eligibility",
+            "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor.evaluate_incident_eligibility",
             lambda *args, **kwargs: MagicMock(eligible=True, reason="active_incident"),
         )
 

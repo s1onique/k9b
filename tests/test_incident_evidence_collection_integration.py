@@ -15,6 +15,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from k8s_diag_agent.collect.incident_diagnosis_authority_seam_types import (
+    LifecycleTransition,
+    LifecycleWriteApplied,
+)
 from k8s_diag_agent.collect.incident_diagnosis_dispatch_contracts import (
     DiagnosisPageIncident,
 )
@@ -68,14 +72,32 @@ class TestCollectorEntrypointIntegration:
                 "fetch_backend_incident_for_diagnosis_typed"
             ) as mock_fetch, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
-                "check_incident_eligibility"
+                "evaluate_incident_eligibility"
             ) as mock_eligibility, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
                 "is_safe_run_id"
             ) as mock_safe, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
-                "get_incident_store"
-            ) as _, patch(
+                "record_diagnosis_loop_started",
+                lambda **kwargs: LifecycleWriteApplied(
+                    transition=LifecycleTransition.STARTED,
+                    incident_id=kwargs["incident_id"],
+                ),
+            ), patch(
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
+                "record_diagnosis_loop_completed",
+                lambda **kwargs: LifecycleWriteApplied(
+                    transition=LifecycleTransition.COMPLETED,
+                    incident_id=kwargs["incident_id"],
+                ),
+            ), patch(
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
+                "record_diagnosis_loop_failed",
+                lambda **kwargs: LifecycleWriteApplied(
+                    transition=LifecycleTransition.FAILED,
+                    incident_id=kwargs["incident_id"],
+                ),
+            ), patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
                 "build_incident_case_file"
             ) as mock_case_file, patch(
@@ -292,14 +314,32 @@ class TestCollectorEntrypointIntegration:
                 "fetch_backend_incident_for_diagnosis_typed"
             ) as mock_fetch, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
-                "check_incident_eligibility"
+                "evaluate_incident_eligibility"
             ) as mock_eligibility, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
                 "is_safe_run_id"
             ) as mock_safe, patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
-                "get_incident_store"
-            ) as _, patch(
+                "record_diagnosis_loop_started",
+                lambda **kwargs: LifecycleWriteApplied(
+                    transition=LifecycleTransition.STARTED,
+                    incident_id=kwargs["incident_id"],
+                ),
+            ), patch(
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
+                "record_diagnosis_loop_completed",
+                lambda **kwargs: LifecycleWriteApplied(
+                    transition=LifecycleTransition.COMPLETED,
+                    incident_id=kwargs["incident_id"],
+                ),
+            ), patch(
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
+                "record_diagnosis_loop_failed",
+                lambda **kwargs: LifecycleWriteApplied(
+                    transition=LifecycleTransition.FAILED,
+                    incident_id=kwargs["incident_id"],
+                ),
+            ), patch(
                 "k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor."
                 "build_incident_case_file"
             ) as mock_case_file, patch(
