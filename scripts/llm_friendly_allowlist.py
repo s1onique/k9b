@@ -270,9 +270,7 @@ ALLOWLIST: list[tuple[str, str]] = [
     # coverage of the new ``BackendIncidentLookupOutcome`` algebra,
     # ``BackendIncidentNotFound.source`` discriminator, and the typed
     # ``diagnosis_failure_reason_for_backend_lookup`` mapping. Narrowly
-    # justified pending staged extraction into focused modules
-    # (canonical outcome contract, source-mode helpers, AST verifier
-    # self-tests).
+    # justified pending staged extraction into focused modules.
     (
         "tests/unit/test_automatic_diagnosis_backend_detail_dispositions.py",
         "[EXTRACTION] R1 dispositions integration tests - canonical 200/404/500 path coverage; staged extraction",
@@ -280,10 +278,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     (
         "tests/unit/test_automatic_diagnosis_backend_detail_outcomes.py",
         "[EXTRACTION] R1 outcome-algebra unit tests - all 3 variants + dispatcher contract; staged extraction",
-    ),
-    (
-        "tests/unit/test_automatic_diagnosis_backend_detail_outcomes_verifier.py",
-        "[EXTRACTION] R1 AST verifier self-tests - all forbidden mutations + substring reject; staged extraction",
     ),
     (
         "tests/unit/test_automatic_diagnosis_backend_detail_security.py",
