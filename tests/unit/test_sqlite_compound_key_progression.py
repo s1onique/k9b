@@ -35,6 +35,9 @@ from k8s_diag_agent.collect.incident_diagnosis_auto_loop_models import (
 from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
     decode_cursor,
 )
+from k8s_diag_agent.collect.incident_diagnosis_review_packet_budget import (
+    ReviewPacketCreationBudget,
+)
 from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus
 from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
 from k8s_diag_agent.collect.incident_store_sqlite_events import (
@@ -204,10 +207,18 @@ class TestSQLiteCompoundKeyProgression(TestCase):
         def make_process_result(
             incident_id: str,
             external_analysis_dir: Path,
-            config: object,
+            config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
-            now: object,
+            now: datetime,
+            review_packet_budget: ReviewPacketCreationBudget | None = None,
         ) -> AutoLoopIncidentResult:
+            del (
+                external_analysis_dir,
+                config,
+                collector_run_id,
+                now,
+                review_packet_budget,
+            )
             return AutoLoopIncidentResult(
                 incident_id=incident_id,
                 eligible=True,

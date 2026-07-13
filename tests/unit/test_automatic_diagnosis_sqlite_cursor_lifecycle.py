@@ -21,6 +21,9 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
+from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
+    AutomaticDiagnosisLoopConfig,
+)
 from k8s_diag_agent.collect.incident_diagnosis_auto_loop_cursor_ops import (
     handle_cursor_disposition,
 )
@@ -39,6 +42,9 @@ from k8s_diag_agent.collect.incident_diagnosis_cursor_disposition import (
 from k8s_diag_agent.collect.incident_diagnosis_keyset_cursor import (
     decode_cursor,
     make_test_cursor,
+)
+from k8s_diag_agent.collect.incident_diagnosis_review_packet_budget import (
+    ReviewPacketCreationBudget,
 )
 from k8s_diag_agent.collect.incident_lifecycle import IncidentStatus
 from k8s_diag_agent.collect.incident_store_sqlite import SQLiteIncidentStore
@@ -197,10 +203,18 @@ class TestSQLiteCursorLifecycle(TestCase):
         def make_process_result(
             incident_id: str,
             external_analysis_dir: Path,
-            config: object,
+            config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
-            now: object,
+            now: datetime,
+            review_packet_budget: ReviewPacketCreationBudget | None = None,
         ) -> AutoLoopIncidentResult:
+            del (
+                external_analysis_dir,
+                config,
+                collector_run_id,
+                now,
+                review_packet_budget,
+            )
             return AutoLoopIncidentResult(
                 incident_id=incident_id,
                 eligible=True,
@@ -296,8 +310,19 @@ class TestSQLiteCursorLifecycle(TestCase):
 
         def make_process_result(
             incident_id: str,
-            **_: object,
+            external_analysis_dir: Path,
+            config: AutomaticDiagnosisLoopConfig,
+            collector_run_id: str,
+            now: datetime,
+            review_packet_budget: ReviewPacketCreationBudget | None = None,
         ) -> AutoLoopIncidentResult:
+            del (
+                external_analysis_dir,
+                config,
+                collector_run_id,
+                now,
+                review_packet_budget,
+            )
             return AutoLoopIncidentResult(
                 incident_id=incident_id,
                 eligible=True,

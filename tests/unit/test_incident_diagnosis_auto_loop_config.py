@@ -192,6 +192,14 @@ class TestAutomaticDiagnosisLoopConfig:
         assert config.max_checks_per_pass == 5
         assert config.write_stop_path_packets is True
         assert config.write_ineligible_packets is False
+        # R1 contract: the per-run review-packet creation budget
+        # defaults to 1 so a fresh collector writes at most one
+        # review packet before being throttled.
+        assert config.max_review_packets == 1
+        # Hypothesis-loop wall-clock budget. Kept aligned with
+        # ``HypothesisLoopConfig.max_seconds_per_incident`` so the
+        # dataclass default and the loop default stay in lock-step.
+        assert config.max_seconds_per_incident == 45
 
     def test_config_to_dict(self):
         """Prove config serializes to dict correctly."""
@@ -200,6 +208,18 @@ class TestAutomaticDiagnosisLoopConfig:
         assert d["max_incidents_per_run"] == 10
         assert d["max_passes_per_incident"] == 1
         assert d["max_checks_per_pass"] == 5
+        # Both halves of the R1 / R7 dataclass contract must round-trip
+        # through ``to_dict()`` so observability and operator overrides
+        # can read them without missing keys.
+        assert d["max_review_packets"] == 1
+        assert d["max_seconds_per_incident"] == 45
+
+    def test_max_seconds_per_incident_default_and_serialization(self):
+        """Compact regression for the new wall-clock budget field."""
+        config = AutomaticDiagnosisLoopConfig()
+
+        assert config.max_seconds_per_incident == 45
+        assert config.to_dict()["max_seconds_per_incident"] == 45
 
 
 # =============================================================================

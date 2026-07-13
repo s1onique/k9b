@@ -109,6 +109,13 @@ class AutomaticDiagnosisLoopConfig:
     # pre-existing review-packet artifacts on disk.
     max_review_packets: int = 1
 
+    # Per-incident wall-clock budget forwarded to ``HypothesisLoopConfig``
+    # by :func:`k8s_diag_agent.collect.incident_diagnosis_auto_loop_evidence_processor._process_incident`.
+    # Keep the default aligned with
+    # ``HypothesisLoopConfig.max_seconds_per_incident`` so the dataclass
+    # and the hypothesis loop stay in lock-step.
+    max_seconds_per_incident: int = 45
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "max_incidents_per_run": self.max_incidents_per_run,
@@ -118,6 +125,7 @@ class AutomaticDiagnosisLoopConfig:
             "write_ineligible_packets": self.write_ineligible_packets,
             "require_complete_root_cause_before_stop": self.require_complete_root_cause_before_stop,
             "max_review_packets": self.max_review_packets,
+            "max_seconds_per_incident": self.max_seconds_per_incident,
         }
 
 

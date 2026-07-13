@@ -187,6 +187,9 @@ class TestTwoRunCollectorIntegration:
         from k8s_diag_agent.collect.incident_diagnosis_pagination_results import (
             AutomaticPageListed,
         )
+        from k8s_diag_agent.collect.incident_diagnosis_review_packet_budget import (
+            ReviewPacketCreationBudget,
+        )
 
         # Enable automatic diagnosis loop for this test (defaults to disabled)
         # Use monkeypatch to ensure cleanup after test
@@ -247,16 +250,23 @@ class TestTwoRunCollectorIntegration:
         # ==== Mock expensive diagnosis work ====
         # Track which incidents were processed
         processed_incidents: list[str] = []
+        # R1: collector-local review-packet budget is forwarded to every
+        # per-incident ``_process_incident`` call within a single
+        # collector run. Record each budget so we can prove the same
+        # instance is reused across incidents.
+        seen_budgets: list[ReviewPacketCreationBudget | None] = []
 
         def mock_process_incident(
             incident_id: str,
-            external_analysis_dir,
-            config,
-            collector_run_id,
-            now,
+            external_analysis_dir: Path,
+            config: AutomaticDiagnosisLoopConfig,
+            collector_run_id: str,
+            now: datetime,
+            review_packet_budget: ReviewPacketCreationBudget | None = None,
         ) -> AutoLoopIncidentResult:
             """Mock that records which incidents were processed."""
             processed_incidents.append(incident_id)
+            seen_budgets.append(review_packet_budget)
             return AutoLoopIncidentResult(
                 incident_id=incident_id,
                 eligible=True,
@@ -298,9 +308,28 @@ class TestTwoRunCollectorIntegration:
         assert saved_token is not None
         assert reset_reason is None
 
+        # R1 contract (run 1): the collector-local
+        # ``ReviewPacketCreationBudget`` must be a real, non-None
+        # object, and the SAME instance must be forwarded to every
+        # ``_process_incident`` call within this run. Asserting
+        # ``is not None`` is required because ``all(budget is budgets[0])``
+        # would false-pass if every callback received ``None``.
+        assert seen_budgets
+        run1_budget = seen_budgets[0]
+        assert run1_budget is not None, (
+            "Expected a real ReviewPacketCreationBudget to be forwarded; "
+            "got None."
+        )
+        assert all(budget is run1_budget for budget in seen_budgets), (
+            "Expected the SAME ReviewPacketCreationBudget instance to be "
+            "forwarded to every _process_incident call within a single run."
+        )
+
         # ==== RUN 2: Resume from cursor, collect remaining 10 ====
-        # Clear processed list for run 2
+        # Clear processed list and budget tracker for run 2 so the
+        # run-2 assertions only see run 2's evidence.
         processed_incidents.clear()
+        seen_budgets.clear()
 
         result2 = run_automatic_diagnosis_loop_evidence_collection(
             external_analysis_dir=runs_dir / "run-002" / "external-analysis",
@@ -317,3 +346,23 @@ class TestTwoRunCollectorIntegration:
         # Verify cursor was cleared (no more incidents)
         cleared_token, _ = _load_scan_cursor(runs_dir)
         assert cleared_token is None
+
+        # R1 contract (run 2): same-instance reuse, AND a fresh
+        # instance distinct from run 1's. Each collector run builds a
+        # new ``ReviewPacketCreationBudget`` keyed by its own
+        # ``collector_run_id``; if run 1 and run 2 share the same
+        # instance, the per-run isolation invariant is broken.
+        assert seen_budgets
+        run2_budget = seen_budgets[0]
+        assert run2_budget is not None, (
+            "Expected a real ReviewPacketCreationBudget to be forwarded; "
+            "got None."
+        )
+        assert run2_budget is not run1_budget, (
+            "Expected run 2's ReviewPacketCreationBudget to be a FRESH "
+            "instance distinct from run 1's."
+        )
+        assert all(budget is run2_budget for budget in seen_budgets), (
+            "Expected the SAME ReviewPacketCreationBudget instance to be "
+            "forwarded to every _process_incident call within a single run."
+        )

@@ -19,6 +19,9 @@ from k8s_diag_agent.collect.incident_diagnosis_authority_seam_types import (
     LifecycleTransition,
     LifecycleWriteApplied,
 )
+from k8s_diag_agent.collect.incident_diagnosis_auto_loop_config import (
+    AutomaticDiagnosisLoopConfig,
+)
 from k8s_diag_agent.collect.incident_diagnosis_dispatch_contracts import (
     DiagnosisPageIncident,
 )
@@ -147,13 +150,13 @@ class TestCollectorEntrypointIntegration:
                 now = datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
                 result = run_automatic_diagnosis_loop_evidence_collection(
                     external_analysis_dir=tmp_path,
-                    config=MagicMock(
+                    config=AutomaticDiagnosisLoopConfig(
                         max_incidents_per_run=10,
                         max_passes_per_incident=2,
                         max_checks_per_pass=3,
                         max_seconds_per_incident=300,
                         write_stop_path_packets=False,
-                        to_dict=lambda: {},
+                        max_review_packets=1,
                     ),
                     incident_ids=["inc-123"],
                     now=now,
@@ -390,13 +393,13 @@ class TestCollectorEntrypointIntegration:
                 now = datetime(2024, 1, 20, 14, 0, 0, tzinfo=UTC)
                 result = run_automatic_diagnosis_loop_evidence_collection(
                     external_analysis_dir=tmp_path,
-                    config=MagicMock(
+                    config=AutomaticDiagnosisLoopConfig(
                         max_incidents_per_run=5,
                         max_passes_per_incident=2,
                         max_checks_per_pass=3,
                         max_seconds_per_incident=120,
                         write_stop_path_packets=False,
-                        to_dict=lambda: {},
+                        max_review_packets=1,
                     ),
                     incident_ids=["signal-inc-456"],
                     now=now,
