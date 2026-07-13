@@ -79,6 +79,7 @@ class CandidateSignal:
     source: str  # pod, deployment, event
     reason: str
     message: str  # sanitized
+    fingerprint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -103,7 +104,15 @@ class IncidentCandidate:
             "object_name": self.object_name,
             "class": self.candidate_class.value,
             "severity": self.severity.value,
-            "signals": [{"source": s.source, "reason": s.reason, "message": s.message} for s in self.signals],
+            "signals": [
+                {
+                    "source": s.source,
+                    "reason": s.reason,
+                    "message": s.message,
+                    **({"fingerprint": s.fingerprint} if s.fingerprint else {}),
+                }
+                for s in self.signals
+            ],
             "evidence_needed": list(self.evidence_needed),
         }
         # Include raw_object_kind for disambiguation when object_kind is UNKNOWN

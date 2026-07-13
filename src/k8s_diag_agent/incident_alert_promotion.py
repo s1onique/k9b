@@ -122,6 +122,8 @@ class AlertIncidentPromotionResult:
 def alert_signal_to_incident_candidate(
     signal: AlertSignal,
     correlation_key: str,
+    *,
+    signal_fingerprint: str | None = None,
 ) -> IncidentCandidate:
     """Project an alert signal to an incident candidate.
 
@@ -149,6 +151,7 @@ def alert_signal_to_incident_candidate(
             source="alert",
             reason=signal.alertname,
             message=_build_alert_message(signal),
+            fingerprint=signal_fingerprint or signal.signal_id,
         )
     ]
 

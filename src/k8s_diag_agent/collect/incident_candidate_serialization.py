@@ -64,6 +64,7 @@ def incident_candidate_to_dict(candidate: IncidentCandidate) -> dict[str, Any]:
             "source": signal.source,
             "reason": signal.reason,
             "message": signal.message,
+            **({"fingerprint": signal.fingerprint} if signal.fingerprint else {}),
         }
         for signal in candidate.signals
     ]
@@ -127,6 +128,7 @@ def incident_candidate_from_dict(data: dict[str, Any]) -> IncidentCandidate:
                 source=sig_data.get("source", "detector"),
                 reason=sig_data.get("reason", ""),
                 message=sig_data.get("message", ""),
+                fingerprint=sig_data.get("fingerprint"),
             )
         )
 

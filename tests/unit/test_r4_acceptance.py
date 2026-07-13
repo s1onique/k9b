@@ -555,16 +555,22 @@ class TestSnapshotSignalsUseBatchAggregates:
         from k8s_diag_agent.health import loop_alertmanager_snapshot_signals
 
         module_text = Path(loop_alertmanager_snapshot_signals.__file__).read_text()
-        # Must NOT recompute counts from records/persisted artifacts.
-        assert "scanned=batch.scanned" in module_text
-        assert "firing=batch.firing" in module_text
-        assert "opened_incidents=batch.opened_incidents" in module_text
-        assert "updated_incidents=batch.updated_incidents" in module_text
-        assert "skipped_duplicates=batch.skipped_duplicates" in module_text
-        assert "errors=batch.errors" in module_text
+        # The current-run scoped path surfaces the batch aggregates verbatim
+        # and routes them into the explicit current-run log payload.
+        assert "scanned_signal_count=batch.scanned" in module_text
+        assert "opened_incident_count=batch.opened_incidents" in module_text
+        assert (
+            "materially_changed_incident_count=batch.updated_incidents"
+            in module_text
+        )
+        assert "skipped_signal_count=batch.skipped_duplicates" in module_text
+        assert "failure_count=batch.errors" in module_text
         # The legacy reconstruction patterns are gone.
         assert "skipped_count = sum(" not in module_text
         assert "error_count = sum(" not in module_text
+        # The forbidden global-scope string is no longer produced by the
+        # scheduler path.
+        assert "promotion_scan_scope=bundle=" not in module_text
 
 
 # =============================================================================

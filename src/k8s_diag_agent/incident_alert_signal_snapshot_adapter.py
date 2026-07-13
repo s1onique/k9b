@@ -82,6 +82,28 @@ class AlertSignalAdapterResult:
         return len(self.errors) > 0
 
 
+@dataclass(frozen=True, slots=True)
+class PersistedAlertSignal:
+    """Persisted alert signal paired with its deterministic artifact identity.
+
+    The scheduler hands the backend ``artifact_identity`` (the SHA256-derived
+    identity used in the artifact filename and lookup) rather than the
+    in-memory ``signal.signal_id`` UUID. The backend reads the artifact
+    via ``read_alert_signal_artifact(root, identity)``; passing the UUID
+    would fail closed with ``signal <uuid> is not present in the
+    current-run scope`` for every non-empty scoped request.
+
+    ``newly_written=False`` represents an already-existing artifact;
+    those duplicates MUST still be included in the current-run scope so
+    retry semantics, observation refreshes, and rebuilt incident stores
+    continue to work.
+    """
+
+    signal: AlertSignal
+    artifact_identity: str
+    newly_written: bool
+
+
 # =============================================================================
 # Adapter Functions
 # =============================================================================
@@ -286,8 +308,19 @@ def persist_alert_signals(
     signals: tuple[AlertSignal, ...],
     root: Path,
     raw_payload_artifact_id: str | None = None,
-) -> tuple[AlertSignalAdapterResult, list[AlertSignal]]:
+) -> tuple[AlertSignalAdapterResult, list[PersistedAlertSignal]]:
     """Persist alert signals to artifacts.
+
+    R1 contract: every successfully observed signal is returned as a
+    :class:`PersistedAlertSignal` carrying the **deterministic artifact
+    identity** (SHA256-derived, used as the artifact filename). The
+    scheduler passes those identities to the backend's scoped promotion
+    endpoint so the backend can read the corresponding artifact.
+
+    Both newly-written artifacts and already-existing duplicates are
+    included in the returned list. Excluding duplicates would silently
+    drop retry/rebuild/observation-refresh semantics from the current-run
+    scope.
 
     Args:
         signals: Alert signals to persist
@@ -295,7 +328,9 @@ def persist_alert_signals(
         raw_payload_artifact_id: Optional reference to raw snapshot artifact
 
     Returns:
-        Tuple of (AdapterResult, list of successfully written signals)
+        Tuple of (AdapterResult, list of :class:`PersistedAlertSignal`)
+        in the order the artifacts were processed. The artifact
+        identity is the canonical lookup key the backend expects.
     """
     if not signals:
         return (
@@ -307,7 +342,7 @@ def persist_alert_signals(
             [],
         )
 
-    written_signals: list[AlertSignal] = []
+    persisted_signals: list[PersistedAlertSignal] = []
     errors: list[str] = []
     duplicate_count = 0
     write_failures = 0
@@ -324,10 +359,22 @@ def persist_alert_signals(
         )
 
         if result.success:
+            identity = result.identity
+            if identity is None:
+                errors.append(
+                    f"Successful write without identity for signal {signal.signal_id}"
+                )
+                write_failures += 1
+                continue
             if result.is_duplicate:
                 duplicate_count += 1
-            else:
-                written_signals.append(signal)
+            persisted_signals.append(
+                PersistedAlertSignal(
+                    signal=signal,
+                    artifact_identity=identity,
+                    newly_written=not result.is_duplicate,
+                )
+            )
             if signal.status == AlertStatus.FIRING:
                 firing_count += 1
             else:
@@ -344,12 +391,12 @@ def persist_alert_signals(
             firing_signals_count=firing_count,
             resolved_signals_count=resolved_count,
             skipped_count=0,
-            signals_written=len(written_signals),
+            signals_written=len(persisted_signals) - duplicate_count,
             signals_skipped_duplicates=duplicate_count,
             signals_failed=write_failures,
             errors=tuple(errors),
         ),
-        written_signals,
+        persisted_signals,
     )
 
 
@@ -398,6 +445,7 @@ def _parse_datetime(value: str | None) -> datetime | None:
 
 __all__ = [
     "AlertSignalAdapterResult",
+    "PersistedAlertSignal",
     "adapt_snapshot_to_alert_signals",
     "persist_alert_signals",
 ]

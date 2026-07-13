@@ -133,7 +133,7 @@ def _ingest_alert_signals(
     # Persist alert signals
     if signals:
         root = directories["root"]
-        persist_result, _written_signals = persist_alert_signals(
+        persist_result, written_signals = persist_alert_signals(
             signals=signals,
             root=root,
             raw_payload_artifact_id=raw_payload_artifact_id,
@@ -154,34 +154,65 @@ def _ingest_alert_signals(
         )
 
         # Promote firing signals to incidents via the dispatcher.
-        # The dispatcher selects the appropriate path (local vs
-        # backend-api) based on configuration. In backend-api mode the
-        # scheduler posts to backend internal API; in local mode it uses
-        # the process-local store directly.
+        # The scheduler ingestion is the current-run scoped path; the
+        # backend NEVER falls back to a global firing-signal scan.
+        # The scoped promotion endpoint reads the artifact by its
+        # deterministic identity (SHA256-derived), NOT the in-memory
+        # ``signal.signal_id`` UUID. Passing the UUID would fail closed
+        # with ``signal <uuid> is not present in the current-run
+        # scope`` for every non-empty scoped request.
+        #
+        # R3: stable-deduplicate the artifact workset before posting.
+        # ``PersistAlertSignal`` includes already-existing duplicate
+        # artifacts (retry/rebuild semantics). The scoped backend
+        # contract rejects duplicate ``signalIds`` via
+        # ``PromoteAlertSignalsRequest`` so we MUST collapse repeated
+        # artifact identities into a unique tuple. The two duplicate
+        # counts are exposed as separate metrics so the audit log can
+        # distinguish between raw persistence duplicates (skipped
+        # writes to disk) and the current-batch identity collapse
+        # (collapse caused by stable-deduplication before posting).
+        unique_artifact_identities: list[str] = list(
+            dict.fromkeys(
+                str(persisted.artifact_identity) for persisted in written_signals
+            )
+        )
+        # ``artifact_write_duplicate_count`` is the raw persistence
+        # duplicate count reported by ``persist_alert_signals``. It is
+        # the number of artifacts that were already on disk from a
+        # previous run and therefore were NOT re-persisted this run.
+        artifact_write_duplicate_count = int(
+            getattr(persist_result, "signals_skipped_duplicates", 0) or 0
+        )
+        # ``current_batch_identity_collapse_count`` is the difference
+        # between the raw persisted count and the unique
+        # artifact-identity count. It represents the number of
+        # duplicates collapsed by the stable-deduplication step
+        # before posting to the scoped backend.
+        current_batch_identity_collapse_count = max(
+            0,
+            len(written_signals) - len(unique_artifact_identities),
+        )
+        # ``duplicate_artifact_count`` is preserved for back-compat
+        # with the legacy log field but now reflects the current-batch
+        # identity collapse metric (the value callers have historically
+        # inferred).
+        duplicate_count = current_batch_identity_collapse_count
+        current_run_signal_ids: tuple[str, ...] = tuple(unique_artifact_identities)
         try:
-            # Import dispatcher at runtime to avoid circular imports.
-            # ``promote_alert_signals_for_accumulator`` returns typed
-            # ``PromotionRecord`` values which we copy straight into the
-            # accumulator.
             from ..collect.incident_promotion_dispatch import (
-                promote_alert_signals_for_accumulator,
+                promote_alert_signals_scoped_for_accumulator,
             )
 
-            # R3: the dispatcher hands us a typed ``PromotionBatch``. We
-            # consume its aggregates verbatim and never infer
-            # ``promotion_mode`` from whether records are empty.
-            batch = promote_alert_signals_for_accumulator(
+            batch = promote_alert_signals_scoped_for_accumulator(
                 runs_dir=root,
+                health_run_id=run_id,
+                source_identity=source_instance,
+                signal_ids=current_run_signal_ids,
                 accumulator=promotion_accumulator,
-                snapshot_bundle_id=None,
+                cluster_context=effective_cluster_context,
             )
 
-            # R4 task 5: use the batch aggregates VERBATIM. The batch
-            # is the dispatcher-reported truth source; we do NOT
-            # reconstruct scanned/firing/opened/updated/skipped_duplicates
-            # /errors from the typed record list (which can contain
-            # ``<aggregate>`` synthesized entries) or from persisted
-            # artifact counts.
             promotion_mode = batch.promotion_mode
             log_event_name = (
                 "alert-signals-promoted-via-backend"
@@ -189,11 +220,19 @@ def _ingest_alert_signals(
                 else "alert-signals-promoted"
             )
 
-            # Bounded error messages from the batch; the dispatcher
-            # already enforces bounded diagnostics, but we cap here
-            # defensively to keep the log payload bounded.
             error_messages = list(batch.error_messages)
             bounded_error_messages = error_messages[:5]
+            actionable = list(batch.canonical_incident_ids())
+            # R2: read the typed category counts from the batch result so
+            # the log line is scope-honest; the previous implementation
+            # hard-coded both fields to zero.
+            promotion_result = batch.promotion_result
+            observation_refreshed_count = len(
+                getattr(promotion_result, "observation_refreshed_incident_ids", ())
+            )
+            unchanged_count = len(
+                getattr(promotion_result, "unchanged_incident_ids", ())
+            )
 
             log_event(
                 "alertmanager-snapshot",
@@ -203,21 +242,33 @@ def _ingest_alert_signals(
                 run_id=run_id,
                 run_label=run_label,
                 source_identity=source_instance,
-                scanned=batch.scanned,
-                firing=batch.firing,
-                opened_incidents=batch.opened_incidents,
-                updated_incidents=batch.updated_incidents,
-                skipped_duplicates=batch.skipped_duplicates,
-                errors=batch.errors,
-                error_messages=bounded_error_messages,
-                opened_incident_ids=list(batch.opened_incident_ids),
-                updated_incident_ids=list(batch.updated_incident_ids),
-                unique_candidate_count=batch.unique_candidate_count,
+                promotion_scope="explicit_current_run_signal_ids",
                 promotion_scan_scope=batch.promotion_scan_scope,
+                requested_signal_count=len(current_run_signal_ids),
+                # R3: surface the two distinct duplicate metrics so the
+                # audit log can attribute each duplicate to either the
+                # raw persistence layer (already-existing artifacts on
+                # disk) or the current-batch identity collapse step
+                # (stable-deduplication before posting).
+                persisted_signal_count=len(written_signals),
+                unique_artifact_signal_count=len(unique_artifact_identities),
+                artifact_write_duplicate_count=artifact_write_duplicate_count,
+                current_batch_identity_collapse_count=current_batch_identity_collapse_count,
+                duplicate_artifact_count=duplicate_count,
+                scanned_signal_count=batch.scanned,
+                opened_incident_count=batch.opened_incidents,
+                materially_changed_incident_count=batch.updated_incidents,
+                observation_refreshed_incident_count=observation_refreshed_count,
+                unchanged_incident_count=unchanged_count,
+                actionable_incident_count=len(actionable),
+                skipped_signal_count=batch.skipped_duplicates,
+                failure_count=batch.errors,
                 incident_access_mode=batch.incident_access_mode,
-                promotion_mode=batch.promotion_mode,
+                promotion_mode=promotion_mode,
+                unique_candidate_count=batch.unique_candidate_count,
                 promotion_record_count=len(batch.promotion_records),
                 cluster_context=effective_cluster_context,
+                error_messages=bounded_error_messages,
             )
         except Exception as exc:
             log_event(

@@ -18,6 +18,12 @@ Exports:
 
 from __future__ import annotations
 
+from k8s_diag_agent.domain.identifiers import (
+    AlertSignalBatchId,
+    AlertSignalId,
+    AutomaticDiagnosisCollectorRunId,
+    HealthRunId,
+)
 from k8s_diag_agent.domain.incident_lifecycle import (
     DuplicateOfIncidentId,
     # Identifiers
@@ -49,6 +55,10 @@ from k8s_diag_agent.domain.incident_lifecycle import (
 
 __all__ = [
     # Identifiers
+    "HealthRunId",
+    "AlertSignalId",
+    "AlertSignalBatchId",
+    "AutomaticDiagnosisCollectorRunId",
     "IncidentId",
     "SourceCandidateId",
     "SnapshotBundleId",

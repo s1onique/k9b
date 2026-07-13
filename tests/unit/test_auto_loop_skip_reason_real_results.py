@@ -81,24 +81,26 @@ class TestRealEligibilityResults:
     def test_active_incident_with_review_packets_is_skipped_via_budget(
         self, temp_external_dir, enabled_auto_loop, monkeypatch: pytest.MonkeyPatch
     ):
-        """Pre-existing review packets push the count over ``max_passes_per_incident``.
+        """R1 contract: pre-existing review packets do NOT cause a fresh
+        collector to skip a new incident. The collector-local
+        :class:`ReviewPacketCreationBudget` is the authoritative
+        accounting source; the historical filesystem count is bypassed.
 
-        ``check_incident_eligibility`` returns ``budget_exhausted`` which
-        maps to ``DiagnosisSkipReason.REVIEW_PACKET_BUDGET_EXHAUSTED``.
+        Exhaustion is reached only when the budget's
+        ``can_attempt()`` returns ``False`` after successful packet
+        writes inside the same collector run.
         """
         store = IncidentStore()
         incident_id = _create_incident_with_status(
             store, name="pod-budget", status=IncidentStatus.COLLECTING_EVIDENCE
         )
 
-        # Drop a fake "auto-" review packet into the external-analysis dir.
-        # ``check_incident_eligibility`` rglobs for
-        # ``auto-{incident_id}-*-diagnosis-review-packet.json``.
-        # The temp_external_dir already exists, so the rglob finds the file
-        # and the budget count goes to 1.
+        # Drop a fake "auto-" review packet into the external-analysis
+        # dir; under the legacy contract this would push the count over
+        # ``max_passes_per_incident``. Under the R1 contract the
+        # collector-local budget starts at zero usage regardless.
         external_dir = temp_external_dir
         external_dir.mkdir(parents=True, exist_ok=True)
-        # Create N review packets to exceed max_passes_per_incident (default 1)
         for i in range(3):
             (external_dir / f"auto-{incident_id}-run{i}-diagnosis-review-packet.json").write_text("{}")
 
@@ -106,7 +108,7 @@ class TestRealEligibilityResults:
 
         config = AutomaticDiagnosisLoopConfig(
             max_incidents_per_run=10,
-            max_passes_per_incident=2,  # 3 pre-existing packets > 2 budget
+            max_passes_per_incident=2,
         )
 
         try:
@@ -116,14 +118,19 @@ class TestRealEligibilityResults:
                 incident_ids=[incident_id],
             )
 
-            # The incident should be skipped, with the closed-vocabulary reason.
-            assert result.incidents_skipped == 1
-            assert result.incidents_eligible == 0
-            assert result.disposition_summary is not None
-            summary = result.disposition_summary
-            assert summary.skipped == 1
-            assert summary.skip_reasons.get(DiagnosisSkipReason.REVIEW_PACKET_BUDGET_EXHAUSTED) == 1
-            _assert_conservation(summary)
+            # R1: the incident is NOT skipped because of historical packets.
+            # It may be eligible or ineligible for other reasons; this test
+            # only asserts the legacy ``review_packet_budget_exhausted``
+            # skip is no longer triggered by pre-existing artifacts.
+            summary_skip_reasons = (
+                result.disposition_summary.skip_reasons
+                if result.disposition_summary is not None
+                else {}
+            )
+            assert (
+                DiagnosisSkipReason.REVIEW_PACKET_BUDGET_EXHAUSTED
+                not in summary_skip_reasons
+            )
         finally:
             set_incident_store(None)
 

@@ -30,7 +30,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from .incident_candidates import (
     CandidateSignal,
@@ -150,6 +150,11 @@ class IncidentPromotionResult:
     # Canonical identity propagation
     opened_incident_ids: tuple[str, ...] = field(default_factory=tuple)
     updated_incident_ids: tuple[str, ...] = field(default_factory=tuple)
+    # R1: typed categories from the scoped endpoint.
+    observation_refreshed_incident_ids: tuple[str, ...] = field(
+        default_factory=tuple
+    )
+    unchanged_incident_ids: tuple[str, ...] = field(default_factory=tuple)
     promotion_records: tuple[dict[str, str | None], ...] = field(default_factory=tuple)
     unique_candidate_count: int = 0
     promotion_scan_scope: str = ""
@@ -199,6 +204,12 @@ def _result_from_dict(
     Carries the canonical incident IDs and per-candidate mapping (when the
     upstream provider exposes them) so callers can consume ``incident_id``
     values directly without re-deriving them from candidate attributes.
+
+    R2: every typed category produced by the new
+    ``IncidentPromotionResult`` (observation-refreshed, unchanged, skipped
+    signals, failures) is mapped from the wire/dict payload so the
+    dispatcher's downstream log lines and accumulator entries can read the
+    real category counts.
     """
     default_access_mode = _incident_access_mode_for_promotion_mode(promotion_mode)
     return IncidentPromotionResult(
@@ -213,6 +224,10 @@ def _result_from_dict(
         promotion_mode=promotion_mode,
         opened_incident_ids=tuple(d.get("opened_incident_ids") or ()),
         updated_incident_ids=tuple(d.get("updated_incident_ids") or ()),
+        observation_refreshed_incident_ids=tuple(
+            d.get("observation_refreshed_incident_ids") or ()
+        ),
+        unchanged_incident_ids=tuple(d.get("unchanged_incident_ids") or ()),
         promotion_records=tuple(
             dict(record) for record in (d.get("promotion_records") or ())
         ),
@@ -757,6 +772,98 @@ def promotion_records_from_result(
     return records
 
 
+def promote_alert_signals_scoped_for_accumulator(
+    *,
+    runs_dir: Path,
+    health_run_id: str,
+    source_identity: str,
+    signal_ids: tuple[str, ...],
+    accumulator: RunPromotionAccumulator | None = None,
+    cluster_context: str | None = None,
+) -> PromotionBatch:
+    """Current-run scoped promotion that NEVER scans the whole tree.
+
+    The dispatcher posts an explicit ``runId`` / ``sourceIdentity`` /
+    ``signalIds`` scope to the backend via the new
+    ``/api/internal/incidents/promote-alert-signals`` endpoint and
+    translates the typed response back into a ``PromotionBatch`` without
+    falling back to ``promote_alert_signals_for_accumulator``.
+    """
+    from .incident_promotion_backend import (
+        promote_alert_signals_via_scoped_backend_api,
+    )
+
+    if not signal_ids:
+        return _build_empty_batch(
+            accumulator=accumulator,
+            resolved_mode=MODE_BACKEND_API,
+            resolved_access_mode=INCIDENT_ACCESS_MODE_BACKEND,
+            runs_dir=runs_dir,
+            cluster_context=cluster_context,
+            snapshot_bundle_id=None,
+        )
+
+    result_dict = promote_alert_signals_via_scoped_backend_api(
+        run_id=health_run_id,
+        source_identity=source_identity,
+        signal_ids=list(signal_ids),
+    )
+
+    promotion_result = _result_from_dict(
+        result_dict,
+        promotion_mode=MODE_BACKEND_API,
+    )
+
+    records = tuple(promotion_records_from_result(promotion_result))
+    batch = PromotionBatch(
+        promotion_result=promotion_result,
+        promotion_records=records,
+        source_kind="alertmanager",
+        cluster_context=cluster_context,
+        snapshot_bundle_id=None,
+    )
+    if accumulator is not None:
+        accumulator.add_batch(batch)
+    return batch
+
+
+def _build_empty_batch(
+    *,
+    accumulator: RunPromotionAccumulator | None,
+    resolved_mode: str,
+    resolved_access_mode: str,
+    runs_dir: Path,
+    cluster_context: str | None,
+    snapshot_bundle_id: str | None,
+) -> PromotionBatch:
+    if resolved_mode == MODE_BACKEND_API:
+        scan_scope = "internal_api_alert_signals:scoped"
+    else:
+        scan_scope = f"alert_signal_artifacts:dir={runs_dir}"
+    empty_result = IncidentPromotionResult(
+        ok=True,
+        scanned=0,
+        firing=0,
+        opened_incidents=0,
+        updated_incidents=0,
+        skipped_duplicates=0,
+        errors=0,
+        promotion_mode=cast(Literal["local", "backend-api"], resolved_mode),
+        promotion_scan_scope=scan_scope,
+        incident_access_mode=resolved_access_mode,
+    )
+    empty_batch = PromotionBatch(
+        promotion_result=empty_result,
+        promotion_records=(),
+        source_kind="alertmanager",
+        cluster_context=cluster_context,
+        snapshot_bundle_id=snapshot_bundle_id,
+    )
+    if accumulator is not None:
+        accumulator.add_batch(empty_batch)
+    return empty_batch
+
+
 __all__ = [
     "IncidentPromotionDispatchConfig",
     "IncidentPromotionResult",
@@ -769,6 +876,7 @@ __all__ = [
     "promote_alert_signals",
     "promote_alert_signals_for_accumulator",
     "promote_alert_signals_from_artifacts",
+    "promote_alert_signals_scoped_for_accumulator",
     "promote_candidates",
     "log_promotion_config",
     "promotion_records_from_result",

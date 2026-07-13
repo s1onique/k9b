@@ -290,6 +290,42 @@ The automatic diagnosis loop is **read-only only**:
 - No external LLM calls
 - No unbounded loops
 
+### Current-run promotion scope
+
+The scheduler ingestion path posts an explicit current-run scope to
+the backend internal API: a ``runId`` / ``sourceIdentity`` / ``signalIds``
+tuple identifies the exact normalized alert-signal artifacts (and only
+those) that belong to the current health run. The backend NEVER
+falls back to a global firing-signal scan, NEVER infers current-run
+membership from timestamps, and NEVER re-uses a legacy
+``promote-alert-signals`` / global-scope endpoint. A missing, malformed,
+or cross-source artifact fails the request closed.
+
+The promotion result exposes an ``actionable_incident_ids`` projection
+owned by the result dataclass itself. The projection is the
+deduped union of opened and materially-changed canonical incident IDs
+in first-occurrence order; observation-refresh, unchanged, skipped,
+and failed categories are NEVER included. The diagnosis handoff MUST
+consume this projection; re-deriving the actionable set from raw
+counts or from the response log is forbidden.
+
+The scheduler log payload for the scoped promotion MUST include
+``promotion_scope=explicit_current_run_signal_ids`` and MUST NOT
+produce the forbidden ``internal_api_alert_signals:bundle=`` scope
+string.
+
+### Collector-local review-packet budget
+
+The collector-scoped review-packet creation budget starts at zero
+usage for every new ``AutomaticDiagnosisCollectorRunId``. A unit of
+budget is consumed only when a review packet is **persisted
+successfully** for the collector's run. Failed writes, ineligible /
+skipped incidents, and reusable existing packets do NOT charge the
+budget. The budget diagnostic source label is always the canonical
+``collector_run_accounting`` string so a fresh collector can never
+inherit usage from historical review-packet artifacts written by
+another collector.
+
 **The review packet is evidence only — it must not be interpreted as permission to act.**
 
 ### Loop run metadata fields
@@ -413,5 +449,6 @@ These are **target direction**, not current implementation.
 - [artifacts.md](./artifacts.md) — Artifact taxonomy and immutability
 - [ui-model-boundaries.md](./ui-model-boundaries.md) — UI/API read-model boundaries
 - `docs/incidents/automatic-diagnosis-loop.md` — Automatic diagnosis loop documentation
+- [ACT-K9B-INCIDENT-CURRENT-RUN-PROMOTION-DIAGNOSIS-WORKSET01](../acts/ACT-K9B-INCIDENT-CURRENT-RUN-PROMOTION-DIAGNOSIS-WORKSET01.md) — Current-run promotion and budget contract
 - `src/k8s_diag_agent/collect/incident_lifecycle.py` — Incident implementation
 - `src/k8s_diag_agent/collect/incident_events.py` — Event type definitions

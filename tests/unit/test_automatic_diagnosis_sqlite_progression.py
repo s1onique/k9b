@@ -194,6 +194,7 @@ class TestSQLiteStarvationProgression(TestCase):
             config: object,
             collector_run_id: str,
             now: object,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             return AutoLoopIncidentResult(
                 incident_id=incident_id,
@@ -316,6 +317,7 @@ class TestSQLiteStarvationProgression(TestCase):
             config: object,
             collector_run_id: str,
             now: object,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             processed_incidents.append(incident_id)
             mock_process()

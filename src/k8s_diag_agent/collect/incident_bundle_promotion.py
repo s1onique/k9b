@@ -153,6 +153,7 @@ def merge_candidate_into_incident_with_bundle(
                 reason=sig.reason,
                 message=sig.message,
                 captured_at=observed_at,
+                fingerprint=sig.fingerprint,
             )
         )
 

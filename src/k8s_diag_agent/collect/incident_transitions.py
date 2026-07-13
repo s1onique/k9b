@@ -51,6 +51,7 @@ def merge_candidate_into_incident(
             reason=sig.reason,
             message=sig.message,
             captured_at=observed_at,
+            fingerprint=sig.fingerprint,
         )
         for sig in candidate.signals
     ]

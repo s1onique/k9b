@@ -156,6 +156,7 @@ class TestSkippedHeadStarvationRegression:
             config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
             now: datetime,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             processed.append(incident_id)
             idx = int(incident_id.split("-")[1])
@@ -244,6 +245,7 @@ class TestSkippedHeadStarvationRegression:
             config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
             now: datetime,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             processed.append(incident_id)
             idx = int(incident_id.split("-")[1])
@@ -321,6 +323,7 @@ class TestSkippedHeadStarvationRegression:
             config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
             now: datetime,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             nonlocal call_count
             call_count += 1
@@ -388,6 +391,7 @@ class TestSkippedHeadStarvationRegression:
             config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
             now: datetime,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             processed.append(incident_id)
             return AutoLoopIncidentResult(

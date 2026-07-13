@@ -11,7 +11,7 @@ import json
 import logging
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode
 
 from .server_incident_internal_models import PromotionResponse
@@ -137,7 +137,7 @@ class SchedulerClient:
         snapshot_bundle_id: str | None = None,
         timeout: float = 30.0,
     ) -> PromotionResponse:
-        """Promote alert signals via backend internal API."""
+        """Promote alert signals via backend internal API (legacy batch)."""
         try:
             self._require_backend_url()
         except SchedulerBackendPromotionError as e:
@@ -167,6 +167,58 @@ class SchedulerClient:
             body = e.read().decode("utf-8")
             try:
                 err_data = json.loads(body)
+                return PromotionResponse(
+                    ok=False,
+                    errors=1,
+                    error_messages=[err_data.get("message", str(e))],
+                )
+            except json.JSONDecodeError:
+                return PromotionResponse(ok=False, errors=1, error_messages=[str(e)])
+        except Exception as e:
+            return PromotionResponse(ok=False, errors=1, error_messages=[str(e)])
+
+    def promote_alert_signals_scoped(
+        self,
+        *,
+        run_id: str,
+        source_identity: str,
+        signal_ids: list[str],
+        timeout: float = 30.0,
+    ) -> dict[str, Any] | PromotionResponse:
+        """Submit the explicit current-run promotion scope.
+
+        Returns the raw response dict so the scheduler can read the new
+        ``actionableIncidentIds`` projection without losing the legacy
+        ``PromotionResponse`` compatibility surface. Errors fall through
+        as the standard ``PromotionResponse(ok=False, ...)`` shape so
+        the dispatcher can keep its existing error handling.
+        """
+        try:
+            self._require_backend_url()
+        except SchedulerBackendPromotionError as e:
+            return PromotionResponse(ok=False, errors=1, error_messages=[str(e)])
+
+        url = f"{self._base_url}/api/internal/incidents/promote-alert-signals"
+        payload = {
+            "runId": run_id,
+            "sourceIdentity": source_identity,
+            "signalIds": list(signal_ids),
+        }
+        data = json.dumps(payload).encode("utf-8")
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8")
+                return cast("dict[str, Any]", json.loads(body))
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8")
+            try:
+                err_data = json.loads(err_body)
                 return PromotionResponse(
                     ok=False,
                     errors=1,

@@ -171,6 +171,7 @@ class TestExistingPacketContinuesIntoLoop:
             config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
             now: datetime,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             diagnosis_loop_run.append(incident_id)
             return AutoLoopIncidentResult(
@@ -259,6 +260,7 @@ class TestAlertRefreshDoesNotStarvePendingWork:
             config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
             now: datetime,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             processed.append(incident_id)
             if incident_id == "incident-old":

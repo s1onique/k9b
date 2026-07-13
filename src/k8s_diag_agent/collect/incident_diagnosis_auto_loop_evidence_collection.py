@@ -23,6 +23,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ..domain.identifiers import AutomaticDiagnosisCollectorRunId
 from .incident_automatic_diagnosis_loop import run_automatic_diagnosis_hypothesis_loop
 from .incident_case_file import build_incident_case_file
 
@@ -64,6 +65,9 @@ from .incident_diagnosis_disposition import (
 from .incident_diagnosis_loop_runtime_single_pass import run_policy_enforced_loop_pass
 from .incident_diagnosis_pagination_types import OpaqueCursorToken
 from .incident_diagnosis_review_packet import write_diagnosis_review_packet
+from .incident_diagnosis_review_packet_budget import (
+    ReviewPacketCreationBudget,
+)
 from .incident_read_only_check_artifacts import is_safe_run_id
 from .incident_store_provider import get_incident_store
 
@@ -164,6 +168,17 @@ def run_automatic_diagnosis_loop_evidence_collection(
 
     # Derive runs_dir from external_analysis_dir
     runs_dir = external_analysis_dir.parent.parent
+
+    # R1: instantiate a single collector-local review-packet creation
+    # budget at the entry of every collector run. This instance is the
+    # authoritative accounting object for the entire run; the historical
+    # filesystem-counting eligibility gate is bypassed when this
+    # object is present so a fresh collector starts at zero usage
+    # regardless of pre-existing review-packet artifacts.
+    review_packet_budget = ReviewPacketCreationBudget(
+        collector_run_id=AutomaticDiagnosisCollectorRunId(collector_run_id),
+        limit=resolved_config.max_review_packets,
+    )
 
     # Phase 1: Get candidates - cursor only loaded for automatic discovery
     max_diagnoses = resolved_config.max_incidents_per_run
@@ -270,6 +285,7 @@ def run_automatic_diagnosis_loop_evidence_collection(
         external_analysis_dir=external_analysis_dir,
         resolved_now=resolved_now,
         scheduler_run_id=scheduler_run_id,
+        review_packet_budget=review_packet_budget,
     )
 
     # Update result from typed batch outcome

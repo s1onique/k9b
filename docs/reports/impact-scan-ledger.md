@@ -236,3 +236,32 @@ If the ledger shows the scan is mostly cargo cult, noisy, or not reducing surpri
 
 
 *Add new entries at the top, below this separator.*
+
+### 2026-07-13 — ACT-K9B-INCIDENT-CURRENT-RUN-PROMOTION-DIAGNOSIS-WORKSET01 close
+
+- Target: Eliminate global incident churn and diagnosis starvation in backend-owned incident mode.
+- Impact scan required: yes
+- Impact scan present: yes
+- Script used: no (manual `git grep` against the production tree)
+- Manual refinement present: yes
+- Planned files: ~14 production + ~6 test + ~3 verifier + ~3 docs
+- Changed files: see commit
+- Unexpected changed files: none
+- Likely tests identified manually: scoped promotion unit + budget unit + scheduler-client unit + scoped handler unit + scoped promotion integration
+- Targeted tests run: focused pytest on the **71 R3+R3.2-targeted tests** (`tests/verifiers/test_incident_current_run_promotion_workset01.py` 27 + `tests/unit/test_act_k9b_collector_local_review_packet_budget01.py` 15 + `tests/unit/test_act_k9b_incident_current_run_promotion_workset01.py` 13 + `tests/integration/test_act_k9b_incident_current_run_promotion_workset01_e2e.py` 14 = 69, plus 2 cross-suite e2e regression paths inside the budget suite).
+- Full gate run: `scripts/verify_all.py --act-local` → **PASS** (17 checks / 0 failed); targeted pytest on the focused suite = **71 passed**.
+- **R3.2 negative + regression tests added** (9 cases): ``TestResponseParserRejectsMalformedIds`` (8 negative cases: empty/whitespace/oversized/unsafe/failure.signalId/empty runId/oversized sourceIdentity/actionable whitespace) + ``TestBackendLoggingCardinalities`` (1 cardinality regression asserting the audit event carries explicit signal counts even when categories collapse to 1 incident).
+- **R3.3 fix applied**: ``_parse_id_list`` now returns the typed list correctly (was rejecting missing field with ``()`` tuple default as non-list) and the failure loop applies ``_is_safe_id`` to every entry; the malformed-failure test now fails for the *correct* reason (``failure.signalId is malformed``) rather than via a side-effect at the missing-field default.
+- Reviewer scope objection: no
+- Reviewer requested missing scan: no
+- Script usefulness: n/a
+- Did the scan reduce surprise: yes — confirmed the new ``/api/internal/incidents/promote-alert-signals`` endpoint, the scheduler backend client, and the new typed contract were consistent across all production call sites
+- Notes:
+  - **Promotion result contract**: ``PromoteAlertSignalsRequest`` and ``IncidentPromotionResult`` live in ``incident_alert_promotion_contract.py``; the canonical ``actionable_incident_ids`` projection is owned by the result dataclass and consumed by the diagnosis handoff (``_derive_automatic_diagnosis_inputs``).
+  - **Scheduler ingestion path**: ``loop_alertmanager_snapshot_signals._ingest_alert_signals`` now calls ``promote_alert_signals_scoped_for_accumulator`` exclusively; the legacy global-scan dispatcher remains only for the manual ``/promote-candidates`` admin path.
+  - **Scheduler backend client**: ``SchedulerClient.promote_alert_signals_scoped`` posts the typed ``runId`` / ``sourceIdentity`` / ``signalIds`` payload and returns the new camelCase ``actionableIncidentIds`` projection.
+  - **Backend handler**: ``server_incident_internal_handlers.handle_promote_alert_signals`` now uses the typed ``parse_promote_alert_signals_request`` parser and ``promote_scoped_alert_signals``; fail-closed on missing/malformed/cross-source scope.
+  - **Collector-local budget**: ``ReviewPacketCreationBudget`` is keyed by ``AutomaticDiagnosisCollectorRunId``; ``record_successful_write`` is the only consumption point; reconstruction filters by exact collector_run_id, not filename, prefix, or health-run id.
+  - **Processor wiring**: ``_process_incident`` consults ``budget.can_attempt()`` before ``write_diagnosis_review_packet`` and only charges the budget after a successful write; pre-exhausted budget produces a ``not_eligible: review_packet_budget_exhausted`` skip.
+  - **Verifier + self-tests**: ``scripts/verifiers/incident_current_run_promotion_workset01.py`` runs 21 detectors across 11 production modules and is exercised by ``tests/verifiers/test_incident_current_run_promotion_workset01.py`` (27 paired positive/negative self-tests). Wired into ``act_local_verification.py`` as a noarg check.
+  - **End-to-end regression**: ``tests/integration/test_act_k9b_incident_current_run_promotion_workset01_e2e.py`` reproduces the production failure (75 historical + 1 current-run) and proves only 1 actionable incident is returned, 75 historical incidents remain untouched, and the budget starts at zero usage.

@@ -31,6 +31,9 @@ from .incident_lifecycle import IncidentStatus
 from .incident_store_provider import get_incident_store
 
 if TYPE_CHECKING:
+    from .incident_diagnosis_review_packet_budget import (
+        ReviewPacketCreationBudget,
+    )
     from .incident_lifecycle import Incident
 
 __all__ = [
@@ -100,6 +103,12 @@ class AutomaticDiagnosisLoopConfig:
     # (shipping, nodeSelector, k9b.dev/otel-lab-node, FailedScheduling) before stopping.
     require_complete_root_cause_before_stop: bool = False
 
+    # R1: per-run review-packet creation budget. The collector-local
+    # ``ReviewPacketCreationBudget`` is instantiated with this value as
+    # its limit. The collector starts at zero usage regardless of any
+    # pre-existing review-packet artifacts on disk.
+    max_review_packets: int = 1
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "max_incidents_per_run": self.max_incidents_per_run,
@@ -108,6 +117,7 @@ class AutomaticDiagnosisLoopConfig:
             "write_stop_path_packets": self.write_stop_path_packets,
             "write_ineligible_packets": self.write_ineligible_packets,
             "require_complete_root_cause_before_stop": self.require_complete_root_cause_before_stop,
+            "max_review_packets": self.max_review_packets,
         }
 
 
@@ -252,6 +262,7 @@ def evaluate_incident_eligibility(
     incident: Incident,
     config: AutomaticDiagnosisLoopConfig,
     external_analysis_dir: Path | None = None,
+    review_packet_budget: ReviewPacketCreationBudget | None = None,
 ) -> EligibilityResult:
     """Evaluate automatic-diagnosis eligibility from a typed incident aggregate.
 
@@ -261,6 +272,16 @@ def evaluate_incident_eligibility(
     ``incident_id`` as its only incident input. Filesystem inspection
     for existing review-packet artifacts and budget accounting is
     permitted where the budget lookup is required.
+
+    R1: when ``review_packet_budget`` is supplied, the historical
+    filesystem count of review-packet artifacts is NOT consulted; the
+    collector-local budget is the authoritative source of truth for
+    per-run packet-write exhaustion. The historical
+    ``_count_automatic_review_packets`` heuristic is restricted to
+    explicit collector-resume reconstruction (see
+    :func:`reconstruct_budget_from_existing_packets`) so a fresh
+    collector run starts at zero usage regardless of pre-existing
+    packet artifacts on disk.
 
     Production callers reach this function with the incident aggregate
     returned from :class:`BackendIncidentFound` so the same typed
@@ -273,11 +294,17 @@ def evaluate_incident_eligibility(
             identity for diagnostics and budget counts.
         config: Collector configuration with budget limits.
         external_analysis_dir: Optional path used to count existing
-            automatic review packets for the per-incident budget.
+            automatic review packets for the per-incident budget when
+            no collector-local budget is supplied.
+        review_packet_budget: Optional collector-local
+            :class:`ReviewPacketCreationBudget`. When supplied, the
+            per-run packet-write exhaustion is decided by the budget's
+            ``can_attempt()`` rather than by the historical filesystem
+            count.
 
     Returns:
         :class:`EligibilityResult` with the same closed vocabulary the
-        legacy ``check_incident_eligibility`` used, so existing
+        legacy ``check_incident_eligibility` used, so existing
         ``AutoLoopIncidentResult`` projection still works.
     """
     incident_id = str(incident.incident_id)
@@ -307,6 +334,33 @@ def evaluate_incident_eligibility(
     suggested_checks = list(getattr(incident, "signals", []) or [])
     has_suggested_checks = len(suggested_checks) > 0
 
+    if review_packet_budget is not None:
+        # R1: collector-local budget is authoritative; the historical
+        # filesystem count is NOT consulted. A fresh collector always
+        # starts at zero usage.
+        budget_diagnostics: tuple[DiagnosisBudgetDiagnostic, ...] = (
+            review_packet_budget.as_diagnostic_for_eligibility(),
+        )
+        if not review_packet_budget.can_attempt():
+            return EligibilityResult(
+                eligible=False,
+                incident_id=incident_id,
+                reason="budget_exhausted",
+                status=status.value,
+                has_suggested_checks=has_suggested_checks,
+                auto_pass_count=review_packet_budget.used,
+                budget_diagnostics=budget_diagnostics,
+            )
+        return EligibilityResult(
+            eligible=True,
+            incident_id=incident_id,
+            reason="active_incident_with_suggested_checks",
+            status=status.value,
+            has_suggested_checks=has_suggested_checks,
+            auto_pass_count=0,
+            budget_diagnostics=budget_diagnostics,
+        )
+
     # Per-incident budget: count existing automatic review packets.
     auto_pass_count = _count_automatic_review_packets(
         incident_id=incident_id,
@@ -315,7 +369,7 @@ def evaluate_incident_eligibility(
 
     budget_limit = config.max_passes_per_incident
     budget_remaining = max(0, budget_limit - auto_pass_count)
-    budget_diagnostics: tuple[DiagnosisBudgetDiagnostic, ...] = (
+    budget_diagnostics = (
         DiagnosisBudgetDiagnostic(
             name="review_packet_budget",
             used=auto_pass_count,

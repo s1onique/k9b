@@ -156,6 +156,7 @@ def open_incident_from_candidate(candidate: IncidentCandidate, observed_at: date
             reason=sig.reason,
             message=sig.message,
             captured_at=observed_at,
+            fingerprint=sig.fingerprint,
         )
         for sig in candidate.signals
     ]

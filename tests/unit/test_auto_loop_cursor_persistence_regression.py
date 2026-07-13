@@ -193,6 +193,7 @@ class TestCursorPersistenceMultiRun:
             config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
             now: datetime,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             # All are eligible
             return AutoLoopIncidentResult(
@@ -306,6 +307,7 @@ class TestCursorPersistenceMultiRun:
             config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
             now: datetime,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             processed.append(incident_id)
             return AutoLoopIncidentResult(
@@ -457,6 +459,7 @@ class TestCursorPersistenceMultiRun:
             config: AutomaticDiagnosisLoopConfig,
             collector_run_id: str,
             now: datetime,
+            review_packet_budget = None,
         ) -> AutoLoopIncidentResult:
             return AutoLoopIncidentResult(
                 incident_id=incident_id,

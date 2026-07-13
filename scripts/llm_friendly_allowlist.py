@@ -309,4 +309,24 @@ ALLOWLIST: list[tuple[str, str]] = [
         "src/k8s_diag_agent/collect/incident_diagnosis_disposition.py",
         "[EXTRACTION] R1 disposition - typed reason + compat re-exports; staged extraction",
     ),
+    (
+        "scripts/verifiers/incident_current_run_promotion_workset01.py",
+        "[EXTRACTION] R3 ACT verifier - 21 detectors for current-run promotion + collector-local budget across 11 production modules; 27 paired positive/negative self-tests in tests/verifiers; staged extraction",
+    ),
+    (
+        "src/k8s_diag_agent/collect/incident_candidates.py",
+        "[EXTRACTION] R1 candidate fingerprint propagation - CandidateSignal.fingerprint field added; staged extraction",
+    ),
+    (
+        "tests/unit/test_act_k9b_collector_local_review_packet_budget01.py",
+        "[EXTRACTION] R2 budget contract + production-equivalent collector integration test - real collector path with packet write; staged extraction",
+    ),
+    (
+        "tests/integration/test_act_k9b_incident_current_run_promotion_workset01_e2e.py",
+        "[TEST] R3 + R3.2 scoped-promotion workset e2e - 14 production-equivalent regression tests (5 original + 8 strict-parser negative cases + 1 backend-logging cardinality regression); staged extraction",
+    ),
+    (
+        "tests/verifiers/test_incident_current_run_promotion_workset01.py",
+        "[TEST] R3 verifier self-test suite - 27 paired positive/negative fixtures across every critical wiring detector; staged split",
+    ),
 ]

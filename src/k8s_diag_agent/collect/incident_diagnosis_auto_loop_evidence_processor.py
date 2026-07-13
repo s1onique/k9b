@@ -80,6 +80,7 @@ from .incident_diagnosis_disposition import (
 from .incident_diagnosis_loop_models import LoopDecision
 from .incident_diagnosis_loop_runtime import run_policy_enforced_loop_pass
 from .incident_diagnosis_review_packet import write_diagnosis_review_packet
+from .incident_diagnosis_review_packet_budget import ReviewPacketCreationBudget
 from .incident_lifecycle import Incident
 from .incident_read_only_check_artifacts import is_safe_run_id
 
@@ -178,6 +179,7 @@ def _process_incident(
     config: AutomaticDiagnosisLoopConfig,
     collector_run_id: str,
     now: datetime,
+    review_packet_budget: ReviewPacketCreationBudget | None = None,
 ) -> AutoLoopIncidentResult:
     """Process a single incident in the automatic diagnosis loop.
 
@@ -277,11 +279,16 @@ def _process_incident(
 
     # INV-02: aggregate-based eligibility evaluation. The supplied
     # incident is the authoritative snapshot; we do NOT re-resolve
-    # through ``get_incident_store()`` here.
+    # through ``get_incident_store()`` here. R1: when the collector
+    # supplies a ``review_packet_budget``, that budget is the
+    # authoritative accounting source; the historical filesystem count
+    # of review-packet artifacts is bypassed so a fresh collector
+    # starts at zero usage.
     eligibility = evaluate_incident_eligibility(
         incident=incident_obj,
         config=config,
         external_analysis_dir=external_analysis_dir,
+        review_packet_budget=review_packet_budget,
     )
 
     _emit_eligibility_evaluated_event(
@@ -487,31 +494,62 @@ def _process_incident(
     review_packet_name = None
 
     should_write_packet = not is_stop_path or config.write_stop_path_packets
+    budget = review_packet_budget
+    budget_exhausted_skip = False
 
     if should_write_packet:
-        try:
-            review_packet_meta = write_diagnosis_review_packet(
-                external_analysis_dir=external_analysis_dir,
-                incident_id=incident_id,
-                collector_run_id=collector_run_id,
-                run_id=run_id,
-                decision=decision,
-                checks_requested=checks_requested,
-                checks_run=checks_run,
-                checks_skipped=checks_skipped,
-                checks_rejected=checks_rejected,
-                eligible=True,
-                eligibility_reason=eligibility.reason,
-                config=config,
-                now=now,
-                case_file=case_file,
-                orchestrator_result=orchestrator_result,
-            )
-            if review_packet_meta.get("written"):
-                review_packet_written = True
-                review_packet_name = str(review_packet_meta.get("name")) if review_packet_meta.get("name") else None
-        except (OSError, ValueError):
-            pass
+        if budget is not None and not budget.can_attempt():
+            budget_exhausted_skip = True
+        else:
+            try:
+                review_packet_meta = write_diagnosis_review_packet(
+                    external_analysis_dir=external_analysis_dir,
+                    incident_id=incident_id,
+                    collector_run_id=collector_run_id,
+                    run_id=run_id,
+                    decision=decision,
+                    checks_requested=checks_requested,
+                    checks_run=checks_run,
+                    checks_skipped=checks_skipped,
+                    checks_rejected=checks_rejected,
+                    eligible=True,
+                    eligibility_reason=eligibility.reason,
+                    config=config,
+                    now=now,
+                    case_file=case_file,
+                    orchestrator_result=orchestrator_result,
+                )
+                if review_packet_meta.get("written"):
+                    review_packet_written = True
+                    review_packet_name = (
+                        str(review_packet_meta.get("name"))
+                        if review_packet_meta.get("name")
+                        else None
+                    )
+                    if budget is not None and review_packet_name:
+                        try:
+                            budget.record_successful_write()
+                        except RuntimeError:
+                            budget_exhausted_skip = True
+            except (OSError, ValueError):
+                pass
+    if budget_exhausted_skip and not review_packet_written:
+        return AutoLoopIncidentResult(
+            incident_id=incident_id,
+            eligible=True,
+            eligibility_reason=eligibility.reason,
+            run_id=run_id,
+            skipped=True,
+            skip_reason=(
+                f"not_eligible: review_packet_budget_exhausted: "
+                f"collector={collector_run_id}"
+            ),
+            budget_diagnostics=(
+                (budget.as_diagnostic_for_eligibility(),)
+                if budget is not None
+                else ()
+            ),
+        )
 
     completed_outcome = record_diagnosis_loop_completed(
         incident_id=incident_id,

@@ -16,6 +16,30 @@ export K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED=true
 
 Default is **disabled** for safety.
 
+## Review-packet creation budget
+
+Each new automatic-diagnosis collector run starts with a fresh
+``ReviewPacketCreationBudget`` keyed by the collector's
+``AutomaticDiagnosisCollectorRunId``. A unit of budget is consumed
+ONLY when a review packet is **persisted successfully**; failed
+writes, ineligible/skipped incidents, and reusable existing packets
+do NOT charge the budget. The budget diagnostic source label is
+always the canonical ``collector_run_accounting`` string so a fresh
+collector can never inherit usage from historical review-packet
+artifacts written by another collector.
+
+| Field | Value | Meaning |
+|-------|-------|---------|
+| ``name`` | ``review_packet_creation_budget`` | stable diagnostic name |
+| ``scope`` | ``automatic_diagnosis_collector`` | per-collector key |
+| ``scope_id`` | collector run id | unique per collector |
+| ``used`` | integer | persisted packets by THIS collector |
+| ``limit`` | integer | configured ceiling |
+| ``remaining`` | integer | ``max(0, limit - used)`` |
+| ``exhausted`` | boolean | ``used >= limit`` |
+| ``source`` | ``collector_run_accounting`` | in-memory authority |
+| ``resettable`` | ``true`` | new collector = new budget |
+
 ## Behavior
 
 When enabled:

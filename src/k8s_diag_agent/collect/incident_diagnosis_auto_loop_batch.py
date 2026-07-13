@@ -34,6 +34,7 @@ from .incident_diagnosis_disposition import (
     reduce_disposition,
 )
 from .incident_diagnosis_keyset_cursor import IncidentDiagnosisCursor, cursor_after_page_incident
+from .incident_diagnosis_review_packet_budget import ReviewPacketCreationBudget
 
 _logger = logging.getLogger(__name__)
 
@@ -82,8 +83,15 @@ def process_incident_batch(
     external_analysis_dir: Path,
     resolved_now: datetime,
     scheduler_run_id: str | None = None,
+    review_packet_budget: ReviewPacketCreationBudget | None = None,
 ) -> IncidentBatchOutcome:
     """Process a batch of incidents and return aggregated results.
+
+    R1: a single ``ReviewPacketCreationBudget`` instance is passed in
+    by the collector entrypoint and forwarded to every per-incident
+    processor. All incidents in the batch share the same budget object
+    so a successful packet write consumes exactly one unit across the
+    whole collector run.
 
     Returns an ``IncidentBatchOutcome`` containing:
 
@@ -125,6 +133,7 @@ def process_incident_batch(
             config=resolved_config,
             collector_run_id=collector_run_id,
             now=resolved_now,
+            review_packet_budget=review_packet_budget,
         )
 
         # Reduce the typed disposition first; counters/derived fields follow.

@@ -112,7 +112,21 @@ def _build_default_check_registry() -> list[CheckCallable]:
         # Small-provider smoke and artifact verifier checks.
         noarg(run_small_provider_smoke_check),
         noarg(run_small_provider_artifact_verifier_check),
+        noarg(_run_incident_current_run_promotion_workset01),
     ]
+
+
+def _run_incident_current_run_promotion_workset01() -> CheckResult:
+    """Run the ACT-K9B-INCIDENT-CURRENT-RUN-PROMOTION-DIAGNOSIS-WORKSET01
+    static verifier as an ACT-local check."""
+    from act_local_checks import run_check
+
+    script_path = Path(__file__).parent / "verifiers" / "incident_current_run_promotion_workset01.py"
+    check_cmd = [
+        str(Path(__file__).parent.parent / ".venv" / "bin" / "python"),
+        str(script_path),
+    ]
+    return run_check("incident-current-run-promotion-workset01", check_cmd)
 
 
 DEFAULT_CHECK_REGISTRY: list[CheckCallable] = _build_default_check_registry()
