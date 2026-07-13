@@ -254,7 +254,6 @@ ALLOWLIST: list[tuple[str, str]] = [
     # as part of the R4 work. Narrowly justified pending staged extraction
     # into focused modules (verification scripts, accumulator seam, SQLite
     # batch + lifecycle helpers).
-    ("src/k8s_diag_agent/collect/incident_promotion_accumulator.py", "[EXTRACTION] Accumulator - validate-before-mutate + access-mode seam; staged extraction"),
     ("src/k8s_diag_agent/collect/incident_store_sqlite_lifecycle.py", "[EXTRACTION] SQLite lifecycle - typed atomic batches + reopened transactional helpers; staged extraction"),
     ("src/k8s_diag_agent/collect/incident_store_sqlite_events_writer.py", "[EXTRACTION] SQLite event writer - explicit append_events_atomic batch boundary; staged extraction"),
     ("src/k8s_diag_agent/collect/incident_store_sqlite_context.py", "[EXTRACTION] SQLite write context - batch event API surface; staged extraction"),
@@ -323,4 +322,8 @@ ALLOWLIST: list[tuple[str, str]] = [
         "tests/verifiers/test_incident_current_run_promotion_workset01.py",
         "[TEST] R3 verifier self-test suite - 27 paired positive/negative fixtures across every critical wiring detector; staged split",
     ),
+
+    # [TEST] SEAM01 fixture modules - split by contract category (2026-07-13)
+    # Split into: ownership, flow, and symbol test suites for better organization.
+    # Each module is under the size threshold individually.
 ]
