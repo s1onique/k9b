@@ -25,7 +25,10 @@ from ..collect.incident_identity_hardening import (
     _validate_response_contracts,
     verify_promotion_consistency,
 )
-from ..collect.incident_promotion_accumulator import RunPromotionAccumulator
+from ..collect.incident_promotion_accumulator import (
+    PromotionWorksetState,
+    RunPromotionAccumulator,
+)
 from ..external_analysis.alertmanager_durable_learning import scan_and_propose
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
 from .adaptation import HealthProposal
@@ -252,6 +255,8 @@ NO_PROMOTION_SCAN_SCOPE = "no_promotion_run"
 INCIDENT_SELECTION_MODE_EXPLICIT_IDS = "explicit_incident_ids"
 INCIDENT_SELECTION_MODE_STORE_SCAN = "store_scan"
 INCIDENT_SELECTION_MODE_BLOCKED = "blocked"
+# SEAM01 R3: new terminal mode for VALID + empty (successful stop, no store scan)
+INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY = "current_run_empty"
 
 BLOCKED_REASON_PROMOTION_CONSISTENCY_CONTRACT_ERROR = (
     "promotion_consistency_contract_error"
@@ -668,27 +673,51 @@ def _derive_automatic_diagnosis_inputs(
         "has_promotion_activity": accumulator.has_promotion_activity(),
     }
 
-    # R7 (item 1): the explicit decision. When authoritative canonical
-    # IDs were carried by the dispatcher, the collector MUST call into
-    # ``run_automatic_diagnosis_loop_evidence_collection`` with
-    # ``incident_ids=...``; when no canonical IDs were carried, the
-    # collector falls back to scan-based listing. ``should_run``
-    # mirrors the existing ``automatic_diagnosis_enabled`` gate so the
-    # orchestrator does not invoke the collector when the loop is
-    # disabled in env.
+    # SEAM01 R2: the explicit decision now uses the workset state from the
+    # accumulator. The workset state is set by propagate_promotion_result_to_run()
+    # and encodes:
+    # - VALID: Workset is valid for diagnosis propagation
+    # - INVALID: Workset is invalid; diagnosis must be blocked
+    # - NOT_APPLICABLE: Workset not applicable; store scan may be used if configured
+    #
+    # State matrix:
+    # - VALID + IDs: explicit current-run diagnosis
+    # - VALID + empty: successful stop; zero store operations
+    # - INVALID: blocked diagnosis; zero store operations
+    # - NOT_APPLICABLE: store scan only when explicitly configured
     from ..collect.incident_diagnosis_auto_loop_config import (
         is_automatic_diagnosis_loop_enabled,
     )
 
     should_run = is_automatic_diagnosis_loop_enabled()
-    if canonical_ids:
-        selection_mode = INCIDENT_SELECTION_MODE_EXPLICIT_IDS
+
+    # SEAM01 R2: Use workset state for explicit decision
+    workset_state = getattr(accumulator, "workset_state", PromotionWorksetState.NOT_APPLICABLE)
+
+    if workset_state == PromotionWorksetState.INVALID:
+        # Block diagnosis when workset is invalid
+        selection_mode = INCIDENT_SELECTION_MODE_BLOCKED
+        blocked_reason = "promotion_workset_contract_failure"
+        should_run = False  # R4: Must not run when INVALID
+    elif workset_state == PromotionWorksetState.VALID:
+        # VALID workset: use explicit IDs if available, otherwise successful stop
+        if canonical_ids:
+            selection_mode = INCIDENT_SELECTION_MODE_EXPLICIT_IDS
+        else:
+            # SEAM01 R3/R4: VALID + empty = terminal stop, NOT store scan
+            # Store scan after a valid empty promotion would violate SEAM01
+            selection_mode = INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY
+            should_run = False  # R4: Terminal empty execution
     else:
+        # NOT_APPLICABLE: only permit store scan when explicitly configured
+        # This is the default when no handoff has occurred
         selection_mode = INCIDENT_SELECTION_MODE_STORE_SCAN
+
     execution = AutomaticDiagnosisExecution(
         should_run=should_run,
         selection_mode=selection_mode,
         incident_access_mode=incident_access_mode,
+        blocked_reason="promotion_workset_contract_failure" if selection_mode == INCIDENT_SELECTION_MODE_BLOCKED else None,
     )
 
     return (

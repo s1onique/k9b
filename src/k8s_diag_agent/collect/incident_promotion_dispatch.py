@@ -180,9 +180,30 @@ class IncidentPromotionResult:
             "incident_access_mode": self.incident_access_mode,
         }
 
+    @property
+    def actionable_incident_ids(self) -> tuple[str, ...]:
+        """Return opened + materially-changed canonical incident IDs.
+
+        This is the stable first-occurrence union of actionable incidents
+        (newly opened + materially changed). Excludes unchanged and
+        observation-refreshed incidents.
+        """
+        seen: set[str] = set()
+        result: list[str] = []
+        for id_ in (*self.opened_incident_ids, *self.updated_incident_ids):
+            if id_ not in seen:
+                seen.add(id_)
+                result.append(id_)
+        return tuple(result)
+
+    # Deprecated: use actionable_incident_ids instead
     def canonical_incident_ids(self) -> tuple[str, ...]:
-        """Return opened + updated canonical incident IDs as one tuple."""
-        return tuple(list(self.opened_incident_ids) + list(self.updated_incident_ids))
+        """Return opened + updated canonical incident IDs as one tuple.
+
+        .. deprecated::
+            Use :attr:`actionable_incident_ids` instead.
+        """
+        return self.actionable_incident_ids
 
 
 def _get_dispatch_config() -> IncidentPromotionDispatchConfig:

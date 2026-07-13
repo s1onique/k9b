@@ -12,7 +12,15 @@ The accumulator MUST NOT infer ``promotion_mode`` from whether
 records are empty. It MUST consume the mode verbatim from the
 batch. ``incident_access_mode`` is also propagated verbatim.
 
+Handoff contract (SEAM01):
+- ``PromotionBatch`` is a transport envelope that MUST NOT own ID projections.
+- The only legitimate access to ``actionable_incident_ids`` is via
+  ``batch.promotion_result.actionable_incident_ids``.
+- ``propagate_promotion_result_to_run()`` is the canonical handoff function
+  that must be used for all promotion-to-diagnosis propagation.
+
 Suggested by: ACT-K9B-AUTO-DIAGNOSIS-BACKEND-INCIDENT-IDENTITY01-R3
+Suggested by: ACT-K9B-HULK-PROMOTION-DIAGNOSIS-HANDOFF-SEAM01
 """
 
 from __future__ import annotations
@@ -34,7 +42,13 @@ class PromotionBatch:
     ``IncidentPromotionResult`` alongside typed ``PromotionRecord``
     values and source/cluster provenance. Downstream callers (notably
     ``RunPromotionAccumulator`` and automatic-diagnosis) consume the
-    batch verbatim; legacy duck-typed dicts are no longer accepted.
+    batch via ``promotion_result``; legacy duck-typed dicts are no
+    longer accepted.
+
+    SEAM01 contract: ``PromotionBatch`` MUST NOT expose ``actionable_incident_ids``
+    or ``canonical_incident_ids()`` as projections. The only allowed access is
+    ``batch.promotion_result.actionable_incident_ids``. Use
+    ``propagate_promotion_result_to_run()`` for canonical handoff.
     """
 
     promotion_result: IncidentPromotionResult

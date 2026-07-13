@@ -222,17 +222,85 @@ def _ingest_alert_signals(
 
             error_messages = list(batch.error_messages)
             bounded_error_messages = error_messages[:5]
-            actionable = list(batch.canonical_incident_ids())
+
+            # SEAM01: Use canonical handoff helper instead of direct extraction
+            # Read actionable_incident_ids from promotion_result (not from batch)
+            promotion_result = batch.promotion_result
+            actionable = list(promotion_result.actionable_incident_ids)
+
             # R2: read the typed category counts from the batch result so
             # the log line is scope-honest; the previous implementation
             # hard-coded both fields to zero.
-            promotion_result = batch.promotion_result
             observation_refreshed_count = len(
                 getattr(promotion_result, "observation_refreshed_incident_ids", ())
             )
             unchanged_count = len(
                 getattr(promotion_result, "unchanged_incident_ids", ())
             )
+
+            # SEAM01: Propagate to accumulator via canonical handoff
+            # This is the ONLY allowed production path for promotion-to-diagnosis
+            from ..collect.promotion_diagnosis_handoff import (
+                propagate_promotion_result_to_run,
+            )
+
+            handoff_propagated = False
+            handoff_error: str | None = None
+            try:
+                if promotion_accumulator is not None:
+                    propagation_result = propagate_promotion_result_to_run(
+                        batch=batch,
+                        accumulator=promotion_accumulator,
+                        source="alertmanager",
+                    )
+                    handoff_propagated = True
+                    # SEAM01 R2: Log propagation telemetry from captured result
+                    log_event(
+                        "alertmanager-snapshot",
+                        "DEBUG",
+                        "Promotion handoff completed",
+                        event="promotion-handoff-completed",
+                        run_id=run_id,
+                        run_label=run_label,
+                        source_identity=source_instance,
+                        handoff_source=propagation_result.source,
+                        actionable_count=propagation_result.total_actionable,
+                        added_count=propagation_result.added_count,
+                        duplicate_count=propagation_result.duplicate_count,
+                        workset_state=promotion_accumulator.workset_state.value,
+                        cluster_context=effective_cluster_context,
+                    )
+            except Exception as handoff_exc:
+                # SEAM01: Handoff failure is distinct from execution failure
+                # Log handoff failure but DO NOT conflate with promotion failure
+                # SEAM01 R2: State is already set on accumulator by handoff function
+                from ..collect.promotion_diagnosis_handoff import (
+                    PromotionDiagnosisHandoffError,
+                )
+
+                if isinstance(handoff_exc, PromotionDiagnosisHandoffError):
+                    handoff_error = f"{handoff_exc.reason_code.value}: {str(handoff_exc)}"
+                else:
+                    handoff_error = str(handoff_exc)
+                log_event(
+                    "alertmanager-snapshot",
+                    "WARNING",
+                    "Promotion handoff failed - diagnosis may be affected",
+                    event="promotion-handoff-failed",
+                    run_id=run_id,
+                    run_label=run_label,
+                    source_identity=source_instance,
+                    severity_reason=handoff_error,
+                    reason="handoff-failure",
+                    promotion_may_have_committed=True,
+                    promotion_propagated_to_diagnosis=False,
+                    workset_state=(
+                        promotion_accumulator.workset_state.value
+                        if promotion_accumulator is not None
+                        else "unknown"
+                    ),
+                    cluster_context=effective_cluster_context,
+                )
 
             log_event(
                 "alertmanager-snapshot",
@@ -267,10 +335,15 @@ def _ingest_alert_signals(
                 promotion_mode=promotion_mode,
                 unique_candidate_count=batch.unique_candidate_count,
                 promotion_record_count=len(batch.promotion_records),
+                # SEAM01: Handoff propagation telemetry
+                promotion_propagated_to_diagnosis=handoff_propagated,
+                promotion_may_have_committed=True,  # Promotion succeeded
                 cluster_context=effective_cluster_context,
                 error_messages=bounded_error_messages,
             )
         except Exception as exc:
+            # SEAM01: Promotion execution failure is DISTINCT from handoff failure
+            # A returned promotion result must never later be logged as execution failure
             log_event(
                 "alertmanager-snapshot",
                 "WARNING",
@@ -280,7 +353,9 @@ def _ingest_alert_signals(
                 run_label=run_label,
                 source_identity=source_instance,
                 severity_reason=str(exc),
-                reason="promotion-error",
+                reason="promotion-execution-failed",
+                promotion_may_have_committed=False,
+                promotion_propagated_to_diagnosis=False,
                 cluster_context=effective_cluster_context,
             )
             # Non-fatal: promotion failure should not crash the run

@@ -17,17 +17,26 @@ accumulator mutates its state. A rejected batch leaves the accumulator
 unchanged and surfaces a typed :class:`PromotionConsistencyContractError`
 that the orchestrator can route to the audit log.
 
+SEAM01 R2 contract:
+* Workset state (VALID/INVALID/NOT_APPLICABLE) is tracked explicitly.
+* ``record_promotion_result()`` applies promotion results atomically.
+* ``last_handoff_error`` captures handoff failures for downstream blocking.
+* The accumulator preserves original promotion outcomes from ``PromotionBatch``.
+
 Suggested by: ACT-K9B-AUTO-DIAGNOSIS-BACKEND-INCIDENT-IDENTITY01-R1
+Suggested by: ACT-K9B-HULK-PROMOTION-DIAGNOSIS-HANDOFF-SEAM01-R2
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import TYPE_CHECKING, cast
 
 from .incident_identity_hardening import (
     INCIDENT_ACCESS_MODE_BACKEND,
+    PROMOTION_OUTCOME_OPENED,
     PROMOTION_OUTCOME_SKIPPED_DUPLICATE,
     PromotionConsistencyContractError,
     PromotionRecord,
@@ -37,6 +46,32 @@ from .incident_identity_hardening import (
 
 if TYPE_CHECKING:
     from .incident_promotion_batch import PromotionBatch
+    from .promotion_diagnosis_handoff import (
+        PromotionDiagnosisHandoffError,
+        PromotionPropagationResult,
+    )
+
+
+class PromotionWorksetState(StrEnum):
+    """Explicit workset state for promotion-to-diagnosis propagation.
+
+    SEAM01 R2: State is EXPLICIT, not inferred from ID tuple emptiness.
+
+    State matrix:
+    - VALID + IDs:     explicit current-run diagnosis
+    - VALID + empty:   successful stop; zero store operations
+    - INVALID:         blocked diagnosis; zero store operations
+    - NOT_APPLICABLE: store scan only when explicitly configured
+    """
+
+    VALID = "valid"
+    """Workset is valid for diagnosis propagation."""
+
+    INVALID = "invalid"
+    """Workset is invalid; diagnosis must be blocked."""
+
+    NOT_APPLICABLE = "not_applicable"
+    """Workset not applicable; store scan may be used if configured."""
 
 
 class AccumulatorAccessModeError(ValueError):
@@ -128,6 +163,19 @@ class RunPromotionAccumulator:
     # short-circuits to the ``blocked`` decision when set.
     last_contract_error: PromotionConsistencyContractError | None = None
 
+    # SEAM01 R2: Explicit workset state for promotion-to-diagnosis propagation.
+    # The state is set by ``propagate_promotion_result_to_run()`` and read
+    # by ``_derive_automatic_diagnosis_inputs()`` to drive selection mode.
+    workset_state: PromotionWorksetState = PromotionWorksetState.NOT_APPLICABLE
+
+    # SEAM01 R2: Last handoff error from ``propagate_promotion_result_to_run()``.
+    # When set, the workset is marked INVALID and automatic diagnosis is blocked.
+    last_handoff_error: PromotionDiagnosisHandoffError | None = None
+
+    # SEAM01 R2: Last propagation result from successful handoff.
+    # Captured for production telemetry.
+    last_propagation_result: PromotionPropagationResult | None = None
+
     # ---------------- R4 atomic insertion helpers (validate-before-mutate) ----
 
     def _snapshot(self) -> dict[str, object]:
@@ -204,6 +252,38 @@ class RunPromotionAccumulator:
     def add_records(self, records: Iterable[PromotionRecord]) -> None:
         for record in records:
             self.add_record(record)
+
+    def record_promotion_result(
+        self,
+        *,
+        source: str,
+        incident_ids: tuple[str, ...],
+    ) -> None:
+        """Record canonical incident IDs from a promotion result atomically.
+
+        This method provides the canonical atomic API for recording promotion
+        results into the accumulator. It should be used instead of directly
+        mutating ``_seen_canonical_ids`` to ensure consistent behavior.
+
+        Each ID is recorded with a synthetic ``PromotionRecord`` using the
+        "opened" outcome (since we only record actionable IDs from promotion).
+
+        If any ID is already in the accumulator, it is not duplicated.
+
+        Args:
+            source: The source of the promotion (e.g. 'alertmanager').
+            incident_ids: The actionable canonical incident IDs to record.
+        """
+        for incident_id in incident_ids:
+            if incident_id not in self._seen_canonical_ids:
+                self._seen_canonical_ids.add(incident_id)
+                self.promotion_records.append(
+                    PromotionRecord(
+                        source_candidate_id=f"<{source}>",
+                        canonical_incident_id=incident_id,
+                        promotion_outcome=PROMOTION_OUTCOME_OPENED,
+                    )
+                )
 
     def add_batch(self, batch: PromotionBatch) -> None:
         """Consume a typed ``PromotionBatch`` and aggregate it atomically.
@@ -356,4 +436,8 @@ class RunPromotionAccumulator:
         }
 
 
-__all__ = ["RunPromotionAccumulator", "AccumulatorAccessModeError"]
+__all__ = [
+    "RunPromotionAccumulator",
+    "AccumulatorAccessModeError",
+    "PromotionWorksetState",
+]
