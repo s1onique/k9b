@@ -5,14 +5,14 @@ SEAM01 R3 contract enforcement:
 - PromotionBatch MUST NOT expose actionable_incident_ids or canonical_incident_ids
 - Production code MUST use propagate_promotion_result_to_run() for handoff
 - No direct batch.actionable_incident_ids or batch.canonical_incident_ids access
-- Semantic enforcement: checks actual receiver provenance, not just names
+- No variable-name dependent checks (checks actual semantics, not just variable names)
+- Parse errors are FATAL (exit code 2) - they are not silently skipped
 
 This verifier scans production code and rejects:
-1. PromotionBatch.actionable_incident_ids property definition
-2. PromotionBatch.canonical_incident_ids method definition
-3. Direct access: batch.actionable_incident_ids (unless receiver provenanced from promotion_result)
-4. Direct access: batch.canonical_incident_ids() (unless receiver is RunPromotionAccumulator)
-5. getattr/hasattr patterns that bypass these checks
+1. PromotionBatch class definition with forbidden property/method
+2. Direct access: batch.actionable_incident_ids (via flow-aware analysis)
+3. Direct access: batch.canonical_incident_ids()
+4. getattr/hasattr patterns that bypass these checks
 
 Exit codes:
   0 -- no violations found
@@ -28,259 +28,352 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
-# Ensure the verifiers directory is in the path for imports
-_VERIFIERS_DIR = Path(__file__).parent
-if str(_VERIFIERS_DIR) not in sys.path:
-    sys.path.insert(0, str(_VERIFIERS_DIR))
+# Handle imports for flow analysis
+_verifiers_dir = Path(__file__).parent
+if str(_verifiers_dir) not in sys.path:
+    sys.path.insert(0, str(_verifiers_dir))
 
-from promotion_diagnosis_handoff_provenance import (
-    build_provenance_at_node,
-    collect_classes,
+from promotion_diagnosis_handoff_checks import (
+    FORBIDDEN_METHOD,
+    FORBIDDEN_PROPERTY,
+    VerifierInfrastructureError,
+    Violation,
+    check_attribute_access,
+    check_method_call,
+)
+from promotion_diagnosis_handoff_flow_collect import (
     collect_functions,
-    collect_imports,
-    find_narrowest_enclosing_function,
-    get_receiver_name,
-    is_legitimate_actionable_access,
-    is_legitimate_canonical_call,
 )
 
-# Forbidden patterns
-FORBIDDEN_PROPERTY = "actionable_incident_ids"
-FORBIDDEN_METHOD = "canonical_incident_ids"
+# R14 FIX: Centralized forbidden names for reflective access
+FORBIDDEN_DYNAMIC_MEMBERS = frozenset({
+    "actionable_incident_ids",
+    "canonical_incident_ids",
+})
+
+# Legitimate access via promotion_result
+LEGITIMATE_ACCESS_PATTERN = "promotion_result.actionable_incident_ids"
+
+# Required handoff function
+REQUIRED_HANDOFF_FUNC = "propagate_promotion_result_to_run"
 
 
-class Violation:
-    """Represents a contract violation found during scanning."""
+def check_class_definition(
+    tree: ast.AST,
+    node: ast.ClassDef,
+    path: Path,
+) -> list[Violation]:
+    """Check a class definition for forbidden property/method.
 
-    def __init__(
-        self,
-        file_path: str,
-        line: int,
-        violation_type: str,
-        detail: str,
-    ) -> None:
-        self.file_path = file_path
-        self.line = line
-        self.violation_type = violation_type
-        self.detail = detail
-
-    def __str__(self) -> str:
-        return (
-            f"{self.file_path}:{self.line} "
-            f"[{self.violation_type}] {self.detail}"
-        )
-
-
-def _scan_module(path: Path) -> list[Violation]:
-    """Scan a single Python file for SEAM01 contract violations.
-
-    Legitimate patterns (NOT violations):
-    - IncidentPromotionResult.self.actionable_incident_ids (class owns the property)
-    - PromotionPropagationResult.self.actionable_incident_ids (result wrapper)
-    - RunPromotionAccumulator.self.canonical_incident_ids() (class owns the method)
-    - x.promotion_result.actionable_incident_ids (through the owned reference)
-    - Variable annotated as IncidentPromotionResult accessing .actionable_incident_ids
-    - Variable annotated as RunPromotionAccumulator calling .canonical_incident_ids()
-    - x = batch.promotion_result; x.actionable_incident_ids (provenanced)
+    R5 FIX: PromotionBatch MUST NOT expose actionable_incident_ids or
+    canonical_incident_ids. This applies to the class body only, not
+    methods that access other PromotionBatch instances.
     """
+
     violations: list[Violation] = []
 
-    try:
-        source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-    except SyntaxError as e:
-        print(f"FAIL: syntax error in {path}: {e}", file=sys.stderr)
-        sys.exit(2)
+    # R5: Check if this class is a PromotionBatch
+    # This catches both:
+    # 1. class PromotionBatch(Base):  - has PromotionBatch as base
+    # 2. class PromotionBatch:       - direct definition (dataclass style)
+    is_promotion_batch = False
 
-    classes = collect_classes(tree)
-    functions = collect_functions(tree)
-    imports = collect_imports(tree)
+    # Check if class name is PromotionBatch (handles dataclass style without explicit base)
+    if node.name == "PromotionBatch":
+        is_promotion_batch = True
+    else:
+        # Check if it has PromotionBatch as a base class
+        for base in node.bases:
+            if isinstance(base, ast.Name):
+                if base.id == "PromotionBatch":
+                    is_promotion_batch = True
+                    break
 
-    # Build final provenance maps for class body analysis (not needed for statement-order check)
-    # Note: Statement-order provenance is computed per-node in the loop below
+    if not is_promotion_batch:
+        return violations
 
-    # Check 1: PromotionBatch class with forbidden members
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == "PromotionBatch":
-            for item in node.body:
-                # Check for actionable_incident_ids property (AnnAssign)
-                if isinstance(item, ast.AnnAssign):
-                    if (
-                        hasattr(item, "target")
-                        and hasattr(item.target, "id")
-                        and item.target.id == FORBIDDEN_PROPERTY
-                    ):
-                        violations.append(Violation(
-                            file_path=str(path),
-                            line=item.lineno or 0,
-                            violation_type="forbidden_property",
-                            detail=(
-                                f"PromotionBatch MUST NOT define '{FORBIDDEN_PROPERTY}' property. "
-                                f"Access via batch.promotion_result.{FORBIDDEN_PROPERTY} instead."
-                            ),
-                        ))
-                # Check for @property decorated actionable_incident_ids (FunctionDef)
-                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    # R5 FIX: Check class body for forbidden property/method definitions
+    # Only check direct assignments and method definitions, not attribute accesses
+    for item in node.body:
+        if isinstance(item, ast.AnnAssign):
+            # Annotated assignment: should be: actionable_incident_ids: list[str] = ...
+            if isinstance(item.target, ast.Name):
+                if item.target.id == FORBIDDEN_PROPERTY:
+                    violations.append(Violation(
+                        file_path=str(path),
+                        line=item.lineno,
+                        violation_type="forbidden_property",
+                        detail=(
+                            f"PromotionBatch defines '{FORBIDDEN_PROPERTY}' property. "
+                            f"This is forbidden by SEAM01 R5."
+                        ),
+                    ))
+        elif isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if item.name == FORBIDDEN_METHOD:
+                violations.append(Violation(
+                    file_path=str(path),
+                    line=item.lineno,
+                    violation_type="forbidden_method",
+                    detail=(
+                        f"PromotionBatch defines '{FORBIDDEN_METHOD}()' method. "
+                        f"This is forbidden by SEAM01 R5."
+                    ),
+                ))
+            # Check for @property decorator with forbidden name
+            for decorator in item.decorator_list:
+                if isinstance(decorator, ast.Name) and decorator.id == "property":
                     if item.name == FORBIDDEN_PROPERTY:
                         violations.append(Violation(
                             file_path=str(path),
-                            line=item.lineno or 0,
+                            line=item.lineno,
                             violation_type="forbidden_property",
                             detail=(
-                                f"PromotionBatch MUST NOT define '{FORBIDDEN_PROPERTY}' as a property. "
-                                f"Access via batch.promotion_result.{FORBIDDEN_PROPERTY} instead."
+                                f"PromotionBatch defines '{FORBIDDEN_PROPERTY}' property. "
+                                f"This is forbidden by SEAM01 R5."
                             ),
                         ))
-                    if item.name == FORBIDDEN_METHOD:
+                        break
+
+    return violations
+
+
+def check_dynamic_access(
+    node: ast.Call,
+    path: Path,
+) -> list[Violation]:
+    """Check getattr/hasattr calls for forbidden property/method access.
+
+    R6 FIX: Reflective access like getattr(batch, 'actionable_incident_ids')
+    also bypasses the contract and must be rejected.
+    """
+    violations: list[Violation] = []
+
+    if isinstance(node.func, ast.Name):
+        if node.func.id in ("getattr", "hasattr"):
+            if len(node.args) >= 2:
+                if isinstance(node.args[1], ast.Constant):
+                    member = node.args[1].value
+                    if member in FORBIDDEN_DYNAMIC_MEMBERS:
                         violations.append(Violation(
                             file_path=str(path),
-                            line=item.lineno or 0,
-                            violation_type="forbidden_method",
+                            line=node.lineno,
+                            violation_type="forbidden_dynamic_access",
                             detail=(
-                                f"PromotionBatch MUST NOT define '{FORBIDDEN_METHOD}()' method. "
-                                f"Use propagate_promotion_result_to_run() for handoff."
+                                f"{node.func.id}(..., '{member}') accesses forbidden member. "
+                                f"Must use promotion_result chain or "
+                                f"{REQUIRED_HANDOFF_FUNC}()."
                             ),
                         ))
 
-    # Check 2 & 3: Direct access patterns with provenance tracking
-    # P0 FIX: Use build_provenance_at_node to get provenance AT THIS STATEMENT,
-    # not the final state after the whole function. This prevents later assignments
-    # from sanitizing earlier accesses.
-    for node in ast.walk(tree):
-        # Only check attribute accesses and calls that might be violations
-        is_violation_candidate = False
-        if isinstance(node, ast.Attribute) and node.attr == FORBIDDEN_PROPERTY:
-            is_violation_candidate = True
-        elif isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Attribute) and node.func.attr == FORBIDDEN_METHOD:
-                is_violation_candidate = True
+    return violations
 
-        if not is_violation_candidate:
-            continue
 
-        # Get enclosing function for provenance lookup
-        enclosing_func = find_narrowest_enclosing_function(node, functions)
+class _ForbiddenAccessVisitor(ast.NodeVisitor):
+    """Visitor that finds all forbidden property/method accesses.
 
-        # P0 FIX: Build provenance up to (but not including) this node's position
-        # This ensures we get the state AT THIS STATEMENT, not after the whole function
-        target_line = getattr(node, 'lineno', None)
-        target_col = getattr(node, 'col_offset', 0) or 0
-        if enclosing_func and target_line is not None:
-            func_prov = build_provenance_at_node(
-                tree,
-                enclosing_func,
-                target_line=target_line,
-                target_col=target_col,
+    This visitor handles R3/R4/R5:
+    - R3: getattr/hasattr patterns for forbidden members
+    - R4: Direct attribute access .actionable_incident_ids
+    - R5: PromotionBatch class definitions with forbidden members
+    """
+
+    def __init__(
+        self,
+        tree: ast.AST,
+        path: Path,
+        functions: list,  # type: ignore[type-arg]
+    ) -> None:
+        self.tree = tree
+        self.path = path
+        self.functions = functions
+        self.violations: list[Violation] = []
+
+    def visit_Call(self, node: ast.Call) -> None:
+        # Check for getattr/hasattr with forbidden member (R6)
+        self.violations.extend(check_dynamic_access(node, self.path))
+
+        # Check for .canonical_incident_ids() calls (R13)
+        if isinstance(node.func, ast.Attribute):
+            if node.func.attr == FORBIDDEN_METHOD:
+                self.violations.extend(
+                    check_method_call(self.tree, node, self.path, self.functions)
+                )
+
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        # Check for .actionable_incident_ids access (R12)
+        if node.attr == FORBIDDEN_PROPERTY:
+            self.violations.extend(
+                check_attribute_access(self.tree, node, self.path, self.functions)
             )
-        elif enclosing_func:
-            func_prov = enclosing_func.local_vars if enclosing_func else {}
+
+        self.generic_visit(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        # Check PromotionBatch class definitions (R5)
+        self.violations.extend(check_class_definition(self.tree, node, self.path))
+        self.generic_visit(node)
+
+
+def scan_file(path: Path, functions: list) -> list[Violation]:  # type: ignore[type-arg]
+    """Scan a single file for promotion-diagnosis handoff violations.
+
+    Raises:
+        VerifierInfrastructureError: For read/parse failures (caught by main).
+    """
+    try:
+        source = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise VerifierInfrastructureError(f"Cannot decode {path}")
+    except OSError as e:
+        raise VerifierInfrastructureError(f"Cannot read {path}: {e}")
+
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError as e:
+        raise VerifierInfrastructureError(f"Parse error in {path}:{e.lineno}: {e.msg}")
+
+    # Visit the tree
+    visitor = _ForbiddenAccessVisitor(tree, path, functions)
+    visitor.visit(tree)
+
+    return visitor.violations
+
+
+def collect_violations(paths: list[Path]) -> tuple[list[Violation], list[str]]:
+    """Collect all violations from the given paths.
+
+    Returns (violations, errors) where errors are infrastructure failures.
+    """
+    all_violations: list[Violation] = []
+    errors: list[str] = []
+
+    for path in paths:
+        # Collect functions first (for provenance analysis)
+        functions: list[Any] = []
+        try:
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(path))
+            functions = collect_functions(tree)
+        except SyntaxError as e:
+            errors.append(f"Parse error in {path}:{e.lineno}: {e.msg}")
+            continue
+        except Exception as e:
+            errors.append(f"Function collection failed in {path}: {e}")
+            continue
+
+        try:
+            violations = scan_file(path, functions)
+            all_violations.extend(violations)
+        except VerifierInfrastructureError as e:
+            errors.append(f"Infrastructure error in {path}: {e}")
+        except Exception as e:
+            errors.append(f"Unexpected error in {path}: {e}")
+
+    return all_violations, errors
+
+
+def print_violations(violations: list[Violation], verbose: bool = False) -> None:
+    """Print violations in sorted order."""
+    for v in sorted(violations, key=lambda x: (x.file_path, x.line)):
+        if verbose:
+            print(f"VIOLATION: {v}")
         else:
-            func_prov = {}
-
-        # Check: .actionable_incident_ids access
-        if isinstance(node, ast.Attribute) and node.attr == FORBIDDEN_PROPERTY:
-            if not is_legitimate_actionable_access(node, classes, func_prov, imports, enclosing_func):
-                receiver = get_receiver_name(node.value)
-                violations.append(Violation(
-                    file_path=str(path),
-                    line=node.lineno or 0,
-                    violation_type="forbidden_actionable_access",
-                    detail=(
-                        f"Must not access {receiver}.{FORBIDDEN_PROPERTY} directly. "
-                        f"Use propagate_promotion_result_to_run() for handoff."
-                    ),
-                ))
-
-        # Check: .canonical_incident_ids() call
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Attribute) and node.func.attr == FORBIDDEN_METHOD:
-                if not is_legitimate_canonical_call(node, classes, func_prov, imports):
-                    receiver = get_receiver_name(node.func.value)
-                    violations.append(Violation(
-                        file_path=str(path),
-                        line=node.lineno or 0,
-                        violation_type="forbidden_canonical_call",
-                        detail=(
-                            f"Must not call {receiver}.{FORBIDDEN_METHOD}(). "
-                            f"Use propagate_promotion_result_to_run() for handoff."
-                        ),
-                    ))
-
-    # Check 4: getattr(..., "actionable_incident_ids")
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "getattr":
-                if len(node.args) >= 2:
-                    second_arg = node.args[1]
-                    if isinstance(second_arg, ast.Constant):
-                        if second_arg.value == FORBIDDEN_PROPERTY:
-                            violations.append(Violation(
-                                file_path=str(path),
-                                line=node.lineno or 0,
-                                violation_type="getattr_bypass",
-                                detail=(
-                                    f"getattr(..., '{FORBIDDEN_PROPERTY}') is not allowed. "
-                                    f"Use propagate_promotion_result_to_run() for handoff."
-                                ),
-                            ))
-
-    # Check 5: hasattr(..., "canonical_incident_ids")
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "hasattr":
-                if len(node.args) >= 2:
-                    second_arg = node.args[1]
-                    if isinstance(second_arg, ast.Constant):
-                        if second_arg.value == FORBIDDEN_METHOD:
-                            violations.append(Violation(
-                                file_path=str(path),
-                                line=node.lineno or 0,
-                                violation_type="hasattr_bypass",
-                                detail=(
-                                    f"hasattr(..., '{FORBIDDEN_METHOD}') is not allowed. "
-                                    f"Use propagate_promotion_result_to_run() for handoff."
-                                ),
-                            ))
-
-    return violations
+            print(v)
 
 
-def scan_src(src_root: Path) -> list[Violation]:
-    """Scan all Python files under src_root for violations."""
-    violations: list[Violation] = []
-    for py_file in src_root.rglob("*.py"):
-        # Skip test files - they're allowed to test the contract
-        if "test_" in py_file.name or "/tests/" in str(py_file):
-            continue
-        # Skip __pycache__
-        if "__pycache__" in str(py_file):
-            continue
-        violations.extend(_scan_module(py_file))
-    return violations
+def main(argv: Sequence[str] | None = None) -> int:
+    """Main entry point.
 
-
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    Args:
+        argv: Optional command-line arguments. If None, uses sys.argv[1:].
+              This enables testable CLI behavior.
+    """
+    parser = argparse.ArgumentParser(
+        description="Verify SEAM01 promotion-diagnosis handoff contract."
+    )
     parser.add_argument(
         "--src-root",
-        default="src",
-        help="Root directory to scan (default: src)",
+        type=Path,
+        default=None,
+        help="Root directory to scan (default: auto-detect)",
+    )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        type=Path,
+        default=None,
+        help="Paths to scan (default: src k8s_diag_agent)",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Verbose output"
+    )
+    parser.add_argument(
+        "--ignore-tests", action="store_true", help="Ignore test files"
     )
     args = parser.parse_args(argv)
 
-    src_root = Path(args.src_root)
-    if not src_root.is_dir():
-        print(f"FAIL: source root {src_root} is not a directory", file=sys.stderr)
+    # Collect all Python files
+    paths_to_scan: list[Path] = []
+
+    # If --src-root is provided, use it as the base directory
+    if args.src_root:
+        base_dir = args.src_root
+        if base_dir.is_file() and base_dir.suffix == ".py":
+            paths_to_scan.append(base_dir)
+        elif base_dir.is_dir():
+            for py_file in base_dir.rglob("*.py"):
+                if args.ignore_tests and py_file.name.startswith("test_"):
+                    continue
+                paths_to_scan.append(py_file)
+        else:
+            # Single file
+            paths_to_scan.append(base_dir)
+    elif args.paths:
+        # Explicit paths provided
+        for p in args.paths:
+            if p.is_file():
+                if p.suffix == ".py":
+                    paths_to_scan.append(p)
+            elif p.is_dir():
+                for py_file in p.rglob("*.py"):
+                    if args.ignore_tests and py_file.name.startswith("test_"):
+                        continue
+                    paths_to_scan.append(py_file)
+    else:
+        # Default: scan src and k8s_diag_agent
+        for default_path in [Path("src"), Path("k8s_diag_agent")]:
+            if default_path.exists():
+                for py_file in default_path.rglob("*.py"):
+                    if args.ignore_tests and py_file.name.startswith("test_"):
+                        continue
+                    paths_to_scan.append(py_file)
+
+    if not paths_to_scan:
+        print("No Python files found to scan.", file=sys.stderr)
+        return 1
+
+    violations, errors = collect_violations(paths_to_scan)
+
+    # Print infrastructure errors first
+    for error in errors:
+        print(f"FAIL: verification infrastructure error: {error}", file=sys.stderr)
+
+    # Exit code 2 for infrastructure errors (R16)
+    if errors:
         return 2
 
-    violations = scan_src(src_root)
+    # Print violations
+    print_violations(violations, args.verbose)
 
+    # Exit code 1 if violations found, 0 otherwise
     if violations:
-        print(f"FAIL: SEAM01 contract violations found ({len(violations)} total):")
-        for v in violations:
-            print(f"  {v}")
+        print("FAIL: SEAM01 contract violations found")
         return 1
 
     print("PASS: No SEAM01 promotion-diagnosis handoff contract violations")
@@ -288,4 +381,4 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main())

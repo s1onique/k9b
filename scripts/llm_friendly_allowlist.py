@@ -322,8 +322,4 @@ ALLOWLIST: list[tuple[str, str]] = [
         "tests/verifiers/test_incident_current_run_promotion_workset01.py",
         "[TEST] R3 verifier self-test suite - 27 paired positive/negative fixtures across every critical wiring detector; staged split",
     ),
-
-    # [TEST] SEAM01 fixture modules - split by contract category (2026-07-13)
-    # Split into: ownership, flow, and symbol test suites for better organization.
-    # Each module is under the size threshold individually.
 ]

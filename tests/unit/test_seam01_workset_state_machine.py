@@ -36,6 +36,7 @@ class TestWorksetStateMachine:
         result = IncidentPromotionResult(
             ok=True,
             scanned=2,
+            opened_incidents=2,  # Must match count of opened records
             opened_incident_ids=("incident-1", "incident-2"),
             updated_incident_ids=(),
             promotion_mode="backend-api",
@@ -160,6 +161,7 @@ class TestWorksetStateMachine:
         """Workset state reflects last handoff result."""
         result1 = IncidentPromotionResult(
             ok=True,
+            opened_incidents=1,  # Must match count of opened records
             opened_incident_ids=("id-first",),
             updated_incident_ids=(),
             promotion_mode="backend-api",
@@ -188,6 +190,7 @@ class TestWorksetStateMachine:
 
         result2 = IncidentPromotionResult(
             ok=True,
+            opened_incidents=2,  # Must match count of opened records
             opened_incident_ids=("id-second", ""),
             updated_incident_ids=(),
             promotion_mode="backend-api",
