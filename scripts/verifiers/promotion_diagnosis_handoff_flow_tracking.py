@@ -16,6 +16,9 @@ from typing import Literal
 from promotion_diagnosis_handoff_flow_collect import (
     annotation_to_str,
 )
+from promotion_diagnosis_handoff_flow_try_canonical import (
+    analyze_try_in_sequence,
+)
 from promotion_diagnosis_handoff_model import (
     CANONICAL_PROMOTION_RESULT_FIELD,
     Provenance,
@@ -431,39 +434,16 @@ def _track_statement(
             else:
                 prov[var_name] = else_body_prov[var_name]
     elif isinstance(stmt, ast.Try):
-        pre_try_state = dict(prov)
-
-        for body_stmt in stmt.body:
-            _track_statement(body_stmt, prov, enclosing_return_type, is_classmethod)
-
-        if stmt.orelse:
-            for else_stmt in stmt.orelse:
-                _track_statement(else_stmt, prov, enclosing_return_type, is_classmethod)
-
-        handler_results: list[dict[str, Provenance]] = []
-        for handler in stmt.handlers:
-            handler_env = dict(pre_try_state)
-            for handler_stmt in handler.body:
-                _track_statement(handler_stmt, handler_env, enclosing_return_type, is_classmethod)
-            handler_results.append(handler_env)
-
-        all_vars = set(prov.keys())
-        for handler_env in handler_results:
-            all_vars.update(handler_env.keys())
-        all_vars.update(pre_try_state.keys())
-
-        merged: dict[str, Provenance] = {}
-        for var_name in all_vars:
-            merged[var_name] = Provenance()
-            if var_name in prov:
-                merged[var_name] = merged[var_name].merge(prov[var_name])
-            for handler_env in handler_results:
-                if var_name in handler_env:
-                    merged[var_name] = merged[var_name].merge(handler_env[var_name])
-
-        prov.update(merged)
-
-        for final_stmt in stmt.finalbody:
-            _track_statement(final_stmt, prov, enclosing_return_type, is_classmethod)
+        # P0 FIX: Delegate try analysis to the canonical analyzer so the
+        # recursive statement tracker shares the same precise-exception
+        # semantics as the flow-target tracker.  See
+        # ACT-K9B-SEAM01-PRECISE-EXCEPTION-FLOW01.
+        analyze_try_in_sequence(
+            stmt,
+            prov,
+            enclosing_return_type,
+            is_classmethod,
+            _track_statement,
+        )
 
     return None

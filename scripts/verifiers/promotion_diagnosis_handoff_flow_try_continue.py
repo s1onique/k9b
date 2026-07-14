@@ -5,7 +5,8 @@ from __future__ import annotations
 import ast
 
 from promotion_diagnosis_handoff_flow_tracking import _track_statement
-from promotion_diagnosis_handoff_flow_try_exceptions import _stmt_may_raise
+from promotion_diagnosis_handoff_flow_try_canonical import capture_exception_envs_no_target
+from promotion_diagnosis_handoff_flow_try_exceptions import _stmt_may_raise  # noqa: F401  (retained only for non-authoritative diagnostics)
 from promotion_diagnosis_handoff_model import FlowResult, Provenance
 
 
@@ -179,10 +180,16 @@ def _process_inner_try_for_continue(
                 result.continues.append(finalized)
             return result
 
-        # P0 FIX: Track exception environments before processing the statement
-        if _stmt_may_raise(stmt):
-            for inner_env in normal_envs:
-                inner_exception_envs.append(dict(inner_env))
+        # CANONICAL exception-env capture via the canonical recursive
+        # transfer.  Walk copies so the downstream continue-descent
+        # sees the original env state.
+        for inner_env in normal_envs:
+            env_copy = dict(inner_env)
+            sub_envs, _sub_term = capture_exception_envs_no_target(
+                stmt, env_copy, enclosing_return_type, is_classmethod,
+                _track_statement,
+            )
+            inner_exception_envs.extend(sub_envs)
 
         if _contains_continue_in_stmt(stmt):
             new_normal_envs: list[dict[str, Provenance]] = []

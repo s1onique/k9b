@@ -40,9 +40,13 @@ class SEAM01P0DiscriminatingFixtures(_SubprocessMixin, unittest.TestCase):
     """Test cases for discriminating P0 paths identified in review."""
 
     def _run_test(
-        self, body: str, should_reject: bool, enforce: bool = True
+        self, body: str, should_reject: bool
     ) -> subprocess.CompletedProcess:
-        """Run test and optionally ENFORCE should_reject assertion."""
+        """Run verifier and assert pass/fail strictly.
+
+        After ACT-K9B-SEAM01-PRECISE-EXCEPTION-FLOW01 the helper does not
+        accept an ``enforce`` flag: every P0 fixture must gate the verifier.
+        """
         relative_path = "violations/typed_violation.py"
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_root = Path(tmpdir)
@@ -55,13 +59,13 @@ class SEAM01P0DiscriminatingFixtures(_SubprocessMixin, unittest.TestCase):
 
             proc = self._run("verify_promotion_diagnosis_handoff", src_root)
 
-            if enforce and should_reject:
+            if should_reject:
                 self.assertEqual(
                     proc.returncode, 1,
                     f"Expected rejection but got: {proc.stdout}\n{proc.stderr}"
                 )
                 self.assertIn("forbidden_actionable_access", proc.stdout)
-            elif enforce:
+            else:
                 self.assertEqual(
                     proc.returncode, 0,
                     f"Expected acceptance but got: {proc.stdout}\n{proc.stderr}"
@@ -309,7 +313,7 @@ class SEAM01P0DiscriminatingFixtures(_SubprocessMixin, unittest.TestCase):
 
                 return value.actionable_incident_ids
         """
-        self._run_test(body, should_reject=True, enforce=False)
+        self._run_test(body, should_reject=True)
 
     def test_try_body_compound_with_finally_sanitizes(self) -> None:
         """Safe case: try body with finally that sanitizes both paths."""
@@ -350,7 +354,7 @@ class SEAM01P0DiscriminatingFixtures(_SubprocessMixin, unittest.TestCase):
 
                 return value.actionable_incident_ids
         """
-        self._run_test(body, should_reject=True, enforce=False)
+        self._run_test(body, should_reject=True)
 
     def test_nested_continue_non_idempotent_finally_once(self) -> None:
         """P0 FIX: nested continue with non-idempotent finally executes once."""
@@ -415,7 +419,7 @@ class SEAM01P0DiscriminatingFixtures(_SubprocessMixin, unittest.TestCase):
 
                 return value.actionable_incident_ids
         """
-        self._run_test(body, should_reject=True, enforce=False)
+        self._run_test(body, should_reject=True)
 
     def test_exception_after_unsafe_and_before_safe(self) -> None:
         """P0 ARCHITECTURAL LIMITATION: exception after unsafe inside compound
@@ -436,7 +440,7 @@ class SEAM01P0DiscriminatingFixtures(_SubprocessMixin, unittest.TestCase):
 
                 return value.actionable_incident_ids
         """
-        self._run_test(body, should_reject=True, enforce=False)
+        self._run_test(body, should_reject=True)
 
     def test_nested_try_handlers_are_alternatives(self) -> None:
         """P0 FIX: nested try handlers are alternatives, not sequential."""

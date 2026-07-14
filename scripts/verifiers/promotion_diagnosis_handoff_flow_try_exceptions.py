@@ -1,86 +1,27 @@
-"""Exception analysis helpers for try statement processing."""
+"""Compatibility shim for SEAM01 promotion-diagnosis handoff verifier.
+
+After ACT-K9B-SEAM01-PRECISE-EXCEPTION-FLOW01 the canonical boolean
+predicates live in
+:mod:`promotion_diagnosis_handoff_flow_exception_paths`.  This module is
+retained as a thin re-export so older call sites that import
+``_stmt_may_raise`` or ``_may_raise`` from here keep working.
+
+The verifier no longer uses these predicates to choose handler-entry
+environments; handler-entry environments come from
+:func:`promotion_diagnosis_handoff_flow_exception_paths.capture_exception_envs`.
+The predicates are kept only as non-authoritative filters inside the
+loop-aware try-processing helpers.
+
+Suggested by: ACT-K9B-SEAM01-PRECISE-EXCEPTION-FLOW01
+"""
 
 from __future__ import annotations
 
-import ast
+from promotion_diagnosis_handoff_flow_exception_paths import (
+    _may_raise_expr as _may_raise,
+)
+from promotion_diagnosis_handoff_flow_exception_paths import (
+    _stmt_may_raise,
+)
 
-
-def _may_raise(expr: ast.expr) -> bool:
-    """Check if an expression may raise an exception. P0 FIX: Conservative model."""
-    if expr is None:
-        return False
-
-    if isinstance(expr, ast.Call):
-        return True
-
-    if isinstance(expr, ast.Attribute):
-        return True
-
-    if isinstance(expr, ast.Subscript):
-        return True
-
-    if isinstance(expr, ast.BinOp):
-        return _may_raise(expr.left) or _may_raise(expr.right)
-
-    if isinstance(expr, ast.UnaryOp):
-        return _may_raise(expr.operand)
-
-    if isinstance(expr, ast.Compare):
-        return _may_raise(expr.left) or any(_may_raise(c) for c in expr.comparators)
-
-    if isinstance(expr, ast.BoolOp):
-        # P0 FIX: Check ALL operands of BoolOp, not just the first.
-        return any(_may_raise(value) for value in expr.values)
-
-    if isinstance(expr, (ast.Name, ast.Constant, ast.FormattedValue, ast.JoinedStr)):
-        return False
-
-    return True
-
-
-def _stmt_may_raise(stmt: ast.stmt) -> bool:
-    """Check if a statement may raise an exception.
-
-    P0 FIX: Recursively analyze compound statements to detect exception points
-    inside if/with/try/etc. bodies. Python begins handler selection at the point
-    the exception interrupts the suite, not from a synthetic state after later statements.
-    """
-    # Base cases - expressions that definitely raise
-    if isinstance(stmt, ast.Expr):
-        return _may_raise(stmt.value)
-
-    if isinstance(stmt, ast.Assign):
-        return _may_raise(stmt.value)
-
-    if isinstance(stmt, ast.AnnAssign):
-        if stmt.value is not None:
-            return _may_raise(stmt.value)
-        return False
-
-    if isinstance(stmt, ast.AugAssign):
-        return _may_raise(stmt.value)
-
-    if isinstance(stmt, ast.Raise):
-        return True
-
-    # P0 FIX: Recursive analysis for compound statements
-    # An If may raise if ANY of its branches may raise
-    if isinstance(stmt, ast.If):
-        return any(_stmt_may_raise(s) for s in stmt.body) or \
-               any(_stmt_may_raise(s) for s in stmt.orelse)
-
-    # A With may raise if any of its body statements may raise
-    if isinstance(stmt, ast.With):
-        return any(_stmt_may_raise(s) for s in stmt.body)
-
-    # A Try may raise if any of body/handlers/else may raise
-    if isinstance(stmt, ast.Try):
-        return any(_stmt_may_raise(s) for s in stmt.body) or \
-               any(any(_stmt_may_raise(s) for s in h.body) for h in stmt.handlers) or \
-               any(_stmt_may_raise(s) for s in stmt.orelse)
-
-    # For and While - check body (not conditions, which are loop guards)
-    if isinstance(stmt, (ast.For, ast.While)):
-        return any(_stmt_may_raise(s) for s in stmt.body)
-
-    return False
+__all__ = ["_may_raise", "_stmt_may_raise"]

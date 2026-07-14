@@ -25,12 +25,14 @@ from promotion_diagnosis_handoff_flow_tracking import (
     _contains_direct_break,
     _track_statement,
 )
+from promotion_diagnosis_handoff_flow_try_canonical import (
+    analyze_try_to_target,
+)
 from promotion_diagnosis_handoff_model import (
     FunctionInfo,
     ImportInfo,
     Provenance,
     ProvenanceKind,
-    merge_paths,
 )
 from promotion_diagnosis_handoff_symbols import (
     is_incident_promotion_result_type,
@@ -236,30 +238,25 @@ def _track_try_to_target(
     enclosing_return_type: str | None,
     is_classmethod: bool,
 ) -> None:
-    """Track try/except/else/finally up to target line."""
-    pre_try_state = dict(prov)
+    """Track try/except/else/finally up to target line.
 
-    for body_stmt in node.body:
-        _track_to_target_line(body_stmt, prov, target_line, target_col, enclosing_return_type, is_classmethod)
-
-    if node.orelse:
-        for else_stmt in node.orelse:
-            _track_to_target_line(else_stmt, prov, target_line, target_col, enclosing_return_type, is_classmethod)
-
-    handler_results: list[dict[str, Provenance]] = []
-    for handler in node.handlers:
-        handler_env = dict(pre_try_state)
-        for handler_stmt in handler.body:
-            _track_to_target_line(handler_stmt, handler_env, target_line, target_col, enclosing_return_type, is_classmethod)
-        handler_results.append(handler_env)
-
-    all_paths = [prov] + handler_results
-    merged = merge_paths(all_paths)
-    prov.clear()
-    prov.update(merged)
-
-    for final_stmt in node.finalbody:
-        _track_to_target_line(final_stmt, prov, target_line, target_col, enclosing_return_type, is_classmethod)
+    After ACT-K9B-SEAM01-PRECISE-EXCEPTION-FLOW01 this is a thin delegation
+    to :func:`analyze_try_to_target`, the canonical try analyzer.  The
+    analyzer emits precise exception environments at every reachable
+    operation inside the try body, starts each handler from each captured
+    snapshot, runs ``else`` only on clean normal completion, and applies
+    ``finally`` exactly once.  See the canonical analyzer for the full
+    invariant specification.
+    """
+    analyze_try_to_target(
+        node,
+        prov,
+        target_line,
+        target_col,
+        enclosing_return_type,
+        is_classmethod,
+        _track_to_target_line,
+    )
 
 
 def build_provenance_at_node(

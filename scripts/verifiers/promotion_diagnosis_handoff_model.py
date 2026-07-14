@@ -5,6 +5,13 @@ This module contains core data types:
 - ProvenanceSafety: safety level enum
 - ClassInfo, FunctionInfo, ImportInfo: metadata types
 - FlowResult: path separation for control flow analysis
+- Environment: canonical name -> Provenance alias
+- SourceLocation, ExceptionKind, ExceptionPath: exception-edge model
+
+All exception-edge types and the Environment alias live here so the rest
+of the flow modules reference exactly one canonical definition.
+
+Suggested by: ACT-K9B-SEAM01-PRECISE-EXCEPTION-FLOW01
 """
 
 from __future__ import annotations
@@ -232,3 +239,43 @@ def merge_paths(paths: list[dict[str, Provenance]]) -> dict[str, Provenance]:
         result[name] = merged
 
     return result
+
+
+# Canonical alias: an environment is a name -> Provenance mapping.
+# This is the single canonical representation referenced everywhere.
+# Defined here so Provenance is fully resolved.
+Environment = dict[str, Provenance]
+
+
+class ExceptionKind(Enum):
+    """How an exception edge was produced.
+
+    The analyzer is intraprocedural and conservative, so most edges are
+    classified as UNKNOWN. EXPLICIT_RAISE is reserved for ast.Raise sites.
+    """
+
+    UNKNOWN = auto()
+    EXPLICIT_RAISE = auto()
+
+
+@dataclass(frozen=True)
+class SourceLocation:
+    """Source location of an exception site (line and column)."""
+
+    line: int
+    column: int
+
+
+@dataclass
+class ExceptionPath:
+    """A single exception edge.
+
+    The mandatory invariant is that ``env`` represents the state
+    immediately before the operation that may raise. Handler selection in
+    the canonical try analyzer must start from this snapshot, not from any
+    other pre-try or post-try state.
+    """
+
+    env: Environment
+    origin: SourceLocation
+    exception_kind: ExceptionKind
