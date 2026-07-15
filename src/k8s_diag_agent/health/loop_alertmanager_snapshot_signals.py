@@ -43,6 +43,43 @@ if TYPE_CHECKING:
     from ..external_analysis.alertmanager_snapshot import AlertmanagerSnapshot
 
 
+def _calculate_identity_collapse_count(
+    *,
+    raw_reference_count: int,
+    unique_workset_signal_count: int,
+) -> int:
+    """Compute the current-batch identity-collapse count.
+
+    ACT-K9B-HULK-CURRENT-RUN-WORKSET-STABLE-COLLAPSE01 contract:
+
+    The collapse count equals ``raw_reference_count -
+    unique_workset_signal_count``. A violation of the cardinality
+    invariant (``unique_workset_signal_count > raw_reference_count``)
+    indicates a contract breach in the producer -- not a benign
+    data observation -- and is raised as
+    :class:`CurrentRunWorksetCardinalityError` rather than being
+    silently clamped to zero. Clamping via ``max(0, ...)`` would
+    hide a future regression in the factory contract.
+
+    The helper is intentionally exposed at module scope and
+    imported nowhere else -- it exists so a regression test can
+    invoke the *actual* production arithmetic, not a manual raise
+    of the exception, proving the metric site would fail closed
+    under any contract regression that decoupled the metric from
+    the factory invariant.
+    """
+    from ..collect.current_run_promotion_workset import (
+        CurrentRunWorksetCardinalityError,
+    )
+
+    if unique_workset_signal_count > raw_reference_count:
+        raise CurrentRunWorksetCardinalityError(
+            raw=raw_reference_count,
+            unique=unique_workset_signal_count,
+        )
+    return raw_reference_count - unique_workset_signal_count
+
+
 def _ingest_alert_signals(
     snapshot: AlertmanagerSnapshot,
     selected_source: AlertmanagerSource,
@@ -162,43 +199,103 @@ def _ingest_alert_signals(
         # with ``signal <uuid> is not present in the current-run
         # scope`` for every non-empty scoped request.
         #
-        # R3: stable-deduplicate the artifact workset before posting.
-        # ``PersistAlertSignal`` includes already-existing duplicate
-        # artifacts (retry/rebuild semantics). The scoped backend
-        # contract rejects duplicate ``signalIds`` via
-        # ``PromoteAlertSignalsRequest`` so we MUST collapse repeated
-        # artifact identities into a unique tuple. The two duplicate
-        # counts are exposed as separate metrics so the audit log can
-        # distinguish between raw persistence duplicates (skipped
-        # writes to disk) and the current-batch identity collapse
-        # (collapse caused by stable-deduplication before posting).
-        unique_artifact_identities: list[str] = list(
-            dict.fromkeys(
-                str(persisted.artifact_identity) for persisted in written_signals
+        # ACT-K9B-HULK-CURRENT-RUN-PROMOTION-SEAM01 contract:
+        #
+        # The current-run workset is sourced from the typed
+        # ``persistence_outcomes`` field of the adapter result.
+        # ``SignalInserted`` and ``SignalIdentityMatched`` outcomes
+        # are admitted; ``SignalIdentityConflict`` and
+        # ``SignalPersistenceFailed`` outcomes are excluded. The
+        # 33-identity-duplicate production regression is fixed
+        # because identity-matched observations now enter the
+        # workset instead of being silently counted as
+        # ``signals_skipped_duplicates``.
+        from ..collect.current_run_promotion_workset import (
+            CurrentRunSignalProvenance,
+            CurrentRunSignalRef,
+            build_current_run_workset,
+        )
+        from ..collect.signal_persistence_outcomes import (
+            SignalIdentityMatched as _OutcomeIdentityMatched,
+        )
+        from ..collect.signal_persistence_outcomes import (
+            SignalInserted as _OutcomeSignalInserted,
+        )
+
+        # ACT-K9B-HULK-CURRENT-RUN-WORKSET-STABLE-COLLAPSE01 contract:
+        #
+        # ``workset_refs`` is the raw observation boundary: one
+        # ``CurrentRunSignalRef`` per promotable outcome. Repeated
+        # references for the same canonical signal identity are
+        # expected in this list -- e.g. when an alert appears twice
+        # in the snapshot. The validated factory collapses them.
+        workset_refs: list[CurrentRunSignalRef] = []
+        for outcome in persist_result.promotable_outcomes:
+            if isinstance(outcome, _OutcomeSignalInserted):
+                provenance = CurrentRunSignalProvenance.INSERTED
+                signal_id = outcome.signal_id
+            elif isinstance(outcome, _OutcomeIdentityMatched):
+                provenance = CurrentRunSignalProvenance.IDENTITY_MATCHED
+                signal_id = outcome.signal_id
+            else:
+                continue
+            workset_refs.append(
+                CurrentRunSignalRef(
+                    run_id=run_id,
+                    signal_id=str(signal_id),
+                    provenance=provenance,
+                )
+            )
+        # Build a typed workset from the promotable outcomes. The
+        # workset is the AUTHORITATIVE source of the backend request:
+        # ``workset.signal_ids`` is what we send, not the raw list of
+        # persisted writes (which may include artifacts whose storage
+        # key collided but whose canonical identity actually agrees).
+        # ``build_current_run_workset`` collapses repeated same-id
+        # references before constructing the immutable aggregate, so
+        # ``current_run_workset.signal_ids`` is unique by construction.
+        current_run_workset = build_current_run_workset(
+            run_id=run_id,
+            source_identity=source_instance,
+            references=tuple(workset_refs),
+        )
+        # ``workset.signal_ids`` is the deterministic, validated
+        # current-run scope. Every signal ID we send to the backend
+        # is admitted from a typed
+        # :class:`SignalInserted` or
+        # :class:`SignalIdentityMatched` outcome, run-bound, and free
+        # of conflicts / failures.
+        current_run_signal_ids: tuple[str, ...] = tuple(
+            current_run_workset.signal_ids
+        )
+        artifact_write_duplicate_count = (
+            persist_result.signals_skipped_duplicates
+        )
+        # ACT-K9B-HULK-CURRENT-RUN-WORKSET-STABLE-COLLAPSE01 collapse
+        # metric: the raw reference count is the factory input length,
+        # NOT ``promotable_signal_ids`` (a legacy projection) or any
+        # written artifact list. After collapse the unique workset
+        # membership count is ``workset.total_count``. The collapse
+        # count is therefore exactly ``raw - unique``.
+        #
+        # The cardinality invariant ``unique <= raw`` MUST hold
+        # structurally; a violation indicates a contract breach in
+        # the producer and is raised via
+        # :class:`CurrentRunWorksetCardinalityError` instead of
+        # being silently clamped. Clamping via ``max(0, ...)`` would
+        # hide a future regression in the factory contract.
+        #
+        # The calculation lives in a focused helper so it can be
+        # regression-tested directly; see
+        # ``tests/unit/test_loop_alertmanager_identity_collapse.py``.
+        current_batch_identity_collapse_count = (
+            _calculate_identity_collapse_count(
+                raw_reference_count=len(workset_refs),
+                unique_workset_signal_count=current_run_workset.total_count,
             )
         )
-        # ``artifact_write_duplicate_count`` is the raw persistence
-        # duplicate count reported by ``persist_alert_signals``. It is
-        # the number of artifacts that were already on disk from a
-        # previous run and therefore were NOT re-persisted this run.
-        artifact_write_duplicate_count = int(
-            getattr(persist_result, "signals_skipped_duplicates", 0) or 0
-        )
-        # ``current_batch_identity_collapse_count`` is the difference
-        # between the raw persisted count and the unique
-        # artifact-identity count. It represents the number of
-        # duplicates collapsed by the stable-deduplication step
-        # before posting to the scoped backend.
-        current_batch_identity_collapse_count = max(
-            0,
-            len(written_signals) - len(unique_artifact_identities),
-        )
-        # ``duplicate_artifact_count`` is preserved for back-compat
-        # with the legacy log field but now reflects the current-batch
-        # identity collapse metric (the value callers have historically
-        # inferred).
         duplicate_count = current_batch_identity_collapse_count
-        current_run_signal_ids: tuple[str, ...] = tuple(unique_artifact_identities)
+        unique_artifact_identities = list(current_run_signal_ids)
         try:
             from ..collect.incident_promotion_dispatch import (
                 promote_alert_signals_scoped_for_accumulator,
