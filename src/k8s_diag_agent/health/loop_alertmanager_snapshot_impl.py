@@ -17,7 +17,10 @@ from .loop_alertmanager_snapshot_collection import (
     select_eligible_source,
     write_snapshot_artifacts,
 )
-from .loop_alertmanager_snapshot_signals import _ingest_alert_signals
+from .loop_alertmanager_snapshot_signals import (
+    AlertSignalPromotionDispatchResult,
+    _ingest_alert_signals,
+)
 
 if TYPE_CHECKING:
     from ..collect.incident_promotion_accumulator import RunPromotionAccumulator
@@ -35,7 +38,7 @@ def run_alertmanager_snapshot_collection(
     stop_port_forward: Callable[..., None],
     incident_store: IncidentStore | None = None,
     promotion_accumulator: RunPromotionAccumulator | None = None,
-) -> None:
+) -> AlertSignalPromotionDispatchResult | None:
     """Collect Alertmanager snapshot and compact artifacts for tracked sources.
 
     This function runs after Alertmanager discovery has populated the inventory
@@ -89,7 +92,7 @@ def run_alertmanager_snapshot_collection(
             run_label=run_label,
             reason="no_inventory",
         )
-        return
+        return None
 
     # Select eligible source
     selected_source, effective_cluster_context = select_eligible_source(
@@ -101,7 +104,7 @@ def run_alertmanager_snapshot_collection(
 
     if selected_source is None:
         # No eligible sources - logged in select_eligible_source
-        return
+        return None
 
     endpoint = selected_source.endpoint
 
@@ -192,7 +195,14 @@ def run_alertmanager_snapshot_collection(
     # so the orchestrator can aggregate them deterministically without
     # relying on the legacy ``directories["__last_promotion_result__"]``
     # sentinel.
-    _ingest_alert_signals(
+    # ACT-K9B-HULK-CURRENT-RUN-PROMOTION-DISPATCH-OUTCOME01:
+    # The production orchestrator MUST consume the returned
+    # AlertSignalPromotionDispatchResult envelope so the typed
+    # outcome is retained even when promotion_accumulator is
+    # None. The envelope is attached to directories for any
+    # subsequent log/aggregation step; if promotion_accumulator is
+    # provided, the typed outcome is already recorded on it.
+    dispatch_result = _ingest_alert_signals(
         snapshot=snapshot,
         selected_source=selected_source,
         snapshot_path=snapshot_path,
@@ -204,3 +214,10 @@ def run_alertmanager_snapshot_collection(
         effective_cluster_context=effective_cluster_context,
         promotion_accumulator=promotion_accumulator,
     )
+    # Retain the typed outcome for downstream consumers by
+    # attaching it to the returned dispatch result (do NOT smuggle
+    # the outcome through ``directories`` -- that map is typed
+    # ``dict[str, Path]`` and a non-Path value violates the contract).
+    # The orchestrator caller reads ``dispatch_result.outcome`` for
+    # the typed outcome.
+    return dispatch_result

@@ -18,7 +18,12 @@ from .loop_alertmanager_port_forward import (
     start_alertmanager_port_forward,
     stop_alertmanager_port_forward,
 )
-from .loop_alertmanager_snapshot import run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl
+from .loop_alertmanager_snapshot import (
+    AlertSignalPromotionDispatchResult,
+)
+from .loop_alertmanager_snapshot import (
+    run_alertmanager_snapshot_collection as _run_alertmanager_snapshot_collection_impl,
+)
 from .loop_port_forward_helpers import _choose_free_local_port, _wait_for_port_ready
 from .loop_vmalert_discovery import run_vmalert_discovery as _run_vmalert_discovery_impl
 from .loop_vmalert_rule_state import run_vmalert_rule_state_collection as _run_vmalert_rule_state_collection_impl
@@ -139,8 +144,16 @@ def run_alertmanager_snapshot_collection(
     stop_port_forward: Callable[..., None],
     incident_store: IncidentStore | None = None,
     promotion_accumulator: RunPromotionAccumulator | None = None,
-) -> None:
+) -> AlertSignalPromotionDispatchResult | None:
     """Collect Alertmanager snapshot and compact artifacts for tracked sources.
+
+    ACT-K9B-HULK-CURRENT-RUN-PROMOTION-DISPATCH-OUTCOME01 R3-1 fix:
+    this public wrapper now returns the typed
+    :class:`AlertSignalPromotionDispatchResult` envelope from the
+    inner implementation. The envelope is returned so the typed outcome
+    is retained even when ``promotion_accumulator`` is ``None`` -- the
+    next production caller can read ``result.outcome`` for the classified
+    :class:`PromotionOutcome` without relying on the accumulator.
 
     ``promotion_accumulator`` is the typed run-scoped handoff. When
     provided, every ``RunPromotionAccumulator.add_record`` call records
@@ -149,9 +162,13 @@ def run_alertmanager_snapshot_collection(
     smuggling so the orchestrator can collect results from multiple
     Alertmanager sources without a typed handoff.
 
-    Delegates to loop_alertmanager_snapshot module.
+    Returns:
+        The :class:`AlertSignalPromotionDispatchResult` from the inner
+        implementation, or ``None`` when no eligible sources exist.
+        The caller can read ``result.outcome`` for the classified
+        :class:`PromotionOutcome`.
     """
-    _run_alertmanager_snapshot_collection_impl(
+    return _run_alertmanager_snapshot_collection_impl(
         inventory=inventory,
         run_id=run_id,
         run_label=run_label,

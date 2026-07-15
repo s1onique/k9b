@@ -26,6 +26,18 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from .collect.signal_persistence_outcomes import (
+    SignalIdentityConflict,
+    SignalIdentityMatched,
+    SignalInserted,
+    SignalPersistenceFailed,
+    SignalPersistenceFailureCode,
+    SignalPersistenceOutcome,
+    SignalPersistenceSummary,
+)
+from .collect.signal_persistence_outcomes import (
+    is_promotable as _is_promotable_outcome,
+)
 from .external_analysis.alertmanager_snapshot import (
     AlertmanagerSnapshot,
     AlertmanagerStatus,
@@ -55,31 +67,119 @@ _logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class AlertSignalAdapterResult:
-    """Result of adapting Alertmanager snapshot to alert signals."""
+    """Result of adapting and persisting Alertmanager snapshot signals.
 
-    # Counts
+    ACT-K9B-HULK-CURRENT-RUN-PROMOTION-SEAM01 contract:
+
+    * The authoritative source is ``persistence_outcomes`` -- a
+      sequence of typed :class:`SignalPersistenceOutcome` variants.
+    * Counters (``signals_written``,
+      ``signals_skipped_duplicates``, ``signals_failed``) are
+      backward-compatible projections of the outcome sequence and
+      MUST NOT be assigned independently of the outcomes.
+    * ``promotable_signal_ids`` are the signals admitted into the
+      current-run promotion workset
+      (``SignalInserted ∪ SignalIdentityMatched``).
+    """
+
+    # Counts (derived projections of persistence_outcomes)
     total_alerts: int = 0
     firing_signals_count: int = 0
     resolved_signals_count: int = 0
     skipped_count: int = 0
-
-    # Artifact results
     signals_written: int = 0
     signals_skipped_duplicates: int = 0
     signals_failed: int = 0
 
+    # Authoritative typed outcomes. The new field MUST drive all
+    # current-run workset decisions.
+    persistence_outcomes: tuple[SignalPersistenceOutcome, ...] = ()
+
+    # Pre-computed current-run workset signal IDs (deterministic).
+    promotable_signal_ids: tuple[str, ...] = ()
+
     # Errors
     errors: tuple[str, ...] = ()
 
+    @classmethod
+    def from_outcomes(
+        cls,
+        *,
+        total_alerts: int,
+        firing_signals_count: int,
+        resolved_signals_count: int,
+        skipped_count: int,
+        outcomes: tuple[SignalPersistenceOutcome, ...],
+        errors: tuple[str, ...] = (),
+    ) -> AlertSignalAdapterResult:
+        """Build an adapter result from a sequence of typed outcomes.
+
+        All counters are derived projections of ``outcomes``; they
+        cannot be supplied independently.
+        """
+        summary = SignalPersistenceSummary(outcomes=outcomes)
+        promotable_ids: list[str] = []
+        for outcome in outcomes:
+            if isinstance(outcome, SignalInserted):
+                promotable_ids.append(outcome.signal_id)
+            elif isinstance(outcome, SignalIdentityMatched):
+                promotable_ids.append(outcome.signal_id)
+        return cls(
+            total_alerts=total_alerts,
+            firing_signals_count=firing_signals_count,
+            resolved_signals_count=resolved_signals_count,
+            skipped_count=skipped_count,
+            signals_written=summary.inserted_count,
+            signals_skipped_duplicates=summary.identity_matched_count,
+            signals_failed=summary.persistence_failure_count,
+            persistence_outcomes=outcomes,
+            promotable_signal_ids=tuple(promotable_ids),
+            errors=errors,
+        )
+
     @property
     def has_signals(self) -> bool:
-        """Return True if any signals were written."""
-        return self.signals_written > 0
+        """Return True if any signals were promotable.
+
+        Authoritative source is ``promotable_signal_ids``. The legacy
+        counter fallback preserves backward compatibility for direct
+        construction without going through :meth:`from_outcomes`.
+        """
+        if self.promotable_signal_ids:
+            return True
+        return (self.signals_written + self.signals_skipped_duplicates) > 0
 
     @property
     def has_errors(self) -> bool:
         """Return True if any errors occurred."""
         return len(self.errors) > 0
+
+    @property
+    def is_workset_populated(self) -> bool:
+        """Strict authoritative check for workset membership.
+
+        Returns True only when the typed outcomes carry at least one
+        :class:`SignalInserted` or :class:`SignalIdentityMatched`
+        outcome. Direct construction without going through
+        :meth:`from_outcomes` cannot satisfy this property.
+        """
+        return bool(self.promotable_signal_ids)
+
+    @property
+    def promotable_outcomes(self) -> tuple[SignalPersistenceOutcome, ...]:
+        """Authoritative list of promotable outcomes (workset sources)."""
+        return tuple(
+            outcome for outcome in self.persistence_outcomes
+            if _is_promotable_outcome(outcome)
+        )
+
+    @property
+    def identity_conflict_count(self) -> int:
+        """Count of identity-conflicting outcomes (always excluded from workset)."""
+        return sum(
+            1 for outcome in self.persistence_outcomes
+            if isinstance(outcome, SignalIdentityConflict)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,6 +422,13 @@ def persist_alert_signals(
     drop retry/rebuild/observation-refresh semantics from the current-run
     scope.
 
+    ACT-K9B-HULK-CURRENT-RUN-PROMOTION-SEAM01 contract:
+
+    The returned ``AlertSignalAdapterResult`` carries the typed
+    ``persistence_outcomes`` sequence in addition to the legacy
+    counter projections. Orchestrators MUST use the typed outcomes
+    to build the current-run promotion workset.
+
     Args:
         signals: Alert signals to persist
         root: Root directory for artifacts
@@ -344,8 +451,7 @@ def persist_alert_signals(
 
     persisted_signals: list[PersistedAlertSignal] = []
     errors: list[str] = []
-    duplicate_count = 0
-    write_failures = 0
+    outcomes: list[SignalPersistenceOutcome] = []
 
     firing_count = 0
     resolved_count = 0
@@ -358,45 +464,102 @@ def persist_alert_signals(
             received_at=signal.received_at,
         )
 
-        if result.success:
-            identity = result.identity
-            if identity is None:
-                errors.append(
-                    f"Successful write without identity for signal {signal.signal_id}"
-                )
-                write_failures += 1
-                continue
-            if result.is_duplicate:
-                duplicate_count += 1
-            persisted_signals.append(
-                PersistedAlertSignal(
-                    signal=signal,
-                    artifact_identity=identity,
-                    newly_written=not result.is_duplicate,
-                )
-            )
-            if signal.status == AlertStatus.FIRING:
-                firing_count += 1
-            else:
-                resolved_count += 1
-        else:
+        identity = result.identity
+        if not result.success:
             error_msg = f"Failed to write signal {signal.signal_id}: {result.error}"
             _logger.warning(error_msg)
             errors.append(error_msg)
-            write_failures += 1
+            outcomes.append(
+                SignalPersistenceFailed(
+                    candidate_signal_id=str(signal.signal_id),
+                    reason=_RESULT_FAILURE_REASON_BY_RESULT.get(
+                        _RESULT_FAILURE_KIND(result),
+                        SignalPersistenceFailureCode.UNKNOWN_ERROR,
+                    ),
+                    detail=(result.error or "")[:256],
+                )
+            )
+            continue
 
+        if identity is None:
+            errors.append(
+                f"Successful write without identity for signal {signal.signal_id}"
+            )
+            outcomes.append(
+                SignalPersistenceFailed(
+                    candidate_signal_id=str(signal.signal_id),
+                    reason=SignalPersistenceFailureCode.CONTRACT_VIOLATION,
+                    detail="successful write without identity",
+                )
+            )
+            continue
+
+        if result.is_duplicate:
+            outcomes.append(SignalIdentityMatched(signal_id=str(identity)))
+        else:
+            outcomes.append(SignalInserted(signal_id=str(identity)))
+
+        persisted_signals.append(
+            PersistedAlertSignal(
+                signal=signal,
+                artifact_identity=identity,
+                newly_written=not result.is_duplicate,
+            )
+        )
+        if signal.status == AlertStatus.FIRING:
+            firing_count += 1
+        else:
+            resolved_count += 1
+
+    outcomes_tuple = tuple(outcomes)
     return (
-        AlertSignalAdapterResult(
+        AlertSignalAdapterResult.from_outcomes(
             total_alerts=len(signals),
             firing_signals_count=firing_count,
             resolved_signals_count=resolved_count,
             skipped_count=0,
-            signals_written=len(persisted_signals) - duplicate_count,
-            signals_skipped_duplicates=duplicate_count,
-            signals_failed=write_failures,
+            outcomes=outcomes_tuple,
             errors=tuple(errors),
         ),
         persisted_signals,
+    )
+
+
+def _RESULT_FAILURE_KIND(result: object) -> str:
+    """Best-effort classification of a :class:`SignalWriteResult` failure.
+
+    Used to map persistence failures to bounded
+    :class:`SignalPersistenceFailureCode` values. New failure modes
+    fall into :attr:`SignalPersistenceFailureCode.UNKNOWN_ERROR`;
+    bounded codes are introduced when a concrete failure mode becomes
+    recurring.
+    """
+    error = getattr(result, "error", None) or ""
+    lowered = str(error).lower()
+    if "json" in lowered or "decode" in lowered or "schema" in lowered:
+        return "schema"
+    if "transport" in lowered or "connection" in lowered or "refused" in lowered:
+        return "transport"
+    return "io"
+
+
+_RESULT_FAILURE_REASON_BY_RESULT = {
+    "schema": SignalPersistenceFailureCode.SCHEMA_ERROR,
+    "transport": SignalPersistenceFailureCode.TRANSPORT_ERROR,
+    "io": SignalPersistenceFailureCode.IO_ERROR,
+}
+
+
+def current_run_persistence_outcomes(
+    outcomes: tuple[SignalPersistenceOutcome, ...],
+) -> tuple[SignalPersistenceOutcome, ...]:
+    """Return only the promotable persistence outcomes.
+
+    Centralised filter so the orchestrator and test fixtures share
+    one definition of what enters the current-run workset.
+    """
+    return tuple(
+        outcome for outcome in outcomes if _is_promotable_outcome(outcome)
     )
 
 

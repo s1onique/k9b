@@ -19,8 +19,12 @@ and loop_alertmanager_snapshot_signals.py.
 
 from __future__ import annotations
 
-from .loop_alertmanager_snapshot_impl import run_alertmanager_snapshot_collection
+from .loop_alertmanager_snapshot_impl import (
+    AlertSignalPromotionDispatchResult,
+    run_alertmanager_snapshot_collection,
+)
 
 __all__ = [
+    "AlertSignalPromotionDispatchResult",
     "run_alertmanager_snapshot_collection",
 ]

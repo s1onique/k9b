@@ -223,43 +223,48 @@ NO_PROMOTION_ACCESS_MODE = "no_promotion_run"
 NO_PROMOTION_MODE = "no_promotion_run"
 NO_PROMOTION_SCAN_SCOPE = "no_promotion_run"
 
-# R7 (item 1): explicit automatic-diagnosis execution decision.
+# ACT-K9B-HULK-CURRENT-RUN-PROMOTION-SEAM01: explicit automatic-diagnosis
+# execution decision.
 #
 # The orchestrator derives a typed decision from the accumulator BEFORE
-# invoking automatic diagnosis. The decision encodes:
+# invoking automatic diagnosis. The decision is a closed
+# :class:`DiagnosisSelectionSource` value (see ``diagnosis_selection.py``).
+# Five values are recognised; this orchestrator never collapses them
+# onto a single mode.
 #
-# * whether automatic diagnosis should run at all (``should_run``);
-# * the selection mode the diagnosis collector must use:
-#   - ``explicit_incident_ids``: the dispatcher carried authoritative
-#     canonical IDs; the collector must call into
-#     ``run_automatic_diagnosis_loop_evidence_collection`` with
-#     ``incident_ids=...`` and MUST NOT fall back to scan-based listing.
-#   - ``store_scan``: no authoritative IDs were carried; the collector
-#     falls back to its normal scan-based listing.
-#   - ``blocked``: a ``PromotionConsistencyContractError`` was
-#     captured during the run; the orchestrator MUST NOT invoke the
-#     collector at all and MUST emit a structured
-#     ``automatic_diagnosis_blocked`` event carrying the captured
-#     reason.
-# * the reason that selection was blocked, when applicable. The
-#   currently-defined reason is ``promotion_consistency_contract_error``
-#   but the field is open so future contract failures (e.g. R8
-#   authoritative record validation) can extend the union without a
-#   function-signature change.
-# * the access mode the collector should attribute to its run. This
-#   is sourced from the accumulator (or the contract error envelope)
-#   and is independent of ``selection_mode`` so a local zero-ID run
-#   keeps ``incident_access_mode == "local"`` and a no-promotion run
-#   keeps ``incident_access_mode == "no_promotion_run"`` instead of
-#   being collapsed onto the legacy ``"backend"`` default.
+# * PROMOTION -- the dispatcher carried authoritative canonical IDs;
+#   the collector MUST call into
+#   ``run_automatic_diagnosis_loop_evidence_collection`` with those
+#   IDs and MUST NOT fall back to scan-based listing.
+# * EXPLICIT_NON_PROMOTION -- a scheduled scan-only run legitimately
+#   opted into non-promotion selection; the collector may scan the
+#   global store.
+# * STORE_SCAN_POLICY -- reserved for future explicit store-scan
+#   policies; the orchestrator does not synthesize this value.
+# * UNAVAILABLE_DUE_TO_REJECTED_PROMOTION -- a
+#   ``PromotionConsistencyContractError`` (or ``PromotionRejected``
+#   variant) was captured during the run; the orchestrator MUST NOT
+#   invoke the collector.
+# * UNAVAILABLE_DUE_TO_COMMIT_UNKNOWN -- a ``PromotionCommitUnknown``
+#   variant was captured; reconciliation is required before any
+#   diagnosis may dispatch.
+#
+# The string constants below remain for backward compatibility with
+# downstream log consumers. They are the only string aliases
+# permitted; the typed source enum is the canonical value.
 INCIDENT_SELECTION_MODE_EXPLICIT_IDS = "explicit_incident_ids"
 INCIDENT_SELECTION_MODE_STORE_SCAN = "store_scan"
 INCIDENT_SELECTION_MODE_BLOCKED = "blocked"
-# SEAM01 R3: new terminal mode for VALID + empty (successful stop, no store scan)
 INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY = "current_run_empty"
+INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN = "commit_unknown"
 
 BLOCKED_REASON_PROMOTION_CONSISTENCY_CONTRACT_ERROR = (
     "promotion_consistency_contract_error"
+)
+BLOCKED_REASON_PROMOTION_REJECTED = "promotion_rejected"
+BLOCKED_REASON_PROMOTION_COMMIT_UNKNOWN = "promotion_commit_unknown"
+BLOCKED_REASON_PROMOTION_WORKSET_CONTRACT_FAILURE = (
+    "promotion_workset_contract_failure"
 )
 
 

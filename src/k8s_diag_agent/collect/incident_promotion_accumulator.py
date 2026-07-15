@@ -23,6 +23,24 @@ SEAM01 R2 contract:
 * ``last_handoff_error`` captures handoff failures for downstream blocking.
 * The accumulator preserves original promotion outcomes from ``PromotionBatch``.
 
+ACT-K9B-HULK-CURRENT-RUN-PROMOTION-DISPATCH-OUTCOME01 contract:
+* The accumulator is the single owner of the typed :class:`PromotionOutcome`
+  (recording, conflict detection, and typed-outcome projection are
+  delegated to :class:`PromotionOutcomeRecorderMixin` in
+  :mod:`incident_promotion_outcome_recorder`).
+* The accumulator is the single owner of the typed :class:`PromotionOutcome`
+  for a health run via :meth:`record_promotion_outcome`. Recording a
+  second outcome for a different ``run_id`` or a materially different
+  variant raises :class:`PromotionOutcomeConflictError`; an identical
+  repeated assignment is idempotent.
+* Once a typed outcome is recorded, :meth:`canonical_incident_ids`,
+  :meth:`promotion_records`, and the compatibility booleans
+  (``promotion_may_have_committed``,
+  ``promotion_consistency_error_recorded``,
+  ``diagnosis_handoff_available``) DERIVE from the recorded outcome
+  rather than from legacy counter projections. Legacy accumulation is
+  the fallback only when no typed outcome is recorded.
+
 Suggested by: ACT-K9B-AUTO-DIAGNOSIS-BACKEND-INCIDENT-IDENTITY01-R1
 Suggested by: ACT-K9B-HULK-PROMOTION-DIAGNOSIS-HANDOFF-SEAM01-R2
 """
@@ -41,7 +59,11 @@ from .incident_identity_hardening import (
     PromotionConsistencyContractError,
     PromotionRecord,
     _validate_response_contracts,
-    select_canonical_ids_from_promotion,
+)
+from .incident_promotion_outcome_recorder import (
+    PromotionOutcomeConflictError,
+    PromotionOutcomeRecorderMixin,
+    PromotionOutcomeRecording,
 )
 
 if TYPE_CHECKING:
@@ -49,6 +71,9 @@ if TYPE_CHECKING:
     from .promotion_diagnosis_handoff import (
         PromotionDiagnosisHandoffError,
         PromotionPropagationResult,
+    )
+    from .promotion_outcomes import (
+        PromotionOutcome,
     )
 
 
@@ -98,7 +123,9 @@ class AccumulatorAccessModeError(ValueError):
 
 
 @dataclass
-class RunPromotionAccumulator:
+class RunPromotionAccumulator(
+    PromotionOutcomeRecorderMixin,
+):
     """Aggregates promotion results from every cluster / source in a run.
 
     The accumulator is intentionally a value object so it can be passed
@@ -125,6 +152,18 @@ class RunPromotionAccumulator:
     ``_seen_canonical_ids``, ``total_*``, and the ``last_*`` fields
     exactly as they were, so the orchestrator can never observe a
     partial-batch state.
+
+    ACT-K9B-HULK-CURRENT-RUN-PROMOTION-DISPATCH-OUTCOME01: the
+    accumulator is the single owner of the typed
+    :class:`PromotionOutcome` for the run. ``promotion_outcome``
+    carries the typed result, ``promotion_outcome_run_id`` carries the
+    cross-check identity, and :meth:`promotion_outcome_variant_label`
+    projects the variant for telemetry.
+
+    Once a typed outcome is recorded, :meth:`canonical_incident_ids`
+    and :meth:`promotion_records` derive from it -- NOT from the
+    legacy counter projections. The legacy accumulation is the
+    fallback only when no typed outcome has been recorded.
     """
 
     promotion_records: list[PromotionRecord] = field(default_factory=list)
@@ -176,6 +215,15 @@ class RunPromotionAccumulator:
     # Captured for production telemetry.
     last_propagation_result: PromotionPropagationResult | None = None
 
+    # ACT-K9B-HULK-CURRENT-RUN-PROMOTION-DISPATCH-OUTCOME01: typed
+    # promotion-outcome ownership. ``promotion_outcome`` is the
+    # authoritative typed outcome once the orchestrator has classified
+    # the dispatcher result. ``promotion_outcome_run_id`` is the
+    # cross-check identity that ``record_promotion_outcome`` uses to
+    # fail closed on cross-run laundry.
+    promotion_outcome: PromotionOutcome | None = field(default=None, repr=False)
+    promotion_outcome_run_id: str = ""
+
     # ---------------- R4 atomic insertion helpers (validate-before-mutate) ----
 
     def _snapshot(self) -> dict[str, object]:
@@ -200,6 +248,8 @@ class RunPromotionAccumulator:
             "last_incident_access_mode": self.last_incident_access_mode,
             "last_source_kind": self.last_source_kind,
             "last_promotion_scan_scope": self.last_promotion_scan_scope,
+            "promotion_outcome": self.promotion_outcome,
+            "promotion_outcome_run_id": self.promotion_outcome_run_id,
         }
 
     def _restore(self, snap: dict[str, object]) -> None:
@@ -220,6 +270,12 @@ class RunPromotionAccumulator:
         self.last_incident_access_mode = cast(str, snap["last_incident_access_mode"])
         self.last_source_kind = cast(str, snap["last_source_kind"])
         self.last_promotion_scan_scope = cast(str, snap["last_promotion_scan_scope"])
+        self.promotion_outcome = cast(
+            "PromotionOutcome | None", snap["promotion_outcome"]
+        )
+        self.promotion_outcome_run_id = cast(
+            str, snap["promotion_outcome_run_id"]
+        )
 
     def _local_skipped_duplicate_count(self) -> int:
         """Count ``skipped_duplicate`` outcomes from local records.
@@ -228,8 +284,8 @@ class RunPromotionAccumulator:
         is sourced from the dispatcher's authoritative count, but
         ``local`` promotion only knows about :class:`PromotionRecord`
         values. Counting the local records directly means the
-        accumulator surfaces the same number whichever path produced
-        the batch.
+        accumulator surfaces the same number whichever path produced the
+        batch.
         """
         return sum(
             1
@@ -244,6 +300,11 @@ class RunPromotionAccumulator:
         Records with a ``None`` canonical incident ID do NOT populate the
         dedup set so they can never mask a later authoritative
         ``canonical_incident_id`` with the same value.
+
+        Note: this method only mutates the legacy accumulator state.
+        The typed outcome (when recorded) is the single source of
+        truth for downstream projections; legacy state is the fallback
+        only when no typed outcome is recorded.
         """
         self.promotion_records.append(record)
         if record.canonical_incident_id:
@@ -284,6 +345,7 @@ class RunPromotionAccumulator:
                         promotion_outcome=PROMOTION_OUTCOME_OPENED,
                     )
                 )
+
 
     def add_batch(self, batch: PromotionBatch) -> None:
         """Consume a typed ``PromotionBatch`` and aggregate it atomically.
@@ -395,26 +457,7 @@ class RunPromotionAccumulator:
             messages.extend(batch.error_messages)
         return tuple(messages)
 
-    def promotion_outcomes(self) -> tuple[str, ...]:
-        """Return the promotion outcomes in input order."""
-        return tuple(record.promotion_outcome for record in self.promotion_records)
 
-    def canonical_incident_ids(
-        self,
-        *,
-        include_skipped: bool = False,
-    ) -> list[str]:
-        """Return canonical IDs in deterministic first-seen order.
-
-        Duplicate canonical IDs are reported exactly once. The same
-        guarantees that :func:`select_canonical_ids_from_promotion`
-        offers are preserved here for callers that prefer the
-        accumulator API.
-        """
-        return select_canonical_ids_from_promotion(
-            self.promotion_records,
-            include_skipped=include_skipped,
-        )
 
     def as_dict(self) -> dict[str, object]:
         """Return a JSON-friendly snapshot of the accumulator.
@@ -437,7 +480,9 @@ class RunPromotionAccumulator:
 
 
 __all__ = [
-    "RunPromotionAccumulator",
     "AccumulatorAccessModeError",
+    "PromotionOutcomeConflictError",
+    "PromotionOutcomeRecording",
     "PromotionWorksetState",
+    "RunPromotionAccumulator",
 ]
