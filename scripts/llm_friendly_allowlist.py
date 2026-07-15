@@ -315,10 +315,6 @@ ALLOWLIST: list[tuple[str, str]] = [
         "[EXTRACTION] R2 budget contract + production-equivalent collector integration test - real collector path with packet write; staged extraction",
     ),
     (
-        "tests/integration/test_act_k9b_incident_current_run_promotion_workset01_e2e.py",
-        "[TEST] R3 + R3.2 scoped-promotion workset e2e - 14 production-equivalent regression tests (5 original + 8 strict-parser negative cases + 1 backend-logging cardinality regression); staged extraction",
-    ),
-    (
         "tests/verifiers/test_incident_current_run_promotion_workset01.py",
         "[TEST] R3 verifier self-test suite - 27 paired positive/negative fixtures across every critical wiring detector; staged split",
     ),
