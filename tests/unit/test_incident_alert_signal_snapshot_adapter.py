@@ -311,3 +311,22 @@ class TestSignalIdentityIntegration:
         identity1 = alert_signal_identity(signals1[0])
         identity2 = alert_signal_identity(signals2[0])
         assert identity1 != identity2
+
+
+def test_legacy_module_path_retains_adapter_public_exports() -> None:
+    """The historical facade path re-exports split contract/persistence APIs."""
+    import k8s_diag_agent.incident_alert_signal_snapshot_adapter as adapter
+    from k8s_diag_agent.incident_alert_signal_persistence import (
+        persist_alert_signals as persistence_function,
+    )
+    from k8s_diag_agent.incident_alert_signal_snapshot_contract import (
+        AlertSignalAdapterResult as contract_result,
+    )
+    from k8s_diag_agent.incident_alert_signal_snapshot_contract import (
+        PersistedAlertSignal,
+    )
+
+    assert adapter.AlertSignalAdapterResult is contract_result
+    assert adapter.PersistedAlertSignal is PersistedAlertSignal
+    assert adapter.persist_alert_signals is persistence_function
+    assert callable(adapter.adapt_snapshot_to_alert_signals)

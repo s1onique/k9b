@@ -1,43 +1,23 @@
 """Automatic diagnosis loop evidence collection integration for health loop.
 
-ACT-K9B-HULK-CURRENT-RUN-PROMOTION-SEAM01 contract:
+The public orchestration seam remains here: selection validation, policy
+checks, collector invocation, and terminal exception semantics. Reporting
+projections and structured event payload construction live in the sibling
+``loop_automatic_diagnosis_reporting`` module and are imported as stable
+private aliases for existing callers and tests.
 
-The collector takes a :class:`DiagnosisSelection` variant from the
-orchestrator and dispatches through a single, exhaustively-matched
-match. The previous contract accepted an optional sequence of canonical
-IDs and an ``incident_selection_mode`` string, and silently fell back
-to a store scan when the IDs were empty.
-
-That truthiness fallback caused the production regression where a
-33-identity-duplicate current run reported zero explicit canonical
-IDs and the collector picked an unrelated incident from the global
-store. The collector now refuses to interpret an empty sequence as a
-fallback signal: the orchestrator must supply an explicit
-:class:`DiagnosisSelection` variant that names the source.
-
-Round-10 invariants (R10-1A and R10-1B) further require:
-
-1. Every promotion-derived ``run_id`` carried by the selection
-   MUST equal ``scheduler_run_id``. Mismatch is a hard error --
-   ``cross-run laundry`` is rejected at the dispatch seam.
-
-2. The validator is **fail-closed**: when ``scheduler_run_id`` is
-   absent (``None`` or empty) AND the selection carries a
-   promotion-derived ``run_id``, the seam raises. A run that
-   cannot produce a comparison target is a configuration error,
-   not a no-op.
-
-3. ``build_diagnosis_selection()`` validates ``promotion_outcome.run_id``
-   BEFORE branching on the outcome variant, so ``PromotionRejected``
-   and ``PromotionCommitUnknown`` are not bypassable through the
-   builder. The builder also rejects when ``run_id`` is empty.
+The collector refuses to interpret an empty incident-ID sequence as a store
+scan. The orchestrator must supply an explicit :class:`DiagnosisSelection`
+variant, and promotion-derived run identities must match the scheduler run.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from k8s_diag_agent.collect import diagnosis_selection as _diagnosis_selection
+from k8s_diag_agent.collect import promotion_outcomes as _promotion_outcomes
 from k8s_diag_agent.collect.diagnosis_selection import (
     DiagnosisRunIdentityMismatchError,
     DiagnosisSelection,
@@ -48,9 +28,6 @@ from k8s_diag_agent.collect.diagnosis_selection import (
 )
 from k8s_diag_agent.collect.diagnosis_selection import (
     selection_run_id as _selection_run_id,
-)
-from k8s_diag_agent.collect.diagnosis_selection import (
-    selection_source as _selection_source,
 )
 from k8s_diag_agent.collect.diagnosis_selection import (
     store_scan_performed as _store_scan_performed,
@@ -66,12 +43,31 @@ from k8s_diag_agent.collect.promotion_outcomes import (
     PromotionRejectionCode,
     PromotionSucceeded,
 )
-from k8s_diag_agent.collect.promotion_outcomes import (
-    consistency_error_recorded as _consistency_error_recorded,
+
+from . import loop_automatic_diagnosis_reporting as _reporting
+from .loop_automatic_diagnosis_reporting import (
+    build_completed_summary,
+    build_disabled_summary,
+    build_error_summary,
+    build_selection_unavailable_summary,
+    emit_complete,
+    emit_disabled,
+    emit_error,
+    emit_selection_unavailable,
+    emit_start,
+)
+from .loop_automatic_diagnosis_reporting import (
+    resolve_access_mode as _resolve_access_mode,
+)
+from .loop_automatic_diagnosis_reporting import (
+    selection_projection as _selection_projection,
 )
 
-if TYPE_CHECKING:
-    pass
+_selection_source = _diagnosis_selection.selection_source
+_consistency_error_recorded = _promotion_outcomes.consistency_error_recorded
+_blocked_reason = _reporting.blocked_reason
+_legacy_selection_mode = _reporting._legacy_selection_mode
+_projection_from_result = _reporting.projection_from_result
 
 __all__ = [
     "build_diagnosis_selection",
@@ -79,31 +75,8 @@ __all__ = [
 ]
 
 
-def _projection_from_result(result: Any) -> dict[str, Any]:
-    """Project reason maps from a typed ``disposition_summary`` (or fall back)."""
-    summary = getattr(result, "disposition_summary", None)
-    if summary is None:
-        return {
-            "skip_reasons": {},
-            "ineligible_reasons": {},
-            "error_reasons": {},
-            "eligibility_schema_version": 2,
-        }
-    return {
-        "skip_reasons": {k.value: v for k, v in summary.skip_reasons.items()},
-        "ineligible_reasons": {k.value: v for k, v in summary.ineligible_reasons.items()},
-        "error_reasons": {k.value: v for k, v in summary.error_reasons.items()},
-        "eligibility_schema_version": 2,
-    }
-
-
 def _coerce_canonical_ids(canonical_incident_ids: Any) -> list[str] | None:
-    """Backward-compatible ID list coercion helper.
-
-    The new selection-algebra path does not consume this directly; the
-    orchestrator now supplies a :class:`DiagnosisSelection` variant.
-    This helper is preserved because existing test fixtures import it.
-    """
+    """Backward-compatible ID list coercion helper."""
     if canonical_incident_ids is None:
         return None
     if isinstance(canonical_incident_ids, (list, tuple)):
@@ -119,36 +92,14 @@ def _coerce_canonical_ids(canonical_incident_ids: Any) -> list[str] | None:
 
 
 class InvalidStoreScanReasonError(ValueError):
-    """Raised when ``non_promotion_reason`` is not a bounded enum value.
-
-    The previous implementation silently defaulted to
-    :class:`NoPromotionSelectionReason.SCHEDULED_SCAN_RUN` whenever
-    the supplied reason was not a bounded enum value, which made
-    fail-open policy decisions possible. We now raise so the
-    orchestrator surfaces the configuration error instead of
-    silently enabling a scan.
-    """
+    """Raised when ``non_promotion_reason`` is not a bounded enum value."""
 
 
 def _validate_diagnosis_selection_run_id(
     selection: DiagnosisSelection,
     scheduler_run_id: str | None,
 ) -> None:
-    """Reject cross-run laundering at the dispatch seam (fail-closed).
-
-    Round-10 invariant (R10-1B): the validator is fail-closed. Every
-    promotion-derived ``run_id`` carried by the selection MUST equal
-    ``scheduler_run_id``. When ``scheduler_run_id`` is ``None`` /
-    empty AND the selection carries a promotion-derived ``run_id``,
-    the seam raises -- the caller cannot prove equality, so the
-    cross-run laundry path is forbidden rather than silently
-    accepted.
-
-    :class:`DiagnosisSelectionWithoutPromotion` carries no promotion-
-    derived ``run_id`` and is allowed through the validator
-    regardless of ``scheduler_run_id`` -- it represents a
-    non-promotion run, not a missing comparison target.
-    """
+    """Reject cross-run laundering at the dispatch seam (fail-closed)."""
     actual = _selection_run_id(selection)
     if actual is None:
         return
@@ -168,38 +119,9 @@ def build_diagnosis_selection(
     non_promotion_reason: str | None = None,
     store_scan_policy: object | None = None,
 ) -> DiagnosisSelection:
-    """Construct the typed :class:`DiagnosisSelection` for a run.
-
-    Round-10 (R10-1A, R10-1B): every promotion-derived ``run_id``
-    carried by ``promotion_outcome`` MUST equal the caller-supplied
-    ``run_id``. We validate BEFORE branching on the variant type so
-    the rule applies uniformly to :class:`PromotionSucceeded`,
-    :class:`PromotionRejected`, and :class:`PromotionCommitUnknown`.
-    We also reject when ``run_id`` is empty -- a promotion outcome
-    cannot be matched against an unknown target, so the builder
-    raises rather than synthesizing an identity.
-
-    Resolution order:
-
-    1. ``promotion_outcome is not None`` ->
-       :class:`DiagnosisSelectionFromPromotion` /
-       :class:`DiagnosisSelectionUnavailable` keyed by the outcome
-       variant. The validation chokepoint runs first.
-    2. ``store_scan_policy is StoreScanPolicy.EXPLICIT_NON_PROMOTION``
-       -> :class:`DiagnosisSelectionWithoutPromotion`.
-    3. Legacy ``non_promotion_policy_enabled=True`` accepts only
-       bounded :class:`NoPromotionSelectionReason` values; unknown
-       reasons raise :class:`InvalidStoreScanReasonError`.
-    4. Otherwise raise so the caller surfaces a configuration error
-       instead of falling back to scan.
-    """
+    """Construct a typed :class:`DiagnosisSelection` for a run."""
     if promotion_outcome is not None:
-        # Validate BEFORE branching on the outcome variant. Every
-        # promotion-derived ``run_id`` (Succeeded, Rejected,
-        # CommitUnknown) must equal the caller's expected
-        # ``run_id``. Empty ``run_id`` is also a configuration
-        # error: the caller cannot prove equality when the
-        # expected target is unknown.
+        # Validate before branching so all three promotion variants are covered.
         expected_run_id = run_id
         actual_run_id = promotion_outcome.run_id
         if not expected_run_id or expected_run_id != actual_run_id:
@@ -216,15 +138,14 @@ def build_diagnosis_selection(
                 promotion_run_id=promotion_outcome.run_id,
                 incident_ids=tuple(promotion_outcome.diagnosis_incident_ids),
             )
-        # A non-conforming typed outcome cannot be projected.
         raise ValueError(
             "build_diagnosis_selection: promotion_outcome is not a "
             f"PromotionOutcome variant (got {type(promotion_outcome).__name__})"
         )
 
-    # Typed policy is the preferred authority.
     if store_scan_policy is not None:
         from ..collect.store_scan_policy import StoreScanPolicy
+
         if store_scan_policy is StoreScanPolicy.DISABLED:
             raise ValueError(
                 "build_diagnosis_selection: store_scan_policy=DISABLED "
@@ -234,9 +155,7 @@ def build_diagnosis_selection(
             )
         if store_scan_policy is StoreScanPolicy.EXPLICIT_NON_PROMOTION:
             try:
-                reason = NoPromotionSelectionReason(
-                    non_promotion_reason or ""
-                )
+                reason = NoPromotionSelectionReason(non_promotion_reason or "")
             except ValueError as exc:
                 raise InvalidStoreScanReasonError(
                     "build_diagnosis_selection: store_scan_policy "
@@ -246,10 +165,6 @@ def build_diagnosis_selection(
             return DiagnosisSelectionWithoutPromotion(reason=reason)
 
     if non_promotion_policy_enabled:
-        # Legacy compatibility: the boolean was previously the
-        # authority. Now we accept only bounded enum values; an
-        # unknown reason raises rather than defaulting to
-        # SCHEDULED_SCAN_RUN.
         try:
             reason = NoPromotionSelectionReason(non_promotion_reason or "")
         except ValueError as exc:
@@ -267,108 +182,10 @@ def build_diagnosis_selection(
     )
 
 
-def _legacy_selection_mode(selection: DiagnosisSelection) -> str:
-    """Map a :class:`DiagnosisSelection` to the legacy string mode."""
-    if isinstance(selection, DiagnosisSelectionFromPromotion):
-        if selection.incident_ids:
-            return "explicit_incident_ids"
-        return "current_run_empty"
-    if isinstance(selection, DiagnosisSelectionUnavailable):
-        carried = selection.outcome
-        if isinstance(carried, PromotionCommitUnknown):
-            return "commit_unknown"
-        return "blocked"
-    return "store_scan"
-
-
-def _selection_projection(
-    selection: DiagnosisSelection,
-    *,
-    access_mode: str,
-) -> dict[str, Any]:
-    """Compute the typed projection shared by every dispatch path."""
-    explicit_count = 0
-    selected_incident_count = 0
-    if isinstance(selection, DiagnosisSelectionFromPromotion):
-        explicit_count = len(selection.incident_ids)
-        selected_incident_count = len(selection.incident_ids)
-    reconciliation_required = (
-        isinstance(selection, DiagnosisSelectionUnavailable)
-        and isinstance(selection.outcome, PromotionCommitUnknown)
-    )
-    # Authoritative zero-work or unavailable selections MUST NOT
-    # claim propagation. Only an explicit
-    # ``DiagnosisSelectionFromPromotion`` with at least one ID
-    # counts as propagation; empty tuples are explicit zero-work.
-    propagated = (
-        isinstance(selection, DiagnosisSelectionFromPromotion)
-        and bool(selection.incident_ids)
-    )
-    if isinstance(selection, DiagnosisSelectionFromPromotion):
-        consistency_error = False
-    elif isinstance(selection, DiagnosisSelectionUnavailable):
-        consistency_error = _consistency_error_recorded(selection.outcome)
-    else:
-        consistency_error = False
-    return {
-        "selection_source": _selection_source(selection).value,
-        "selection_mode": _legacy_selection_mode(selection),
-        "explicit_canonical_id_count": explicit_count,
-        "selected_incident_count": selected_incident_count,
-        "store_scan_performed": _store_scan_performed(selection),
-        "reconciliation_required": reconciliation_required,
-        "promotion_propagated_to_diagnosis": propagated,
-        "promotion_consistency_error_recorded": consistency_error,
-        "incident_access_mode": access_mode,
-    }
-
-
-def _resolve_access_mode(
-    *,
-    backend_endpoint_identity: dict[str, Any] | None,
-    promotion_result_summary: dict[str, Any] | None,
-) -> str:
-    access_mode = "no_promotion_run"
-    if isinstance(backend_endpoint_identity, dict):
-        candidate_mode = backend_endpoint_identity.get("incident_access_mode")
-        if isinstance(candidate_mode, str) and candidate_mode:
-            access_mode = candidate_mode
-    if (
-        access_mode == "no_promotion_run"
-        and isinstance(promotion_result_summary, dict)
-    ):
-        candidate_mode = promotion_result_summary.get("incident_access_mode")
-        if isinstance(candidate_mode, str) and candidate_mode:
-            access_mode = candidate_mode
-    return access_mode
-
-
-def _blocked_reason(selection: DiagnosisSelection) -> str | None:
-    if not isinstance(selection, DiagnosisSelectionUnavailable):
-        return None
-    carried = selection.outcome
-    if isinstance(carried, PromotionCommitUnknown):
-        return "promotion_commit_unknown"
-    if isinstance(carried, PromotionRejected):
-        return "promotion_rejected"
-    return "promotion_unavailable"
-
-
 class AmbiguousDiagnosisSelectionError(ValueError):
-    """Raised when the caller cannot supply an unambiguous :class:`DiagnosisSelection`.
+    """Raised when the caller cannot supply an unambiguous selection."""
 
-    The legacy no-IDs / no-mode path used to silently fall back to a
-    store scan, which is exactly the production regression this ACT
-    closed. The error forces the orchestrator to surface a
-    configuration error instead of an unexplained incident pivot.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        run_id: str,
-    ) -> None:
+    def __init__(self, message: str, *, run_id: str) -> None:
         super().__init__(message)
         self.run_id = run_id
 
@@ -379,21 +196,7 @@ def _legacy_build_selection(
     incident_selection_mode: str | None,
     scheduler_run_id: str | None,
 ) -> DiagnosisSelection:
-    """Build a :class:`DiagnosisSelection` from the legacy arguments.
-
-    The previous truthiness fallback is replaced with explicit variants.
-    Legacy callers without an explicit selection variant raise so the
-    configuration error surfaces instead of silently store-scanning
-    (the 33-identity-duplicate regression shape).
-
-    The :class:`DiagnosisSelectionFromPromotion` ``promotion_run_id``
-    field carries the legacy run identity so the dispatch seam
-    validator can compare it against ``scheduler_run_id``. When
-    ``scheduler_run_id`` is ``None`` the legacy synthesises a
-    sentinel ``"legacy_run"`` so the validator has a comparison
-    target; the orchestrator MUST supply a real ``scheduler_run_id``
-    in production for the identity check to be meaningful.
-    """
+    """Build a typed selection from legacy arguments without scan fallback."""
     legacy_run_id = str(scheduler_run_id or "legacy_run")
     if incident_selection_mode == "blocked":
         return DiagnosisSelectionUnavailable(
@@ -413,18 +216,13 @@ def _legacy_build_selection(
             promotion_run_id=legacy_run_id,
             incident_ids=tuple(coerced),
         )
-    # No legacy IDs and no mode: this used to silently select
-    # DiagnosisSelectionWithoutPromotion, which permitted a global
-    # store scan. We now refuse the call so the orchestrator surfaces
-    # a configuration error instead of an unobserved incident pivot.
     raise AmbiguousDiagnosisSelectionError(
         "run_automatic_diagnosis_loop requires an explicit "
         "DiagnosisSelection or one of: canonical_incident_ids, "
         "incident_selection_mode in {'store_scan'} with explicit "
         "promotion policy, or a promotion_outcome. The legacy "
         "truthiness fallback is forbidden because it caused a "
-        "production store-scan regression on duplicate alert "
-        "signals.",
+        "production store-scan regression on duplicate alert signals.",
         run_id=legacy_run_id,
     )
 
@@ -443,33 +241,12 @@ def run_automatic_diagnosis_loop(
     non_promotion_policy_enabled: bool = False,
     non_promotion_reason: str | None = None,
 ) -> dict[str, Any]:
-    """Run automatic diagnosis loop evidence collection.
-
-    Dispatch decision is sourced from an explicit
-    :class:`DiagnosisSelection` variant. The legacy
-    ``incident_selection_mode`` / ``canonical_incident_ids`` path is
-    retained for backward compatibility but raises when it would have
-    triggered a truthiness-based store scan fallback.
-
-    P0 invariant (round 10): the dispatch seam runs
-    :func:`_validate_diagnosis_selection_run_id` BEFORE telemetry,
-    gate evaluation, or collector dispatch. Mismatched or missing
-    ``scheduler_run_id`` raises
-    :class:`DiagnosisRunIdentityMismatchError` so cross-run laundry
-    cannot silently slip past.
-    """
+    """Run automatic diagnosis loop evidence collection."""
     access_mode = _resolve_access_mode(
         backend_endpoint_identity=backend_endpoint_identity,
         promotion_result_summary=promotion_result_summary,
     )
 
-    # P0: reject contradictory selection inputs. The typed
-    # :class:`DiagnosisSelection` is the sole authority. A
-    # :class:`PromotionOutcome` is an input to ``build_diagnosis_selection``
-    # and may NOT outrank a directly-supplied selection. A
-    # ``promotion_outcome=PromotionCommitUnknown`` paired with a
-    # ``diagnosis_selection=DiagnosisSelectionFromPromotion`` would
-    # otherwise silently bypass commit-uncertainty blocking.
     sources_supplied = sum(
         (
             diagnosis_selection is not None,
@@ -507,18 +284,7 @@ def run_automatic_diagnosis_loop(
             scheduler_run_id=scheduler_run_id,
         )
 
-    # P0 cross-run-identity guard (round 10). Enforced at the dispatch
-    # seam so ALL three sources of selection (direct, build, legacy)
-    # are checked uniformly before telemetry, gate evaluation, or
-    # collector dispatch. ``build_diagnosis_selection`` already
-    # validates its own ``promotion_outcome.run_id`` invariant; this
-    # is the redundant check that catches direct
-    # ``diagnosis_selection=...`` inputs and the legacy path's implicit
-    # ``promotion_run_id`` materialisation. The validator is
-    # fail-closed: a missing ``scheduler_run_id`` for a
-    # promotion-derived selection is rejected.
     _validate_diagnosis_selection_run_id(selection, scheduler_run_id)
-
     projection = _selection_projection(selection, access_mode=access_mode)
     selected_ids = (
         selection.incident_ids
@@ -527,75 +293,24 @@ def run_automatic_diagnosis_loop(
     )
 
     if isinstance(selection, DiagnosisSelectionUnavailable):
-        if log_event_fn:
-            log_event_fn(
-                "automatic-diagnosis",
-                "INFO",
-                "Automatic diagnosis selection unavailable",
-                event="automatic_diagnosis_selection_unavailable",
-                selection_source=projection["selection_source"],
-                selection_mode=projection["selection_mode"],
-                reconciliation_required=projection["reconciliation_required"],
-                promotion_consistency_error_recorded=projection[
-                    "promotion_consistency_error_recorded"
-                ],
-                incident_access_mode=access_mode,
-            )
-        return {
-            "automatic_diagnosis_enabled": True,
-            "collector_run_id": None,
-            "incidents_processed": 0,
-            "incidents_eligible": 0,
-            "incidents_skipped": 0,
-            "incidents_with_errors": 0,
-            "total_review_packets_written": 0,
-            "skip_reasons": {},
-            "ineligible_reasons": {},
-            "error_reasons": {},
-            "eligibility_schema_version": 2,
-            **projection,
-            "promotion_summary_propagated": (
-                dict(promotion_result_summary) if promotion_result_summary else {}
-            ),
-            "backend_endpoint_identity": backend_endpoint_identity,
-            "blocked_reason": _blocked_reason(selection),
-        }
-
-    enabled = is_automatic_diagnosis_loop_enabled()
-
-    if not enabled:
-        if log_event_fn:
-            log_event_fn(
-                "automatic-diagnosis",
-                "INFO",
-                "Automatic diagnosis loop is disabled",
-                event="disabled",
-                **projection,
-            )
-        return {
-            "automatic_diagnosis_enabled": False,
-            "collector_run_id": None,
-            "incidents_processed": 0,
-            "incidents_eligible": 0,
-            "incidents_skipped": 0,
-            "incidents_with_errors": 0,
-            "total_review_packets_written": 0,
-            "skip_reasons": {},
-            "ineligible_reasons": {},
-            "error_reasons": {},
-            "eligibility_schema_version": 2,
-            **projection,
-        }
-
-    if log_event_fn:
-        log_event_fn(
-            "automatic-diagnosis",
-            "INFO",
-            "Starting automatic diagnosis loop evidence collection",
-            event="start",
-            **projection,
+        emit_selection_unavailable(
+            log_event_fn,
+            projection=projection,
+            access_mode=access_mode,
+        )
+        return build_selection_unavailable_summary(
+            projection=projection,
+            promotion_result_summary=promotion_result_summary,
+            backend_endpoint_identity=backend_endpoint_identity,
+            selection=selection,
         )
 
+    enabled = is_automatic_diagnosis_loop_enabled()
+    if not enabled:
+        emit_disabled(log_event_fn, projection)
+        return build_disabled_summary(projection)
+
+    emit_start(log_event_fn, projection)
     config = AutomaticDiagnosisLoopConfig(
         max_incidents_per_run=10,
         max_passes_per_incident=1,
@@ -604,7 +319,9 @@ def run_automatic_diagnosis_loop(
         write_ineligible_packets=False,
     )
 
-    from ..collect.incident_diagnosis_auto_loop import run_automatic_diagnosis_loop_evidence_collection
+    from ..collect.incident_diagnosis_auto_loop import (
+        run_automatic_diagnosis_loop_evidence_collection,
+    )
 
     promotion_summary = (
         dict(promotion_result_summary) if promotion_result_summary else {}
@@ -626,69 +343,26 @@ def run_automatic_diagnosis_loop(
                 scheduler_run_id=scheduler_run_id,
             )
 
-        reason_projection = _projection_from_result(result)
-        summary = {
-            "automatic_diagnosis_enabled": True,
-            "collector_run_id": result.run_id,
-            "run_id": scheduler_run_id,
-            "incidents_processed": result.incidents_processed,
-            "incidents_eligible": result.incidents_eligible,
-            "incidents_skipped": result.incidents_skipped,
-            "incidents_ineligible": result.incidents_ineligible,
-            "incidents_with_errors": result.incidents_with_errors,
-            "total_review_packets_written": result.total_review_packets_written,
-            **projection,
-            "backend_endpoint_identity": backend_endpoint_identity,
-            "promotion_summary_propagated": promotion_summary,
-            **reason_projection,
-        }
-
-        if log_event_fn:
-            log_event_fn(
-                "automatic-diagnosis",
-                "INFO",
-                "Automatic diagnosis loop completed",
-                event="complete",
-                collector_run_id=result.run_id,
-                run_id=scheduler_run_id,
-                incidents_processed=result.incidents_processed,
-                incidents_eligible=result.incidents_eligible,
-                incidents_skipped=result.incidents_skipped,
-                incidents_ineligible=result.incidents_ineligible,
-                incidents_with_errors=result.incidents_with_errors,
-                total_review_packets_written=result.total_review_packets_written,
-                **projection,
-                **reason_projection,
-            )
-
+        summary, reason_projection = build_completed_summary(
+            result=result,
+            scheduler_run_id=scheduler_run_id,
+            projection=projection,
+            backend_endpoint_identity=backend_endpoint_identity,
+            promotion_summary=promotion_summary,
+        )
+        emit_complete(
+            log_event_fn,
+            result=result,
+            scheduler_run_id=scheduler_run_id,
+            projection=projection,
+            reason_projection=reason_projection,
+        )
         return summary
 
     except Exception as exc:
-        if log_event_fn:
-            log_event_fn(
-                "automatic-diagnosis",
-                "WARNING",
-                "Automatic diagnosis loop failed with error",
-                event="error",
-                error=str(type(exc).__name__),
-                **projection,
-            )
-
-        return {
-            "automatic_diagnosis_enabled": True,
-            "collector_run_id": None,
-            "incidents_processed": 0,
-            "incidents_eligible": 0,
-            "incidents_skipped": 0,
-            "incidents_with_errors": 1,
-            "total_review_packets_written": 0,
-            "skip_reasons": {},
-            "ineligible_reasons": {},
-            "error_reasons": {
-                "eligibility_evaluation_failed": 1,
-            },
-            "eligibility_schema_version": 2,
-            **projection,
-            "backend_endpoint_identity": backend_endpoint_identity,
-            "promotion_summary_propagated": promotion_summary,
-        }
+        emit_error(log_event_fn, projection=projection, exc=exc)
+        return build_error_summary(
+            projection=projection,
+            backend_endpoint_identity=backend_endpoint_identity,
+            promotion_summary=promotion_summary,
+        )

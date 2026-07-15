@@ -1,212 +1,32 @@
-"""Adapter to convert Alertmanager snapshots into alert signals for incident promotion.
+"""Adapt Alertmanager snapshots into alert signals.
 
-This module bridges the gap between:
-- Alertmanager snapshot collection (external_analysis/alertmanager_snapshot.py)
-- Alert signal domain model (incident_alert_signal_contract.py)
-- Alert signal persistence (incident_alert_signal_store.py)
-- Incident promotion (incident_alert_promotion.py)
-
-Design principles:
-- Reuse existing NormalizedAlert → AlertSignal mapping
-- Use existing alert_signal_identity() for dedupe
-- Use existing write functions for artifact persistence
-- Non-fatal: failures are logged but do not stop the run
-- Labels-based dedupe per Prometheus convention (not annotations)
-
-Non-goals:
-- Alert-to-incident promotion (handled by incident_alert_promotion.py)
-- Webhook endpoint implementation
-- LLM-based classification
+This facade owns snapshot conversion and preserves the historical import
+surface. Contracts live in ``incident_alert_signal_snapshot_contract`` and
+artifact persistence lives in ``incident_alert_signal_persistence``.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 
-from .collect.signal_persistence_outcomes import (
-    SignalIdentityConflict,
-    SignalIdentityMatched,
-    SignalInserted,
-    SignalPersistenceFailed,
-    SignalPersistenceFailureCode,
-    SignalPersistenceOutcome,
-    SignalPersistenceSummary,
-)
-from .collect.signal_persistence_outcomes import (
-    is_promotable as _is_promotable_outcome,
-)
 from .external_analysis.alertmanager_snapshot import (
     AlertmanagerSnapshot,
     AlertmanagerStatus,
     NormalizedAlert,
 )
-from .incident_alert_signal import (
-    AlertSignal,
-    AlertSourceType,
-    AlertStatus,
-)
+from .incident_alert_signal import AlertSignal, AlertSourceType, AlertStatus
 from .incident_alert_signal_identity import alert_signal_identity
-from .incident_alert_signal_store import (
-    write_alert_signal_artifact,
+from .incident_alert_signal_persistence import (
+    current_run_persistence_outcomes,
+    persist_alert_signals,
+)
+from .incident_alert_signal_snapshot_contract import (
+    AlertSignalAdapterResult,
+    PersistedAlertSignal,
 )
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
-# Module logger
 _logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Adapter Result Types
-# =============================================================================
-
-
-@dataclass(frozen=True)
-class AlertSignalAdapterResult:
-    """Result of adapting and persisting Alertmanager snapshot signals.
-
-    ACT-K9B-HULK-CURRENT-RUN-PROMOTION-SEAM01 contract:
-
-    * The authoritative source is ``persistence_outcomes`` -- a
-      sequence of typed :class:`SignalPersistenceOutcome` variants.
-    * Counters (``signals_written``,
-      ``signals_skipped_duplicates``, ``signals_failed``) are
-      backward-compatible projections of the outcome sequence and
-      MUST NOT be assigned independently of the outcomes.
-    * ``promotable_signal_ids`` are the signals admitted into the
-      current-run promotion workset
-      (``SignalInserted ∪ SignalIdentityMatched``).
-    """
-
-    # Counts (derived projections of persistence_outcomes)
-    total_alerts: int = 0
-    firing_signals_count: int = 0
-    resolved_signals_count: int = 0
-    skipped_count: int = 0
-    signals_written: int = 0
-    signals_skipped_duplicates: int = 0
-    signals_failed: int = 0
-
-    # Authoritative typed outcomes. The new field MUST drive all
-    # current-run workset decisions.
-    persistence_outcomes: tuple[SignalPersistenceOutcome, ...] = ()
-
-    # Pre-computed current-run workset signal IDs (deterministic).
-    promotable_signal_ids: tuple[str, ...] = ()
-
-    # Errors
-    errors: tuple[str, ...] = ()
-
-    @classmethod
-    def from_outcomes(
-        cls,
-        *,
-        total_alerts: int,
-        firing_signals_count: int,
-        resolved_signals_count: int,
-        skipped_count: int,
-        outcomes: tuple[SignalPersistenceOutcome, ...],
-        errors: tuple[str, ...] = (),
-    ) -> AlertSignalAdapterResult:
-        """Build an adapter result from a sequence of typed outcomes.
-
-        All counters are derived projections of ``outcomes``; they
-        cannot be supplied independently.
-        """
-        summary = SignalPersistenceSummary(outcomes=outcomes)
-        promotable_ids: list[str] = []
-        for outcome in outcomes:
-            if isinstance(outcome, SignalInserted):
-                promotable_ids.append(outcome.signal_id)
-            elif isinstance(outcome, SignalIdentityMatched):
-                promotable_ids.append(outcome.signal_id)
-        return cls(
-            total_alerts=total_alerts,
-            firing_signals_count=firing_signals_count,
-            resolved_signals_count=resolved_signals_count,
-            skipped_count=skipped_count,
-            signals_written=summary.inserted_count,
-            signals_skipped_duplicates=summary.identity_matched_count,
-            signals_failed=summary.persistence_failure_count,
-            persistence_outcomes=outcomes,
-            promotable_signal_ids=tuple(promotable_ids),
-            errors=errors,
-        )
-
-    @property
-    def has_signals(self) -> bool:
-        """Return True if any signals were promotable.
-
-        Authoritative source is ``promotable_signal_ids``. The legacy
-        counter fallback preserves backward compatibility for direct
-        construction without going through :meth:`from_outcomes`.
-        """
-        if self.promotable_signal_ids:
-            return True
-        return (self.signals_written + self.signals_skipped_duplicates) > 0
-
-    @property
-    def has_errors(self) -> bool:
-        """Return True if any errors occurred."""
-        return len(self.errors) > 0
-
-    @property
-    def is_workset_populated(self) -> bool:
-        """Strict authoritative check for workset membership.
-
-        Returns True only when the typed outcomes carry at least one
-        :class:`SignalInserted` or :class:`SignalIdentityMatched`
-        outcome. Direct construction without going through
-        :meth:`from_outcomes` cannot satisfy this property.
-        """
-        return bool(self.promotable_signal_ids)
-
-    @property
-    def promotable_outcomes(self) -> tuple[SignalPersistenceOutcome, ...]:
-        """Authoritative list of promotable outcomes (workset sources)."""
-        return tuple(
-            outcome for outcome in self.persistence_outcomes
-            if _is_promotable_outcome(outcome)
-        )
-
-    @property
-    def identity_conflict_count(self) -> int:
-        """Count of identity-conflicting outcomes (always excluded from workset)."""
-        return sum(
-            1 for outcome in self.persistence_outcomes
-            if isinstance(outcome, SignalIdentityConflict)
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class PersistedAlertSignal:
-    """Persisted alert signal paired with its deterministic artifact identity.
-
-    The scheduler hands the backend ``artifact_identity`` (the SHA256-derived
-    identity used in the artifact filename and lookup) rather than the
-    in-memory ``signal.signal_id`` UUID. The backend reads the artifact
-    via ``read_alert_signal_artifact(root, identity)``; passing the UUID
-    would fail closed with ``signal <uuid> is not present in the
-    current-run scope`` for every non-empty scoped request.
-
-    ``newly_written=False`` represents an already-existing artifact;
-    those duplicates MUST still be included in the current-run scope so
-    retry semantics, observation refreshes, and rebuilt incident stores
-    continue to work.
-    """
-
-    signal: AlertSignal
-    artifact_identity: str
-    newly_written: bool
-
-
-# =============================================================================
-# Adapter Functions
-# =============================================================================
 
 
 def adapt_snapshot_to_alert_signals(
@@ -215,33 +35,12 @@ def adapt_snapshot_to_alert_signals(
     received_at: datetime | None = None,
     raw_payload_artifact_id: str | None = None,
 ) -> tuple[tuple[AlertSignal, ...], AlertSignalAdapterResult]:
-    """Adapt an Alertmanager snapshot into AlertSignal objects.
-
-    This function converts NormalizedAlert objects from the Alertmanager snapshot
-    into the internal AlertSignal domain model, ready for persistence and promotion.
-
-    Alert state mapping:
-    - Alertmanager "active" state → AlertStatus.FIRING
-    - Alertmanager "suppressed" state → skipped (silenced/inhibited already filtered)
-    - Alertmanager "unprocessed" state → skipped
-    - All other states → FIRING (conservative)
-
-    Args:
-        snapshot: The Alertmanager snapshot with normalized alerts
-        source_instance: Canonical Alertmanager source ID (not alias URL)
-        received_at: When the snapshot was captured (defaults to now)
-        raw_payload_artifact_id: Optional reference to raw snapshot artifact
-
-    Returns:
-        Tuple of (AlertSignal tuple, AdapterResult)
-    """
+    """Convert normalized Alertmanager alerts into domain signals."""
     if received_at is None:
         received_at = datetime.now(UTC)
 
     signals: list[AlertSignal] = []
     errors: list[str] = []
-
-    # Check if snapshot has alerts
     if snapshot.status == AlertmanagerStatus.EMPTY:
         return (
             tuple(signals),
@@ -257,7 +56,6 @@ def adapt_snapshot_to_alert_signals(
             ),
         )
 
-    # Check for error status
     if snapshot.status not in (AlertmanagerStatus.OK, AlertmanagerStatus.EMPTY):
         error_msg = f"Snapshot has error status: {snapshot.status.value}"
         if snapshot.errors:
@@ -270,7 +68,6 @@ def adapt_snapshot_to_alert_signals(
             ),
         )
 
-    # Track seen identities for dedupe within this snapshot
     seen_identities: set[str] = set()
     firing_count = 0
     resolved_count = 0
@@ -284,14 +81,11 @@ def adapt_snapshot_to_alert_signals(
                 received_at=received_at,
                 raw_payload_artifact_id=raw_payload_artifact_id,
             )
-
-            # Compute identity for dedupe
             identity = alert_signal_identity(signal)
-
-            # Skip if already seen in this snapshot (dedupe within batch)
             if identity in seen_identities:
                 _logger.debug(
-                    "Skipping duplicate alert in snapshot: alertname=%s fingerprint=%s",
+                    "Skipping duplicate alert in snapshot: alertname=%s "
+                    "fingerprint=%s",
                     signal.alertname,
                     signal.external_fingerprint,
                 )
@@ -300,12 +94,10 @@ def adapt_snapshot_to_alert_signals(
 
             seen_identities.add(identity)
             signals.append(signal)
-
             if signal.status == AlertStatus.FIRING:
                 firing_count += 1
             else:
                 resolved_count += 1
-
         except Exception as exc:
             error_msg = f"Failed to convert alert {alert.fingerprint}: {exc}"
             _logger.warning(error_msg)
@@ -318,8 +110,8 @@ def adapt_snapshot_to_alert_signals(
             firing_signals_count=firing_count,
             resolved_signals_count=resolved_count,
             skipped_count=skipped_count,
-            signals_written=0,  # Set by caller after writing
-            signals_skipped_duplicates=0,  # Set by caller
+            signals_written=0,
+            signals_skipped_duplicates=0,
             signals_failed=len(errors),
             errors=tuple(errors),
         ),
@@ -332,58 +124,28 @@ def _convert_normalized_alert(
     received_at: datetime,
     raw_payload_artifact_id: str | None = None,
 ) -> AlertSignal:
-    """Convert a NormalizedAlert to an AlertSignal.
-
-    Extended in ACT-K9B-ALERTMANAGER-ALERT-INGESTION01R1 to preserve:
-    - generator_url from NormalizedAlert.generator_url
-    - full annotations from NormalizedAlert.annotations
-    - ends_at from NormalizedAlert.ends_at
-    - receiver from NormalizedAlert.receiver
-
-    Args:
-        alert: The normalized alert from Alertmanager snapshot
-        source_instance: Canonical Alertmanager source ID
-        received_at: When the snapshot was captured
-        raw_payload_artifact_id: Optional reference to raw snapshot artifact
-
-    Returns:
-        AlertSignal ready for persistence
-    """
-    # Map Alertmanager state to AlertStatus
-    # "active" → FIRING, anything else → FIRING (conservative)
-    # Silenced/inhibited alerts should already be filtered by the fetch
+    """Convert one normalized alert while preserving all evidence fields."""
     state = alert.state.lower() if alert.state else ""
     if state in ("active", "firing"):
         status = AlertStatus.FIRING
     elif state in ("resolved", "complete"):
         status = AlertStatus.RESOLVED
     else:
-        # Unknown state - default to FIRING (conservative)
         status = AlertStatus.FIRING
 
-    # Parse timestamps (ACT-R1: also parse ends_at)
     starts_at = _parse_datetime(alert.starts_at) if alert.starts_at else None
     ends_at = _parse_datetime(alert.ends_at) if alert.ends_at else None
-
-    # Extract severity
     severity = alert.severity if alert.severity else None
-
-    # Use labels directly (already sorted in NormalizedAlert)
     labels = alert.labels
-
-    # Build annotations from full NormalizedAlert.annotations (ACT-R1)
-    # Use full annotations if present, otherwise fall back to summary
     annotations: tuple[tuple[str, str], ...] = ()
     if alert.annotations:
         annotations = alert.annotations
     elif alert.summary:
-        # Legacy fallback: build annotations from summary only
         annotations = (("summary", alert.summary),)
 
-    # Generate signal_id (UUID-based)
     from .identity.artifact import new_artifact_id
-    signal_id = new_artifact_id()
 
+    signal_id = new_artifact_id()
     return AlertSignal(
         signal_id=signal_id,
         source_type=AlertSourceType.ALERTMANAGER,
@@ -397,187 +159,21 @@ def _convert_normalized_alert(
         starts_at=starts_at,
         ends_at=ends_at,
         received_at=received_at,
-        generator_url=alert.generator_url,  # ACT-R1: preserve generator_url
-        receiver=alert.receiver,  # ACT-R1: preserve receiver
+        generator_url=alert.generator_url,
+        receiver=alert.receiver,
         raw_payload_artifact_id=raw_payload_artifact_id,
         truncation=None,
     )
 
 
-def persist_alert_signals(
-    signals: tuple[AlertSignal, ...],
-    root: Path,
-    raw_payload_artifact_id: str | None = None,
-) -> tuple[AlertSignalAdapterResult, list[PersistedAlertSignal]]:
-    """Persist alert signals to artifacts.
-
-    R1 contract: every successfully observed signal is returned as a
-    :class:`PersistedAlertSignal` carrying the **deterministic artifact
-    identity** (SHA256-derived, used as the artifact filename). The
-    scheduler passes those identities to the backend's scoped promotion
-    endpoint so the backend can read the corresponding artifact.
-
-    Both newly-written artifacts and already-existing duplicates are
-    included in the returned list. Excluding duplicates would silently
-    drop retry/rebuild/observation-refresh semantics from the current-run
-    scope.
-
-    ACT-K9B-HULK-CURRENT-RUN-PROMOTION-SEAM01 contract:
-
-    The returned ``AlertSignalAdapterResult`` carries the typed
-    ``persistence_outcomes`` sequence in addition to the legacy
-    counter projections. Orchestrators MUST use the typed outcomes
-    to build the current-run promotion workset.
-
-    Args:
-        signals: Alert signals to persist
-        root: Root directory for artifacts
-        raw_payload_artifact_id: Optional reference to raw snapshot artifact
-
-    Returns:
-        Tuple of (AdapterResult, list of :class:`PersistedAlertSignal`)
-        in the order the artifacts were processed. The artifact
-        identity is the canonical lookup key the backend expects.
-    """
-    if not signals:
-        return (
-            AlertSignalAdapterResult(
-                total_alerts=0,
-                firing_signals_count=0,
-                resolved_signals_count=0,
-            ),
-            [],
-        )
-
-    persisted_signals: list[PersistedAlertSignal] = []
-    errors: list[str] = []
-    outcomes: list[SignalPersistenceOutcome] = []
-
-    firing_count = 0
-    resolved_count = 0
-
-    for signal in signals:
-        result = write_alert_signal_artifact(
-            root=root,
-            signal=signal,
-            raw_payload_artifact_id=raw_payload_artifact_id,
-            received_at=signal.received_at,
-        )
-
-        identity = result.identity
-        if not result.success:
-            error_msg = f"Failed to write signal {signal.signal_id}: {result.error}"
-            _logger.warning(error_msg)
-            errors.append(error_msg)
-            outcomes.append(
-                SignalPersistenceFailed(
-                    candidate_signal_id=str(signal.signal_id),
-                    reason=_RESULT_FAILURE_REASON_BY_RESULT.get(
-                        _RESULT_FAILURE_KIND(result),
-                        SignalPersistenceFailureCode.UNKNOWN_ERROR,
-                    ),
-                    detail=(result.error or "")[:256],
-                )
-            )
-            continue
-
-        if identity is None:
-            errors.append(
-                f"Successful write without identity for signal {signal.signal_id}"
-            )
-            outcomes.append(
-                SignalPersistenceFailed(
-                    candidate_signal_id=str(signal.signal_id),
-                    reason=SignalPersistenceFailureCode.CONTRACT_VIOLATION,
-                    detail="successful write without identity",
-                )
-            )
-            continue
-
-        if result.is_duplicate:
-            outcomes.append(SignalIdentityMatched(signal_id=str(identity)))
-        else:
-            outcomes.append(SignalInserted(signal_id=str(identity)))
-
-        persisted_signals.append(
-            PersistedAlertSignal(
-                signal=signal,
-                artifact_identity=identity,
-                newly_written=not result.is_duplicate,
-            )
-        )
-        if signal.status == AlertStatus.FIRING:
-            firing_count += 1
-        else:
-            resolved_count += 1
-
-    outcomes_tuple = tuple(outcomes)
-    return (
-        AlertSignalAdapterResult.from_outcomes(
-            total_alerts=len(signals),
-            firing_signals_count=firing_count,
-            resolved_signals_count=resolved_count,
-            skipped_count=0,
-            outcomes=outcomes_tuple,
-            errors=tuple(errors),
-        ),
-        persisted_signals,
-    )
-
-
-def _RESULT_FAILURE_KIND(result: object) -> str:
-    """Best-effort classification of a :class:`SignalWriteResult` failure.
-
-    Used to map persistence failures to bounded
-    :class:`SignalPersistenceFailureCode` values. New failure modes
-    fall into :attr:`SignalPersistenceFailureCode.UNKNOWN_ERROR`;
-    bounded codes are introduced when a concrete failure mode becomes
-    recurring.
-    """
-    error = getattr(result, "error", None) or ""
-    lowered = str(error).lower()
-    if "json" in lowered or "decode" in lowered or "schema" in lowered:
-        return "schema"
-    if "transport" in lowered or "connection" in lowered or "refused" in lowered:
-        return "transport"
-    return "io"
-
-
-_RESULT_FAILURE_REASON_BY_RESULT = {
-    "schema": SignalPersistenceFailureCode.SCHEMA_ERROR,
-    "transport": SignalPersistenceFailureCode.TRANSPORT_ERROR,
-    "io": SignalPersistenceFailureCode.IO_ERROR,
-}
-
-
-def current_run_persistence_outcomes(
-    outcomes: tuple[SignalPersistenceOutcome, ...],
-) -> tuple[SignalPersistenceOutcome, ...]:
-    """Return only the promotable persistence outcomes.
-
-    Centralised filter so the orchestrator and test fixtures share
-    one definition of what enters the current-run workset.
-    """
-    return tuple(
-        outcome for outcome in outcomes if _is_promotable_outcome(outcome)
-    )
-
-
 def _parse_datetime(value: str | None) -> datetime | None:
-    """Parse datetime string to datetime.
-
-    Handles various formats from Alertmanager.
-    """
+    """Parse common Alertmanager timestamp formats."""
     if not value:
         return None
-
     if isinstance(value, datetime):
         return value
-
     if not isinstance(value, str):
         return None
-
-    # Handle Z suffix
     if value.endswith("Z"):
         value = f"{value[:-1]}+00:00"
 
@@ -586,7 +182,6 @@ def _parse_datetime(value: str | None) -> datetime | None:
     except ValueError:
         pass
 
-    # Try common formats
     formats = [
         "%Y-%m-%dT%H:%M:%S.%fZ",
         "%Y-%m-%dT%H:%M:%SZ",
@@ -598,17 +193,13 @@ def _parse_datetime(value: str | None) -> datetime | None:
             return datetime.strptime(value, fmt)
         except ValueError:
             continue
-
     return None
 
-
-# =============================================================================
-# Module Exports
-# =============================================================================
 
 __all__ = [
     "AlertSignalAdapterResult",
     "PersistedAlertSignal",
     "adapt_snapshot_to_alert_signals",
+    "current_run_persistence_outcomes",
     "persist_alert_signals",
 ]

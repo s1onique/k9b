@@ -57,76 +57,23 @@ from k8s_diag_agent.collect.signal_persistence_outcomes import (
     SignalIdentityMatched,
     SignalInserted,
 )
-from k8s_diag_agent.external_analysis.alertmanager_discovery import (
-    AlertmanagerSource,
+from k8s_diag_agent.external_analysis.alertmanager_snapshot import AlertmanagerSnapshot
+from k8s_diag_agent.incident_alert_signal import AlertSignal
+from k8s_diag_agent.incident_alert_signal_identity import alert_signal_identity
+from k8s_diag_agent.incident_alert_signal_store import write_alert_signal_artifact
+
+from .act_k9b_hulk_current_run_workset_stable_collapse01_production_regression_support import (
+    ALERT_FINGERPRINT,
+    RUN_ID,
+    SOURCE_IDENTITY,
+    build_same_identity_signals,
+    build_snapshot_with_single_alert,
+    build_source,
+    gather_event,
+    make_runs_dir,
+    patch_scoped_backend_to_promoted,
 )
-from k8s_diag_agent.external_analysis.alertmanager_snapshot import (
-    AlertmanagerSnapshot,
-    AlertmanagerStatus,
-    NormalizedAlert,
-)
-from k8s_diag_agent.incident_alert_signal import (
-    AlertSignal,
-)
-from k8s_diag_agent.incident_alert_signal_store import (
-    write_alert_signal_artifact,
-)
-from tests.integration.incident_current_run_promotion_workset01_support import (
-    make_signal,
-)
-
-RUN_ID = "run-2026-07-15T03:30Z"
-SOURCE_IDENTITY = "http://alertmanager:9093"
-ALERT_FINGERPRINT = "alert-2026-07-15T0330Z-collapse-pair"
-
-
-def _build_snapshot_with_single_alert() -> AlertmanagerSnapshot:
-    """A snapshot containing one alert (the adapter stub does not dedupe)."""
-    alert = NormalizedAlert(
-        fingerprint=ALERT_FINGERPRINT,
-        alertname="KubePodCrashLooping",
-        state="active",
-        severity="critical",
-        cluster="prod",
-        namespace="default",
-        service="redis",
-        instance="redis-0",
-        starts_at="2026-07-15T03:30:00Z",
-        ends_at=None,
-        summary="Crash loop on redis-0",
-    )
-    return AlertmanagerSnapshot(
-        status=AlertmanagerStatus.OK,
-        captured_at="2026-07-15T03:30:00Z",
-        source=SOURCE_IDENTITY,
-        alert_count=1,
-        alerts=(alert,),
-        errors=(),
-    )
-
-
-def _build_source() -> AlertmanagerSource:
-    return AlertmanagerSource(
-        source_id=SOURCE_IDENTITY,
-        endpoint=f"{SOURCE_IDENTITY}/api/v1/alerts",
-    )
-
-
-def _duplicate_identity_signal(
-    signal: AlertSignal, *, new_signal_id: str,
-) -> AlertSignal:
-    """Return a new ``AlertSignal`` that shares canonical identity.
-
-    Persisted ``artifact_identity`` is computed from
-    ``alert_signal_identity(signal)`` which combines
-    ``source_instance``, ``alertname``, ``status``,
-    ``external_fingerprint`` (or the stable-label fallback) and
-    ``starts_at``. Two alerts that share every immutable field
-    therefore collapse to one persisted artifact -- one
-    ``SignalInserted`` for the first write and one
-    ``SignalIdentityMatched`` for the second.
-    """
-    return replace(signal, signal_id=new_signal_id)
+from .incident_current_run_promotion_workset01_support import make_signal
 
 
 class TestSameIdentityCollapseProductionPath:
@@ -191,40 +138,14 @@ class TestSameIdentityCollapseProductionPath:
             loop_alertmanager_snapshot_signals as ingestion_module,
         )
 
-        runs_dir = tmp_path / "runs"
-        (runs_dir / "external-analysis" / "alert-signals").mkdir(
-            parents=True, exist_ok=True,
-        )
-
-        # Build two ``AlertSignal`` objects that share every
-        # immutable field but carry different in-memory UUIDs.
-        signal_a = make_signal(
-            signal_id="uuid-A",
-            namespace="default",
-            name="redis-0",
-            alertname="KubePodCrashLooping",
-        )
-        signal_b = _duplicate_identity_signal(
-            signal_a, new_signal_id="uuid-B",
-        )
-        from k8s_diag_agent.incident_alert_signal_identity import (
-            alert_signal_identity as _identity,
-        )
-        canonical_identity = str(_identity(signal_a))
-        assert _identity(signal_a) == _identity(signal_b)
-
-        adapt_result_payload = (
-            (signal_a, signal_b),
-            adapter_module.AlertSignalAdapterResult(
-                total_alerts=2,
-                firing_signals_count=2,
-                resolved_signals_count=0,
-                skipped_count=0,
-                signals_written=0,
-                signals_skipped_duplicates=0,
-                signals_failed=0,
-            ),
-        )
+        runs_dir = make_runs_dir(tmp_path)
+        fixture = build_same_identity_signals()
+        signal_a = fixture.signal_a
+        signal_b = fixture.signal_b
+        canonical_identity = fixture.canonical_identity
+        assert canonical_identity == str(alert_signal_identity(signal_a))
+        assert alert_signal_identity(signal_a) == alert_signal_identity(signal_b)
+        adapt_result_payload = fixture.adapt_result_payload
 
         def _adapt_stub(
             *,
@@ -297,10 +218,14 @@ class TestSameIdentityCollapseProductionPath:
             "_calculate_identity_collapse_count",
             _spy_calculator,
         )
+        patch_scoped_backend_to_promoted(
+            monkeypatch,
+            expected_signal_ids=[canonical_identity],
+        )
 
         ingestion_module._ingest_alert_signals(
-            snapshot=_build_snapshot_with_single_alert(),
-            selected_source=_build_source(),
+            snapshot=build_snapshot_with_single_alert(),
+            selected_source=build_source(),
             snapshot_path=None,
             directories={"root": runs_dir},
             incident_store=None,
@@ -319,6 +244,12 @@ class TestSameIdentityCollapseProductionPath:
         )
         assert sent_ids[0] == canonical_identity
         assert len(sent_ids) == len(set(sent_ids))
+        # Strict contract: the dispatcher must forward the exact
+        # production values. The scoped-backend HTTP-boundary spy
+        # already enforces run_id and source_identity above; here
+        # we confirm the upstream scoped-for-accumulator
+        # invocation forwarded the deduplicated canonical signal.
+        assert sent_ids == [canonical_identity]
 
         # --- Production-helper pin ---
         # Production MUST have called the helper exactly once with
@@ -344,7 +275,7 @@ class TestSameIdentityCollapseProductionPath:
             f"no promoted event logged; events: "
             f"{sorted(event_names)!r}"
         )
-        written_event = _gather_event(events, "alert-signals-written")
+        written_event = gather_event(events, "alert-signals-written")
         assert written_event["signals_written"] == 1
         assert written_event["signals_duplicates"] == 1
         assert written_event["signals_failed"] == 0
@@ -353,7 +284,7 @@ class TestSameIdentityCollapseProductionPath:
             if "alert-signals-promoted" in event_names
             else "alert-signals-promoted-via-backend"
         )
-        promoted_event = _gather_event(events, promoted_event_name)
+        promoted_event = gather_event(events, promoted_event_name)
         raw_persisted = promoted_event["persisted_signal_count"]
         unique_artifacts = promoted_event["unique_artifact_signal_count"]
         assert raw_persisted == 2, (
@@ -403,10 +334,7 @@ class TestSameIdentityCollapseProductionPath:
         the canonical identity and the real factory collapses the
         duplicate reference.
         """
-        runs_dir = tmp_path / "runs"
-        (runs_dir / "external-analysis" / "alert-signals").mkdir(
-            parents=True, exist_ok=True,
-        )
+        runs_dir = make_runs_dir(tmp_path)
         first_signal = make_signal(
             signal_id=ALERT_FINGERPRINT,
             namespace="default",
@@ -460,10 +388,7 @@ class TestSameIdentityCollapseProductionPath:
         :class:`SignalIdentityMatched`. The factory collapses the
         resulting workset references to one membership.
         """
-        runs_dir = tmp_path / "runs"
-        (runs_dir / "external-analysis" / "alert-signals").mkdir(
-            parents=True, exist_ok=True,
-        )
+        runs_dir = make_runs_dir(tmp_path)
 
         signal_a = make_signal(
             signal_id="uuid-1",
@@ -545,13 +470,3 @@ class TestSameIdentityCollapseProductionPath:
         assert len(refs) - workset.total_count == 1
         assert workset.signal_ids == (canonical_identity,)
         assert len(workset.signal_ids) == 1
-
-
-def _gather_event(
-    captured: list[dict[str, Any]], event_name: str,
-) -> dict[str, Any]:
-    """Return the captured entry whose ``event`` field matches."""
-    for entry in captured:
-        if entry.get("event") == event_name:
-            return entry
-    raise AssertionError(f"event {event_name!r} not logged")

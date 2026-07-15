@@ -70,99 +70,23 @@ from k8s_diag_agent.collect.signal_persistence_outcomes import (
     SignalPersistenceSummary,
     is_promotable,
 )
-from k8s_diag_agent.external_analysis.alertmanager_discovery import (
-    AlertmanagerSource,
-)
-from k8s_diag_agent.external_analysis.alertmanager_snapshot import (
-    AlertmanagerSnapshot,
-    AlertmanagerStatus,
-    NormalizedAlert,
-)
 from k8s_diag_agent.health.loop_automatic_diagnosis import (
     build_diagnosis_selection,
 )
 from k8s_diag_agent.incident_alert_signal_snapshot_adapter import (
     persist_alert_signals,
 )
-from k8s_diag_agent.incident_alert_signal_store import (
-    write_alert_signal_artifact,
+from k8s_diag_agent.incident_alert_signal_store import write_alert_signal_artifact
+
+from .act_k9b_hulk_current_run_promotion_seam01_production_regression_support import (
+    RUN_ID,
+    SOURCE_IDENTITY,
+    build_snapshot,
+    build_source,
+    build_thirty_three_distinct_alerts,
+    write_alerts_round_one,
 )
-
 from .incident_current_run_promotion_workset01_support import make_signal
-
-RUN_ID = "run-2026-07-15T0330Z"
-SOURCE_IDENTITY = "http://alertmanager:9093"
-ALERT_COUNT = 33
-
-
-def _build_thirty_three_distinct_alerts() -> list[NormalizedAlert]:
-    alerts: list[NormalizedAlert] = []
-    for i in range(ALERT_COUNT):
-        alert = NormalizedAlert(
-            fingerprint=f"alert-2026-07-15T0330Z-{i:03d}",
-            alertname="KubePodCrashLooping",
-            state="active",
-            severity="critical",
-            cluster="prod",
-            namespace="default",
-            service="redis",
-            instance=f"redis-{i // 7}",
-            starts_at="2026-07-15T03:30:00Z",
-            ends_at=None,
-            summary=f"Crash loop on redis-{i // 7}",
-        )
-        alerts.append(alert)
-    return alerts
-
-
-def _write_alerts_round_one(runs_dir: Path) -> list[Any]:
-    """Pre-populate the artifact directory with the 33 distinct alerts.
-
-    Round 1: the persistence boundary inserts one artifact per alert.
-    Round 2: the same alerts arrive again and the persistence
-    boundary must report identity-matched duplicates.
-    """
-    signals = [
-        make_signal(
-            signal_id=f"alert-2026-07-15T0330Z-{i:03d}",
-            namespace="default",
-            name=f"redis-{i // 7}",
-            alertname="KubePodCrashLooping",
-        )
-        for i in range(ALERT_COUNT)
-    ]
-    for signal in signals:
-        result = write_alert_signal_artifact(root=runs_dir, signal=signal)
-        assert result.success
-        assert result.is_duplicate is False  # round 1: new artifact.
-    return signals
-
-
-def _build_snapshot(alerts: list[NormalizedAlert]) -> AlertmanagerSnapshot:
-    return AlertmanagerSnapshot(
-        status=AlertmanagerStatus.OK,
-        captured_at="2026-07-15T03:30:00Z",
-        source=SOURCE_IDENTITY,
-        alert_count=len(alerts),
-        alerts=tuple(alerts),
-        errors=(),
-    )
-
-
-def _build_source() -> AlertmanagerSource:
-    return AlertmanagerSource(
-        source_id=SOURCE_IDENTITY,
-        endpoint=f"{SOURCE_IDENTITY}/api/v1/alerts",
-    )
-
-
-def _gather_log(captured: list[dict[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for entry in captured:
-        event = entry.get("event")
-        if event is not None:
-            result[event] = entry
-    return result
 
 
 class TestHulkProductionRegression:
@@ -185,7 +109,7 @@ class TestHulkProductionRegression:
         (runs_dir / "external-analysis" / "alert-signals").mkdir(
             parents=True, exist_ok=True,
         )
-        signals = _write_alerts_round_one(runs_dir)
+        signals = write_alerts_round_one(runs_dir)
 
         # Round 2 produces 33 identity-matched duplicates.
         round_two: list[SignalIdentityMatched] = []
@@ -240,7 +164,7 @@ class TestHulkProductionRegression:
         (runs_dir / "external-analysis" / "alert-signals").mkdir(
             parents=True, exist_ok=True,
         )
-        _write_alerts_round_one(runs_dir)
+        write_alerts_round_one(runs_dir)
 
         # Spy on the dispatch entry point so we can read what it
         # receives. The function is imported locally inside the
@@ -267,8 +191,8 @@ class TestHulkProductionRegression:
         # Configure local promotion mode for the dispatcher.
         monkeypatch.setenv("K9B_INCIDENT_PROMOTION_MODE", "local")
 
-        snapshot = _build_snapshot(_build_thirty_three_distinct_alerts())
-        selected_source = _build_source()
+        snapshot = build_snapshot(build_thirty_three_distinct_alerts())
+        selected_source = build_source()
         directories = {"root": runs_dir}
 
         events: list[dict[str, Any]] = []
