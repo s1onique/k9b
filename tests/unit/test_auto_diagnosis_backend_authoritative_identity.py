@@ -247,7 +247,11 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
     def test_disabled_path_does_not_synthesize_ids(self) -> None:
         # Even when canonical IDs are supplied, a disabled loop returns no
         # synthesized IDs. We patch the gate so we don't depend on the
-        # scheduler deployment environment.
+        # scheduler deployment environment. Round-10 (R10-1B):
+        # ``scheduler_run_id="test-run"`` is supplied because the
+        # dispatch-seam validator is fail-closed and rejects
+        # promotion-derived selections without an explicit scheduler
+        # run identity to compare against.
         os.environ["K9B_AUTOMATIC_DIAGNOSIS_LOOP_ENABLED"] = "false"
         with patch(
             "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
@@ -257,6 +261,7 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
                 external_analysis_dir=Path("/tmp"),
                 log_event_fn=lambda *a, **kw: None,
                 canonical_incident_ids=["incident-1"],
+                scheduler_run_id="test-run",
             )
         assert result["automatic_diagnosis_enabled"] is False
         assert result["promotion_propagated_to_diagnosis"] is True
@@ -268,19 +273,194 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
         # ``backend`` default.
         assert result["incident_access_mode"] == "no_promotion_run"
 
-    def test_no_canonical_ids_marks_propagation_false(self) -> None:
+    def test_no_canonical_ids_raises_ambiguous_selection(self) -> None:
+        """ACT-K9B-HULK-CURRENT-RUN-PROMOTION-SEAM01 invariant.
+
+        The legacy ``if not ids: scan()`` truthiness fallback was the
+        cause of the production 33-duplicate regression.  The seam
+        now refuses the call rather than silently picking an unrelated
+        incident.
+        """
+        from k8s_diag_agent.health.loop_automatic_diagnosis import (
+            AmbiguousDiagnosisSelectionError,
+        )
+
         with patch(
             "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
             return_value=False,
         ):
-            result = run_automatic_diagnosis_loop(
-                external_analysis_dir=Path("/tmp"),
-                log_event_fn=lambda *a, **kw: None,
-                canonical_incident_ids=None,
+            with pytest.raises(AmbiguousDiagnosisSelectionError):
+                run_automatic_diagnosis_loop(
+                    external_analysis_dir=Path("/tmp"),
+                    log_event_fn=lambda *a, **kw: None,
+                    canonical_incident_ids=None,
+                )
+
+    def test_multiple_authority_sources_raise_ambiguous(
+        self,
+    ) -> None:
+        """Round 6 P0: contradictory authority sources are rejected.
+
+        The 5-way combination of authority sources MUST yield exactly
+        one source. The P0 guard closes the bypass where
+        ``promotion_outcome=PromotionCommitUnknown`` paired with
+        ``diagnosis_selection=DiagnosisSelectionFromPromotion`` would
+        otherwise silently outrank the commit-uncertainty block.
+        """
+        from k8s_diag_agent.collect.diagnosis_selection import (
+            DiagnosisSelectionFromPromotion,
+            DiagnosisSelectionWithoutPromotion,
+        )
+        from k8s_diag_agent.collect.promotion_outcomes import (
+            PromotionCommitUnknown,
+            PromotionReconciliationToken,
+            PromotionRejected,
+            PromotionRejectionCode,
+            PromotionSucceeded,
+        )
+        from k8s_diag_agent.health.loop_automatic_diagnosis import (
+            AmbiguousDiagnosisSelectionError,
+        )
+
+        from_promotion = DiagnosisSelectionFromPromotion(
+            promotion_run_id="run", incident_ids=()
+        )
+        without_promotion = DiagnosisSelectionWithoutPromotion(
+            reason=__import__(
+                "k8s_diag_agent.collect.diagnosis_selection",
+                fromlist=["NoPromotionSelectionReason"],
+            ).NoPromotionSelectionReason.SCHEDULED_SCAN_RUN
+        )
+        commit_unknown = PromotionCommitUnknown(
+            run_id="run",
+            reason=__import__(
+                "k8s_diag_agent.collect.promotion_outcomes",
+                fromlist=["PromotionUncertaintyCode"],
+            ).PromotionUncertaintyCode.AMBIGUOUS_RESPONSE,
+            reconciliation_token=PromotionReconciliationToken(
+                request_id="r",
+                request_fingerprint="sha256:f",
+            ),
+        )
+        rejected = PromotionRejected(
+            run_id="run",
+            reason=PromotionRejectionCode.WORKLIST_INCONSISTENT,
+            rejected_signal_ids=(),
+        )
+        succeeded = PromotionSucceeded(
+            run_id="run",
+            requested_signal_ids=(),
+            records=(),
+            diagnosis_incident_ids=(),
+        )
+
+        with patch(
+            "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
+            return_value=False,
+        ):
+            # diagnosis_selection + promotion_outcome -> raise
+            for selection, outcome in [
+                (from_promotion, commit_unknown),
+                (from_promotion, rejected),
+                (from_promotion, succeeded),
+                (without_promotion, commit_unknown),
+                (without_promotion, rejected),
+                (without_promotion, succeeded),
+            ]:
+                with pytest.raises(AmbiguousDiagnosisSelectionError):
+                    run_automatic_diagnosis_loop(
+                        external_analysis_dir=Path("/tmp"),
+                        log_event_fn=lambda *a, **kw: None,
+                        diagnosis_selection=selection,
+                        promotion_outcome=outcome,
+                    )
+
+    def test_cross_run_promotion_selection_is_rejected(self) -> None:
+        """A DiagnosisSelectionFromPromotion with a mismatched run_id MUST be rejected.
+
+        Round 10 P0 invariant: the dispatch seam rejects every
+        :class:`DiagnosisSelectionFromPromotion` whose
+        ``promotion_run_id`` differs from the caller-supplied
+        ``scheduler_run_id``. Promoting the assertion from the broad
+        ``ValueError`` form to the typed
+        :class:`DiagnosisRunIdentityMismatchError` makes the contract
+        explicit and prevents a silently-relabelled cross-run
+        selection from leaking into diagnosis.
+        """
+        from k8s_diag_agent.collect.diagnosis_selection import (
+            DiagnosisRunIdentityMismatchError,
+            DiagnosisSelectionFromPromotion,
+        )
+
+        # Construct a diagnosis selection whose underlying outcome
+        # run_id is "run-A" but pass "run-B" as the scheduler run_id.
+        # A correct implementation MUST raise
+        # DiagnosisRunIdentityMismatchError; until round 10 the call
+        # returned normally and the strict xfail accepted that as the
+        # documented defect. The strict marker has now been removed.
+        selection = DiagnosisSelectionFromPromotion(
+            promotion_run_id="run-A",
+            incident_ids=("incident-A",),
+        )
+
+        with patch(
+            "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
+            return_value=False,
+        ):
+            with pytest.raises(DiagnosisRunIdentityMismatchError) as exc_info:
+                run_automatic_diagnosis_loop(
+                    external_analysis_dir=Path("/tmp"),
+                    log_event_fn=lambda *a, **kw: None,
+                    diagnosis_selection=selection,
+                    scheduler_run_id="run-B",
+                )
+        # Typed-error contract: surface the expected and actual run
+        # identities so the operator can diagnose the cross-run
+        # laundering directly without parsing the message.
+        assert exc_info.value.expected_run_id == "run-B"
+        assert exc_info.value.actual_run_id == "run-A"
+
+    def test_cross_run_unavailable_outcome_is_rejected(self) -> None:
+        """A DiagnosisSelectionUnavailable with a mismatched outcome.run_id MUST be rejected.
+
+        Round 10 P0 invariant (all promotion-derived values must
+        match): even when the selection is the
+        :class:`DiagnosisSelectionUnavailable` variant, the carried
+        :class:`PromotionRejected`/``PromotionCommitUnknown`` ``run_id``
+        is checked against ``scheduler_run_id``. The cross-run
+        laundering risk is identical for "blocked" and "available"
+        selection variants.
+        """
+        from k8s_diag_agent.collect.diagnosis_selection import (
+            DiagnosisRunIdentityMismatchError,
+            DiagnosisSelectionUnavailable,
+        )
+        from k8s_diag_agent.collect.promotion_outcomes import (
+            PromotionRejected,
+            PromotionRejectionCode,
+        )
+
+        selection = DiagnosisSelectionUnavailable(
+            outcome=PromotionRejected(
+                run_id="run-A",
+                reason=PromotionRejectionCode.WORKLIST_INCONSISTENT,
+                rejected_signal_ids=(),
             )
-        assert result["automatic_diagnosis_enabled"] is False
-        assert result["promotion_propagated_to_diagnosis"] is False
-        assert result["explicit_canonical_id_count"] == 0
+        )
+
+        with patch(
+            "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
+            return_value=False,
+        ):
+            with pytest.raises(DiagnosisRunIdentityMismatchError) as exc_info:
+                run_automatic_diagnosis_loop(
+                    external_analysis_dir=Path("/tmp"),
+                    log_event_fn=lambda *a, **kw: None,
+                    diagnosis_selection=selection,
+                    scheduler_run_id="run-B",
+                )
+        assert exc_info.value.expected_run_id == "run-B"
+        assert exc_info.value.actual_run_id == "run-A"
 
     def test_completion_emits_consistency_propagation_metadata(self, tmp_path: Path) -> None:
         # Patch the gate to deterministically enable the loop regardless
@@ -333,6 +513,12 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
                     "backend_reachable": True,
                     "incident_access_mode": INCIDENT_ACCESS_MODE_BACKEND,
                 },
+                # Round-10 (R10-1B): the dispatch seam is fail-closed;
+                # a promotion-derived selection requires an explicit
+                # scheduler_run_id to compare against. The collector
+                # stub returns ``run_id="test-run"`` so the legacy
+                # path's selection carries the matching identity.
+                scheduler_run_id="test-run",
             )
 
         start = next(
