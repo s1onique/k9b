@@ -193,6 +193,11 @@ def _command_specs(repo_root: Path, target: Path) -> list[CommandSpec]:
         "src/k8s_diag_agent/collect/incident_evidence_llm_safe.py",
         "src/k8s_diag_agent/security/redaction_policy.py",
         "src/k8s_diag_agent/security/sanitizer.py",
+        # R100 (P1): include the R20 workset verifier and its
+        # R98/R99 companion so the verifier-specific mypy run
+        # can flag any future drift on _Binding.path back to
+        # a scalar.
+        "scripts/verifiers/incident_current_run_promotion_workset01.py",
     ]
     # The targeted-repository-gate command is the actual cycle path; it must
     # inherit the recursion guard so any nested populate launch under
