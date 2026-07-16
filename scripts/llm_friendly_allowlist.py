@@ -316,6 +316,13 @@ ALLOWLIST: list[tuple[str, str]] = [
     ),
     (
         "tests/verifiers/test_incident_current_run_promotion_workset01.py",
-        "[TEST] R3 verifier self-test suite - 27 paired positive/negative fixtures across every critical wiring detector; staged split",
+        "[TEST] R3 verifier self-test suite - 27 paired positive/negative fixtures across every critical wiring detector",
+    ),
+    # [TEST] CORE01 contract tests - verifies the contract the
+    # canonical R20 verifier relies on (top-level-only lookups,
+    # direct-Name call detection, stable codes).
+    (
+        "tests/verifiers/test_verifier_core.py",
+        "[TEST] CORE01 verifier core contract tests - covers deterministic parsing, structural lookups, rebinding scanners, callable-in-collection detection; covers codes/diagnostics/lookups/directness/detectors modules",
     ),
 ]

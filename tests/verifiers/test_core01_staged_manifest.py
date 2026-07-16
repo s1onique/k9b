@@ -1,0 +1,123 @@
+"""Staged-manifest verification for the CORE01 closure.
+
+CORRECTION05 R10: the final report must calculate the staged
+manifest rather than manually asserting 17 or 18 paths. The
+test in this file compares ``git diff --cached --name-only``
+against the documented CORE01 manifest and fails on:
+
+* missing staged paths,
+* undocumented staged paths,
+* duplicate manifest entries,
+* any CORE01 path with an unstaged delta.
+
+The CORE01 manifest is documented here as the authoritative
+set; if a future ACT needs to add or remove a CORE01 path, it
+must update this test (and the matching progress report).
+
+Unrelated pre-existing untracked files are explicitly NOT
+part of the CORE01 manifest.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Authoritative CORE01 staged manifest. Add or remove paths
+# here in lockstep with the closure report.
+CORE01_MANIFEST: tuple[str, ...] = (
+    ".factory/gate-summary.json",
+    "docs/doctrine/verifier-canonical-syntax.md",
+    "docs/reports/r20-verifier-test-reconciliation.md",
+    "mypy.ini",
+    "scripts/factory/populate_gate_summary.py",
+    "scripts/llm_friendly_allowlist.py",
+    "scripts/verifiers/__init__.py",
+    "scripts/verifiers/verifier_core/__init__.py",
+    "scripts/verifiers/verifier_core/codes.py",
+    "scripts/verifiers/verifier_core/detectors.py",
+    "scripts/verifiers/verifier_core/diagnostics.py",
+    "scripts/verifiers/verifier_core/directness.py",
+    "scripts/verifiers/verifier_core/lookups.py",
+    "task_progress_act_k9b_llm_friendly_verifier_canonical_syntax_core01.md",
+    "task_progress_act_k9b_verifier_core01_closure_correction03.md",
+    "task_progress_act_k9b_verifier_core01_closure_correction04.md",
+    "task_progress_act_k9b_verifier_core01_closure_correction05.md",
+    "tests/verifiers/test_canonical_doctrine_matches_production.py",
+    "tests/verifiers/test_core01_staged_manifest.py",
+    "tests/verifiers/test_verifier_core.py",
+    "tests/verifiers/test_verifier_core_mypy_fixture.py",
+)
+
+
+def _git(*args: str) -> str:
+    """Run git with the supplied args and return stdout."""
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.stdout
+
+
+def test_manifest_has_no_duplicates() -> None:
+    """The CORE01 manifest itself has no duplicate entries."""
+    assert len(CORE01_MANIFEST) == len(set(CORE01_MANIFEST)), (
+        f"CORE01 manifest has duplicate entries: {CORE01_MANIFEST!r}"
+    )
+
+
+def test_staged_paths_match_manifest() -> None:
+    """Every staged CORE01 Python / config / docs path is in the manifest,
+    and every manifest path is staged (no missing, no undocumented)."""
+    staged = sorted(
+        line.strip()
+        for line in _git("diff", "--cached", "--name-only").splitlines()
+        if line.strip()
+    )
+    manifest = sorted(CORE01_MANIFEST)
+    missing_from_staged = sorted(set(manifest) - set(staged))
+    undocumented = sorted(set(staged) - set(manifest))
+    assert not missing_from_staged, (
+        f"manifest paths NOT staged: {missing_from_staged!r}"
+    )
+    assert not undocumented, (
+        f"staged CORE01 paths NOT in manifest: {undocumented!r}"
+    )
+
+
+def test_no_core01_path_has_an_unstaged_delta() -> None:
+    """No staged CORE01 path has an unstaged delta (working-tree != index)."""
+    unstaged_diff = _git("diff", "--name-only")
+    unstaged_paths = {
+        line.strip() for line in unstaged_diff.splitlines() if line.strip()
+    }
+    offenders = sorted(set(CORE01_MANIFEST) & unstaged_paths)
+    assert not offenders, (
+        f"CORE01 paths with an unstaged delta: {offenders!r}"
+    )
+
+
+@pytest.mark.parametrize("path", CORE01_MANIFEST)
+def test_manifest_path_is_a_real_file(path: str) -> None:
+    """Every CORE01 manifest path resolves to a real file."""
+    assert (REPO_ROOT / path).exists(), (
+        f"manifest path does not exist: {path!r}"
+    )
+
+
+def test_manifest_count_is_documented() -> None:
+    """The CORE01 manifest size is exactly the count recorded in the
+    closure report. This guards against drift between the report
+    text and the manifest contents."""
+    assert len(CORE01_MANIFEST) == 21, (
+        f"CORE01 manifest size must match the documented count (21); "
+        f"got {len(CORE01_MANIFEST)}. If you intentionally added/removed "
+        "a path, update both this test and the closure report."
+    )

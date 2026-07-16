@@ -155,6 +155,22 @@ def _run(spec: CommandSpec) -> CheckOutcome:
     )
 
 
+def _core01_mypy_manifest_complete(
+    argv: list[str], expected_paths: tuple[str, ...]
+) -> bool:
+    """Self-test: the generated canonical mypy command includes the
+    complete CORE01 manifest.
+
+    Returns True when every expected path is present in the
+    command argv (substring match against the joined command).
+    A failing self-test raises ``AssertionError`` from the
+    caller's :func:`_command_specs` so the producer can never
+    silently drop a CORE01 path.
+    """
+    joined = " ".join(argv)
+    return all(path in joined for path in expected_paths)
+
+
 def _pytest_spec(repo_root: Path, name: str, *nodeids: str) -> CommandSpec:
     return CommandSpec(
         name=name,
@@ -188,17 +204,44 @@ def _command_specs(repo_root: Path, target: Path) -> list[CommandSpec]:
     env = _env(repo_root)
     source_root = _source_root(repo_root)
     changed_py = _changed_python_files() or ["scripts/factory/populate_gate_summary.py"]
+    # CORRECTION05 R8: the canonical mypy command MUST visibly
+    # include the complete CORE01 manifest:
+    #   * the verifier_core package (covered by the package
+    #     wildcard ``[mypy-scripts.verifiers.verifier_core.*]``
+    #     in mypy.ini);
+    #   * the R20 workset verifier consumer;
+    #   * the surviving CORE01 test files (the contract tests,
+    #     the mypy-fixture test, the production-shape test);
+    #   * the existing redaction-module coverage preserved
+    #     verbatim (CORE01 does NOT regress that surface).
     mypy_targets = [
+        # Existing redaction-module coverage (preserved verbatim).
         "src/k8s_diag_agent/collect/incident_evidence_redaction.py",
         "src/k8s_diag_agent/collect/incident_evidence_llm_safe.py",
         "src/k8s_diag_agent/security/redaction_policy.py",
         "src/k8s_diag_agent/security/sanitizer.py",
-        # R100 (P1): include the R20 workset verifier and its
-        # R98/R99 companion so the verifier-specific mypy run
-        # can flag any future drift on _Binding.path back to
-        # a scalar.
+        # CORE01 production-consumer surface.
+        "scripts/verifiers/verifier_core/",
         "scripts/verifiers/incident_current_run_promotion_workset01.py",
+        # CORE01 contract tests.
+        "tests/verifiers/test_verifier_core.py",
+        "tests/verifiers/test_canonical_doctrine_matches_production.py",
+        "tests/verifiers/test_verifier_core_mypy_fixture.py",
     ]
+    # The CORE01 self-test asserts the generated mypy command
+    # contains every CORE01 manifest path. The check is
+    # performed in :func:`_core01_mypy_manifest_complete`.
+    expected_core01_mypy_paths = (
+        "scripts/verifiers/verifier_core/",
+        "scripts/verifiers/incident_current_run_promotion_workset01.py",
+        "tests/verifiers/test_verifier_core.py",
+        "tests/verifiers/test_canonical_doctrine_matches_production.py",
+        "tests/verifiers/test_verifier_core_mypy_fixture.py",
+    )
+    core01_mypy_argv = [str(VENV_PYTHON), "-m", "mypy", *mypy_targets, "--ignore-missing-imports"]
+    assert _core01_mypy_manifest_complete(core01_mypy_argv, expected_core01_mypy_paths), (
+        "canonical gate mypy command is missing CORE01 manifest paths"
+    )
     # The targeted-repository-gate command is the actual cycle path; it must
     # inherit the recursion guard so any nested populate launch under
     # verify_all.sh fails fast with exit code 2 rather than recursively
