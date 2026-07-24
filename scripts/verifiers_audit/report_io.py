@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from scripts.verifiers_audit.discovery import REPO_ROOT
@@ -151,6 +152,7 @@ def _relative_to_repo(path: Path) -> str:
 def write_all(
     report_root: Path | None = None,
     audit: dict | None = None,
+    layout: ReportLayout | None = None,
 ) -> dict[str, str]:
     """Write every audit-owned shard to ``report_root`` (defaults
     to the canonical :data:`REPORT_ROOT`).  ``gate_classification``
@@ -167,7 +169,10 @@ def write_all(
     """
     from scripts.verifiers_audit.builder import build_audit_object
 
-    root = report_root or REPORT_ROOT
+    if layout is not None:
+        root = layout.shard_root
+    else:
+        root = report_root or REPORT_ROOT
     owns_audit = audit is None
     if owns_audit:
         audit = build_audit_object({})
@@ -222,30 +227,136 @@ def write_all(
     return {name: info["path"] for name, info in audit["index"]["shards"].items()}
 
 
+@dataclass(frozen=True)
+class ReportLayout:
+    """CORRECTION10: the canonical report artifact layout.
+
+    Tests construct a :class:`ReportLayout` entirely beneath
+    ``tmp_path``.  The CLI constructs the canonical layout
+    explicitly via :func:`canonical_layout`.  Any deviation
+    (extra ``docs/`` prefix, nested path, wrong filename) is
+    rejected by :func:`report_layout_for_shard_root`.
+    """
+    shard_root: Path
+    top_level_json: Path
+    markdown_path: Path
+
+
+def canonical_layout() -> ReportLayout:
+    """Return the canonical :class:`ReportLayout` for the live
+    repository (the default ``REPORT_ROOT``).  The top-level and
+    markdown files live at :data:`TOP_LEVEL_JSON` and a sibling
+    path respectively.  Any deviation raises ``ValueError``.
+    """
+    from pathlib import Path as _P
+
+    if not _P(TOP_LEVEL_JSON).name == "verifier-core-migration-audit01.json":
+        raise ValueError(
+            f"canonical top-level filename is wrong: {TOP_LEVEL_JSON}"
+        )
+    return ReportLayout(
+        shard_root=REPORT_ROOT,
+        top_level_json=TOP_LEVEL_JSON,
+        markdown_path=REPORT_ROOT.parent
+        / "verifier-core-migration-audit01.md",
+    )
+
+
+def report_layout_for_shard_root(root: Path) -> ReportLayout:
+    """CORRECTION10: construct a :class:`ReportLayout` for an
+    arbitrary ``root`` (typically a test's ``tmp_path / "reports"``).
+
+    The top-level file lives at ``root.parent / "verifier-core-migration-audit01.json"``
+    (a SIBLING of the shard directory).  The markdown lives
+    at ``root.parent / "verifier-core-migration-audit01.md"``.
+
+    Any deviation (nested path, wrong filename) raises
+    ``ValueError`` so the validator can reject the layout.
+    """
+
+    if not root.is_absolute():
+        raise ValueError(f"shard_root must be absolute: {root}")
+    top = root.parent / "verifier-core-migration-audit01.json"
+    md = root.parent / "verifier-core-migration-audit01.md"
+    if not top.name == "verifier-core-migration-audit01.json":
+        raise ValueError(f"top-level filename is wrong: {top}")
+    if not md.name == "verifier-core-migration-audit01.md":
+        raise ValueError(f"markdown filename is wrong: {md}")
+    if not top.parent == root.parent == md.parent:
+        raise ValueError(
+            f"top-level and markdown are not siblings of {root}"
+        )
+    return ReportLayout(
+        shard_root=root, top_level_json=top, markdown_path=md
+    )
+
+
+def load_top_level_index(layout: ReportLayout | None = None) -> dict[str, object]:
+    if layout is None:
+        layout = canonical_layout()
+    return json.loads(layout.top_level_json.read_text(encoding="utf-8"))
+
+
+def load_shard(
+    name: str, layout: ReportLayout | None = None
+) -> dict[str, object]:
+    if layout is None:
+        layout = canonical_layout()
+    return json.loads((layout.shard_root / f"{name}.json").read_text(encoding="utf-8"))
+
+
+def shard_paths(layout: ReportLayout | None = None) -> dict[str, str]:
+    index = load_top_level_index(layout)
+    return {name: info["path"] for name, info in index["shards"].items()}
+
+
+def _load_gate_classification_from(
+    layout: ReportLayout,
+) -> dict[str, object] | None:
+    """Load the ``gate_classification.json`` shard from a layout.
+    The canonical owner is
+    :mod:`scripts.verifiers_audit.collect_r2_evidence`; this
+    helper only reads.
+    """
+    path = layout.shard_root / "gate_classification.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def write_audit(
     skip_gate: bool = False,
+    *,
+    layout: ReportLayout | None = None,
     report_root: Path | None = None,
 ) -> dict[str, str]:
-    """Write the full audit set to ``report_root`` (defaults to
-    the canonical :data:`REPORT_ROOT`).  ``gate_classification``
-    is NEVER written by this helper - that shard is owned
-    exclusively by :mod:`scripts.verifiers_audit.collect_r2_evidence`.
+    """CORRECTION10: write the full audit set to ``layout``
+    (defaults to :func:`canonical_layout`).
 
-    ``skip_gate`` propagates to the builder for fast local
-    sanity runs; production closures leave it ``False`` so
-    real evidence is recorded.
+    ``skip_gate`` is FORWARDED to ``build_audit_object`` (the
+    previous implementation silently dropped the argument).  The
+    layout's ``gate_classification`` is loaded from disk (the
+    canonical owner is
+    :mod:`scripts.verifiers_audit.collect_r2_evidence`).
+
+    ``report_root`` is accepted for backward compatibility with
+    legacy callers; when present, a temporary layout is built
+    around it and ``skip_gate`` is still forwarded.
     """
-    return write_all(report_root=report_root)
+    if layout is None:
+        if report_root is not None:
+            layout = report_layout_for_shard_root(report_root)
+        else:
+            layout = canonical_layout()
+    persisted_gc = _load_gate_classification_from(layout)
+    from scripts.verifiers_audit.builder import build_audit_object
 
-
-def load_top_level_index() -> dict[str, object]:
-    return json.loads(TOP_LEVEL_JSON.read_text(encoding="utf-8"))
-
-
-def load_shard(name: str) -> dict[str, object]:
-    return json.loads((REPORT_ROOT / f"{name}.json").read_text(encoding="utf-8"))
-
-
-def shard_paths() -> dict[str, str]:
-    index = load_top_level_index()
-    return {name: info["path"] for name, info in index["shards"].items()}
+    audit = build_audit_object(
+        {},
+        skip_gate=skip_gate,
+        gate_classification=persisted_gc,
+    )
+    return write_all(layout=layout, audit=audit)

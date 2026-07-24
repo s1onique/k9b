@@ -291,39 +291,6 @@ def validate_required_shards_complete(
     return True
 
 
-def validate_canonical_top_level_path(
-    audit: dict | None = None,
-) -> bool:
-    """CORRECTION09: the canonical top-level file MUST live at
-    ``report_root.parent / "verifier-core-migration-audit01.json"``
-    (i.e. a SIBLING of the shard directory, not a child).
-
-    For the default :data:`REPORT_ROOT` this resolves to
-    :data:`TOP_LEVEL_JSON`.  Any deviation (e.g. an extra ``docs/``
-    prefix, a nested path) is rejected.
-    """
-    from scripts.verifiers_audit.report_io import (
-        TOP_LEVEL_JSON,
-    )
-    from scripts.verifiers_audit.report_io import (
-        _relative_to_repo as _canonical,
-    )
-    if not TOP_LEVEL_JSON.exists():
-        return True
-    expected_path = _canonical(TOP_LEVEL_JSON)
-    if audit is None:
-        return True
-    # The top-level is recorded in the index, but only via its
-    # file hash.  We compare the on-disk canonical file path
-    # to the recorded canonical file path indirectly: the
-    # index does not include the top-level file in ``shards``
-    # (the shards map contains the 6 audit-owned shards and
-    # the gate_classification).  The strict-path check lives
-    # in ``validate_required_shards_complete``.  Here we only
-    # verify the canonical top-level file is reachable.
-    return expected_path == _canonical(TOP_LEVEL_JSON)
-
-
 def validate_reports_agree(audit: dict | None = None) -> bool:
     """JSON index, Markdown totals, and the candidates shard all
     agree on the headline numbers.  This is the cross-report
