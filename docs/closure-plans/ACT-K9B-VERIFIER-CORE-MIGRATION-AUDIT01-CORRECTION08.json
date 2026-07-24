@@ -1,0 +1,159 @@
+{
+  "schema_version": "leamas.v2.closure-plan/1",
+  "act_id": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION08",
+  "title": "Repair AUDIT01 subject checkpoint: identity contract, single-writer classification, range-bound gates (CORRECTION08)",
+  "scope": {
+    "exact_act": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION08",
+    "subject_act_under_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01",
+    "prior_checkpoint": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION07 (S=ef1ebc5a on local main, not pushed, rescue branch created)",
+    "target_act_after_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)",
+    "baseline": {
+      "parent_commit": "ef1ebc5aab791d11aaaf216d44f6e6f86e474fe3 (CORRECTION07 S, on local main)",
+      "original_baseline_commit_for_audit": "a22ac7ba4626c9d3125d4f5e0c8435c18f9cf6c0 (CORRECTION07 F, immutable analysis base)",
+      "rescue_branch": "rescue/audit01-correction07-subject-20260724"
+    }
+  },
+  "known_defects_in_s": {
+    "head_commit_uses_neither_F_nor_S": "docs/reports/verifier-core-migration-audit01.json and .../gate_classification.json both contain head_commit=0e9b6d20... (an amended-away intermediate commit) instead of F or S",
+    "gate_classification_must_not_be_SKIPPED_in_canonical": "the committed gate_classification.json has classification=SKIPPED with skip_reason mentioning test_required_shards_complete; a canonical committed shard must be UNASSESSED / PRE-EXISTING-DETERMINISTIC / PRE-EXISTING-ENVIRONMENTAL / ACT-INTRODUCED / UNRESOLVED — never SKIPPED",
+    "classification_has_multiple_writers": "scripts/verifiers_audit/cli.py cmd_write re-emits gate_classification.json when an in-memory gate_classification is provided; the canonical writer must be only scripts/verifiers_audit/collect_r2_evidence.py",
+    "gate_commands_derive_scope_from_working_tree": "scripts/factory/populate_gate_summary.py _changed_python_files reads git diff --cached and git diff (working tree) instead of a frozen base..subject range; a 17/17 PASS is not authoritative unless its commands are range-bound",
+    "lifecycle_doc_says_CORRECTION06_removed_but_was_a_worktree_rewrite": "task_progress_act_k9b_verifier_core_migration_audit01.md claims 'the abandoned CORRECTION06 removal is undone' but CORRECTION06 was a worktree rewrite, not a removal",
+    "evidence_dir_mislabelled_as_protocol_E": "previous evidence captures at /tmp/closure_evidence are NOT Leamas protocol E; protocol E requires a v2 binary that is not installed"
+  },
+  "permitted_subject_paths": [
+    ".factory/gate-summary.json",
+    "docs/reports/verifier-core-migration-audit01.json",
+    "docs/reports/verifier-core-migration-audit01/gate_classification.json",
+    "docs/reports/verifier-core-migration-audit01/helpers.json",
+    "scripts/verifiers_audit/builder.py",
+    "scripts/verifiers_audit/cli.py",
+    "scripts/verifiers_audit/collect_r2_evidence.py",
+    "scripts/verifiers_audit/correction08_validators.py",
+    "scripts/verifiers_audit/gate_classification.py",
+    "scripts/verifiers_audit/report_io.py",
+    "scripts/verifiers_audit/validation.py",
+    "tests/verifiers/test_verifier_core_migration_audit01.py"
+  ],
+  "identity_contract": {
+    "schema_field": "analysis_base_commit",
+    "field_type": "string (40-char lowercase hex git sha)",
+    "required_relationship_to_subject": "must be an immutable ancestor of the subject (F or F8 is acceptable as the analysis base; S, S8, and their trees MUST NOT appear inside S8 itself)",
+    "binding_object": {
+      "subject_commit_location": "external-closure-record",
+      "subject_commit_embedded": false
+    },
+    "validators_must_reject": [
+      "missing field",
+      "non-ancestor commit",
+      "any sha that equals the subject itself"
+    ],
+    "removed_fields": ["head_commit (every occurrence)"]
+  },
+  "single_writer_classification": {
+    "canonical_writer": "scripts/verifiers_audit/collect_r2_evidence.py",
+    "no_other_writer": true,
+    "audit_read_only_behavior": "scripts/verifiers_audit/cli.py cmd_write must NOT write or re-emit gate_classification.json; it MAY include the shard's hash in the index if the shard exists on disk",
+    "missing_classification": "in-memory UNASSESSED record OR fail-closed diagnostic per documented contract",
+    "SKIPPED_allowed_only_in_synthetic_in_memory_test_fixture": true,
+    "tests_must_use_tmp_path_configured_report_roots": true,
+    "mutation_proof_required": "before/after sha256 of the canonical committed gate_classification.json is identical after every test and after audit.py --write",
+    "committed_skip_reason_must_not_reference_test_function": true,
+    "final_canonical_classification_must_be_one_of": ["UNASSESSED", "PRE-EXISTING-DETERMINISTIC", "PRE-EXISTING-ENVIRONMENTAL", "ACT-INTRODUCED", "UNRESOLVED"],
+    "must_not_be": ["SKIPPED"]
+  },
+  "range_bound_gates": {
+    "conceptual_command": ".venv/bin/python scripts/factory/populate_gate_summary.py --repo-root . --base $F_OR_F8 --subject $S8 --target .factory/gate-summary.json",
+    "use_existing_interface": true,
+    "summary_must_record": {
+      "base_commit": "40-char hex",
+      "subject_commit": "40-char hex",
+      "subject_parent": "40-char hex",
+      "subject_tree": "40-char hex",
+      "changed_path_count": "int",
+      "changed_paths_sha256": "sha256 over sorted changed paths",
+      "range": "base..subject"
+    },
+    "manifest_source": "git diff --name-only --diff-filter=ACMRT $BASE..$SUBJECT",
+    "required_proofs": [
+      "ruff covers all changed Python production AND test paths",
+      "mypy covers the ACT-prescribed typed paths",
+      "llm-friendly checks include all subject-range paths",
+      "verification-discipline includes all subject-range paths",
+      "no gate derives scope solely from a clean working tree or empty index",
+      "running the same gate from two clean clones of the same F..S8 produces the same command/file manifest"
+    ],
+    "seventeen_seventeen_is_not_authoritative_unless_range_bound": true
+  },
+  "lifecycle_terminology": {
+    "CORRECTION07_RECOVERY": "PASS",
+    "CORRECTION07_F_S_CHECKPOINT": "SUPERSEDED_BY_CORRECTION08",
+    "CORRECTION07_V2_CLOSURE": "BLOCKED",
+    "manual_preclosure_evidence": "present",
+    "leamas_protocol_E": "absent",
+    "closure_commit_C": "absent",
+    "annotated_tag_T": "absent",
+    "deterministic_C_proof": "blocked",
+    "remove_phrases": [
+      "closure protocol executed end-to-end",
+      "evidence_detached: true (when referring to protocol E)"
+    ],
+    "use_phrases": [
+      "manual pre-closure gate captures exist outside Git"
+    ],
+    "correction_text": [
+      "the abandoned CORRECTION06 worktree rewrite was discarded (NOT 'removal')"
+    ]
+  },
+  "wave_1_policy": {
+    "wave_1_implementation": "PROHIBITED",
+    "blocked_target": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01",
+    "reason": "Wave 1 remains blocked until AUDIT01 receives a complete (non-partial) v2 closure."
+  },
+  "transaction_contract": {
+    "protocol": "v2",
+    "F8": "immutable plan-freeze commit (this plan is committed alone; no subject paths staged in F8); F8 is a NEW plan-freeze commit, parent(S7)",
+    "S8": "exactly one model-authored subject commit; parent(S8) = F8",
+    "C": "exactly one deterministic Leamas-authored closure commit; never authored by the model; absent until a v2 binary is installed",
+    "T": "Leamas-authored annotated tag targeting C; absent until C exists",
+    "E": "detached raw evidence bundle; never committed into the worktree; absent until a v2 binary produces it",
+    "no_manual_attestation_commit": true,
+    "do_not_rewrite_S7": true,
+    "preserve_F7": true,
+    "deterministic_C_proof": {
+      "policy": "Reproduce closure from identical inputs in an isolated non-publishing environment and assert C1 == C2; commit-object bytes equal.",
+      "blocked_status_text": "DETERMINISTIC_C_PROOF: BLOCKED, CLOSURE: PARTIAL",
+      "blocked_reason": "The installed /usr/local/bin/leamas binary exposes only Closure Protocol v1 commands (no --protocol v2 flag) and rejects the v2 plan schema (unknown field 'schema_version'). Safe isolated v2 reproduction is unsupported. The model MUST NOT simulate or hand-author C2."
+    }
+  },
+  "remaining_successors": [
+    "ACT-K9B-REDACTION-NEGATIVE-PROOFS-PORTABILITY01",
+    "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)",
+    "Leamas v2 binary/schema qualification and actual C/T/E creation",
+    "Complete AUDIT01 closure"
+  ],
+  "definition_of_done": {
+    "report_identity_is_non_self_referential": true,
+    "report_base_is_immutable_ancestor": true,
+    "classification_single_writer": true,
+    "tests_cannot_mutate_canonical_shard": true,
+    "canonical_classification_not_skipped": true,
+    "progress_and_shard_classification_match": true,
+    "authoritative_gates_bound_to_base_subject_range": true,
+    "canonical_ruff_covers_subject_paths": true,
+    "manual_evidence_not_called_protocol_E": true,
+    "C_T_E_not_hand_authored": true,
+    "worktree_clean": true,
+    "wave_1_started": false
+  },
+  "expected_final_state_until_v2_binary_exists": {
+    "CORRECTION08": "PARTIAL_CHECKPOINT",
+    "k9b_subject": "verified",
+    "range_bound_gates": "pass",
+    "C": "absent",
+    "T": "absent",
+    "E": "absent",
+    "deterministic_C": "blocked",
+    "wave_1": "blocked"
+  }
+}
