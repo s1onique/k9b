@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "head_commit": "0e9b6d2013f42d6943a0004036cd477f76e22e7b",
+  "totals": {
+    "tracked_path_count": 29,
+    "included_path_count": 18,
+    "excluded_path_count": 11,
+    "helper_count": 202,
+    "duplicate_group_count": 8,
+    "exact_duplicate_group_count": 3,
+    "exact_duplicate_helper_count": 3,
+    "core_public_symbol_count": 24,
+    "production_consumer_count": 0,
+    "test_only_consumer_count": 18,
+    "unused_consumer_count": 6,
+    "candidate_count": 8,
+    "wave_1_candidate_count": 3,
+    "measured_net_deletion_lines": 16,
+    "preserved_path_count": 29
+  },
+  "shards": {
+    "inventory": {
+      "path": "docs/reports/verifier-core-migration-audit01/inventory.json",
+      "sha256": "eb1ad290ad6d6c98a6d2115a47609cda676a96e6e5e7d0109ac04f45d74c3cee"
+    },
+    "helpers": {
+      "path": "docs/reports/verifier-core-migration-audit01/helpers.json",
+      "sha256": "55f0b26f66494e5759c2d082c614c05f347aa6cb11fcd095798c12631d72368c"
+    },
+    "groups": {
+      "path": "docs/reports/verifier-core-migration-audit01/groups.json",
+      "sha256": "343b6ed62c3b67a50ab3e3f85287c25e8af0da2e2efa09c24700b03594533558"
+    },
+    "core_usage": {
+      "path": "docs/reports/verifier-core-migration-audit01/core_usage.json",
+      "sha256": "98d2fc9a4c09d11fa7f0f6380393029e14b4343994ef8f51c369b1b62b0a90a2"
+    },
+    "candidates": {
+      "path": "docs/reports/verifier-core-migration-audit01/candidates.json",
+      "sha256": "7d1a10c49068ea9581da4e4ace82d4349606ada574cd7d285beddd1c7d24097e"
+    },
+    "source_preservation": {
+      "path": "docs/reports/verifier-core-migration-audit01/source_preservation.json",
+      "sha256": "9711f87db7be4a942096a123e8a92662f187ba1375420dbef6865173d2f47bda"
+    },
+    "gate_classification": {
+      "path": "docs/reports/verifier-core-migration-audit01/gate_classification.json",
+      "sha256": "2a54a96ced1c901e4f79702d4d873c529bcf6f2da19404ed54899572c1e7892d"
+    }
+  }
+}

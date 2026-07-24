@@ -1,0 +1,335 @@
+{
+  "schema_version": "1.0",
+  "totals": {
+    "candidate_count": 8,
+    "wave_1_candidate_count": 3,
+    "measured_net_deletion_lines": 16
+  },
+  "equivalence_suites": {
+    "read_source": {
+      "total": 6,
+      "executed": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "cases": [
+        {
+          "name": "valid_utf8",
+          "status": "PASSED",
+          "local": "Returned(str, 'def f(): pass\\n')",
+          "core": "Returned(str, 'def f(): pass\\n')"
+        },
+        {
+          "name": "empty_file",
+          "status": "PASSED",
+          "local": "Returned(str, '')",
+          "core": "Returned(str, '')"
+        },
+        {
+          "name": "missing_file",
+          "status": "PASSED",
+          "local": "Raised(FileNotFoundError, errno=2)",
+          "core": "Raised(FileNotFoundError, errno=2)"
+        },
+        {
+          "name": "dir_as_file",
+          "status": "PASSED",
+          "local": "Raised(IsADirectoryError, errno=21)",
+          "core": "Raised(IsADirectoryError, errno=21)"
+        },
+        {
+          "name": "invalid_utf8",
+          "status": "PASSED",
+          "local": "Raised(UnicodeDecodeError, errno=None)",
+          "core": "Raised(UnicodeDecodeError, errno=None)"
+        },
+        {
+          "name": "permission_denied",
+          "status": "PASSED",
+          "local": "Raised(PermissionError, errno=13)",
+          "core": "Raised(PermissionError, errno=13)"
+        }
+      ]
+    },
+    "parse": {
+      "total": 6,
+      "executed": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "cases": [
+        {
+          "name": "valid_python",
+          "status": "PASSED",
+          "local": "Returned(module, 'x = 1')",
+          "core": "Returned(module, 'x = 1')"
+        },
+        {
+          "name": "empty_file",
+          "status": "PASSED",
+          "local": "Returned(module, '')",
+          "core": "Returned(module, '')"
+        },
+        {
+          "name": "syntax_invalid",
+          "status": "PASSED",
+          "local": "Returned(none, 'None')",
+          "core": "Returned(none, 'None')"
+        },
+        {
+          "name": "missing_file",
+          "status": "PASSED",
+          "local": "Returned(none, 'None')",
+          "core": "Returned(none, 'None')"
+        },
+        {
+          "name": "dir_as_file",
+          "status": "PASSED",
+          "local": "Returned(none, 'None')",
+          "core": "Returned(none, 'None')"
+        },
+        {
+          "name": "invalid_utf8",
+          "status": "PASSED",
+          "local": "Raised(UnicodeDecodeError, errno=None)",
+          "core": "Raised(UnicodeDecodeError, errno=None)"
+        }
+      ]
+    },
+    "top_level_function": {
+      "total": 8,
+      "executed": 8,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "cases": [
+        {
+          "name": "top_level_match",
+          "status": "PASSED",
+          "local": "Returned(function_node, 'outer@1')",
+          "core": "Returned(function_node, 'outer@1')"
+        },
+        {
+          "name": "absent_name",
+          "status": "PASSED",
+          "local": "Returned(none, 'None')",
+          "core": "Returned(none, 'None')"
+        },
+        {
+          "name": "nested_only_top_level_returns_none",
+          "status": "PASSED",
+          "local": "Returned(none, 'None')",
+          "core": "Returned(none, 'None')"
+        },
+        {
+          "name": "class_method_only_top_level_returns_none",
+          "status": "PASSED",
+          "local": "Returned(none, 'None')",
+          "core": "Returned(none, 'None')"
+        },
+        {
+          "name": "async_only_returns_none",
+          "status": "PASSED",
+          "local": "Returned(none, 'None')",
+          "core": "Returned(none, 'None')"
+        },
+        {
+          "name": "duplicate_first_match",
+          "status": "PASSED",
+          "local": "Returned(function_node, 'outer@1')",
+          "core": "Returned(function_node, 'outer@1')"
+        },
+        {
+          "name": "top_level_plus_nested",
+          "status": "PASSED",
+          "local": "Returned(function_node, 'outer@1')",
+          "core": "Returned(function_node, 'outer@1')"
+        },
+        {
+          "name": "method_then_top_level",
+          "status": "PASSED",
+          "local": "Returned(function_node, 'outer@3')",
+          "core": "Returned(function_node, 'outer@3')"
+        }
+      ]
+    }
+  },
+  "candidates": [
+    {
+      "candidate_id": "MC-01-WORKSET-READ",
+      "group_id": "GR-03-SOURCE-READ",
+      "core_symbol": "read_source",
+      "scores": {
+        "structural_equivalence": 3,
+        "test_strength": 3,
+        "diagnostic_compatibility": 3,
+        "control_flow_complexity": 3,
+        "typing_readiness": 3,
+        "import_bootstrap_simplicity": 3,
+        "expected_deletion_benefit": 3,
+        "risk_of_behavior_drift": 0
+      },
+      "migration_score": 21,
+      "risk_score": 0,
+      "confidence": "high",
+      "wave": "Wave 1",
+      "rationale": "_read_source vs read_source: byte-equivalent on every positive and negative fixture. 6/6 equivalence cases pass (0 skipped)."
+    },
+    {
+      "candidate_id": "MC-02-WORKSET-PARSE",
+      "group_id": "GR-02-AST-PARSE",
+      "core_symbol": "parse_path",
+      "scores": {
+        "structural_equivalence": 3,
+        "test_strength": 3,
+        "diagnostic_compatibility": 3,
+        "control_flow_complexity": 3,
+        "typing_readiness": 3,
+        "import_bootstrap_simplicity": 3,
+        "expected_deletion_benefit": 3,
+        "risk_of_behavior_drift": 0
+      },
+      "migration_score": 21,
+      "risk_score": 0,
+      "confidence": "high",
+      "wave": "Wave 1",
+      "rationale": "_parse vs parse_path: byte-equivalent. Both swallow (OSError, SyntaxError) and return None; both return ast.Module for valid Python. 6/6 equivalence cases pass (0 skipped)."
+    },
+    {
+      "candidate_id": "MC-03-WORKSET-TOP-LEVEL-FN-DIRECT",
+      "group_id": "GR-01-TOP-LEVEL-FN-DIRECT",
+      "core_symbol": "top_level_function",
+      "scores": {
+        "structural_equivalence": 3,
+        "test_strength": 3,
+        "diagnostic_compatibility": 3,
+        "control_flow_complexity": 3,
+        "typing_readiness": 3,
+        "import_bootstrap_simplicity": 3,
+        "expected_deletion_benefit": 3,
+        "risk_of_behavior_drift": 0
+      },
+      "migration_score": 21,
+      "risk_score": 0,
+      "confidence": "high",
+      "wave": "Wave 1",
+      "rationale": "_function_def_in vs top_level_function: both are direct-child, first-match; neither descends into nested defs; both ignore AsyncFunctionDef. 8/8 equivalence cases pass (0 skipped)."
+    },
+    {
+      "candidate_id": "MC-04-WORKSET-TOP-LEVEL-FN-RECURSIVE",
+      "group_id": "GR-04-RECURSIVE-FUNCTION-LOOKUP",
+      "core_symbol": "(no core analogue; new primitive required)",
+      "scores": {
+        "structural_equivalence": 1,
+        "test_strength": 2,
+        "diagnostic_compatibility": 3,
+        "control_flow_complexity": 2,
+        "typing_readiness": 2,
+        "import_bootstrap_simplicity": 2,
+        "expected_deletion_benefit": 2,
+        "risk_of_behavior_drift": 2
+      },
+      "migration_score": 14,
+      "risk_score": 2,
+      "confidence": "low",
+      "wave": "CORE-GAP-REQUIRES-DESIGN-REVIEW",
+      "rationale": "Both _function_def and _find_function_node use ast.walk recursively. The core only ships direct-child top_level_function. Migration requires a NEW recursive_top_level_function primitive; the audit MUST NOT add it."
+    },
+    {
+      "candidate_id": "MC-05-POLICY-AST-CHECKS",
+      "group_id": "GR-05-POLICY-AST-CHECKS",
+      "core_symbol": "(no core analogue)",
+      "scores": {
+        "structural_equivalence": 0,
+        "test_strength": 0,
+        "diagnostic_compatibility": 0,
+        "control_flow_complexity": 0,
+        "typing_readiness": 0,
+        "import_bootstrap_simplicity": 0,
+        "expected_deletion_benefit": 0,
+        "risk_of_behavior_drift": 3
+      },
+      "migration_score": 0,
+      "risk_score": 3,
+      "confidence": "none",
+      "wave": "Prohibited",
+      "rationale": "Policy-bearing; prohibited from migrating."
+    },
+    {
+      "candidate_id": "MC-06-FLOW-ANALYSIS",
+      "group_id": "GR-06-FLOW-ANALYSIS",
+      "core_symbol": "(no core analogue)",
+      "scores": {
+        "structural_equivalence": 0,
+        "test_strength": 0,
+        "diagnostic_compatibility": 0,
+        "control_flow_complexity": 0,
+        "typing_readiness": 0,
+        "import_bootstrap_simplicity": 0,
+        "expected_deletion_benefit": 0,
+        "risk_of_behavior_drift": 3
+      },
+      "migration_score": 0,
+      "risk_score": 3,
+      "confidence": "none",
+      "wave": "Prohibited",
+      "rationale": "Doctrinal; prohibited from migrating."
+    },
+    {
+      "candidate_id": "MC-07-METADATA-COLLECTION",
+      "group_id": "GR-07-METADATA-COLLECTION",
+      "core_symbol": "(no core analogue)",
+      "scores": {
+        "structural_equivalence": 0,
+        "test_strength": 0,
+        "diagnostic_compatibility": 0,
+        "control_flow_complexity": 0,
+        "typing_readiness": 0,
+        "import_bootstrap_simplicity": 0,
+        "expected_deletion_benefit": 0,
+        "risk_of_behavior_drift": 3
+      },
+      "migration_score": 0,
+      "risk_score": 3,
+      "confidence": "none",
+      "wave": "Prohibited",
+      "rationale": "Doctrinal; prohibited from migrating."
+    },
+    {
+      "candidate_id": "MC-08-PARENT-MAP",
+      "group_id": "GR-08-PARENT-MAP",
+      "core_symbol": "(no core analogue)",
+      "scores": {
+        "structural_equivalence": 0,
+        "test_strength": 0,
+        "diagnostic_compatibility": 0,
+        "control_flow_complexity": 0,
+        "typing_readiness": 0,
+        "import_bootstrap_simplicity": 0,
+        "expected_deletion_benefit": 0,
+        "risk_of_behavior_drift": 3
+      },
+      "migration_score": 0,
+      "risk_score": 3,
+      "confidence": "none",
+      "wave": "Prohibited",
+      "rationale": "Infrastructure-specific; prohibited from migrating."
+    }
+  ],
+  "wave_breakdown": {
+    "CORE-GAP-REQUIRES-DESIGN-REVIEW": [
+      "MC-04-WORKSET-TOP-LEVEL-FN-RECURSIVE"
+    ],
+    "Prohibited": [
+      "MC-05-POLICY-AST-CHECKS",
+      "MC-06-FLOW-ANALYSIS",
+      "MC-07-METADATA-COLLECTION",
+      "MC-08-PARENT-MAP"
+    ],
+    "Wave 1": [
+      "MC-01-WORKSET-READ",
+      "MC-02-WORKSET-PARSE",
+      "MC-03-WORKSET-TOP-LEVEL-FN-DIRECT"
+    ]
+  }
+}

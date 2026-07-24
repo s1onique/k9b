@@ -1,0 +1,215 @@
+{
+  "schema_version": "1.0",
+  "totals": {
+    "core_public_symbol_count": 24,
+    "proven_reused_count": 0,
+    "test_only_count": 18,
+    "unused_count": 6
+  },
+  "consumers": [
+    {
+      "symbol": "VerInfrastructureError",
+      "module": "scripts/verifiers/verifier_core/codes.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "parse_path",
+      "module": "scripts/verifiers/verifier_core/codes.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "parse_strict",
+      "module": "scripts/verifiers/verifier_core/codes.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "read_source",
+      "module": "scripts/verifiers/verifier_core/codes.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "detect_dynamic_getattr",
+      "module": "scripts/verifiers/verifier_core/detectors.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "detect_lambdas",
+      "module": "scripts/verifiers/verifier_core/detectors.py",
+      "production_callers": [],
+      "test_callers": [],
+      "classification": "UNUSED"
+    },
+    {
+      "symbol": "detect_nested_compound_under",
+      "module": "scripts/verifiers/verifier_core/detectors.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "detect_nested_defs",
+      "module": "scripts/verifiers/verifier_core/detectors.py",
+      "production_callers": [],
+      "test_callers": [],
+      "classification": "UNUSED"
+    },
+    {
+      "symbol": "detect_partial_application",
+      "module": "scripts/verifiers/verifier_core/detectors.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "detect_star_expansion",
+      "module": "scripts/verifiers/verifier_core/detectors.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "is_callable_collection_literal",
+      "module": "scripts/verifiers/verifier_core/detectors.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "statement_value",
+      "module": "scripts/verifiers/verifier_core/detectors.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "SourceLocation",
+      "module": "scripts/verifiers/verifier_core/diagnostics.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "location_of",
+      "module": "scripts/verifiers/verifier_core/diagnostics.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "direct_name_from_load",
+      "module": "scripts/verifiers/verifier_core/directness.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "is_direct_call_to",
+      "module": "scripts/verifiers/verifier_core/directness.py",
+      "production_callers": [],
+      "test_callers": [],
+      "classification": "UNUSED"
+    },
+    {
+      "symbol": "is_direct_name",
+      "module": "scripts/verifiers/verifier_core/directness.py",
+      "production_callers": [],
+      "test_callers": [],
+      "classification": "UNUSED"
+    },
+    {
+      "symbol": "is_direct_name_call",
+      "module": "scripts/verifiers/verifier_core/directness.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "is_simple_load",
+      "module": "scripts/verifiers/verifier_core/directness.py",
+      "production_callers": [],
+      "test_callers": [],
+      "classification": "UNUSED"
+    },
+    {
+      "symbol": "kwargs_dict",
+      "module": "scripts/verifiers/verifier_core/directness.py",
+      "production_callers": [],
+      "test_callers": [],
+      "classification": "UNUSED"
+    },
+    {
+      "symbol": "single_direct_name_call",
+      "module": "scripts/verifiers/verifier_core/directness.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "function_body_statements",
+      "module": "scripts/verifiers/verifier_core/lookups.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "parse_function_body",
+      "module": "scripts/verifiers/verifier_core/lookups.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    },
+    {
+      "symbol": "top_level_function",
+      "module": "scripts/verifiers/verifier_core/lookups.py",
+      "production_callers": [],
+      "test_callers": [
+        "tests/verifiers/test_verifier_core.py"
+      ],
+      "classification": "TEST-ONLY"
+    }
+  ]
+}

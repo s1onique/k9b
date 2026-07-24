@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "totals": {
+    "classification": "SKIPPED",
+    "timeout_seconds": 60,
+    "skipped": true
+  },
+  "head_commit": "0e9b6d2013f42d6943a0004036cd477f76e22e7b",
+  "classification": "SKIPPED",
+  "timeout_seconds": 60,
+  "command": "scripts/incident_lifecycle_boundary/redaction_full_gate_negative_proofs.py",
+  "skipped": true,
+  "skip_reason": "test_required_shards_complete wrote a fresh audit; the canonical repository gate is recorded in .factory/gate-summary.json.",
+  "clean_worktree": {},
+  "audit_tree": {}
+}

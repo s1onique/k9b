@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "totals": {
+    "tracked_path_count": 29,
+    "included_path_count": 18,
+    "excluded_path_count": 11,
+    "included_plus_excluded_equals_tracked": true
+  },
+  "included_paths": [
+    "scripts/verifiers/current_run_promotion_seam01.py",
+    "scripts/verifiers/current_run_promotion_seam01_checks.py",
+    "scripts/verifiers/incident_current_run_promotion_workset01.py",
+    "scripts/verifiers/promotion_diagnosis_handoff.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_checks.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_flow.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_flow_collect.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_flow_exception_paths.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_flow_loops.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_flow_tracking.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_flow_try.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_flow_try_break.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_flow_try_canonical.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_flow_try_continue.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_flow_try_exceptions.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_model.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_provenance.py",
+    "scripts/verifiers/promotion_diagnosis_handoff_symbols.py"
+  ],
+  "excluded_paths": [
+    {
+      "path": "scripts/verifiers/__init__.py",
+      "exclusion_rule": "EX-BASE:scripts/verifiers/__init__.py"
+    },
+    {
+      "path": "scripts/verifiers/automatic_diagnosis_authority_seam01.py",
+      "exclusion_rule": "EX-GLOB:scripts/verifiers/automatic_diagnosis_*.py"
+    },
+    {
+      "path": "scripts/verifiers/automatic_diagnosis_authority_seam01_checks.py",
+      "exclusion_rule": "EX-GLOB:scripts/verifiers/automatic_diagnosis_*.py"
+    },
+    {
+      "path": "scripts/verifiers/automatic_diagnosis_authority_seam01_helpers.py",
+      "exclusion_rule": "EX-GLOB:scripts/verifiers/automatic_diagnosis_*.py"
+    },
+    {
+      "path": "scripts/verifiers/automatic_diagnosis_backend_detail_outcomes.py",
+      "exclusion_rule": "EX-GLOB:scripts/verifiers/automatic_diagnosis_*.py"
+    },
+    {
+      "path": "scripts/verifiers/verifier_core/__init__.py",
+      "exclusion_rule": "EX-DIR:scripts/verifiers/verifier_core"
+    },
+    {
+      "path": "scripts/verifiers/verifier_core/codes.py",
+      "exclusion_rule": "EX-DIR:scripts/verifiers/verifier_core"
+    },
+    {
+      "path": "scripts/verifiers/verifier_core/detectors.py",
+      "exclusion_rule": "EX-DIR:scripts/verifiers/verifier_core"
+    },
+    {
+      "path": "scripts/verifiers/verifier_core/diagnostics.py",
+      "exclusion_rule": "EX-DIR:scripts/verifiers/verifier_core"
+    },
+    {
+      "path": "scripts/verifiers/verifier_core/directness.py",
+      "exclusion_rule": "EX-DIR:scripts/verifiers/verifier_core"
+    },
+    {
+      "path": "scripts/verifiers/verifier_core/lookups.py",
+      "exclusion_rule": "EX-DIR:scripts/verifiers/verifier_core"
+    }
+  ]
+}

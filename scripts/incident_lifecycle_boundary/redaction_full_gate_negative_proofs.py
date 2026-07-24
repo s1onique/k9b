@@ -12,7 +12,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-PYTHON = REPO / ".venv" / "bin" / "python"
+# Use the active interpreter (``sys.executable``) for nested subprocesses
+# so the proof still works when the repository's ``.venv`` is not
+# provisioned in a detached worktree or in a CI runner.
+PYTHON = Path(sys.executable)
 POPULATE = REPO / "scripts" / "factory" / "populate_gate_summary.py"
 PARSER = REPO / "scripts" / "factory" / "parse_gate_summary.py"
 

@@ -1,0 +1,170 @@
+{
+  "schema_version": "1.0",
+  "totals": {
+    "duplicate_group_count": 8,
+    "exact_duplicate_group_count": 3,
+    "exact_duplicate_helper_count": 3,
+    "mixed_groups": []
+  },
+  "groups": [
+    {
+      "group_id": "GR-01-TOP-LEVEL-FN-DIRECT",
+      "taxonomy": "top_level_function_lookup",
+      "core_symbol": "top_level_function",
+      "members": [
+        "scripts/verifiers/incident_current_run_promotion_workset01.py:_function_def_in"
+      ],
+      "classification": "EXACT-DUPLICATE",
+      "positive_examples": [
+        "``def outer(): pass`` -> _function_def_in returns outer; top_level_function returns outer."
+      ],
+      "negative_examples": [
+        "Absent function -> both return None.",
+        "Nested same-name function -> both return the top-level one."
+      ],
+      "risk": "Zero: byte-equivalent per the Wave-1 equivalence suite.",
+      "recommended_action": "Wave 1; MC-03-WORKSET-TOP-LEVEL-FN-DIRECT."
+    },
+    {
+      "group_id": "GR-02-AST-PARSE",
+      "taxonomy": "ast_parsing",
+      "core_symbol": "parse_path",
+      "members": [
+        "scripts/verifiers/incident_current_run_promotion_workset01.py:_parse"
+      ],
+      "classification": "EXACT-DUPLICATE",
+      "positive_examples": [
+        "Valid Python -> both return ast.Module."
+      ],
+      "negative_examples": [
+        "Syntax-invalid -> both return None.",
+        "Missing file -> both return None."
+      ],
+      "risk": "Zero: byte-equivalent per the Wave-1 equivalence suite.",
+      "recommended_action": "Wave 1; MC-02-WORKSET-PARSE."
+    },
+    {
+      "group_id": "GR-03-SOURCE-READ",
+      "taxonomy": "source_reading",
+      "core_symbol": "read_source",
+      "members": [
+        "scripts/verifiers/incident_current_run_promotion_workset01.py:_read_source"
+      ],
+      "classification": "EXACT-DUPLICATE",
+      "positive_examples": [
+        "Valid UTF-8 file -> both return the bytes verbatim.",
+        "Empty file -> both return empty string."
+      ],
+      "negative_examples": [
+        "Missing file -> both raise OSError.",
+        "Directory supplied as a file -> both raise OSError."
+      ],
+      "risk": "Zero: byte-equivalent per the Wave-1 equivalence suite.",
+      "recommended_action": "Wave 1; MC-01-WORKSET-READ."
+    },
+    {
+      "group_id": "GR-04-RECURSIVE-FUNCTION-LOOKUP",
+      "taxonomy": "top_level_function_lookup",
+      "core_symbol": "(no core analogue; new primitive required)",
+      "members": [
+        "scripts/verifiers/incident_current_run_promotion_workset01.py:_function_def",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow.py:_find_function_node"
+      ],
+      "classification": "SEMANTICALLY-DIFFERENT",
+      "positive_examples": [
+        "Single top-level definition -> both find it."
+      ],
+      "negative_examples": [
+        "ast.walk descends into nested defs and methods; the core's top_level_function does not. The two surfaces are not equivalent."
+      ],
+      "risk": "These helpers use ast.walk recursively. The core's top_level_function is direct-child only. Migration requires a NEW core primitive (recursive_top_level_function) which the audit MUST NOT add.",
+      "recommended_action": "CORE-GAP-REQUIRES-DESIGN-REVIEW."
+    },
+    {
+      "group_id": "GR-05-POLICY-AST-CHECKS",
+      "taxonomy": "policy_specific",
+      "core_symbol": "(no core analogue; policy-bearing)",
+      "members": [
+        "scripts/verifiers/current_run_promotion_seam01_checks.py:_truthiness_fallback_violations",
+        "scripts/verifiers/current_run_promotion_seam01_checks.py:_store_scan_string_violations",
+        "scripts/verifiers/current_run_promotion_seam01_checks.py:_explicit_truthy_scan_violations",
+        "scripts/verifiers/current_run_promotion_seam01_checks.py:_independent_outcome_boolean_violations",
+        "scripts/verifiers/promotion_diagnosis_handoff_checks.py:check_attribute_access",
+        "scripts/verifiers/promotion_diagnosis_handoff_checks.py:check_method_call"
+      ],
+      "classification": "POLICY-SPECIFIC",
+      "positive_examples": [
+        "Rejection of ``if not incident: reason = incident_not_found``."
+      ],
+      "negative_examples": [
+        "Acceptance of ``batch.promotion_result.actionable_incident_ids``."
+      ],
+      "risk": "Doctrine-specific; policy-free core cannot express.",
+      "recommended_action": "Prohibited; must remain in production verifiers."
+    },
+    {
+      "group_id": "GR-06-FLOW-ANALYSIS",
+      "taxonomy": "flow_analysis",
+      "core_symbol": "(no core analogue; doctrine flow tracker)",
+      "members": [
+        "scripts/verifiers/promotion_diagnosis_handoff_flow.py:_track_to_target_line",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow.py:build_provenance_at_node",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_tracking.py:_track_statement",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_loops.py:_track_for_to_target",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_loops.py:_track_while_to_target",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_try.py:process_try_body",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_try.py:process_try_for_continue",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_try_break.py:process_try_for_break",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_try_canonical.py:analyze_try_to_target",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_try_canonical.py:analyze_try_in_sequence",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_exception_paths.py:capture_exception_envs",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_try_canonical.py:capture_exception_envs_no_target"
+      ],
+      "classification": "POLICY-SPECIFIC",
+      "positive_examples": [
+        "Provenance-aware flow tracking through try/except/finally."
+      ],
+      "negative_examples": [
+        "Structural-only AST traversal would lose precision."
+      ],
+      "risk": "Doctrinal; must remain in production verifiers.",
+      "recommended_action": "Prohibited; must remain in production verifiers."
+    },
+    {
+      "group_id": "GR-07-METADATA-COLLECTION",
+      "taxonomy": "metadata_collection",
+      "core_symbol": "(no core analogue; doctrine dataclasses)",
+      "members": [
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_collect.py:collect_classes",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_collect.py:collect_functions",
+        "scripts/verifiers/promotion_diagnosis_handoff_flow_collect.py:collect_imports"
+      ],
+      "classification": "POLICY-SPECIFIC",
+      "positive_examples": [
+        "Collect FunctionInfo records with annotation text."
+      ],
+      "negative_examples": [
+        "Core has no annotation concept."
+      ],
+      "risk": "Doctrinal.",
+      "recommended_action": "Prohibited; must remain in production verifiers."
+    },
+    {
+      "group_id": "GR-08-PARENT-MAP",
+      "taxonomy": "parent_map",
+      "core_symbol": "(no core analogue; verifier-side infrastructure)",
+      "members": [
+        "scripts/verifiers/incident_current_run_promotion_workset01.py:_build_parent_map"
+      ],
+      "classification": "INFRASTRUCTURE-SPECIFIC",
+      "positive_examples": [
+        "Builds a ``dict[id(child), ast.AST]`` over the tree."
+      ],
+      "negative_examples": [
+        "The policy-free core does not expose a parent-map primitive."
+      ],
+      "risk": "A generic parent-map primitive would broaden the core with infrastructure that no canonical detector currently needs.",
+      "recommended_action": "Prohibited; keep verifier-side infrastructure."
+    }
+  ]
+}
