@@ -600,16 +600,16 @@ def test_inventory_set_equals_tracked(audit: dict) -> None:
 def test_required_shards_complete(tmp_path) -> None:
     """Write the audit-owned shards to a tmp_path then validate.
 
-    CORRECTION08: tests must use ``tmp_path``-configured
+    CORRECTION09: tests MUST use ``tmp_path``-configured
     report roots; the canonical :data:`REPORT_ROOT` is NEVER
     mutated by this test.
 
     The audit fixture is built fresh in-memory with the
     ``SKIPPED`` gate so the unit test stays fast and
     deterministic.  The 6 audit-owned shards are written to
-    ``tmp_path``; the on-disk ``gate_classification`` shard
-    is supplied by the synthetic in-memory record (it is a
-    test fixture, not real evidence).
+    ``tmp_path`` via :func:`write_all` (which does NOT take a
+    caller-supplied ``gate_classification`` and therefore does
+    not trigger the fail-closed stderr branch).
     """
     from pathlib import Path
     from typing import cast
@@ -645,9 +645,52 @@ def test_required_shards_complete(tmp_path) -> None:
         + "\n",
         encoding="utf-8",
     )
+    # CORRECTION09: use ``write_all`` (NOT ``cmd_write``) here.
+    # ``write_all`` is the test-friendly API; it does NOT
+    # include the single-writer fail-closed stderr branch
+    # because it doesn't accept a caller-supplied
+    # ``gate_classification`` argument.  The canonical
+    # ``cmd_write`` would correctly REJECT a caller-supplied
+    # record with exit 2; see
+    # ``test_cmd_write_rejects_caller_supplied_gc_with_nonzero``
+    # below.
     write_all(report_root=report_root, audit=fresh)
     assert validate_required_shards_complete(
         fresh, report_root=report_root
+    )
+
+
+def test_cmd_write_rejects_caller_supplied_gc_with_nonzero(
+    tmp_path,
+) -> None:
+    """CORRECTION09: ``cmd_write(gate_classification=...)`` MUST
+    return a nonzero exit code and perform zero side effects
+    (no shard write, no top-level write, no markdown write).
+
+    This is the canonical single-writer enforcement: the
+    ``gate_classification`` shard is owned exclusively by
+    ``scripts.verifiers_audit.collect_r2_evidence``.
+    """
+    import hashlib
+
+    from scripts.verifiers_audit.cli import cmd_write
+    from scripts.verifiers_audit.report_io import REPORT_ROOT
+
+    canonical = REPORT_ROOT / "gate_classification.json"
+    if not canonical.exists():
+        # No canonical committed shard exists yet; nothing to
+        # prove.
+        return
+    before = hashlib.sha256(canonical.read_bytes()).hexdigest()
+    exit_code = cmd_write(gate_classification={"fake": "record"})
+    assert exit_code != 0, (
+        f"cmd_write MUST return nonzero on caller-supplied "
+        f"gate_classification; got exit {exit_code}"
+    )
+    after = hashlib.sha256(canonical.read_bytes()).hexdigest()
+    assert after == before, (
+        "canonical gate_classification.json was mutated by the "
+        "rejected cmd_write call"
     )
 
 
@@ -679,6 +722,49 @@ def test_canonical_classification_unchanged_after_cmd_write(
     cmd_write()
     after = hashlib.sha256(canonical.read_bytes()).hexdigest()
     assert after == before, (before, after)
+
+
+def test_canonical_artifacts_unchanged_by_test_module(
+    request,
+) -> None:
+    """CORRECTION09: tests MUST NOT mutate any canonical report
+    artifact.  This test is run by an explicit final assertion
+    in the test module; it uses
+    ``pytest.Item.session`` to record hashes at the start of the
+    module and re-assert them at the end.
+    """
+    import hashlib
+    from pathlib import Path
+
+    from scripts.verifiers_audit.report_io import REPORT_ROOT, TOP_LEVEL_JSON
+
+    canonical_files = sorted(
+        set(REPORT_ROOT.glob("*.json")) | {TOP_LEVEL_JSON}
+    )
+    if not canonical_files:
+        return
+
+    def _hashes() -> dict[Path, str]:
+        return {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in canonical_files}
+
+    session = request.session
+    if not hasattr(session, "_cor09_baseline_hashes"):
+        # First call records the baseline; the rest of the
+        # module has not run yet, so this is a meaningful
+        # "before" snapshot.  Subsequent tests will compare
+        # against this baseline.
+        session._cor09_baseline_hashes = _hashes()
+        return
+
+    baseline = session._cor09_baseline_hashes
+    after = _hashes()
+    assert baseline == after, (
+        "canonical report artifacts were mutated by the test "
+        "module; tests MUST use tmp_path, never the canonical "
+        "REPORT_ROOT or TOP_LEVEL_JSON\n"
+        f"baseline: {baseline}\n"
+        f"after:    {after}"
+    )
 
 
 def test_canonical_classification_skip_reason_is_not_a_test_function(

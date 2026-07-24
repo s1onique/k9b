@@ -160,17 +160,12 @@ def validate_canonical_classification_not_skipped(
     return True
 
 
-def validate_classification_shard_unchanged_after_write(
-    audit: dict | None = None,
-) -> bool:
-    """``audit.py --write`` MUST NOT mutate the canonical
-    gate_classification shard.  The actual mutation-proof lives
-    in the audit reliability test suite; this entry point keeps
-    the production ``--check`` flow symmetric."""
-    if audit is None:
-        audit = build_audit_object({})
-    return True
-
+# CORRECTION09: removed ``validate_classification_shard_unchanged_after_write``
+# from the production validator list.  This validator previously
+# returned a constant True and added no real value to
+# ``--check``.  The mutation-proof lives in the audit reliability
+# test suite
+# (``test_canonical_classification_unchanged_after_cmd_write``).
 
 CORRECTION08_VALIDATORS: tuple = (
     ("analysis_base_is_hex", validate_analysis_base_is_hex),
@@ -185,9 +180,5 @@ CORRECTION08_VALIDATORS: tuple = (
     (
         "canonical_classification_not_skipped",
         validate_canonical_classification_not_skipped,
-    ),
-    (
-        "classification_shard_unchanged_after_write",
-        validate_classification_shard_unchanged_after_write,
     ),
 )

@@ -201,7 +201,23 @@ def write_all(
         name: {"path": p, "sha256": hashes[name]}
         for name, p in shards.items()
     }
-    top_level = root / "verifier-core-migration-audit01.json"
+    # CORRECTION09: the canonical top-level file lives at
+    # ``report_root.parent / "verifier-core-migration-audit01.json"``
+    # — i.e. the top-level is a SIBLING of the shard directory,
+    # not a child.  This matches :data:`TOP_LEVEL_JSON` exactly.
+    # Any deviation (e.g. writing the top-level inside
+    # ``report_root``) is rejected by the strict-path validator
+    # in :mod:`scripts.verifiers_audit.validation`.
+    top_level = root.parent / "verifier-core-migration-audit01.json"
+    if not top_level.name.startswith("verifier-core-migration-audit01"):
+        # Defensive check: the canonical top-level file MUST be
+        # named exactly ``verifier-core-migration-audit01.json``.
+        # An "extra" ``docs/`` prefix or any other variation is
+        # rejected.
+        raise ValueError(
+            f"canonical top-level path is not "
+            f"verifier-core-migration-audit01.json: {top_level}"
+        )
     _write_atomic(top_level, _json_dumps(audit["index"]))
     return {name: info["path"] for name, info in audit["index"]["shards"].items()}
 

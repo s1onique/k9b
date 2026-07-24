@@ -175,6 +175,26 @@ def cmd_write(
     asks for the shard to be persisted to disk, cmd_write will
     re-emit it so the in-memory and on-disk copies match.
     """
+    # CORRECTION09: ``cmd_write`` MUST return nonzero and
+    # perform zero side effects when a caller supplies a
+    # non-None ``gate_classification`` argument.  This check
+    # runs FIRST, before any shard write, before any
+    # ``build_audit_object`` call, before any top-level write,
+    # and before any markdown write.
+    if gate_classification is not None:
+        import sys as _sys
+
+        print(
+            "ERROR: cmd_write received a non-None "
+            "gate_classification argument; per CORRECTION09 the "
+            "canonical gate_classification writer is "
+            "scripts/verifiers_audit.collect_r2_evidence, and "
+            "audit.py --write is read-only for that shard.  "
+            "The supplied record has been dropped and no "
+            "artifact was written.  Exit code 2.",
+            file=_sys.stderr,
+        )
+        return 2
     from scripts.verifiers_audit.report_io import _write_atomic
 
     skip_gate = os.environ.get("AUDIT01_SKIP_GATE") == "1"
@@ -191,28 +211,6 @@ def cmd_write(
         h = _write_atomic(shard_path, body)
         shards[name] = str(shard_path.relative_to(REPO_ROOT))
         hashes[name] = h
-    # ``gate_classification`` is NOT a write-owned shard.
-    # CORRECTION08: the canonical writer is exclusively
-    # ``scripts/verifiers_audit.collect_r2_evidence``.  This
-    # function is read-only for that shard; it MAY include the
-    # on-disk hash in the index if the shard exists, but it
-    # MUST NEVER re-emit or otherwise mutate the shard.  A
-    # caller that supplies an in-memory ``gate_classification``
-    # argument is treated as a fail-closed programmer error:
-    # the in-memory record is dropped (it is the test's own
-    # synthetic fixture, not real evidence).
-    if gate_classification is not None:
-        import sys as _sys
-
-        print(
-            "ERROR: cmd_write received a non-None "
-            "gate_classification argument; per CORRECTION08 the "
-            "canonical gate_classification writer is "
-            "scripts/verifiers_audit.collect_r2_evidence, and "
-            "audit.py --write is read-only for that shard.  The "
-            "supplied record has been dropped.",
-            file=_sys.stderr,
-        )
     if (REPORT_ROOT / "gate_classification.json").exists():
         # The on-disk file is authoritative; record its hash
         # in the in-memory index so cmd_check can validate it.
