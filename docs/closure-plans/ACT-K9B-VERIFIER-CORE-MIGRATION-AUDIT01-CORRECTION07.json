@@ -1,0 +1,118 @@
+{
+  "schema_version": "leamas.v2.closure-plan/1",
+  "act_id": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION07",
+  "title": "Recover AUDIT01 staged snapshot and reconcile partial closure (CORRECTION07)",
+  "scope": {
+    "exact_act": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION07",
+    "subject_act_under_correction": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01",
+    "target_act_after_correction": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (blocked)",
+    "baseline": {
+      "head_commit": "08e6027341fb92bce2e26d3a7cdabb69ffa6c9a8",
+      "head_tree": "0fa1473a9026aeb238b16e58f931803b5436d0c4",
+      "recovered_staged_patch_sha256": "312b43b2c88927a0f13b19c5b6628b78594938fb82b7429a3204b9e33b62c78b",
+      "recovered_staged_path_count": 36,
+      "removed_untracked_backup": "tests/verifiers/test_verifier_core_migration_audit01.py.bak"
+    },
+    "reconciliation_objective": "Remove false or contradictory COMPLETE claims; classify AUDIT01 recovery as CLOSED (PARTIAL) because the two genuine blockers (gate-classification ownership, negative-proofs portability) remain outstanding; record the two successor ACTs; keep Wave 1 blocked; distinguish the k9b canonical gate (17/17 PASS) from the Leamas v2 digest-schema compatibility (BLOCKED)."
+  },
+  "permitted_subject_paths": [
+    ".factory/gate-summary.json",
+    "docs/reports/verifier-core-migration-audit01.json",
+    "docs/reports/verifier-core-migration-audit01.md",
+    "docs/reports/verifier-core-migration-audit01/candidates.json",
+    "docs/reports/verifier-core-migration-audit01/core_usage.json",
+    "docs/reports/verifier-core-migration-audit01/gate_classification.json",
+    "docs/reports/verifier-core-migration-audit01/groups.json",
+    "docs/reports/verifier-core-migration-audit01/helpers.json",
+    "docs/reports/verifier-core-migration-audit01/inventory.json",
+    "docs/reports/verifier-core-migration-audit01/source_preservation.json",
+    "scripts/incident_lifecycle_boundary/redaction_full_gate_negative_proofs.py",
+    "scripts/llm_friendly_allowlist.py",
+    "scripts/verifiers_audit/__init__.py",
+    "scripts/verifiers_audit/audit.py",
+    "scripts/verifiers_audit/builder.py",
+    "scripts/verifiers_audit/candidates.py",
+    "scripts/verifiers_audit/cli.py",
+    "scripts/verifiers_audit/collect_r2_evidence.py",
+    "scripts/verifiers_audit/consumer_map.py",
+    "scripts/verifiers_audit/discovery.py",
+    "scripts/verifiers_audit/equivalence.py",
+    "scripts/verifiers_audit/gate_classification.py",
+    "scripts/verifiers_audit/groups.py",
+    "scripts/verifiers_audit/patch_execution.py",
+    "scripts/verifiers_audit/patch_simulation.py",
+    "scripts/verifiers_audit/render.py",
+    "scripts/verifiers_audit/report_io.py",
+    "scripts/verifiers_audit/scope.py",
+    "scripts/verifiers_audit/source_preservation.py",
+    "scripts/verifiers_audit/taxonomy.py",
+    "scripts/verifiers_audit/validation.py",
+    "task_progress_act_k9b_verifier_core_migration_audit01.md",
+    "tests/verifiers/test_verifier_core_migration_audit01.py"
+  ],
+  "required_gates": [
+    "audit.py --check (consistency validators)",
+    "pytest tests/verifiers/test_verifier_core_migration_audit01.py -q",
+    "ruff check on scripts/verifiers_audit and the reliability test",
+    "mypy on scripts/verifiers_audit and the reliability test (--ignore-missing-imports)",
+    "scripts/check_llm_friendly_files.py --changed-only",
+    "scripts/verify_no_new_llm_allowlist.py",
+    "scripts/verify_verification_discipline.py --changed-only",
+    "scripts/verify_all.sh --act-local --skip-gate-summary",
+    "scripts/factory/populate_gate_summary.py (authoritative canonical k9b gate result)"
+  ],
+  "expected_outcome": {
+    "classification": "CLOSED (PARTIAL)",
+    "rationale": "Unless both separated blockers (gate-classification ownership, negative-proofs portability) are genuinely resolved within this frozen plan, AUDIT01 closure remains partial. The k9b canonical repository gate (17/17 PASS) is preserved as the authoritative closure result; the Leamas v2 digest-schema compatibility check is BLOCKED because the installed /usr/local/bin/leamas binary is v1 (version 0.1.0+dev.3352229d5e02.20260723T134256Z, 'Closure Protocol v1 commands') and does not expose a --protocol v2 flag, so the deterministic C1 == C2 reproduction cannot be executed safely."
+  },
+  "open_successor_acts": [
+    "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-GATE-CLASSIFICATION-OWNERSHIP01",
+    "ACT-K9B-REDACTION-NEGATIVE-PROOFS-PORTABILITY01"
+  ],
+  "wave_1_policy": {
+    "wave_1_implementation": "PROHIBITED",
+    "blocked_target": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01",
+    "reason": "Wave 1 remains blocked until AUDIT01 receives a complete (non-partial) v2 closure."
+  },
+  "transaction_contract": {
+    "protocol": "v2",
+    "leamas_minimum_version_required": "v2 (unreleased; --protocol v2 flag expected)",
+    "leamas_installed_version": "0.1.0+dev.3352229d5e02.20260723T134256Z (v1 only)",
+    "F": "immutable plan-freeze commit (this plan is committed alone; no subject paths staged in F)",
+    "S": "exactly one model-authored subject commit recovering the CORRECTION05 staged snapshot plus reconciliation edits; S must follow F (parent(S) = F)",
+    "C": "exactly one deterministic Leamas-authored closure commit; never authored by the model",
+    "T": "Leamas-authored annotated tag targeting C",
+    "E": "detached raw evidence bundle; never committed into the worktree",
+    "no_manual_attestation_commit": true,
+    "deterministic_C_proof": {
+      "policy": "Reproduce closure from identical inputs in an isolated non-publishing environment and assert C1 == C2; commit-object bytes equal.",
+      "blocked_status_text": "DETERMINISTIC_C_PROOF: BLOCKED, CLOSURE: PARTIAL",
+      "blocked_reason": "The installed /usr/local/bin/leamas binary exposes only Closure Protocol v1 commands (no --protocol v2 flag). Safe isolated v2 reproduction is unsupported. The model MUST NOT simulate or hand-author C2."
+    }
+  },
+  "evidence_policy": {
+    "detached": true,
+    "publish_to_git": false,
+    "owner": "leamas factory close run"
+  },
+  "distinction_recorded": {
+    "k9b_canonical_gate": ".factory/gate-summary.json (overall_status: pass, 17/17 checks)",
+    "leamas_digest_schema_compatibility": "BLOCKED (installed leamas is v1, not v2)",
+    "scope": "These are independent signals; the partial closure does not falsify the k9b canonical gate."
+  },
+  "definition_of_done": {
+    "recovered_patch_preserved": true,
+    "untracked_backup_removed": true,
+    "F_exists": true,
+    "plan_blob_frozen": true,
+    "exactly_one_subject_commit": true,
+    "parent_S_equals_F": true,
+    "author_of_C": "leamas",
+    "tag_targets_C": true,
+    "evidence_detached": true,
+    "manual_attestation_commit": false,
+    "deterministic_C_proven_or_explicitly_blocked": true,
+    "closure_claim_truthful": true,
+    "wave_1_started": false
+  }
+}
