@@ -1,13 +1,30 @@
-"""Top-level audit builder (CORRECTION01 minimal).
+"""Top-level audit builder (CORRECTION01 minimal; CORRECTION08 identity contract).
 
 Assembles the single source-derived audit object used by every
 report. The builder is fully deterministic and never modifies
 production verifier files or the verifier-core package.
+
+CORRECTION08 identity contract:
+
+* ``analysis_base_commit`` (string) is an **immutable ancestor** of the
+  subject. It MUST NOT equal the subject itself.
+* ``identity_binding.subject_commit_location`` records where the subject
+  commit is bound (the canonical Leamas ``C``/``E`` artifacts).
+* ``identity_binding.subject_commit_embedded`` records whether the
+  subject commit's sha is embedded inside the subject (always ``false``
+  inside the audit object; ``true`` only inside the external closure
+  record).
+
+The audit generator reads the analysis base from the
+``AUDIT01_ANALYSIS_BASE_COMMIT`` environment variable, falling back to
+a sensible default (the project's current ``F``). This makes the
+audit reproducible from two clean clones of the same ``F..S8`` range.
 """
 
 from __future__ import annotations
 
 # mypy: disable-error-code="type-arg,no-any-return,index,assignment"
+import os
 import subprocess
 
 from scripts.verifiers_audit.candidates import (
@@ -40,9 +57,29 @@ from scripts.verifiers_audit.source_preservation import (
 
 SCHEMA_VERSION = "1.0"
 
+# Default immutable analysis base (CORRECTION07 F).
+DEFAULT_ANALYSIS_BASE_COMMIT = "a22ac7ba4626c9d3125d4f5e0c8435c18f9cf6c0"
 
-def head_commit() -> str:
-    return _run_git("rev-parse", "HEAD").strip()
+
+def analysis_base_commit() -> str:
+    """Return the immutable analysis base commit.
+
+    The base MUST be an ancestor of the subject. The audit object never
+    embeds the subject's own sha; that binding is recorded externally
+    (Leamas ``C``/``E``).
+    """
+    explicit = os.environ.get("AUDIT01_ANALYSIS_BASE_COMMIT", "").strip()
+    if explicit:
+        return explicit
+    return DEFAULT_ANALYSIS_BASE_COMMIT
+
+
+def identity_binding() -> dict[str, object]:
+    """Return the identity_binding object embedded in every audit record."""
+    return {
+        "subject_commit_location": "external-closure-record",
+        "subject_commit_embedded": False,
+    }
 
 
 def tracked_verifier_paths() -> list[str]:
@@ -81,7 +118,18 @@ def build_inventory_shard(tracked: list[str]) -> dict[str, object]:
 
 
 def build_helpers_shard(included_paths: list[str]) -> dict[str, object]:
-    """Compact helpers shard (CORRECTION01)."""
+    """Compact helpers shard (CORRECTION01; CORRECTION08
+    single-line helpers to keep the JSON shard under the
+    500-line LLM-friendly threshold).
+
+    Every public helper is kept as a dict in memory.  The
+    on-disk serialization is rendered with a compact inner
+    separator so that a 74-helper shard renders to ~80 lines
+    instead of ~530.  :func:`scripts.verifiers_audit.report_io.dump_helpers_shard`
+    is the only writer that knows the custom encoding; the
+    audit's ``_json_dumps`` body has a corresponding compact
+    helper path.
+    """
     all_helpers = discover_helpers(included_paths)
     public_helpers = [h for h in all_helpers if h.is_public]
     return {
@@ -211,7 +259,8 @@ def build_top_level_index(
 ) -> dict[str, object]:
     return {
         "schema_version": SCHEMA_VERSION,
-        "head_commit": head_commit(),
+        "analysis_base_commit": analysis_base_commit(),
+        "identity_binding": identity_binding(),
         "totals": {
             "tracked_path_count": inventory_shard["totals"]["tracked_path_count"],
             "included_path_count": inventory_shard["totals"]["included_path_count"],

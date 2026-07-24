@@ -597,45 +597,141 @@ def test_inventory_set_equals_tracked(audit: dict) -> None:
     assert validate_inventory_set_equals_tracked(audit)
 
 
-def test_required_shards_complete() -> None:
-    """Write the audit first, then validate the on-disk shards.
+def test_required_shards_complete(tmp_path) -> None:
+    """Write the audit-owned shards to a tmp_path then validate.
 
-    The audit fixture is built fresh in-memory with the SKIPPED
-    gate; the validator compares the in-memory shard body hash
-    with the on-disk file.  This test builds the audit, writes
-    it to disk, and validates the freshly-built object against
-    the freshly-written disk.
+    CORRECTION08: tests must use ``tmp_path``-configured
+    report roots; the canonical :data:`REPORT_ROOT` is NEVER
+    mutated by this test.
+
+    The audit fixture is built fresh in-memory with the
+    ``SKIPPED`` gate so the unit test stays fast and
+    deterministic.  The 6 audit-owned shards are written to
+    ``tmp_path``; the on-disk ``gate_classification`` shard
+    is supplied by the synthetic in-memory record (it is a
+    test fixture, not real evidence).
     """
-    # Build the in-memory audit object first (using SKIPPED for
-    # the gate so this unit test stays fast), then write the
-    # audit-owned shards to disk using the same in-memory record.
-    # This keeps the in-memory and on-disk gate_classification
-    # shards byte-identical, so the required-shards validator
-    # passes.
+    from pathlib import Path
     from typing import cast
 
     from scripts.verifiers_audit.builder import build_audit_object
-    from scripts.verifiers_audit.cli import cmd_write
     from scripts.verifiers_audit.gate_classification import (
         _skipped_record,
     )
+    from scripts.verifiers_audit.report_io import write_all
     from scripts.verifiers_audit.validation import (
         validate_required_shards_complete,
+    )
+
+    report_root: Path = tmp_path / "reports"
+    skipped = _skipped_record(
+        "test_required_shards_complete synthetic fixture; the "
+        "canonical repository gate is recorded in "
+        ".factory/gate-summary.json."
     )
     fresh = build_audit_object(
         {},
         skip_gate=True,
-        gate_classification=_skipped_record(
-            "test_required_shards_complete wrote a fresh audit; "
-            "the canonical repository gate is recorded in "
-            ".factory/gate-summary.json."
-        ),
+        gate_classification=cast("dict[str, object]", skipped),
     )
-    cmd_write(
-        gate_classification=cast("dict[str, object]",
-                                 fresh["gate_classification"]),
+    # Persist the synthetic gate_classification to tmp_path so
+    # the validator sees every required shard on disk.  This
+    # NEVER touches the canonical REPORT_ROOT.
+    (report_root).mkdir(parents=True, exist_ok=True)
+    import json as _json
+
+    (report_root / "gate_classification.json").write_text(
+        _json.dumps(skipped, indent=2, sort_keys=False)
+        + "\n",
+        encoding="utf-8",
     )
-    assert validate_required_shards_complete(fresh)
+    write_all(report_root=report_root, audit=fresh)
+    assert validate_required_shards_complete(
+        fresh, report_root=report_root
+    )
+
+
+def test_canonical_classification_unchanged_after_cmd_write(
+    tmp_path,
+) -> None:
+    """CORRECTION08 mutation proof.
+
+    The canonical (committed) ``gate_classification.json``
+    MUST be byte-identical before and after every call to
+    ``cmd_write`` (and the rest of the audit reliability
+    suite).  This guards against any future regression that
+    accidentally re-introduces a write path for the shard.
+    """
+    import hashlib
+
+    from scripts.verifiers_audit.cli import cmd_write
+    from scripts.verifiers_audit.report_io import REPORT_ROOT
+
+    canonical = REPORT_ROOT / "gate_classification.json"
+    if not canonical.exists():
+        # No canonical committed shard yet; nothing to prove.
+        return
+    before = hashlib.sha256(canonical.read_bytes()).hexdigest()
+    # Run every audit reliability test path that could
+    # plausibly touch the canonical shard.  cmd_write is the
+    # principal entry point; running it without arguments is
+    # the canonical reproduction from any clean clone.
+    cmd_write()
+    after = hashlib.sha256(canonical.read_bytes()).hexdigest()
+    assert after == before, (before, after)
+
+
+def test_canonical_classification_skip_reason_is_not_a_test_function(
+) -> None:
+    """The canonical committed ``gate_classification.json``
+    MUST NOT carry a ``skip_reason`` that references a
+    repository test function (e.g. ``test_required_shards_complete``).
+    """
+    import json
+
+    from scripts.verifiers_audit.report_io import REPORT_ROOT
+
+    canonical = REPORT_ROOT / "gate_classification.json"
+    if not canonical.exists():
+        return
+    shard = json.loads(canonical.read_text(encoding="utf-8"))
+    reason = (shard.get("skip_reason") or "").lower()
+    forbidden = (
+        "test_",
+        "conftest",
+        "test_required_shards_complete",
+    )
+    for token in forbidden:
+        assert token not in reason, (token, reason)
+
+
+def test_progress_and_shard_classification_agree() -> None:
+    """The lifecycle document must report the same classification
+    as the canonical on-disk shard (none of: ``SKIPPED``,
+    reference to a test function, or silent downgrade)."""
+
+    from scripts.verifiers_audit.report_io import REPORT_ROOT
+
+    canonical = REPORT_ROOT / "gate_classification.json"
+    if not canonical.exists():
+        return
+    classification = canonical.read_text(encoding="utf-8")
+    # The committed shard must NOT be class ``SKIPPED``.
+    assert '"classification": "SKIPPED"' not in classification, (
+        "canonical shard is SKIPPED; per CORRECTION08 a canonical "
+        "committed shard must be UNASSESSED / "
+        "PRE-EXISTING-DETERMINISTIC / "
+        "PRE-EXISTING-ENVIRONMENTAL / "
+        "ACT-INTRODUCED / UNRESOLVED"
+    )
+    # The committed shard must carry the analysis_base_commit
+    # identity contract.
+    assert '"analysis_base_commit"' in classification, (
+        "canonical shard is missing analysis_base_commit"
+    )
+    assert '"head_commit"' not in classification, (
+        "canonical shard still uses the legacy head_commit field"
+    )
 
 
 def test_reports_agree(audit: dict) -> None:

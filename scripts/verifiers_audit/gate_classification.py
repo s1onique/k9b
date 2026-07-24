@@ -227,13 +227,25 @@ def _cleanup_worktree(worktree: Path) -> None:
 
 
 def head_commit() -> str:
-    return subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout.strip()
+    """Deprecated: the canonical identity contract uses
+    :func:`analysis_base_commit` (CORRECTION08).  Kept as a
+    backward-compatibility shim that returns the immutable
+    analysis base, NOT the current HEAD.
+    """
+    from scripts.verifiers_audit.builder import analysis_base_commit
+
+    return analysis_base_commit()
+
+
+def analysis_base_commit() -> str:
+    """Re-export the builder's analysis base for callers that
+    already imported this module.  The audit object's
+    ``analysis_base_commit`` field MUST point to an immutable
+    ancestor of the subject (typically the project's ``F``).
+    """
+    from scripts.verifiers_audit.builder import analysis_base_commit
+
+    return analysis_base_commit()
 
 
 _ABS_PATH_TOKEN = re.compile(
@@ -265,7 +277,11 @@ def _skipped_record(skip_reason: str) -> dict[str, object]:
             "timeout_seconds": GATE_TIMEOUT_SECONDS,
             "skipped": True,
         },
-        "head_commit": head_commit(),
+        "analysis_base_commit": analysis_base_commit(),
+        "identity_binding": {
+            "subject_commit_location": "external-closure-record",
+            "subject_commit_embedded": False,
+        },
         "classification": "SKIPPED",
         "timeout_seconds": GATE_TIMEOUT_SECONDS,
         "command": NEGATIVE_PROOFS_SCRIPT,
@@ -284,7 +300,11 @@ def _unassessed_record(reason: str) -> dict[str, object]:
             "timeout_seconds": GATE_TIMEOUT_SECONDS,
             "skipped": True,
         },
-        "head_commit": head_commit(),
+        "analysis_base_commit": analysis_base_commit(),
+        "identity_binding": {
+            "subject_commit_location": "external-closure-record",
+            "subject_commit_embedded": False,
+        },
         "classification": "UNASSESSED",
         "timeout_seconds": GATE_TIMEOUT_SECONDS,
         "command": NEGATIVE_PROOFS_SCRIPT,
@@ -303,10 +323,15 @@ def _run_canonical_gate() -> dict[str, object]:
     Implementation note: both the clean and audit trees share
     the same interpreter (``sys.executable``); the negative-proofs
     script does not require a repository-local ``.venv``.
+
+    CORRECTION08 identity contract: the emitted record carries
+    ``analysis_base_commit`` (an immutable ancestor of the
+    subject) and an ``identity_binding`` object that explicitly
+    states the subject's sha is NOT embedded in this record.
     """
-    head = head_commit()
+    base = analysis_base_commit()
     executable = sys.executable
-    worktree = _make_clean_worktree(head)
+    worktree = _make_clean_worktree(base)
     try:
         clean = _run_with_timeout(
             [executable, NEGATIVE_PROOFS_SCRIPT],
@@ -329,7 +354,11 @@ def _run_canonical_gate() -> dict[str, object]:
             "clean_elapsed_seconds": clean.elapsed_seconds,
             "audit_elapsed_seconds": audit_run.elapsed_seconds,
         },
-        "head_commit": head,
+        "analysis_base_commit": base,
+        "identity_binding": {
+            "subject_commit_location": "external-closure-record",
+            "subject_commit_embedded": False,
+        },
         "classification": classification,
         "timeout_seconds": GATE_TIMEOUT_SECONDS,
         "command": NEGATIVE_PROOFS_SCRIPT,

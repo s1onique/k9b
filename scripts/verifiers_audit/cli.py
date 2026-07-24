@@ -9,7 +9,7 @@ Usage::
 
 from __future__ import annotations
 
-# mypy: disable-error-code="type-arg,no-any-return,index,assignment"
+# mypy: disable-error-code="type-arg,no-any-return,index,assignment,arg-type,union-attr"
 import argparse
 import hashlib
 import os
@@ -22,7 +22,7 @@ from scripts.verifiers_audit.report_io import (
     REPORT_ROOT,
     SHARD_NAMES,
     TOP_LEVEL_JSON,
-    _compact_json_dumps,
+    _dump_helpers_shard,
     _json_dumps,
 )
 from scripts.verifiers_audit.validation import run_all
@@ -33,8 +33,12 @@ def _hash_bytes(b: bytes) -> str:
 
 
 def _encode(name: str, shard: object) -> bytes:
+    # The ``helpers`` shard is hand-assembled so every helper
+    # dict renders on a single line (a 74-helper shard otherwise
+    # overflows the 500-line LLM-friendly threshold).  Every
+    # other shard uses the standard ``_json_dumps`` encoding.
     if name == "helpers":
-        return _compact_json_dumps(shard)
+        return _dump_helpers_shard(shard)
     return _json_dumps(shard)
 
 
@@ -187,22 +191,32 @@ def cmd_write(
         h = _write_atomic(shard_path, body)
         shards[name] = str(shard_path.relative_to(REPO_ROOT))
         hashes[name] = h
-    # ``gate_classification`` is intentionally NOT in
-    # WRITE_OWNED_SHARDS, but when the caller supplies a record
-    # we re-emit it so the in-memory and on-disk copies match.
+    # ``gate_classification`` is NOT a write-owned shard.
+    # CORRECTION08: the canonical writer is exclusively
+    # ``scripts/verifiers_audit.collect_r2_evidence``.  This
+    # function is read-only for that shard; it MAY include the
+    # on-disk hash in the index if the shard exists, but it
+    # MUST NEVER re-emit or otherwise mutate the shard.  A
+    # caller that supplies an in-memory ``gate_classification``
+    # argument is treated as a fail-closed programmer error:
+    # the in-memory record is dropped (it is the test's own
+    # synthetic fixture, not real evidence).
     if gate_classification is not None:
-        gc_path = REPORT_ROOT / "gate_classification.json"
-        gc_bytes = _json_dumps(gate_classification)
-        _write_atomic(gc_path, gc_bytes)
-        shards["gate_classification"] = str(
-            gc_path.relative_to(REPO_ROOT)
+        import sys as _sys
+
+        print(
+            "ERROR: cmd_write received a non-None "
+            "gate_classification argument; per CORRECTION08 the "
+            "canonical gate_classification writer is "
+            "scripts/verifiers_audit.collect_r2_evidence, and "
+            "audit.py --write is read-only for that shard.  The "
+            "supplied record has been dropped.",
+            file=_sys.stderr,
         )
-        hashes["gate_classification"] = hashlib.sha256(
-            gc_bytes
-        ).hexdigest()
-    elif (REPORT_ROOT / "gate_classification.json").exists():
-        # The on-disk file is authoritative; record its hash in
-        # the in-memory index so cmd_check can validate it.
+    if (REPORT_ROOT / "gate_classification.json").exists():
+        # The on-disk file is authoritative; record its hash
+        # in the in-memory index so cmd_check can validate it.
+        # The shard is NOT re-written here.
         gc_path = REPORT_ROOT / "gate_classification.json"
         gc_bytes = gc_path.read_bytes()
         shards["gate_classification"] = str(

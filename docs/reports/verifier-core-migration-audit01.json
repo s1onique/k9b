@@ -1,6 +1,10 @@
 {
   "schema_version": "1.0",
-  "head_commit": "0e9b6d2013f42d6943a0004036cd477f76e22e7b",
+  "analysis_base_commit": "a22ac7ba4626c9d3125d4f5e0c8435c18f9cf6c0",
+  "identity_binding": {
+    "subject_commit_location": "external-closure-record",
+    "subject_commit_embedded": false
+  },
   "totals": {
     "tracked_path_count": 29,
     "included_path_count": 18,
@@ -25,7 +29,7 @@
     },
     "helpers": {
       "path": "docs/reports/verifier-core-migration-audit01/helpers.json",
-      "sha256": "55f0b26f66494e5759c2d082c614c05f347aa6cb11fcd095798c12631d72368c"
+      "sha256": "d533f79c002323752f1e60dd74e1cecffddad9b2a59ff178f1bd6cb76da598e2"
     },
     "groups": {
       "path": "docs/reports/verifier-core-migration-audit01/groups.json",
@@ -45,7 +49,7 @@
     },
     "gate_classification": {
       "path": "docs/reports/verifier-core-migration-audit01/gate_classification.json",
-      "sha256": "2a54a96ced1c901e4f79702d4d873c529bcf6f2da19404ed54899572c1e7892d"
+      "sha256": "0d1f84f3f3238185e6d9d615711b2051d19c17f9f72e87adfa7fb6ef906fa275"
     }
   }
 }

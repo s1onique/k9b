@@ -1,16 +1,21 @@
 {
   "schema_version": "1.0",
   "totals": {
-    "classification": "SKIPPED",
+    "classification": "UNASSESSED",
     "timeout_seconds": 60,
     "skipped": true
   },
-  "head_commit": "0e9b6d2013f42d6943a0004036cd477f76e22e7b",
-  "classification": "SKIPPED",
+  "analysis_base_commit": "a22ac7ba4626c9d3125d4f5e0c8435c18f9cf6c0",
+  "identity_binding": {
+    "subject_commit_location": "external-closure-record",
+    "subject_commit_embedded": false
+  },
+  "classification": "UNASSESSED",
   "timeout_seconds": 60,
   "command": "scripts/incident_lifecycle_boundary/redaction_full_gate_negative_proofs.py",
   "skipped": true,
-  "skip_reason": "test_required_shards_complete wrote a fresh audit; the canonical repository gate is recorded in .factory/gate-summary.json.",
+  "skip_reason": "detached worktree dependency environment was not provisioned equivalently; canonical repository gate is authoritative",
   "clean_worktree": {},
-  "audit_tree": {}
+  "audit_tree": {},
+  "python_executable": "<REDACTED-PATH>"
 }

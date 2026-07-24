@@ -173,6 +173,11 @@ def collect_and_persist(output: Path, timeout: int) -> dict:
         stderr_tail=audit_run["stderr_tail"],
     )
     classification = classify_pair(clean_obj, audit_obj)
+    from scripts.verifiers_audit.builder import (
+        analysis_base_commit,
+        identity_binding,
+    )
+    base = analysis_base_commit()
     record = {
         "schema_version": "1.0",
         "totals": {
@@ -181,7 +186,8 @@ def collect_and_persist(output: Path, timeout: int) -> dict:
             "clean_elapsed_seconds": clean["elapsed_seconds"],
             "audit_elapsed_seconds": audit_run["elapsed_seconds"],
         },
-        "head_commit": head,
+        "analysis_base_commit": base,
+        "identity_binding": identity_binding(),
         "classification": classification,
         "timeout_seconds": timeout,
         "command": NEGATIVE_PROOFS_SCRIPT,
@@ -248,7 +254,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"classification: {record['classification']}\n"
         f"command: {record['command']}\n"
-        f"head_commit: {record['head_commit']}\n"
+        f"analysis_base_commit: {record['analysis_base_commit']}\n"
+        f"identity_binding: {record['identity_binding']}\n"
         f"clean_elapsed_seconds: {record['totals'].get('clean_elapsed_seconds', 'n/a')}\n"
         f"audit_elapsed_seconds: {record['totals'].get('audit_elapsed_seconds', 'n/a')}\n"
         f"written: {args.output}",
