@@ -1,0 +1,174 @@
+{
+  "schema_version": "leamas.v2.closure-plan/1",
+  "act_id": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION09",
+  "title": "Replace unsupported CORRECTION08 gate and evidence claims with a reproducible subject-range protocol (CORRECTION09)",
+  "scope": {
+    "exact_act": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION09",
+    "subject_act_under_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01",
+    "prior_checkpoint": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION08 (F8=3b88fe39 unpublished, S8=29dbd608 unpublished, both under rescue branches rescue/audit01-correction08-{f8,s8})",
+    "target_act_after_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)",
+    "baseline": {
+      "S7": "ef1ebc5aab791d11aaaf216d44f6e6f86e474fe3 (the last committed audit snapshot; F8 is a child of S7; S8 is a child of F8)",
+      "F8": "3b88fe39aec60b8666553a11ab5c9c8d2ea3b612 (CORRECTION08 plan-freeze)",
+      "S8": "29dbd60890b3aff719a663b8bc48a01ef9f1bbbd (CORRECTION08 subject; UNPUBLISHED on local main, not in any remote branch or tag)",
+      "S8_tree": "b787ce4ebf2298be8fe718e0885443f6e12e4d68",
+      "original_audit_freeze": "a22ac7ba4626c9d3125d4f5e0c8435c18f9cf6c0 (CORRECTION07 F, used as the immutable analysis base for the audit object)",
+      "rescue_branches": [
+        "rescue/audit01-correction08-f8 at F8",
+        "rescue/audit01-correction08-s8 at S8",
+        "rescue/audit01-correction07-subject-20260724 at S7"
+      ]
+    }
+  },
+  "known_unsupported_claims_in_S8": {
+    "working_tree_driven_gates": "populate_gate_summary.py reads git diff --cached and git diff to derive changed files, not an explicit commit range. A 17/17 PASS is not authoritative unless its commands are bound to F9..S9.",
+    "tests_may_mutate_canonical_reports": "test_required_shards_complete in test_verifier_core_migration_audit01.py previously called cmd_write with a synthetic SKIPPED record. The audit.py --write path now has fail-closed stderr but cmd_write did not return nonzero before writing.",
+    "audit_cmd_write_owns_canonical_shard": "the previous CORRECTION08 cmd_write() included a branch that included the on-disk gate_classification shard hash in the index without re-emitting the shard itself, but the fail-closed stderr branch ran AFTER the index was already written. Single-writer enforcement was therefore weak.",
+    "auxiliary_classification_cross_revision": "the previous R2 auxiliary experiment compared the canonical clean tree at a22ac7ba with the audit tree at S8, mixing two distinct revisions into the classification result. Same-source requirement was not enforced.",
+    "committed_artifact_cannot_contain_S8": "any field that embeds S8 (e.g. the previous analysis_base_commit bound to F but the on-disk shards still used a self-referential head_commit) violates the non-self-referential identity contract.",
+    "evidence_dir_not_protocol_E": "previous /tmp/closure_evidence_08/manifest.json was an explicit manual record, NOT Leamas protocol E. Protocol E requires a v2 binary which is not installed."
+  },
+  "permitted_subject_paths": [
+    "scripts/verifiers_audit/audit.py",
+    "scripts/verifiers_audit/builder.py",
+    "scripts/verifiers_audit/cli.py",
+    "scripts/verifiers_audit/collect_r2_evidence.py",
+    "scripts/verifiers_audit/correction08_validators.py",
+    "scripts/verifiers_audit/gate_classification.py",
+    "scripts/verifiers_audit/report_io.py",
+    "scripts/verifiers_audit/validation.py",
+    "scripts/factory/populate_gate_summary.py",
+    "scripts/factory/build_gate_summary.py",
+    "scripts/factory/parse_gate_summary.py",
+    "tests/verifiers/test_verifier_core_migration_audit01.py"
+  ],
+  "report_writer_isolation": {
+    "cmd_write_rejects_caller_supplied_record_with_nonzero_exit": "if gate_classification is not None: print fail-closed message to stderr AND return 2 BEFORE any shard write, top-level write, or markdown write.",
+    "tests_must_use_tmp_path_configured_report_roots": true,
+    "no_test_may_call_canonical_writer_with_default_root": true,
+    "canonical_artifacts_unchanged_by_full_test_run": true,
+    "remove_validate_classification_shard_unchanged_after_write": "this production validator previously returned a constant. It is removed from VALIDATORS. The mutation-proof lives in the audit reliability test suite (test_canonical_classification_unchanged_after_cmd_write)."
+  },
+  "report_io_repair": {
+    "write_audit_propagates_skip_gate": "write_audit(..., skip_gate=True) MUST pass skip_gate through to build_audit_object so a SKIPPED run can be produced.",
+    "canonical_top_level_path_correct": "TOP_LEVEL_JSON is the canonical top-level file at docs/reports/verifier-core-migration-audit01.json. write_all writes the top-level into report_root/verifier-core-migration-audit01.json. The helper enforces this exact filename; an extra \"docs/\" prefix is rejected.",
+    "temporary_report_root_supported": "write_all(..., report_root=tmp_path/...) places the top-level file under the temporary root, and the canonical REPORT_ROOT is NOT used by tests.",
+    "gate_classification_written_only_by_collector": "audit.py --write is read-only for gate_classification.json.",
+    "strict_path_identity": "every index entry must resolve to a path under the configured report_root with the correct canonical shard filename. The validator normalises the recorded path and the expected path through the SAME canonical helper and rejects any recorded path that does not match the canonical helper output."
+  },
+  "auxiliary_classification_contract_b": {
+    "choice": "Contract B — UNASSESSED",
+    "rationale": "The previous R2 experiment compared the canonical clean tree at a22ac7ba against the audit tree at S8. This mixed two revisions and is not a valid same-source comparison. Contract B persists UNASSESSED with an explicit reason; the real experiment is deferred to ACT-K9B-REDACTION-NEGATIVE-PROOFS-PORTABILITY01.",
+    "classification": "UNASSESSED",
+    "reason": "equivalent detached execution environment not yet qualified; deferred to ACT-K9B-REDACTION-NEGATIVE-PROOFS-PORTABILITY01",
+    "analysis_base_commit_role": "is the immutable ancestor used for the audit object identity. It is NOT a substitute for the revision actually executed by the auxiliary experiment. The auxiliary experiment explicitly declares its source-delta contract via Contract B."
+  },
+  "deterministic_analysis_input_manifest": {
+    "analysis_input_paths_sha256": "sha256 over sorted, space-separated relative paths of the verifier source files actually consumed by build_audit_object at F9..S9",
+    "analysis_input_content_sha256": "sha256 over the concatenation of each file's bytes (in the same order as paths_sha256)",
+    "analysis_reference_commit": "the specific commit (F9 or S9) from which the input content was sampled; the manifest MUST NOT self-reference the enclosing commit",
+    "subject_commit_location": "external-closure-record",
+    "subject_commit_embedded": false
+  },
+  "range_bound_post_subject_evidence": {
+    "evidence_directory": "/tmp/closure_evidence_09",
+    "required_files": [
+      "manifest.json (binds F9, F9_tree, plan_blob, S9, S9_tree, changed_paths_sha256, commands_sha256; declares protocol_stage=manual-preclosure-evidence; records leamas_protocol_E=false)",
+      "changed-paths.txt (git diff --name-only --diff-filter=ACMRT F9 S9)",
+      "changed-paths-status.txt (git diff --name-status F9 S9)",
+      "commands.json (every post-subject command recorded with argv, cwd, env, start, end, exit_code, sha256 of stdout, sha256 of stderr)",
+      "<command>.stdout (raw captured stdout, not folded into S9)",
+      "<command>.stderr (raw captured stderr)",
+      "<command>.rc (exit code, ascii digit 0-255)",
+      "final-classification.md (the human-readable closure narrative)"
+    ],
+    "forbidden_scope_sources": [
+      "git status (working-tree dirtiness)",
+      "git diff without two commit arguments",
+      "git diff --cached (staged but unanchored)",
+      "any clean working tree inference"
+    ]
+  },
+  "lifecycle_terminology": {
+    "CORRECTION08_RECOVERY": "PARTIAL_CHECKPOINT",
+    "CORRECTION08_F_S_CHECKPOINT": "SUPERSEDED_BY_CORRECTION09",
+    "CORRECTION08_V2_CLOSURE": "BLOCKED",
+    "manual_preclosure_evidence": "present",
+    "leamas_protocol_E": "absent",
+    "closure_commit_C": "absent",
+    "annotated_tag_T": "absent",
+    "deterministic_C_proof": "blocked",
+    "committed_artifact_description": "pre-subject repository-gate snapshot (NOT authoritative post-S9 closure evidence)",
+    "remove_phrases": [
+      "closure protocol executed end-to-end (when referring to protocol E)",
+      "evidence_detached: true (when referring to protocol E)",
+      "canonical 17/17 PASS is authoritative (without explicit F9..S9 range binding)"
+    ],
+    "use_phrases": [
+      "manual pre-closure gate captures exist outside Git",
+      "the committed gate-summary.json is a pre-subject repository-gate snapshot"
+    ]
+  },
+  "wave_1_policy": {
+    "wave_1_implementation": "PROHIBITED",
+    "blocked_target": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01",
+    "reason": "Wave 1 remains blocked until AUDIT01 receives a complete (non-partial) v2 closure."
+  },
+  "transaction_contract": {
+    "protocol": "v2",
+    "F9": "immutable plan-freeze commit (this plan is committed alone; no subject paths staged in F9); F9 is a NEW plan-freeze commit, parent(S7)",
+    "S9": "exactly one model-authored subject commit; parent(S9) = F9",
+    "C": "exactly one deterministic Leamas-authored closure commit; never authored by the model; absent until a v2 binary is installed",
+    "T": "Leamas-authored annotated tag targeting C; absent until C exists",
+    "E": "detached raw evidence bundle; never committed into the worktree; absent until a v2 binary produces it",
+    "no_manual_attestation_commit": true,
+    "do_not_rewrite_S7_S8": true,
+    "preserve_F8": true,
+    "preserve_rescue_branches": true,
+    "deterministic_C_proof": {
+      "policy": "Reproduce closure from identical inputs in an isolated non-publishing environment and assert C1 == C2; commit-object bytes equal.",
+      "blocked_status_text": "DETERMINISTIC_C_PROOF: BLOCKED, CLOSURE: PARTIAL_CHECKPOINT",
+      "blocked_reason": "The installed /usr/local/bin/leamas binary exposes only Closure Protocol v1 commands (no --protocol v2 flag) and rejects the v2 plan schema (unknown field 'schema_version'). Safe isolated v2 reproduction is unsupported. The model MUST NOT simulate or hand-author C2."
+    }
+  },
+  "remaining_successors": [
+    "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-GATE-CLASSIFICATION-OWNERSHIP01",
+    "ACT-K9B-REDACTION-NEGATIVE-PROOFS-PORTABILITY01",
+    "Leamas v2 binary/schema qualification and actual C/T/E creation",
+    "Complete AUDIT01 closure",
+    "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)"
+  ],
+  "definition_of_done": {
+    "unpublished_F8_S8_preserved_under_rescue_refs": true,
+    "F9_contains_only_plan": true,
+    "parent_S9_equals_F9": true,
+    "cmd_write_rejection_is_nonzero_and_side_effect_free": true,
+    "all_tests_use_temporary_report_roots": true,
+    "canonical_artifacts_unchanged_by_tests": true,
+    "write_audit_skip_gate_contract_repaired": true,
+    "canonical_report_paths_strictly_validated": true,
+    "auxiliary_comparison_uses_identical_source_revision_or_unassessed": true,
+    "post_subject_manifest_derived_from_F9_S9": true,
+    "ruff_input_equals_subject_python_manifest": true,
+    "working_tree_changed_only_not_used_as_closure_authority": true,
+    "manual_evidence_not_called_protocol_E": true,
+    "C_T_E_not_hand_authored": true,
+    "worktree_clean": true,
+    "wave_1_started": false
+  },
+  "expected_final_state_until_v2_binary_exists": {
+    "CORRECTION09": "PARTIAL_CHECKPOINT",
+    "identity_contract": "PASS",
+    "single_writer_ownership": "PASS",
+    "tests_do_not_mutate_canonical_reports": "PASS",
+    "range_bound_gate_manifest": "PASS",
+    "subject_python_ruff_coverage": "PASS",
+    "manual_preclosure_evidence": "PRESENT",
+    "C": "ABSENT",
+    "T": "ABSENT",
+    "leamas_protocol_E": "ABSENT",
+    "deterministic_C_proof": "BLOCKED",
+    "negative_proofs_portability": "OPEN",
+    "wave_1": "BLOCKED"
+  }
+}
