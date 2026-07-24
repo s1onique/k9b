@@ -1,0 +1,158 @@
+{
+  "schema_version": "leamas.v2.closure-plan/1",
+  "act_id": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION10",
+  "title": "Repair CORRECTION09 defects: topology truth, canonical-artifact immutability, real mutation guard (CORRECTION10)",
+  "scope": {
+    "exact_act": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION10",
+    "subject_act_under_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01",
+    "prior_checkpoint": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION09 (SUPERSEDED: object-proven parent(F9)=S8, not the S7 the plan claimed)",
+    "target_act_after_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)",
+    "baseline": {
+      "F9": "eebbd103552d3cc270c2d6545d4f46f682578250 (CORRECTION09 plan-freeze; object-proven parent=S8, NOT S7)",
+      "F9_tree": "1d80242fa2f2077b463e6dc10a06aea7830acb92",
+      "S9": "9c8dfd0b9210887c7c259db8b00dd596c18b2da9 (CORRECTION09 subject; object-proven parent=F9)",
+      "S9_tree": "e317a4257a46c014c04a74421fbc79e129723959",
+      "S7": "ef1ebc5aab791d11aaaf216d44f6e6f86e474fe3 (CORRECTION07 subject; under rescue/audit01-correction07-subject-20260724)",
+      "F8": "3b88fe39aec60b8666553a11ab5c9c8d2ea3b612 (CORRECTION08 plan-freeze; under rescue/audit01-correction08-f8)",
+      "S8": "29dbd60890b3aff719a663b8bc48a01ef9f1bbbd (CORRECTION08 subject; under rescue/audit01-correction08-s8)",
+      "rescue_branches": [
+        "rescue/audit01-correction07-subject-20260724 at S7",
+        "rescue/audit01-correction08-f8 at F8",
+        "rescue/audit01-correction08-s8 at S8",
+        "rescue/audit01-correction09-f9 at F9",
+        "rescue/audit01-correction09-s9 at S9"
+      ]
+    }
+  },
+  "known_defects_in_cor09": {
+    "F9_parent_claim_does_not_match_object": "The CORRECTION09 plan claimed parent(F9) = S7 (ef1ebc5a), but the F9 commit object records parent(F9) = S8 (29dbd608). The closure does NOT pass the topology invariant from the CORRECTION09 plan. CORRECTION10 binds the object-proven ancestry.",
+    "tests_call_default_canonical_writers": "test_canonical_classification_unchanged_after_cmd_write calls cmd_write() with no arguments, writing through the canonical REPORT_ROOT. CORRECTION10 removes this test and replaces it with a real module-scope autouse mutation-guard fixture.",
+    "tautological_top_level_path_validator": "validate_canonical_top_level_path just checks the recorded path equals the recorded path. CORRECTION10 replaces it with a canonical ReportLayout constructor and executable contract tests.",
+    "write_audit_skip_gate_contract_unrepaired": "write_audit(skip_gate=False) currently calls write_all(...) which builds its own audit object with skip_gate=False (the default), so the skip_gate argument is silently dropped. CORRECTION10 implements the documented contract."
+  },
+  "permitted_subject_paths": [
+    "scripts/verifiers_audit/cli.py",
+    "scripts/verifiers_audit/correction08_validators.py",
+    "scripts/verifiers_audit/report_io.py",
+    "scripts/verifiers_audit/validation.py",
+    "tests/verifiers/test_verifier_core_migration_audit01.py"
+  ],
+  "object_proven_F9_S9_ancestry": {
+    "actual_parent_F9": "29dbd60890b3aff719a663b8bc48a01ef9f1bbbd",
+    "actual_parent_S9": "eebbd103552d3cc270c2d6545d4f46f682578250",
+    "actual_F9_contains_only": ["docs/closure-plans/ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION09.json"],
+    "actual_S9_contains_5_modified_files": [
+      "scripts/verifiers_audit/cli.py",
+      "scripts/verifiers_audit/correction08_validators.py",
+      "scripts/verifiers_audit/report_io.py",
+      "scripts/verifiers_audit/validation.py",
+      "tests/verifiers/test_verifier_core_migration_audit01.py"
+    ],
+    "CORRECTION09_topology_recorded_truthfully": true,
+    "CORRECTION09: SUPERSEDED_BY_CORRECTION10"
+  },
+  "report_layout_canonical_constructor": {
+    "shape": "ReportLayout(shard_root: Path, top_level_json: Path, markdown_path: Path)",
+    "function": "report_layout_for_shard_root(root) -> ReportLayout",
+    "semantics": "the canonical top-level file lives at root.parent/verifier-core-migration-audit01.json (sibling of the shard directory, NOT child). The markdown file lives at root.parent/verifier-core-migration-audit01.md. Any deviation (extra 'docs/' prefix, nested path, wrong filename) is rejected."
+  },
+  "tests_must_use_temporary_layout": {
+    "no_test_calls_default_canonical_writer": true,
+    "every_writer_test_uses_ReportLayout_under_tmp_path": true,
+    "cli_constructs_canonical_layout_explicitly": true,
+    "removed_test": "test_canonical_classification_unchanged_after_cmd_write"
+  },
+  "module_autouse_mutation_guard": {
+    "fixture": "@pytest.fixture(scope='module', autouse=True) def canonical_artifacts_remain_unchanged() -> Iterator[None]: yield; assert after == before",
+    "protected_set": [
+      ".factory/gate-summary.json",
+      "docs/reports/verifier-core-migration-audit01.json",
+      "docs/reports/verifier-core-migration-audit01.md",
+      "docs/reports/verifier-core-migration-audit01/*.json"
+    ],
+    "scope": "module — runs even when an intervening test fails",
+    "adversarial_test_included": true
+  },
+  "write_audit_skip_gate_contract": {
+    "signature": "def write_audit(skip_gate: bool = False, *, layout: ReportLayout | None = None) -> dict[str, str]",
+    "implementation": "writes use the resolved_layout (or canonical_layout()); the skip_gate argument is forwarded to build_audit_object",
+    "tests": [
+      "skip_gate_false_reaches_builder",
+      "skip_gate_true_reaches_builder",
+      "caller_supplied_gate_classification_not_supported",
+      "temporary_layout_only_in_tests",
+      "canonical_gate_classification_not_written"
+    ]
+  },
+  "removed_validators": [
+    "validate_canonical_top_level_path (was tautological)"
+  ],
+  "lifecycle_terminology": {
+    "CORRECTION07_RECOVERY": "PASS",
+    "CORRECTION08": "SUPERSEDED",
+    "CORRECTION09": "PARTIAL_CHECKPOINT_SUPERSEDED",
+    "CORRECTION10": "PARTIAL_CHECKPOINT",
+    "gate_classification_single_writer": "PASS",
+    "negative_proofs_equivalent_environment": "UNASSESSED",
+    "negative_proofs_portability": "OPEN",
+    "manual_preclosure_evidence": "PRESENT",
+    "C": "ABSENT",
+    "T": "ABSENT",
+    "leamas_protocol_E": "ABSENT",
+    "deterministic_C_proof": "BLOCKED",
+    "wave_1": "BLOCKED"
+  },
+  "absorbed_successors": [
+    "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-GATE-CLASSIFICATION-OWNERSHIP01 (absorbed by CORRECTION08-10; gate_classification_single_writer is now PASS)"
+  ],
+  "remaining_successors": [
+    "ACT-K9B-REDACTION-NEGATIVE-PROOFS-PORTABILITY01",
+    "Leamas v2 binary/schema qualification and actual C/T/E creation",
+    "Complete AUDIT01 closure"
+  ],
+  "wave_1_policy": {
+    "wave_1_implementation": "PROHIBITED",
+    "blocked_target": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01"
+  },
+  "transaction_contract": {
+    "protocol": "v2",
+    "F10": "immutable plan-freeze commit; parent(F10) = S9 (object-proven)",
+    "S10": "exactly one model-authored subject commit; parent(S10) = F10",
+    "C": "exactly one deterministic Leamas-authored closure commit; never authored by the model; absent until a v2 binary is installed",
+    "T": "Leamas-authored annotated tag targeting C; absent until C exists",
+    "E": "detached raw evidence bundle; never committed into the worktree",
+    "no_manual_attestation_commit": true,
+    "preserve_F9_S9": true,
+    "preserve_rescue_branches": true,
+    "deterministic_C_proof_blocked_until_v2_binary": true
+  },
+  "definition_of_done": {
+    "actual_F9_parent_recorded_truthfully": true,
+    "CORRECTION09_topology_claim_reconciled": true,
+    "F10_contains_only_plan": true,
+    "parent_S10_equals_F10": true,
+    "no_test_calls_default_canonical_writer": true,
+    "module_autouse_yield_mutation_guard": true,
+    "canonical_artifacts_unchanged_after_full_module": true,
+    "write_audit_skip_gate_false_forwarded": true,
+    "write_audit_skip_gate_true_forwarded": true,
+    "gate_classification_single_writer": true,
+    "top_level_path_constructor_single_authority": true,
+    "tautological_validator_removed": true,
+    "temporary_layout_isolated": true,
+    "detached_manifest_supplied_for_review": true,
+    "ruff_input_equals_changed_python_paths": true,
+    "manual_evidence_not_called_protocol_E": true,
+    "C_T_E_not_hand_authored": true,
+    "worktree_clean": true,
+    "wave_1_started": false
+  },
+  "expected_final_state_until_v2_binary_exists": {
+    "CORRECTION10": "PARTIAL_CHECKPOINT",
+    "C": "ABSENT",
+    "T": "ABSENT",
+    "leamas_protocol_E": "ABSENT",
+    "deterministic_C_proof": "BLOCKED",
+    "wave_1": "BLOCKED"
+  }
+}
