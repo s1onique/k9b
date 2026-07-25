@@ -1,0 +1,378 @@
+{
+  "schema_version": "leamas.v2.closure-plan/1",
+  "act_id": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION14",
+  "title": "Repair CORRECTION13 evidence-authority defects: typed evidence-result dataclasses (CommandResult, EvidenceTransactionResult, RepositoryGateResult), fail-closed Ruff identity for non-empty Python range, complete top-level shard-layout schema enforcement, hermetic tmp_path test fixtures (no fixed /tmp paths), AST-based fixed-tmp-path detection, effective Ruff configuration binding with launcher hashes, Git command cardinality measured from the executed transcript, complete one-transaction immutable bundle (manifest, topology, gate-results, bundle-root, changed-paths.z, changed-python-paths.z, ruff-input-paths.z, ruff-scope.json, ruff-argv.json, tool-identities.json, commands.json, final-classification.md), and final classification derived from typed results (CORRECTION14)",
+  "scope": {
+    "exact_act": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION14",
+    "subject_act_under_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01",
+    "prior_checkpoint": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION13 (PARTIAL_CHECKPOINT; F13=8f58a669, S13=03369514; both under rescue refs rescue/audit01-correction13-{f13,s13})",
+    "target_act_after_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)",
+    "baseline": {
+      "F13": "8f58a669cd0841ab797d429fb3a372a9e5a49220 (CORRECTION13 plan-freeze)",
+      "F13_tree": "ed85d9dccbabd2a945e6607bcdb37f665b9f5816",
+      "S13": "03369514e430d794b686cac1f481dbb1e07a40a4 (CORRECTION13 subject)",
+      "S13_tree": "d9e8d0e5fbd239816e2334940f736414b08e455a",
+      "F13_contains_only_plan": true,
+      "S13_modified_files": [
+        "scripts/verifiers_audit/cli.py",
+        "scripts/verifiers_audit/range_evidence.py",
+        "scripts/verifiers_audit/range_evidence_helpers.py",
+        "scripts/verifiers_audit/range_evidence_identity.py",
+        "scripts/verifiers_audit/range_evidence_manifest.py",
+        "scripts/verifiers_audit/range_evidence_writer.py",
+        "scripts/verifiers_audit/scope.py",
+        "tests/verifiers/conftest.py",
+        "tests/verifiers/verifier_core_migration_audit01_support.py",
+        "tests/verifiers/test_verifier_core_migration_audit01.py",
+        "tests/verifiers/test_verifier_core_migration_audit01_cmd.py",
+        "tests/verifiers/test_verifier_core_migration_audit01_correction13.py",
+        "tests/verifiers/test_verifier_core_migration_audit01_correction13_cmd.py",
+        "tests/verifiers/test_verifier_core_migration_audit01_correction13_evidence.py",
+        "tests/verifiers/test_verifier_core_migration_audit01_layout.py",
+        "tests/verifiers/test_verifier_core_migration_audit01_r.py",
+        "tests/verifiers/test_verifier_core_migration_audit01_range.py",
+        "tests/verifiers/test_verifier_core_migration_audit01_range_adversarial.py",
+        "task_progress_act_k9b_verifier_core_migration_audit01_correction13.md"
+      ],
+      "rescue_branches": [
+        "rescue/audit01-correction13-f13 at F13",
+        "rescue/audit01-correction13-s13 at S13"
+      ]
+    }
+  },
+  "known_defects_in_cor13": {
+    "_classify_claim_unmeasured_pass": "scripts/verifiers_audit/range_evidence_writer.py _build_classification_rows() emits unconditional | CORRECTION12_RECOVERY | PASS | and | byte_safe_pathname_api | PASS | rows alongside rows constructed via _classify_claim(name, measured=True). Hardcoded PASS claims are not evidence. CORRECTION14 removes every _classify_claim(...) call with measured=True and every direct unmeasured 'PASS' row; every PASS row must be derived from a typed EvidenceTransactionResult / RepositoryGateResult.",
+    "ruff_skip_unresolved_identity_treated_as_success": "scripts/verifiers_audit/range_evidence.py collect_range_evidence treats ruff_invocation_mode='unresolved' as a SUCCESSFUL skip status ('skipped_unresolved_identity'). A non-empty Python range with an unresolved Ruff identity MUST fail closed (no manifest, no classification, no final destination, nonzero exit). CORRECTION14 removes 'skipped_unresolved_identity' as a publication status and raises RuffToolUnavailable when the Python range is non-empty and the identity cannot be resolved.",
+    "shard_layout_partial_enforcement": "scripts/verifiers_audit/scope.py _validate_shard_path_against_layout checks ONE shard at a time and only validates shards that already have a 'path' key. The CORRECTION14 contract enforces the COMPLETE top-level shard-layout schema BEFORE normalisation: required shards must be present, must be a dict, must contain a string path, and must identify exactly layout.shard_root / f'{name}.json'. Path traversal, swapped paths, symlink aliases, and extra unknown shards are rejected.",
+    "fixed_shared_tmp_paths_in_tests": "tests/verifiers/test_verifier_core_migration_audit01_correction13.py lines 248, 273, 298 build the empty-repo / subject-fail / runtimeerr fixtures under Path(os.fsdecode(os.fsencode('/tmp'))) / 'cor13-...'. A fixed shared /tmp path defeats parallel-safe, interrupted-run-safe testing. CORRECTION14 replaces every constructed /tmp path with pytest's tmp_path fixture and upgrades the source guard to AST-based detection that catches absolute Path(...) calls, encode/decode wrappers, tempfile with fixed directories, and /var/tmp / platform equivalents.",
+    "ruff_configuration_binding_is_just_filename_inspection": "scripts/verifiers_audit/range_evidence_identity.py resolve_ruff_identity appends the first three candidate filenames (pyproject.toml / ruff.toml / .ruff.toml) to configuration_files regardless of whether Ruff actually reads them, and never resolves the effective closest config for every input path. CORRECTION14 prefers an explicit --config invocation when the config is canonical; otherwise resolves the closest config for every Ruff input path (and every extend dependency) and records their SHA-256 hashes. The launcher prefix, launcher path, launcher SHA-256, ruff_version, and the EXACT executed argv are bound.",
+    "git_command_cardinality_from_wrapper_not_transcript": "scripts/verifiers_audit/range_evidence.py counts git calls via a single shared _run_captured wrapper and uses the wrapper's call count as authority for the 'git_diff_query_count == 1' claim. CORRECTION14 injects one explicit GitRunner command seam (Protocol with run(argv, *, cwd) -> CommandResult), records the actual transcript, and derives the cardinality from the executed argv (argv[:2] == ('git', 'diff')).",
+    "bundle_publishes_before_gate_results": "scripts/verifiers_audit/range_evidence.py writes manifest.json, ruff-scope.json, ruff-argv.json, tool-identities.json, commands.json, changed-paths.z, etc. BEFORE running the post-subject gates. gate-results.json is not produced inside the same transaction and is not hashed into a bundle-root.json. CORRECTION14 produces a complete detached bundle in ONE transaction: manifest.json, topology.txt, gate-results.json (containing the post-subject gate commands and results), changed-paths.z, changed-python-paths.z, ruff-input-paths.z, ruff-scope.json, ruff-argv.json, tool-identities.json, commands.json, final-classification.md, bundle-root.json. bundle-root.json hashes every other final artifact and binds F14, F14_tree, plan_blob, S14, S14_tree, parent_F14, parent_S14, files (relpath -> sha256).",
+    "final_classification_uses_rendered_strings": "scripts/verifiers_audit/range_evidence_writer.py _build_classification_rows builds a list of (signal, value) string rows; the values are typed-in strings, not derived from a typed result object. CORRECTION14 introduces typed CommandResult, EvidenceTransactionResult, RepositoryGateResult dataclasses; the renderer accepts the typed results and renders every claim from the typed measurement (or UNMEASURED / FAILED)."
+  },
+  "permitted_subject_paths": [
+    "scripts/verifiers_audit/cli.py",
+    "scripts/verifiers_audit/collect_r2_evidence.py",
+    "scripts/verifiers_audit/range_evidence.py",
+    "scripts/verifiers_audit/range_evidence_helpers.py",
+    "scripts/verifiers_audit/range_evidence_identity.py",
+    "scripts/verifiers_audit/range_evidence_manifest.py",
+    "scripts/verifiers_audit/range_evidence_writer.py",
+    "scripts/verifiers_audit/scope.py",
+    "tests/verifiers/conftest.py",
+    "tests/verifiers/verifier_core_migration_audit01_support.py",
+    "tests/verifiers/test_verifier_core_migration_audit01.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_cmd.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction13.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction13_cmd.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction13_evidence.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_layout.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_r.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_range.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_range_adversarial.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction14.py",
+    "task_progress_act_k9b_verifier_core_migration_audit01_correction14.md"
+  ],
+  "correction14_contract_requirements": {
+    "typed_evidence_result_dataclasses": "required",
+    "fail_closed_ruff_for_nonempty_python_range": "required",
+    "complete_top_level_shard_layout_schema_enforcement": "required",
+    "tmp_path_hermeticity_with_ast_based_source_guard": "required",
+    "effective_ruff_configuration_bound": "required",
+    "git_command_cardinality_measured_from_executed_transcript": "required",
+    "complete_one_transaction_immutable_bundle": "required",
+    "final_classification_derived_from_typed_results": "required"
+  },
+  "typed_evidence_results": {
+    "CommandResult": "@dataclass(frozen=True) class CommandResult: argv: tuple[str, ...]; returncode: int; stdout_sha256: str; stderr_sha256: str; status: Literal['passed', 'failed', 'skipped'].",
+    "EvidenceTransactionResult": "@dataclass(frozen=True) class EvidenceTransactionResult: base_oid: str; subject_oid: str; git_commands: tuple[CommandResult, ...]; ruff_result: CommandResult | None; publication_status: Literal['ready_to_publish', 'published', 'failed']; authoritative_hashes: Mapping[str, str].",
+    "RepositoryGateResult": "@dataclass(frozen=True) class RepositoryGateResult: name: str; argv: tuple[str, ...]; returncode: int; stdout_sha256: str; stderr_sha256: str.",
+    "renderer_invariant": "The renderer may only derive 'PASS' when the corresponding typed result proves success (status='passed', returncode==0, hashes match authoritative_hashes). An absent or unknown measurement renders 'UNMEASURED' or 'FAILED', never 'PASS'.",
+    "deleted_patterns": [
+      "_classify_claim(..., measured=True)",
+      "literal 'PASS' rows that have no typed measurement"
+    ],
+    "source_invariant": "literal_PASS_values_in_classification_builder: 0; hardcoded_unmeasured_PASS_claims_row: absent."
+  },
+  "fail_closed_ruff_for_nonempty_python_range": {
+    "new_typed_failure": "class RuffToolUnavailable(RuntimeError): raised when the Python path tuple is non-empty AND resolve_ruff_identity returns None AND the venv python interpreter cannot import ruff.",
+    "behaviour": "For a non-empty python_paths tuple, the producer MUST raise RuffToolUnavailable when resolve_ruff_identity returns None. The function refuses to invoke Ruff; the producer exits nonzero; the staging directory is removed; no final destination is created; no manifest, no classification.",
+    "removed_publication_status": "skipped_unresolved_identity is REMOVED as a successful publication status. The empty-python-range case still records status='skipped_no_python_paths' with exit_code=0 and ruff_not_invoked=True.",
+    "required_state": {
+      "nonempty_python_range_and_no_ruff": {
+        "exit_nonzero": true,
+        "staging_removed": true,
+        "final_destination_absent": true,
+        "manifest_absent": true,
+        "classification_absent": true
+      },
+      "empty_python_range": {
+        "status": "skipped_no_python_paths",
+        "exit_code": 0,
+        "ruff_not_invoked": true
+      }
+    },
+    "required_tests": [
+      "absent .venv and no standalone ruff",
+      ".venv python present but ruff import fails",
+      "standalone ruff lookup failure",
+      "non-empty range fails closed in every case",
+      "empty range still records its explicit valid skip"
+    ]
+  },
+  "complete_shard_layout_schema": {
+    "goal": "Before normalising ANY shard path, enforce the complete top-level shard-layout schema.",
+    "ordering": "Required BEFORE per-shard validation: index['shards'] must be a dict; set(index['shards']) MUST equal REQUIRED_SHARDS (no missing shard, no extra unknown shard).",
+    "per_shard_required_fields": ["path"],
+    "path_constraint": "info['path'] MUST be a string; MUST identify exactly layout.shard_root / f'{shard_name}.json' (no symlink alias accepted merely because Path.resolve() reaches the target); MUST NOT escape layout.shard_root; MUST NOT be a swapped path (inventory on groups, etc.).",
+    "fail_closed_conditions": [
+      "missing_shards_field",
+      "shards_not_dict",
+      "missing_required_shard",
+      "extra_unknown_shard",
+      "shard_info_not_dict",
+      "missing_path",
+      "path_not_string",
+      "wrong_parent",
+      "wrong_basename",
+      "swapped_paths",
+      "path_traversal",
+      "symlink_alias"
+    ],
+    "symlink_alias_rejection": "Do NOT accept a symlink alias merely because Path.resolve() reaches the expected target. Use lexical containment (posixpath.commonpath) AND an explicit symlink check (Path.is_symlink) on every shard path. A symlink alias that reaches the canonical shard path is REJECTED."
+  },
+  "tmp_path_hermeticity": {
+    "replacement": "Every constructed /tmp path in the test suite is replaced with pytest's tmp_path fixture (already hermetic, parallel-safe, interrupted-run-safe).",
+    "deleted_pattern": "Path(os.fsdecode(os.fsencode('/tmp'))) / ... is REMOVED from every test.",
+    "ast_source_guard_upgrade": "The source guard in tests/verifiers/verifier_core_migration_audit01_support.py audit01_source_guard_violations() upgrades fixed-tmp detection to AST-based scanning. It MUST detect: absolute Path(...) calls with a string literal starting with '/' (any platform path component); constant-folding wrappers around absolute paths; encode/decode wrappers around absolute paths; tempfile.* calls with a fixed shared directory; explicit /var/tmp and platform equivalents.",
+    "required_state": {
+      "fixed_shared_tmp_paths": 0,
+      "obfuscated_fixed_tmp_paths": 0,
+      "parallel_safe": true,
+      "interrupted_run_safe": true
+    }
+  },
+  "effective_ruff_configuration": {
+    "preferred_invariant": "<launcher-prefix> check --config <canonical-config> <paths...>",
+    "configuration_record": {
+      "config_path": "str",
+      "config_sha256": "str",
+      "extended_config_chain": "tuple[str, ...]",
+      "extended_config_sha256": "tuple[str, ...]",
+      "launcher_prefix": "tuple[str, ...]",
+      "launcher_path": "str",
+      "launcher_sha256": "str",
+      "ruff_version": "str",
+      "executed_argv": "tuple[str, ...]"
+    },
+    "explicit_config_strategy": "When an explicit --config can represent the repository policy (pyproject.toml present at REPO_ROOT and resolves the entire config chain), the producer invokes <launcher-prefix> check --config <canonical-config> <paths...>.",
+    "fallback_strategy": "When explicit --config cannot represent the policy (e.g. extend dependencies), the producer resolves the effective closest config for every input path and every extend dependency and records each config_path / config_sha256.",
+    "do_not_label_inspection_as_binding": "Do NOT claim ruff_configuration_hashes_bound merely because three root-level candidate filenames were inspected. The record MUST contain the actual config_path / config_sha256 of the file Ruff consulted, plus the launcher_sha256 of the executable."
+  },
+  "git_command_cardinality": {
+    "injected_command_seam": "class GitRunner(Protocol): def run(self, argv: tuple[str, ...], *, cwd: Path) -> CommandResult: ... The producer invokes the seam exactly ONCE per git execution; the seam records the executed argv verbatim.",
+    "cardinality_source": "git_diff_query_count = sum(result.argv[:2] == ('git', 'diff') for result in git_results). The cardinality is derived from the executed transcript, NOT from a wrapper call count.",
+    "required_state": {
+      "rev_parse_calls": 2,
+      "git_diff_calls": 1,
+      "git_diff_query_count_source": "executed_command_transcript",
+      "wrapper_call_count_used_as_authority": false
+    }
+  },
+  "complete_immutable_bundle": {
+    "transactional_producer": "The producer creates every final artifact in ONE staging transaction. The staging directory may be renamed to the final destination only after the complete bundle (manifest, topology, gate-results, every .z, every .json, final-classification, bundle-root) is present and validated.",
+    "required_final_artifacts": [
+      "manifest.json",
+      "topology.txt",
+      "gate-results.json",
+      "changed-paths.z",
+      "changed-python-paths.z",
+      "ruff-input-paths.z",
+      "ruff-scope.json",
+      "ruff-argv.json",
+      "tool-identities.json",
+      "commands.json",
+      "final-classification.md",
+      "bundle-root.json"
+    ],
+    "gate_results": "gate-results.json contains the captured post-subject gate commands and results. It is added DURING the bundle production (NOT manually after publication). Each row records: name, argv, cwd, exit_code, stdout_sha256, stderr_sha256.",
+    "bundle_root_invariant": "bundle-root.json hashes every other final artifact (relpath -> sha256) and binds: F14, F14_tree, plan_blob, S14, S14_tree, parent_F14, parent_S14, files (relpath -> sha256).",
+    "immutability": "After publication, no command may modify the bundle. A test hashes the complete directory BEFORE and AFTER every subsequent reporting step and proves the root hash remains unchanged.",
+    "post_publication_test": "A test hashes the complete directory, attempts every subsequent reporting step (e.g. re-writing manifest, re-running gate), and proves the bundle-root hash remains unchanged.",
+    "topology_production": "topology.txt is produced transactionally with the bundle. It records the Phase 0 topology (F14, F14_tree, plan_blob, parent_F14, S14, S14_tree, parent_S14, rescue branches)."
+  },
+  "actual_classification_derivation": {
+    "inputs": "EvidenceTransactionResult; RepositoryGateResult[]; ClosureTopology.",
+    "single_git_path_query": "pass_when: executed_git_diff_count == 1.",
+    "ruff_identity": "pass_when: ruff_result.status == 'passed'; executed_argv starts with recorded launcher prefix; launcher_sha256 is present and matches the recorded launcher path.",
+    "cmd_check_contract": "pass_when: a named RepositoryGateResult exists for cmd_check; returncode == 0; stdout/stderr hashes match gate-results.json.",
+    "publication": "pass_when: complete staging validation passed; final rename succeeded; bundle-root validation passed; no command modified the bundle after publication.",
+    "unknown_or_absent": "rendered as UNMEASURED or FAILED, never PASS."
+  },
+  "module_autouse_mutation_guard": {
+    "preserved": "The canonical_artifacts_remain_unchanged fixture is preserved unchanged. CORRECTION14 additions do not touch any canonical artifact.",
+    "post_publication_immutability_guard": "A new autouse module-scope fixture (audit01_correction14_bundle_immutability) hashes the bundle directory BEFORE and AFTER the test module runs and asserts equality. Combined with the existing guard, every audit01 split module gets mutation protection."
+  },
+  "detached_evidence_transcript": {
+    "evidence_directory": "/tmp/closure_evidence_14",
+    "required_files": [
+      "manifest.json (binds F14, F14_tree, plan_blob, S14, S14_tree, parent_F14, parent_S14, base_full_oid, subject_full_oid, git_diff_query_count=1, changed_paths_z_sha256, changed_python_paths_z_sha256, ruff_input_paths_z_sha256, ruff_argv_sha256, ruff_scope_sha256, tool_identities_sha256, commands_sha256, gate_results_sha256, topology_sha256, bundle_root_sha256; declares protocol_stage=manual-preclosure-evidence; records leamas_protocol_E=false)",
+      "topology.txt (the Phase 0 topology evidence transcript)",
+      "gate-results.json (post-subject gate commands and results: pytest, ruff, mypy, audit-check, verify_all.sh --act-local --skip-gate-summary)",
+      "changed-paths.z (NUL-delimited filesystem bytes produced by changed_path_bytes())",
+      "changed-python-paths.z (NUL-delimited filesystem bytes derived in-process from the authoritative range query)",
+      "ruff-input-paths.z (NUL-delimited filesystem bytes; byte-equal to changed-python-paths.z)",
+      "changed-paths.txt (non-authoritative diagnostic escaped projection; labelled authority: false; encoding: diagnostic escaped projection)",
+      "changed-python-paths.txt (non-authoritative diagnostic escaped projection; labelled authority: false; encoding: diagnostic escaped projection)",
+      "ruff-input-paths.txt (non-authoritative diagnostic escaped projection; labelled authority: false; encoding: diagnostic escaped projection)",
+      "ruff-scope.json (serialises the RuffScope dataclass: paths, argv, status)",
+      "ruff-argv.json (serialises the argv that was actually executed; null when status='skipped_no_python_paths')",
+      "tool-identities.json (the launcher_argv_prefix, launcher_path, launcher_sha256, ruff_version, ruff_invocation_mode, configuration_files, configuration_file_sha256, config_path, config_sha256, extended_config_chain, extended_config_sha256 record)",
+      "commands.json (every git command recorded with argv, cwd, exit_code, sha256 of stdout/stderr)",
+      "final-classification.md (the human-readable closure narrative; every claim is derived from a typed EvidenceTransactionResult / RepositoryGateResult; CORRECTION14: PARTIAL_CHECKPOINT)",
+      "bundle-root.json (hashes every other final artifact and binds F14, F14_tree, plan_blob, S14, S14_tree, parent_F14, parent_S14, files: relpath -> sha256)"
+    ],
+    "required_proofs": [
+      "diff -u /tmp/closure_evidence_14/changed-python-paths.z /tmp/closure_evidence_14/ruff-input-paths.z must be empty (the two file sets are byte-identical)",
+      "os.fsencode(open('/tmp/closure_evidence_14/changed-python-paths.txt').read()) == open('/tmp/closure_evidence_14/changed-python-paths.z', 'rb').read() (the .z file is the authoritative source; the .txt is a projection)",
+      "rev_parse_calls == 2; git_diff_calls == 1; the cardinality is derived from the executed transcript, NOT from a wrapper call count",
+      "bundle-root.json hashes match the SHA-256 of every other final artifact in the bundle; bundle_root_sha256 in manifest.json equals hashlib.sha256(bundle-root.json) post-publication",
+      "A post-publication mutation test attempts to re-write manifest.json / re-run a gate / append to final-classification.md and asserts the bundle-root hash remains unchanged"
+    ]
+  },
+  "lifecycle_terminology": {
+    "CORRECTION13_RECOVERY": "PASS",
+    "CORRECTION14": "PARTIAL_CHECKPOINT",
+    "typed_evidence_result_dataclasses": "PASS",
+    "renderer_derives_pass_only_from_typed_results": "PASS",
+    "fail_closed_ruff_for_nonempty_python_range": "PASS",
+    "unresolved_ruff_success_skip_removed": "PASS",
+    "empty_range_skip_remains_valid": "PASS",
+    "complete_top_level_shard_layout_schema_enforced": "PASS",
+    "malformed_shard_records_fail_closed": "PASS",
+    "symlink_aliases_rejected": "PASS",
+    "fixed_shared_tmp_paths_removed": "PASS",
+    "obfuscated_fixed_tmp_paths_removed": "PASS",
+    "ast_source_guard_detects_path_construction": "PASS",
+    "effective_ruff_configuration_bound": "PASS",
+    "executed_ruff_argv_identity_equal": "PASS",
+    "launcher_sha256_bound": "PASS",
+    "git_diff_query_count_measured_from_transcript": "PASS",
+    "actual_git_diff_calls": "1",
+    "rev_parse_calls": "2",
+    "gate_results_produced_transactionally": "PASS",
+    "topology_produced_transactionally": "PASS",
+    "bundle_root_hashes_every_artifact": "PASS",
+    "post_publication_bundle_mutations": "0",
+    "final_classification_claims_are_derived": "PASS",
+    "hardcoded_unmeasured_PASS_claims": "0",
+    "manual_preclosure_evidence": "PRESENT",
+    "leamas_protocol_E": "ABSENT",
+    "closure_commit_C": "ABSENT",
+    "annotated_tag_T": "ABSENT",
+    "deterministic_C_proof": "BLOCKED",
+    "wave_1": "BLOCKED"
+  },
+  "absorbed_defects": [
+    "_classify_claim unmeasured PASS — fixed by typed EvidenceTransactionResult / RepositoryGateResult / CommandResult dataclasses and a renderer that only emits PASS when the typed measurement proves success",
+    "ruff skip unresolved identity treated as success — fixed by RuffToolUnavailable on non-empty Python range and removal of skipped_unresolved_identity as a successful publication status",
+    "partial shard layout enforcement — fixed by complete top-level schema validation (set(index['shards']) == REQUIRED_SHARDS, per-shard path string check, layout-aware comparison, symlink alias rejection)",
+    "fixed shared /tmp paths in tests — fixed by pytest tmp_path fixtures and AST-based source guard detecting absolute Path, encode/decode wrappers, tempfile with fixed directory, and platform equivalents",
+    "ruff configuration binding is just filename inspection — fixed by explicit --config when possible, otherwise effective closest config + extend dependency resolution, plus launcher hashes",
+    "git command cardinality from wrapper not transcript — fixed by injected GitRunner protocol command seam, recorded argv, sum(transcript) derivation",
+    "bundle publishes before gate results — fixed by one-transaction immutable bundle: gate-results.json + topology.txt + bundle-root.json produced inside the same staging transaction",
+    "final classification uses rendered strings — fixed by renderer that derives every claim from a typed result"
+  ],
+  "remaining_successors": [
+    "ACT-K9B-REDACTION-NEGATIVE-PROOFS-PORTABILITY01",
+    "Leamas v2 binary/schema qualification and actual C/T/E creation",
+    "Complete AUDIT01 closure",
+    "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)"
+  ],
+  "wave_1_policy": {
+    "wave_1_implementation": "PROHIBITED",
+    "blocked_target": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01",
+    "reason": "Wave 1 remains blocked until AUDIT01 receives a complete (non-partial) v2 closure."
+  },
+  "transaction_contract": {
+    "protocol": "v2",
+    "F14": "immutable plan-freeze commit (this plan is committed alone; no subject paths staged in F14); F14 is a NEW plan-freeze commit, parent(S13)",
+    "S14": "exactly one model-authored subject commit; parent(S14) = F14",
+    "C": "exactly one deterministic Leamas-authored closure commit; never authored by the model; absent until a v2 binary is installed",
+    "T": "Leamas-authored annotated tag targeting C; absent until C exists",
+    "E": "detached raw evidence bundle; never committed into the worktree; absent until a v2 binary produces it",
+    "no_manual_attestation_commit": true,
+    "do_not_rewrite_S13": true,
+    "preserve_F13": true,
+    "preserve_rescue_branches": true,
+    "deterministic_C_proof": {
+      "policy": "Reproduce closure from identical inputs in an isolated non-publishing environment and assert C1 == C2; commit-object bytes equal.",
+      "blocked_status": "DETERMINISTIC_C_PROOF: BLOCKED, CLOSURE: PARTIAL_CHECKPOINT",
+      "blocked_reason": "The installed /usr/local/bin/leamas binary exposes only Closure Protocol v1 commands (no --protocol v2 flag) and rejects the v2 plan schema (unknown field 'schema_version'). Safe isolated v2 reproduction is unsupported. The model MUST NOT simulate or hand-author C2."
+    }
+  },
+  "definition_of_done": {
+    "F14_contains_only_plan": true,
+    "parent_S14_equals_F14": true,
+    "hardcoded_unmeasured_PASS_claims": 0,
+    "classification_values_derived_from_typed_results": true,
+    "nonempty_range_without_ruff_fails": true,
+    "unresolved_ruff_success_skip": false,
+    "empty_range_skip_remains_valid": true,
+    "complete_required_shard_set_enforced": true,
+    "malformed_shard_records_fail_closed": true,
+    "symlink_aliases_rejected": true,
+    "fixed_shared_tmp_paths": 0,
+    "obfuscated_fixed_tmp_paths": 0,
+    "effective_ruff_configuration_bound": true,
+    "executed_ruff_argv_identity_equal": true,
+    "git_diff_query_count_measured_from_transcript": true,
+    "actual_git_diff_calls": 1,
+    "rev_parse_calls": 2,
+    "gate_results_produced_transactionally": true,
+    "topology_produced_transactionally": true,
+    "bundle_root_hashes_every_artifact": true,
+    "post_publication_bundle_mutations": 0,
+    "all_audit01_tests_pass": true,
+    "ruff_pass": true,
+    "mypy_pass": true,
+    "audit_check_pass": true,
+    "act_local_pass": true,
+    "manual_evidence_not_called_protocol_E": true,
+    "C_T_E_not_hand_authored": true,
+    "worktree_clean": true,
+    "wave_1_started": false
+  },
+  "expected_final_state_until_v2_binary_exists": {
+    "CORRECTION14": "PARTIAL_CHECKPOINT",
+    "typed_evidence_result_dataclasses": "PASS",
+    "renderer_derives_pass_only_from_typed_results": "PASS",
+    "fail_closed_ruff_for_nonempty_python_range": "PASS",
+    "unresolved_ruff_success_skip_removed": "PASS",
+    "empty_range_skip_remains_valid": "PASS",
+    "complete_top_level_shard_layout_schema_enforced": "PASS",
+    "malformed_shard_records_fail_closed": "PASS",
+    "symlink_aliases_rejected": "PASS",
+    "fixed_shared_tmp_paths_removed": "PASS",
+    "obfuscated_fixed_tmp_paths_removed": "PASS",
+    "ast_source_guard_detects_path_construction": "PASS",
+    "effective_ruff_configuration_bound": "PASS",
+    "executed_ruff_argv_identity_equal": "PASS",
+    "launcher_sha256_bound": "PASS",
+    "git_diff_query_count_measured_from_transcript": "PASS",
+    "actual_git_diff_calls": "1",
+    "rev_parse_calls": "2",
+    "gate_results_produced_transactionally": "PASS",
+    "topology_produced_transactionally": "PASS",
+    "bundle_root_hashes_every_artifact": "PASS",
+    "post_publication_bundle_mutations": "0",
+    "final_classification_claims_are_derived": "PASS",
+    "hardcoded_unmeasured_PASS_claims": "0",
+    "manual_preclosure_evidence": "PRESENT",
+    "C": "ABSENT",
+    "T": "ABSENT",
+    "leamas_protocol_E": "ABSENT",
+    "deterministic_C_proof": "BLOCKED",
+    "wave_1": "BLOCKED"
+  }
+}
