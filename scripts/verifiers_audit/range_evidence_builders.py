@@ -1,4 +1,4 @@
-"""CORRECTION14/CORRECTION15: detached range evidence manifest + topology
+"""CORRECTION14/CORRECTION15/CORRECTION16: detached range evidence manifest + topology
 builders.
 
 The functions in this module are extracted from
@@ -7,6 +7,13 @@ The functions in this module are extracted from
 :class:`EvidenceTransactionResult` /
 :class:`ClosureTopology` arguments and return dicts that the
 file-writer layer serialises to disk.
+
+CORRECTION16: the ``build_topology`` function accepts the
+transaction-derived topology record (when the closure
+topology is not yet produced by the orchestrator).  The
+``build_manifest_from_evidence`` function adds the
+``pytest-input-paths.z`` / ``mypy-input-paths.z`` /
+respective ``.txt`` projections to the manifest.
 
 The bundle-root builder lives in
 :mod:`range_evidence_bundle`; this module owns only the
@@ -29,44 +36,74 @@ from scripts.verifiers_audit.typed_results import (
 
 def build_topology(
     *,
-    topology: ClosureTopology,
+    topology: ClosureTopology | None,
     base_full_oid: str,
     subject_full_oid: str,
     git_diff_query_count: int,
     rescue_branches: tuple[str, ...] = (),
+    f16_full_oid: str | None = None,
+    f16_tree: str | None = None,
+    plan_blob: str | None = None,
+    s16_full_oid: str | None = None,
+    s16_tree: str | None = None,
+    parent_f16: str | None = None,
+    parent_s16: str | None = None,
+    plan_path: str | None = None,
 ) -> str:
     """Build the ``topology.txt`` text content.
 
-    The text records:
-
-    * F15, F15_tree, plan_blob;
-    * S15, S15_tree (when present);
-    * parent_F15, parent_S15;
-    * base_full_oid, subject_full_oid;
-    * git_diff_query_count;
-    * rescue_branches.
+    The text records F16 / S16 / parent_F16 / parent_S16 /
+    plan_blob.  When ``topology`` is supplied the legacy
+    fields are used; otherwise the individual CORRECTION16
+    fields are emitted.  The recorded fields are the
+    transcript-derived values, NOT the caller-supplied
+    environment identities.
     """
-    lines: list[str] = [
-        "CORRECTION15 topology.txt",
-        "",
-        "## Plan-freeze commit",
-        "",
-        f"F15 = {topology.F15}",
-        f"F15_tree = {topology.F15_tree}",
-        f"plan_blob = {topology.plan_blob}",
-        f"parent_F15 = {topology.parent_F15}",
-    ]
-    if topology.S15 is not None:
+    lines: list[str] = ["CORRECTION16 topology.txt", ""]
+
+    if topology is not None:
+        # Use the legacy closure topology record.
         lines.extend(
             [
+                "## Plan-freeze commit",
+                "",
+                f"F16 = {topology.F16}",
+                f"F16_tree = {topology.F16_tree}",
+                f"plan_blob = {topology.plan_blob}",
+                f"parent_F16 = {topology.parent_F16}",
+            ]
+        )
+        if topology.S16 is not None:
+            lines.extend(
+                [
+                    "",
+                    "## Subject commit",
+                    "",
+                    f"S16 = {topology.S16}",
+                    f"S16_tree = {topology.S16_tree or '(unknown)'}",
+                    f"parent_S16 = {topology.parent_S16 or '(unknown)'}",
+                ]
+            )
+    else:
+        # Use the CORRECTION16 transactional fields.
+        lines.extend(
+            [
+                "## Plan-freeze commit",
+                "",
+                f"F16 = {f16_full_oid or ''}",
+                f"F16_tree = {f16_tree or ''}",
+                f"plan_blob = {plan_blob or ''}",
+                f"parent_F16 = {parent_f16 or ''}",
+                f"plan_path = {plan_path or ''}",
                 "",
                 "## Subject commit",
                 "",
-                f"S15 = {topology.S15}",
-                f"S15_tree = {topology.S15_tree or '(unknown)'}",
-                f"parent_S15 = {topology.parent_S15 or '(unknown)'}",
+                f"S16 = {s16_full_oid or ''}",
+                f"S16_tree = {s16_tree or ''}",
+                f"parent_S16 = {parent_s16 or ''}",
             ]
         )
+
     lines.extend(
         [
             "",
@@ -104,6 +141,10 @@ def build_manifest_from_evidence(
     changed_python_paths_txt: Path,
     ruff_input_paths_z: Path,
     ruff_input_paths_txt: Path,
+    pytest_input_paths_z: Path | None = None,
+    pytest_input_paths_txt: Path | None = None,
+    mypy_input_paths_z: Path | None = None,
+    mypy_input_paths_txt: Path | None = None,
     ruff_scope_path: Path,
     ruff_argv_path: Path,
     tool_identities_path: Path,
@@ -113,16 +154,14 @@ def build_manifest_from_evidence(
 ) -> dict[str, object]:
     """Build the manifest dict from the typed evidence result.
 
-    CORRECTION15: the manifest records the
-    ``publication_state`` of the staged bundle as
-    ``READY_TO_PUBLISH``; the rename to the final
-    destination records the manual publication result in a
-    separate transcript outside the bundle.  The
-    ``staging_root`` / ``output_dir`` / temporary absolute
-    paths are NEVER recorded.
+    CORRECTION16: ``pytest_input_paths_z`` /
+    ``pytest_input_paths_txt`` / ``mypy_input_paths_z`` /
+    ``mypy_input_paths_txt`` are CORRECTION16 artifacts; the
+    ``publication_state`` field is the typed
+    ``evidence.publication_status``.
     """
     authoritative = evidence.authoritative_hashes
-    return {
+    manifest: dict[str, object] = {
         "schema_version": "leamas.v2.closure-evidence/2",
         "base": base,
         "subject": subject,
@@ -224,6 +263,36 @@ def build_manifest_from_evidence(
             if evidence.ruff_result is not None
             else None
         ),
+        "transaction_summary": {
+            "topology_git_commands": evidence.transaction_summary.topology_git_commands,
+            "range_git_commands": evidence.transaction_summary.range_git_commands,
+            "gate_git_commands": evidence.transaction_summary.gate_git_commands,
+            "total_git_commands": evidence.transaction_summary.total_git_commands,
+            "unrecorded_git_commands": evidence.transaction_summary.unrecorded_git_commands,
+            "hidden_shell_git_invocations": evidence.transaction_summary.hidden_shell_git_invocations,
+        },
+        "repository_topology": {
+            "F16": evidence.repository_topology.F16,
+            "F16_tree": evidence.repository_topology.F16_tree,
+            "plan_blob": evidence.repository_topology.plan_blob,
+            "S16": evidence.repository_topology.S16,
+            "S16_tree": evidence.repository_topology.S16_tree,
+            "parent_F16": evidence.repository_topology.parent_F16,
+            "parent_S16": evidence.repository_topology.parent_S16,
+            "plan_path": evidence.repository_topology.plan_path,
+        },
+        "ruff_equivalence": {
+            "explicit_returncode": evidence.ruff_equivalence.explicit_returncode,
+            "canonical_returncode": evidence.ruff_equivalence.canonical_returncode,
+            "explicit_diagnostics_sha256": evidence.ruff_equivalence.explicit_diagnostics_sha256,
+            "canonical_diagnostics_sha256": evidence.ruff_equivalence.canonical_diagnostics_sha256,
+            "ruff_version": evidence.ruff_equivalence.ruff_version,
+            "input_path_tuple_sha256": evidence.ruff_equivalence.input_path_tuple_sha256,
+            "config_path": evidence.ruff_equivalence.config_path,
+            "config_sha256": evidence.ruff_equivalence.config_sha256,
+            "equivalent": evidence.ruff_equivalence.equivalent,
+        },
+        "all_gates_pass": evidence.all_gates_pass,
         "protocol_stage": "manual-preclosure-evidence",
         "leamas_protocol_E": False,
         "publication_state": (
@@ -233,6 +302,35 @@ def build_manifest_from_evidence(
         ),
         "publication_status": evidence.publication_status,
     }
+    if (
+        pytest_input_paths_z is not None
+        and pytest_input_paths_txt is not None
+    ):
+        manifest["pytest_input_paths"] = {
+            "relpath": "pytest-input-paths.z",
+            "text_relpath": "pytest-input-paths.txt",
+            "sha256": _sha256_of(pytest_input_paths_z),
+            "text_sha256": _sha256_of(pytest_input_paths_txt),
+            "count": len(py_paths_bytes),
+            "authoritative_sha256": authoritative.get(
+                "pytest-input-paths.z", ""
+            ),
+        }
+    if (
+        mypy_input_paths_z is not None
+        and mypy_input_paths_txt is not None
+    ):
+        manifest["mypy_input_paths"] = {
+            "relpath": "mypy-input-paths.z",
+            "text_relpath": "mypy-input-paths.txt",
+            "sha256": _sha256_of(mypy_input_paths_z),
+            "text_sha256": _sha256_of(mypy_input_paths_txt),
+            "count": len(py_paths_bytes),
+            "authoritative_sha256": authoritative.get(
+                "mypy-input-paths.z", ""
+            ),
+        }
+    return manifest
 
 
 __all__ = [

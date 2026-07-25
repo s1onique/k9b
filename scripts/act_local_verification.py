@@ -144,6 +144,8 @@ def run_act_local_verification(
     python_files: list[str] | None = None,
     include_gate_summary_parser: bool | None = None,
     gate_summary_artifact_path: Path | None = None,
+    base: str | None = None,
+    subject: str | None = None,
 ) -> ActLocalResult:
     """
     Run ACT-local verification.
@@ -195,7 +197,15 @@ def run_act_local_verification(
     failure_commands: list[str] = []
 
     if changed_files is None:
-        changed_files = get_changed_files()
+        # CORRECTION16: when --base / --subject are supplied
+        # the script uses the explicit F16..S16 range as the
+        # authoritative source of changed files.
+        range_base = base or None
+        range_subject = subject or None
+        changed_files = get_changed_files(
+            base=range_base,
+            subject=range_subject,
+        )
 
     if python_files is None:
         python_files = filter_python_files(changed_files)

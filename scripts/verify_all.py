@@ -150,7 +150,30 @@ ACT-Local: Use --act-local as the default close-check for local agent ACTs.
             "populating)."
         ),
     )
-    
+
+    # CORRECTION16: explicit F16..S16 range for act-local.
+    parser.add_argument(
+        "--base",
+        type=str,
+        default=None,
+        help=(
+            "Base commit (F16) for explicit change-range scope. "
+            "When supplied with --subject the act-local profile "
+            "uses 'git diff --name-only -z --diff-filter=ACMRT "
+            "<base>..<subject>' as the authoritative source of "
+            "changed files."
+        ),
+    )
+    parser.add_argument(
+        "--subject",
+        type=str,
+        default=None,
+        help=(
+            "Subject commit (S16) for explicit change-range scope. "
+            "See --base for usage."
+        ),
+    )
+
     # Lock management commands (mutually exclusive with profile)
     lock_group = parser.add_mutually_exclusive_group()
     lock_group.add_argument(
@@ -348,9 +371,13 @@ def main(argv: list[str] | None = None) -> int:
         # populate circular dependency is broken when this verification is
         # itself launched from the targeted-repository-gate step of
         # scripts/factory/populate_gate_summary.py.
+        # CORRECTION16: forward --base / --subject so the script verifies
+        # only the F16..S16 range.
         act_result = run_act_local_verification(
             json_mode=args.json,
             skip_gate_summary=args.skip_gate_summary,
+            base=args.base,
+            subject=args.subject,
         )
 
         if args.json:

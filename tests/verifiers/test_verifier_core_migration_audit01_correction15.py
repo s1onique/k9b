@@ -5,6 +5,10 @@ in :mod:`scripts.verifiers_audit.typed_results` and the
 named claim-derivation functions introduced in
 :mod:`scripts.verifiers_audit.range_evidence_classification`.
 
+CORRECTION16: the tests use the ``F16`` / ``S16`` keyword
+arguments (the canonical CORRECTION16 names); the
+``F15`` / ``S15`` aliases are preserved as properties only.
+
 The module re-uses the audit01 family split (no top-level
 fixtures) so the
 ``canonical_audit_artifacts_remain_unchanged`` autouse
@@ -121,19 +125,38 @@ def test_bundle_validation_result_is_invalid_when_missing() -> None:
     assert not validation.is_valid
 
 
-def test_closure_topology_accepts_f15_identity() -> None:
+def test_closure_topology_accepts_f16_identity() -> None:
     topo = ClosureTopology(
-        F15="f15-hash",
-        F15_tree="f15-tree",
+        F16="f16-hash",
+        F16_tree="f16-tree",
         plan_blob="plan-blob",
-        S15="s15-hash",
-        S15_tree="s15-tree",
-        parent_F15="s14-hash",
-        parent_S15="f15-hash",
+        S16="s16-hash",
+        S16_tree="s16-tree",
+        parent_F16="s15-hash",
+        parent_S16="f16-hash",
     )
-    assert topo.F15 == "f15-hash"
-    assert topo.S15 == "s15-hash"
-    assert topo.parent_S15 == "f15-hash"
+    assert topo.F16 == "f16-hash"
+    assert topo.S16 == "s16-hash"
+    assert topo.parent_S16 == "f16-hash"
+
+
+def test_closure_topology_f15_aliases() -> None:
+    topo = ClosureTopology(
+        F16="f16-hash",
+        F16_tree="f16-tree",
+        plan_blob="plan-blob",
+        S16="s16-hash",
+        S16_tree="s16-tree",
+        parent_F16="s15-hash",
+        parent_S16="f16-hash",
+    )
+    # CORRECTION14 backwards-compat aliases.
+    assert topo.F15 == "f16-hash"
+    assert topo.F15_tree == "f16-tree"
+    assert topo.S15 == "s16-hash"
+    assert topo.S15_tree == "s16-tree"
+    assert topo.parent_F15 == "s15-hash"
+    assert topo.parent_S15 == "f16-hash"
 
 
 def test_derive_audit_check_pass() -> None:
@@ -164,10 +187,18 @@ def test_derive_audit_check_unmeasured() -> None:
 
 
 def test_derive_git_diff_cardinality_pass() -> None:
+    """CORRECTION16: the count is 1 git-diff + 5 rev-parse (topology+range)."""
     evidence = EvidenceTransactionResult(
         base_oid="a" * 40,
         subject_oid="b" * 40,
         git_commands=(
+            _executed(name="git-rev-parse-f16-commit"),
+            _executed(name="git-rev-parse-f16-tree"),
+            _executed(name="git-rev-parse-f16-parent"),
+            _executed(name="git-rev-parse-f16-plan-blob"),
+            _executed(name="git-rev-parse-s16-commit"),
+            _executed(name="git-rev-parse-s16-tree"),
+            _executed(name="git-rev-parse-s16-parent"),
             _executed(name="git-rev-parse-base"),
             _executed(name="git-rev-parse-subject"),
             _executed(
@@ -182,7 +213,7 @@ def test_derive_git_diff_cardinality_pass() -> None:
     claim = derive_git_diff_cardinality(evidence)
     assert claim.status == "PASS"
     assert "1 git-diff" in claim.derivation
-    assert "2 rev-parse" in claim.derivation
+    assert "9 rev-parse" in claim.derivation
 
 
 def test_derive_git_diff_cardinality_failed() -> None:
@@ -263,7 +294,12 @@ def test_derive_publication_status_ready() -> None:
 
 
 def test_derive_bundle_root_hash_present() -> None:
-    claim = derive_bundle_root_hash({"bundle-root.json": "abc123"})
+    # CORRECTION16: the bundle-root hash is PASS only at
+    # ``root_writes`` / ``published_renamed`` lifecycle
+    # stages.  Pre-root is UNMEASURED.
+    claim = derive_bundle_root_hash(
+        {"bundle-root.json": "abc123"}, lifecycle_stage="root_writes"
+    )
     assert claim.status == "PASS"
     assert claim.value == "abc123"
 
@@ -318,8 +354,8 @@ def test_final_classification_renders_named_derivations() -> None:
         authoritative_hashes={"bundle-root.json": "abc"},
     )
     topo = ClosureTopology(
-        F15="f15", F15_tree="f15t", plan_blob="pb",
-        S15=None, S15_tree=None, parent_F15="s14", parent_S15=None,
+        F16="f16", F16_tree="f16t", plan_blob="pb",
+        S16=None, S16_tree=None, parent_F16="s15", parent_S16=None,
     )
     text = build_final_classification(
         evidence=evidence,
@@ -330,9 +366,9 @@ def test_final_classification_renders_named_derivations() -> None:
     )
     # The Derivation column is present and every row carries it.
     assert "| Derivation |" in text
-    # The CORRECTION15 lifecycle row uses the closure-topology
+    # The CORRECTION16 lifecycle row uses the closure-topology
     # constant (NOT a hardcoded "PASS" row).
-    assert "CORRECTION15" in text
+    assert "CORRECTION16" in text
     assert "PARTIAL_CHECKPOINT" in text
     # No hardcoded constant "0" for hardcoded_unmeasured_PASS_claims
     # row should be rendered in the lifecycle table.

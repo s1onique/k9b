@@ -1,4 +1,4 @@
-"""CORRECTION14/CORRECTION15: typed evidence-result dataclasses.
+"""CORRECTION14/CORRECTION15/CORRECTION16: typed evidence-result dataclasses.
 
 Every claim in the final-classification.md file MUST be derived
 from a typed :class:`ExecutedCommand` /
@@ -12,6 +12,19 @@ output entirely (the lifecycle rows for ``C`` / ``T`` /
 ``ABSENT`` / ``BLOCKED`` values because they are explicit
 closure-topology constants, not measurements).
 
+CORRECTION16 additions:
+
+* :class:`GitCommandKind` - the closed ``Literal`` of
+  permitted Git command classifications;
+* :class:`TransactionGitCommand` - a single Git command
+  typed with its kind (topology / range / gate / other);
+* :class:`TransactionSummary` - the typed cardinality of
+  every Git command in the transaction;
+* :class:`RepositoryTopology` - the topology derived from
+  the Git transcript (F16 / S16 / parent / tree / blob);
+* :class:`RuffEquivalenceProof` - the explicit vs canonical
+  Ruff comparison record.
+
 Public surface:
 
 * :class:`ExecutedCommand` - one executed command with the
@@ -24,8 +37,8 @@ Public surface:
 * :class:`RepositoryGateResult` - one captured post-subject
   gate command with a closed semantic ``name`` (Literal).
 * :class:`ClosureTopology` - the deterministic closure
-  topology record (F15, F15_tree, plan_blob, S15, S15_tree,
-  parent_F15, parent_S15).
+  topology record (F16, F16_tree, plan_blob, S16, S16_tree,
+  parent_F16, parent_S16).
 * :class:`BundleValidationResult` - the bundle validation
   outcome (declarative set, computed set, missing/extra,
   symmetric difference).
@@ -64,6 +77,13 @@ PublicationStatus = Literal["ready_to_publish", "published", "failed"]
   directory was removed and the final destination does not
   exist.
 """
+
+
+# CORRECTION16: the closed ``Literal`` of Git command kinds.
+# The orchestrator MUST tag every recorded Git command with
+# one of these values so the cardinality of the transaction
+# is auditable.
+GitCommandKind = Literal["topology", "range", "gate", "other"]
 
 
 RepositoryGateName = Literal[
@@ -128,9 +148,112 @@ CommandResult = ExecutedCommand
 
 
 @dataclass(frozen=True)
+class TransactionGitCommand:
+    """CORRECTION16: a single Git command with its kind tag.
+
+    * ``command`` - the typed :class:`ExecutedCommand` from
+      the seam.
+    * ``kind`` - the :class:`GitCommandKind` tag.
+    """
+
+    command: ExecutedCommand
+    kind: GitCommandKind
+
+
+@dataclass(frozen=True)
+class TransactionSummary:
+    """CORRECTION16: the canonical transcript cardinality.
+
+    * ``topology_git_commands`` - the number of recorded
+      topology Git commands (F16 / S16 / parent / tree / blob
+      queries).
+    * ``range_git_commands`` - the number of recorded range
+      Git commands (BASE / SUBJECT rev-parse + diff).
+    * ``gate_git_commands`` - the number of recorded gate
+      Git commands (``diff-check`` + ``worktree-clean``).
+    * ``total_git_commands`` - the total number of recorded
+      Git commands.
+    * ``unrecorded_git_commands`` - the number of Git
+      invocations that bypassed the seam (MUST be zero).
+    * ``hidden_shell_git_invocations`` - the number of Git
+      invocations hidden inside a shell command (MUST be
+      zero).
+    """
+
+    topology_git_commands: int
+    range_git_commands: int
+    gate_git_commands: int
+    total_git_commands: int
+    unrecorded_git_commands: int = 0
+    hidden_shell_git_invocations: int = 0
+
+
+@dataclass(frozen=True)
+class RepositoryTopology:
+    """CORRECTION16: the topology derived from the Git transcript.
+
+    * ``F16`` - the resolved full OID of the plan-freeze
+      commit.
+    * ``F16_tree`` - the tree hash of F16.
+    * ``plan_blob`` - the blob hash of the plan file in F16.
+    * ``S16`` - the resolved full OID of the subject commit.
+    * ``S16_tree`` - the tree hash of S16.
+    * ``parent_F16`` - the parent of F16 (= S15).
+    * ``parent_S16`` - the parent of S16 (= F16).
+    * ``plan_path`` - the plan path relative to the repo root.
+    """
+
+    F16: str
+    F16_tree: str
+    plan_blob: str
+    S16: str
+    S16_tree: str
+    parent_F16: str
+    parent_S16: str
+    plan_path: str
+
+
+@dataclass(frozen=True)
+class RuffEquivalenceProof:
+    """CORRECTION16: explicit vs canonical Ruff equivalence proof.
+
+    * ``explicit_returncode`` - returncode of the explicit
+      ``--config <canonical-config>`` invocation against the
+      exact subject Python path tuple.
+    * ``canonical_returncode`` - returncode of the canonical
+      (no ``--config``) invocation against the same tuple.
+    * ``explicit_diagnostics_sha256`` - SHA-256 of the
+      explicit invocation's normalised diagnostics payload.
+    * ``canonical_diagnostics_sha256`` - SHA-256 of the
+      canonical invocation's normalised diagnostics payload.
+    * ``ruff_version`` - the Ruff version used by both
+      invocations.
+    * ``input_path_tuple_sha256`` - SHA-256 of the sorted
+      tuple of input paths (identical for both invocations).
+    * ``config_path`` - the canonical config path used by
+      the explicit invocation.
+    * ``config_sha256`` - SHA-256 of the canonical config
+      file.
+    * ``equivalent`` - True when returncode equal AND
+      normalised diagnostics SHA-256 equal AND ruff_version
+      equal AND input_path_tuple_sha256 equal.
+    """
+
+    explicit_returncode: int
+    canonical_returncode: int
+    explicit_diagnostics_sha256: str
+    canonical_diagnostics_sha256: str
+    ruff_version: str
+    input_path_tuple_sha256: str
+    config_path: str
+    config_sha256: str
+    equivalent: bool
+
+
+@dataclass(frozen=True)
 class EvidenceTransactionResult:
-    """CORRECTION14/CORRECTION15: the entire detached evidence
-    transaction.
+    """CORRECTION14/CORRECTION15/CORRECTION16: the entire detached
+    evidence transaction.
 
     * ``base_oid`` - the resolved full object ID of BASE.
     * ``subject_oid`` - the resolved full object ID of SUBJECT.
@@ -140,6 +263,14 @@ class EvidenceTransactionResult:
     * ``publication_status`` - the terminal publication status.
     * ``authoritative_hashes`` - SHA-256 of every authoritative
       final artifact (relpath -> hex digest).
+    * ``transaction_summary`` - the CORRECTION16 typed
+      cardinality of the Git transcript.
+    * ``repository_topology`` - the CORRECTION16 topology
+      derived from the Git transcript.
+    * ``ruff_equivalence`` - the CORRECTION16 equivalence
+      proof record.
+    * ``all_gates_pass`` - the CORRECTION16 typed result of
+      the fail-closed gate check.
     """
 
     base_oid: str
@@ -148,6 +279,10 @@ class EvidenceTransactionResult:
     ruff_result: ExecutedCommand | None
     publication_status: PublicationStatus
     authoritative_hashes: Mapping[str, str]
+    transaction_summary: TransactionSummary | None = None
+    repository_topology: RepositoryTopology | None = None
+    ruff_equivalence: RuffEquivalenceProof | None = None
+    all_gates_pass: bool = True
 
 
 @dataclass(frozen=True)
@@ -172,61 +307,88 @@ class RepositoryGateResult:
 
 @dataclass(frozen=True)
 class ClosureTopology:
-    """CORRECTION14/CORRECTION15: the deterministic closure-topology record.
+    """CORRECTION14/CORRECTION15/CORRECTION16: the deterministic
+    closure-topology record.
 
-    * ``F15`` - the CORRECTION15 plan-freeze commit hash.
-    * ``F15_tree`` - the tree hash of the F15 commit.
+    * ``F16`` - the CORRECTION16 plan-freeze commit hash.
+    * ``F16_tree`` - the tree hash of the F16 commit.
     * ``plan_blob`` - the SHA-256 of the plan file bytes.
-    * ``S15`` - the CORRECTION15 subject commit hash (None
-      when not yet authored).
-    * ``S15_tree`` - the tree hash of the S15 commit (None
-      when S15 is absent).
-    * ``parent_F15`` - the parent of F15 (= S14).
-    * ``parent_S15`` - the parent of S15 (= F15) when S15 is
-      present; None otherwise.
+    * ``S16`` - the CORRECTION16 subject commit hash.
+    * ``S16_tree`` - the tree hash of the S16 commit.
+    * ``parent_F16`` - the parent of F16 (= final S15).
+    * ``parent_S16`` - the parent of S16 (= F16).
 
     The dataclass is the SOLE authority for which commits
     bound the closure.  Renderers MUST consult it directly
     instead of hardcoding lifecycle strings.
+
+    CORRECTION14 backwards-compat aliases (F14 / S14) are
+    preserved so older callers can read the same fields by
+    their previous name.
     """
 
-    F15: str
-    F15_tree: str
+    F16: str
+    F16_tree: str
     plan_blob: str
-    S15: str | None
-    S15_tree: str | None
-    parent_F15: str
-    parent_S15: str | None
+    S16: str | None
+    S16_tree: str | None
+    parent_F16: str
+    parent_S16: str | None
+
+    # CORRECTION14 backwards-compat aliases.
+    @property
+    def F15(self) -> str:  # pragma: no cover - alias
+        return self.F16
+
+    @property
+    def F15_tree(self) -> str:  # pragma: no cover - alias
+        return self.F16_tree
+
+    @property
+    def S15(self) -> str | None:  # pragma: no cover - alias
+        return self.S16
+
+    @property
+    def S15_tree(self) -> str | None:  # pragma: no cover - alias
+        return self.S16_tree
+
+    @property
+    def parent_F15(self) -> str:  # pragma: no cover - alias
+        return self.parent_F16
+
+    @property
+    def parent_S15(self) -> str | None:  # pragma: no cover - alias
+        return self.parent_S16
 
     # CORRECTION14 backwards-compat aliases.
     @property
     def F14(self) -> str:  # pragma: no cover - alias
-        return self.F15
+        return self.F16
 
     @property
     def F14_tree(self) -> str:  # pragma: no cover - alias
-        return self.F15_tree
+        return self.F16_tree
 
     @property
     def S14(self) -> str | None:  # pragma: no cover - alias
-        return self.S15
+        return self.S16
 
     @property
     def S14_tree(self) -> str | None:  # pragma: no cover - alias
-        return self.S15_tree
+        return self.S16_tree
 
     @property
     def parent_F14(self) -> str:  # pragma: no cover - alias
-        return self.parent_F15
+        return self.parent_F16
 
     @property
     def parent_S14(self) -> str | None:  # pragma: no cover - alias
-        return self.parent_S15
+        return self.parent_S16
 
 
 @dataclass(frozen=True)
 class BundleValidationResult:
-    """CORRECTION15: bundle validation outcome.
+    """CORRECTION15/CORRECTION16: bundle validation outcome.
 
     * ``declared_artifacts`` - the complete declared final
       artifact set (no staging/output/temp absolute paths).
@@ -263,7 +425,12 @@ __all__ = [
     "CommandStatus",
     "EvidenceTransactionResult",
     "ExecutedCommand",
+    "GitCommandKind",
     "PublicationStatus",
     "RepositoryGateName",
     "RepositoryGateResult",
+    "RepositoryTopology",
+    "RuffEquivalenceProof",
+    "TransactionGitCommand",
+    "TransactionSummary",
 ]

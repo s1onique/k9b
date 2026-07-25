@@ -1,4 +1,4 @@
-"""CORRECTION15: detached evidence bundle builder.
+"""CORRECTION15/CORRECTION16: detached evidence bundle builder.
 
 The bundle module owns the strict final-artifact enumeration
 algorithm:
@@ -8,12 +8,20 @@ algorithm:
    files, or unexpected names;
 3. require the exact declared artifact set (no missing, no
    extra);
-4. hash every regular file except ``bundle-root.json``;
+4. hash every regular file except ``bundle-root.json``
+   (CORRECTION16: the hash is computed from disk bytes);
 5. sort by canonical slash-separated relative path;
 6. write ``bundle-root.json`` WITHOUT the staging/output/temp
    absolute paths;
 7. independently re-enumerate and validate every recorded
    hash.
+
+CORRECTION16 added artifacts:
+
+* ``pytest-input-paths.z`` / ``pytest-input-paths.txt`` -
+  the resolved pytest test-inventory tuple (no glob).
+* ``mypy-input-paths.z`` / ``mypy-input-paths.txt`` - the
+  resolved mypy audit01 test-inventory tuple (no glob).
 
 The declared set is:
 
@@ -24,9 +32,13 @@ The declared set is:
 * ``changed-paths.z``
 * ``changed-python-paths.z``
 * ``ruff-input-paths.z``
+* ``pytest-input-paths.z``
+* ``mypy-input-paths.z``
 * ``changed-paths.txt``
 * ``changed-python-paths.txt``
 * ``ruff-input-paths.txt``
+* ``pytest-input-paths.txt``
+* ``mypy-input-paths.txt``
 * ``ruff-scope.json``
 * ``ruff-argv.json``
 * ``tool-identities.json``
@@ -46,10 +58,15 @@ import json
 import stat
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from scripts.verifiers_audit.typed_results import (
     BundleValidationResult,
     ClosureTopology,
+    RepositoryGateResult,
+    RepositoryTopology,
+    RuffEquivalenceProof,
+    TransactionSummary,
 )
 
 DECLARED_FINAL_ARTIFACTS: tuple[str, ...] = (
@@ -60,9 +77,13 @@ DECLARED_FINAL_ARTIFACTS: tuple[str, ...] = (
     "changed-paths.z",
     "changed-python-paths.z",
     "ruff-input-paths.z",
+    "pytest-input-paths.z",
+    "mypy-input-paths.z",
     "changed-paths.txt",
     "changed-python-paths.txt",
     "ruff-input-paths.txt",
+    "pytest-input-paths.txt",
+    "mypy-input-paths.txt",
     "ruff-scope.json",
     "ruff-argv.json",
     "tool-identities.json",
@@ -71,9 +92,10 @@ DECLARED_FINAL_ARTIFACTS: tuple[str, ...] = (
 )
 """The complete declared final-artifact set.
 
-CORRECTION15: the bundle root MUST cover every artifact in
+CORRECTION16: the bundle root MUST cover every artifact in
 this tuple; no extras are accepted.  The ``.txt`` projections
-are first-class bundle members.
+are first-class bundle members.  The pytest/mypy inventory
+files are mandatory.
 """
 
 
@@ -169,20 +191,30 @@ def enumerate_bundle(
 
 def build_bundle_root(
     *,
-    topology: ClosureTopology,
+    topology: ClosureTopology | None,
     staging: Path,
     authoritative_hashes: Mapping[str, str],
+    repository_topology: RepositoryTopology | None = None,
+    transaction_summary: TransactionSummary | None = None,
+    ruff_equivalence: RuffEquivalenceProof | None = None,
+    gate_results: tuple[RepositoryGateResult, ...] = (),
 ) -> dict[str, object]:
     """Build the ``bundle-root.json`` dict from the actual directory.
 
-    CORRECTION15: the bundle root MUST be derived from the
+    CORRECTION16: the bundle root MUST be derived from the
     actual directory enumeration result (the
     :class:`BundleValidationResult` ``observed_artifacts``);
     the ``staging`` / ``output_dir`` / temporary absolute
     paths are NEVER recorded.  Every observed artifact's
-    hash is taken from the in-memory ``authoritative_hashes``
-    mapping; the resulting file is rejected when a hash is
-    missing.
+    hash is taken from the supplied ``authoritative_hashes``
+    mapping (which the caller has just produced from disk
+    bytes via :func:`hash_declared_artifacts`).
+
+    The optional ``repository_topology`` /
+    ``transaction_summary`` / ``ruff_equivalence`` /
+    ``gate_results`` arguments are recorded when supplied so
+    the in-bundle root can be audited without consulting any
+    external file.
     """
     validation = enumerate_bundle(staging)
     files_section: dict[str, str] = {}
@@ -196,19 +228,72 @@ def build_bundle_root(
                 f"artifact {rel!r}"
             )
         files_section[rel] = digest
-    return {
+    payload: dict[str, Any] = {
         "schema_version": "leamas.v2.bundle-root/1",
-        "F15": topology.F15,
-        "F15_tree": topology.F15_tree,
-        "plan_blob": topology.plan_blob,
-        "S15": topology.S15,
-        "S15_tree": topology.S15_tree,
-        "parent_F15": topology.parent_F15,
-        "parent_S15": topology.parent_S15,
+        "F16": "",
+        "F16_tree": "",
+        "plan_blob": "",
+        "S16": "",
+        "S16_tree": "",
+        "parent_F16": "",
+        "parent_S16": "",
+        "plan_path": "",
+        "transaction_summary": {},
+        "ruff_equivalence": {},
+        "gate_results": [],
         "declared_artifacts": list(validation.declared_artifacts),
         "observed_artifacts": list(validation.observed_artifacts),
         "files": files_section,
     }
+    if repository_topology is not None:
+        payload["F16"] = repository_topology.F16
+        payload["F16_tree"] = repository_topology.F16_tree
+        payload["plan_blob"] = repository_topology.plan_blob
+        payload["S16"] = repository_topology.S16
+        payload["S16_tree"] = repository_topology.S16_tree
+        payload["parent_F16"] = repository_topology.parent_F16
+        payload["parent_S16"] = repository_topology.parent_S16
+        payload["plan_path"] = repository_topology.plan_path
+    elif topology is not None:
+        payload["F16"] = topology.F16
+        payload["F16_tree"] = topology.F16_tree
+        payload["plan_blob"] = topology.plan_blob
+        payload["S16"] = topology.S16 or ""
+        payload["S16_tree"] = topology.S16_tree or ""
+        payload["parent_F16"] = topology.parent_F16
+        payload["parent_S16"] = topology.parent_S16 or ""
+    if transaction_summary is not None:
+        payload["transaction_summary"] = {
+            "topology_git_commands": transaction_summary.topology_git_commands,
+            "range_git_commands": transaction_summary.range_git_commands,
+            "gate_git_commands": transaction_summary.gate_git_commands,
+            "total_git_commands": transaction_summary.total_git_commands,
+            "unrecorded_git_commands": transaction_summary.unrecorded_git_commands,
+            "hidden_shell_git_invocations": transaction_summary.hidden_shell_git_invocations,
+        }
+    if ruff_equivalence is not None:
+        payload["ruff_equivalence"] = {
+            "explicit_returncode": ruff_equivalence.explicit_returncode,
+            "canonical_returncode": ruff_equivalence.canonical_returncode,
+            "explicit_diagnostics_sha256": ruff_equivalence.explicit_diagnostics_sha256,
+            "canonical_diagnostics_sha256": ruff_equivalence.canonical_diagnostics_sha256,
+            "ruff_version": ruff_equivalence.ruff_version,
+            "input_path_tuple_sha256": ruff_equivalence.input_path_tuple_sha256,
+            "config_path": ruff_equivalence.config_path,
+            "config_sha256": ruff_equivalence.config_sha256,
+            "equivalent": ruff_equivalence.equivalent,
+        }
+    payload["gate_results"] = [
+        {
+            "name": gate.name,
+            "status": gate.command.status,
+            "returncode": gate.command.returncode,
+            "stdout_sha256": gate.command.stdout_sha256,
+            "stderr_sha256": gate.command.stderr_sha256,
+        }
+        for gate in gate_results
+    ]
+    return payload
 
 
 def write_bundle_root(
@@ -289,6 +374,30 @@ def hash_declared_artifacts(
     return out
 
 
+def rehash_published_bundle(
+    output_dir: Path,
+    *,
+    declared_artifacts: tuple[str, ...] = DECLARED_FINAL_ARTIFACTS,
+) -> dict[str, str]:
+    """Rehash every declared artifact on disk after the rename.
+
+    CORRECTION16: the function is the canonical
+    post-publication rehash that the external
+    publication-result.json consumes.  The bundle-root.json
+    hash is included so the publication result can be
+    cross-checked.
+    """
+    out: dict[str, str] = {}
+    for rel in declared_artifacts:
+        path = output_dir / rel
+        if not path.exists() or path.is_symlink() or not path.is_file():
+            raise FileNotFoundError(
+                f"published artifact missing or non-regular: {rel}"
+            )
+        out[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return out
+
+
 __all__ = [
     "DECLARED_FINAL_ARTIFACTS",
     "assert_no_temporary_absolute_paths",
@@ -296,5 +405,6 @@ __all__ = [
     "enumerate_bundle",
     "hash_declared_artifacts",
     "independent_revalidation",
+    "rehash_published_bundle",
     "write_bundle_root",
 ]

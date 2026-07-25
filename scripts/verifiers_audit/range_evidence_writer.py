@@ -1,4 +1,5 @@
-"""CORRECTION13/CORRECTION14/CORRECTION15: detached range evidence bundle writer.
+"""CORRECTION13/CORRECTION14/CORRECTION15/CORRECTION16: detached range evidence
+bundle writer.
 
 The writer module owns the file-writer layer:
 
@@ -16,6 +17,12 @@ The writer module owns the file-writer layer:
 * :func:`write_classification_file` - the
   ``final-classification.md`` writer.
 
+CORRECTION16: the commands registry records every Git
+command (topology + range + gate) and the ruff check
+result.  The function uses the
+:class:`TransactionGitCommand` records to label every
+entry with its kind.
+
 The manifest / topology / bundle-root builders live in
 :mod:`range_evidence_builders` and :mod:`range_evidence_bundle`;
 the typed result dataclasses live in :mod:`typed_results`;
@@ -32,6 +39,7 @@ from pathlib import Path
 from scripts.verifiers_audit.typed_results import (
     ExecutedCommand,
     RepositoryGateResult,
+    TransactionGitCommand,
 )
 
 
@@ -44,82 +52,57 @@ def build_commands_registry(
     git_commands: tuple[ExecutedCommand, ...],
     ruff_result: ExecutedCommand | None,
     repo_root: Path,
+    transaction: tuple[TransactionGitCommand, ...] = (),
 ) -> list[dict[str, object]]:
     """Build the post-subject commands registry.
 
-    Every command's argv is recorded verbatim.  The
-    ``git-rev-parse-base`` and ``git-rev-parse-subject``
-    commands are ALWAYS recorded; the ``git-diff-factory``
-    command is recorded with the FULL OIDs; the
-    ``ruff-check`` command is recorded as the executed
-    argv (or absent when the range was empty or the
-    identity was unresolved).
+    CORRECTION16: every command's argv is recorded verbatim
+    with its kind tag (topology / range / gate).  The
+    registry is the canonical source of truth for the
+    transaction transcript.
     """
-    commands: list[dict[str, object]] = [
-        {
-            "name": "git-rev-parse-base",
-            "argv": (
-                list(git_commands[0].argv) if git_commands
-                else [
-                    "git", "rev-parse", "--verify",
-                    f"{base}^{{commit}}",
-                ]
-            ),
-            "cwd": str(repo_root),
-            "exit_code": git_commands[0].returncode if git_commands else -1,
-            "stdout_sha256": (
-                git_commands[0].stdout_sha256 if git_commands else ""
-            ),
-            "stderr_sha256": (
-                git_commands[0].stderr_sha256 if git_commands else ""
-            ),
-            "status": git_commands[0].status if git_commands else "failed",
-        },
-        {
-            "name": "git-rev-parse-subject",
-            "argv": (
-                list(git_commands[1].argv) if len(git_commands) > 1
-                else [
-                    "git", "rev-parse", "--verify",
-                    f"{subject}^{{commit}}",
-                ]
-            ),
-            "cwd": str(repo_root),
-            "exit_code": (
-                git_commands[1].returncode if len(git_commands) > 1 else -1
-            ),
-            "stdout_sha256": (
-                git_commands[1].stdout_sha256
-                if len(git_commands) > 1
-                else ""
-            ),
-            "stderr_sha256": (
-                git_commands[1].stderr_sha256
-                if len(git_commands) > 1
-                else ""
-            ),
-            "status": (
-                git_commands[1].status if len(git_commands) > 1 else "failed"
-            ),
-        },
-    ]
-    if len(git_commands) > 2:
-        diff = git_commands[2]
-        commands.append(
-            {
-                "name": "git-diff-factory",
-                "argv": list(diff.argv),
-                "cwd": str(repo_root),
-                "exit_code": diff.returncode,
-                "stdout_sha256": diff.stdout_sha256,
-                "stderr_sha256": diff.stderr_sha256,
-                "status": diff.status,
-            }
-        )
+    commands: list[dict[str, object]] = []
+    if transaction:
+        for record in transaction:
+            commands.append(
+                {
+                    "name": record.command.name,
+                    "kind": record.kind,
+                    "argv": list(record.command.argv),
+                    "cwd": str(repo_root),
+                    "exit_code": record.command.returncode,
+                    "stdout_sha256": record.command.stdout_sha256,
+                    "stderr_sha256": record.command.stderr_sha256,
+                    "status": record.command.status,
+                }
+            )
+    else:
+        # Backwards-compat: when the caller did not pass
+        # ``transaction`` the registry records the range
+        # commands only (the legacy C15 surface).
+        for index, cmd in enumerate(git_commands):
+            name = {
+                0: "git-rev-parse-base",
+                1: "git-rev-parse-subject",
+                2: "git-diff-factory",
+            }.get(index, f"git-command-{index}")
+            commands.append(
+                {
+                    "name": name,
+                    "kind": "range",
+                    "argv": list(cmd.argv),
+                    "cwd": str(repo_root),
+                    "exit_code": cmd.returncode,
+                    "stdout_sha256": cmd.stdout_sha256,
+                    "stderr_sha256": cmd.stderr_sha256,
+                    "status": cmd.status,
+                }
+            )
     if ruff_result is not None:
         commands.append(
             {
                 "name": "ruff-check",
+                "kind": "ruff",
                 "argv": list(ruff_result.argv),
                 "cwd": str(repo_root),
                 "exit_code": ruff_result.returncode,

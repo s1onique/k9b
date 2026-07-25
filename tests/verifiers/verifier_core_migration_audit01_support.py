@@ -35,6 +35,7 @@ AUDIT01_TEST_MODULES_WITHOUT_SUPPORT: tuple[Path, ...] = (
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction15_bundle.py",
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction15_evidence.py",
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction15_inventory.py",
+    TESTS_ROOT / "test_verifier_core_migration_audit01_correction16.py",
 )
 
 AUDIT01_TEST_MODULES: tuple[Path, ...] = (
