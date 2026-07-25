@@ -1,4 +1,4 @@
-"""Sharded JSON report writer (CORRECTION01 minimal)."""
+"""Sharded JSON report writer (CORRECTION01 minimal; CORRECTION11 sole-authority layout)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from scripts.verifiers_audit.discovery import REPO_ROOT
 
@@ -24,6 +25,12 @@ SHARD_NAMES: tuple[str, ...] = (
     "gate_classification",
 )
 REQUIRED_SHARDS: frozenset[str] = frozenset(SHARD_NAMES)
+
+# CORRECTION11: the canonical filenames are FROZEN.  Any
+# deviation (extra ``docs/`` prefix, nested path, wrong filename)
+# is rejected by the ``ReportLayout`` validator below.
+_CANONICAL_TOP_LEVEL_FILENAME = "verifier-core-migration-audit01.json"
+_CANONICAL_MARKDOWN_FILENAME = "verifier-core-migration-audit01.md"
 
 
 def _hash_bytes(b: bytes) -> str:
@@ -149,97 +156,86 @@ def _relative_to_repo(path: Path) -> str:
         return str(path.resolve())
 
 
-def write_all(
-    report_root: Path | None = None,
-    audit: dict | None = None,
-    layout: ReportLayout | None = None,
-) -> dict[str, str]:
-    """Write every audit-owned shard to ``report_root`` (defaults
-    to the canonical :data:`REPORT_ROOT`).  ``gate_classification``
-    is intentionally NOT written here - that shard is owned by
-    :mod:`scripts.verifiers_audit.collect_r2_evidence`.
+def _validate_layout(layout: ReportLayout) -> None:
+    """CORRECTION11: enforce the strict invariants below on a
+    ``ReportLayout`` before the FIRST write is performed.
 
-    If ``audit`` is provided, the function updates
-    ``audit["index"]["shards"]`` in place so the recorded
-    paths match the on-disk locations.  Otherwise the
-    function builds a fresh audit object internally and
-    returns the recorded paths.
-
-    Returns a mapping ``shard_name -> relative_path``.
+    * ``shard_root_absolute``: ``shard_root`` must be an absolute
+      path.
+    * ``top_level_is_expected_sibling``: ``top_level_json`` must
+      live at ``shard_root.parent / canonical_top_level_filename``.
+    * ``markdown_is_expected_sibling``: ``markdown_path`` must
+      live at ``shard_root.parent / canonical_markdown_filename``.
+    * ``top_level_filename_exact``: ``top_level_json.name`` must
+      be exactly ``verifier-core-migration-audit01.json``.
+    * ``markdown_filename_exact``: ``markdown_path.name`` must
+      be exactly ``verifier-core-migration-audit01.md``.
+    * ``paths_do_not_overlap``: ``shard_root``, ``top_level_json``,
+      and ``markdown_path`` must be three distinct paths.
     """
-    from scripts.verifiers_audit.builder import build_audit_object
-
-    if layout is not None:
-        root = layout.shard_root
-    else:
-        root = report_root or REPORT_ROOT
-    owns_audit = audit is None
-    if owns_audit:
-        audit = build_audit_object({})
-    shards: dict[str, str] = {}
-    hashes: dict[str, str] = {}
-    for name in WRITE_OWNED_SHARD_NAMES:
-        shard_path = root / f"{name}.json"
-        if name == "helpers":
-            # The helpers shard uses a compact inner separator
-            # so a 74-helper shard fits under the 500-line
-            # LLM-friendly threshold.  The validator mirrors
-            # this encoding via ``_dump_helpers_shard``-aware
-            # body reconstruction (see
-            # :mod:`scripts.verifiers_audit.validation`).
-            body = _dump_helpers_shard(audit[name])
-        else:
-            body = _json_dumps(audit[name])
-        h = _write_atomic(shard_path, body)
-        shards[name] = _relative_to_repo(shard_path)
-        hashes[name] = h
-    # Include the on-disk gate_classification shard hash in the
-    # index WITHOUT writing or modifying the shard itself.  The
-    # canonical owner of that shard is
-    # :mod:`scripts.verifiers_audit.collect_r2_evidence`.
-    gc_path = root / "gate_classification.json"
-    if gc_path.exists():
-        gc_bytes = gc_path.read_bytes()
-        shards["gate_classification"] = _relative_to_repo(gc_path)
-        hashes["gate_classification"] = _hash_bytes(gc_bytes)
-    audit["index"]["shards"] = {
-        name: {"path": p, "sha256": hashes[name]}
-        for name, p in shards.items()
-    }
-    # CORRECTION09: the canonical top-level file lives at
-    # ``report_root.parent / "verifier-core-migration-audit01.json"``
-    # — i.e. the top-level is a SIBLING of the shard directory,
-    # not a child.  This matches :data:`TOP_LEVEL_JSON` exactly.
-    # Any deviation (e.g. writing the top-level inside
-    # ``report_root``) is rejected by the strict-path validator
-    # in :mod:`scripts.verifiers_audit.validation`.
-    top_level = root.parent / "verifier-core-migration-audit01.json"
-    if not top_level.name.startswith("verifier-core-migration-audit01"):
-        # Defensive check: the canonical top-level file MUST be
-        # named exactly ``verifier-core-migration-audit01.json``.
-        # An "extra" ``docs/`` prefix or any other variation is
-        # rejected.
+    if not layout.shard_root.is_absolute():
         raise ValueError(
-            f"canonical top-level path is not "
-            f"verifier-core-migration-audit01.json: {top_level}"
+            f"shard_root must be absolute: {layout.shard_root}"
         )
-    _write_atomic(top_level, _json_dumps(audit["index"]))
-    return {name: info["path"] for name, info in audit["index"]["shards"].items()}
+    if layout.top_level_json.name != _CANONICAL_TOP_LEVEL_FILENAME:
+        raise ValueError(
+            f"top_level filename is wrong: {layout.top_level_json.name!r} "
+            f"(expected {_CANONICAL_TOP_LEVEL_FILENAME!r})"
+        )
+    if layout.markdown_path.name != _CANONICAL_MARKDOWN_FILENAME:
+        raise ValueError(
+            f"markdown filename is wrong: {layout.markdown_path.name!r} "
+            f"(expected {_CANONICAL_MARKDOWN_FILENAME!r})"
+        )
+    expected_top = (
+        layout.shard_root.parent / _CANONICAL_TOP_LEVEL_FILENAME
+    )
+    if layout.top_level_json != expected_top:
+        raise ValueError(
+            f"top_level_json is not the expected sibling of "
+            f"shard_root: {layout.top_level_json} != {expected_top}"
+        )
+    expected_md = (
+        layout.shard_root.parent / _CANONICAL_MARKDOWN_FILENAME
+    )
+    if layout.markdown_path != expected_md:
+        raise ValueError(
+            f"markdown_path is not the expected sibling of "
+            f"shard_root: {layout.markdown_path} != {expected_md}"
+        )
+    if (
+        layout.shard_root == layout.top_level_json
+        or layout.shard_root == layout.markdown_path
+        or layout.top_level_json == layout.markdown_path
+    ):
+        raise ValueError(
+            f"paths must not overlap: shard_root={layout.shard_root}, "
+            f"top_level_json={layout.top_level_json}, "
+            f"markdown_path={layout.markdown_path}"
+        )
 
 
 @dataclass(frozen=True)
 class ReportLayout:
-    """CORRECTION10: the canonical report artifact layout.
+    """CORRECTION10/CORRECTION11: the canonical report artifact layout.
+
+    The constructor (via :meth:`__post_init__`) enforces the
+    strict invariants listed in :func:`_validate_layout`.  An
+    inconsistent layout raises ``ValueError`` at construction
+    time, BEFORE any write is performed.
 
     Tests construct a :class:`ReportLayout` entirely beneath
     ``tmp_path``.  The CLI constructs the canonical layout
     explicitly via :func:`canonical_layout`.  Any deviation
     (extra ``docs/`` prefix, nested path, wrong filename) is
-    rejected by :func:`report_layout_for_shard_root`.
+    rejected by the constructor.
     """
     shard_root: Path
     top_level_json: Path
     markdown_path: Path
+
+    def __post_init__(self) -> None:
+        _validate_layout(self)
 
 
 def canonical_layout() -> ReportLayout:
@@ -250,42 +246,35 @@ def canonical_layout() -> ReportLayout:
     """
     from pathlib import Path as _P
 
-    if not _P(TOP_LEVEL_JSON).name == "verifier-core-migration-audit01.json":
+    if not _P(TOP_LEVEL_JSON).name == _CANONICAL_TOP_LEVEL_FILENAME:
         raise ValueError(
             f"canonical top-level filename is wrong: {TOP_LEVEL_JSON}"
         )
     return ReportLayout(
         shard_root=REPORT_ROOT,
         top_level_json=TOP_LEVEL_JSON,
-        markdown_path=REPORT_ROOT.parent
-        / "verifier-core-migration-audit01.md",
+        markdown_path=REPORT_ROOT.parent / _CANONICAL_MARKDOWN_FILENAME,
     )
 
 
 def report_layout_for_shard_root(root: Path) -> ReportLayout:
-    """CORRECTION10: construct a :class:`ReportLayout` for an
-    arbitrary ``root`` (typically a test's ``tmp_path / "reports"``).
+    """CORRECTION10/CORRECTION11: construct a :class:`ReportLayout`
+    for an arbitrary ``root`` (typically a test's
+    ``tmp_path / "reports"``).
 
-    The top-level file lives at ``root.parent / "verifier-core-migration-audit01.json"``
+    The top-level file lives at ``root.parent / _CANONICAL_TOP_LEVEL_FILENAME``
     (a SIBLING of the shard directory).  The markdown lives
-    at ``root.parent / "verifier-core-migration-audit01.md"``.
+    at ``root.parent / _CANONICAL_MARKDOWN_FILENAME``.
 
-    Any deviation (nested path, wrong filename) raises
-    ``ValueError`` so the validator can reject the layout.
+    The constructor's ``__post_init__`` validator enforces the
+    invariant; any deviation raises ``ValueError`` so the
+    validator can reject the layout.
     """
 
     if not root.is_absolute():
         raise ValueError(f"shard_root must be absolute: {root}")
-    top = root.parent / "verifier-core-migration-audit01.json"
-    md = root.parent / "verifier-core-migration-audit01.md"
-    if not top.name == "verifier-core-migration-audit01.json":
-        raise ValueError(f"top-level filename is wrong: {top}")
-    if not md.name == "verifier-core-migration-audit01.md":
-        raise ValueError(f"markdown filename is wrong: {md}")
-    if not top.parent == root.parent == md.parent:
-        raise ValueError(
-            f"top-level and markdown are not siblings of {root}"
-        )
+    top = root.parent / _CANONICAL_TOP_LEVEL_FILENAME
+    md = root.parent / _CANONICAL_MARKDOWN_FILENAME
     return ReportLayout(
         shard_root=root, top_level_json=top, markdown_path=md
     )
@@ -327,36 +316,107 @@ def _load_gate_classification_from(
         return None
 
 
+def write_all(
+    *,
+    layout: ReportLayout,
+    audit: dict[str, object],
+) -> dict[str, str]:
+    """CORRECTION11: write every audit-owned shard to ``layout``.
+
+    The function accepts ONE output description (``layout``);
+    the legacy ``report_root`` parameter is removed.  Every
+    write MUST go through the layout:
+
+    * shards are written to ``layout.shard_root / ``<name>.json``,
+    * the top-level index is written through
+      ``_write_atomic(layout.top_level_json, ...)``,
+    * the markdown is written through
+      ``layout.markdown_path.write_bytes(...)``.
+
+    The validator :func:`_validate_layout` runs BEFORE any
+    write is performed so an inconsistent layout is rejected
+    before reaching the filesystem.
+
+    ``gate_classification`` is intentionally NOT written here -
+    that shard is owned by
+    :mod:`scripts.verifiers_audit.collect_r2_evidence`.  When
+    the shard exists on disk, its hash is recorded in the index
+    without re-emitting the shard itself.
+
+    Returns a mapping ``shard_name -> relative_path``.
+    """
+    _validate_layout(layout)
+    from scripts.verifiers_audit.builder import build_audit_object
+    from scripts.verifiers_audit.render import render_markdown
+
+    if audit is None:
+        audit = build_audit_object({})
+    shards: dict[str, str] = {}
+    hashes: dict[str, str] = {}
+    for name in WRITE_OWNED_SHARD_NAMES:
+        shard_path = layout.shard_root / f"{name}.json"
+        if name == "helpers":
+            # The helpers shard uses a compact inner separator
+            # so a 74-helper shard fits under the 500-line
+            # LLM-friendly threshold.  The validator mirrors
+            # this encoding via ``_dump_helpers_shard``-aware
+            # body reconstruction (see
+            # :mod:`scripts.verifiers_audit.validation`).
+            body = _dump_helpers_shard(
+                cast("dict[str, object]", audit[name])
+            )
+        else:
+            body = _json_dumps(audit[name])
+        h = _write_atomic(shard_path, body)
+        shards[name] = _relative_to_repo(shard_path)
+        hashes[name] = h
+    # Include the on-disk gate_classification shard hash in the
+    # index WITHOUT writing or modifying the shard itself.  The
+    # canonical owner of that shard is
+    # :mod:`scripts.verifiers_audit.collect_r2_evidence`.
+    gc_path = layout.shard_root / "gate_classification.json"
+    if gc_path.exists():
+        gc_bytes = gc_path.read_bytes()
+        shards["gate_classification"] = _relative_to_repo(gc_path)
+        hashes["gate_classification"] = _hash_bytes(gc_bytes)
+    audit["index"]["shards"] = {
+        name: {"path": p, "sha256": hashes[name]}
+        for name, p in shards.items()
+    }
+    # CORRECTION09/CORRECTION11: the canonical top-level file
+    # lives at ``layout.shard_root.parent / canonical_filename``
+    # — i.e. the top-level is a SIBLING of the shard directory,
+    # not a child.  The :func:`_validate_layout` call at the
+    # top of this function already enforces this; the explicit
+    # ``layout.top_level_json`` use below is the SOLE write path.
+    _write_atomic(layout.top_level_json, _json_dumps(audit["index"]))
+    # The markdown is written through ``layout.markdown_path``.
+    layout.markdown_path.write_bytes(render_markdown(audit).encode("utf-8"))
+    return {name: info["path"] for name, info in audit["index"]["shards"].items()}
+
+
 def write_audit(
-    skip_gate: bool = False,
     *,
     layout: ReportLayout | None = None,
-    report_root: Path | None = None,
 ) -> dict[str, str]:
-    """CORRECTION10: write the full audit set to ``layout``
-    (defaults to :func:`canonical_layout`).
+    """CORRECTION11: write the full audit set to ``layout``.
 
-    ``skip_gate`` is FORWARDED to ``build_audit_object`` (the
-    previous implementation silently dropped the argument).  The
-    layout's ``gate_classification`` is loaded from disk (the
-    canonical owner is
-    :mod:`scripts.verifiers_audit.collect_r2_evidence`).
+    The layout is the ONLY output description accepted by this
+    function.  There is no ``report_root`` legacy parameter
+    and no ``skip_gate`` parameter (the latter was removed by
+    Contract B; the audit object reads the persisted
+    ``gate_classification.json`` from the layout's shard_root).
 
-    ``report_root`` is accepted for backward compatibility with
-    legacy callers; when present, a temporary layout is built
-    around it and ``skip_gate`` is still forwarded.
+    ``layout`` defaults to :func:`canonical_layout` so the
+    production CLI gets the canonical on-disk layout.
     """
     if layout is None:
-        if report_root is not None:
-            layout = report_layout_for_shard_root(report_root)
-        else:
-            layout = canonical_layout()
+        layout = canonical_layout()
     persisted_gc = _load_gate_classification_from(layout)
     from scripts.verifiers_audit.builder import build_audit_object
 
     audit = build_audit_object(
         {},
-        skip_gate=skip_gate,
         gate_classification=persisted_gc,
     )
     return write_all(layout=layout, audit=audit)

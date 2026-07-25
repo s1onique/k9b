@@ -19,6 +19,16 @@ The audit generator reads the analysis base from the
 ``AUDIT01_ANALYSIS_BASE_COMMIT`` environment variable, falling back to
 a sensible default (the project's current ``F``). This makes the
 audit reproducible from two clean clones of the same ``F..S8`` range.
+
+CORRECTION11 contract change:
+
+* The ``skip_gate`` parameter is REMOVED.  Production never has a
+  legitimate fast-skip workflow — the canonical
+  ``gate_classification.json`` shard is owned exclusively by
+  :mod:`scripts.verifiers_audit.collect_r2_evidence` and the
+  builder does not re-run the gate.  Unit tests that need a
+  deterministic ``SKIPPED`` record must pass an explicit
+  ``gate_classification=_skipped_record(...)`` argument.
 """
 
 from __future__ import annotations
@@ -331,25 +341,32 @@ def _default_shard_map() -> dict[str, dict[str, str]]:
 
 def build_audit_object(
     shards: dict[str, str] | None = None,
-    skip_gate: bool = False,
+    *,
     gate_classification: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Build the audit object.
 
-    ``skip_gate`` defaults to ``False`` so production report
-    generation always records real evidence from the canonical
-    gate.  Unit tests may opt into a deterministic ``SKIPPED``
-    record by passing ``skip_gate=True``; this is the only
-    supported way to bypass the gate (no repository-level
-    ``conftest.py`` is allowed to toggle the env var silently).
+    CORRECTION11: the ``skip_gate`` parameter is removed.  The
+    audit object never re-runs the canonical gate; the
+    ``gate_classification`` shard is owned exclusively by
+    :mod:`scripts.verifiers_audit.collect_r2_evidence`.
 
-    ``gate_classification`` is the auxiliary clean-worktree
-    experiment record.  The audit object does NOT regenerate
-    this record - the caller MUST pass a previously-collected
-    record (typically produced by
-    :mod:`scripts.verifiers_audit.collect_r2_evidence`).  This
-    prevents the fast ``--write`` flow from overwriting real
-    evidence with a ``SKIPPED`` shard.
+    The ``gate_classification`` argument is the auxiliary clean-
+    worktree experiment record.  When the caller does NOT
+    supply a previously-collected record (the typical
+    unit-test path), the builder emits a deterministic
+    ``UNASSESSED`` record (NOT ``SKIPPED``).  Unit tests that
+    need a deterministic ``SKIPPED`` record must pass an
+    explicit ``gate_classification=_skipped_record(...)``
+    argument.
+
+    Outcome invariants (CORRECTION11):
+
+    * ``build_audit_object({}, gate_classification=_skipped_record(reason))``
+      returns ``audit["gate_classification"]["classification"] == "SKIPPED"``.
+    * ``build_audit_object({})`` returns
+      ``audit["gate_classification"]["classification"] != "SKIPPED"``
+      (the production default is ``UNASSESSED``).
     """
     tracked = tracked_verifier_paths()
     included, _ = split_tracked(tracked)
@@ -365,9 +382,10 @@ def build_audit_object(
     source_preservation = build_source_preservation()
     if gate_classification is None:
         # The caller did not supply a previously-collected
-        # record.  This MUST be a unit-test-only path.  Emit a
-        # deterministic ``UNASSESSED`` record (not ``SKIPPED``)
-        # so production never silently downgrades.
+        # record.  Emit a deterministic ``UNASSESSED`` record
+        # (NOT ``SKIPPED``) so production never silently
+        # downgrades.  Unit tests that specifically need a
+        # SKIPPED record must pass it explicitly.
         from scripts.verifiers_audit.gate_classification import (
             _unassessed_record,
         )

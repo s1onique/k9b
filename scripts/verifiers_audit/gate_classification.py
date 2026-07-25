@@ -1,4 +1,4 @@
-"""Canonical-gate classification (R7 / CORRECTION05).
+"""Canonical-gate classification (R7 / CORRECTION05 / CORRECTION11).
 
 The :func:`classify_canonical_gate` entry point is the auxiliary
 clean-worktree experiment that compares the negative-proofs
@@ -38,10 +38,16 @@ Classification rules (R7):
   equivalently) - the canonical repository gate is the
   authoritative result.
 
-A deterministic ``SKIPPED`` record is also supported.  A SKIPPED
-record MUST NOT be classified as ``PRE-EXISTING-ENVIRONMENTAL``;
-the skip is explicitly the caller's choice, never an environmental
-artefact.
+A deterministic ``SKIPPED`` record factory is also supported
+(``_skipped_record``).  A SKIPPED record MUST NOT be classified
+as ``PRE-EXISTING-ENVIRONMENTAL``; the skip is explicitly the
+caller's choice, never an environmental artefact.
+
+CORRECTION11: the ``skip`` and ``skip_reason`` parameters of
+:func:`classify_canonical_gate` are removed.  Unit tests that
+need a deterministic ``SKIPPED`` record must call
+:func:`_skipped_record` directly and pass the result to
+``build_audit_object`` as the ``gate_classification`` argument.
 """
 
 from __future__ import annotations
@@ -270,6 +276,13 @@ def _run_to_dict(run: _Run) -> dict[str, object]:
 
 
 def _skipped_record(skip_reason: str) -> dict[str, object]:
+    """Build a deterministic ``SKIPPED`` record.
+
+    The record is the unit-test synthetic equivalent of the
+    full two-tree experiment.  Production code paths MUST NOT
+    call this helper; the audit object never produces a
+    SKIPPED record on its own.
+    """
     return {
         "schema_version": "1.0",
         "totals": {
@@ -368,21 +381,12 @@ def _run_canonical_gate() -> dict[str, object]:
     }
 
 
-def classify_canonical_gate(
-    skip: bool = False,
-    skip_reason: str | None = None,
-) -> dict[str, object]:
-    """Public entry point.  Honours an explicit ``skip`` flag.
+def classify_canonical_gate() -> dict[str, object]:
+    """CORRECTION11: public entry point for the two-tree
+    experiment.
 
-    Production code paths pass ``skip=False`` (the default).
-    Unit tests may request a deterministic ``SKIPPED`` record
-    explicitly.
+    The ``skip`` parameter is removed.  This function always
+    runs the experiment (the unit-test SKIPPED path is now
+    served by :func:`_skipped_record` directly).
     """
-    if skip:
-        return _skipped_record(
-            skip_reason
-            or "skip=True was passed explicitly to "
-            "classify_canonical_gate; the canonical-gate "
-            "command is not run."
-        )
     return _run_canonical_gate()
