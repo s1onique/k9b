@@ -1,0 +1,410 @@
+{
+  "schema_version": "leamas.v2.closure-plan/1",
+  "act_id": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION13",
+  "title": "Repair CORRECTION12 evidence-contract defects: byte-safe pathnames, adversarial-range fixture, empty-range Ruff skip, complete cmd_check integrity, immutable range snapshot, bound Ruff identity, transactional evidence publishing, layout-aware normalisation, typed Git failure contract, single immutable Git pathname query, executed-Ruff identity equivalence, ruff-failure-prevents-publication, fresh-destination-only evidence, derived final classification, and actual cmd_check mutation tests (CORRECTION13)",
+  "scope": {
+    "exact_act": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION13",
+    "subject_act_under_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01",
+    "prior_checkpoint": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION12 (PARTIAL_CHECKPOINT; F12=01ec9a4f, S12=61f1e4cd; both under rescue refs rescue/audit01-correction12-{f12,s12})",
+    "target_act_after_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)",
+    "baseline": {
+      "F12": "01ec9a4f7dea5ad256078bb898fc85d8eec608f4 (CORRECTION12 plan-freeze)",
+      "F12_tree": "be27c428b9df1cf078eb8e6841af728e6ee8ee2f",
+      "S12": "61f1e4cdda0b8a81a3ae99c9ff7cd835aa8923f2 (CORRECTION12 subject)",
+      "S12_tree": "49e898f2cc66f5f8e78885d06aced5485050f1b1",
+      "F12_contains_only_plan": true,
+      "S12_modified_files": [
+        "scripts/verifiers_audit/cli.py",
+        "scripts/verifiers_audit/range_evidence.py",
+        "scripts/verifiers_audit/report_io.py",
+        "scripts/verifiers_audit/scope.py",
+        "tests/verifiers/test_verifier_core_migration_audit01.py"
+      ],
+      "rescue_branches": [
+        "rescue/audit01-correction12-f12 at F12",
+        "rescue/audit01-correction12-s12 at S12"
+      ]
+    }
+  },
+  "known_defects_in_cor12": {
+    "fixture_does_not_actually_change_adversarial_paths": "tests/verifiers/test_verifier_core_migration_audit01.py commit_fixture_subject does not modify 'with space.py', ' leading.py', 'trailing.py ', 'файл.py', or any embedded-newline path. The 'adversarial' assertions only prove the parser does not mangle these paths in the change-set ambient; they do not prove the parser SURVIVES an actual change through these paths. CORRECTION13 must exercise every required pathname through a real committed change.",
+    "string_API_loses_bytes": "scripts/verifiers_audit/scope.py changed_paths() returns tuple[str, ...] via os.fsdecode(raw). Non-ASCII bytes and embedded NUL splits are decoded too early; the authoritative evidence must preserve filesystem bytes verbatim, with the string API as a derived convenience layer.",
+    "detached_text_manifests_lose_byte_authority": "scripts/verifiers_audit/range_evidence.py writes changed-paths.txt, changed-python-paths.txt, ruff-input-paths.txt as UTF-8 lines. The CORRECTION13 contract requires authoritative NUL-delimited `.z` files (filesystem bytes) and explicitly labels the `.txt` files as non-authoritative diagnostic escaped projections.",
+    "build_ruff_argv_can_return_pathless_ruff_check": "scripts/verifiers_audit/scope.py build_ruff_argv(()) returns ('ruff', 'check'). A pathless ruff check is a regression: the evidence path must observe an explicit skip status, not a naked invocation. CORRECTION13 introduces a RuffScope dataclass with a typed status field.",
+    "cmd_check_compares_incomplete_top_level_objects": "scripts/verifiers_audit/cli.py cmd_check compares shard hashes and a small subset of the top-level index fields. The full top-level identity (schema_version, analysis_base_commit, identity_binding, totals, shard set, etc.) is not part of the equality contract. CORRECTION13 enforces a complete normalised top-level comparison.",
+    "range_query_runs_after_rev_parse": "scripts/verifiers_audit/range_evidence.py collects the arg list and immediately runs `git diff`. The full commit object IDs are not resolved before the range query, so the command transcript contains '01ec9a4f' / '61f1e4cd' (the abbreviating names) instead of the full SHA-256 object IDs. CORRECTION13 records the full object IDs in the manifest.",
+    "ruff_identity_is_not_bound": "scripts/verifiers_audit/range_evidence.py records the argv but not the executable path, the executable SHA-256, the Ruff version, the Python interpreter, or the configuration-file hashes. A failure on a different host would be hard to attribute. CORRECTION13 binds all five identifiers.",
+    "evidence_output_is_not_transactional": "scripts/verifiers_audit/range_evidence.py writes to the requested output directory directly. A failure mid-write (or after a partial write) leaves a stale or partial bundle. CORRECTION13 must publish the bundle transactionally: write into a staging sibling, then rename only on success.",
+    "escape_does_not_force_re_invoke_after_skip": "build_ruff_argv(()) returns ('ruff', 'check') so the evidence producer executes ruff with no paths. CORRECTION13 records the skip status and does NOT execute ruff at all.",
+    "normalise_index_paths_uses_realpath_not_layout": "scripts/verifiers_audit/scope.py normalise_index_paths calls os.path.realpath on the shard path, which is root-independent: a /private/var/folders/.../inventory.json path on macOS and a /Users/.../inventory.json path on a tmpfs are not equated when the realpath differs from the recorded path. CORRECTION13 makes the normaliser layout-aware: the layout's shard_root and shard name are the only legitimate sources of the canonical shard-path representation.",
+    "git_failure_uses_bare_runtimeerror": "scripts/verifiers_audit/range_evidence_helpers.py _resolve_full_commit raises a plain RuntimeError on a failed rev-parse; the same module's rev-parse failures are not unified with the diff-failure contract in scripts/verifiers_audit/scope.py _run_git_diff_names_bytes. Three different failure surfaces (resolve_base, resolve_subject, diff_names) leak across the evidence-transaction boundary as a generic exception type. CORRECTION13 introduces a typed GitRangeError (or extends RangeResolutionError with a stage field) and uses it at every Git failure site.",
+    "python_paths_use_extra_subprocess": "scripts/verifiers_audit/range_evidence.py previously invoked changed_path_bytes AND changed_python_path_bytes; the python filter ran a fresh git diff query in scope.changed_python_path_bytes (when it pre-filtered via a separate subprocess). The CORRECTION13 contract requires exactly ONE git diff pathname query per evidence transaction; the python subset must be derived from the same authoritative byte tuple via a pure-Python filter.",
+    "ruff_argv_built_without_resolved_identity": "scripts/verifiers_audit/range_evidence.py builds the Ruff argv as ('ruff', 'check', *paths) or invokes the resolved venv ruff without first binding the resolved executable strategy. The recorded argv and the executed argv may differ when the venv ruff is unavailable. CORRECTION13 requires the recorded executable, executable SHA-256, ruff version, and argv prefix to be EXACTLY the executed values.",
+    "force_replace_supports_overwrite": "scripts/verifiers_audit/range_evidence.py collect_range_evidence supports --force-replace to overwrite an existing destination directory. This is a silent failure mode: a previous bundle's contents may be partially preserved. CORRECTION13 removes --force-replace entirely; the destination MUST initially be absent.",
+    "failed_ruff_run_publishes_partial_bundle": "scripts/verifiers_audit/range_evidence.py writes every artifact before invoking Ruff and only renames the staging directory on success. When Ruff exits nonzero, the staging directory is removed (correct) but the final destination is left untouched only because the rename was never executed. The CORRECTION13 contract makes the failure explicitly bound: the manifest, classification, and the final bundle MUST be absent when Ruff exits nonzero.",
+    "final_classification_uses_hardcoded_pass": "scripts/verifiers_audit/range_evidence_writer.py _classification_lines emits unconditional | CORRECTION13 | PARTIAL_CHECKPOINT | and | single_git_path_query_per_evidence_transaction | PASS | rows. Hardcoded PASS claims are not evidence. CORRECTION13 derives every claim from a measured result; an unmeasured claim is absent or 'UNMEASURED'.",
+    "cmd_check_mutation_tests_compare_normalised_dicts": "tests/verifiers/test_verifier_core_migration_audit01_correction13.py compares normalised dictionaries but never invokes the actual cmd_check() production function. The tests prove the normaliser contract; they do not prove cmd_check() is bound to the normaliser. CORRECTION13 requires every mutation test to exercise the real production boundary (or a test-extracted compare_report_layouts that cmd_check() calls)."
+  },
+  "permitted_subject_paths": [
+    "scripts/verifiers_audit/audit.py",
+    "scripts/verifiers_audit/cli.py",
+    "scripts/verifiers_audit/collect_r2_evidence.py",
+    "scripts/verifiers_audit/range_evidence.py",
+    "scripts/verifiers_audit/range_evidence_helpers.py",
+    "scripts/verifiers_audit/range_evidence_identity.py",
+    "scripts/verifiers_audit/range_evidence_writer.py",
+    "scripts/verifiers_audit/report_io.py",
+    "scripts/verifiers_audit/scope.py",
+    "tests/verifiers/conftest.py",
+    "tests/verifiers/verifier_core_migration_audit01_support.py",
+    "tests/verifiers/test_verifier_core_migration_audit01.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_cmd.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction13.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_layout.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_r.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_range.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_range_adversarial.py",
+    "task_progress_act_k9b_verifier_core_migration_audit01_correction13.md"
+  ],
+  "correction13_contract_requirements": {
+    "layout_aware_index_normalisation": "required",
+    "typed_revision_resolution_errors": "required",
+    "single_git_path_query": "required",
+    "executed_ruff_identity_equivalence": "required",
+    "ruff_failure_prevents_publication": "required",
+    "fresh_destination_only": "required",
+    "derived_final_classification": "required",
+    "actual_cmd_check_mutation_tests": "required"
+  },
+  "byte_safe_pathname_api": {
+    "goal": "Preserve filesystem bytes through the range API; expose a string view as a derived convenience.",
+    "new_authoritative_function": "def changed_path_bytes(base: str, subject: str, *, repo_root: Path = REPO_ROOT) -> tuple[bytes, ...]: run subprocess.run with capture_output=True, no text=True; split on b'\\0'; drop empty entries; return the raw bytes verbatim.",
+    "string_view": "def changed_paths(base: str, subject: str, *, repo_root: Path = REPO_ROOT) -> tuple[str, ...]: return tuple(os.fsdecode(p) for p in changed_path_bytes(base, subject, repo_root=repo_root)).",
+    "python_filter": "def changed_python_paths(base: str, subject: str, *, repo_root: Path = REPO_ROOT) -> tuple[str, ...]: return tuple(p for p in changed_paths(base, subject, repo_root=repo_root) if p.endswith('.py')).",
+    "python_filter_bytes": "def changed_python_path_bytes(base: str, subject: str, *, repo_root: Path = REPO_ROOT) -> tuple[bytes, ...]: return tuple(p for p in changed_path_bytes(base, subject, repo_root=repo_root) if p.endswith(b'.py')).",
+    "single_immutable_pathname_query": "CORRECTION13 evidence transactions call changed_path_bytes EXACTLY ONCE per transaction. The Python subset is derived in-process from the returned tuple via a pure-Python filter; no second git subprocess is launched.",
+    "forbidden_patterns_in_authoritative_path": [
+      "text=True",
+      "splitlines()",
+      "strip() on pathnames",
+      "decoding raw bytes through os.fsdecode in the authoritative path (must be derived)",
+      "a second git diff subprocess for the python subset"
+    ]
+  },
+  "typed_git_failure_contract": {
+    "goal": "All Git revision and range command failures raise a single typed hierarchy at the evidence-transaction boundary.",
+    "preferred_model": "class GitRangeError(RuntimeError): stage: Literal['resolve_base','resolve_subject','diff_names']; base: str; subject: str; argv: tuple[str, ...]; returncode: int; stderr: str.",
+    "public_name": "RangeResolutionError remains the public name; it is extended with a stage field set to one of 'resolve_base', 'resolve_subject', 'diff_names' at every Git failure site.",
+    "every_git_failure_must_raise_typed_error": "rev-parse --verify base, rev-parse --verify subject, and the git diff --name-only -z --diff-filter=ACMRT invocation must each raise a typed RangeResolutionError with the matching stage. A bare RuntimeError at the evidence-transaction boundary is forbidden.",
+    "no_translation_to_empty_range": "A Git failure MUST raise; it MUST NOT be translated into an empty range. The (()) empty tuple is reserved for a valid equal-commit range.",
+    "argv_preserved": "The argv of the failing git command is preserved on the exception (as a tuple[str, ...]) so the failing command is reproducible from the exception alone.",
+    "returncode_preserved": "The subprocess returncode is preserved on the exception.",
+    "stderr_preserved": "The subprocess stderr (decoded via os.fsdecode) is preserved on the exception."
+  },
+  "layout_aware_index_normalisation": {
+    "goal": "Replace root-independent os.path.realpath comparison with an explicit layout contract.",
+    "preferred_interface": "def normalise_index_paths(index: dict[str, object], *, layout: ReportLayout) -> dict[str, object]: copy the index; for each shard entry: require the shard name to be known in REQUIRED_SHARDS; require 'path' to be a string; resolve the path according to the supplied layout; require it to identify exactly layout.shard_root / f'{shard_name}.json'; replace the validated environmental path with the canonical form f'{shard_name}.json'.",
+    "fields_that_must_not_be_normalised": [
+      "schema_version",
+      "analysis_base_commit",
+      "identity_binding",
+      "totals",
+      "hashes",
+      "unknown extra fields"
+    ],
+    "fail_closed_conditions": [
+      "shard name is unknown to REQUIRED_SHARDS",
+      "path is missing or not a string",
+      "path does not identify layout.shard_root / f'{shard_name}.json'",
+      "path traversal (path attempts to escape layout.shard_root)",
+      "shard set is swapped (inventory's path on groups, etc.)"
+    ],
+    "no_realpath_shortcut": "The normaliser MUST NOT call os.path.realpath. The only path-acceptance check is whether the recorded path equals layout.shard_root / f'{shard_name}.json' under the layout's own resolution."
+  },
+  "actual_cmd_check_mutation_tests": {
+    "goal": "Every mutation test must exercise the real cmd_check() production boundary.",
+    "preferred_interface": "def compare_report_layouts(expected_layout: ReportLayout, canonical_layout: ReportLayout) -> list[str]: ...; cmd_check() must call compare_report_layouts in production.",
+    "required_mutations": [
+      "schema_version",
+      "analysis_base_commit",
+      "identity_binding",
+      "totals",
+      "shard_hash",
+      "shard_set",
+      "unknown_extra_field",
+      "wrong_shard_basename",
+      "wrong_shard_parent",
+      "swapped_shard_paths"
+    ],
+    "every_mutation_must_fail_cmd_check": "Each listed mutation must produce a nonzero result and a useful per-field diagnostic from the real cmd_check() boundary (or the production-bound compare_report_layouts function it delegates to).",
+    "tests_that_compare_dictionaries_are_insufficient": "Tests that merely compare normalise_index_paths(expected) == normalise_index_paths(mutated) without invoking cmd_check() (or compare_report_layouts) are deleted or renamed. They prove the normaliser contract; they do not prove cmd_check() is bound to the normaliser."
+  },
+  "authoritative_evidence_manifests": {
+    "nul_delimited_byte_files": [
+      "changed-paths.z",
+      "changed-python-paths.z",
+      "ruff-input-paths.z"
+    ],
+    "encoding": "Each .z file is b'\\0'.join(<bytes tuple>) + b'\\0' (or no trailing NUL if empty). The file contents are exactly the filesystem bytes produced by the authoritative range API.",
+    "human_readable_text_files": [
+      "changed-paths.txt",
+      "changed-python-paths.txt",
+      "ruff-input-paths.txt"
+    ],
+    "text_file_provenance": "Each .txt file is a utf-8 escaped projection of the matching .z file. The header is: authority: false; encoding: diagnostic escaped projection.",
+    "required_equality": "changed_python_z == ruff_input_z (byte-for-byte). The text files round-trip through os.fsencode / os.fsdecode preserving identical bytes."
+  },
+  "empty_range_ruff_contract": {
+    "new_typed_result": "@dataclass(frozen=True) class RuffScope: paths: tuple[str, ...]; argv: tuple[str, ...] | None; status: Literal['ready', 'skipped_no_python_paths'].",
+    "new_function": "def build_ruff_scope(paths: Sequence[str]) -> RuffScope: if not paths: return RuffScope(paths=(), argv=None, status='skipped_no_python_paths'); return RuffScope(paths=tuple(paths), argv=('ruff', 'check', *paths), status='ready').",
+    "empty_inputs": "build_ruff_scope(()).status == 'skipped_no_python_paths'; build_ruff_scope(()).argv is None.",
+    "non_empty_inputs": "build_ruff_scope(['a.py', 'b.py']).argv == ('ruff', 'check', 'a.py', 'b.py'); build_ruff_scope(['a.py']).argv[2:] == ('a.py',).",
+    "evidence_producer": "When the RuffScope.status is 'skipped_no_python_paths', the evidence producer MUST NOT invoke ruff. The manifest records argv=None, exit_code=0, stdout_sha256 / stderr_sha256 of empty bytes, and a status field equal to 'skipped_no_python_paths'.",
+    "removed_behaviour": "build_ruff_argv(()) is no longer permitted to return ('ruff', 'check'). The function is replaced by build_ruff_scope() and the empty-set case returns an explicit skip."
+  },
+  "immutable_range_snapshot": {
+    "goal": "The range query resolves the full commit object IDs BEFORE the git diff runs, and the manifest records the full IDs.",
+    "command_order": "git rev-parse --verify ${BASE}^{commit}; git rev-parse --verify ${SUBJECT}^{commit}; record the full object IDs; execute the git diff EXACTLY ONCE and derive all path sets from the same bytes.",
+    "no_independent_queries": "The evidence producer MUST NOT run independent git queries for the same evidence transaction. The single git diff output is the source for the changed-paths, changed-python-paths, and ruff-input-paths sets. The python subset is derived in-process from the authoritative byte tuple via a pure-Python filter (b'.py' suffix).",
+    "manifest_record": "manifest['range'] = { 'base_full_oid': <full sha>, 'subject_full_oid': <full sha>, 'method': 'git-diff-factory', 'diff_args': [...] }.",
+    "spy_proof_required": "Tests MUST spy on the git subprocess and assert: rev_parse_calls == 2 (one for base, one for subject); git_diff_name_queries == 1; the changed-python-paths and ruff-input-paths bytes come from the same authoritative tuple; the ruff input source is the same tuple."
+  },
+  "ruff_identity_binding": {
+    "required_record_keys": [
+      "launcher_argv_prefix",
+      "launcher_path",
+      "launcher_sha256",
+      "ruff_version",
+      "ruff_invocation_mode",
+      "configuration_files",
+      "configuration_file_sha256"
+    ],
+    "resolved_strategy": "Before Ruff runs, the producer resolves exactly one executable strategy. The preferred strategy is <repo>/.venv/bin/python -m ruff check <paths...>; the resolved object records launcher_argv_prefix, launcher_path, launcher_sha256, ruff_version, ruff_invocation_mode, configuration_files, and configuration_file_sha256. A standalone ruff binary is used only when the repository interpreter cannot import ruff.",
+    "executed_argv_must_match_recorded_argv": "The argv that is actually executed is built from the SAME identity that is recorded in tool-identities.json. recorded_ruff_argv == executed_ruff_argv; recorded_launcher_path == executed_launcher_path; recorded_launcher_sha256 == sha256(executed_launcher).",
+    "do_not_label_python_interpreter_as_ruff_hash": "When the launcher is the repository's Python interpreter invoking -m ruff, the recorded launcher path is the interpreter, the recorded sha256 is the interpreter's SHA-256, and the recorded launcher_argv_prefix includes the leading tokens (e.g. ('/path/to/.venv/bin/python', '-m', 'ruff')). The interpreter hash is NEVER labelled as a ruff executable hash.",
+    "first_path_rejection": "Commands MUST NOT rely on whichever ruff emerges first in $PATH. The producer records the resolved executable path and its SHA-256 hash before invocation.",
+    "configuration_files": "configuration_files lists every repository-located ruff configuration file (pyproject.toml, ruff.toml, .ruff.toml) that the Ruff invocation reads. Each SHA-256 is recorded in configuration_file_sha256 mapping."
+  },
+  "transactional_evidence_publishing": {
+    "goal": "The evidence bundle is published atomically: a failure mid-flight leaves no final bundle and no stale files from a previous run.",
+    "fresh_destination_only": "The requested output directory must initially be absent. If it exists, the producer raises FileExistsError. The --force-replace / force_replace semantics are REMOVED entirely; an existing destination is never overwritten.",
+    "staging_pattern": "Write into a sibling staging directory: closure_evidence_13.tmp.<pid>. The final rename happens only after range resolution, range-derived paths, ruff resolution, successful Ruff invocation (or an explicit empty-range skip), every identity is recorded, every hash is computed, the manifest validates, and the final classification is derived.",
+    "ruff_failure_prevents_publication": "When Ruff exits nonzero: exit_nonzero is recorded; the staging directory is removed; the final destination is NOT created; the manifest file is NOT created; the classification file is NOT created. A failed Ruff run publishes zero bytes to the final destination.",
+    "failure_cleanup": "On any failure (range, ruff, write), the producer: (1) exits nonzero; (2) removes the staging directory; (3) leaves no final bundle; (4) never retains stale files from a previous run.",
+    "no_force_replace_supported": "force_replace_supported: false. The argument --force-replace is removed from the CLI; the keyword argument force_replace is removed from collect_range_evidence.",
+    "failure_injection_tests": [
+      "base resolution failure",
+      "subject resolution failure",
+      "range query failure",
+      "Ruff execution failure",
+      "manifest write failure",
+      "classification write failure",
+      "final rename failure"
+    ],
+    "every_failure_leaves_no_bundle": "Every failure-injection test asserts (a) the function raises the typed error, (b) the final destination does not exist, (c) no staging directory remains."
+  },
+  "derived_final_classification": {
+    "goal": "Every claim in final-classification.md is measured in the current evidence transaction or bound to named post-subject gate evidence. Hardcoded PASS claims are forbidden.",
+    "claim_sources": {
+      "transaction_evidence": [
+        "range_resolution",
+        "path_manifest",
+        "ruff_execution",
+        "publication"
+      ],
+      "repository_test_evidence": [
+        "cmd_check_contract",
+        "mutation_matrix",
+        "full_test_suite"
+      ]
+    },
+    "unmeasured_claim_marker": "An unmeasured claim is rendered as 'UNMEASURED', not 'PASS'. The only claims that may be 'PASS' are the ones that have an associated measurement in the current transaction (transaction_evidence) or that are bound to a named repository test (repository_test_evidence).",
+    "no_repository_test_claim_without_captured_command": "When a claim references a repository test, the captured command (argv, exit_code, sha256 of stdout/stderr) MUST be present in commands.json. The detached range producer does not claim 'full_test_suite: PASS' unless the test-suite command's captured evidence is included.",
+    "hardcoded_unmeasured_PASS_claims": 0
+  },
+  "module_autouse_mutation_guard": {
+    "preserved": "The CORRECTION11 canonical_artifacts_remain_unchanged fixture (module-scope, autouse=True) is preserved unchanged. The CORRECTION13 additions do not touch any canonical artifact."
+  },
+  "detached_evidence_transcript": {
+    "evidence_directory": "/tmp/closure_evidence_13",
+    "required_files": [
+      "manifest.json (binds F13, F13_tree, plan_blob, S13, S13_tree, parent_F13, parent_S13, base_full_oid, subject_full_oid, git_diff_query_count=1, changed_paths_z_sha256, changed_python_paths_z_sha256, ruff_input_paths_z_sha256, ruff_argv_sha256, ruff_scope_sha256, tool_identities_sha256, commands_sha256; declares protocol_stage=manual-preclosure-evidence; records leamas_protocol_E=false)",
+      "topology.txt (the Phase 0 topology evidence transcript)",
+      "changed-paths.z (NUL-delimited filesystem bytes produced by changed_path_bytes())",
+      "changed-python-paths.z (NUL-delimited filesystem bytes derived in-process from the authoritative range query)",
+      "ruff-input-paths.z (NUL-delimited filesystem bytes; byte-equal to changed-python-paths.z)",
+      "changed-paths.txt (non-authoritative diagnostic escaped projection; labelled authority: false; encoding: diagnostic escaped projection)",
+      "changed-python-paths.txt (non-authoritative diagnostic escaped projection; labelled authority: false; encoding: diagnostic escaped projection)",
+      "ruff-input-paths.txt (non-authoritative diagnostic escaped projection; labelled authority: false; encoding: diagnostic escaped projection)",
+      "ruff-scope.json (serialises the RuffScope dataclass: paths, argv, status)",
+      "ruff-argv.json (serialises the argv that was actually executed; null when status='skipped_no_python_paths')",
+      "tool-identities.json (the launcher_argv_prefix, launcher_path, launcher_sha256, ruff_version, ruff_invocation_mode, configuration_files, configuration_file_sha256 record; the recorded launcher is exactly the executed launcher)",
+      "commands.json (every post-subject command recorded with argv, cwd, env, start, end, exit_code, sha256 of stdout, sha256 of stderr)",
+      "01..N.stdout, 01..N.stderr, 01..N.rc (raw captured outputs for each post-subject command)",
+      "final-classification.md (the human-readable closure narrative; every claim is derived from a measured result or bound to a named post-subject gate; CORRECTION13: PARTIAL_CHECKPOINT)"
+    ],
+    "required_proofs": [
+      "diff -u /tmp/closure_evidence_13/changed-python-paths.z /tmp/closure_evidence_13/ruff-input-paths.z must be empty (the two file sets are byte-identical)",
+      "os.fsencode(open('/tmp/closure_evidence_13/changed-python-paths.txt').read()) == open('/tmp/closure_evidence_13/changed-python-paths.z', 'rb').read() (the .z file is the authoritative source; the .txt is a projection)",
+      "rev_parse_calls == 2 (one for base, one for subject); git_diff_query_count == 1 in the manifest",
+      "changed_python_z and ruff_input_z come from the same authoritative tuple; the ruff input source is that tuple"
+    ]
+  },
+  "lifecycle_terminology": {
+    "CORRECTION12_RECOVERY": "PASS",
+    "CORRECTION13": "PARTIAL_CHECKPOINT",
+    "byte_safe_pathname_api": "PASS",
+    "authoritative_evidence_manifests_are_nul_delimited_bytes": "PASS",
+    "human_text_manifests_are_non_authoritative": "PASS",
+    "adversarial_paths_are_actually_changed": "PASS",
+    "empty_range_records_explicit_skip": "PASS",
+    "empty_range_does_not_run_pathless_ruff": "PASS",
+    "typed_git_failure_contract_at_every_git_site": "PASS",
+    "layout_aware_index_normalisation": "PASS",
+    "actual_cmd_check_mutation_tests": "PASS",
+    "single_immutable_git_pathname_query": "PASS",
+    "python_paths_derived_without_second_git_call": "PASS",
+    "cmd_check_compares_complete_normalised_index": "PASS",
+    "top_level_metadata_mutation_tests_present": "PASS",
+    "range_is_resolved_to_full_commit_oids_once": "PASS",
+    "single_git_path_query_per_evidence_transaction": "PASS",
+    "executed_ruff_identity_equivalence": "PASS",
+    "ruff_executable_identity_bound": "PASS",
+    "ruff_version_bound": "PASS",
+    "ruff_configuration_hashes_bound": "PASS",
+    "fresh_destination_only": "PASS",
+    "force_replace_supported": "NO",
+    "ruff_failure_prevents_publication": "PASS",
+    "evidence_output_requires_fresh_destination": "PASS",
+    "evidence_bundle_published_transactionally": "PASS",
+    "failed_evidence_run_leaves_no_final_bundle": "PASS",
+    "final_classification_claims_are_derived": "PASS",
+    "hardcoded_unmeasured_PASS_claims": 0,
+    "manual_preclosure_evidence": "PRESENT",
+    "leamas_protocol_E": "ABSENT",
+    "closure_commit_C": "ABSENT",
+    "annotated_tag_T": "ABSENT",
+    "deterministic_C_proof": "BLOCKED",
+    "wave_1": "BLOCKED"
+  },
+  "absorbed_defects": [
+    "fixture does not actually change adversarial paths — fixed by adding a real modification through every required pathname in commit_fixture_subject",
+    "string API loses bytes — fixed by changed_path_bytes (authoritative) and changed_paths (derived)",
+    "detached text manifests lose byte authority — fixed by NUL-delimited .z files + non-authoritative .txt projections",
+    "build_ruff_argv can return pathless ruff check — fixed by RuffScope dataclass with status field",
+    "cmd_check compares incomplete top-level objects — fixed by complete normalised top-level index comparison",
+    "range query runs after rev_parse — fixed by full commit OID resolution before git diff",
+    "ruff identity is not bound — fixed by tool-identities.json record",
+    "evidence output is not transactional — fixed by staging + rename + on-failure cleanup",
+    "normalise_index_paths uses realpath — fixed by layout-aware ReportLayout contract",
+    "git failure uses bare RuntimeError — fixed by typed RangeResolutionError with stage field at every Git failure site",
+    "python paths use extra subprocess — fixed by deriving the python subset from the authoritative byte tuple",
+    "ruff argv built without resolved identity — fixed by resolve_ruff_identity() returning a single strategy and argv",
+    "force_replace supports overwrite — fixed by removing --force-replace and force_replace entirely",
+    "failed ruff run publishes partial bundle — fixed by ruff-failure-prevents-publication (zero bytes on failure)",
+    "final classification uses hardcoded PASS — fixed by derived claim rendering",
+    "cmd_check mutation tests compare normalised dicts — fixed by compare_report_layouts() invoked from cmd_check()"
+  ],
+  "remaining_successors": [
+    "ACT-K9B-REDACTION-NEGATIVE-PROOFS-PORTABILITY01",
+    "Leamas v2 binary/schema qualification and actual C/T/E creation",
+    "Complete AUDIT01 closure",
+    "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)"
+  ],
+  "wave_1_policy": {
+    "wave_1_implementation": "PROHIBITED",
+    "blocked_target": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01",
+    "reason": "Wave 1 remains blocked until AUDIT01 receives a complete (non-partial) v2 closure."
+  },
+  "transaction_contract": {
+    "protocol": "v2",
+    "F13": "immutable plan-freeze commit (this plan is committed alone; no subject paths staged in F13); F13 is a NEW plan-freeze commit, parent(S12)",
+    "S13": "exactly one model-authored subject commit; parent(S13) = F13",
+    "C": "exactly one deterministic Leamas-authored closure commit; never authored by the model; absent until a v2 binary is installed",
+    "T": "Leamas-authored annotated tag targeting C; absent until C exists",
+    "E": "detached raw evidence bundle; never committed into the worktree; absent until a v2 binary produces it",
+    "no_manual_attestation_commit": true,
+    "do_not_rewrite_S12": true,
+    "preserve_F12": true,
+    "preserve_rescue_branches": true,
+    "deterministic_C_proof": {
+      "policy": "Reproduce closure from identical inputs in an isolated non-publishing environment and assert C1 == C2; commit-object bytes equal.",
+      "blocked_status": "DETERMINISTIC_C_PROOF: BLOCKED, CLOSURE: PARTIAL_CHECKPOINT",
+      "blocked_reason": "The installed /usr/local/bin/leamas binary exposes only Closure Protocol v1 commands (no --protocol v2 flag) and rejects the v2 plan schema (unknown field 'schema_version'). Safe isolated v2 reproduction is unsupported. The model MUST NOT simulate or hand-author C2."
+    }
+  },
+  "definition_of_done": {
+    "F13_contains_only_plan": true,
+    "parent_S13_equals_F13": true,
+    "adversarial_paths_are_actually_changed": true,
+    "newline_path_tested": true,
+    "non_ascii_path_tested": true,
+    "leading_and_trailing_whitespace_tested": true,
+    "added_python_file_really_added_in_subject": true,
+    "authoritative_manifests_are_nul_delimited_bytes": true,
+    "filesystem_bytes_round_trip": true,
+    "human_text_manifests_are_non_authoritative": true,
+    "empty_python_range_does_not_run_pathless_ruff": true,
+    "empty_range_records_explicit_skip": true,
+    "typed_git_failure_contract_at_every_git_site": true,
+    "layout_aware_index_normalisation": true,
+    "actual_cmd_check_mutation_tests": true,
+    "cmd_check_compares_complete_normalised_index": true,
+    "top_level_metadata_mutation_tests_present": true,
+    "range_is_resolved_to_full_commit_oids_once": true,
+    "single_git_path_query_per_evidence_transaction": true,
+    "python_paths_derived_without_second_git_call": true,
+    "executed_ruff_identity_equivalence": true,
+    "ruff_executable_identity_bound": true,
+    "ruff_version_bound": true,
+    "ruff_configuration_hashes_bound": true,
+    "fresh_destination_only": true,
+    "force_replace_supported": false,
+    "ruff_failure_prevents_publication": true,
+    "evidence_output_requires_fresh_destination": true,
+    "evidence_bundle_published_transactionally": true,
+    "failed_evidence_run_leaves_no_final_bundle": true,
+    "final_classification_claims_are_derived": true,
+    "hardcoded_unmeasured_PASS_claims": 0,
+    "canonical_artifacts_unchanged_by_tests": true,
+    "manual_evidence_not_called_protocol_E": true,
+    "C_T_E_not_hand_authored": true,
+    "worktree_clean": true,
+    "wave_1_started": false
+  },
+  "expected_final_state_until_v2_binary_exists": {
+    "CORRECTION13": "PARTIAL_CHECKPOINT",
+    "byte_safe_pathname_api": "PASS",
+    "authoritative_evidence_manifests_are_nul_delimited_bytes": "PASS",
+    "human_text_manifests_are_non_authoritative": "PASS",
+    "adversarial_paths_are_actually_changed": "PASS",
+    "empty_range_records_explicit_skip": "PASS",
+    "empty_range_does_not_run_pathless_ruff": "PASS",
+    "typed_git_failure_contract_at_every_git_site": "PASS",
+    "layout_aware_index_normalisation": "PASS",
+    "actual_cmd_check_mutation_tests": "PASS",
+    "cmd_check_compares_complete_normalised_index": "PASS",
+    "top_level_metadata_mutation_tests_present": "PASS",
+    "range_is_resolved_to_full_commit_oids_once": "PASS",
+    "single_git_path_query_per_evidence_transaction": "PASS",
+    "python_paths_derived_without_second_git_call": "PASS",
+    "executed_ruff_identity_equivalence": "PASS",
+    "ruff_executable_identity_bound": "PASS",
+    "ruff_version_bound": "PASS",
+    "ruff_configuration_hashes_bound": "PASS",
+    "fresh_destination_only": "PASS",
+    "force_replace_supported": "NO",
+    "ruff_failure_prevents_publication": "PASS",
+    "evidence_output_requires_fresh_destination": "PASS",
+    "evidence_bundle_published_transactionally": "PASS",
+    "failed_evidence_run_leaves_no_final_bundle": "PASS",
+    "final_classification_claims_are_derived": "PASS",
+    "hardcoded_unmeasured_PASS_claims": 0,
+    "manual_preclosure_evidence": "PRESENT",
+    "C": "ABSENT",
+    "T": "ABSENT",
+    "leamas_protocol_E": "ABSENT",
+    "deterministic_C_proof": "BLOCKED",
+    "wave_1": "BLOCKED"
+  }
+}
