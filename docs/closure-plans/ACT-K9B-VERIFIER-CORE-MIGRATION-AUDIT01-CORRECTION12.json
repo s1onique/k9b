@@ -1,0 +1,235 @@
+{
+  "schema_version": "leamas.v2.closure-plan/1",
+  "act_id": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION12",
+  "title": "Repair CORRECTION11 defects: ReportLayout sole production writer, cli.py delegation, fail-closed range API, hermetic range fixture, detached evidence bound to production (CORRECTION12)",
+  "scope": {
+    "exact_act": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION12",
+    "subject_act_under_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01",
+    "prior_checkpoint": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION11 (PARTIAL_CHECKPOINT; F11=75a43f3f, S11=0c9226e0; both under rescue refs rescue/audit01-correction11-{f11,s11})",
+    "target_act_after_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)",
+    "baseline": {
+      "F11": "75a43f3f317c6f2dc571e4fe5e988d00ba00285c (CORRECTION11 plan-freeze)",
+      "F11_tree": "5398ad615c393c6386374b91cb8f2ec82f04642d",
+      "S11": "0c9226e03a043631ea3f4bfe2e55c8b84c713c4a (CORRECTION11 subject)",
+      "S11_tree": "f53f6cf6a969e4af59aacbdee7b2c7af38abc8a8",
+      "F11_contains_only_plan": true,
+      "S11_modified_files": [
+        "scripts/verifiers_audit/builder.py",
+        "scripts/verifiers_audit/cli.py",
+        "scripts/verifiers_audit/gate_classification.py",
+        "scripts/verifiers_audit/report_io.py",
+        "scripts/verifiers_audit/scope.py",
+        "tests/verifiers/test_verifier_core_migration_audit01.py"
+      ],
+      "rescue_branches": [
+        "rescue/audit01-correction11-f11 at F11",
+        "rescue/audit01-correction11-s11 at S11"
+      ]
+    }
+  },
+  "known_defects_in_cor11": {
+    "cli_has_duplicate_writer_logic": "scripts/verifiers_audit/cli.py (cmd_write) re-implements shard encoding, hashing, atomic write, top-level index write, and markdown write. The single production writer is ReportLayout + write_all + write_audit; cli.py must only delegate.",
+    "range_api_returns_empty_on_git_failure": "scope.py _run_git_diff_names uses text=True and splitlines(); a non-zero exit code returns an empty tuple (Git failure is silently indistinguishable from a valid empty range). ReportLayout logic and tests must never confuse failure with empty.",
+    "range_functions_use_repo_root_constant": "scope.py changed_paths and changed_python_paths hard-code REPO_ROOT; tests cannot inject a temporary repository. The detached-evidence runner also needs to call the same production functions against the real repo.",
+    "range_tests_use_hardcoded_repo_commits": "tests/verifiers/test_verifier_core_migration_audit01.py uses FIXTURE_BASE/FIXTURE_SUBJECT commit IDs that mirror the k9b repo and break history-coupled isolation. The tests must use a hermetic temporary Git repository.",
+    "detached_evidence_has_independent_path_regeneration": "The /tmp/closure_evidence_XX/* manifests are produced by independent shell commands (git diff / git rev-parse / echo) that bypass the production code paths. The detached evidence must call the same production functions."
+  },
+  "permitted_subject_paths": [
+    "scripts/verifiers_audit/audit.py",
+    "scripts/verifiers_audit/cli.py",
+    "scripts/verifiers_audit/collect_r2_evidence.py",
+    "scripts/verifiers_audit/report_io.py",
+    "scripts/verifiers_audit/scope.py",
+    "tests/verifiers/test_verifier_core_migration_audit01.py"
+  ],
+  "cli_writer_unification": {
+    "goal": "scripts/verifiers_audit/cli's cmd_write must write the audit set ONLY through write_audit(layout=canonical_layout())",
+    "forbidden_imports_in_cli": "Forbidden in cli.py: _write_atomic, _json_dumps, _dump_helpers_shard, render_markdown. The CLI may import only the high-level writer and canonical layout.",
+    "cmd_write_signature": "def cmd_write(gate_classification: dict[str, object] | None = None) -> int. When gate_classification is not None, command prints ERROR and returns 2 BEFORE any write is performed (zero side effects).",
+    "writer_success_path": "write_audit(layout=canonical_layout()) is the sole production writer call. (OSError, ValueError, AuditWriteError) is caught and returns 1; success is 0.",
+    "tests_required": [
+      "cmd_write calls write_audit exactly once",
+      "cmd_write supplies canonical_layout()",
+      "caller-supplied gate_classification returns 2 before writer invocation",
+      "writer exception returns nonzero",
+      "no artifact changes after rejected or failed writes",
+      "cli.py source contains no direct report-file writing calls"
+    ],
+    "removed_from_cli": [
+      "duplicate audit-object assembly",
+      "shard encoding (_encode, _json_dumps)",
+      "atomic shard writes (_write_atomic)",
+      "hash calculation for the in-memory index",
+      "top-level index write",
+      "markdown write",
+      "classification shard hash re-read/re-emit"
+    ]
+  },
+  "fail_closed_range_api": {
+    "new_typed_error": "class RangeResolutionError(RuntimeError): __init__(self, *, base: str, subject: str, returncode: int, stderr: str) -> None",
+    "_run_git_diff_names_contract": "argv list (no shell quoting), capture_output=True, check=False, no text=True, no splitlines(), no strip() on pathnames. On non-zero returncode: raise RangeResolutionError(base, subject, returncode, stderr). On zero: return tuple of os.fsdecode(raw) for raw in proc.stdout.split(b'\\0') if raw.",
+    "nul_delimited_parser": "git diff -z --diff-filter=ACMRT produces NUL-separated paths. The parser splits on NUL bytes and rejects empty entries. Whitespace (leading, trailing, interior) is preserved verbatim.",
+    "forbidden_patterns": [
+      "Using text=True",
+      "Using splitlines() on Git output",
+      "Calling strip() on pathnames",
+      "Returning an empty manifest after Git failure",
+      "Suppressing stderr or substituting HEAD/index/working tree"
+    ],
+    "valid_empty_range": "A valid equal-commit range MAY return an empty tuple. An invalid range MUST raise RangeResolutionError."
+  },
+  "repository_injectable_range": {
+    "changed_paths": "def changed_paths(base: str, subject: str, *, repo_root: Path = REPO_ROOT) -> tuple[str, ...]",
+    "changed_python_paths": "def changed_python_paths(base: str, subject: str, *, repo_root: Path = REPO_ROOT) -> tuple[str, ...]",
+    "detached_evidence_uses_same_functions": "The detached-evidence runner calls changed_paths() and changed_python_paths() with the live REPO_ROOT default; the test suite calls the same functions with a tmp_path repo_root.",
+    "no_hardcoded_commit_fixtures": "Tests must NOT contain permanent k9b commit IDs (F10, S10, F11, S11). FIXTURE_BASE / FIXTURE_SUBJECT and the F11/S10 ancestry comment are deleted."
+  },
+  "hermetic_range_fixture": {
+    "fixture_name": "range_repo",
+    "fixture_binds": "RangeRepo(root=tmp_path / 'repo', base=<base commit>, subject=<subject commit>)",
+    "commits_made": [
+      "added Python file",
+      "modified Python file",
+      "renamed Python file (source -> destination)",
+      "deleted Python file",
+      "added non-Python file",
+      "path containing an ordinary space",
+      "path with leading whitespace",
+      "path with trailing whitespace (skipped if not supported by Git/filesystem)",
+      "non-ASCII pathname"
+    ],
+    "required_tests": [
+      "valid_range_returns_expected_post_image_paths",
+      "python_filter_matches_expected_files",
+      "deleted_python_file_excluded",
+      "renamed_python_destination_included",
+      "ordinary_space_preserved",
+      "leading_whitespace_preserved",
+      "trailing_whitespace_preserved_or_explicitly_platform_skipped",
+      "non_ascii_path_preserved",
+      "empty_valid_range_returns_empty",
+      "invalid_base_raises",
+      "invalid_subject_raises",
+      "git_failure_never_returns_empty_success",
+      "ruff_argv_paths_equal_changed_python_paths",
+      "deterministic_order_across_repeated_runs"
+    ],
+    "argv_lists_only": "Do not shell-quote or manually concatenate commands. Pass argv lists."
+  },
+  "detached_evidence_binding": {
+    "new_production_command": "scripts/verifiers_audit/collect_r2_evidence.py (or a new dedicated evidence module) exposes a command that accepts --base, --subject, --repo-root, --output-dir; calls changed_paths() and changed_python_paths(); calls build_ruff_argv(); writes the three manifests; executes the returned Ruff argv; records stdout, stderr, exit_code, hashes; exits nonzero on any range/ruff failure.",
+    "no_shell_regeneration": "The detached evidence MUST NOT regenerate paths using independent shell commands. The changed-paths.txt, changed-python-paths.txt, and ruff-input-paths.txt are produced by the same production code path used by tests.",
+    "required_equality": "production changed_python_paths output == detached changed-python-paths.txt == detached ruff-input-paths.txt == paths in executed Ruff argv"
+  },
+  "module_autouse_mutation_guard": {
+    "preserved": "The CORRECTION11 canonical_artifacts_remain_unchanged fixture (module-scope, autouse=True) is preserved unchanged. The CORRECTION12 modifications do not touch any canonical artifact."
+  },
+  "detached_evidence_transcript": {
+    "evidence_directory": "/tmp/closure_evidence_12",
+    "required_files": [
+      "manifest.json (binds F12, F12_tree, plan_blob, S12, S12_tree, parent_F12, parent_S12, changed_paths_sha256, changed_python_paths_sha256, ruff_input_paths_sha256, ruff_argv_sha256, commands_sha256; declares protocol_stage=manual-preclosure-evidence; records leamas_protocol_E=false)",
+      "topology.txt (the Phase 0 topology evidence transcript)",
+      "changed-paths.txt (production code path: changed_paths(F12, S12))",
+      "changed-python-paths.txt (production code path: changed_python_paths(F12, S12))",
+      "ruff-input-paths.txt (production code path: build_ruff_argv(changed_python_paths(F12, S12)) minus the command prefix)",
+      "ruff-argv.json (production code path: build_ruff_argv(changed_python_paths(F12, S12)))",
+      "commands.json (every post-subject command recorded with argv, cwd, env, start, end, exit_code, sha256 of stdout, sha256 of stderr)",
+      "01..N.stdout, 01..N.stderr, 01..N.rc (raw captured outputs for each post-subject command)",
+      "final-classification.md (the human-readable closure narrative; CORRECTION12: PARTIAL_CHECKPOINT)"
+    ],
+    "required_proof": "diff -u /tmp/closure_evidence_12/changed-python-paths.txt /tmp/closure_evidence_12/ruff-input-paths.txt must be empty (the two file sets are byte-identical)."
+  },
+  "lifecycle_terminology": {
+    "CORRECTION11_RECOVERY": "PASS",
+    "CORRECTION12": "PARTIAL_CHECKPOINT",
+    "cli_writer_unification": "PASS",
+    "report_layout_sole_production_authority": "PASS",
+    "fail_closed_range_api": "PASS",
+    "repository_injectable_range": "PASS",
+    "hermetic_range_fixture": "PASS",
+    "detached_evidence_uses_production_range_functions": "PASS",
+    "ruff_argv_exactly_matches_changed_python_paths": "PASS",
+    "manual_preclosure_evidence": "PRESENT",
+    "leamas_protocol_E": "ABSENT",
+    "closure_commit_C": "ABSENT",
+    "annotated_tag_T": "ABSENT",
+    "deterministic_C_proof": "BLOCKED",
+    "wave_1": "BLOCKED"
+  },
+  "absorbed_defects": [
+    "cli.py duplicate writer logic — fixed by delegating to write_audit(canonical_layout())",
+    "scope.py returns empty on Git failure — fixed by NUL-delimited parser and RangeResolutionError",
+    "scope.py uses REPO_ROOT constant — fixed by repo_root injection",
+    "tests use hardcoded k9b commit IDs — fixed by hermetic tmp_path range_repo fixture",
+    "detached evidence regenerates paths — fixed by production-bound evidence command"
+  ],
+  "remaining_successors": [
+    "ACT-K9B-REDACTION-NEGATIVE-PROOFS-PORTABILITY01",
+    "Leamas v2 binary/schema qualification and actual C/T/E creation",
+    "Complete AUDIT01 closure",
+    "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)"
+  ],
+  "wave_1_policy": {
+    "wave_1_implementation": "PROHIBITED",
+    "blocked_target": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01",
+    "reason": "Wave 1 remains blocked until AUDIT01 receives a complete (non-partial) v2 closure."
+  },
+  "transaction_contract": {
+    "protocol": "v2",
+    "F12": "immutable plan-freeze commit (this plan is committed alone; no subject paths staged in F12); F12 is a NEW plan-freeze commit, parent(S11)",
+    "S12": "exactly one model-authored subject commit; parent(S12) = F12",
+    "C": "exactly one deterministic Leamas-authored closure commit; never authored by the model; absent until a v2 binary is installed",
+    "T": "Leamas-authored annotated tag targeting C; absent until C exists",
+    "E": "detached raw evidence bundle; never committed into the worktree; absent until a v2 binary produces it",
+    "no_manual_attestation_commit": true,
+    "do_not_rewrite_S11": true,
+    "preserve_F11": true,
+    "preserve_rescue_branches": true,
+    "deterministic_C_proof": {
+      "policy": "Reproduce closure from identical inputs in an isolated non-publishing environment and assert C1 == C2; commit-object bytes equal.",
+      "blocked_status": "DETERMINISTIC_C_PROOF: BLOCKED, CLOSURE: PARTIAL_CHECKPOINT",
+      "blocked_reason": "The installed /usr/local/bin/leamas binary exposes only Closure Protocol v1 commands (no --protocol v2 flag) and rejects the v2 plan schema (unknown field 'schema_version'). Safe isolated v2 reproduction is unsupported. The model MUST NOT simulate or hand-author C2."
+    }
+  },
+  "definition_of_done": {
+    "F12_contains_only_plan": true,
+    "parent_S12_equals_F12": true,
+    "cli_delegates_to_write_audit": true,
+    "duplicate_cli_writer_logic_removed": true,
+    "ReportLayout_is_single_production_writer_authority": true,
+    "rejected_cli_write_has_zero_side_effects": true,
+    "git_range_nonzero_exit_raises": true,
+    "git_range_stderr_preserved": true,
+    "invalid_range_never_becomes_empty_success": true,
+    "nul_delimited_path_parser": true,
+    "pathname_whitespace_preserved": true,
+    "non_ascii_path_preserved": true,
+    "hardcoded_repository_commit_fixtures": 0,
+    "range_tests_use_temporary_git_repository": true,
+    "range_repo_root_injectable": true,
+    "detached_evidence_uses_production_range_functions": true,
+    "ruff_argv_exactly_matches_changed_python_paths": true,
+    "detached_manifest_supplied_for_review": true,
+    "canonical_artifacts_unchanged_by_full_test_module": true,
+    "manual_evidence_not_called_protocol_E": true,
+    "C_T_E_not_hand_authored": true,
+    "worktree_clean": true,
+    "wave_1_started": false
+  },
+  "expected_final_state_until_v2_binary_exists": {
+    "CORRECTION12": "PARTIAL_CHECKPOINT",
+    "cli_writer_unification": "PASS",
+    "report_layout_sole_production_authority": "PASS",
+    "fail_closed_range_api": "PASS",
+    "repository_injectable_range": "PASS",
+    "hermetic_range_fixture": "PASS",
+    "detached_evidence_uses_production_range_functions": "PASS",
+    "ruff_argv_exactly_matches_changed_python_paths": "PASS",
+    "manual_preclosure_evidence": "PRESENT",
+    "C": "ABSENT",
+    "T": "ABSENT",
+    "leamas_protocol_E": "ABSENT",
+    "deterministic_C_proof": "BLOCKED",
+    "wave_1": "BLOCKED"
+  }
+}
