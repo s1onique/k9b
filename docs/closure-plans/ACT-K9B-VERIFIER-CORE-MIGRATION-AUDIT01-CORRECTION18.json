@@ -1,0 +1,584 @@
+{
+  "schema_version": "leamas.v2.closure-plan/1",
+  "act_id": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION18",
+  "title": "Repair C17 bundle-root self-referential hash defect; implement authoritative generic identities, explicit manifest ACT-local, acyclic bundle root, and production-bound integration tests without rewriting F17 or S17 and without beginning Wave 1",
+  "scope": {
+    "exact_act": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION18",
+    "subject_act_under_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01",
+    "prior_checkpoint": "ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION17 (PARTIAL_CHECKPOINT)",
+    "target_after_repair": "ACT-K9B-VERIFIER-CORE-MIGRATION-WAVE01 (still blocked)",
+    "baseline": {
+      "F17": "354c596fa40387d63affb4136087c2d6d9eb1c6b",
+      "S17": "2e920bb59810adc65724036ce8d67f2bdd23ba92",
+      "F18": "this plan-freeze commit; parent(F18) = S17; contains this plan and no other path",
+      "S18": "exactly one model-authored subject commit; parent(S18) = F18",
+      "F18_contains_only_plan": true,
+      "rescue_references": {
+        "rescue/audit01-correction17-f17": "354c596fa40387d63affb4136087c2d6d9eb1c6b",
+        "rescue/audit01-correction17-s17": "2e920bb59810adc65724036ce8d67f2bdd23ba92"
+      },
+      "checkpoint_state": {
+        "CORRECTION17": "PARTIAL_CHECKPOINT",
+        "bundle17_root_self_referential_hash": "MISMATCH (computed: ef17fe26f204665175a623747e7bb78e156c227e67501f828733ad78e9f33165, recorded: a473591e78a964816f6dfa8a898c072d87fae7dd749067ed4f505971fcf9fdb4)",
+        "C": "ABSENT",
+        "T": "ABSENT",
+        "leamas_protocol_E": "ABSENT",
+        "wave_1": "BLOCKED"
+      }
+    }
+  },
+  "phase_0_object_evidence": {
+    "F17_commit_object": {
+      "tree": "verified-via-git-show",
+      "parent": "verified-via-git-show",
+      "name_status": [
+        "A\tdocs/closure-plans/ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION17.json"
+      ]
+    },
+    "S17_commit_object": {
+      "tree": "verified-via-git-show",
+      "parent": "354c596fa40387d63affb4136087c2d6d9eb1c6b",
+      "F17_contains_only_plan": true,
+      "do_not_rewrite": true
+    },
+    "preserved_rescue_branches": {
+      "rescue/audit01-correction17-f17": "354c596fa40387d63affb4136087c2d6d9eb1c6b",
+      "rescue/audit01-correction17-s17": "2e920bb59810adc65724036ce8d67f2bdd23ba92"
+    },
+    "bundle17_falsification": {
+      "bundle_root_self_referential_hash": "MISMATCH",
+      "computed_hash": "ef17fe26f204665175a623747e7bb78e156c227e67501f828733ad78e9f33165",
+      "recorded_hash": "a473591e78a964816f6dfa8a898c072d87fae7dd749067ed4f505971fcf9fdb4",
+      "all_other_file_hashes_match": true,
+      "bundle17_superseded": true
+    },
+    "bundle17_root_matches_final_files": true,
+    "bundle17_classification_hash_matches_root": true,
+    "bundle17_gate_results_match_commands": true,
+    "bundle17_publication_result_has_complete_rehash": false
+  },
+  "known_correction17_authority_defects": {
+    "bundle_root_self_referential_hash": "The C17 bundle-root.json records its own SHA-256 as a473591e... but the actual file content computes to ef17fe26... This is a self-referential hash failure: the bundle-root cannot claim a hash of itself that doesn't match.",
+    "classification_lifecycle_violation": "C17 final-classification.md was potentially rewritten after bundle-root.json creation in some lifecycle traces; Phase 6 requires classification BEFORE root exists.",
+    "act_local_manifest_not_enforced": "C17 verify_all.sh --act-local accepts --base/--subject but may not enforce that the manifest is passed; Phase 3 requires explicit manifest interface.",
+    "gate_invocation_environment_implicit_inheritance": "C17 GateInvocation records may inherit environment implicitly; Phase 2 requires explicit environment in records.",
+    "ruff_equivalence_field_names_correction_specific": "C17 uses correction-specific field names; Phase 2 requires generic identities."
+  },
+  "transaction_topology": {
+    "F18": "this plan-freeze commit; parent(F18) = S17 (2e920bb5); contains this plan and no other path",
+    "S18": "exactly one model-authored subject commit; parent(S18) = F18",
+    "F18_name_status": [
+      "A\tdocs/closure-plans/ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION18.json"
+    ],
+    "F18_contains_only_plan": true,
+    "C": "absent until a qualified Leamas v2 implementation produces it; never model-authored",
+    "T": "absent until Leamas v2 produces it; never model-authored",
+    "E": "absent until Leamas v2 produces protocol E; the manual evidence bundle and publication-result are not protocol E",
+    "do_not_rewrite_F17_or_S17": true,
+    "wave_1_implementation": "PROHIBITED"
+  },
+  "phase_2_generic_identities": {
+    "description": "Phase 2 replaces correction-number-specific field names with generic identities throughout the gate plan",
+    "freeze_commit": "The plan-freeze commit OID (was F17, F16, etc.)",
+    "freeze_tree": "The tree hash of the freeze commit",
+    "freeze_parent": "The parent OID of the freeze commit",
+    "plan_blob": "The blob hash of the plan file in the freeze commit",
+    "subject_commit": "The subject commit OID (was S17, S16, etc.)",
+    "subject_tree": "The tree hash of the subject commit",
+    "subject_parent": "The parent OID of the subject commit (should equal freeze_commit)",
+    "GateInvocation_contract": {
+      "required_fields": [
+        "name: str - semantic gate name",
+        "argv: tuple[str, ...] - exact command executed",
+        "cwd: str - working directory at execution",
+        "environment: dict[str, str] - explicit environment (no implicit inheritance)",
+        "input_paths: tuple[str, ...] - files consumed by the gate"
+      ],
+      "forbidden": "No required environment input may be inherited implicitly"
+    }
+  },
+  "phase_3_explicit_manifest": {
+    "description": "Phase 3 requires ACT-local to receive an explicit immutable manifest file",
+    "manifest_file": "changed-paths.z",
+    "interface": "./scripts/verify_all.sh --act-local --base <F18> --subject <S18> --manifest <staging>/changed-paths.z --skip-gate-summary",
+    "ACT_local_must_not_git_discovery": "In explicit range mode ACT-local MUST NOT invoke git diff, git status, git ls-files, or any other Git discovery command",
+    "manifest_authority": "The orchestrator-produced changed-paths.z is the SOLE source of changed files in explicit range mode",
+    "manifest_immutable": "The manifest file is written once before gate execution and never modified"
+  },
+  "phase_4_exact_gate_inventories": {
+    "description": "Phase 4 builds each gate inventory from the actual planned argv",
+    "pytest_input_paths_file": "pytest-input-paths.z",
+    "mypy_input_paths_file": "mypy-input-paths.z",
+    "ruff_input_paths_file": "ruff-input-paths.z",
+    "inventory_contract": "Byte-for-byte equality between each recorded manifest and the corresponding executed gate input tuple",
+    "ruff_gate_must_use_exact_S18_tuple": "The Ruff gate executes against the exact S18 changed-Python path tuple, not a glob",
+    "range_hygiene_gate": "git diff --check <F18_FULL_OID> <S18_FULL_OID> - must use the full resolved OIDs"
+  },
+  "phase_5_real_ruff_equivalence": {
+    "description": "Phase 5 executes explicit and canonical Ruff commands as two typed ExecutedCommand records",
+    "explicit_command": {
+      "launcher_path": "Path to Ruff launcher",
+      "launcher_sha256": "SHA-256 of launcher binary",
+      "ruff_version": "Version string from ruff --version",
+      "cwd": "Working directory",
+      "ordered_input_tuple_sha256": "SHA-256 of sorted input path tuple",
+      "returncode": "Exit code",
+      "normalised_stdout_stderr_sha256": "SHA-256 of (stdout || b'\\n' || stderr)"
+    },
+    "canonical_command": "Same fields as explicit_command, but without --config flag",
+    "equivalence_requirements": [
+      "launcher_path equality",
+      "launcher_sha256 equality",
+      "ruff_version equality",
+      "cwd equality",
+      "ordered_input_tuple_sha256 equality",
+      "returncode equality",
+      "normalised_stdout_stderr_sha256 equality"
+    ],
+    "forbidden": "Self-comparisons (e.g., x == x) are NOT permitted; each field must be independently measured"
+  },
+  "phase_6_acyclic_bundle_root": {
+    "description": "Phase 6 renders final-classification.md EXACTLY ONCE before bundle-root.json exists",
+    "classification_pre_root": {
+      "publication_state": "READY_TO_PUBLISH",
+      "bundle_root_sha256": "PENDING_EXTERNAL_RESULT",
+      "publication_succeeded": "PENDING_EXTERNAL_RESULT"
+    },
+    "algorithm": [
+      "1. Write all non-root artifacts to staging",
+      "2. Render final-classification.md with PENDING_EXTERNAL_RESULT for bundle_root_sha256 and publication_succeeded",
+      "3. Hash every final non-root file from disk",
+      "4. Write bundle-root.json",
+      "5. Parse the root back from disk",
+      "6. Rehash every path from the root's own 'files' mapping",
+      "7. Require zero missing, extra, or mismatched files",
+      "8. NEVER modify an in-bundle file after this point"
+    ],
+    "acyclic_guarantee": "final-classification.md is rendered BEFORE bundle-root.json exists; bundle-root.json is NOT an input to classification"
+  },
+  "phase_7_fail_closed_publication": {
+    "description": "Phase 7 implements fail-closed publication with pre-checks",
+    "pre_gate_checks": {
+      "output_directory_absent": true,
+      "staging_directory_absent": true
+    },
+    "staging_creation": "staging.mkdir(parents=True, exist_ok=False) - must fail if directory exists",
+    "post_rename_rehash": "After rename, rehash the complete published directory",
+    "rehash_error_handling": "Any rehash error must make the publication result fail and the CLI exit nonzero",
+    "forbidden": "Never convert an exception into an empty successful hash mapping"
+  },
+  "phase_8_production_bound_integration_tests": {
+    "description": "Phase 8 requires production-bound integration tests that call the real CLI and inspect artifacts",
+    "required_mutation_tests": [
+      {
+        "mutation": "alter final classification after root creation",
+        "expected": "fail closed"
+      },
+      {
+        "mutation": "alter a root-recorded file",
+        "expected": "fail closed"
+      },
+      {
+        "mutation": "omit the ACT-local manifest",
+        "expected": "fail closed"
+      },
+      {
+        "mutation": "substitute a broad Ruff directory",
+        "expected": "fail closed"
+      },
+      {
+        "mutation": "remove F18/S18 from git diff --check",
+        "expected": "fail closed"
+      },
+      {
+        "mutation": "change an inherited environment variable",
+        "expected": "fail closed"
+      },
+      {
+        "mutation": "make post-rename rehash fail",
+        "expected": "fail closed"
+      },
+      {
+        "mutation": "pre-create output or staging directory",
+        "expected": "fail closed"
+      }
+    ],
+    "test_requirements": {
+      "forbidden_assertions": [
+        "Source-string checks (e.g., 'assert \"ruff\" in argv')",
+        "Type-literal checks (e.g., 'assert isinstance(x, str)')",
+        "Length checks (e.g., 'assert len(argv) >= 3')"
+      ],
+      "required": "Tests must call the real CLI and inspect produced artifacts"
+    }
+  },
+  "executed_command_contract": {
+    "type": "@dataclass(frozen=True) class ExecutedCommand: name: str; argv: tuple[str, ...]; cwd: str; returncode: int; stdout: bytes; stderr: bytes; status: Literal['passed', 'failed', 'skipped']; stdout_sha256 and stderr_sha256 are properties derived from the raw bytes",
+    "serialized_form": "Raw bytes remain authoritative in memory; JSON records their SHA-256 values and may reference separately persisted raw output files.",
+    "range_error": "RangeResolutionError.stderr contains decoded command stderr, never its digest."
+  },
+  "single_git_seam_contract": {
+    "authoritative_commands": [
+      "git rev-parse --verify F18^{commit}",
+      "git rev-parse F18^{tree}",
+      "git rev-parse F18^",
+      "git rev-parse F18:<plan-path>",
+      "git rev-parse --verify S18^{commit}",
+      "git rev-parse S18^{tree}",
+      "git rev-parse S18^",
+      "git rev-parse --verify BASE^{commit}",
+      "git rev-parse --verify SUBJECT^{commit}",
+      "git diff --name-only -z --diff-filter=ACMRT BASE_OID SUBJECT_OID",
+      "git diff --check F18_FULL_OID S18_FULL_OID",
+      "git status --porcelain=v1 -z"
+    ],
+    "derivation": {
+      "F18_full_oid": "os.fsdecode(F18_rev.stdout).strip()",
+      "F18_tree": "os.fsdecode(F18_tree_rev.stdout).strip()",
+      "plan_blob": "os.fsdecode(F18_plan_path_rev.stdout).strip()",
+      "parent_F18": "os.fsdecode(F18_parent_rev.stdout).strip()",
+      "S18_full_oid": "os.fsdecode(S18_rev.stdout).strip()",
+      "S18_tree": "os.fsdecode(S18_tree_rev.stdout).strip()",
+      "parent_S18": "os.fsdecode(S18_parent_rev.stdout).strip()",
+      "base_oid": "os.fsdecode(base_rev.stdout).strip()",
+      "subject_oid": "os.fsdecode(subject_rev.stdout).strip()",
+      "all_paths": "parse_nul_paths(diff_result.stdout)",
+      "python_paths": "python_path_bytes(all_paths)",
+      "worktree_clean": "len(parse_nul_paths(worktree.stdout)) == 0",
+      "diff_check": "diff_check.returncode == 0"
+    },
+    "required_cardinality": {
+      "topology_git_commands": 7,
+      "range_git_commands": 3,
+      "gate_git_commands": 2,
+      "transaction_git_commands_total": 12,
+      "unrecorded_git_commands": 0,
+      "hidden_shell_git_invocations": 0
+    },
+    "spy_proof": "Patch subprocess.run and fail any invocation outside the injected Git command seam."
+  },
+  "repository_gate_contract": {
+    "semantic_names": [
+      "audit01-pytest",
+      "audit01-ruff",
+      "audit01-mypy",
+      "audit-check",
+      "act-local-range",
+      "range-diff-check",
+      "worktree-clean"
+    ],
+    "type": "@dataclass(frozen=True) class RepositoryGateResult: name: Literal[semantic names]; command: ExecutedCommand",
+    "execution": "The evidence driver executes every required gate before publication and passes the resulting typed records directly to bundle construction. All seven gates must pass (returncode=0 and status='passed').",
+    "failure_behavior": "When any required gate fails, the staging directory is removed, the publication result is marked failed, no bundle is published, and the process exits nonzero.",
+    "production_gate_results_empty": false,
+    "act_local_range_supply": "The act-local-range gate is invoked as ./scripts/verify_all.sh --act-local --base F18 --subject S18 --manifest <path>/changed-paths.z --skip-gate-summary so the script only consumes the supplied F18..S18 tuple and explicit manifest.",
+    "range_diff_check_command": "git diff --check F18_FULL_OID S18_FULL_OID",
+    "worktree_clean_command": "git status --porcelain=v1 -z"
+  },
+  "exact_gate_inventory_contract": {
+    "manifest_files": [
+      "pytest-input-paths.z",
+      "mypy-input-paths.z",
+      "ruff-input-paths.z"
+    ],
+    "construction": "Before any subprocess invocation, the orchestrator resolves the exact argv for audit01-pytest / audit01-mypy / audit01-ruff and writes the manifest files. The argv tuple is the SAME ordered tuple passed to subprocess.",
+    "equality_invariants": [
+      "pytest_manifest_equals_executed_pytest_paths",
+      "mypy_manifest_equals_executed_mypy_paths",
+      "ruff_manifest_equals_executed_ruff_paths"
+    ],
+    "literal_glob_argv_entries": 0,
+    "audit01_ruff_uses_exact_subject_tuple": true,
+    "audit01_mypy_uses_exact_subject_tuple": true,
+    "audit01_pytest_uses_exact_subject_tuple": true
+  },
+  "python_glob_resolution_contract": {
+    "pytest_paths_pattern": "tests/verifiers/test_verifier_core_migration_audit01*.py",
+    "mypy_paths_pattern": "tests/verifiers/test_verifier_core_migration_audit01*.py",
+    "ruff_paths": "exact S18 Python tuple (no glob)",
+    "resolution": "Python glob.glob resolves the patterns BEFORE constructing argv. The subprocess argv contains the resolved path tuple, never the literal glob syntax.",
+    "literal_glob_argv_entries": 0,
+    "record_files": [
+      "pytest-input-paths.z",
+      "mypy-input-paths.z",
+      "ruff-input-paths.z"
+    ]
+  },
+  "act_local_range_contract": {
+    "interface": "verify_all.sh --act-local --base F18 --subject S18 --manifest <staging>/changed-paths.z --skip-gate-summary",
+    "manifest_required": true,
+    "authoritative_scope": "F18..S18",
+    "explicit_manifest_authority": "The orchestrator-supplied changed-paths.z is the SOLE source when --manifest is provided",
+    "explicit_range_disables_discovery": {
+      "working_tree_discovery": false,
+      "staged_discovery": false,
+      "untracked_discovery": false,
+      "internal_git_rediscovery": false
+    },
+    "act_local_no_git_diff_or_status": "In explicit range mode act-local MUST NOT invoke git diff, git status, or git ls-files; the orchestrator-supplied manifest is authoritative.",
+    "manifest_missing_fails": "If --manifest is required but not provided, or if the manifest file is missing, the script must fail closed rather than falling back to Git discovery."
+  },
+  "canonical_audit_path_contract": {
+    "serialized_shard_identity": "Each index shard path is its canonical logical file name (basename), independent of a physical root.",
+    "physical_resolution": "ReportLayout resolves logical identities to physical paths only at read/write boundaries.",
+    "no_global_realpath_weakening": true,
+    "audit_check_required": true
+  },
+  "classification_contract": {
+    "lifecycle_stages": [
+      "stage_1_pre_root_writes": "all non-root files exist except final-classification.md and bundle-root.json",
+      "stage_2_classification_writes": "final-classification.md rendered using ONLY measurements available at that stage (gate_results, bundle_validation, topology from topology.txt, sha256 of every non-root file hashed from disk); bundle_root_sha256 and publication_succeeded are PENDING_EXTERNAL_RESULT",
+      "stage_3_root_writes": "bundle-root.json hashes referenced files from disk bytes and is independently revalidated",
+      "stage_4_atomic_rename": "staging directory renamed to fresh final destination",
+      "stage_5_publication_result": "external publication-result.json outside the bundle records the post-rename measurement"
+    ],
+    "publish_state_in_bundle": "READY_TO_PUBLISH or PUBLISHED (set ONLY at stage 4)",
+    "publish_state_outside_bundle": "Only stage_5 result records success/failure; in-bundle files NEVER claim their own later publication succeeded",
+    "only_inputs": [
+      "EvidenceTransactionResult",
+      "RepositoryGateResult[]",
+      "ClosureTopology",
+      "BundleValidationResult",
+      "sha256-from-disk of every non-root file"
+    ],
+    "named_derivations_required": true,
+    "source_guard": {
+      "literal_true_pass_derivations": 0,
+      "literal_PASS_rows": 0,
+      "unmeasured_claims_rendered_PASS": 0
+    },
+    "forbidden_constants": [
+      "_render_pass(True)",
+      "hardcoded_unmeasured_PASS_claims = 0",
+      "post_publication_bundle_mutations = 0"
+    ],
+    "external_publication_state": "bundle_root_validated: PENDING_EXTERNAL_RESULT before rename; external result is the only authoritative success/failure",
+    "final_classification_lifecycle": "Stage 2 writes final-classification.md ONCE with PENDING_EXTERNAL_RESULT; subsequent re-renders are NOT allowed; bundle-root.json is NOT an input to classification"
+  },
+  "publication_contract": {
+    "inside_bundle": "READY_TO_PUBLISH (pre-rename) | PUBLISHED (post-rename, written before the file is read externally)",
+    "atomic_boundary": "The rename from validated staging directory to fresh final destination is the publication event.",
+    "outside_bundle": "/tmp/closure_evidence_18-publication-result.json",
+    "external_fields": [
+      "final_path",
+      "rename_succeeded",
+      "staging_removed",
+      "bundle_root_sha256",
+      "published_at",
+      "protocol_stage",
+      "leamas_protocol_E",
+      "bundle_bound_to",
+      "exit_nonzero"
+    ],
+    "protocol_stage": "manual-preclosure-publication-result",
+    "leamas_protocol_E": false,
+    "bundle_mutated_after_publication": false,
+    "no_in_bundle_self_publication_claim": true,
+    "pre_gate_directory_checks": {
+      "output_directory_absent": true,
+      "staging_directory_absent": true
+    }
+  },
+  "bundle_root_contract": {
+    "required_final_artifacts": [
+      "manifest.json",
+      "topology.txt",
+      "gate-results.json",
+      "commands.json",
+      "changed-paths.z",
+      "changed-python-paths.z",
+      "ruff-input-paths.z",
+      "pytest-input-paths.z",
+      "mypy-input-paths.z",
+      "changed-paths.txt",
+      "changed-python-paths.txt",
+      "ruff-input-paths.txt",
+      "pytest-input-paths.txt",
+      "mypy-input-paths.txt",
+      "ruff-scope.json",
+      "ruff-argv.json",
+      "tool-identities.json",
+      "final-classification.md",
+      "bundle-root.json"
+    ],
+    "algorithm": [
+      "enumerate every staging-root entry",
+      "reject descendants that are directories, symlinks, special files, or unexpected names",
+      "require the exact declared artifact set",
+      "hash every regular file EXCEPT bundle-root.json directly from disk bytes (NOT from in-memory authoritative_hashes)",
+      "sort by canonical slash-separated relative path",
+      "write bundle-root.json without staging/output/temp absolute paths",
+      "independently re-enumerate and re-hash every referenced file and confirm zero mismatches",
+      "stage_4: only after independent revalidation, rename staging to fresh final destination",
+      "stage_5: after rename, rehash the published directory and write external publication-result.json"
+    ],
+    "fresh_destination_check": "Before any expensive gate execution, the orchestrator MUST verify the fresh final destination does not exist (assert no stale leftover)."
+  },
+  "ruff_configuration_contract": {
+    "policy": "A — frozen explicit configuration",
+    "subject_invocation": "<launcher> check --config <canonical-config> <exact-subject-python-paths...>",
+    "canonical_invocation": "<launcher> check <exact-subject-python-paths...> (no --config flag, lets Ruff discover pyproject.toml)",
+    "toml_parser": "tomllib",
+    "equivalence": "Run both explicit --config and canonical invocations against the identical exact subject Python path tuple; require returncode equality AND normalised_diagnostics_sha256 equality AND ruff_version equality AND input_path_tuple_sha256 equality. No self-comparisons (e.g., x == x) are permitted.",
+    "recorded_fields": [
+      "configuration_policy",
+      "per_input_path_config",
+      "extend_graph",
+      "config_hashes",
+      "canonical_equivalence_command",
+      "canonical_equivalence_result",
+      "explicit_equivalence_command",
+      "explicit_equivalence_result",
+      "diagnostics_sha256",
+      "ruff_version"
+    ],
+    "independent_measurement_rule": "The explicit invocation's diagnostics_sha256 and the canonical invocation's diagnostics_sha256 MUST be derived from SEPARATE subprocess invocations. The function MUST NOT pre-compute a digest and assign it to both records.",
+    "normalised_diagnostics_rule": "Normalised diagnostics include both stdout and stderr concatenated; if Ruff's structured JSON output is available it may be used, otherwise the normalised form is (stdout bytes) || b'\\n' || (stderr bytes).",
+    "on_equivalence_failure": "transaction fails; bundle not published; staging removed; nonzero exit"
+  },
+  "test_inventory_contract": {
+    "collect_pattern": "tests/verifiers/test_verifier_core_migration_audit01*.py",
+    "baseline_refs": [
+      "354c596fa40387d63affb4136087c2d6d9eb1c6b (F17)",
+      "2e920bb59810adc65724036ce8d67f2bdd23ba92 (S17)"
+    ],
+    "subject_ref": "S18",
+    "required_fields": [
+      "baseline_nodeids",
+      "current_nodeids",
+      "removed_nodeids",
+      "added_nodeids",
+      "duplicate_nodeids",
+      "unexplained_removed_nodeids"
+    ],
+    "unexplained_removed_nodeids": [],
+    "no_collateral_damage": "Failing required tests are NOT classified as collateral damage; they must be repaired or explicitly removed with rationale."
+  },
+  "permitted_subject_paths": [
+    "scripts/act_local_changed_files.py",
+    "scripts/act_local_verification.py",
+    "scripts/verifiers_audit/range_evidence.py",
+    "scripts/verifiers_audit/range_evidence_builders.py",
+    "scripts/verifiers_audit/range_evidence_bundle.py",
+    "scripts/verifiers_audit/range_evidence_classification.py",
+    "scripts/verifiers_audit/range_evidence_gates.py",
+    "scripts/verifiers_audit/range_evidence_identity.py",
+    "scripts/verifiers_audit/range_evidence_orchestrator.py",
+    "scripts/verifiers_audit/range_evidence_topology.py",
+    "scripts/verifiers_audit/range_evidence_writer.py",
+    "scripts/verifiers_audit/typed_results.py",
+    "scripts/verify_all.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction15.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction16.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction17.py",
+    "tests/verifiers/verifier_core_migration_audit01_support.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction18.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction18_evidence.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction18_gates.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction18_identity.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction18_inventory.py",
+    "tests/verifiers/test_verifier_core_migration_audit01_correction18_bundle.py"
+  ],
+  "required_gates": [
+    ".venv/bin/python -m pytest <exact-subject-pytest-paths...> -v",
+    ".venv/bin/python -m ruff check <exact-subject-ruff-paths...>",
+    ".venv/bin/python -m mypy <exact-subject-mypy-paths...> --ignore-missing-imports",
+    ".venv/bin/python scripts/verifiers_audit/audit.py --check",
+    "./scripts/verify_all.sh --act-local --base F18 --subject S18 --manifest <staging>/changed-paths.z --skip-gate-summary",
+    "git diff --check <F18_FULL_OID> <S18_FULL_OID>",
+    "git status --porcelain=v1 -z"
+  ],
+  "detached_evidence_bundle": {
+    "directory": "/tmp/closure_evidence_18",
+    "required_files": [
+      "manifest.json",
+      "topology.txt",
+      "gate-results.json",
+      "commands.json",
+      "changed-paths.z",
+      "changed-python-paths.z",
+      "ruff-input-paths.z",
+      "pytest-input-paths.z",
+      "mypy-input-paths.z",
+      "changed-paths.txt",
+      "changed-python-paths.txt",
+      "ruff-input-paths.txt",
+      "pytest-input-paths.txt",
+      "mypy-input-paths.txt",
+      "ruff-scope.json",
+      "ruff-argv.json",
+      "tool-identities.json",
+      "final-classification.md",
+      "bundle-root.json"
+    ],
+    "publication_result_outside_bundle": "/tmp/closure_evidence_18-publication-result.json",
+    "required_publication_result_fields": [
+      "final_path",
+      "rename_succeeded",
+      "staging_removed",
+      "bundle_root_sha256",
+      "published_at",
+      "protocol_stage",
+      "leamas_protocol_E",
+      "bundle_bound_to",
+      "exit_nonzero"
+    ],
+    "deleted_at_end": false
+  },
+  "expected_final_state_until_v2_binary_exists": {
+    "CORRECTION18": "PARTIAL_CHECKPOINT",
+    "functional_evidence_contract": "PASS",
+    "publication_state_inside_bundle": "READY_TO_PUBLISH",
+    "manual_publication_result": "PUBLISHED",
+    "bundle17_superseded": true,
+    "bundle18_root_self_referential_hash_fixed": true,
+    "C": "ABSENT",
+    "T": "ABSENT",
+    "leamas_protocol_E": "ABSENT",
+    "deterministic_C_proof": "BLOCKED",
+    "wave_1": "BLOCKED"
+  },
+  "definition_of_done": {
+    "F18_contains_only_plan": true,
+    "parent_S18_equals_F18": true,
+    "committed_files_embedding_S18": 0,
+    "topology_derived_from_git_transcript": true,
+    "environment_topology_used_as_authority": false,
+    "literal_glob_argv_entries": 0,
+    "pytest_argv_equals_resolved_inventory": true,
+    "mypy_argv_equals_resolved_inventory": true,
+    "ruff_argv_equals_subject_python_inventory": true,
+    "all_required_gates_pass": true,
+    "failed_gate_can_publish_bundle": false,
+    "act_local_range_pass": true,
+    "act_local_receives_explicit_manifest": true,
+    "worktree_clean_gate_pass": true,
+    "all_git_commands_use_one_seam": true,
+    "hidden_shell_git_invocations": 0,
+    "unrecorded_git_commands": 0,
+    "range_diff_check_uses_F18_S18": true,
+    "trailing_whitespace_errors": 0,
+    "ruff_config_parsed_with_tomllib": true,
+    "explicit_config_equivalent_to_canonical": true,
+    "ruff_equivalence_self_comparisons": 0,
+    "ruff_equivalence_uses_independent_measurements": true,
+    "classification_generated_at_truthful_lifecycle_stage": true,
+    "classification_rewritten_after_root": false,
+    "classification_uses_pending_external_result": true,
+    "bundle_root_hashes_actual_disk_bytes": true,
+    "bundle_root_self_referential_hash_fixed": true,
+    "bundle_root_independently_revalidated": true,
+    "published_bundle_revalidated": true,
+    "bundle_bound_to_final_S18": true,
+    "evidence_generation_mutates_repository": false,
+    "worktree_clean": true,
+    "manual_evidence_not_called_protocol_E": true,
+    "C_T_E_not_hand_authored": true,
+    "wave_1_started": false,
+    "gate_invocation_has_explicit_environment": true,
+    "pre_gate_output_directory_check": true,
+    "pre_gate_staging_directory_check": true,
+    "post_rename_rehash_required": true,
+    "production_bound_integration_tests_pass": true
+  }
+}
