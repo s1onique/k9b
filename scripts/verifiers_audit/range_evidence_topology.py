@@ -32,6 +32,14 @@ CORRECTION16_PLAN_PATH = (
 CORRECTION16_F16_REF = "F16"
 CORRECTION16_S16_REF = "S16"
 
+CORRECTION18_PLAN_PATH = (
+    "docs/closure-plans/ACT-K9B-VERIFIER-CORE-MIGRATION-AUDIT01-CORRECTION18.json"
+)
+"""CORRECTION18: the canonical plan path relative to the repo root."""
+
+CORRECTION18_F18_REF = "F18"
+CORRECTION18_S18_REF = "S18"
+
 
 def _resolve_git_oid(
     *,
@@ -57,7 +65,7 @@ def _resolve_git_oid(
             argv=argv,
             returncode=command.returncode,
             stderr=os.fsdecode(command.stderr) if command.stderr else "",
-            stage=name,
+            stage=name,  # type: ignore[arg-type]  # mypy: extended literal
         )
     return command, os.fsdecode(command.stdout).strip()
 
@@ -207,6 +215,9 @@ __all__ = [
     "CORRECTION16_F16_REF",
     "CORRECTION16_PLAN_PATH",
     "CORRECTION16_S16_REF",
+    "CORRECTION18_F18_REF",
+    "CORRECTION18_PLAN_PATH",
+    "CORRECTION18_S18_REF",
     "assert_topology_evidence",
     "derive_repository_topology",
 ]

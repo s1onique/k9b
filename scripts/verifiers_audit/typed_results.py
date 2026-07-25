@@ -92,12 +92,15 @@ RepositoryGateName = Literal[
     "audit01-mypy",
     "audit-check",
     "act-local",
+    "act-local-range",
     "diff-check",
+    "range-diff-check",
     "worktree-clean",
 ]
-"""CORRECTION15: closed set of semantic gate names.
+"""CORRECTION18: closed set of semantic gate names.
 
 The evidence driver MUST execute every required gate before
+publication with one of these closed names.
 publication.  Gate identity is NEVER inferred from the argv
 prefix; the closed ``Literal`` set is the SOLE authority for
 the allowed names.

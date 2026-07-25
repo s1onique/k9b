@@ -174,6 +174,19 @@ ACT-Local: Use --act-local as the default close-check for local agent ACTs.
         ),
     )
 
+    # CORRECTION18: explicit manifest file for act-local.
+    parser.add_argument(
+        "--manifest",
+        type=str,
+        default=None,
+        help=(
+            "Path to a file containing explicit changed-paths manifest "
+            "(newline-separated NUL-terminated paths). When supplied with "
+            "--act-local, the manifest is used instead of git diff to "
+            "determine which files to verify."
+        ),
+    )
+
     # Lock management commands (mutually exclusive with profile)
     lock_group = parser.add_mutually_exclusive_group()
     lock_group.add_argument(
@@ -373,11 +386,14 @@ def main(argv: list[str] | None = None) -> int:
         # scripts/factory/populate_gate_summary.py.
         # CORRECTION16: forward --base / --subject so the script verifies
         # only the F16..S16 range.
+        # CORRECTION18: forward --manifest for explicit changed-paths
+        # manifest.
         act_result = run_act_local_verification(
             json_mode=args.json,
             skip_gate_summary=args.skip_gate_summary,
             base=args.base,
             subject=args.subject,
+            manifest=args.manifest,
         )
 
         if args.json:

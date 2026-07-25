@@ -78,21 +78,77 @@ from scripts.verifiers_audit.typed_results import (
 )
 
 
+# CORRECTION18: exception raised when gate plan is invalid
+class GatePlanError(RuntimeError):
+    """Raised when a gate plan constraint is violated."""
+    pass
+
+
 @dataclass(frozen=True)
 class GateInvocation:
-    """A planned gate invocation.
+    """CORRECTION18: a planned gate invocation with explicit environment.
 
     * ``name`` - the closed semantic name of the gate.
-    * ``argv`` - the executed argv (tuple).
+    * ``argv`` - the executed argv (tuple) or ``None`` when
+      the gate is explicitly skipped (e.g., ruff with empty
+      subject Python paths).  When ``argv`` is ``None`` the
+      gate MUST NOT be executed.
     * ``cwd`` - the working directory.
+    * ``environment_overrides`` - CORRECTION18: immutable tuple
+      of key-value pairs representing environment overrides.
+      The executor always constructs an effective environment:
+      ``effective = sanitised_parent_environment();
+      effective.update(dict(overrides))``.  This preserves
+      PATH and other required variables while allowing
+      PYTHONPATH overrides.
+    * ``input_paths`` - files consumed by the gate.
     * ``expected_pass`` - whether the gate is expected to
       pass (False when the gate is allowed to be skipped).
+
+    CORRECTION18: ``__post_init__`` enforces runtime immutability
+    of ``environment_overrides`` by validating the exact tuple
+    shape at construction time.  A frozen dataclass alone does
+    not prevent mutable nested values.
     """
 
     name: RepositoryGateName
-    argv: tuple[str, ...]
+    argv: tuple[str, ...] | None
     cwd: str
+    environment_overrides: tuple[tuple[str, str], ...]
+    input_paths: tuple[str, ...]
     expected_pass: bool = True
+
+    def __post_init__(self) -> None:
+        """Validate environment_overrides shape at construction time."""
+        overrides = self.environment_overrides
+
+        # Validate exact tuple type
+        if not isinstance(overrides, tuple):
+            raise TypeError(
+                "environment_overrides must be a tuple of string pairs, "
+                f"got {type(overrides).__name__}"
+            )
+
+        # Validate each entry and check for duplicates
+        seen: set[str] = set()
+        for item in overrides:
+            if (
+                not isinstance(item, tuple)
+                or len(item) != 2
+                or not isinstance(item[0], str)
+                or not isinstance(item[1], str)
+            ):
+                raise TypeError(
+                    "environment_overrides entries must be (str, str), "
+                    f"got {type(item).__name__}"
+                )
+
+            key: str = item[0]
+            if key in seen:
+                raise ValueError(
+                    f"duplicate environment override key: {key!r}"
+                )
+            seen.add(key)
 
 
 # CORRECTION16: the canonical test-inventory glob pattern.
@@ -163,10 +219,11 @@ def build_required_gates(
     *,
     repo_root: Path,
     subject_python_paths: tuple[str, ...] = (),
-    base: str = "F16",
-    subject: str = "S16",
+    base: str = "F18",
+    subject: str = "S18",
+    manifest_path: Path | None = None,
 ) -> tuple[GateInvocation, ...]:
-    """Build the closed set of required gate invocations.
+    """CORRECTION18: build the closed set of required gate invocations.
 
     The function returns the seven required gate plans in
     the canonical order.  The caller is expected to
@@ -174,21 +231,60 @@ def build_required_gates(
     :class:`RepositoryGateResult` records to the bundle
     builder.
 
-    CORRECTION16:
+    CORRECTION18 hardenings:
 
-    * ``subject_python_paths`` is the exact Python path
-      tuple the CORRECTION16 subject commit changed (used
-      by the ``audit01-ruff`` gate so the Ruff invocation
-      targets the same files).
-    * ``base`` and ``subject`` are forwarded to the
-      ``act-local`` gate so the script verifies only the
-      F16..S16 range.
-    * ``audit01-pytest`` and ``audit01-mypy`` argv contains
-      the resolved test inventory tuple, NEVER the literal
-      glob pattern.
+    * ``manifest_path`` is REQUIRED for the closure
+      transaction.  When ``None``, a ``GatePlanError`` is
+      raised to enforce the exact-range contract;
+    * ``act-local-range`` receives explicit
+      ``--base F18 --subject S18`` arguments AND
+      ``--manifest <path>``;
+    * ``range-diff-check`` is invoked with full OID range;
+    * ``audit01-ruff`` uses the EXACT subject Python path
+      tuple from ``subject_python_paths``;
+    * an empty ``subject_python_paths`` results in
+      ``argv=None`` and ``expected_pass=False`` (explicit skip);
+    * every GateInvocation has explicit ``environment`` and
+      ``input_paths`` fields;
+    * defaults are F18/S18 instead of F16/S16.
     """
+    # CORRECTION18: manifest_path is required for the closure transaction
+    if manifest_path is None:
+        raise GatePlanError(
+            "act-local-range requires an authoritative changed-paths manifest"
+        )
+
     py = _default_python()
     test_inventory = resolve_test_inventory(repo_root=repo_root)
+
+    # CORRECTION18: ruff uses the EXACT subject Python paths.
+    # An empty tuple is a valid result (no Python files in range).
+    # The gate MUST skip explicitly rather than linting the
+    # current directory (which is what pathless "ruff check" does).
+    ruff_has_paths = bool(subject_python_paths)
+    ruff_paths = subject_python_paths if ruff_has_paths else ()
+
+    # Build act-local argv with required manifest path
+    act_local_argv: list[str] = [
+        "./scripts/verify_all.sh",
+        "--act-local",
+        "--base",
+        base,
+        "--subject",
+        subject,
+        "--skip-gate-summary",
+        "--manifest",
+        str(manifest_path),
+    ]
+
+    # CORRECTION18: mypy inventory includes full audit surface
+    mypy_inventory = (
+        "scripts/verifiers_audit",
+        *test_inventory,
+        "tests/verifiers/conftest.py",
+        "tests/verifiers/verifier_core_migration_audit01_support.py",
+    )
+
     return (
         GateInvocation(
             name="audit01-pytest",
@@ -200,6 +296,8 @@ def build_required_gates(
                 "-v",
             ),
             cwd=str(repo_root),
+            environment_overrides=(("PYTHONPATH", str(repo_root)),),
+            input_paths=test_inventory,
         ),
         GateInvocation(
             name="audit01-ruff",
@@ -208,10 +306,12 @@ def build_required_gates(
                 "-m",
                 "ruff",
                 "check",
-                "scripts/verifiers_audit",
-                "tests/verifiers",
-            ),
+                *ruff_paths,
+            ) if ruff_has_paths else None,
             cwd=str(repo_root),
+            environment_overrides=(("PYTHONPATH", str(repo_root)),),
+            input_paths=ruff_paths,
+            expected_pass=ruff_has_paths,
         ),
         GateInvocation(
             name="audit01-mypy",
@@ -219,41 +319,40 @@ def build_required_gates(
                 py,
                 "-m",
                 "mypy",
-                "scripts/verifiers_audit",
-                *test_inventory,
-                "tests/verifiers/verifier_core_migration_audit01_support.py",
-                "tests/verifiers/conftest.py",
+                *mypy_inventory,
                 "--ignore-missing-imports",
             ),
             cwd=str(repo_root),
+            environment_overrides=(("PYTHONPATH", str(repo_root)),),
+            input_paths=mypy_inventory,
         ),
         GateInvocation(
             name="audit-check",
             argv=(py, "scripts/verifiers_audit/audit.py", "--check"),
             cwd=str(repo_root),
+            environment_overrides=(("PYTHONPATH", str(repo_root)),),
+            input_paths=("scripts/verifiers_audit/audit.py",),
         ),
         GateInvocation(
-            name="act-local",
-            argv=(
-                "./scripts/verify_all.sh",
-                "--act-local",
-                "--base",
-                base,
-                "--subject",
-                subject,
-                "--skip-gate-summary",
-            ),
+            name="act-local-range",
+            argv=tuple(act_local_argv),
             cwd=str(repo_root),
+            environment_overrides=(),
+            input_paths=(str(manifest_path),) if manifest_path else (),
         ),
         GateInvocation(
-            name="diff-check",
-            argv=("git", "diff", "--check"),
+            name="range-diff-check",
+            argv=("git", "diff", "--check", f"{base}..{subject}"),
             cwd=str(repo_root),
+            environment_overrides=(),
+            input_paths=(),
         ),
         GateInvocation(
             name="worktree-clean",
             argv=("git", "status", "--porcelain=v1", "-z"),
             cwd=str(repo_root),
+            environment_overrides=(),
+            input_paths=(),
         ),
     )
 
@@ -265,18 +364,45 @@ def _execute_invocation(
 ) -> ExecutedCommand:
     """Execute a single gate invocation and return the typed result.
 
+    When ``invocation.argv`` is ``None`` the gate is explicitly
+    skipped and a "skipped" status is returned without executing
+    any subprocess.  This handles the CORRECTION18 case where
+    ruff is skipped due to an empty subject Python path tuple.
+
     Git invocations (``diff-check`` and ``worktree-clean``)
     go through the :class:`SubprocessGitRunner` seam so the
     test suite can patch ``subprocess.run`` and assert that
     every Git call is recorded in the seam's transcript.
     Non-Git gates use :func:`capture_command`.
+
+    CORRECTION18: the executor ALWAYS constructs an effective
+    environment: ``effective = dict(os.environ);
+    effective.update(dict(overrides))``.  Even when overrides
+    is empty, the explicit policy is used rather than implicit
+    inheritance.
     """
+    # CORRECTION18: explicit skip when argv is None
+    if invocation.argv is None:
+        return ExecutedCommand(
+            name=invocation.name,
+            argv=(),
+            cwd=invocation.cwd,
+            returncode=0,
+            stdout=b"",
+            stderr=b"",
+            status="skipped",
+        )
     cwd = Path(invocation.cwd)
     argv = invocation.argv
+    # CORRECTION18: always construct effective environment
+    # even when overrides is empty (explicit policy, not implicit inheritance)
+    effective_env: dict[str, str] = dict(os.environ)
+    for key, value in invocation.environment_overrides:
+        effective_env[key] = value
     if argv and argv[0] == "git":
         runner = git_runner or SubprocessGitRunner()
-        return runner.run(argv, cwd=cwd, name=invocation.name)
-    return capture_command(argv, cwd=cwd, name=invocation.name)
+        return runner.run(argv, cwd=cwd, name=invocation.name, env=effective_env)
+    return capture_command(argv, cwd=cwd, name=invocation.name, env=effective_env)
 
 
 def run_required_gates(
@@ -284,8 +410,9 @@ def run_required_gates(
     repo_root: Path,
     git_runner: SubprocessGitRunner | None = None,
     subject_python_paths: tuple[str, ...] = (),
-    base: str = "F16",
-    subject: str = "S16",
+    base: str,
+    subject: str,
+    manifest_path: Path,
 ) -> tuple[RepositoryGateResult, ...]:
     """Execute the seven required gates and return the typed records.
 
@@ -294,6 +421,10 @@ def run_required_gates(
     per gate.  The order is canonical.  A gate that fails is
     still recorded; the function does NOT short-circuit so
     every gate is captured for the bundle.
+
+    CORRECTION18: ``manifest_path``, ``base``, and ``subject``
+    are REQUIRED.  There are no defaults; callers must supply
+    explicit resolved full commit OIDs.
 
     CORRECTION16:
 
@@ -311,6 +442,7 @@ def run_required_gates(
         subject_python_paths=subject_python_paths,
         base=base,
         subject=subject,
+        manifest_path=manifest_path,
     )
     out: list[RepositoryGateResult] = []
     for invocation in invocations:
@@ -413,6 +545,7 @@ _default_paths = os.environ.get("K9B_TEST_INVENTORY", "")
 __all__ = [
     "AUDIT01_TEST_GLOB_PATTERN",
     "GateInvocation",
+    "GatePlanError",
     "all_required_gates_pass",
     "argv_has_literal_glob",
     "assert_argv_has_no_literal_glob",

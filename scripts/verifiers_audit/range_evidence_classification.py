@@ -50,6 +50,9 @@ from scripts.verifiers_audit.typed_results import (
 
 ClaimStatus = Literal["PASS", "FAILED", "UNMEASURED", "PENDING_EXTERNAL_RESULT"]
 
+# CORRECTION18: exported constant for external reference
+PENDING_EXTERNAL_RESULT: str = "PENDING_EXTERNAL_RESULT"
+
 LifecycleStage = Literal[
     "pre_root_writes",
     "root_writes",

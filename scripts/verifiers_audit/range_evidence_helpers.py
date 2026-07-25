@@ -121,6 +121,9 @@ class GitRunner(Protocol):
     * preserve the argv verbatim (``tuple`` not ``list``);
     * preserve the raw stdout/stderr bytes verbatim.
 
+    CORRECTION18: implementations MUST accept and pass
+    an optional ``env`` parameter to subprocess.run.
+
     The default implementation (:class:`SubprocessGitRunner`)
     runs in-process.
     """
@@ -131,6 +134,7 @@ class GitRunner(Protocol):
         *,
         cwd: Path,
         name: str = "",
+        env: dict[str, str] | None = None,
     ) -> ExecutedCommand:
         ...
 
@@ -145,6 +149,12 @@ class SubprocessGitRunner:
     raw stdout/stderr bytes are returned to the caller; the
     ``stdout_sha256`` / ``stderr_sha256`` properties on the
     :class:`ExecutedCommand` are derived from those bytes.
+
+    CORRECTION18: the runner accepts a COMPLETE environment
+    mapping and passes it directly to subprocess.run without
+    further merging.  The caller (gate executor) is solely
+    responsible for constructing the effective environment
+    from parent + overrides.  This avoids double-merging.
     """
 
     def run(
@@ -153,12 +163,16 @@ class SubprocessGitRunner:
         *,
         cwd: Path,
         name: str = "",
+        env: dict[str, str] | None = None,
     ) -> ExecutedCommand:
+        # CORRECTION18: env is already the complete effective environment.
+        # Runner passes it directly to subprocess without merging.
         proc = subprocess.run(
             list(argv),
             cwd=str(cwd),
             capture_output=True,
             check=False,
+            env=env,
         )
         status: CommandStatus = "passed" if proc.returncode == 0 else "failed"
         return ExecutedCommand(
@@ -217,6 +231,7 @@ def capture_command(
     *,
     cwd: Path,
     name: str = "",
+    env: dict[str, str] | None = None,
 ) -> ExecutedCommand:
     """CORRECTION15: capture an arbitrary command as a typed result.
 
@@ -227,9 +242,12 @@ def capture_command(
     canonical capture helper for every non-Git command too; it
     deliberately uses the same interface as the Git seam so
     downstream code can treat all commands uniformly.
+
+    CORRECTION18: when ``env`` is supplied, it is merged with
+    os.environ and passed to subprocess.run.
     """
     runner = SubprocessGitRunner()
-    return runner.run(argv, cwd=cwd, name=name)
+    return runner.run(argv, cwd=cwd, name=name, env=env)
 
 
 __all__ = [

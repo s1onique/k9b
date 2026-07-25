@@ -146,6 +146,7 @@ def run_act_local_verification(
     gate_summary_artifact_path: Path | None = None,
     base: str | None = None,
     subject: str | None = None,
+    manifest: str | None = None,
 ) -> ActLocalResult:
     """
     Run ACT-local verification.
@@ -200,11 +201,15 @@ def run_act_local_verification(
         # CORRECTION16: when --base / --subject are supplied
         # the script uses the explicit F16..S16 range as the
         # authoritative source of changed files.
+        # CORRECTION18: when --manifest is supplied, use the
+        # explicit manifest file instead of git discovery.
         range_base = base or None
         range_subject = subject or None
+        manifest_path = Path(manifest) if manifest else None
         changed_files = get_changed_files(
             base=range_base,
             subject=range_subject,
+            manifest_path=manifest_path,
         )
 
     if python_files is None:

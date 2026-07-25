@@ -155,6 +155,14 @@ RangeResolutionStage = Literal[
     "resolve_base",
     "resolve_subject",
     "diff_names",
+    # CORRECTION18: extended stages for topology derivation
+    "git-rev-parse-f16-commit",
+    "git-rev-parse-f16-tree",
+    "git-rev-parse-f16-parent",
+    "git-rev-parse-f16-plan-blob",
+    "git-rev-parse-s16-commit",
+    "git-rev-parse-s16-tree",
+    "git-rev-parse-s16-parent",
 ]
 
 
