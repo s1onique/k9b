@@ -238,17 +238,14 @@ def test_invalid_subject_resolution_raises_typed_error(
     assert excinfo.value.subject == "0" * 40
 
 
-def test_resolve_base_failure_raises_stage_resolve_base() -> None:
+def test_resolve_base_failure_raises_stage_resolve_base(tmp_path: Path) -> None:
     """``_resolve_full_commit`` raises a typed
     ``RangeResolutionError`` with ``stage='resolve_base'``."""
     from scripts.verifiers_audit.range_evidence_helpers import (
         _resolve_full_commit,
     )
 
-    tmp = Path(os.fsdecode(os.fsencode("/tmp"))) / "cor13-empty-repo"
-    if tmp.exists():
-        import shutil as _sh
-        _sh.rmtree(tmp)
+    tmp = tmp_path / "cor13-empty-repo"
     tmp.mkdir()
     git_init(tmp)
     with pytest.raises(RangeResolutionError) as excinfo:
@@ -263,17 +260,14 @@ def test_resolve_base_failure_raises_stage_resolve_base() -> None:
     assert excinfo.value.returncode != 0
 
 
-def test_resolve_subject_failure_raises_stage_resolve_subject() -> None:
+def test_resolve_subject_failure_raises_stage_resolve_subject(tmp_path: Path) -> None:
     """``_resolve_full_commit`` raises a typed
     ``RangeResolutionError`` with ``stage='resolve_subject'``."""
     from scripts.verifiers_audit.range_evidence_helpers import (
         _resolve_full_commit,
     )
 
-    tmp = Path(os.fsdecode(os.fsencode("/tmp"))) / "cor13-subject-fail"
-    if tmp.exists():
-        import shutil as _sh
-        _sh.rmtree(tmp)
+    tmp = tmp_path / "cor13-subject-fail"
     tmp.mkdir()
     git_init(tmp)
     base, _trailing_ok = commit_fixture_base(tmp)
@@ -289,16 +283,13 @@ def test_resolve_subject_failure_raises_stage_resolve_subject() -> None:
     assert excinfo.value.returncode != 0
 
 
-def test_no_plain_runtimeerror_at_range_boundary() -> None:
+def test_no_plain_runtimeerror_at_range_boundary(tmp_path: Path) -> None:
     """A plain ``RuntimeError`` is forbidden at the Git
     range boundary.  The typed
     :class:`RangeResolutionError` MUST be raised instead."""
     from scripts.verifiers_audit.scope import _run_git_diff_names_bytes
 
-    tmp = Path(os.fsdecode(os.fsencode("/tmp"))) / "cor13-runtimeerr"
-    if tmp.exists():
-        import shutil as _sh
-        _sh.rmtree(tmp)
+    tmp = tmp_path / "cor13-runtimeerr"
     tmp.mkdir()
     git_init(tmp)
     with pytest.raises(RangeResolutionError) as excinfo:

@@ -22,9 +22,15 @@ SHARD_NAMES: tuple[str, ...] = (
     "core_usage",
     "candidates",
     "source_preservation",
-    "gate_classification",
 )
+# The shards the audit writer is responsible for emitting.
+# ``gate_classification`` is an OPTIONAL shard owned by
+# :mod:`scripts.verifiers_audit.collect_r2_evidence`; the
+# audit writer does not emit it but may include it in the
+# top-level index when the file already exists on disk.
 REQUIRED_SHARDS: frozenset[str] = frozenset(SHARD_NAMES)
+OPTIONAL_SHARDS: frozenset[str] = frozenset({"gate_classification"})
+ALL_SHARDS: frozenset[str] = REQUIRED_SHARDS | OPTIONAL_SHARDS
 
 
 class AuditWriteError(RuntimeError):

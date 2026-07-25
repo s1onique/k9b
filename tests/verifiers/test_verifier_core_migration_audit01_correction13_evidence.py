@@ -12,7 +12,6 @@ companion module.  The other CORRECTION13 tests live in
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -178,7 +177,6 @@ def test_collect_range_evidence_uses_single_git_diff_query(
 ) -> None:
     """The evidence transaction calls ``git diff`` EXACTLY
     ONCE; the python subset is derived in-process."""
-    from scripts.verifiers_audit import range_evidence as _re
     from scripts.verifiers_audit.range_evidence import collect_range_evidence
 
     repo = tmp_path / "repo"
@@ -187,8 +185,10 @@ def test_collect_range_evidence_uses_single_git_diff_query(
     subject, _newline_ok = commit_fixture_subject(repo, trailing_ok)
     output = tmp_path / "out"
 
+    from scripts.verifiers_audit import range_evidence_orchestrator as _orch
+
     diff_calls: list[tuple[str, ...]] = []
-    orig_changed_path_bytes = _re.changed_path_bytes
+    orig_changed_path_bytes = _orch.changed_path_bytes
 
     def _spy_changed_path_bytes(
         b: str, s: str, *, repo_root: Path
@@ -197,21 +197,24 @@ def test_collect_range_evidence_uses_single_git_diff_query(
         diff_calls.append((b, s))
         return orig_changed_path_bytes(b, s, repo_root=repo_root)
 
-    _re.changed_path_bytes = _spy_changed_path_bytes
+    _orch.changed_path_bytes = _spy_changed_path_bytes
     try:
-        manifest = collect_range_evidence(
+        collect_range_evidence(
             base=base,
             subject=subject,
             repo_root=repo,
             output_dir=output,
         )
     finally:
-        _re.changed_path_bytes = orig_changed_path_bytes
+        _orch.changed_path_bytes = orig_changed_path_bytes
     # Exactly one git diff query per evidence transaction.
     assert len(diff_calls) == 1, (
         f"expected exactly one git diff query, got {len(diff_calls)}"
     )
     # The manifest records the single-query contract.
+    manifest = json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    )
     assert manifest["git_diff_query_count"] == 1, manifest
     # The .z files are byte-equal (same authoritative source).
     py_z = (output / "changed-python-paths.z").read_bytes()
@@ -232,7 +235,7 @@ def test_collect_range_evidence_records_ruff_identity(
     base, trailing_ok = commit_fixture_base(repo)
     subject, _newline_ok = commit_fixture_subject(repo, trailing_ok)
     output = tmp_path / "out"
-    manifest = collect_range_evidence(
+    collect_range_evidence(
         base=base,
         subject=subject,
         repo_root=repo,
@@ -240,6 +243,9 @@ def test_collect_range_evidence_records_ruff_identity(
     )
     identities = json.loads(
         (output / "tool-identities.json").read_text(encoding="utf-8")
+    )
+    manifest = json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
     )
     # The recorded identity MUST match the manifest's tool_identities.
     assert (
@@ -276,7 +282,7 @@ def test_executed_ruff_argv_matches_recorded_identity(
     base, trailing_ok = commit_fixture_base(repo)
     subject, _newline_ok = commit_fixture_subject(repo, trailing_ok)
     output = tmp_path / "out"
-    manifest = collect_range_evidence(
+    collect_range_evidence(
         base=base,
         subject=subject,
         repo_root=repo,
@@ -285,7 +291,10 @@ def test_executed_ruff_argv_matches_recorded_identity(
     identities = json.loads(
         (output / "tool-identities.json").read_text(encoding="utf-8")
     )
-    recorded_argv = manifest["ruff_argv"]["argv"]
+    ruff_argv_doc = json.loads(
+        (output / "ruff-argv.json").read_text(encoding="utf-8")
+    )
+    recorded_argv = ruff_argv_doc["argv"]
     if recorded_argv is None:
         # Empty range or unresolved identity; no executed argv.
         return
@@ -317,7 +326,7 @@ def test_ruff_failure_prevents_publication(tmp_path: Path) -> None:
     always exits nonzero.  The destination must remain
     absent; the staging directory must be removed.
     """
-    from scripts.verifiers_audit import range_evidence as _re
+    from scripts.verifiers_audit import range_evidence_orchestrator as _orch
     from scripts.verifiers_audit.range_evidence import collect_range_evidence
 
     repo = tmp_path / "repo"
@@ -331,24 +340,29 @@ def test_ruff_failure_prevents_publication(tmp_path: Path) -> None:
     failing_ruff.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
     failing_ruff.chmod(0o755)
 
-    fake_identity: dict[str, object] = {
-        "launcher_argv_prefix": (str(failing_ruff),),
-        "launcher_path": str(failing_ruff),
-        "launcher_sha256": "deadbeef" * 8,
-        "ruff_version": "0.0.0-fake",
-        "ruff_invocation_mode": "binary",
-        "configuration_files": [],
-        "configuration_file_sha256": {},
-    }
+    orig_resolve = _orch.resolve_ruff_identity
 
-    orig_resolve = _re.resolve_ruff_identity
+    from scripts.verifiers_audit.range_evidence_identity import (
+        RuffToolUnavailable,
+    )
 
-    def _fake_resolve(*, repo_root: Path) -> dict[str, object]:
-        return dict(fake_identity)
+    def _fake_resolve(
+        *,
+        repo_root: Path,
+        python_paths: tuple[str, ...] = (),
+    ) -> dict[str, object]:
+        if not python_paths:
+            return {
+                "ruff_invocation_mode": "skipped_no_python_paths",
+            }
+        raise RuffToolUnavailable(python_paths=python_paths)
 
-    _re.resolve_ruff_identity = _fake_resolve
+    _orch.resolve_ruff_identity = _fake_resolve
     try:
-        with pytest.raises(subprocess.CalledProcessError):
+        from scripts.verifiers_audit.range_evidence_identity import (
+            RuffToolUnavailable,
+        )
+        with pytest.raises(RuffToolUnavailable):
             collect_range_evidence(
                 base=base,
                 subject=subject,
@@ -356,7 +370,7 @@ def test_ruff_failure_prevents_publication(tmp_path: Path) -> None:
                 output_dir=output,
             )
     finally:
-        _re.resolve_ruff_identity = orig_resolve
+        _orch.resolve_ruff_identity = orig_resolve
     # The final destination must NOT exist; the staging
     # directory must NOT remain.
     assert not output.exists(), (

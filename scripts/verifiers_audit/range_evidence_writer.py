@@ -1,203 +1,131 @@
-"""CORRECTION13: detached range evidence bundle writer.
+"""CORRECTION13/CORRECTION14: detached range evidence bundle writer.
 
-The writer module produces the manifest, scope, argv,
-tool-identities, commands, and final-classification files
-inside the staging directory.  All operations are
-idempotent: an existing staging directory is removed
-before the writer runs.
+The writer module owns the file-writer layer:
+
+* :func:`write_ruff_scope_file` - the ``ruff-scope.json`` writer.
+* :func:`write_ruff_argv_file` - the ``ruff-argv.json`` writer.
+* :func:`write_tool_identities_file` - the
+  ``tool-identities.json`` writer.
+* :func:`write_commands_file` - the ``commands.json`` writer.
+* :func:`write_manifest_file` - the ``manifest.json`` writer.
+* :func:`write_topology_file` - the ``topology.txt`` writer.
+* :func:`write_gate_results_file` - the
+  ``gate-results.json`` writer.
+* :func:`write_classification_file` - the
+  ``final-classification.md`` writer.
+
+The manifest / topology / bundle-root builders live in
+:mod:`range_evidence_builders`; the typed result dataclasses
+live in :mod:`typed_results`; the final-classification
+renderer lives in :mod:`range_evidence_classification`.
 
 The writer is invoked by :func:`collect_range_evidence` in
 :mod:`range_evidence`.  It must NEVER touch the destination
 directory directly; the orchestrator renames the staging
 directory only after every write succeeds.
-
-CORRECTION13: the final-classification.md file is rendered
-from a measured result object.  Hardcoded ``PASS`` claims
-are forbidden; the writer renders every claim from the
-measured result or marks it ``UNMEASURED``.  The
-classification distinguishes transaction-derived claims
-(range, paths, ruff, publication) from
-repository-test-evidence claims (cmd_check, mutation
-matrix, full test suite).  The repository test suite
-claim is not emitted unless the test command's captured
-evidence is included in ``commands.json``.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import cast
 
-from scripts.verifiers_audit.range_evidence_manifest import (
-    build_commands_registry,
-    build_manifest,
-)
+from scripts.verifiers_audit.typed_results import CommandResult
 
 
-def _classify_claim(claim: str, measured: bool) -> str:
-    """Render a claim row from a measured result.
-
-    When ``measured`` is True, the claim is ``PASS``; when
-    False, the claim is rendered ``UNMEASURED`` so a
-    downstream consumer can distinguish a verified row from
-    an unverified row.
-    """
-    return "PASS" if measured else "UNMEASURED"
-
-
-def _build_classification_rows(
+def build_commands_registry(
     *,
     base: str,
     subject: str,
     base_full_oid: str,
     subject_full_oid: str,
-    sha_map: dict[str, str],
-    ruff_scope_status: str,
-    ruff_run: dict[str, object],
-) -> list[tuple[str, str]]:
-    """Return a list of (signal, value) rows for the final classification.
+    git_commands: tuple[CommandResult, ...],
+    ruff_result: CommandResult | None,
+    repo_root: Path,
+) -> list[dict[str, object]]:
+    """Build the post-subject commands registry.
 
-    Every row's value is derived from the supplied measurements
-    (``sha_map``, ``ruff_scope_status``, ``ruff_run``) or is
-    rendered ``UNMEASURED`` when the claim has no measurement
-    bound to the current evidence transaction.
+    Every command's argv is recorded verbatim.  The
+    ``git-rev-parse-base`` and ``git-rev-parse-subject``
+    commands are ALWAYS recorded; the ``git-diff-factory``
+    command is recorded with the FULL OIDs; the
+    ``ruff-check`` command is recorded as the executed
+    argv (or absent when the range was empty or the
+    identity was unresolved).
     """
-    return [
-        ("CORRECTION12_RECOVERY", "PASS"),
-        ("CORRECTION13", "PARTIAL_CHECKPOINT"),
-        ("byte_safe_pathname_api", "PASS"),
-        ("authoritative_evidence_manifests_are_nul_delimited_bytes", "PASS"),
-        ("human_text_manifests_are_non_authoritative", "PASS"),
-        ("adversarial_paths_are_actually_changed", "PASS"),
-        ("empty_range_records_explicit_skip", "PASS"),
-        ("empty_range_does_not_run_pathless_ruff", "PASS"),
-        (
-            "typed_git_failure_contract_at_every_git_site",
-            _classify_claim(
-                "typed_git_failure_contract_at_every_git_site",
-                measured=True,
+    commands: list[dict[str, object]] = [
+        {
+            "name": "git-rev-parse-base",
+            "argv": (
+                list(git_commands[0].argv) if git_commands
+                else [
+                    "git", "rev-parse", "--verify",
+                    f"{base}^{{commit}}",
+                ]
             ),
-        ),
-        (
-            "layout_aware_index_normalisation",
-            _classify_claim(
-                "layout_aware_index_normalisation", measured=True
+            "cwd": str(repo_root),
+            "exit_code": git_commands[0].returncode if git_commands else -1,
+            "stdout_sha256": (
+                git_commands[0].stdout_sha256 if git_commands else ""
             ),
-        ),
-        (
-            "actual_cmd_check_mutation_tests",
-            _classify_claim(
-                "actual_cmd_check_mutation_tests", measured=True
+            "stderr_sha256": (
+                git_commands[0].stderr_sha256 if git_commands else ""
             ),
-        ),
-        (
-            "single_git_path_query_per_evidence_transaction",
-            _classify_claim(
-                "single_git_path_query_per_evidence_transaction",
-                measured=True,
+        },
+        {
+            "name": "git-rev-parse-subject",
+            "argv": (
+                list(git_commands[1].argv) if len(git_commands) > 1
+                else [
+                    "git", "rev-parse", "--verify",
+                    f"{subject}^{{commit}}",
+                ]
             ),
-        ),
-        (
-            "python_paths_derived_without_second_git_call",
-            _classify_claim(
-                "python_paths_derived_without_second_git_call",
-                measured=True,
+            "cwd": str(repo_root),
+            "exit_code": (
+                git_commands[1].returncode if len(git_commands) > 1 else -1
             ),
-        ),
-        (
-            "cmd_check_compares_complete_normalised_index",
-            _classify_claim(
-                "cmd_check_compares_complete_normalised_index",
-                measured=True,
+            "stdout_sha256": (
+                git_commands[1].stdout_sha256
+                if len(git_commands) > 1
+                else ""
             ),
-        ),
-        (
-            "top_level_metadata_mutation_tests_present",
-            _classify_claim(
-                "top_level_metadata_mutation_tests_present", measured=True
+            "stderr_sha256": (
+                git_commands[1].stderr_sha256
+                if len(git_commands) > 1
+                else ""
             ),
-        ),
-        (
-            "range_is_resolved_to_full_commit_oids_once",
-            _classify_claim(
-                "range_is_resolved_to_full_commit_oids_once", measured=True
-            ),
-        ),
-        (
-            "executed_ruff_identity_equivalence",
-            _classify_claim(
-                "executed_ruff_identity_equivalence",
-                measured=True,
-            ),
-        ),
-        (
-            "ruff_executable_identity_bound",
-            _classify_claim(
-                "ruff_executable_identity_bound", measured=True
-            ),
-        ),
-        ("ruff_version_bound", "PASS"),
-        ("ruff_configuration_hashes_bound", "PASS"),
-        ("fresh_destination_only", "PASS"),
-        ("force_replace_supported", "NO"),
-        (
-            "ruff_failure_prevents_publication",
-            _classify_claim(
-                "ruff_failure_prevents_publication", measured=True
-            ),
-        ),
-        (
-            "evidence_output_requires_fresh_destination",
-            _classify_claim(
-                "evidence_output_requires_fresh_destination", measured=True
-            ),
-        ),
-        (
-            "evidence_bundle_published_transactionally",
-            _classify_claim(
-                "evidence_bundle_published_transactionally", measured=True
-            ),
-        ),
-        (
-            "failed_evidence_run_leaves_no_final_bundle",
-            _classify_claim(
-                "failed_evidence_run_leaves_no_final_bundle", measured=True
-            ),
-        ),
-        (
-            "final_classification_claims_are_derived",
-            _classify_claim(
-                "final_classification_claims_are_derived", measured=True
-            ),
-        ),
-        ("hardcoded_unmeasured_PASS_claims", "0"),
-        ("transaction_evidence.range_resolution",
-         f"PASS ({base} -> {base_full_oid})"),
-        ("transaction_evidence.subject_resolution",
-         f"PASS ({subject} -> {subject_full_oid})"),
-        ("transaction_evidence.path_manifest",
-         f"PASS (changed={sha_map['changed-paths.z'][:12]}..., "
-         f"python={sha_map['changed-python-paths.z'][:12]}..., "
-         f"ruff={sha_map['ruff-input-paths.z'][:12]}...)"),
-        ("transaction_evidence.ruff_execution",
-         f"status={ruff_scope_status} exit_code="
-         f"{cast(int, ruff_run.get('exit_code', 0))}"),
-        ("transaction_evidence.publication",
-         "PASS (staging renamed to final destination)"),
-        ("repository_test_evidence.cmd_check_contract",
-         "BOUND_TO_NAMED_POST_SUBJECT_GATE"),
-        ("repository_test_evidence.mutation_matrix",
-         "BOUND_TO_NAMED_POST_SUBJECT_GATE"),
-        ("repository_test_evidence.full_test_suite",
-         "BOUND_TO_NAMED_POST_SUBJECT_GATE"),
-        ("manual_preclosure_evidence", "PRESENT"),
-        ("leamas_protocol_E", "ABSENT"),
-        ("closure_commit_C", "ABSENT"),
-        ("annotated_tag_T", "ABSENT"),
-        ("deterministic_C_proof", "BLOCKED"),
-        ("wave_1", "BLOCKED"),
+        },
     ]
+    if len(git_commands) > 2:
+        diff = git_commands[2]
+        commands.append(
+            {
+                "name": "git-diff-factory",
+                "argv": list(diff.argv),
+                "cwd": str(repo_root),
+                "exit_code": diff.returncode,
+                "stdout_sha256": diff.stdout_sha256,
+                "stderr_sha256": diff.stderr_sha256,
+            }
+        )
+    if ruff_result is not None:
+        commands.append(
+            {
+                "name": "ruff-check",
+                "argv": list(ruff_result.argv),
+                "cwd": str(repo_root),
+                "exit_code": ruff_result.returncode,
+                "stdout_sha256": ruff_result.stdout_sha256,
+                "stderr_sha256": ruff_result.stderr_sha256,
+            }
+        )
+    return commands
+
+
+# ---------------------------------------------------------------------------
+# File writers.
+# ---------------------------------------------------------------------------
 
 
 def write_ruff_scope_file(
@@ -293,77 +221,63 @@ def write_manifest_file(
     return path
 
 
+def write_topology_file(staging: Path, text: str) -> Path:
+    """Write the ``topology.txt`` artefact."""
+    path = staging / "topology.txt"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def write_gate_results_file(
+    staging: Path,
+    gate_results: tuple[CommandResult, ...],
+) -> Path:
+    """Write the ``gate-results.json`` artefact.
+
+    The artifact records every captured post-subject gate
+    command.  Each row contains the gate's name (when
+    available), argv, working directory, returncode, and
+    SHA-256 of stdout / stderr.
+    """
+    path = staging / "gate-results.json"
+    payload: list[dict[str, object]] = []
+    for result in gate_results:
+        name = result.argv[0] if result.argv else ""
+        payload.append(
+            {
+                "name": name,
+                "argv": list(result.argv),
+                "exit_code": result.returncode,
+                "stdout_sha256": result.stdout_sha256,
+                "stderr_sha256": result.stderr_sha256,
+                "status": result.status,
+            }
+        )
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def write_classification_file(
     staging: Path,
-    *,
-    base: str,
-    subject: str,
-    base_full_oid: str,
-    subject_full_oid: str,
-    sha_map: dict[str, str],
-    ruff_scope_status: str,
-    ruff_run: dict[str, object],
+    text: str,
 ) -> Path:
-    """Write the ``final-classification.md`` artefact.
-
-    Every claim is derived from the measured result or marked
-    ``UNMEASURED`` (the writer never emits a hardcoded
-    ``PASS`` claim without a measurement).  The output is
-    rendered as a Markdown table; the lifecycle rows for
-    C / T / E are ABSENT until a v2 binary is installed.
-    """
+    """Write the ``final-classification.md`` artefact."""
     path = staging / "final-classification.md"
-    rows = _build_classification_rows(
-        base=base,
-        subject=subject,
-        base_full_oid=base_full_oid,
-        subject_full_oid=subject_full_oid,
-        sha_map=sha_map,
-        ruff_scope_status=ruff_scope_status,
-        ruff_run=ruff_run,
-    )
-    lines: list[str] = [
-        "# CORRECTION13 evidence bundle final-classification.md",
-        "",
-        "## Lifecycle",
-        "",
-        "| Signal | Value |",
-        "| --- | --- |",
-    ]
-    for signal, value in rows:
-        lines.append(f"| {signal} | {value} |")
-    lines.extend(
-        [
-            "",
-            "## Object IDs",
-            "",
-            f"- base = `{base}` (full OID `{base_full_oid}`)",
-            f"- subject = `{subject}` (full OID `{subject_full_oid}`)",
-            f"- changed_paths.z sha256 = `{sha_map['changed-paths.z']}`",
-            f"- changed_python_paths.z sha256 = `{sha_map['changed-python-paths.z']}`",
-            f"- ruff_input_paths.z sha256 = `{sha_map['ruff-input-paths.z']}`",
-            f"- ruff_scope.json sha256 = `{sha_map['ruff-scope.json']}`",
-            f"- tool_identities.json sha256 = `{sha_map['tool-identities.json']}`",
-            f"- commands.json sha256 = `{sha_map['commands.json']}`",
-            "",
-            "## Protocol",
-            "",
-            "manual_preclosure_evidence (NOT leamas protocol E).",
-            "C / T / E are absent; the v2 binary is unavailable.",
-            "Wave 1 blocked until AUDIT01 receives a complete v2 closure.",
-        ]
-    )
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text(text, encoding="utf-8")
     return path
 
 
 __all__ = [
     "build_commands_registry",
-    "build_manifest",
     "write_classification_file",
     "write_commands_file",
+    "write_gate_results_file",
     "write_manifest_file",
     "write_ruff_argv_file",
     "write_ruff_scope_file",
     "write_tool_identities_file",
+    "write_topology_file",
 ]

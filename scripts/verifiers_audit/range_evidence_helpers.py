@@ -1,14 +1,19 @@
-"""CORRECTION13: detached range evidence helpers.
+"""CORRECTION13/CORRECTION14: detached range evidence helpers.
 
 Low-level helpers for the range-evidence producer:
 
-* :func:`_sha256_of` — single-file SHA-256 computation.
-* :func:`_write_nul` — NUL-delimited filesystem bytes writer.
-* :func:`_write_text_projection` — non-authoritative
+* :func:`_sha256_of` - single-file SHA-256 computation.
+* :func:`_write_nul` - NUL-delimited filesystem bytes writer.
+* :func:`_write_text_projection` - non-authoritative
   ``.txt`` projection writer with a labelled header.
-* :func:`_resolve_full_commit` — full git object ID
+* :func:`_resolve_full_commit` - full git object ID
   resolution via ``git rev-parse``.
-* :func:`_run_captured` — subprocess capture wrapper.
+* :func:`_run_captured` - subprocess capture wrapper.
+* :class:`GitRunner` - CORRECTION14 injected command seam for
+  every Git invocation.  The seam records the actual argv
+  executed by the producer; the cardinality of the
+  ``git diff`` calls is derived from the recorded transcript,
+  NOT from a wrapper call count.
 """
 
 from __future__ import annotations
@@ -17,7 +22,11 @@ import hashlib
 import os
 import subprocess
 import time
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Protocol
+
+from scripts.verifiers_audit.typed_results import CommandResult
 
 
 def _sha256_of(path: Path) -> str:
@@ -110,7 +119,6 @@ def _resolve_full_commit(
     return proc.stdout.decode("utf-8").strip()
 
 
-
 def _run_captured(argv: list[str], repo_root: Path) -> dict[str, object]:
     """Run ``argv`` (CWD ``repo_root``) and capture stdout/stderr/exit."""
     start = time.monotonic()
@@ -128,3 +136,108 @@ def _run_captured(argv: list[str], repo_root: Path) -> dict[str, object]:
         "stdout_sha256": hashlib.sha256(proc.stdout).hexdigest(),
         "stderr_sha256": hashlib.sha256(proc.stderr).hexdigest(),
     }
+
+
+class GitRunner(Protocol):
+    """CORRECTION14: injected command seam for every Git invocation.
+
+    The producer invokes :meth:`GitRunner.run` exactly ONCE
+    per Git execution.  The seam records the executed argv
+    verbatim so the cardinality of the ``git diff`` calls is
+    derived from the recorded transcript, NOT from a wrapper
+    call count.
+
+    Implementations MUST:
+
+    * invoke ``subprocess.run`` with the supplied ``argv``;
+    * capture stdout/stderr in bytes (no ``text=True``);
+    * return a :class:`CommandResult` whose ``status`` is
+      ``"passed"`` when the command exited zero AND produced
+      the expected outcome, ``"failed"`` otherwise;
+    * preserve the argv verbatim (``tuple`` not ``list``).
+
+    The default implementation (:class:`SubprocessGitRunner`)
+    runs in-process.
+    """
+
+    def run(
+        self,
+        argv: tuple[str, ...],
+        *,
+        cwd: Path,
+    ) -> CommandResult:
+        ...
+
+
+class SubprocessGitRunner:
+    """CORRECTION14: default in-process GitRunner.
+
+    Runs the supplied argv via :func:`subprocess.run` with
+    ``capture_output=True``, ``text=False``, ``check=False``.
+    The ``status`` field is ``"passed"`` when ``returncode ==
+    0`` AND stdout is non-empty (the git diff command MUST
+    produce bytes; an empty stdout from a git diff is treated
+    as a valid equal-commit range, so the status is
+    ``"passed"`` regardless of stdout length).  When
+    ``returncode != 0`` the status is ``"failed"``.
+    """
+
+    def run(
+        self,
+        argv: tuple[str, ...],
+        *,
+        cwd: Path,
+    ) -> CommandResult:
+        proc = subprocess.run(
+            list(argv),
+            cwd=str(cwd),
+            capture_output=True,
+            check=False,
+        )
+        stdout_sha256 = hashlib.sha256(proc.stdout).hexdigest()
+        stderr_sha256 = hashlib.sha256(proc.stderr).hexdigest()
+        status: str
+        if proc.returncode != 0:
+            status = "failed"
+        else:
+            status = "passed"
+        return CommandResult(
+            argv=tuple(argv),
+            returncode=proc.returncode,
+            stdout_sha256=stdout_sha256,
+            stderr_sha256=stderr_sha256,
+            status=status,  # type: ignore[arg-type]
+        )
+
+
+def capture_post_subject_gate(
+    argv: list[str],
+    *,
+    cwd: Path,
+) -> CommandResult:
+    """CORRECTION14: capture a post-subject gate as a typed result.
+
+    The function wraps :class:`SubprocessGitRunner`-style
+    capture for arbitrary gate commands (pytest, ruff, mypy,
+    audit-check, verify_all.sh --act-local --skip-gate-summary).
+    The returned :class:`CommandResult` is the SOLE authority
+    for whether the gate ``passed``.  The gate row MUST be
+    recorded in ``gate-results.json`` exactly once per gate.
+    """
+    runner = SubprocessGitRunner()
+    return runner.run(tuple(argv), cwd=cwd)
+
+
+def collect_git_results(
+    runners: Iterable[CommandResult],
+) -> tuple[CommandResult, ...]:
+    """CORRECTION14: derive the executed-transcript view of Git runs.
+
+    The function returns a tuple of the supplied runners
+    verbatim so the caller can derive
+    ``git_diff_query_count = sum(r.argv[:2] == ('git', 'diff')
+    for r in git_results)``.  The cardinality is measured
+    from the EXECUTED transcript (the captured argv), NOT
+    from any wrapper call count.
+    """
+    return tuple(runners)

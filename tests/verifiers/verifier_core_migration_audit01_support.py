@@ -28,12 +28,16 @@ AUDIT01_TEST_MODULES_WITHOUT_SUPPORT: tuple[Path, ...] = (
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction13.py",
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction13_cmd.py",
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction13_evidence.py",
+    TESTS_ROOT / "test_verifier_core_migration_audit01_correction14.py",
+    TESTS_ROOT / "test_verifier_core_migration_audit01_correction14_layout.py",
+    TESTS_ROOT / "test_verifier_core_migration_audit01_correction14_evidence.py",
 )
 
 AUDIT01_TEST_MODULES: tuple[Path, ...] = (
     *AUDIT01_TEST_MODULES_WITHOUT_SUPPORT,
     TESTS_ROOT / "conftest.py",
     TESTS_ROOT / "verifier_core_migration_audit01_support.py",
+    TESTS_ROOT / "verifier_core_migration_audit01_source_guard.py",
 )
 
 AUDIT01_PRODUCTION_MODULES: tuple[Path, ...] = (
@@ -41,7 +45,10 @@ AUDIT01_PRODUCTION_MODULES: tuple[Path, ...] = (
     REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_helpers.py",
     REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_identity.py",
     REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_writer.py",
-    REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_manifest.py",
+    REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_orchestrator.py",
+    REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_builders.py",
+    REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_classification.py",
+    REPO_ROOT / "scripts" / "verifiers_audit" / "typed_results.py",
 )
 
 
@@ -60,18 +67,14 @@ def audit01_source_guard_violations() -> dict[str, tuple[str, ...]]:
         "direct_canonical_writer_calls_outside_allowed_tests": [],
         "files_over_500_lines": [],
     }
-    slash = "/"
-    tmp_name = "tmp"
-    single_quote = "'"
-    double_quote = '"'
-    fixed_tmp_tokens = (
-        f"Path({double_quote}{slash}{tmp_name}{slash}",
-        f"Path({single_quote}{slash}{tmp_name}{slash}",
-        f"_P({double_quote}{slash}{tmp_name}{slash}",
-        f"_P({single_quote}{slash}{tmp_name}{slash}",
-        f"{double_quote}{slash}{tmp_name}{slash}closure_evidence_",
-        f"{single_quote}{slash}{tmp_name}{slash}closure_evidence_",
+    from tests.verifiers.verifier_core_migration_audit01_source_guard import (
+        _build_detection_helpers,
+        detect_fixed_shared_tmp,
     )
+
+    helpers = _build_detection_helpers()
+    fixed_tmp_tokens = helpers["fixed_tmp_tokens"]
+    assert isinstance(fixed_tmp_tokens, tuple)
     fixture_base_name = "FIXTURE_" + "BASE"
     fixture_subject_name = "FIXTURE_" + "SUBJECT"
     forbidden_values = {
@@ -142,12 +145,15 @@ def audit01_source_guard_violations() -> dict[str, tuple[str, ...]]:
         source = path.read_text(encoding="utf-8")
         relative_path = path.relative_to(REPO_ROOT).as_posix()
         tree = ast.parse(source, filename=str(path))
-
-        for token in fixed_tmp_tokens:
-            if token in source:
-                violations["fixed_shared_tmp_paths"].append(
-                    f"{relative_path}: {token!r}"
-                )
+        violations["fixed_shared_tmp_paths"].extend(
+            detect_fixed_shared_tmp(
+                relative_path=relative_path,
+                source=source,
+                tree=tree,
+                fixed_tmp_tokens=fixed_tmp_tokens,
+                helpers=helpers,
+            )
+        )
 
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):

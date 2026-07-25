@@ -48,7 +48,6 @@ Public surface:
 from __future__ import annotations
 
 # mypy: disable-error-code="type-arg,no-any-return,index,assignment,operator,no-untyped-call,no-untyped-def"
-import copy
 import fnmatch
 import os
 import subprocess
@@ -465,91 +464,12 @@ def python_path_bytes(paths: tuple[bytes, ...]) -> tuple[bytes, ...]:
 # ---------------------------------------------------------------------------
 
 
-class IndexNormalisationError(ValueError):
-    """CORRECTION13: typed failure for layout-aware normalisation.
+# Re-export the exception from the canonical module so existing
+# imports (``from scripts.verifiers_audit.scope import
+# IndexNormalisationError``) continue to resolve.
+from scripts.verifiers_audit import normalise_index as _normalise_index_mod  # noqa: E402
 
-    Raised by :func:`normalise_index_paths` when a shard path
-    fails the layout contract: an unknown shard name, a missing
-    or non-string path, a wrong parent directory, a wrong
-    basename, a path-traversal attempt, or a swapped shard
-    path (inventory's path under groups' name, etc.).
-    """
-
-
-def _resolve_path_against_layout(
-    raw_path: str,
-    *,
-    layout: ReportLayout,
-) -> Path:
-    """Resolve a recorded path to an absolute Path.
-
-    The recorded path may be:
-
-    * an absolute path (``/abs/.../shard.json``);
-    * a path relative to :data:`REPO_ROOT` (the audit writer
-      uses ``_relative_to_repo`` so a path like
-      ``docs/reports/verifier-core-migration-audit01/inventory.json``
-      resolves to ``REPO_ROOT/docs/reports/verifier-core-migration-audit01/inventory.json``).
-
-    The function returns the absolute Path.  It NEVER
-    consults :func:`os.path.realpath`; the comparison is a
-    pure path-equality check.
-    """
-    p = Path(raw_path)
-    if p.is_absolute():
-        return p
-    return REPO_ROOT / p
-
-
-def _validate_shard_path_against_layout(
-    shard_name: str,
-    info: object,
-    *,
-    layout: ReportLayout,
-    required_shards: frozenset[str],
-) -> str | None:
-    """Return the canonical normalised path when valid, else raise.
-
-    The function enforces, in order:
-
-    1. ``shard_name`` must be a known shard (``required_shards``).
-    2. ``info`` must be a dict with a string ``path`` field.
-    3. The recorded path (absolute or REPO_ROOT-relative) must
-       identify exactly ``layout.shard_root / f"{shard_name}.json"``.
-    4. A wrong basename, wrong parent, path traversal, missing
-       path, or swapped shard path is REJECTED with
-       :class:`IndexNormalisationError`.
-
-    On success the function returns the canonical normalised
-    form (``f"{shard_name}.json"``).
-    """
-    if shard_name not in required_shards:
-        raise IndexNormalisationError(
-            f"unknown shard name {shard_name!r}; "
-            f"required={sorted(required_shards)}"
-        )
-    if not isinstance(info, dict):
-        raise IndexNormalisationError(
-            f"shard {shard_name!r} info must be a dict, got "
-            f"{type(info).__name__}"
-        )
-    raw_path = info.get("path")
-    if not isinstance(raw_path, str):
-        raise IndexNormalisationError(
-            f"shard {shard_name!r} path must be a string, got "
-            f"{type(raw_path).__name__}: {raw_path!r}"
-        )
-    recorded_abs = _resolve_path_against_layout(
-        raw_path, layout=layout
-    )
-    expected_abs = (layout.shard_root / f"{shard_name}.json").resolve()
-    if recorded_abs.resolve() != expected_abs:
-        raise IndexNormalisationError(
-            f"shard {shard_name!r} path drift: recorded="
-            f"{recorded_abs.as_posix()!r} expected={expected_abs.as_posix()!r}"
-        )
-    return f"{shard_name}.json"
-
+IndexNormalisationError = _normalise_index_mod.IndexNormalisationError
 
 
 def normalise_index_paths(
@@ -557,50 +477,19 @@ def normalise_index_paths(
     *,
     layout: ReportLayout,
 ) -> dict[str, object]:
-    """CORRECTION13: layout-aware path normalisation.
+    """CORRECTION13/CORRECTION14: layout-aware path normalisation.
 
-    The function returns a deep-copied index whose values are
-    equivalent modulo the canonical shard-path representation.
-    The layout is the sole authority for the canonical
-    representation; ``os.path.realpath`` is NEVER consulted.
-
-    For every shard entry, the function:
-
-    1. requires the shard name to be known (one of
-       :data:`REQUIRED_SHARDS`);
-    2. requires ``path`` to be a string;
-    3. resolves the path according to the supplied layout
-       (the recorded path must equal
-       ``layout.shard_root / f"{shard_name}.json"``);
-    4. replaces the validated environmental path with the
-       canonical form ``f"{shard_name}.json"``.
-
-    The function NEVER normalises:
-
-    * ``schema_version``;
-    * ``analysis_base_commit``;
-    * ``identity_binding``;
-    * ``totals``;
-    * shard hashes (``sha256``);
-    * unknown extra fields.
-
-    An invalid basename, wrong parent, path traversal, missing
-    path, or swapped shard path raises
-    :class:`IndexNormalisationError` rather than normalising.
+    Delegates to :func:`scripts.verifiers_audit.normalise_index.normalise_index_paths`
+    using the layout's ``shard_root`` and the
+    :data:`REQUIRED_SHARDS` set.
     """
-    # Local import keeps ``scope`` import-cost low and avoids
-    # the circular-import risk in the cold-start path.
+    from scripts.verifiers_audit.normalise_index import (
+        normalise_index_paths as _normalise_index_paths_impl,
+    )
     from scripts.verifiers_audit.report_io import REQUIRED_SHARDS
 
-    out = copy.deepcopy(index)
-    shards = out.get("shards")
-    if isinstance(shards, dict):
-        for name, info in shards.items():
-            if isinstance(info, dict) and "path" in info:
-                info["path"] = _validate_shard_path_against_layout(
-                    str(name),
-                    info,
-                    layout=layout,
-                    required_shards=REQUIRED_SHARDS,
-                )
-    return out
+    return _normalise_index_paths_impl(
+        index,
+        layout_shard_root=layout.shard_root,
+        required_shards=REQUIRED_SHARDS,
+    )
