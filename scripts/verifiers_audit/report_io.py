@@ -1,4 +1,4 @@
-"""Sharded JSON report writer (CORRECTION01 minimal; CORRECTION11 sole-authority layout)."""
+"""Sharded JSON report writer (CORRECTION11 sole-authority layout; CORRECTION12 single-writer invariant)."""
 
 from __future__ import annotations
 
@@ -25,6 +25,20 @@ SHARD_NAMES: tuple[str, ...] = (
     "gate_classification",
 )
 REQUIRED_SHARDS: frozenset[str] = frozenset(SHARD_NAMES)
+
+
+class AuditWriteError(RuntimeError):
+    """CORRECTION12: typed failure for audit-writing invariants.
+
+    Raised by :func:`write_all` / :func:`write_audit` when the
+    audit object is structurally invalid (missing the ``index``
+    block, missing a required shard, or otherwise outside the
+    CORRECTION11/CORRECTION12 contract).  Generic
+    :class:`OSError` and :class:`ValueError` continue to surface
+    filesystem and layout-validator failures respectively.
+    """
+
+    pass
 
 # CORRECTION11: the canonical filenames are FROZEN.  Any
 # deviation (extra ``docs/`` prefix, nested path, wrong filename)
@@ -351,6 +365,25 @@ def write_all(
 
     if audit is None:
         audit = build_audit_object({})
+    # CORRECTION12: a structurally invalid audit object is a
+    # WRITE-side failure (the caller passed a bad dict).  Surface
+    # it as the typed :class:`AuditWriteError` so :func:`cmd_write`
+    # can report it without conflating it with generic filesystem
+    # failures (``OSError``) or layout-validator failures
+    # (``ValueError``).
+    if not isinstance(audit, dict):
+        raise AuditWriteError(
+            f"audit object must be a dict, got {type(audit).__name__}"
+        )
+    if "index" not in audit or not isinstance(audit["index"], dict):
+        raise AuditWriteError(
+            "audit object missing 'index' block"
+        )
+    for name in WRITE_OWNED_SHARD_NAMES:
+        if name not in audit:
+            raise AuditWriteError(
+                f"audit object missing required shard: {name!r}"
+            )
     shards: dict[str, str] = {}
     hashes: dict[str, str] = {}
     for name in WRITE_OWNED_SHARD_NAMES:

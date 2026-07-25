@@ -17,22 +17,27 @@ Public surface:
   rule
 * :func:`classify_path` — return the matching rule id (or ``None``)
 * :func:`changed_paths` — return the changed paths in a
-  ``base..subject`` revision range (CORRECTION11)
+  ``base..subject`` revision range (CORRECTION12 NUL-parser;
+  fail-closed on any Git error; ``repo_root`` is injectable)
 * :func:`changed_python_paths` — return the subset of ``changed_paths``
-  that end in ``.py`` (CORRECTION11)
+  that end in ``.py`` (CORRECTION12)
 * :func:`build_ruff_argv` — return the ``ruff check`` argv that
-  exactly matches ``changed_python_paths`` (CORRECTION11)
+  exactly matches ``changed_python_paths`` (CORRECTION12)
 * :func:`argv_after_command_prefix` — return the path-portion of a
   ``ruff check`` argv, stripping the ``(ruff, check)`` prefix
-  (CORRECTION11)
+  (CORRECTION12)
+* :class:`RangeResolutionError` — typed failure for invalid
+  ``git diff`` ranges (CORRECTION12)
 """
 
 from __future__ import annotations
 
 # mypy: disable-error-code="type-arg,no-any-return,index,assignment,operator,no-untyped-call,no-untyped-def"
 import fnmatch
+import os
 import subprocess
 from collections.abc import Iterable, Sequence
+from pathlib import Path
 
 from scripts.verifiers_audit.discovery import REPO_ROOT
 
@@ -117,46 +122,122 @@ def split_tracked(tracked: Iterable[str]) -> tuple[list[str], list[tuple[str, st
 
 
 # ---------------------------------------------------------------------------
-# CORRECTION11: change-range derived paths for the closure manifest
+# CORRECTION12: fail-closed range API for the closure manifest
 # ---------------------------------------------------------------------------
 
 
-def _run_git_diff_names(base: str, subject: str) -> tuple[str, ...]:
-    """Return ``git diff --name-only --diff-filter=ACMRT base..subject``.
+class RangeResolutionError(RuntimeError):
+    """CORRECTION12: typed failure for invalid ``git diff`` ranges.
 
-    Both ``base`` and ``subject`` are interpreted as commit-ish
-    references.  The output is the raw newline-split list of paths
-    emitted by git; trailing whitespace is stripped and empty
-    lines are removed.  The order matches git's output exactly
-    (path-status order) so the closure manifest can be reproduced
-    by a third party.
+    Raised by :func:`_run_git_diff_names` when ``git diff`` exits
+    with a non-zero status.  The exception captures the
+    ``base`` / ``subject`` revision pair, the ``returncode``,
+    and the (decoded) stderr text so the caller can fail closed
+    without ever confusing a Git failure with a valid empty
+    range.
+
+    A valid equal-commit range MAY legitimately return an empty
+    tuple.  An invalid range MUST raise this exception.
+    """
+
+    def __init__(
+        self,
+        *,
+        base: str,
+        subject: str,
+        returncode: int,
+        stderr: str,
+    ) -> None:
+        super().__init__(
+            f"git diff failed for range {base!r}..{subject!r}: "
+            f"returncode={returncode}: {stderr}"
+        )
+        self.base = base
+        self.subject = subject
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+def _run_git_diff_names(
+    base: str,
+    subject: str,
+    *,
+    repo_root: Path = REPO_ROOT,
+) -> tuple[str, ...]:
+    """Return ``git diff --name-only -z --diff-filter=ACMRT base subject``.
+
+    CORRECTION12: NUL-delimited, byte-safe, pathname-safe,
+    injectable ``repo_root``.  The function NEVER:
+
+    * uses ``text=True`` (output is binary bytes),
+    * uses ``splitlines()`` (pathnames may contain any bytes),
+    * calls ``strip()`` on pathnames (whitespace is preserved),
+    * returns an empty tuple after a Git failure (it raises),
+    * suppresses stderr (it is captured and forwarded),
+    * silently substitutes ``HEAD``, the index, or the working
+      tree (the supplied revisions are used verbatim).
+
+    On non-zero exit the function raises :class:`RangeResolutionError`.
+    On zero exit the trailing NUL is preserved by ``split`` and
+    dropped by the ``if raw`` filter; an empty trailing entry is
+    NEVER emitted as a path.  A valid equal-commit range MAY
+    return ``()``.
     """
     proc = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMRT",
-         f"{base}..{subject}"],
-        cwd=str(REPO_ROOT),
+        [
+            "git",
+            "diff",
+            "--name-only",
+            "-z",
+            "--diff-filter=ACMRT",
+            base,
+            subject,
+        ],
+        cwd=str(repo_root),
         capture_output=True,
-        text=True,
         check=False,
     )
+
+    if proc.returncode != 0:
+        raise RangeResolutionError(
+            base=base,
+            subject=subject,
+            returncode=proc.returncode,
+            stderr=os.fsdecode(proc.stderr) if proc.stderr else "",
+        )
+
     return tuple(
-        line.strip() for line in proc.stdout.splitlines() if line.strip()
+        os.fsdecode(raw)
+        for raw in proc.stdout.split(b"\0")
+        if raw
     )
 
 
-def changed_paths(base: str, subject: str) -> tuple[str, ...]:
+def changed_paths(
+    base: str,
+    subject: str,
+    *,
+    repo_root: Path = REPO_ROOT,
+) -> tuple[str, ...]:
     """Return the paths changed between ``base`` and ``subject``.
 
-    The function is the SOLE production source for the closure
-    range's changed-path set.  ``base`` and ``subject`` are
-    commit-ish references; the returned tuple mirrors the exact
-    git output (no sorting, no dedup).  Tests must call this
-    function instead of hard-coding paths.
+    CORRECTION12: the function is the SOLE production source
+    for the closure range's changed-path set.  ``base`` and
+    ``subject`` are commit-ish references; ``repo_root`` is
+    injectable so tests can use a hermetic temporary Git
+    repository.  The returned tuple mirrors the exact git
+    output (no sorting, no dedup, no whitespace stripping);
+    Git failure is raised as :class:`RangeResolutionError`.
     """
-    return _run_git_diff_names(base, subject)
+    return _run_git_diff_names(base, subject, repo_root=repo_root)
 
 
-def changed_python_paths(base: str, subject: str) -> tuple[str, ...]:
+def changed_python_paths(
+    base: str,
+    subject: str,
+    *,
+    repo_root: Path = REPO_ROOT,
+) -> tuple[str, ...]:
     """Return the subset of :func:`changed_paths` that ends in ``.py``.
 
     Deleted Python files (``D`` status) are excluded from the
@@ -165,7 +246,10 @@ def changed_python_paths(base: str, subject: str) -> tuple[str, ...]:
     Renamed, Type-changed files are kept).  The returned tuple
     preserves the order of :func:`changed_paths`.
     """
-    return tuple(p for p in changed_paths(base, subject) if p.endswith(".py"))
+    return tuple(
+        p for p in changed_paths(base, subject, repo_root=repo_root)
+        if p.endswith(".py")
+    )
 
 
 def build_ruff_argv(paths: Sequence[str]) -> tuple[str, ...]:
@@ -198,12 +282,3 @@ def argv_after_command_prefix(argv: Sequence[str]) -> tuple[str, ...]:
             f"argv does not have 'check' as second arg: argv[1]={argv[1]!r}"
         )
     return tuple(argv[2:])
-
-
-# Detection invariant: existence of the canonical baseline file is
-# not required for any of the public functions above; the helpers
-# operate entirely on the repository's git history and a Path
-# argument.  Tests that need a fixture use
-# :func:`changed_paths` / :func:`changed_python_paths` against
-# two real commits (typically F vs S) that they have created in
-# the test repository.
