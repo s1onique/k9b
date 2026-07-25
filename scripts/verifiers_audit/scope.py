@@ -16,30 +16,52 @@ Public surface:
 * :func:`is_excluded` — return True when a tracked path matches any
   rule
 * :func:`classify_path` — return the matching rule id (or ``None``)
-* :func:`changed_paths` — return the changed paths in a
-  ``base..subject`` revision range (CORRECTION12 NUL-parser;
-  fail-closed on any Git error; ``repo_root`` is injectable)
-* :func:`changed_python_paths` — return the subset of ``changed_paths``
-  that end in ``.py`` (CORRECTION12)
-* :func:`build_ruff_argv` — return the ``ruff check`` argv that
-  exactly matches ``changed_python_paths`` (CORRECTION12)
+* :func:`changed_path_bytes` — return the changed paths in a
+  ``base..subject`` revision range as **filesystem bytes**
+  (CORRECTION13 authoritative API)
+* :func:`changed_paths` — return the changed paths as ``str``
+  (CORRECTION13 derived convenience layer; never the source of
+  the detached evidence)
+* :func:`changed_python_path_bytes` — return the Python subset of
+  :func:`changed_path_bytes` as bytes (CORRECTION13)
+* :func:`changed_python_paths` — return the Python subset of
+  :func:`changed_paths` as ``str`` (CORRECTION13)
+* :func:`build_ruff_scope` — return a typed :class:`RuffScope`
+  whose ``status`` is ``"skipped_no_python_paths"`` for an empty
+  set (CORRECTION13)
 * :func:`argv_after_command_prefix` — return the path-portion of a
   ``ruff check`` argv, stripping the ``(ruff, check)`` prefix
-  (CORRECTION12)
-* :class:`RangeResolutionError` — typed failure for invalid
-  ``git diff`` ranges (CORRECTION12)
+* :func:`normalise_index_paths` — produce a deep-copied index
+  whose values are equivalent modulo the canonical shard-path
+  representation (CORRECTION13 layout-aware; takes a
+  :class:`ReportLayout` parameter)
+* :func:`python_path_bytes` — derive the Python subset of a
+  bytes tuple via a pure-Python filter (CORRECTION13)
+* :class:`RangeResolutionError` — typed failure for every Git
+  revision / range command, with a ``stage`` field set to
+  one of ``resolve_base``, ``resolve_subject``, ``diff_names``
+  (CORRECTION12/CORRECTION13)
+* :class:`RuffScope` — typed result for the Ruff scope builder
+  (CORRECTION13)
 """
 
 from __future__ import annotations
 
 # mypy: disable-error-code="type-arg,no-any-return,index,assignment,operator,no-untyped-call,no-untyped-def"
+import copy
 import fnmatch
 import os
 import subprocess
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Literal
 
 from scripts.verifiers_audit.discovery import REPO_ROOT
+
+if TYPE_CHECKING:
+    from scripts.verifiers_audit.report_io import ReportLayout
+
 
 # ---------------------------------------------------------------------------
 # Exclusion rules (frozen, deterministic)
@@ -123,18 +145,37 @@ def split_tracked(tracked: Iterable[str]) -> tuple[list[str], list[tuple[str, st
 
 # ---------------------------------------------------------------------------
 # CORRECTION12: fail-closed range API for the closure manifest
+# CORRECTION13: byte-safe range API; string view is a derived convenience
 # ---------------------------------------------------------------------------
 
 
-class RangeResolutionError(RuntimeError):
-    """CORRECTION12: typed failure for invalid ``git diff`` ranges.
+RangeResolutionStage = Literal[
+    "resolve_base",
+    "resolve_subject",
+    "diff_names",
+]
 
-    Raised by :func:`_run_git_diff_names` when ``git diff`` exits
-    with a non-zero status.  The exception captures the
-    ``base`` / ``subject`` revision pair, the ``returncode``,
-    and the (decoded) stderr text so the caller can fail closed
-    without ever confusing a Git failure with a valid empty
-    range.
+
+class RangeResolutionError(RuntimeError):
+    """CORRECTION12/CORRECTION13: typed failure for every Git
+    revision / range command in the evidence-transaction path.
+
+    The exception unifies three previously separate failure
+    surfaces:
+
+    * ``"resolve_base"`` - ``git rev-parse --verify ${BASE}^{commit}``
+      exited non-zero (the BASE commit cannot be resolved).
+    * ``"resolve_subject"`` - ``git rev-parse --verify ${SUBJECT}^{commit}``
+      exited non-zero (the SUBJECT commit cannot be resolved).
+    * ``"diff_names"`` - ``git diff --name-only -z --diff-filter=ACMRT``
+      exited non-zero (the range diff query failed).
+
+    The exception captures the ``base`` / ``subject`` revision
+    pair, the failing ``argv`` (as a tuple), the ``returncode``,
+    the (decoded) stderr text, and the ``stage`` so the caller
+    can fail closed without ever confusing a Git failure with
+    a valid empty range.  A bare :class:`RuntimeError` at the
+    evidence-transaction boundary is forbidden.
 
     A valid equal-commit range MAY legitimately return an empty
     tuple.  An invalid range MUST raise this exception.
@@ -145,29 +186,35 @@ class RangeResolutionError(RuntimeError):
         *,
         base: str,
         subject: str,
+        argv: tuple[str, ...],
         returncode: int,
         stderr: str,
+        stage: RangeResolutionStage,
     ) -> None:
         super().__init__(
-            f"git diff failed for range {base!r}..{subject!r}: "
+            f"git {argv[0] if argv else '?'} failed at stage {stage!r} "
+            f"for range {base!r}..{subject!r}: "
             f"returncode={returncode}: {stderr}"
         )
         self.base = base
         self.subject = subject
+        self.argv = tuple(argv)
         self.returncode = returncode
         self.stderr = stderr
+        self.stage = stage
 
 
-def _run_git_diff_names(
+
+def _run_git_diff_names_bytes(
     base: str,
     subject: str,
     *,
     repo_root: Path = REPO_ROOT,
-) -> tuple[str, ...]:
+) -> tuple[bytes, ...]:
     """Return ``git diff --name-only -z --diff-filter=ACMRT base subject``.
 
-    CORRECTION12: NUL-delimited, byte-safe, pathname-safe,
-    injectable ``repo_root``.  The function NEVER:
+    CORRECTION13: this is the **authoritative** range query.  It
+    NEVER:
 
     * uses ``text=True`` (output is binary bytes),
     * uses ``splitlines()`` (pathnames may contain any bytes),
@@ -182,17 +229,21 @@ def _run_git_diff_names(
     dropped by the ``if raw`` filter; an empty trailing entry is
     NEVER emitted as a path.  A valid equal-commit range MAY
     return ``()``.
+
+    The returned tuple is bytes (filesystem representation);
+    test code may decode with :func:`os.fsdecode` round-trip.
     """
+    argv: tuple[str, ...] = (
+        "git",
+        "diff",
+        "--name-only",
+        "-z",
+        "--diff-filter=ACMRT",
+        base,
+        subject,
+    )
     proc = subprocess.run(
-        [
-            "git",
-            "diff",
-            "--name-only",
-            "-z",
-            "--diff-filter=ACMRT",
-            base,
-            subject,
-        ],
+        list(argv),
         cwd=str(repo_root),
         capture_output=True,
         check=False,
@@ -202,15 +253,36 @@ def _run_git_diff_names(
         raise RangeResolutionError(
             base=base,
             subject=subject,
+            argv=argv,
             returncode=proc.returncode,
             stderr=os.fsdecode(proc.stderr) if proc.stderr else "",
+            stage="diff_names",
         )
 
-    return tuple(
-        os.fsdecode(raw)
-        for raw in proc.stdout.split(b"\0")
-        if raw
-    )
+    return tuple(raw for raw in proc.stdout.split(b"\0") if raw)
+
+
+
+def changed_path_bytes(
+    base: str,
+    subject: str,
+    *,
+    repo_root: Path = REPO_ROOT,
+) -> tuple[bytes, ...]:
+    """CORRECTION13: authoritative byte-safe range API.
+
+    Returns the changed paths in a ``base..subject`` revision
+    range as filesystem bytes.  The string view
+    :func:`changed_paths` is a derived convenience.
+
+    ``base`` and ``subject`` are commit-ish references;
+    ``repo_root`` is injectable so tests can use a hermetic
+    temporary Git repository.  The returned tuple mirrors the
+    exact git output (no sorting, no dedup, no whitespace
+    stripping); Git failure is raised as
+    :class:`RangeResolutionError`.
+    """
+    return _run_git_diff_names_bytes(base, subject, repo_root=repo_root)
 
 
 def changed_paths(
@@ -219,17 +291,42 @@ def changed_paths(
     *,
     repo_root: Path = REPO_ROOT,
 ) -> tuple[str, ...]:
-    """Return the paths changed between ``base`` and ``subject``.
+    """CORRECTION13: derived string view of the range API.
 
-    CORRECTION12: the function is the SOLE production source
-    for the closure range's changed-path set.  ``base`` and
-    ``subject`` are commit-ish references; ``repo_root`` is
-    injectable so tests can use a hermetic temporary Git
-    repository.  The returned tuple mirrors the exact git
-    output (no sorting, no dedup, no whitespace stripping);
-    Git failure is raised as :class:`RangeResolutionError`.
+    Returns the changed paths in a ``base..subject`` revision
+    range as ``str``.  The bytes are decoded via
+    :func:`os.fsdecode` so encoding errors are surfaced
+    deterministically; the authoritative range query is
+    :func:`changed_path_bytes`.
     """
-    return _run_git_diff_names(base, subject, repo_root=repo_root)
+    return tuple(
+        os.fsdecode(p) for p in changed_path_bytes(
+            base, subject, repo_root=repo_root
+        )
+    )
+
+
+def changed_python_path_bytes(
+    base: str,
+    subject: str,
+    *,
+    repo_root: Path = REPO_ROOT,
+) -> tuple[bytes, ...]:
+    """CORRECTION13: authoritative byte-safe Python subset.
+
+    Returns the subset of :func:`changed_path_bytes` whose
+    bytes end in ``b'.py'``.  Deleted Python files
+    (``D`` status) are excluded from the Ruff input by virtue
+    of the ``--diff-filter=ACMRT`` filter in
+    :func:`_run_git_diff_names_bytes` (only Added, Copied,
+    Modified, Renamed, Type-changed files are kept).  The
+    returned tuple preserves the order of
+    :func:`changed_path_bytes`.
+    """
+    return tuple(
+        p for p in changed_path_bytes(base, subject, repo_root=repo_root)
+        if p.endswith(b".py")
+    )
 
 
 def changed_python_paths(
@@ -238,28 +335,90 @@ def changed_python_paths(
     *,
     repo_root: Path = REPO_ROOT,
 ) -> tuple[str, ...]:
-    """Return the subset of :func:`changed_paths` that ends in ``.py``.
+    """CORRECTION13: derived string view of the Python subset.
 
-    Deleted Python files (``D`` status) are excluded from the
-    Ruff input by virtue of the ``--diff-filter=ACMRT`` filter
-    in :func:`_run_git_diff_names` (only Added, Copied, Modified,
-    Renamed, Type-changed files are kept).  The returned tuple
-    preserves the order of :func:`changed_paths`.
+    Returns the subset of :func:`changed_paths` whose string
+    representation ends in ``.py``.  Deleted Python files
+    (``D`` status) are excluded by the ``--diff-filter=ACMRT``
+    filter.  The returned tuple preserves the order of
+    :func:`changed_paths`.
     """
     return tuple(
-        p for p in changed_paths(base, subject, repo_root=repo_root)
-        if p.endswith(".py")
+        os.fsdecode(p) for p in changed_python_path_bytes(
+            base, subject, repo_root=repo_root
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# CORRECTION13: typed Ruff scope builder
+# ---------------------------------------------------------------------------
+
+
+RuffScopeStatus = Literal["ready", "skipped_no_python_paths"]
+
+
+@dataclass(frozen=True)
+class RuffScope:
+    """CORRECTION13: typed result of the Ruff scope builder.
+
+    * ``paths`` is the canonical production path tuple (the
+      tuple the evidence manifest records; it is identical to
+      the output of :func:`changed_python_paths`).
+    * ``argv`` is the ``ruff check`` argv that visits exactly
+      ``paths``, or ``None`` when ``paths`` is empty (skipped
+      range — evidence producer does NOT invoke Ruff).
+    * ``status`` is ``"ready"`` for a non-empty range and
+      ``"skipped_no_python_paths"`` for an empty range.
+    """
+
+    paths: tuple[str, ...]
+    argv: tuple[str, ...] | None
+    status: RuffScopeStatus
+
+
+def build_ruff_scope(paths: Sequence[str]) -> RuffScope:
+    """CORRECTION13: return the typed :class:`RuffScope` for ``paths``.
+
+    The empty case (``paths == ()``) returns
+    ``status="skipped_no_python_paths"`` and ``argv=None``.  The
+    evidence producer MUST NOT invoke Ruff when
+    ``status="skipped_no_python_paths"``.
+
+    The non-empty case returns ``argv=("ruff", "check", *paths)``
+    and ``status="ready"``.  The argv's path suffix
+    (``argv[2:]``) is exactly the production path tuple.
+    """
+    if not paths:
+        return RuffScope(
+            paths=(),
+            argv=None,
+            status="skipped_no_python_paths",
+        )
+    return RuffScope(
+        paths=tuple(paths),
+        argv=("ruff", "check", *paths),
+        status="ready",
     )
 
 
 def build_ruff_argv(paths: Sequence[str]) -> tuple[str, ...]:
-    """Return the ``ruff check`` argv that visits exactly ``paths``.
+    """CORRECTION13: deprecated wrapper.
 
-    The function is the SOLE production source for the closure
-    range's Ruff input.  The returned tuple is deterministic
-    (preserves the order of ``paths``) and is reproducible by
-    a third party from the same ``changed_python_paths`` set.
+    Returns ``("ruff", "check", *paths)`` for a non-empty
+    ``paths`` sequence.  For an empty ``paths`` sequence it
+    raises :class:`ValueError` instead of returning a pathless
+    ``ruff check``.
+
+    Production code SHOULD use :func:`build_ruff_scope` instead;
+    this function is preserved for backward compatibility with
+    the CORRECTION12 test suite.
     """
+    if not paths:
+        raise ValueError(
+            "build_ruff_argv(paths) requires a non-empty sequence; "
+            "use build_ruff_scope(()) for an explicit skip"
+        )
     return ("ruff", "check", *paths)
 
 
@@ -282,3 +441,166 @@ def argv_after_command_prefix(argv: Sequence[str]) -> tuple[str, ...]:
             f"argv does not have 'check' as second arg: argv[1]={argv[1]!r}"
         )
     return tuple(argv[2:])
+
+
+# ---------------------------------------------------------------------------
+# CORRECTION13: in-process Python subset derivation
+# ---------------------------------------------------------------------------
+
+
+def python_path_bytes(paths: tuple[bytes, ...]) -> tuple[bytes, ...]:
+    """Return the Python subset of a bytes tuple.
+
+    CORRECTION13: the python subset is derived in-process from
+    the authoritative byte tuple via a pure-Python filter.  No
+    second git subprocess is launched; the same bytes tuple
+    is the source for the changed-paths, changed-python-paths,
+    and ruff-input-paths manifests.
+    """
+    return tuple(p for p in paths if p.endswith(b".py"))
+
+
+# ---------------------------------------------------------------------------
+# CORRECTION13: layout-aware top-level index normalisation
+# ---------------------------------------------------------------------------
+
+
+class IndexNormalisationError(ValueError):
+    """CORRECTION13: typed failure for layout-aware normalisation.
+
+    Raised by :func:`normalise_index_paths` when a shard path
+    fails the layout contract: an unknown shard name, a missing
+    or non-string path, a wrong parent directory, a wrong
+    basename, a path-traversal attempt, or a swapped shard
+    path (inventory's path under groups' name, etc.).
+    """
+
+
+def _resolve_path_against_layout(
+    raw_path: str,
+    *,
+    layout: ReportLayout,
+) -> Path:
+    """Resolve a recorded path to an absolute Path.
+
+    The recorded path may be:
+
+    * an absolute path (``/abs/.../shard.json``);
+    * a path relative to :data:`REPO_ROOT` (the audit writer
+      uses ``_relative_to_repo`` so a path like
+      ``docs/reports/verifier-core-migration-audit01/inventory.json``
+      resolves to ``REPO_ROOT/docs/reports/verifier-core-migration-audit01/inventory.json``).
+
+    The function returns the absolute Path.  It NEVER
+    consults :func:`os.path.realpath`; the comparison is a
+    pure path-equality check.
+    """
+    p = Path(raw_path)
+    if p.is_absolute():
+        return p
+    return REPO_ROOT / p
+
+
+def _validate_shard_path_against_layout(
+    shard_name: str,
+    info: object,
+    *,
+    layout: ReportLayout,
+    required_shards: frozenset[str],
+) -> str | None:
+    """Return the canonical normalised path when valid, else raise.
+
+    The function enforces, in order:
+
+    1. ``shard_name`` must be a known shard (``required_shards``).
+    2. ``info`` must be a dict with a string ``path`` field.
+    3. The recorded path (absolute or REPO_ROOT-relative) must
+       identify exactly ``layout.shard_root / f"{shard_name}.json"``.
+    4. A wrong basename, wrong parent, path traversal, missing
+       path, or swapped shard path is REJECTED with
+       :class:`IndexNormalisationError`.
+
+    On success the function returns the canonical normalised
+    form (``f"{shard_name}.json"``).
+    """
+    if shard_name not in required_shards:
+        raise IndexNormalisationError(
+            f"unknown shard name {shard_name!r}; "
+            f"required={sorted(required_shards)}"
+        )
+    if not isinstance(info, dict):
+        raise IndexNormalisationError(
+            f"shard {shard_name!r} info must be a dict, got "
+            f"{type(info).__name__}"
+        )
+    raw_path = info.get("path")
+    if not isinstance(raw_path, str):
+        raise IndexNormalisationError(
+            f"shard {shard_name!r} path must be a string, got "
+            f"{type(raw_path).__name__}: {raw_path!r}"
+        )
+    recorded_abs = _resolve_path_against_layout(
+        raw_path, layout=layout
+    )
+    expected_abs = (layout.shard_root / f"{shard_name}.json").resolve()
+    if recorded_abs.resolve() != expected_abs:
+        raise IndexNormalisationError(
+            f"shard {shard_name!r} path drift: recorded="
+            f"{recorded_abs.as_posix()!r} expected={expected_abs.as_posix()!r}"
+        )
+    return f"{shard_name}.json"
+
+
+
+def normalise_index_paths(
+    index: dict[str, object],
+    *,
+    layout: ReportLayout,
+) -> dict[str, object]:
+    """CORRECTION13: layout-aware path normalisation.
+
+    The function returns a deep-copied index whose values are
+    equivalent modulo the canonical shard-path representation.
+    The layout is the sole authority for the canonical
+    representation; ``os.path.realpath`` is NEVER consulted.
+
+    For every shard entry, the function:
+
+    1. requires the shard name to be known (one of
+       :data:`REQUIRED_SHARDS`);
+    2. requires ``path`` to be a string;
+    3. resolves the path according to the supplied layout
+       (the recorded path must equal
+       ``layout.shard_root / f"{shard_name}.json"``);
+    4. replaces the validated environmental path with the
+       canonical form ``f"{shard_name}.json"``.
+
+    The function NEVER normalises:
+
+    * ``schema_version``;
+    * ``analysis_base_commit``;
+    * ``identity_binding``;
+    * ``totals``;
+    * shard hashes (``sha256``);
+    * unknown extra fields.
+
+    An invalid basename, wrong parent, path traversal, missing
+    path, or swapped shard path raises
+    :class:`IndexNormalisationError` rather than normalising.
+    """
+    # Local import keeps ``scope`` import-cost low and avoids
+    # the circular-import risk in the cold-start path.
+    from scripts.verifiers_audit.report_io import REQUIRED_SHARDS
+
+    out = copy.deepcopy(index)
+    shards = out.get("shards")
+    if isinstance(shards, dict):
+        for name, info in shards.items():
+            if isinstance(info, dict) and "path" in info:
+                info["path"] = _validate_shard_path_against_layout(
+                    str(name),
+                    info,
+                    layout=layout,
+                    required_shards=REQUIRED_SHARDS,
+                )
+    return out

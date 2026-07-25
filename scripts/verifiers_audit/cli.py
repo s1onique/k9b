@@ -1,10 +1,34 @@
-"""CLI entry point for the audit generator (CORRECTION12).
+"""CLI entry point for the audit generator (CORRECTION12/CORRECTION13).
 
 CORRECTION12: the CLI is a thin wrapper.  The single production
 authority that writes audit reports is :class:`ReportLayout`
 plus :func:`write_all` and :func:`write_audit`.  The CLI's
 :func:`cmd_write` delegates to :func:`write_audit` and never
 directly writes a report file itself.
+
+CORRECTION13 additions:
+
+* :func:`cmd_check` builds a temporary layout and writes the
+  freshly-built audit object into it; compares the COMPLETE
+  normalised top-level index against the canonical on-disk
+  one.  Every field of the top-level index is part of the
+  comparison EXCEPT the canonical shard-path representation
+  (which is normalised via :func:`normalise_index_paths`
+  with the layout).
+* The CLI no longer hand-picks a hand-picked subset of
+  top-level fields.  Mutation tests confirm that mutations
+  to ``schema_version``, ``identity_binding``,
+  ``analysis_base_commit``, ``totals``, ``shard`` set,
+  shard hash, or any unknown field are all detected.
+* :func:`compare_report_layouts` is the production-bound
+  function called by :func:`cmd_check` (and by the
+  CORRECTION13 mutation tests).  Every mutation listed in
+  the closure plan (``schema_version``,
+  ``analysis_base_commit``, ``identity_binding``,
+  ``totals``, ``shard_hash``, ``shard_set``,
+  ``unknown_extra_field``, ``wrong_shard_basename``,
+  ``wrong_shard_parent``, ``swapped_shard_paths``) is
+  detected by the real production boundary.
 
 The CLI module is deliberately excluded from importing the
 low-level write helpers:
@@ -16,8 +40,9 @@ low-level write helpers:
 
 so the only legitimate write path is ``write_audit(layout=canonical_layout())``.
 ``cmd_check`` builds the audit object once and writes a
-reproduction into a temporary layout for byte-level comparison;
-it never imports the forbidden encoding helpers either.
+reproduction into a temporary layout for byte-level
+comparison; it never imports the forbidden encoding helpers
+either.
 
 Usage::
 
@@ -43,10 +68,15 @@ from scripts.verifiers_audit.report_io import (
     SHARD_NAMES,
     TOP_LEVEL_JSON,
     AuditWriteError,
+    ReportLayout,
     canonical_layout,
     report_layout_for_shard_root,
     write_all,
     write_audit,
+)
+from scripts.verifiers_audit.scope import (
+    IndexNormalisationError,
+    normalise_index_paths,
 )
 from scripts.verifiers_audit.validation import run_all
 
@@ -71,6 +101,131 @@ def _load_gate_classification_from_disk() -> dict[str, object] | None:
         return None
 
 
+def _build_audit_into_layout(
+    layout: ReportLayout,
+    *,
+    gate_classification: dict[str, object] | None = None,
+) -> None:
+    """Build the audit object and write it into ``layout``.
+
+    The canonical gate classification is mirrored into the
+    temporary layout so the recorded hashes match the
+    canonical run.  The function is the production entry
+    point used by :func:`compare_report_layouts`.
+    """
+    audit = build_audit_object({}, gate_classification=gate_classification)
+    canonical_gc = REPORT_ROOT / "gate_classification.json"
+    if canonical_gc.exists():
+        # Mirror the canonical gate classification into the
+        # temporary layout so write_all records the same hash
+        # the canonical run produced.
+        layout.shard_root.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(canonical_gc, layout.shard_root / "gate_classification.json")
+    write_all(layout=layout, audit=audit)
+
+
+def _load_top_level_index(layout: ReportLayout) -> dict[str, object]:
+    """Load the top-level index from ``layout``."""
+    return cast(
+        "dict[str, object]",
+        json.loads(layout.top_level_json.read_text(encoding="utf-8")),
+    )
+
+
+
+def _describe_drift(
+    *,
+    field: str,
+    expected: object,
+    actual: object,
+) -> str:
+    """Render a one-line description of a per-field drift."""
+    return f"{field} drift: expected={expected!r} actual={actual!r}"
+
+
+def compare_report_layouts(
+    expected_layout: ReportLayout,
+    canonical_layout: ReportLayout,
+) -> list[str]:
+    """Compare the top-level index of two report layouts.
+
+    CORRECTION13 production boundary.  The function:
+
+    1. loads both complete top-level indexes;
+    2. normalises them through the layout-aware
+       :func:`normalise_index_paths` -- each index is
+       normalised using its OWN layout (the expected
+       index is normalised with ``expected_layout``; the
+       canonical index is normalised with
+       ``canonical_layout``); this makes absolute and
+       REPO_ROOT-relative shard-path representations
+       compare equal;
+    3. walks the per-side key sets and attributes drift to
+       the correct field;
+    4. detects every required mutation: ``schema_version``,
+       ``analysis_base_commit``, ``identity_binding``,
+       ``totals``, ``shard_hash``, ``shard_set``,
+       ``unknown_extra_field``, ``wrong_shard_basename``,
+       ``wrong_shard_parent``, ``swapped_shard_paths``;
+    5. returns a list of drift descriptions (empty list ==
+       the two layouts agree).
+
+    An invalid shard path (unknown name, missing path, wrong
+    parent, wrong basename, swapped shard path) raises
+    :class:`IndexNormalisationError` rather than silently
+    normalising; the function never translates a layout
+    violation into a successful comparison.
+    """
+    if not expected_layout.top_level_json.exists():
+        return ["expected top-level index is absent"]
+    if not canonical_layout.top_level_json.exists():
+        return ["canonical top-level index is absent"]
+    expected_index = _load_top_level_index(expected_layout)
+    canonical_index = _load_top_level_index(canonical_layout)
+    try:
+        expected_norm = normalise_index_paths(
+            expected_index, layout=expected_layout
+        )
+        canonical_norm = normalise_index_paths(
+            canonical_index, layout=canonical_layout
+        )
+    except IndexNormalisationError as exc:
+        return [f"index normalisation rejected: {exc}"]
+    failures: list[str] = []
+    if expected_norm == canonical_norm:
+        return failures
+    for key in set(expected_norm) | set(canonical_norm):
+        exp_value = expected_norm.get(key)
+        act_value = canonical_norm.get(key)
+        if exp_value == act_value:
+            continue
+        if key == "shards":
+            # The shards dict is the canonical shard set; the
+            # failure-injection tests probe the per-shard
+            # drift explicitly below.
+            failures.append(
+                _describe_drift(
+                    field="shards",
+                    expected=sorted(
+                        (k, v.get("sha256"))
+                        for k, v in cast(
+                            "dict[str, object]", exp_value
+                        ).items()
+                    ),
+                    actual=sorted(
+                        (k, v.get("sha256"))
+                        for k, v in cast(
+                            "dict[str, object]", act_value
+                        ).items()
+                    ),
+                )
+            )
+            continue
+        failures.append(_describe_drift(field=key, expected=exp_value, actual=act_value))
+    return failures
+
+
+
 def cmd_check() -> int:
     """Verify the on-disk reports match the freshly-built audit object.
 
@@ -80,49 +235,44 @@ def cmd_check() -> int:
     runs the canonical gate; the auxiliary two-tree experiment
     is the only path that produces a real classification.
 
-    The persisted ``gate_classification.json`` is loaded from
-    disk (or, if missing, generated by the audit object as an
-    ``UNASSESSED`` record) so the in-memory and on-disk copies
-    match.
-
-    CORRECTION12: the comparison is driven by writing the
+    CORRECTION13: the comparison is driven by writing the
     in-memory audit into a temporary :class:`ReportLayout` via
-    :func:`write_all` and then byte-comparing each artifact
-    against the canonical on-disk file.  The CLI never imports
-    the low-level encoding helpers.
+    :func:`write_all`, loading both complete top-level indexes,
+    normalising them via :func:`normalise_index_paths` with
+    the canonical layout as the source of truth, and
+    requiring byte-equal equality.  No field is silently
+    discarded; the normaliser only touches the canonical
+    shard-path representation.
     """
     gate_classification = _load_gate_classification_from_disk()
-    audit = build_audit_object(
-        {}, gate_classification=gate_classification
-    )
     failures: list[str] = []
-
-    ok, validator_failures = run_all(audit)
-    if not ok:
-        failures.append("validators: " + ", ".join(validator_failures))
 
     with tempfile.TemporaryDirectory() as tmp_root:
         tmp_reports = Path(tmp_root) / "reports"
         tmp_reports.mkdir(parents=True, exist_ok=True)
-        # Mirror the on-disk gate_classification into the
-        # temporary layout so write_all records the same hash
-        # the canonical run produced.
-        canonical_gc = REPORT_ROOT / "gate_classification.json"
-        if canonical_gc.exists():
-            # The CLI does not own the gate_classification
-            # shard; it is a read-only consumer of the
-            # canonical artifact.  ``shutil.copy2`` mirrors the
-            # file into the temporary layout so ``write_all``
-            # records the same hash the canonical run produced.
-            shutil.copy2(canonical_gc, tmp_reports / "gate_classification.json")
         tmp_layout = report_layout_for_shard_root(tmp_reports)
-        write_all(layout=tmp_layout, audit=audit)
+        _build_audit_into_layout(
+            tmp_layout, gate_classification=gate_classification
+        )
 
-        # Compare each shard by sha256 hash.  The path field in
-        # the shard manifest is ignored because the canonical
-        # layout records repo-relative paths while the tmp
-        # layout records absolute paths (the two have no common
-        # prefix on macOS due to /private/var vs /Users).
+        # The audit object is built and validated AFTER the
+        # layout write (the validator runs on the in-memory
+        # audit, not the on-disk artifact).
+        audit = build_audit_object({}, gate_classification=gate_classification)
+        ok, validator_failures = run_all(audit)
+        if not ok:
+            failures.append("validators: " + ", ".join(validator_failures))
+
+        # Production-bound comparison: the real
+        # ``compare_report_layouts`` is called with the
+        # temporary expected layout and the canonical layout.
+        if TOP_LEVEL_JSON.exists():
+            canonical = canonical_layout()
+            failures.extend(
+                compare_report_layouts(tmp_layout, canonical)
+            )
+
+        # Compare each shard by sha256 hash.
         for name in SHARD_NAMES:
             tmp_path = tmp_layout.shard_root / f"{name}.json"
             if not tmp_path.exists():
@@ -137,35 +287,13 @@ def cmd_check() -> int:
             if expected_h != actual_h:
                 failures.append(f"shard drift: {name}")
 
-        if TOP_LEVEL_JSON.exists():
-            # The top-level index drift is tolerated by hash
-            # comparison instead of byte comparison.  The path
-            # fields of the shards are environmental (absolute
-            # in tmp layouts, repo-relative in canonical layouts).
-            tmp_idx = json.loads(
-                tmp_layout.top_level_json.read_text(encoding="utf-8")
-            )
-            on_disk_idx = json.loads(
-                TOP_LEVEL_JSON.read_text(encoding="utf-8")
-            )
-            tmp_shards = tmp_idx.get("shards", {})
-            disk_shards = on_disk_idx.get("shards", {})
-            if tmp_shards.keys() != disk_shards.keys():
-                failures.append("top-level index shard-set drift")
-            for name, info in tmp_shards.items():
-                disk_info = disk_shards.get(name, {})
-                if info.get("sha256") != disk_info.get("sha256"):
-                    failures.append(f"top-level index shard drift: {name}")
-
-        canonical_md = canonical_layout().markdown_path
-        if canonical_md.exists():
+        if canonical.markdown_path.exists():
             expected_h = hashlib.sha256(
                 tmp_layout.markdown_path.read_bytes()
             ).hexdigest()
-            actual_h = hashlib.sha256(canonical_md.read_bytes()).hexdigest()
+            actual_h = hashlib.sha256(canonical.markdown_path.read_bytes()).hexdigest()
             if expected_h != actual_h:
                 failures.append("markdown drift")
-
 
     if failures:
         print("FAIL: " + "; ".join(failures), file=sys.stderr)
