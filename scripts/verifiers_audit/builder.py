@@ -308,11 +308,14 @@ def build_top_level_index(
 
 def _default_shard_map() -> dict[str, dict[str, str]]:
     """Compute the default shard map (path + sha256) from the
-    in-memory shards so the audit object is self-contained."""
+    in-memory shards so the audit object is self-contained.
 
-    from scripts.verifiers_audit.report_io import (
-        REPORT_ROOT,
-    )
+    CORRECTION15: the default map records the canonical
+    logical shard identity (``f"{name}.json"``) for every
+    shard (required + optional).  The
+    :class:`ReportLayout` resolves the logical identity to a
+    physical path only at the read/write boundary.
+    """
 
     out: dict[str, dict[str, str]] = {}
     for name in (
@@ -324,16 +327,8 @@ def _default_shard_map() -> dict[str, dict[str, str]]:
         "source_preservation",
         "gate_classification",
     ):
-        # The actual shards are built below in build_audit_object
-        # itself; for the default map we use placeholder entries
-        # that cmd_write / cmd_check will overwrite on disk.  The
-        # validator validate_required_shards_complete accepts the
-        # in-memory shard body for the sha256 comparison, so we
-        # defer the actual hashing to that validator.
         out[name] = {
-            "path": str((REPORT_ROOT / f"{name}.json").relative_to(
-                REPO_ROOT
-            )),
+            "path": f"{name}.json",
             "sha256": "",
         }
     return out

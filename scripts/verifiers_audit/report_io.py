@@ -154,26 +154,40 @@ def _dump_helpers_shard(shard: dict[str, object]) -> bytes:
 
 
 def _relative_to_repo(path: Path) -> str:
-    """Compute ``path`` relative to ``REPO_ROOT`` in a way that
-    tolerates macOS's ``/private/var`` vs ``/Users`` symlink
-    mismatch.  Both sides are resolved through ``os.path.realpath``
-    so the symlink expansion matches the validator's view.
-    Falls back to the absolute path when the two roots do not
-    share a common prefix.
-    """
-    from pathlib import Path
+    """Compute ``path`` relative to ``REPO_ROOT``.
 
+    CORRECTION15: the helper no longer applies
+    ``os.path.realpath`` to both sides; the global
+    realpath weakening was REMOVED because it silently
+    accepted both the canonical parent and its macOS
+    ``/private/var`` symlink alias as identical.  The
+    function now records the canonical logical shard
+    identity (``f"{name}.json"``) when ``path`` is a
+    child of the canonical ``REPORT_ROOT``, and falls
+    back to a ``Path.relative_to`` computation when the
+    path lies under ``REPO_ROOT``.  The audit
+    ``--check`` mode uses
+    :func:`range_evidence_inventory.shard_path_layout_records_match`
+    to compare the recorded path with the layout-resolved
+    path without applying a global realpath.
+    """
+    canonical_top_level = REPO_ROOT / "docs" / "reports" / (
+        "verifier-core-migration-audit01.json"
+    )
+    canonical_shard_root = REPO_ROOT / "docs" / "reports" / (
+        "verifier-core-migration-audit01"
+    )
     try:
-        return str(
-            Path(
-                os.path.relpath(
-                    os.path.realpath(path),
-                    os.path.realpath(REPO_ROOT),
-                )
-            )
-        )
+        if path == canonical_top_level:
+            return "docs/reports/verifier-core-migration-audit01.json"
+        if canonical_shard_root in path.parents:
+            return path.name
+    except OSError:
+        pass
+    try:
+        return str(path.relative_to(REPO_ROOT))
     except ValueError:
-        return str(path.resolve())
+        return str(path)
 
 
 def _validate_layout(layout: ReportLayout) -> None:
@@ -407,7 +421,12 @@ def write_all(
         else:
             body = _json_dumps(audit[name])
         h = _write_atomic(shard_path, body)
-        shards[name] = _relative_to_repo(shard_path)
+        # CORRECTION15: the recorded shard path is the
+        # canonical logical identity (basename), independent
+        # of the physical root.  The :class:`ReportLayout`
+        # resolves the logical identity to the physical path
+        # only at the read/write boundary.
+        shards[name] = f"{name}.json"
         hashes[name] = h
     # Include the on-disk gate_classification shard hash in the
     # index WITHOUT writing or modifying the shard itself.  The
@@ -416,7 +435,7 @@ def write_all(
     gc_path = layout.shard_root / "gate_classification.json"
     if gc_path.exists():
         gc_bytes = gc_path.read_bytes()
-        shards["gate_classification"] = _relative_to_repo(gc_path)
+        shards["gate_classification"] = "gate_classification.json"
         hashes["gate_classification"] = _hash_bytes(gc_bytes)
     audit["index"]["shards"] = {
         name: {"path": p, "sha256": hashes[name]}

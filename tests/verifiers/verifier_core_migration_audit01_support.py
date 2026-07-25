@@ -31,6 +31,10 @@ AUDIT01_TEST_MODULES_WITHOUT_SUPPORT: tuple[Path, ...] = (
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction14.py",
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction14_layout.py",
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction14_evidence.py",
+    TESTS_ROOT / "test_verifier_core_migration_audit01_correction15.py",
+    TESTS_ROOT / "test_verifier_core_migration_audit01_correction15_bundle.py",
+    TESTS_ROOT / "test_verifier_core_migration_audit01_correction15_evidence.py",
+    TESTS_ROOT / "test_verifier_core_migration_audit01_correction15_inventory.py",
 )
 
 AUDIT01_TEST_MODULES: tuple[Path, ...] = (
@@ -48,6 +52,9 @@ AUDIT01_PRODUCTION_MODULES: tuple[Path, ...] = (
     REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_orchestrator.py",
     REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_builders.py",
     REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_classification.py",
+    REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_bundle.py",
+    REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_gates.py",
+    REPO_ROOT / "scripts" / "verifiers_audit" / "range_evidence_inventory.py",
     REPO_ROOT / "scripts" / "verifiers_audit" / "typed_results.py",
 )
 
@@ -135,6 +142,10 @@ def audit01_source_guard_violations() -> dict[str, tuple[str, ...]]:
                 "test_cmd_check_detects_swapped_shard_paths",
                 "test_cmd_check_production_invocation_detects_totals_mutation",
             }
+        ),
+        TESTS_ROOT
+        / "test_verifier_core_migration_audit01_correction14_layout.py": frozenset(
+            {"_build_complete_index"}
         ),
     }
 

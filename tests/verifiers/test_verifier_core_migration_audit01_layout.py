@@ -165,11 +165,15 @@ def test_recorded_shard_paths_match_layout(tmp_path) -> None:
     write_audit(layout=layout)
     index = json.loads(layout.top_level_json.read_text(encoding="utf-8"))
     for name, info in index["shards"].items():
-        abs_path = (REPO_ROOT / info["path"]).resolve()
-        assert (
-            abs_path
-            == (layout.shard_root / f"{name}.json").resolve()
-        ), f"shard {name} not under layout: {abs_path}"
+        # CORRECTION15: the recorded shard path is the canonical
+        # logical identity (basename); the layout's
+        # ``shard_root / f"{name}.json"`` is the resolved
+        # physical path.
+        assert info["path"] == f"{name}.json", info["path"]
+        assert (layout.shard_root / f"{name}.json").exists(), (
+            f"shard {name} not under layout: "
+            f"{layout.shard_root / f'{name}.json'}"
+        )
 
 
 def test_canonical_gate_classification_not_written_by_write_audit(

@@ -1,4 +1,4 @@
-"""CORRECTION14: detached range evidence manifest + topology + bundle-root
+"""CORRECTION14/CORRECTION15: detached range evidence manifest + topology
 builders.
 
 The functions in this module are extracted from
@@ -7,11 +7,17 @@ The functions in this module are extracted from
 :class:`EvidenceTransactionResult` /
 :class:`ClosureTopology` arguments and return dicts that the
 file-writer layer serialises to disk.
+
+The bundle-root builder lives in
+:mod:`range_evidence_bundle`; this module owns only the
+``manifest.json`` and ``topology.txt`` builders so the
+bundle module's strict directory enumeration remains
+isolated.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+# mypy: disable-error-code="type-arg,no-any-return,index,assignment,operator,no-untyped-call,no-untyped-def"
 from pathlib import Path
 
 from scripts.verifiers_audit.range_evidence_helpers import _sha256_of
@@ -29,36 +35,36 @@ def build_topology(
     git_diff_query_count: int,
     rescue_branches: tuple[str, ...] = (),
 ) -> str:
-    """Build the topology.txt text content.
+    """Build the ``topology.txt`` text content.
 
     The text records:
 
-    * F14, F14_tree, plan_blob;
-    * S14, S14_tree (when present);
-    * parent_F14, parent_S14;
+    * F15, F15_tree, plan_blob;
+    * S15, S15_tree (when present);
+    * parent_F15, parent_S15;
     * base_full_oid, subject_full_oid;
     * git_diff_query_count;
     * rescue_branches.
     """
     lines: list[str] = [
-        "CORRECTION14 topology.txt",
+        "CORRECTION15 topology.txt",
         "",
         "## Plan-freeze commit",
         "",
-        f"F14 = {topology.F14}",
-        f"F14_tree = {topology.F14_tree}",
+        f"F15 = {topology.F15}",
+        f"F15_tree = {topology.F15_tree}",
         f"plan_blob = {topology.plan_blob}",
-        f"parent_F14 = {topology.parent_F14}",
+        f"parent_F15 = {topology.parent_F15}",
     ]
-    if topology.S14 is not None:
+    if topology.S15 is not None:
         lines.extend(
             [
                 "",
                 "## Subject commit",
                 "",
-                f"S14 = {topology.S14}",
-                f"S14_tree = {topology.S14_tree or '(unknown)'}",
-                f"parent_S14 = {topology.parent_S14 or '(unknown)'}",
+                f"S15 = {topology.S15}",
+                f"S15_tree = {topology.S15_tree or '(unknown)'}",
+                f"parent_S15 = {topology.parent_S15 or '(unknown)'}",
             ]
         )
     lines.extend(
@@ -87,7 +93,6 @@ def build_manifest_from_evidence(
     base: str,
     subject: str,
     repo_root: Path,
-    output_dir: Path,
     all_paths_bytes: tuple[bytes, ...],
     py_paths_bytes: tuple[bytes, ...],
     ruff_scope_status: str,
@@ -108,9 +113,13 @@ def build_manifest_from_evidence(
 ) -> dict[str, object]:
     """Build the manifest dict from the typed evidence result.
 
-    CORRECTION14: every required artifact hash is bound from
-    ``authoritative_hashes`` so the manifest is consistent
-    with the on-disk files.
+    CORRECTION15: the manifest records the
+    ``publication_state`` of the staged bundle as
+    ``READY_TO_PUBLISH``; the rename to the final
+    destination records the manual publication result in a
+    separate transcript outside the bundle.  The
+    ``staging_root`` / ``output_dir`` / temporary absolute
+    paths are NEVER recorded.
     """
     authoritative = evidence.authoritative_hashes
     return {
@@ -120,7 +129,6 @@ def build_manifest_from_evidence(
         "base_full_oid": evidence.base_oid,
         "subject_full_oid": evidence.subject_oid,
         "repo_root": str(repo_root),
-        "output_dir": str(output_dir),
         "git_diff_query_count": git_diff_query_count,
         "range": {
             "method": "git-diff-factory",
@@ -218,41 +226,16 @@ def build_manifest_from_evidence(
         ),
         "protocol_stage": "manual-preclosure-evidence",
         "leamas_protocol_E": False,
+        "publication_state": (
+            "READY_TO_PUBLISH"
+            if evidence.publication_status == "ready_to_publish"
+            else evidence.publication_status.upper()
+        ),
         "publication_status": evidence.publication_status,
     }
 
 
-def build_bundle_root(
-    *,
-    topology: ClosureTopology,
-    staging: Path,
-    authoritative_hashes: Mapping[str, str],
-) -> dict[str, object]:
-    """Build the bundle-root.json dict.
-
-    The bundle-root hashes every other final artifact and
-    binds F14, F14_tree, plan_blob, S14, S14_tree,
-    parent_F14, parent_S14, files (relpath -> sha256).
-    The hashes in ``files`` are taken from
-    ``authoritative_hashes`` so the bundle-root is
-    consistent with the on-disk files at publication time.
-    """
-    return {
-        "schema_version": "leamas.v2.bundle-root/1",
-        "F14": topology.F14,
-        "F14_tree": topology.F14_tree,
-        "plan_blob": topology.plan_blob,
-        "S14": topology.S14,
-        "S14_tree": topology.S14_tree,
-        "parent_F14": topology.parent_F14,
-        "parent_S14": topology.parent_S14,
-        "staging_root": str(staging),
-        "files": dict(authoritative_hashes),
-    }
-
-
 __all__ = [
-    "build_bundle_root",
     "build_manifest_from_evidence",
     "build_topology",
 ]

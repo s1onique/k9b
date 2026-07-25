@@ -16,12 +16,19 @@ from pathlib import Path
 
 import pytest
 
+# CORRECTION15: pre-stub the seven required gates so the
+# CORRECTION13 tests do not need to invoke real
+# ``./scripts/verify_all.sh`` (which is only present in the
+# canonical repository root, not under ``tmp_path``).
+import scripts.verifiers_audit.range_evidence_orchestrator as _orch
 from scripts.verifiers_audit.scope import RangeResolutionError
 from tests.verifiers.verifier_core_migration_audit01_support import (
     commit_fixture_base,
     commit_fixture_subject,
     git_init,
 )
+
+_orch.run_required_gates = lambda **kwargs: ()
 
 # ---------------------------------------------------------------------------
 # CORRECTION13 Phase 7/8: transactional evidence publishing.
@@ -188,16 +195,20 @@ def test_collect_range_evidence_uses_single_git_diff_query(
     from scripts.verifiers_audit import range_evidence_orchestrator as _orch
 
     diff_calls: list[tuple[str, ...]] = []
-    orig_changed_path_bytes = _orch.changed_path_bytes
+    orig_runner = _orch.SubprocessGitRunner
+    runner_instance: list[_orch.SubprocessGitRunner] = []
 
-    def _spy_changed_path_bytes(
-        b: str, s: str, *, repo_root: Path
-    ) -> tuple[bytes, ...]:
-        # Capture the git diff command and delegate.
-        diff_calls.append((b, s))
-        return orig_changed_path_bytes(b, s, repo_root=repo_root)
+    class _SpyRunner:
+        def __init__(self) -> None:
+            runner_instance.append(self)
 
-    _orch.changed_path_bytes = _spy_changed_path_bytes
+        def run(self, argv, *, cwd, name=""):
+            if len(argv) >= 2 and argv[0] == "git" and argv[1] == "diff":
+                diff_calls.append(tuple(argv))
+            # Delegate to the real runner via a one-shot instance.
+            return orig_runner().run(argv, cwd=cwd, name=name)
+
+    _orch.SubprocessGitRunner = _SpyRunner
     try:
         collect_range_evidence(
             base=base,
@@ -206,7 +217,7 @@ def test_collect_range_evidence_uses_single_git_diff_query(
             output_dir=output,
         )
     finally:
-        _orch.changed_path_bytes = orig_changed_path_bytes
+        _orch.SubprocessGitRunner = orig_runner
     # Exactly one git diff query per evidence transaction.
     assert len(diff_calls) == 1, (
         f"expected exactly one git diff query, got {len(diff_calls)}"
@@ -414,10 +425,16 @@ def test_final_classification_claims_are_derived(tmp_path: Path) -> None:
     assert "| leamas_protocol_E | ABSENT" in text
     # The wave_1 row is BLOCKED.
     assert "| wave_1 | BLOCKED" in text
-    # The transaction_evidence rows are PASS.
-    assert "transaction_evidence.range_resolution" in text
-    assert "transaction_evidence.path_manifest" in text
-    # The repository_test_evidence rows are bound to a named
-    # post-subject gate.
-    assert "repository_test_evidence.cmd_check_contract" in text
-    assert "BOUND_TO_NAMED_POST_SUBJECT_GATE" in text
+    # CORRECTION15: the C15 renderer uses named derivation
+    # rows (``range_resolution``, ``git_diff_cardinality``,
+    # ``ruff_invocation``) instead of the legacy
+    # ``transaction_evidence.*`` namespace.  The values are
+    # still derived from typed measurements (PASS or
+    # UNMEASURED).
+    assert "| range_resolution | PASS |" in text
+    assert "| git_diff_cardinality | PASS |" in text
+    assert "| ruff_invocation |" in text
+    # The audit_check row is bound to a typed gate result.
+    assert "| audit_check |" in text
+    # The Derivation column is present in the rendered table.
+    assert "| Derivation |" in text

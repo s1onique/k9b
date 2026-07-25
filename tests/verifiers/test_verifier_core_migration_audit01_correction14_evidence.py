@@ -126,14 +126,15 @@ def test_collect_range_evidence_fails_closed_without_ruff(
                 repo_root=repo,
                 output_dir=output,
                 topology=ClosureTopology(
-                    F14="a" * 40,
-                    F14_tree="b" * 40,
+                    F15="a" * 40,
+                    F15_tree="b" * 40,
                     plan_blob="c" * 64,
-                    S14=None,
-                    S14_tree=None,
-                    parent_F14="d" * 40,
-                    parent_S14=None,
+                    S15=None,
+                    S15_tree=None,
+                    parent_F15="d" * 40,
+                    parent_S15=None,
                 ),
+                gate_results=(),
             )
     finally:
         _re_mod.resolve_ruff_identity = orig_resolve
@@ -176,7 +177,9 @@ def test_git_cardinality_measured_from_executed_transcript() -> None:
 
 def test_required_final_artifacts_constant() -> None:
     """The required final artifacts include every required
-    artifact from the CORRECTION14 plan."""
+    artifact from the CORRECTION15 plan (the ``.txt``
+    projections are first-class members).
+    """
     from scripts.verifiers_audit.range_evidence_orchestrator import (
         REQUIRED_FINAL_ARTIFACTS,
     )
@@ -186,8 +189,11 @@ def test_required_final_artifacts_constant() -> None:
         "topology.txt",
         "gate-results.json",
         "changed-paths.z",
+        "changed-paths.txt",
         "changed-python-paths.z",
+        "changed-python-paths.txt",
         "ruff-input-paths.z",
+        "ruff-input-paths.txt",
         "ruff-scope.json",
         "ruff-argv.json",
         "tool-identities.json",
@@ -200,9 +206,13 @@ def test_required_final_artifacts_constant() -> None:
 
 def test_final_classification_no_hardcoded_pass_for_unmeasured() -> None:
     """The final-classification builder NEVER hardcodes a PASS row
-    for a measurement it does not actually have."""
+    for a measurement it does not actually have.
+    """
     from scripts.verifiers_audit.range_evidence_classification import (
         build_final_classification,
+    )
+    from scripts.verifiers_audit.typed_results import (
+        BundleValidationResult,
     )
 
     evidence = EvidenceTransactionResult(
@@ -214,37 +224,51 @@ def test_final_classification_no_hardcoded_pass_for_unmeasured() -> None:
         authoritative_hashes=MappingProxyType({}),
     )
     topology = ClosureTopology(
-        F14="a" * 40,
-        F14_tree="b" * 40,
+        F15="a" * 40,
+        F15_tree="b" * 40,
         plan_blob="c" * 64,
-        S14=None,
-        S14_tree=None,
-        parent_F14="d" * 40,
-        parent_S14=None,
+        S15=None,
+        S15_tree=None,
+        parent_F15="d" * 40,
+        parent_S15=None,
     )
     text = build_final_classification(
         evidence=evidence,
         gate_results=(),
         topology=topology,
+        validation=BundleValidationResult(
+            declared_artifacts=(),
+            observed_artifacts=(),
+            missing_artifacts=(),
+            extra_artifacts=(),
+        ),
         sha_map={},
     )
-    assert "| actual_git_diff_calls | 0 |" in text
+    # The lifecycle rows are explicit closure-topology
+    # constants (not derived measurements).
     assert "| wave_1 | BLOCKED |" in text
+    assert "| CORRECTION15 | PARTIAL_CHECKPOINT |" in text
 
 
 def test_final_classification_renders_pass_only_from_typed_result() -> None:
-    """A typed :class:`CommandResult` with status='passed' AND
-    returncode=0 produces a typed-measurement row in the final
-    classification."""
+    """A typed :class:`ExecutedCommand` with status='passed'
+    produces a derivation that records the status in the
+    final classification.
+    """
     from scripts.verifiers_audit.range_evidence_classification import (
         build_final_classification,
     )
+    from scripts.verifiers_audit.typed_results import (
+        BundleValidationResult,
+    )
 
     ruff_result = CommandResult(
+        name="ruff-check",
         argv=(".venv/bin/python", "-m", "ruff", "check", "a.py"),
+        cwd="/repo",
         returncode=0,
-        stdout_sha256="a" * 64,
-        stderr_sha256="b" * 64,
+        stdout=b"",
+        stderr=b"",
         status="passed",
     )
     evidence = EvidenceTransactionResult(
@@ -252,44 +276,42 @@ def test_final_classification_renders_pass_only_from_typed_result() -> None:
         subject_oid="b" * 40,
         git_commands=(
             CommandResult(
+                name="git-rev-parse-base",
                 argv=(
                     "git", "rev-parse", "--verify", "HEAD^{commit}"
                 ),
+                cwd="/repo",
                 returncode=0,
-                stdout_sha256="c" * 64,
-                stderr_sha256="d" * 64,
+                stdout=b"a" * 40,
+                stderr=b"",
                 status="passed",
             ),
         ),
         ruff_result=ruff_result,
-        publication_status="published",
-        authoritative_hashes=MappingProxyType({
-            "manifest.json": "e" * 64,
-            "topology.txt": "f" * 64,
-            "gate-results.json": "0" * 64,
-            "bundle-root.json": "1" * 64,
-            "tool-identities.json": "2" * 64,
-        }),
+        publication_status="ready_to_publish",
+        authoritative_hashes=MappingProxyType({}),
     )
     topology = ClosureTopology(
-        F14="a" * 40,
-        F14_tree="b" * 40,
+        F15="a" * 40,
+        F15_tree="b" * 40,
         plan_blob="c" * 64,
-        S14=None,
-        S14_tree=None,
-        parent_F14="d" * 40,
-        parent_S14=None,
+        S15=None,
+        S15_tree=None,
+        parent_F15="d" * 40,
+        parent_S15=None,
     )
     text = build_final_classification(
         evidence=evidence,
         gate_results=(),
         topology=topology,
-        sha_map={
-            "manifest.json": "e" * 64,
-            "topology.txt": "f" * 64,
-            "gate-results.json": "0" * 64,
-            "bundle-root.json": "1" * 64,
-            "tool-identities.json": "2" * 64,
-        },
+        validation=BundleValidationResult(
+            declared_artifacts=(),
+            observed_artifacts=(),
+            missing_artifacts=(),
+            extra_artifacts=(),
+        ),
+        sha_map={},
     )
-    assert "status=passed returncode=0" in text
+    # The ruff derivation must record ``status=passed`` in
+    # the rendered table.
+    assert "Ruff status=passed" in text

@@ -1,5 +1,5 @@
 # mypy: disable-error-code="index,assignment,operator,arg-type,union-attr,attr-defined,return-value,no-any-return,no-untyped-call,no-untyped-def,var-annotated,call-overload,comparison-overlap"
-"""CORRECTION14: typed evidence-result dataclass tests.
+"""CORRECTION14/CORRECTION15: typed evidence-result dataclass tests.
 
 The companion modules
 :mod:`test_verifier_core_migration_audit01_correction14_layout`
@@ -18,17 +18,22 @@ import pytest
 from scripts.verifiers_audit.typed_results import (
     CommandResult,
     EvidenceTransactionResult,
+    ExecutedCommand,
     RepositoryGateResult,
 )
 
 
 def test_command_result_is_frozen() -> None:
-    """The :class:`CommandResult` dataclass is frozen."""
+    """The :class:`CommandResult` (= :class:`ExecutedCommand`)
+    dataclass is frozen.
+    """
     result = CommandResult(
+        name="git-rev-parse-base",
         argv=("git", "rev-parse", "HEAD"),
+        cwd="/repo",
         returncode=0,
-        stdout_sha256="a" * 64,
-        stderr_sha256="b" * 64,
+        stdout=b"",
+        stderr=b"",
         status="passed",
     )
     with pytest.raises(Exception):
@@ -51,12 +56,52 @@ def test_evidence_transaction_result_is_frozen() -> None:
 
 def test_repository_gate_result_is_frozen() -> None:
     """The :class:`RepositoryGateResult` dataclass is frozen."""
-    gate = RepositoryGateResult(
+    cmd = ExecutedCommand(
         name="pytest",
         argv=("pytest",),
+        cwd="/repo",
         returncode=0,
-        stdout_sha256="a" * 64,
-        stderr_sha256="b" * 64,
+        stdout=b"",
+        stderr=b"",
+        status="passed",
     )
+    gate = RepositoryGateResult(name="pytest", command=cmd)
     with pytest.raises(Exception):
-        gate.returncode = 1  # type: ignore[misc]
+        gate.name = "act-local"  # type: ignore[misc]
+
+
+def test_executed_command_stdout_sha256_is_derived_from_bytes() -> None:
+    """CORRECTION15: the SHA-256 properties are derived from
+    the raw bytes the command produced.
+    """
+    import hashlib
+
+    cmd = ExecutedCommand(
+        name="git-rev-parse",
+        argv=("git", "rev-parse", "HEAD"),
+        cwd="/repo",
+        returncode=0,
+        stdout=b"abc123\n",
+        stderr=b"",
+        status="passed",
+    )
+    assert cmd.stdout_sha256 == hashlib.sha256(b"abc123\n").hexdigest()
+
+
+def test_executed_command_preserves_raw_bytes() -> None:
+    """CORRECTION15: the raw stdout/stderr bytes are preserved
+    in memory; the ``sha256`` properties are derived from
+    those bytes.
+    """
+    raw = b"with embedded NUL \x00 and trailing newline\n"
+    cmd = ExecutedCommand(
+        name="git-rev-parse",
+        argv=("git", "rev-parse", "HEAD"),
+        cwd="/repo",
+        returncode=0,
+        stdout=raw,
+        stderr=b"err",
+        status="passed",
+    )
+    assert cmd.stdout == raw
+    assert cmd.stderr == b"err"

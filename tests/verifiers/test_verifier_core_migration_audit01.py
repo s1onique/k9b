@@ -400,17 +400,28 @@ def test_index_and_shards_byte_identical_across_runs() -> None:
 
 
 def test_top_level_index_lists_required_shards(audit: dict) -> None:
-    from scripts.verifiers_audit.report_io import REPORT_ROOT
+    """CORRECTION15: the recorded shard path is the canonical
+    logical identity (basename), independent of the
+    physical root.  The :class:`ReportLayout` resolves the
+    logical identity to the physical path only at the
+    read/write boundary.
+    """
+    from scripts.verifiers_audit.range_evidence_inventory import (
+        canonical_shard_path,
+    )
 
     shards = audit["index"]["shards"]
     for name in SHARD_NAMES:
-        expected_path = str(
-            (REPORT_ROOT / f"{name}.json").relative_to(REPO_ROOT)
-        )
+        expected_path = canonical_shard_path(name)
         if name in shards:
             assert shards[name]["path"] == expected_path
         if shards:
             assert "sha256" in shards[name]
+    # CORRECTION15: SHARD_NAMES is the 6 required shard
+    # basenames; ``gate_classification`` is an OPTIONAL
+    # shard owned by ``collect_r2_evidence`` and appended
+    # to the top-level index by the writer when the on-disk
+    # file is present.
     assert set(SHARD_NAMES) == frozenset({
         "inventory",
         "helpers",
@@ -418,5 +429,4 @@ def test_top_level_index_lists_required_shards(audit: dict) -> None:
         "core_usage",
         "candidates",
         "source_preservation",
-        "gate_classification",
     })

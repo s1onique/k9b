@@ -50,13 +50,16 @@ from __future__ import annotations
 # mypy: disable-error-code="type-arg,no-any-return,index,assignment,operator,no-untyped-call,no-untyped-def"
 import fnmatch
 import os
-import subprocess
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from scripts.verifiers_audit.discovery import REPO_ROOT
+from scripts.verifiers_audit.range_evidence_helpers import (
+    SubprocessGitRunner,
+    parse_nul_paths,
+)
 
 if TYPE_CHECKING:
     from scripts.verifiers_audit.report_io import ReportLayout
@@ -212,25 +215,14 @@ def _run_git_diff_names_bytes(
 ) -> tuple[bytes, ...]:
     """Return ``git diff --name-only -z --diff-filter=ACMRT base subject``.
 
-    CORRECTION13: this is the **authoritative** range query.  It
-    NEVER:
-
-    * uses ``text=True`` (output is binary bytes),
-    * uses ``splitlines()`` (pathnames may contain any bytes),
-    * calls ``strip()`` on pathnames (whitespace is preserved),
-    * returns an empty tuple after a Git failure (it raises),
-    * suppresses stderr (it is captured and forwarded),
-    * silently substitutes ``HEAD``, the index, or the working
-      tree (the supplied revisions are used verbatim).
-
-    On non-zero exit the function raises :class:`RangeResolutionError`.
-    On zero exit the trailing NUL is preserved by ``split`` and
-    dropped by the ``if raw`` filter; an empty trailing entry is
-    NEVER emitted as a path.  A valid equal-commit range MAY
-    return ``()``.
-
-    The returned tuple is bytes (filesystem representation);
-    test code may decode with :func:`os.fsdecode` round-trip.
+    CORRECTION15: the function is a backward-compatibility
+    shim around the authoritative
+    :class:`SubprocessGitRunner` seam.  Production code MUST
+    call :func:`changed_path_bytes` only via the
+    :class:`GitRunner` injection; the legacy
+    ``subprocess.run`` call site was REMOVED so the test
+    suite can patch ``subprocess.run`` and assert that every
+    invocation is recorded by the seam.
     """
     argv: tuple[str, ...] = (
         "git",
@@ -241,24 +233,18 @@ def _run_git_diff_names_bytes(
         base,
         subject,
     )
-    proc = subprocess.run(
-        list(argv),
-        cwd=str(repo_root),
-        capture_output=True,
-        check=False,
-    )
-
-    if proc.returncode != 0:
+    runner = SubprocessGitRunner()
+    result = runner.run(argv, cwd=repo_root, name="git-diff-factory")
+    if result.status == "failed":
         raise RangeResolutionError(
             base=base,
             subject=subject,
             argv=argv,
-            returncode=proc.returncode,
-            stderr=os.fsdecode(proc.stderr) if proc.stderr else "",
+            returncode=result.returncode,
+            stderr=os.fsdecode(result.stderr) if result.stderr else "",
             stage="diff_names",
         )
-
-    return tuple(raw for raw in proc.stdout.split(b"\0") if raw)
+    return parse_nul_paths(result.stdout)
 
 
 

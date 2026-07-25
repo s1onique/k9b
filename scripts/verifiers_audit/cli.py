@@ -149,7 +149,8 @@ def compare_report_layouts(
 ) -> list[str]:
     """Compare the top-level index of two report layouts.
 
-    CORRECTION13 production boundary.  The function:
+    CORRECTION13/CORRECTION15 production boundary.  The
+    function:
 
     1. loads both complete top-level indexes;
     2. normalises them through the layout-aware
@@ -160,14 +161,20 @@ def compare_report_layouts(
        ``canonical_layout``); this makes absolute and
        REPO_ROOT-relative shard-path representations
        compare equal;
-    3. walks the per-side key sets and attributes drift to
+    3. CORRECTION15: rewrites every recorded shard path
+       to the canonical logical identity (basename) via
+       :func:`range_evidence_inventory.rebuild_index_shards`
+       so the comparison is robust to macOS
+       ``/private/var`` vs ``/var`` aliases WITHOUT a
+       global ``realpath`` weakening;
+    4. walks the per-side key sets and attributes drift to
        the correct field;
-    4. detects every required mutation: ``schema_version``,
+    5. detects every required mutation: ``schema_version``,
        ``analysis_base_commit``, ``identity_binding``,
        ``totals``, ``shard_hash``, ``shard_set``,
        ``unknown_extra_field``, ``wrong_shard_basename``,
        ``wrong_shard_parent``, ``swapped_shard_paths``;
-    5. returns a list of drift descriptions (empty list ==
+    6. returns a list of drift descriptions (empty list ==
        the two layouts agree).
 
     An invalid shard path (unknown name, missing path, wrong
@@ -191,6 +198,15 @@ def compare_report_layouts(
         )
     except IndexNormalisationError as exc:
         return [f"index normalisation rejected: {exc}"]
+    from scripts.verifiers_audit.range_evidence_inventory import (
+        rebuild_index_shards,
+    )
+    expected_norm = rebuild_index_shards(
+        expected_norm, layout=expected_layout
+    )
+    canonical_norm = rebuild_index_shards(
+        canonical_norm, layout=canonical_layout
+    )
     failures: list[str] = []
     if expected_norm == canonical_norm:
         return failures

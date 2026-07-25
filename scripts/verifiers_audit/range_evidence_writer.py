@@ -1,7 +1,8 @@
-"""CORRECTION13/CORRECTION14: detached range evidence bundle writer.
+"""CORRECTION13/CORRECTION14/CORRECTION15: detached range evidence bundle writer.
 
 The writer module owns the file-writer layer:
 
+* :func:`build_commands_registry` - the ``commands.json`` builder.
 * :func:`write_ruff_scope_file` - the ``ruff-scope.json`` writer.
 * :func:`write_ruff_argv_file` - the ``ruff-argv.json`` writer.
 * :func:`write_tool_identities_file` - the
@@ -10,27 +11,28 @@ The writer module owns the file-writer layer:
 * :func:`write_manifest_file` - the ``manifest.json`` writer.
 * :func:`write_topology_file` - the ``topology.txt`` writer.
 * :func:`write_gate_results_file` - the
-  ``gate-results.json`` writer.
+  ``gate-results.json`` writer (CORRECTION15: gates
+  use the closed semantic ``RepositoryGateName`` ``Literal``).
 * :func:`write_classification_file` - the
   ``final-classification.md`` writer.
 
 The manifest / topology / bundle-root builders live in
-:mod:`range_evidence_builders`; the typed result dataclasses
-live in :mod:`typed_results`; the final-classification
-renderer lives in :mod:`range_evidence_classification`.
-
-The writer is invoked by :func:`collect_range_evidence` in
-:mod:`range_evidence`.  It must NEVER touch the destination
-directory directly; the orchestrator renames the staging
-directory only after every write succeeds.
+:mod:`range_evidence_builders` and :mod:`range_evidence_bundle`;
+the typed result dataclasses live in :mod:`typed_results`;
+the final-classification renderer lives in
+:mod:`range_evidence_classification`.
 """
 
 from __future__ import annotations
 
+# mypy: disable-error-code="type-arg,no-any-return,index,assignment"
 import json
 from pathlib import Path
 
-from scripts.verifiers_audit.typed_results import CommandResult
+from scripts.verifiers_audit.typed_results import (
+    ExecutedCommand,
+    RepositoryGateResult,
+)
 
 
 def build_commands_registry(
@@ -39,8 +41,8 @@ def build_commands_registry(
     subject: str,
     base_full_oid: str,
     subject_full_oid: str,
-    git_commands: tuple[CommandResult, ...],
-    ruff_result: CommandResult | None,
+    git_commands: tuple[ExecutedCommand, ...],
+    ruff_result: ExecutedCommand | None,
     repo_root: Path,
 ) -> list[dict[str, object]]:
     """Build the post-subject commands registry.
@@ -71,6 +73,7 @@ def build_commands_registry(
             "stderr_sha256": (
                 git_commands[0].stderr_sha256 if git_commands else ""
             ),
+            "status": git_commands[0].status if git_commands else "failed",
         },
         {
             "name": "git-rev-parse-subject",
@@ -95,6 +98,9 @@ def build_commands_registry(
                 if len(git_commands) > 1
                 else ""
             ),
+            "status": (
+                git_commands[1].status if len(git_commands) > 1 else "failed"
+            ),
         },
     ]
     if len(git_commands) > 2:
@@ -107,6 +113,7 @@ def build_commands_registry(
                 "exit_code": diff.returncode,
                 "stdout_sha256": diff.stdout_sha256,
                 "stderr_sha256": diff.stderr_sha256,
+                "status": diff.status,
             }
         )
     if ruff_result is not None:
@@ -118,6 +125,7 @@ def build_commands_registry(
                 "exit_code": ruff_result.returncode,
                 "stdout_sha256": ruff_result.stdout_sha256,
                 "stderr_sha256": ruff_result.stderr_sha256,
+                "status": ruff_result.status,
             }
         )
     return commands
@@ -230,27 +238,31 @@ def write_topology_file(staging: Path, text: str) -> Path:
 
 def write_gate_results_file(
     staging: Path,
-    gate_results: tuple[CommandResult, ...],
+    gate_results: tuple[RepositoryGateResult, ...],
 ) -> Path:
     """Write the ``gate-results.json`` artefact.
 
-    The artifact records every captured post-subject gate
-    command.  Each row contains the gate's name (when
-    available), argv, working directory, returncode, and
-    SHA-256 of stdout / stderr.
+    CORRECTION15: every gate row records the closed
+    semantic ``name`` (the :class:`RepositoryGateName`
+    ``Literal``) and the full underlying
+    :class:`ExecutedCommand` (argv, cwd, returncode,
+    stdout/stderr SHA-256, status).  The serialized form
+    is the SOLE source of truth for whether a gate
+    passed.
     """
     path = staging / "gate-results.json"
     payload: list[dict[str, object]] = []
     for result in gate_results:
-        name = result.argv[0] if result.argv else ""
+        cmd = result.command
         payload.append(
             {
-                "name": name,
-                "argv": list(result.argv),
-                "exit_code": result.returncode,
-                "stdout_sha256": result.stdout_sha256,
-                "stderr_sha256": result.stderr_sha256,
-                "status": result.status,
+                "name": result.name,
+                "argv": list(cmd.argv),
+                "cwd": cmd.cwd,
+                "exit_code": cmd.returncode,
+                "stdout_sha256": cmd.stdout_sha256,
+                "stderr_sha256": cmd.stderr_sha256,
+                "status": cmd.status,
             }
         )
     path.write_text(

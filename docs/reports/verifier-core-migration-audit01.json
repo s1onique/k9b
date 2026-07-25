@@ -24,31 +24,31 @@
   },
   "shards": {
     "inventory": {
-      "path": "docs/reports/verifier-core-migration-audit01/inventory.json",
+      "path": "inventory.json",
       "sha256": "eb1ad290ad6d6c98a6d2115a47609cda676a96e6e5e7d0109ac04f45d74c3cee"
     },
     "helpers": {
-      "path": "docs/reports/verifier-core-migration-audit01/helpers.json",
+      "path": "helpers.json",
       "sha256": "d533f79c002323752f1e60dd74e1cecffddad9b2a59ff178f1bd6cb76da598e2"
     },
     "groups": {
-      "path": "docs/reports/verifier-core-migration-audit01/groups.json",
+      "path": "groups.json",
       "sha256": "343b6ed62c3b67a50ab3e3f85287c25e8af0da2e2efa09c24700b03594533558"
     },
     "core_usage": {
-      "path": "docs/reports/verifier-core-migration-audit01/core_usage.json",
+      "path": "core_usage.json",
       "sha256": "98d2fc9a4c09d11fa7f0f6380393029e14b4343994ef8f51c369b1b62b0a90a2"
     },
     "candidates": {
-      "path": "docs/reports/verifier-core-migration-audit01/candidates.json",
+      "path": "candidates.json",
       "sha256": "7d1a10c49068ea9581da4e4ace82d4349606ada574cd7d285beddd1c7d24097e"
     },
     "source_preservation": {
-      "path": "docs/reports/verifier-core-migration-audit01/source_preservation.json",
+      "path": "source_preservation.json",
       "sha256": "9711f87db7be4a942096a123e8a92662f187ba1375420dbef6865173d2f47bda"
     },
     "gate_classification": {
-      "path": "docs/reports/verifier-core-migration-audit01/gate_classification.json",
+      "path": "gate_classification.json",
       "sha256": "0d1f84f3f3238185e6d9d615711b2051d19c17f9f72e87adfa7fb6ef906fa275"
     }
   }

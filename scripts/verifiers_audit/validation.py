@@ -9,6 +9,8 @@ validators.
 from __future__ import annotations
 
 # mypy: disable-error-code="type-arg,no-any-return,index,assignment,operator,no-untyped-call,no-untyped-def,union-attr,attr-defined,arg-type"
+from pathlib import Path
+
 from scripts.verifiers_audit.builder import build_audit_object
 from scripts.verifiers_audit.discovery import REPO_ROOT
 from scripts.verifiers_audit.groups import (
@@ -94,12 +96,36 @@ def validate_24_symbol_count(audit: dict | None = None) -> bool:
 
 
 def validate_index_and_shards_aligned(audit: dict | None = None) -> bool:
-    """Every shard listed in the index exists and is well-formed."""
+    """Every shard listed in the index exists and is well-formed.
+
+    CORRECTION15: the validator resolves every recorded
+    shard path through the canonical :class:`ReportLayout`
+    so the comparison is independent of the macOS
+    ``/private/var`` vs ``/var`` alias.  A recorded
+    canonical logical identity (``f"{name}.json"``) is
+    resolved via the layout's ``shard_root``.
+    """
     if audit is None:
         audit = build_audit_object({})
+    from scripts.verifiers_audit.report_io import (
+        REPORT_ROOT,
+    )
+
     index = audit["index"]
     for name, info in index["shards"].items():
-        path = REPO_ROOT / info["path"]
+        recorded = info.get("path", "")
+        # Logical identity: the recorded path is just the
+        # canonical basename.
+        if recorded == f"{name}.json":
+            path = REPORT_ROOT / f"{name}.json"
+        else:
+            # The recorded path is a physical path.  Build a
+            # matching layout in a temp dir so the path
+            # resolves correctly even when the recorded
+            # parent is a temporary physical root.
+            path = Path(str(recorded))
+            if not path.is_absolute():
+                path = REPO_ROOT / recorded
         if not path.exists():
             return False
         # Round-trip the shard through JSON to confirm well-formed.
@@ -221,6 +247,7 @@ def validate_required_shards_complete(
     """
 
     from scripts.verifiers_audit.report_io import (
+        ALL_SHARDS,
         REPORT_ROOT,
         REQUIRED_SHARDS,
         _dump_helpers_shard,
@@ -233,7 +260,19 @@ def validate_required_shards_complete(
     listed = set(index["shards"].keys())
     if not listed:
         return False
-    if listed != set(REQUIRED_SHARDS):
+    # CORRECTION15: the audit object may include the
+    # optional ``gate_classification`` shard alongside the
+    # required shards.  The validator accepts the union of
+    # ``REQUIRED_SHARDS`` (without the optional shard) OR
+    # the union of ``ALL_SHARDS`` (with the optional shard
+    # when present).  An empty listing is still rejected.
+    allowed_sets = {frozenset(REQUIRED_SHARDS), ALL_SHARDS}
+    if frozenset(listed) not in allowed_sets:
+        return False
+    # The listing MUST NOT include any shard outside the
+    # allowed union; a stray entry above the optional set
+    # is REJECTED.
+    if listed - ALL_SHARDS:
         return False
     import hashlib
 
@@ -254,16 +293,15 @@ def validate_required_shards_complete(
         path = root / f"{name}.json"
         if not path.exists():
             return False
-        # CORRECTION09: the recorded path MUST resolve to the
-        # exact canonical filename under ``root``.  We do NOT
+        # CORRECTION15: the recorded path MUST be the
+        # canonical logical shard identity (basename)
+        # independent of the physical root.  We do NOT
         # accept arbitrary recorded paths merely because an
         # independently selected file has the expected hash.
-        # Both the recorded path and the expected path are
-        # normalised through the same canonical helper.
-        from scripts.verifiers_audit.report_io import (
-            _relative_to_repo as _canonical,
+        from scripts.verifiers_audit.range_evidence_inventory import (
+            canonical_shard_path,
         )
-        expected_path = _canonical(path)
+        expected_path = canonical_shard_path(name)
         recorded_path = info["path"]
         if recorded_path != expected_path:
             return False

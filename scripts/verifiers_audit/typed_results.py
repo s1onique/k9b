@@ -1,37 +1,40 @@
-"""CORRECTION14: typed evidence-result dataclasses.
+"""CORRECTION14/CORRECTION15: typed evidence-result dataclasses.
 
 Every claim in the final-classification.md file MUST be derived
-from a typed :class:`CommandResult` /
+from a typed :class:`ExecutedCommand` /
 :class:`EvidenceTransactionResult` /
-:class:`RepositoryGateResult` measurement.  Hardcoded ``PASS``
-rows are forbidden.  An unmeasured claim is rendered
+:class:`RepositoryGateResult` /
+:class:`BundleValidationResult` measurement.  Hardcoded
+``PASS`` rows are forbidden.  An unmeasured claim is rendered
 ``UNMEASURED`` or ``FAILED``; an absent row is omitted from the
 output entirely (the lifecycle rows for ``C`` / ``T`` /
 ``leamas_protocol_E`` are still emitted with their
 ``ABSENT`` / ``BLOCKED`` values because they are explicit
 closure-topology constants, not measurements).
 
-The dataclasses are frozen so the renderer cannot mutate them
-after construction.  Every field is hashable so the producer
-can compute a deterministic bundle hash without mutable state.
-
 Public surface:
 
-* :class:`CommandResult` - one executed command and its
-  outcome (argv, returncode, stdout/stderr SHA-256, status).
+* :class:`ExecutedCommand` - one executed command with the
+  raw stdout/stderr bytes preserved in memory; the
+  ``stdout_sha256`` / ``stderr_sha256`` properties are derived
+  from those bytes (CORRECTION15).
 * :class:`EvidenceTransactionResult` - the entire detached
   evidence transaction (base_oid, subject_oid, git_commands,
   ruff_result, publication_status, authoritative_hashes).
 * :class:`RepositoryGateResult` - one captured post-subject
-  gate command (name, argv, returncode, stdout/stderr SHA-256).
+  gate command with a closed semantic ``name`` (Literal).
 * :class:`ClosureTopology` - the deterministic closure
-  topology record (F14, F14_tree, plan_blob, S14, S14_tree,
-  parent_F14, parent_S14).
+  topology record (F15, F15_tree, plan_blob, S15, S15_tree,
+  parent_F15, parent_S15).
+* :class:`BundleValidationResult` - the bundle validation
+  outcome (declarative set, computed set, missing/extra,
+  symmetric difference).
 """
 
 from __future__ import annotations
 
 # mypy: disable-error-code="type-arg,no-any-return,index,assignment,operator,no-untyped-call,no-untyped-def"
+import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
@@ -54,7 +57,7 @@ PublicationStatus = Literal["ready_to_publish", "published", "failed"]
 """The terminal publication status of the evidence transaction.
 
 * ``"ready_to_publish"`` - every required artifact is present
-  on disk; the staging directory is ready for rename.
+  on disk; the staging directory is ready for atomic rename.
 * ``"published"`` - the rename succeeded; the bundle is
   immutable from this point forward.
 * ``"failed"`` - any precondition failed; the staging
@@ -63,33 +66,71 @@ PublicationStatus = Literal["ready_to_publish", "published", "failed"]
 """
 
 
-@dataclass(frozen=True)
-class CommandResult:
-    """CORRECTION14: one executed command and its outcome.
+RepositoryGateName = Literal[
+    "audit01-pytest",
+    "audit01-ruff",
+    "audit01-mypy",
+    "audit-check",
+    "act-local",
+    "diff-check",
+    "worktree-clean",
+]
+"""CORRECTION15: closed set of semantic gate names.
 
+The evidence driver MUST execute every required gate before
+publication.  Gate identity is NEVER inferred from the argv
+prefix; the closed ``Literal`` set is the SOLE authority for
+the allowed names.
+"""
+
+
+@dataclass(frozen=True)
+class ExecutedCommand:
+    """CORRECTION15: one executed command and its outcome.
+
+    * ``name`` - the semantic name of the command (e.g.
+      ``"git-rev-parse-base"`` or the gate name).  Optional
+      for ad-hoc captures; required for gates.
     * ``argv`` - the executed argv (tuple, never list).
+    * ``cwd`` - the working directory (filesystem path).
     * ``returncode`` - the subprocess exit code.
-    * ``stdout_sha256`` - SHA-256 of the captured stdout bytes.
-    * ``stderr_sha256`` - SHA-256 of the captured stderr bytes.
+    * ``stdout`` - the raw captured stdout bytes
+      (CORRECTION15: bytes are preserved in memory; the
+      ``stdout_sha256`` property is derived from them).
+    * ``stderr`` - the raw captured stderr bytes
+      (CORRECTION15: bytes are preserved in memory; the
+      ``stderr_sha256`` property is derived from them).
     * ``status`` - the terminal status (``"passed"`` /
       ``"failed"`` / ``"skipped"``).
-
-    A ``CommandResult`` is the SOLE authority for whether a
-    command ``passed``.  Renderers MUST NOT emit ``PASS`` for a
-    command absent from the typed result; absent commands
-    render as ``UNMEASURED``.
     """
 
+    name: str
     argv: tuple[str, ...]
+    cwd: str
     returncode: int
-    stdout_sha256: str
-    stderr_sha256: str
+    stdout: bytes
+    stderr: bytes
     status: CommandStatus
+
+    @property
+    def stdout_sha256(self) -> str:
+        return hashlib.sha256(self.stdout).hexdigest()
+
+    @property
+    def stderr_sha256(self) -> str:
+        return hashlib.sha256(self.stderr).hexdigest()
+
+
+# CORRECTION14 backwards-compat alias.  Existing tests that
+# import ``CommandResult`` continue to resolve; new code
+# should prefer :class:`ExecutedCommand`.
+CommandResult = ExecutedCommand
 
 
 @dataclass(frozen=True)
 class EvidenceTransactionResult:
-    """CORRECTION14: the entire detached evidence transaction.
+    """CORRECTION14/CORRECTION15: the entire detached evidence
+    transaction.
 
     * ``base_oid`` - the resolved full object ID of BASE.
     * ``subject_oid`` - the resolved full object ID of SUBJECT.
@@ -103,50 +144,45 @@ class EvidenceTransactionResult:
 
     base_oid: str
     subject_oid: str
-    git_commands: tuple[CommandResult, ...]
-    ruff_result: CommandResult | None
+    git_commands: tuple[ExecutedCommand, ...]
+    ruff_result: ExecutedCommand | None
     publication_status: PublicationStatus
     authoritative_hashes: Mapping[str, str]
 
 
 @dataclass(frozen=True)
 class RepositoryGateResult:
-    """CORRECTION14: one captured post-subject gate command.
+    """CORRECTION15: one captured post-subject gate command.
 
-    * ``name`` - the gate's logical name (e.g. ``"ruff"``,
-      ``"mypy"``, ``"pytest"``, ``"audit-check"``,
-      ``"verify-act-local"``).
-    * ``argv`` - the executed argv (tuple, never list).
-    * ``returncode`` - the subprocess exit code.
-    * ``stdout_sha256`` - SHA-256 of the captured stdout bytes.
-    * ``stderr_sha256`` - SHA-256 of the captured stderr bytes.
+    * ``name`` - the gate's closed semantic name (one of the
+      values in :data:`RepositoryGateName`).  The name is
+      NEVER inferred from ``argv[0]``.
+    * ``command`` - the typed :class:`ExecutedCommand`
+      produced by the evidence driver.
 
-    The gate is treated as ``passed`` when ``returncode == 0``;
-    renderers MUST use the explicit ``returncode`` field and
-    MUST NOT assume a successful run from the mere presence of
-    the gate row.
+    The gate is treated as ``passed`` when the underlying
+    :class:`ExecutedCommand` ``status`` is ``"passed"`` (which
+    requires both ``returncode == 0`` and a non-empty captured
+    outcome when the contract demands one).
     """
 
-    name: str
-    argv: tuple[str, ...]
-    returncode: int
-    stdout_sha256: str
-    stderr_sha256: str
+    name: RepositoryGateName
+    command: ExecutedCommand
 
 
 @dataclass(frozen=True)
 class ClosureTopology:
-    """CORRECTION14: the deterministic closure-topology record.
+    """CORRECTION14/CORRECTION15: the deterministic closure-topology record.
 
-    * ``F14`` - the CORRECTION14 plan-freeze commit hash.
-    * ``F14_tree`` - the tree hash of the F14 commit.
+    * ``F15`` - the CORRECTION15 plan-freeze commit hash.
+    * ``F15_tree`` - the tree hash of the F15 commit.
     * ``plan_blob`` - the SHA-256 of the plan file bytes.
-    * ``S14`` - the CORRECTION14 subject commit hash (None
+    * ``S15`` - the CORRECTION15 subject commit hash (None
       when not yet authored).
-    * ``S14_tree`` - the tree hash of the S14 commit (None
-      when S14 is absent).
-    * ``parent_F14`` - the parent of F14 (= S13).
-    * ``parent_S14`` - the parent of S14 (= F14) when S14 is
+    * ``S15_tree`` - the tree hash of the S15 commit (None
+      when S15 is absent).
+    * ``parent_F15`` - the parent of F15 (= S14).
+    * ``parent_S15`` - the parent of S15 (= F15) when S15 is
       present; None otherwise.
 
     The dataclass is the SOLE authority for which commits
@@ -154,20 +190,80 @@ class ClosureTopology:
     instead of hardcoding lifecycle strings.
     """
 
-    F14: str
-    F14_tree: str
+    F15: str
+    F15_tree: str
     plan_blob: str
-    S14: str | None
-    S14_tree: str | None
-    parent_F14: str
-    parent_S14: str | None
+    S15: str | None
+    S15_tree: str | None
+    parent_F15: str
+    parent_S15: str | None
+
+    # CORRECTION14 backwards-compat aliases.
+    @property
+    def F14(self) -> str:  # pragma: no cover - alias
+        return self.F15
+
+    @property
+    def F14_tree(self) -> str:  # pragma: no cover - alias
+        return self.F15_tree
+
+    @property
+    def S14(self) -> str | None:  # pragma: no cover - alias
+        return self.S15
+
+    @property
+    def S14_tree(self) -> str | None:  # pragma: no cover - alias
+        return self.S15_tree
+
+    @property
+    def parent_F14(self) -> str:  # pragma: no cover - alias
+        return self.parent_F15
+
+    @property
+    def parent_S14(self) -> str | None:  # pragma: no cover - alias
+        return self.parent_S15
+
+
+@dataclass(frozen=True)
+class BundleValidationResult:
+    """CORRECTION15: bundle validation outcome.
+
+    * ``declared_artifacts`` - the complete declared final
+      artifact set (no staging/output/temp absolute paths).
+    * ``observed_artifacts`` - the actual directory
+      enumeration result.
+    * ``missing_artifacts`` - declared artifacts that are
+      absent from the actual directory.
+    * ``extra_artifacts`` - entries present in the actual
+      directory that are not in the declared set.
+    * ``rejected_entries`` - entries rejected for being a
+      directory descendant, a symlink, a special file, or
+      for an unexpected name.
+    """
+
+    declared_artifacts: tuple[str, ...]
+    observed_artifacts: tuple[str, ...]
+    missing_artifacts: tuple[str, ...]
+    extra_artifacts: tuple[str, ...]
+    rejected_entries: tuple[str, ...] = ()
+
+    @property
+    def is_valid(self) -> bool:
+        return (
+            not self.missing_artifacts
+            and not self.extra_artifacts
+            and not self.rejected_entries
+        )
 
 
 __all__ = [
+    "BundleValidationResult",
     "ClosureTopology",
     "CommandResult",
     "CommandStatus",
     "EvidenceTransactionResult",
+    "ExecutedCommand",
     "PublicationStatus",
+    "RepositoryGateName",
     "RepositoryGateResult",
 ]
