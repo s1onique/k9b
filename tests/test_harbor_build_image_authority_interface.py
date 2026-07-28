@@ -1,6 +1,7 @@
 """Contract tests for harbor-build-image workflow caller/callee interface.
 
 Tests Track C: Secret boundary narrowing.
+CORRECTION07-B: Updated for split PR/trusted caller structure.
 """
 
 import re
@@ -24,35 +25,66 @@ class TestSecretBoundary:
         match = re.search(pattern, content, re.MULTILINE)
         assert match is None, "secrets: inherit is forbidden - use explicit secrets mapping"
 
-    def test_only_harbor_secrets_passed(self) -> None:
-        """Only Harbor username and token secrets are passed."""
+    def test_pr_callers_receive_only_ca_secret(self) -> None:
+        """PR callers must receive only SPBNIX_CA_CERT_PEM, no Harbor auth."""
         with open(HARBOR_WORKFLOW) as f:
             workflow = yaml.safe_load(f)
 
-        calls = []
-        jobs = workflow.get("jobs") or {}
-        for job_name, job_config in jobs.items():
+        pr_calls = []
+        for job_name, job_config in workflow.get("jobs", {}).items():
             if "uses" in job_config and "harbor-build-image.yml" in job_config["uses"]:
-                calls.append((job_name, job_config))
+                # PR callers end with -pr
+                if job_name.endswith("-pr"):
+                    pr_calls.append((job_name, job_config))
 
-        assert len(calls) > 0, "Must have at least one harbor-build-image.yml call"
+        assert len(pr_calls) > 0, "Must have at least one PR harbor-build-image.yml call"
 
-        for job_name, job_config in calls:
-            assert "secrets" in job_config, f"{job_name} must specify secrets"
+        for job_name, job_config in pr_calls:
+            secrets = job_config.get("secrets") or {}
 
-            secrets = job_config["secrets"]
+            # PR callers MUST have CA secret
+            assert "SPBNIX_CA_CERT_PEM" in secrets, f"{job_name} must pass SPBNIX_CA_CERT_PEM"
+            assert "secrets.SPBNIX_CA_CERT_PEM" in secrets["SPBNIX_CA_CERT_PEM"], \
+                f"{job_name} SPBNIX_CA_CERT_PEM must map from repository secrets"
 
-            # Must have HARBOR_USERNAME
+            # PR callers MUST NOT have Harbor auth credentials
+            assert "HARBOR_USERNAME" not in secrets, \
+                f"{job_name} must NOT pass HARBOR_USERNAME (PR callers are read-only)"
+            assert "HARBOR_TOKEN" not in secrets, \
+                f"{job_name} must NOT pass HARBOR_TOKEN (PR callers are read-only)"
+
+    def test_trusted_callers_receive_all_credentials(self) -> None:
+        """Trusted publication callers must receive CA and Harbor auth."""
+        with open(HARBOR_WORKFLOW) as f:
+            workflow = yaml.safe_load(f)
+
+        trusted_calls = []
+        for job_name, job_config in workflow.get("jobs", {}).items():
+            if "uses" in job_config and "harbor-build-image.yml" in job_config["uses"]:
+                # Trusted callers end with -publish
+                if "-publish" in job_name:
+                    trusted_calls.append((job_name, job_config))
+
+        assert len(trusted_calls) > 0, "Must have at least one trusted harbor-build-image.yml call"
+
+        for job_name, job_config in trusted_calls:
+            secrets = job_config.get("secrets") or {}
+
+            # Trusted callers MUST have all three credentials
+            assert "SPBNIX_CA_CERT_PEM" in secrets, f"{job_name} must pass SPBNIX_CA_CERT_PEM"
             assert "HARBOR_USERNAME" in secrets, f"{job_name} must pass HARBOR_USERNAME"
-
-            # Must have HARBOR_TOKEN
             assert "HARBOR_TOKEN" in secrets, f"{job_name} must pass HARBOR_TOKEN"
 
-            # Must NOT have secrets: inherit
-            assert secrets != "inherit", f"{job_name} must not use secrets: inherit"
+            # Verify mapping
+            assert "secrets.SPBNIX_CA_CERT_PEM" in secrets["SPBNIX_CA_CERT_PEM"], \
+                f"{job_name} SPBNIX_CA_CERT_PEM must map from repository secrets"
+            assert "secrets.HARBOR_USERNAME" in secrets["HARBOR_USERNAME"], \
+                f"{job_name} HARBOR_USERNAME must map from repository secrets"
+            assert "secrets.HARBOR_TOKEN" in secrets["HARBOR_TOKEN"], \
+                f"{job_name} HARBOR_TOKEN must map from repository secrets"
 
     def test_harbor_username_mapped_correctly(self) -> None:
-        """HARBOR_USERNAME must be mapped from repository secrets."""
+        """HARBOR_USERNAME must be mapped from repository secrets when present."""
         with open(HARBOR_WORKFLOW) as f:
             workflow = yaml.safe_load(f)
 
@@ -61,10 +93,11 @@ class TestSecretBoundary:
                 secrets = job_config.get("secrets", {})
                 if "HARBOR_USERNAME" in secrets:
                     value = secrets["HARBOR_USERNAME"]
-                    assert "secrets.HARBOR_USERNAME" in value, f"{job_name} HARBOR_USERNAME must map from repository secrets"
+                    assert "secrets.HARBOR_USERNAME" in value, \
+                        f"{job_name} HARBOR_USERNAME must map from repository secrets"
 
     def test_harbor_token_mapped_correctly(self) -> None:
-        """HARBOR_TOKEN must be mapped from repository secrets."""
+        """HARBOR_TOKEN must be mapped from repository secrets when present."""
         with open(HARBOR_WORKFLOW) as f:
             workflow = yaml.safe_load(f)
 
@@ -73,7 +106,8 @@ class TestSecretBoundary:
                 secrets = job_config.get("secrets", {})
                 if "HARBOR_TOKEN" in secrets:
                     value = secrets["HARBOR_TOKEN"]
-                    assert "secrets.HARBOR_TOKEN" in value, f"{job_name} HARBOR_TOKEN must map from repository secrets"
+                    assert "secrets.HARBOR_TOKEN" in value, \
+                        f"{job_name} HARBOR_TOKEN must map from repository secrets"
 
 
 class TestMissingSecretRegression:
@@ -91,7 +125,10 @@ class TestMissingSecretRegression:
         on = reusable.get("on") or {}
         wc = on.get("workflow_call") if isinstance(on, dict) else {}
         reusable_secrets = (wc.get("secrets") or {}) if isinstance(wc, dict) else {}
-        required_secrets = {name: cfg for name, cfg in reusable_secrets.items() if isinstance(cfg, dict) and cfg.get("required") is True}
+        required_secrets = {
+            name: cfg for name, cfg in reusable_secrets.items()
+            if isinstance(cfg, dict) and cfg.get("required") is True
+        }
 
         # Find all callers
         callers = []
