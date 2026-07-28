@@ -112,10 +112,6 @@ def _validate_diagnosis_selection_run_id(
     if actual is None:
         return
     expected = str(scheduler_run_id or "")
-    # Allow legacy_run_id when scheduler has no run_id (backward compatibility
-    # for tests and legacy callers that do not set scheduler_run_id).
-    if scheduler_run_id is None and actual == "legacy_run":
-        return
     if expected != actual:
         raise DiagnosisRunIdentityMismatchError(
             expected_run_id=expected,
@@ -254,25 +250,6 @@ def run_automatic_diagnosis_loop(
     non_promotion_reason: str | None = None,
 ) -> dict[str, Any]:
     """Run automatic diagnosis loop evidence collection."""
-    # Check enabled status early: when integration is disabled, return
-    # the disabled summary immediately without requiring an authority.
-    # This allows disabled-integration tests to pass without authority.
-    enabled = is_automatic_diagnosis_loop_enabled()
-    if not enabled:
-        access_mode = _resolve_access_mode(
-            backend_endpoint_identity=backend_endpoint_identity,
-            promotion_result_summary=promotion_result_summary,
-        )
-        projection = _selection_projection(
-            DiagnosisSelectionWithoutPromotion(
-                reason=NoPromotionSelectionReason.EXPLICIT_NON_PROMOTION_MODE,
-            ),
-            access_mode=access_mode,
-        )
-        emit_disabled(log_event_fn, projection)
-        return build_disabled_summary(projection)
-
-    # Integration is enabled. Validate authority arguments.
     access_mode = _resolve_access_mode(
         backend_endpoint_identity=backend_endpoint_identity,
         promotion_result_summary=promotion_result_summary,
@@ -301,15 +278,6 @@ def run_automatic_diagnosis_loop(
     selection: DiagnosisSelection
     if diagnosis_selection is not None:
         selection = diagnosis_selection
-    elif canonical_incident_ids is not None or incident_selection_mode is not None:
-        # Legacy authority: canonical_incident_ids or incident_selection_mode.
-        # Must be handled before build_diagnosis_selection to avoid
-        # ambiguity error from the promotion-based selection builder.
-        selection = _legacy_build_selection(
-            canonical_incident_ids=canonical_incident_ids,
-            incident_selection_mode=incident_selection_mode,
-            scheduler_run_id=scheduler_run_id,
-        )
     elif promotion_outcome is not None or non_promotion_policy_enabled:
         selection = build_diagnosis_selection(
             promotion_outcome=promotion_outcome,
@@ -318,16 +286,11 @@ def run_automatic_diagnosis_loop(
             non_promotion_reason=non_promotion_reason,
         )
     else:
-        # Integration enabled but no authority: this is the "no trigger" path.
-        # Return an enabled summary with 0 incidents processed.
-        projection = _selection_projection(
-            DiagnosisSelectionWithoutPromotion(
-                reason=NoPromotionSelectionReason.EXPLICIT_NON_PROMOTION_MODE,
-            ),
-            access_mode=access_mode,
+        selection = _legacy_build_selection(
+            canonical_incident_ids=canonical_incident_ids,
+            incident_selection_mode=incident_selection_mode,
+            scheduler_run_id=scheduler_run_id,
         )
-        emit_disabled(log_event_fn, projection)
-        return build_no_trigger_summary(projection)
 
     _validate_diagnosis_selection_run_id(selection, scheduler_run_id)
     projection = _selection_projection(selection, access_mode=access_mode)
@@ -349,6 +312,11 @@ def run_automatic_diagnosis_loop(
             backend_endpoint_identity=backend_endpoint_identity,
             selection=selection,
         )
+
+    enabled = is_automatic_diagnosis_loop_enabled()
+    if not enabled:
+        emit_disabled(log_event_fn, projection)
+        return build_disabled_summary(projection)
 
     emit_start(log_event_fn, projection)
     config = AutomaticDiagnosisLoopConfig(
