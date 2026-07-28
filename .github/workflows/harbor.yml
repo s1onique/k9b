@@ -236,6 +236,10 @@ jobs:
   # =============================================================================
   # Build and push jobs - depend on all quality gates
   # Extracted Docker setup/build logic to .github/workflows/harbor-build-image.yml
+  #
+  # Authority matrix for image-builder:
+  # - pull_request:  image_push=false, cache_read=true, cache_write=false
+  # - trusted push:  image_push=true,  cache_read=true, cache_write=true
   # =============================================================================
 
   build-push:
@@ -253,6 +257,10 @@ jobs:
       build_args: |
         KUBECTL_VERSION=v1.29.6
         HELM_VERSION=3.20.1
+      # Explicit publication authorities for security
+      image_push_enabled: ${{ github.event_name != 'pull_request' }}
+      registry_cache_read_enabled: true
+      registry_cache_write_enabled: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
 
   frontend:
@@ -268,4 +276,8 @@ jobs:
       image_name: k9b-frontend
       dockerfile: ./frontend/Dockerfile
       build_args: ""
+      # Explicit publication authorities for security
+      image_push_enabled: ${{ github.event_name != 'pull_request' }}
+      registry_cache_read_enabled: true
+      registry_cache_write_enabled: ${{ github.event_name != 'pull_request' }}
     secrets: inherit

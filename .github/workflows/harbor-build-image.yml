@@ -30,6 +30,28 @@ on:
         required: false
         type: string
         default: ""
+      # =============================================================================
+      # Explicit publication authorities - see ACT-K9B-IMAGE-BUILDER-REGISTRY-CACHE-AUTHORIZATION01
+      # These three flags control independent operations:
+      # - image_push_enabled: controls application-image registry publication
+      # - registry_cache_read_enabled: controls cache-from (BuildKit cache import)
+      # - registry_cache_write_enabled: controls cache-to (BuildKit cache export)
+      # =============================================================================
+      image_push_enabled:
+        description: "Whether to push the application image to registry"
+        required: false
+        type: boolean
+        default: true
+      registry_cache_read_enabled:
+        description: "Whether to read from registry cache (cache-from)"
+        required: false
+        type: boolean
+        default: true
+      registry_cache_write_enabled:
+        description: "Whether to write to registry cache (cache-to)"
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   build:
@@ -53,6 +75,97 @@ jobs:
           docker info
           docker buildx version
           ls -l /var/run/docker.sock
+
+      # =============================================================================
+      # Authority preflight - fail fast before expensive multi-platform build
+      # =============================================================================
+      - name: Authority preflight
+        id: authority-preflight
+        run: |
+          set -euo pipefail
+
+          echo "=== Authority Preflight ==="
+          echo ""
+          echo "Event classification: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Head repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}"
+          echo "Base repository: ${{ github.event.pull_request.base.repo.full_name || github.repository }}"
+          echo ""
+
+          # Validate inputs
+          if [[ -z "${{ inputs.registry }}" ]]; then
+            echo "ERROR: registry input is empty"
+            exit 1
+          fi
+          if [[ -z "${{ inputs.harbor_project }}" ]]; then
+            echo "ERROR: harbor_project input is empty"
+            exit 1
+          fi
+          if [[ -z "${{ inputs.image_name }}" ]]; then
+            echo "ERROR: image_name input is empty"
+            exit 1
+          fi
+
+          # Validate boolean inputs
+          case "${{ inputs.image_push_enabled }}" in
+            true|false) ;;
+            *) echo "ERROR: image_push_enabled must be true or false, got '${{ inputs.image_push_enabled }}'"; exit 1 ;;
+          esac
+          case "${{ inputs.registry_cache_read_enabled }}" in
+            true|false) ;;
+            *) echo "ERROR: registry_cache_read_enabled must be true or false, got '${{ inputs.registry_cache_read_enabled }}'"; exit 1 ;;
+          esac
+          case "${{ inputs.registry_cache_write_enabled }}" in
+            true|false) ;;
+            *) echo "ERROR: registry_cache_write_enabled must be true or false, got '${{ inputs.registry_cache_write_enabled }}'"; exit 1 ;;
+          esac
+
+          echo "Image push enabled: ${{ inputs.image_push_enabled }}"
+          echo "Cache read enabled: ${{ inputs.registry_cache_read_enabled }}"
+          echo "Cache write enabled: ${{ inputs.registry_cache_write_enabled }}"
+          echo ""
+
+          # Determine if Harbor write login is required
+          HARBOR_WRITE_REQUIRED="false"
+          if [[ "${{ inputs.image_push_enabled }}" == "true" ]] || [[ "${{ inputs.registry_cache_write_enabled }}" == "true" ]]; then
+            HARBOR_WRITE_REQUIRED="true"
+          fi
+          echo "Harbor login required: ${HARBOR_WRITE_REQUIRED}"
+
+          # Check credential availability when write is required
+          if [[ "${HARBOR_WRITE_REQUIRED}" == "true" ]]; then
+            echo "Harbor credential available: ${{ secrets.HARBOR_USERNAME != '' && secrets.HARBOR_TOKEN != '' }}"
+            if [[ -z "${{ secrets.HARBOR_USERNAME }}" ]] || [[ -z "${{ secrets.HARBOR_TOKEN }}" ]]; then
+              echo "ERROR: Harbor write is requested but credentials are missing"
+              exit 1
+            fi
+          else
+            echo "Harbor credential available: N/A (not required for this build)"
+          fi
+
+          # Security: Prevent write operations on PRs from forks (except Dependabot)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            IS_FORK="true"
+            if [[ "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" ]]; then
+              IS_FORK="false"
+            elif [[ "${{ github.event.pull_request.head.repo.full_name }}" == *"/dependabot"* ]]; then
+              IS_FORK="false"
+            fi
+
+            if [[ "${IS_FORK}" == "true" ]]; then
+              if [[ "${{ inputs.image_push_enabled }}" == "true" ]] || [[ "${{ inputs.registry_cache_write_enabled }}" == "true" ]]; then
+                echo "ERROR: Fork PR cannot request write operations. Set image_push_enabled=false and registry_cache_write_enabled=false for fork PRs."
+                exit 1
+              fi
+              echo "Security: Fork PR correctly configured (read-only)"
+            fi
+          fi
+
+          echo ""
+          echo "Cache reference: ${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache"
+          echo "Image reference: ${{ inputs.registry }}/${{ inputs.harbor_project }}/${{ inputs.image_name }}"
+          echo ""
+          echo "=== Authority Preflight: PASSED ==="
 
       # CA must be installed BEFORE QEMU/Buildx because they pull images from Harbor.
       # The Docker daemon validates registry TLS, so the CA must be in daemon trust.
@@ -124,9 +237,13 @@ jobs:
           scripts/ci/wire_docker_buildx.sh \
             --buildkitd-config "${{ steps.buildkitd-config.outputs.path }}"
 
+      # =============================================================================
+      # Harbor login - only required for write operations
+      # =============================================================================
       # CI-HERMETIC-TOOLCACHE: docker/login-action replaced with docker_login.sh.
+      # Login required when either image_push_enabled OR registry_cache_write_enabled.
       - name: Login to Harbor
-        if: github.event_name != 'pull_request'
+        if: inputs.image_push_enabled == true || inputs.registry_cache_write_enabled == true
         env:
           HARBOR_REGISTRY: ${{ inputs.registry }}
           HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
@@ -146,15 +263,32 @@ jobs:
           echo "BuildKit cache ref: ${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache"
 
       - name: Build and push image
+        id: build-image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ inputs.dockerfile }}
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ inputs.image_push_enabled }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache
-          cache-to: type=registry,ref=${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache,mode=max
+          cache-from: ${{ inputs.registry_cache_read_enabled && format('type=registry,ref={0}/{1}/cache/{2}:buildcache', inputs.registry, inputs.harbor_project, inputs.image_name) || '' }}
+          cache-to: ${{ inputs.registry_cache_write_enabled && format('type=registry,ref={0}/{1}/cache/{2}:buildcache,mode=max', inputs.registry, inputs.harbor_project, inputs.image_name) || '' }}
           build-args: ${{ inputs.build_args }}
           builder: ${{ steps.buildx.outputs.name }}
+
+      # =============================================================================
+      # Post-build summary with authority details
+      # =============================================================================
+      - name: Build summary
+        run: |
+          echo "=== Build Summary ==="
+          echo ""
+          echo "Authority configuration:"
+          echo "  Image push enabled: ${{ inputs.image_push_enabled }}"
+          echo "  Cache read enabled: ${{ inputs.registry_cache_read_enabled }}"
+          echo "  Cache write enabled: ${{ inputs.registry_cache_write_enabled }}"
+          echo ""
+          echo "Build outputs:"
+          echo "  Image: ${{ inputs.registry }}/${{ inputs.harbor_project }}/${{ inputs.image_name }}"
+          echo "  Cache: ${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache"
