@@ -8,6 +8,8 @@ validators.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 # mypy: disable-error-code="type-arg,no-any-return,index,assignment,operator,no-untyped-call,no-untyped-def,union-attr,attr-defined,arg-type"
 from scripts.verifiers_audit.builder import build_audit_object
 from scripts.verifiers_audit.discovery import REPO_ROOT
@@ -250,12 +252,15 @@ def validate_required_shards_complete(
             return _dump_helpers_shard(audit[name])
         return _json_dumps(audit[name])
 
-    for name in REQUIRED_SHARDS:
-        info = index["shards"][name]
-        path = root / f"{name}.json"
+    def _validate_shard(
+        name: str,
+        info: dict,
+        path: Path,
+    ) -> bool:
+        """Validate a single shard (required or optional)."""
         if not path.exists():
             return False
-        # CORRECTION09: the recorded path MUST resolve to the
+        # CORRECTION28: the recorded path MUST resolve to the
         # exact canonical filename under ``root``.  We do NOT
         # accept arbitrary recorded paths merely because an
         # independently selected file has the expected hash.
@@ -290,6 +295,21 @@ def validate_required_shards_complete(
             return False
         if not shard.get("totals"):
             return False
+        return True
+
+    # CORRECTION28: Validate all required shards
+    for name in REQUIRED_SHARDS:
+        if name not in index["shards"]:
+            return False
+        if not _validate_shard(name, index["shards"][name], root / f"{name}.json"):
+            return False
+
+    # CORRECTION28: Validate any optional shards that are present
+    for name in OPTIONAL_SHARDS:
+        if name in index["shards"]:
+            if not _validate_shard(name, index["shards"][name], root / f"{name}.json"):
+                return False
+
     return True
 
 

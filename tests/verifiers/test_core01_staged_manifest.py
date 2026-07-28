@@ -77,12 +77,7 @@ class StagedManifestMismatch:
     @property
     def is_valid(self) -> bool:
         """Return True only when the staged state matches the manifest exactly."""
-        return (
-            not self.missing
-            and not self.extra
-            and not self.unstaged
-            and not self.duplicate_manifest_paths
-        )
+        return not self.missing and not self.extra and not self.unstaged and not self.duplicate_manifest_paths
 
     def __str__(self) -> str:
         """Return a deterministic diagnostic string."""
@@ -224,7 +219,7 @@ class TemporaryStagedRepo:
 
     def get_staged_paths(self) -> set[str]:
         """Return the set of currently staged paths.
-        
+
         Fails closed: raises RuntimeError on Git command failure.
         """
         result = _git(self.repo, "diff", "--cached", "--name-only")
@@ -232,7 +227,7 @@ class TemporaryStagedRepo:
 
     def get_unstaged_paths(self) -> set[str]:
         """Return the set of paths with unstaged modifications.
-        
+
         Fails closed: raises RuntimeError on Git command failure.
         """
         result = _git(self.repo, "diff", "--name-only")
