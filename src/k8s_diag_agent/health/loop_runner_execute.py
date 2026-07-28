@@ -13,6 +13,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..collect.diagnosis_selection import (
+    DiagnosisSelection,
+    DiagnosisSelectionFromPromotion,
+    DiagnosisSelectionUnavailable,
+    DiagnosisSelectionWithoutPromotion,
+    NoPromotionSelectionReason,
+)
 from ..collect.incident_identity_hardening import (
     INCIDENT_ACCESS_MODE_BACKEND,
     PROMOTION_OUTCOME_OPENED,
@@ -29,22 +36,14 @@ from ..collect.incident_promotion_accumulator import (
     PromotionWorksetState,
     RunPromotionAccumulator,
 )
-from ..external_analysis.alertmanager_durable_learning import scan_and_propose
-from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
-from .adaptation import HealthProposal
-from ..collect.diagnosis_selection import (
-    DiagnosisSelection,
-    DiagnosisSelectionFromPromotion,
-    DiagnosisSelectionUnavailable,
-    DiagnosisSelectionWithoutPromotion,
-    NoPromotionSelectionReason,
-)
 from ..collect.promotion_outcomes import (
     PromotionCommitUnknown,
     PromotionRejected,
-    PromotionRejectionCode,
     PromotionSucceeded,
 )
+from ..external_analysis.alertmanager_durable_learning import scan_and_propose
+from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
+from .adaptation import HealthProposal
 from .loop_history import HealthRating
 from .loop_runner_assessments import build_assessments_for_records
 from .loop_runner_comparisons import evaluate_triggers_for_records

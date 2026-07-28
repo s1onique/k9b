@@ -75,7 +75,9 @@ from k8s_diag_agent.ui.server_incident_internal_models import (
 # ---------------------------------------------------------------------------
 
 
-def _incident(incident_id: str, status: IncidentStatus = IncidentStatus.OPEN) -> Incident:
+def _incident(
+    incident_id: str, status: IncidentStatus = IncidentStatus.OPEN
+) -> Incident:
     """Build a minimal Incident record for tests."""
     first = datetime(2026, 7, 10, 12, 0, 0, tzinfo=UTC)
     last = datetime(2026, 7, 10, 13, 0, 0, tzinfo=UTC)
@@ -154,7 +156,7 @@ class TestDeriveAutomaticDiagnosisInputs:
         )
 
         accumulator = RunPromotionAccumulator()
-        canonical_ids, summary, consistency, endpoint, _execution = (
+        canonical_ids, summary, consistency, endpoint, _execution, _promotion_outcome = (
             _derive_automatic_diagnosis_inputs(accumulator)
         )
         assert canonical_ids == []
@@ -230,7 +232,7 @@ class TestDeriveAutomaticDiagnosisInputs:
         # batches. We still rely on the upstream patches to seed the
         # accumulator with backend-mode promotion_records, so the
         # derived summary respects that mode verbatim.
-        canonical_ids, summary, _consistency, _backend, _execution = (
+        canonical_ids, summary, _consistency, _backend, _execution, _promotion_outcome = (
             _derive_automatic_diagnosis_inputs(accumulator)
         )
         assert canonical_ids == ["incident-1", "incident-2"]
@@ -296,9 +298,7 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
                     canonical_incident_ids=None,
                 )
 
-    def test_multiple_authority_sources_raise_ambiguous(
-        self,
-    ) -> None:
+    def test_multiple_authority_sources_raise_ambiguous(self) -> None:
         """Round 6 P0: contradictory authority sources are rejected.
 
         The 5-way combination of authority sources MUST yield exactly
@@ -310,6 +310,7 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
         from k8s_diag_agent.collect.diagnosis_selection import (
             DiagnosisSelectionFromPromotion,
             DiagnosisSelectionWithoutPromotion,
+            NoPromotionSelectionReason,
         )
         from k8s_diag_agent.collect.promotion_outcomes import (
             PromotionCommitUnknown,
@@ -317,6 +318,7 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
             PromotionRejected,
             PromotionRejectionCode,
             PromotionSucceeded,
+            PromotionUncertaintyCode,
         )
         from k8s_diag_agent.health.loop_automatic_diagnosis import (
             AmbiguousDiagnosisSelectionError,
@@ -326,17 +328,11 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
             promotion_run_id="run", incident_ids=()
         )
         without_promotion = DiagnosisSelectionWithoutPromotion(
-            reason=__import__(
-                "k8s_diag_agent.collect.diagnosis_selection",
-                fromlist=["NoPromotionSelectionReason"],
-            ).NoPromotionSelectionReason.SCHEDULED_SCAN_RUN
+            reason=NoPromotionSelectionReason.SCHEDULED_SCAN_RUN
         )
         commit_unknown = PromotionCommitUnknown(
             run_id="run",
-            reason=__import__(
-                "k8s_diag_agent.collect.promotion_outcomes",
-                fromlist=["PromotionUncertaintyCode"],
-            ).PromotionUncertaintyCode.AMBIGUOUS_RESPONSE,
+            reason=PromotionUncertaintyCode.AMBIGUOUS_RESPONSE,
             reconciliation_token=PromotionReconciliationToken(
                 request_id="r",
                 request_fingerprint="sha256:f",
@@ -462,7 +458,9 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
         assert exc_info.value.expected_run_id == "run-B"
         assert exc_info.value.actual_run_id == "run-A"
 
-    def test_completion_emits_consistency_propagation_metadata(self, tmp_path: Path) -> None:
+    def test_completion_emits_consistency_propagation_metadata(
+        self, tmp_path: Path
+    ) -> None:
         # Patch the gate to deterministically enable the loop regardless
         # of the deployment env. This pins the test to "scheduler says
         # run" without depending on cluster state.
@@ -521,9 +519,7 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
                 scheduler_run_id="test-run",
             )
 
-        start = next(
-            event for event in captured if event.get("event") == "start"
-        )
+        start = next(event for event in captured if event.get("event") == "start")
         assert start["explicit_canonical_id_count"] == 1
         assert start["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
 
@@ -547,6 +543,7 @@ class TestBackendEndpointIdentityNoCredentials:
         finally:
             os.environ.pop("K9B_BACKEND_INTERNAL_URL", None)
         import json
+
         serialized = json.dumps(payload, default=str)
         assert "token" not in serialized
         # We deliberately do not embed any auth tokens in the diagnostic
@@ -610,12 +607,11 @@ class TestAlertSignalPromotionReturnsCanonicalIDs:
         with patch(
             "k8s_diag_agent.collect.incident_promotion_backend.SchedulerClient"
         ) as mock_client_class:
-            mock_client_class.return_value.promote_alert_signals.return_value = response
-
-            result = promote_alert_signals(
-                candidates=[],
-                observed_at=observed_at,
+            mock_client_class.return_value.promote_alert_signals.return_value = (
+                response
             )
+
+            result = promote_alert_signals(candidates=[], observed_at=observed_at)
 
         assert isinstance(result, IncidentPromotionResult)
         assert result.promotion_mode == MODE_BACKEND_API
@@ -672,14 +668,15 @@ class TestAlertSignalPromotionReturnsCanonicalIDs:
             object_name="test-pod",
             candidate_class=CandidateClass.CRASH_LOOP,
             severity=Severity.ERROR,
-            signals=(CandidateSignal(source="alert", reason="CrashLoopBackOff", message="oops"),),
+            signals=(
+                CandidateSignal(
+                    source="alert", reason="CrashLoopBackOff", message="oops"
+                ),
+            ),
             evidence_needed=("alert_evidence",),
         )
 
-        result_dict = promote_local(
-            candidates=[candidate],
-            observed_at=_dt.now(_UTC),
-        )
+        result_dict = promote_local(candidates=[candidate], observed_at=_dt.now(_UTC))
         opened = result_dict["opened_incident_ids"]
         assert len(opened) == 1
         canonical_incident_id = opened[0]
@@ -694,7 +691,9 @@ class TestAlertSignalPromotionReturnsCanonicalIDs:
         # when the in-memory store is asked to materialize an incident.
         # Pin this to make sure the regression never reintroduces the
         # candidate-shaped-IDs-as-incident-IDs bug.
-        assert records[0]["canonical_incident_id"] != records[0]["source_candidate_id"]
+        assert (
+            records[0]["canonical_incident_id"] != records[0]["source_candidate_id"]
+        )
         reset_incident_store()
 
 
@@ -777,8 +776,7 @@ class TestSchedulerRoleGuard:
             evidence_needed=("alert_evidence",),
         )
         result = promote_alert_signals(
-            candidates=[candidate],
-            observed_at=_dt.now(UTC),
+            candidates=[candidate], observed_at=_dt.now(UTC)
         )
         assert result.ok is False
         assert result.errors >= 1
@@ -844,10 +842,7 @@ class TestMultiplePromotedCandidatesOneToOneMapping:
             for i in range(3)
         ]
 
-        result_dict = promote_local(
-            candidates=candidates,
-            observed_at=_dt.now(_UTC),
-        )
+        result_dict = promote_local(candidates=candidates, observed_at=_dt.now(_UTC))
         opened = result_dict["opened_incident_ids"]
         assert len(opened) == 3
         # 3 distinct canonical IDs.
@@ -1127,9 +1122,14 @@ class TestRunPromotionAccumulatorIntegratedRegression:
             # accumulated batches. We seeded the accumulator with a
             # backend-api batch above so the derived summary respects
             # that mode verbatim.
-            canonical_ids, summary, consistency, backend_identity, _execution = (
-                _derive_automatic_diagnosis_inputs(accumulator)
-            )
+            (
+                canonical_ids,
+                summary,
+                consistency,
+                backend_identity,
+                _execution,
+                _promotion_outcome,
+            ) = _derive_automatic_diagnosis_inputs(accumulator)
 
             assert canonical_ids == [
                 "incident-canonical-abc",
@@ -1138,11 +1138,13 @@ class TestRunPromotionAccumulatorIntegratedRegression:
             # The promotion summary carries the typed records
             # straight through so downstream structured logs do not
             # have to re-parse a free-form dict.
-            assert summary["promotion_records"][0]["canonical_incident_id"] == (
-                "incident-canonical-abc"
+            assert (
+                summary["promotion_records"][0]["canonical_incident_id"]
+                == "incident-canonical-abc"
             )
-            assert summary["promotion_records"][1]["canonical_incident_id"] == (
-                "incident-canonical-def"
+            assert (
+                summary["promotion_records"][1]["canonical_incident_id"]
+                == "incident-canonical-def"
             )
             assert summary["incident_access_mode"] == "backend"
 
@@ -1168,9 +1170,7 @@ class TestRunPromotionAccumulatorIntegratedRegression:
         # entry. We confirm via the collector stub's recorded reasons.
         assert result["skip_reasons"] == {}
 
-    def test_instrumented_scheduler_local_store_sees_zero_io(
-        self,
-    ) -> None:
+    def test_instrumented_scheduler_local_store_sees_zero_io(self) -> None:
         # R2 acceptance criterion: the scheduler-local store MUST NOT
         # be touched at all when the dispatcher is in
         # ``backend-api`` mode. We instrument ``IncidentStore.add_incident``
@@ -1190,6 +1190,7 @@ class TestRunPromotionAccumulatorIntegratedRegression:
             PromotionBatch,
         )
         from k8s_diag_agent.collect.incident_promotion_dispatch import (
+            MODE_BACKEND_API,
             IncidentPromotionResult,
         )
 
@@ -1254,15 +1255,23 @@ class TestRunPromotionAccumulatorIntegratedRegression:
                 "k8s_diag_agent.collect.incident_diagnosis_dispatch.fetch_incident_for_diagnosis",
                 return_value=("incident-canonical-abc-stub", True, None),
             ):
-                canonical_ids, summary, consistency, backend_identity, _execution = (
-                    _derive_automatic_diagnosis_inputs(accumulator)
-                )
+                (
+                    canonical_ids,
+                    summary,
+                    consistency,
+                    backend_identity,
+                    _execution,
+                    _promotion_outcome,
+                ) = _derive_automatic_diagnosis_inputs(accumulator)
             assert canonical_ids == ["incident-canonical-abc"]
-            assert summary["promotion_records"][0]["canonical_incident_id"] == (
-                "incident-canonical-abc"
+            assert (
+                summary["promotion_records"][0]["canonical_incident_id"]
+                == "incident-canonical-abc"
             )
             assert consistency is None
-            assert backend_identity["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
+            assert (
+                backend_identity["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
+            )
         finally:
             store_module.IncidentStore.add_incident = original_add
             store_module.IncidentStore.get_incident = original_get
@@ -1270,6 +1279,8 @@ class TestRunPromotionAccumulatorIntegratedRegression:
         # The dispatcher MUST NOT have read or written the local store.
         assert read_count["reads"] == 0
         assert read_count["writes"] == 0
+
+
 class TestDeriveAutomaticDiagnosisInputsLegacyRegression:
     """R6 (item 1): the legacy-backend regression reaches the
     orchestrator and produces a typed contract failure.
@@ -1376,14 +1387,23 @@ class TestDeriveAutomaticDiagnosisInputsLegacyRegression:
         # ``blocked`` decision so the diagnosis loop is NEVER invoked
         # for a malformed dispatcher response.
         accumulator.last_contract_error = contract
-        canonical_ids, summary, consistency, endpoint, execution = (
-            _derive_automatic_diagnosis_inputs(accumulator)
-        )
+        (
+            canonical_ids,
+            summary,
+            consistency,
+            endpoint,
+            execution,
+            _promotion_outcome,
+        ) = _derive_automatic_diagnosis_inputs(accumulator)
         assert canonical_ids == []
         assert consistency is None
         assert summary["promotion_consistency_contract_error"] is not None
-        assert summary["promotion_consistency_contract_error"]["opened_incidents"] == 2
-        assert summary["promotion_consistency_contract_error"]["updated_incidents"] == 1
+        assert (
+            summary["promotion_consistency_contract_error"]["opened_incidents"] == 2
+        )
+        assert (
+            summary["promotion_consistency_contract_error"]["updated_incidents"] == 1
+        )
         assert "Legacy-backend regression" in (
             summary["promotion_consistency_contract_error"]["message"]
         )
@@ -1486,6 +1506,7 @@ class TestExecuteHealthLoopRunProductionShape:
                 from k8s_diag_agent.collect.incident_promotion_dispatch import (
                     IncidentPromotionResult,
                 )
+
                 if mode_value == "backend":
                     batch = PromotionBatch(
                         promotion_result=IncidentPromotionResult(
@@ -1552,7 +1573,9 @@ class TestExecuteHealthLoopRunProductionShape:
                             incident_access_mode="local",
                         ),
                         promotion_records=(
-                            PromotionRecord("cand-l1", "inc-l1", PROMOTION_OUTCOME_OPENED),
+                            PromotionRecord(
+                                "cand-l1", "inc-l1", PROMOTION_OUTCOME_OPENED
+                            ),
                         ),
                         source_kind="alertmanager",
                     )
@@ -1561,8 +1584,12 @@ class TestExecuteHealthLoopRunProductionShape:
                 if batch is not None:
                     promotion_accumulator.add_batch(batch)
 
-            def _log_event(self: Any, *args: Any, **kwargs: Any) -> None:
-                self._events.append((args[0] if args else "", args[2] if len(args) >= 3 else "", kwargs))
+            def _log_event(
+                self: Any, *args: Any, **kwargs: Any
+            ) -> None:
+                self._events.append(
+                    (args[0] if args else "", args[2] if len(args) >= 3 else "", kwargs)
+                )
 
             def _run_automatic_diagnosis_loop(
                 self: Any,
@@ -1571,6 +1598,7 @@ class TestExecuteHealthLoopRunProductionShape:
                 canonical_incident_ids: Any = None,
                 promotion_result_summary: Any = None,
                 backend_endpoint_identity: Any = None,
+                diagnosis_selection: Any = None,
                 incident_selection_mode: Any = None,
             ) -> dict[str, Any]:
                 self._diagnosis_calls.append(
@@ -1683,17 +1711,19 @@ class TestExecuteHealthLoopRunProductionShape:
         from k8s_diag_agent.collect.incident_promotion_accumulator import (
             RunPromotionAccumulator,
         )
+
         assert isinstance(runner._captured_accumulator, RunPromotionAccumulator)
         # Backend access mode is preserved through the orchestrator.
         assert diagnosis["incident_access_mode"] == "backend"
         assert diagnosis["promotion_mode"] == "backend-api"
         # Terminal completion event is emitted AFTER the diagnosis call.
         completion_index = next(
-                (idx
+            (
+                idx
                 for idx, event in enumerate(runner._events)
                 if event[1] == "Health run completed"
-                ),
-                None,
+            ),
+            None,
         )
         assert completion_index is not None
         # The diagnosis call must have happened before the completion
@@ -1752,7 +1782,6 @@ class TestExecuteHealthLoopRunProductionShape:
             "k8s_diag_agent.health.loop_runner_execute.scan_and_propose",
             return_value=[],
         ):
-            runner = self._build_minimal_runner(mode=mode)
             runner = self._build_minimal_runner(mode=mode)
             directories = self._stub_directories(tmp_path)
             execute_health_loop_run(runner, [], directories)
