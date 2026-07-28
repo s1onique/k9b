@@ -94,9 +94,7 @@ class AutomaticDiagnosisInputs:
     promotion_consistency_error: IncidentStoreConsistencyError | None
     backend_endpoint_identity: dict[str, Any]
     execution: AutomaticDiagnosisExecution
-    promotion_outcome: (
-        PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None
-    )
+    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None
 
     @property
     def has_promotion_outcome(self) -> bool:
@@ -328,14 +326,10 @@ INCIDENT_SELECTION_MODE_BLOCKED = "blocked"
 INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY = "current_run_empty"
 INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN = "commit_unknown"
 
-BLOCKED_REASON_PROMOTION_CONSISTENCY_CONTRACT_ERROR = (
-    "promotion_consistency_contract_error"
-)
+BLOCKED_REASON_PROMOTION_CONSISTENCY_CONTRACT_ERROR = "promotion_consistency_contract_error"
 BLOCKED_REASON_PROMOTION_REJECTED = "promotion_rejected"
 BLOCKED_REASON_PROMOTION_COMMIT_UNKNOWN = "promotion_commit_unknown"
-BLOCKED_REASON_PROMOTION_WORKSET_CONTRACT_FAILURE = (
-    "promotion_workset_contract_failure"
-)
+BLOCKED_REASON_PROMOTION_WORKSET_CONTRACT_FAILURE = "promotion_workset_contract_failure"
 
 
 @dataclass(frozen=True)
@@ -407,8 +401,7 @@ def _resolve_accumulator_truth(
         unique_modes.add(mode_pair)
     if len(unique_modes) > 1:
         raise IndeterminatePromotionModeError(
-            "Conflicting promotion modes across accumulated batches; "
-            "refusing to derive a single dispatcher mode.",
+            "Conflicting promotion modes across accumulated batches; refusing to derive a single dispatcher mode.",
             observed_modes=tuple(observed),
         )
 
@@ -465,9 +458,7 @@ def _derive_automatic_diagnosis_inputs(
     # BEFORE any further work. The blocked decision prevents automatic
     # diagnosis from being invoked and emits the typed blocked event
     # carrying the captured reason.
-    captured_contract_error = getattr(
-        accumulator, "last_contract_error", None
-    )
+    captured_contract_error = getattr(accumulator, "last_contract_error", None)
     if captured_contract_error is not None:
         # R7 (item 2): preserve the access mode the dispatcher
         # actually consumed by reading it from the last accepted
@@ -502,27 +493,15 @@ def _derive_automatic_diagnosis_inputs(
     promotion_records: list[PromotionRecord] = list(accumulator.promotion_records)
     canonical_ids = list(accumulator.canonical_incident_ids())
 
-    promotion_mode, incident_access_mode, scan_scope = _resolve_accumulator_truth(
-        accumulator
-    )
+    promotion_mode, incident_access_mode, scan_scope = _resolve_accumulator_truth(accumulator)
 
     # Map promotion records to summary-style aggregation so the existing
     # structured-log paths remain stable. We still compute the
     # ``opened_ids`` / ``updated_ids`` lists (used by log consumers)
     # from the typed records because those are exact mappings, not
     # aggregates reconstructed from persisted state.
-    opened_ids = [
-        record.canonical_incident_id
-        for record in promotion_records
-        if record.canonical_incident_id is not None
-        and record.promotion_outcome == PROMOTION_OUTCOME_OPENED
-    ]
-    updated_ids = [
-        record.canonical_incident_id
-        for record in promotion_records
-        if record.canonical_incident_id is not None
-        and record.promotion_outcome == PROMOTION_OUTCOME_UPDATED
-    ]
+    opened_ids = [record.canonical_incident_id for record in promotion_records if record.canonical_incident_id is not None and record.promotion_outcome == PROMOTION_OUTCOME_OPENED]
+    updated_ids = [record.canonical_incident_id for record in promotion_records if record.canonical_incident_id is not None and record.promotion_outcome == PROMOTION_OUTCOME_UPDATED]
 
     # R5 (item 2): the backend endpoint identity reflects the
     # accumulator-resolved access mode (or the explicit
@@ -535,10 +514,7 @@ def _derive_automatic_diagnosis_inputs(
     )
 
     consistency_error: IncidentStoreConsistencyError | None = None
-    is_backend_authoritative = (
-        incident_access_mode == INCIDENT_ACCESS_MODE_BACKEND
-        and promotion_mode in {"backend-api", "auto"}
-    )
+    is_backend_authoritative = incident_access_mode == INCIDENT_ACCESS_MODE_BACKEND and promotion_mode in {"backend-api", "auto"}
     promotions_records_for_verifier = [
         PromotionRecord(
             source_candidate_id=record.source_candidate_id,
@@ -547,7 +523,8 @@ def _derive_automatic_diagnosis_inputs(
         )
         for record in promotion_records
         if record.canonical_incident_id is not None
-        and record.promotion_outcome in {
+        and record.promotion_outcome
+        in {
             PROMOTION_OUTCOME_OPENED,
             PROMOTION_OUTCOME_UPDATED,
         }
@@ -555,20 +532,9 @@ def _derive_automatic_diagnosis_inputs(
     endpoint = BackendEndpointIdentity(
         scheme=str(backend_endpoint_identity.get("scheme", "")),
         host=str(backend_endpoint_identity.get("host", "")),
-        port=(
-            int(backend_endpoint_identity["port"])
-            if isinstance(
-                backend_endpoint_identity.get("port"), int
-            )
-            else None
-        ),
-        internal_api_path_prefix=str(
-            backend_endpoint_identity.get("internal_api_path_prefix")
-            or "/api/internal"
-        ),
-        backend_reachable=backend_endpoint_identity.get(
-            "backend_reachable"
-        ),
+        port=(int(backend_endpoint_identity["port"]) if isinstance(backend_endpoint_identity.get("port"), int) else None),
+        internal_api_path_prefix=str(backend_endpoint_identity.get("internal_api_path_prefix") or "/api/internal"),
+        backend_reachable=backend_endpoint_identity.get("backend_reachable"),
     )
 
     # R6 (item 1): contract validation runs unconditionally for every
@@ -606,9 +572,7 @@ def _derive_automatic_diagnosis_inputs(
             )
             return AutomaticDiagnosisInputs(
                 canonical_incident_ids=tuple(canonical_ids),
-                promotion_result_summary=_build_contract_error_summary(
-                    contract_error, accumulator, locals()
-                ),
+                promotion_result_summary=_build_contract_error_summary(contract_error, accumulator, locals()),
                 promotion_consistency_error=None,
                 backend_endpoint_identity=backend_endpoint_identity,
                 execution=blocked_decision,
@@ -622,11 +586,7 @@ def _derive_automatic_diagnosis_inputs(
     # this path; the two phases fail closed independently and produce
     # distinct diagnostics so operators can tell a dispatcher
     # regression apart from a backend lookup mismatch.
-    if (
-        is_backend_authoritative
-        and promotion_records
-        and canonical_ids
-    ):
+    if is_backend_authoritative and promotion_records and canonical_ids:
         try:
             lookup_outcomes = _authoritative_lookup_canonical_ids(canonical_ids)
             consistency_error = verify_promotion_consistency(
@@ -644,10 +604,7 @@ def _derive_automatic_diagnosis_inputs(
                 LOOKUP_ERROR_KIND_NOT_FOUND,
             )
 
-            if any(
-                outcome.error_kind != LOOKUP_ERROR_KIND_NOT_FOUND
-                for outcome in lookup_outcomes
-            ):
+            if any(outcome.error_kind != LOOKUP_ERROR_KIND_NOT_FOUND for outcome in lookup_outcomes):
                 backend_endpoint_identity["backend_reachable"] = False
             else:
                 backend_endpoint_identity["backend_reachable"] = True
@@ -751,9 +708,7 @@ def _derive_automatic_diagnosis_inputs(
     # ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION06: Extract typed
     # promotion_outcome from accumulator. This is the real typed outcome,
     # not fabricated from mode strings.
-    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None = (
-        accumulator.promotion_outcome
-    )
+    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None = accumulator.promotion_outcome
 
     return AutomaticDiagnosisInputs(
         canonical_incident_ids=tuple(canonical_ids),
@@ -787,14 +742,10 @@ def _build_contract_error_summary(
             "promotion_record_count": contract_error.promotion_record_count,
             "opened_id_count": contract_error.opened_id_count,
             "updated_id_count": contract_error.updated_id_count,
-            "missing_canonical_ids": list(
-                contract_error.missing_canonical_ids
-            ),
+            "missing_canonical_ids": list(contract_error.missing_canonical_ids),
         },
         "promotion_mode": locals_before_failure.get("promotion_mode", ""),
-        "incident_access_mode": locals_before_failure.get(
-            "incident_access_mode", ""
-        ),
+        "incident_access_mode": locals_before_failure.get("incident_access_mode", ""),
         "promotion_scan_scope": locals_before_failure.get("scan_scope", ""),
         "opened_incidents": accumulator.total_opened_incidents,
         "updated_incidents": accumulator.total_updated_incidents,
@@ -840,9 +791,7 @@ def _build_diagnosis_selection_for_execution(
 
     # blocked is handled before reaching here
     if selection_mode == INCIDENT_SELECTION_MODE_BLOCKED:
-        raise ValueError(
-            "blocked selection must be handled before calling this builder"
-        )
+        raise ValueError("blocked selection must be handled before calling this builder")
 
     # store_scan: no promotion outcome needed
     if selection_mode == INCIDENT_SELECTION_MODE_STORE_SCAN:
@@ -853,15 +802,9 @@ def _build_diagnosis_selection_for_execution(
     # commit_unknown: requires PromotionCommitUnknown
     if selection_mode == INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN:
         if promotion_outcome is None:
-            raise ValueError(
-                f"selection_mode={selection_mode!r} requires a PromotionCommitUnknown "
-                f"outcome, got None"
-            )
+            raise ValueError(f"selection_mode={selection_mode!r} requires a PromotionCommitUnknown outcome, got None")
         if not isinstance(promotion_outcome, PromotionCommitUnknown):
-            raise ValueError(
-                f"selection_mode={selection_mode!r} requires PromotionCommitUnknown, "
-                f"got {type(promotion_outcome).__name__}"
-            )
+            raise ValueError(f"selection_mode={selection_mode!r} requires PromotionCommitUnknown, got {type(promotion_outcome).__name__}")
         return DiagnosisSelectionUnavailable(outcome=promotion_outcome)
 
         # explicit_incident_ids or current_run_empty: require PromotionSucceeded
@@ -870,22 +813,13 @@ def _build_diagnosis_selection_for_execution(
         INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
     ):
         if promotion_outcome is None:
-            raise ValueError(
-                f"selection_mode={selection_mode!r} requires PromotionSucceeded, "
-                f"got None"
-            )
+            raise ValueError(f"selection_mode={selection_mode!r} requires PromotionSucceeded, got None")
         if not isinstance(promotion_outcome, PromotionSucceeded):
-            raise ValueError(
-                f"selection_mode={selection_mode!r} requires PromotionSucceeded, "
-                f"got {type(promotion_outcome).__name__}"
-            )
+            raise ValueError(f"selection_mode={selection_mode!r} requires PromotionSucceeded, got {type(promotion_outcome).__name__}")
 
         # CORRECTION08: Validate run identity matches
         if promotion_outcome.run_id != scheduler_run_id:
-            raise ValueError(
-                f"promotion_outcome.run_id={promotion_outcome.run_id!r} "
-                f"does not match scheduler_run_id={scheduler_run_id!r}"
-            )
+            raise ValueError(f"promotion_outcome.run_id={promotion_outcome.run_id!r} does not match scheduler_run_id={scheduler_run_id!r}")
 
         # CORRECTION08/CORRECTION09: Validate outcome.diagnosis_incident_ids matches canonical_ids
         # This is the SOLE ID AUTHORITY validation - the outcome's IDs must match
@@ -897,9 +831,7 @@ def _build_diagnosis_selection_for_execution(
             # but construct from outcome_ids (sole authority).
             if tuple(canonical_incident_ids) != outcome_ids:
                 raise PromotionConsistencyContractError(
-                    f"DiagnosisSelection SOLE ID AUTHORITY violation: "
-                    f"canonical_incident_ids={canonical_incident_ids} does not match "
-                    f"promotion_outcome.diagnosis_incident_ids={list(outcome_ids)}",
+                    f"DiagnosisSelection SOLE ID AUTHORITY violation: canonical_incident_ids={canonical_incident_ids} does not match promotion_outcome.diagnosis_incident_ids={list(outcome_ids)}",
                     promotion_record_count=len(canonical_incident_ids),
                     opened_incidents=len(canonical_incident_ids),
                     updated_incidents=len(outcome_ids) - len(canonical_incident_ids),
@@ -913,9 +845,7 @@ def _build_diagnosis_selection_for_execution(
             # CORRECTION08/CORRECTION09: current_run_empty mode - outcome must have empty IDs
             if outcome_ids != ():
                 raise PromotionConsistencyContractError(
-                    f"DiagnosisSelection SOLE ID AUTHORITY violation: "
-                    f"selection_mode=current_run_empty requires empty diagnosis_incident_ids, "
-                    f"got {list(outcome_ids)}",
+                    f"DiagnosisSelection SOLE ID AUTHORITY violation: selection_mode=current_run_empty requires empty diagnosis_incident_ids, got {list(outcome_ids)}",
                     promotion_record_count=len(outcome_ids),
                     opened_incidents=0,
                     updated_incidents=0,
@@ -928,7 +858,7 @@ def _build_diagnosis_selection_for_execution(
 
     # Unknown mode: fail-closed
     raise ValueError(
-        f"Unknown selection_mode={selection_mode!r}. "
+        f"unknown selection_mode={selection_mode!r}. "
         f"Known modes: {INCIDENT_SELECTION_MODE_EXPLICIT_IDS!r}, "
         f"{INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY!r}, "
         f"{INCIDENT_SELECTION_MODE_STORE_SCAN!r}, "
@@ -995,8 +925,7 @@ def execute_health_loop_run(
         runner._log_event(
             "incident-identity",
             "ERROR",
-            "PromotionConsistencyContractError captured by orchestrator; "
-            "automatic diagnosis will be blocked.",
+            "PromotionConsistencyContractError captured by orchestrator; automatic diagnosis will be blocked.",
             event="promotion_consistency_contract_error",
             contract_message=str(contract_error),
             opened_incidents=contract_error.opened_incidents,
@@ -1087,9 +1016,7 @@ def execute_health_loop_run(
     )
 
     # Write review artifact
-    review_path, proposals = runner._write_review_artifact(
-        assessments, drilldowns, directories
-    )
+    review_path, proposals = runner._write_review_artifact(assessments, drilldowns, directories)
 
     # Run review enrichment
     enrichment_artifact = _run_review_enrichment_impl(
@@ -1105,11 +1032,7 @@ def execute_health_loop_run(
         external_artifacts.append(enrichment_artifact)
 
     # Filter to execution artifacts
-    execution_artifacts = tuple(
-        a
-        for a in external_artifacts
-        if a.purpose == ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION
-    )
+    execution_artifacts = tuple(a for a in external_artifacts if a.purpose == ExternalAnalysisPurpose.NEXT_CHECK_EXECUTION)
 
     # Derive incident linkage context
     linkage_context = runner._derive_incident_linkage_context(records)
@@ -1167,14 +1090,10 @@ def execute_health_loop_run(
         runner._log_event(
             "automatic-diagnosis",
             "INFO",
-            "Automatic diagnosis blocked: "
-            "promotion_consistency_contract_error",
+            "Automatic diagnosis blocked: promotion_consistency_contract_error",
             event="automatic_diagnosis_blocked",
-            blocked_reason=automatic_diagnosis_execution.blocked_reason
-            or "promotion_consistency_contract_error",
-            incident_access_mode=(
-                automatic_diagnosis_execution.incident_access_mode
-            ),
+            blocked_reason=automatic_diagnosis_execution.blocked_reason or "promotion_consistency_contract_error",
+            incident_access_mode=(automatic_diagnosis_execution.incident_access_mode),
             selection_mode=automatic_diagnosis_execution.selection_mode,
         )
     else:
@@ -1200,11 +1119,7 @@ def execute_health_loop_run(
     # the synchronous automatic diagnosis phase finished before this
     # event was emitted, so downstream health-run consumers no longer
     # race the diagnostic collector.
-    healthy_count = sum(
-        1
-        for artifact in assessments
-        if artifact.health_rating == HealthRating.HEALTHY
-    )
+    healthy_count = sum(1 for artifact in assessments if artifact.health_rating == HealthRating.HEALTHY)
     degraded_count = len(assessments) - healthy_count
     runner._log_event(
         "health-loop",
@@ -1219,12 +1134,8 @@ def execute_health_loop_run(
         external_analysis_count=len(external_artifacts),
         automatic_diagnosis_synchronous=True,
         canonical_incident_id_count=len(canonical_ids),
-        promotion_record_count=len(
-            promotion_summary.get("promotion_records") or []
-        ),
-        promotion_consistency_error_recorded=(
-            promotion_consistency_error is not None
-        ),
+        promotion_record_count=len(promotion_summary.get("promotion_records") or []),
+        promotion_consistency_error_recorded=(promotion_consistency_error is not None),
         backend_endpoint_identity=backend_endpoint_identity,
     )
 
@@ -1240,11 +1151,7 @@ def execute_health_loop_run(
                 HealthProposal.from_durable_proposal_candidate(
                     candidate=candidate,
                     source_run_id=runner.run_id,
-                    source_artifact_path=str(
-                        directories["root"]
-                        / "alertmanager-durable-proposals"
-                        / f"{candidate.proposal_id}.json"
-                    ),
+                    source_artifact_path=str(directories["root"] / "alertmanager-durable-proposals" / f"{candidate.proposal_id}.json"),
                 )
                 for candidate in durable_candidates
             )

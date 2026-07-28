@@ -123,9 +123,7 @@ def _execution(mode: str) -> AutomaticDiagnosisExecution:
     [
         (
             INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
-            lambda run_id: _succeeded(
-                run_id, ids=("inc-a", "inc-b")
-            ),
+            lambda run_id: _succeeded(run_id, ids=("inc-a", "inc-b")),
             DiagnosisSelectionFromPromotion,
             ("inc-a", "inc-b"),
             ("inc-a", "inc-b"),
@@ -154,8 +152,11 @@ def _execution(mode: str) -> AutomaticDiagnosisExecution:
     ],
 )
 def test_helper_accepts_valid_cross_product(
-    mode, outcome_factory, expected_cls,
-    canonical_incident_ids, expected_ids,
+    mode,
+    outcome_factory,
+    expected_cls,
+    canonical_incident_ids,
+    expected_ids,
 ):
     """The helper accepts the documented (mode, outcome) cross-product.
 
@@ -207,9 +208,7 @@ def test_helper_rejects_explicit_ids_without_promotion_succeeded():
     scheduler_run_id = "exec-mode-bad-001"
     with pytest.raises(ValueError, match="PromotionSucceeded"):
         _build_diagnosis_selection_for_execution(
-            automatic_diagnosis_execution=_execution(
-                INCIDENT_SELECTION_MODE_EXPLICIT_IDS
-            ),
+            automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_EXPLICIT_IDS),
             promotion_outcome=None,  # not a PromotionSucceeded
             canonical_incident_ids=("inc-a",),
             scheduler_run_id=scheduler_run_id,
@@ -221,9 +220,7 @@ def test_helper_rejects_current_run_empty_without_promotion_succeeded():
     scheduler_run_id = "exec-mode-bad-002"
     with pytest.raises(ValueError, match="current_run_empty"):
         _build_diagnosis_selection_for_execution(
-            automatic_diagnosis_execution=_execution(
-                INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY
-            ),
+            automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY),
             promotion_outcome=None,
             canonical_incident_ids=(),
             scheduler_run_id=scheduler_run_id,
@@ -235,9 +232,7 @@ def test_helper_rejects_store_scan_with_recorded_outcome():
     scheduler_run_id = "exec-mode-bad-003"
     with pytest.raises(ValueError, match="store_scan"):
         _build_diagnosis_selection_for_execution(
-            automatic_diagnosis_execution=_execution(
-                INCIDENT_SELECTION_MODE_STORE_SCAN
-            ),
+            automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_STORE_SCAN),
             promotion_outcome=_succeeded(scheduler_run_id),
             canonical_incident_ids=(),
             scheduler_run_id=scheduler_run_id,
@@ -249,9 +244,7 @@ def test_helper_rejects_commit_unknown_without_promotion_commit_unknown():
     scheduler_run_id = "exec-mode-bad-004"
     with pytest.raises(ValueError, match="PromotionCommitUnknown"):
         _build_diagnosis_selection_for_execution(
-            automatic_diagnosis_execution=_execution(
-                INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN
-            ),
+            automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN),
             promotion_outcome=None,  # not a PromotionCommitUnknown
             canonical_incident_ids=(),
             scheduler_run_id=scheduler_run_id,
@@ -262,9 +255,7 @@ def test_helper_rejects_unknown_mode():
     """An unknown mode raises ValueError (no silent fall-through)."""
     with pytest.raises(ValueError, match="unknown selection_mode"):
         _build_diagnosis_selection_for_execution(
-            automatic_diagnosis_execution=_execution(
-                "some_unknown_mode"
-            ),
+            automatic_diagnosis_execution=_execution("some_unknown_mode"),
             promotion_outcome=None,
             canonical_incident_ids=(),
             scheduler_run_id="any",
@@ -292,9 +283,7 @@ def test_helper_rejects_authority_split_when_parallel_ids_diverge():
     )
     with pytest.raises(ValueError, match="authority split rejected"):
         _build_diagnosis_selection_for_execution(
-            automatic_diagnosis_execution=_execution(
-                INCIDENT_SELECTION_MODE_EXPLICIT_IDS
-            ),
+            automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_EXPLICIT_IDS),
             promotion_outcome=outcome,
             canonical_incident_ids=("z",),  # disagrees with outcome
             scheduler_run_id=scheduler_run_id,
@@ -316,14 +305,11 @@ def test_helper_rejects_authority_split_when_canonical_empty_but_outcome_has_ids
     )
     with pytest.raises(ValueError, match="authority split rejected"):
         _build_diagnosis_selection_for_execution(
-            automatic_diagnosis_execution=_execution(
-                INCIDENT_SELECTION_MODE_EXPLICIT_IDS
-            ),
+            automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_EXPLICIT_IDS),
             promotion_outcome=outcome,
             canonical_incident_ids=(),
             scheduler_run_id=scheduler_run_id,
         )
-
 
 
 def test_helper_rejects_explicit_ids_with_empty_outcome():
@@ -382,7 +368,7 @@ def test_helper_rejects_blocked_mode():
         incident_access_mode="backend",
         blocked_reason="promotion_consistency_contract_error",
     )
-    with pytest.raises(ValueError, match="blocked is not a valid"):
+    with pytest.raises(ValueError, match="blocked selection must be handled"):
         _build_diagnosis_selection_for_execution(
             automatic_diagnosis_execution=blocked_execution,
             promotion_outcome=None,
@@ -413,9 +399,7 @@ def test_helper_rejects_cross_run_promotion_succeeded():
     )
     with pytest.raises(ValueError, match="disagrees with run_id"):
         _build_diagnosis_selection_for_execution(
-            automatic_diagnosis_execution=_execution(
-                INCIDENT_SELECTION_MODE_EXPLICIT_IDS
-            ),
+            automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_EXPLICIT_IDS),
             promotion_outcome=foreign_outcome,
             canonical_incident_ids=("inc-x",),
             scheduler_run_id=scheduler_run_id,
@@ -434,9 +418,7 @@ def test_helper_rejects_cross_run_promotion_commit_unknown():
     foreign_outcome = _commit_unknown("foreign-run-id-yyy")
     with pytest.raises(ValueError, match="disagrees with run_id"):
         _build_diagnosis_selection_for_execution(
-            automatic_diagnosis_execution=_execution(
-                INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN
-            ),
+            automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN),
             promotion_outcome=foreign_outcome,
             canonical_incident_ids=(),
             scheduler_run_id=scheduler_run_id,
