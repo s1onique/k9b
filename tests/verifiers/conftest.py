@@ -76,3 +76,36 @@ def canonical_audit_artifacts_remain_unchanged(
         f"{module_path.relative_to(module_path.parents[2])}: "
         f"before={before} after={after}"
     )
+
+
+@pytest.fixture
+def hermetic_ruff_capability(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Inject a hermetic Ruff capability into the evidence orchestrator."""
+    import scripts.verifiers_audit.range_evidence_identity as identity_module
+    import scripts.verifiers_audit.range_evidence_orchestrator as orchestrator_module
+    from tests.verifiers.verifier_core_migration_audit01_correction22_hermetic_ruff import (
+        build_hermetic_capability,
+    )
+
+    capability = build_hermetic_capability(tmp_path / "ruff-capability")
+
+    def hermetic_resolve(*, repo_root: Path, python_paths: tuple[str, ...] = ()):
+        if not python_paths:
+            return {
+                "launcher_argv_prefix": (),
+                "launcher_path": None,
+                "launcher_sha256": None,
+                "ruff_version": None,
+                "ruff_invocation_mode": "skipped_no_python_paths",
+            }
+        return capability.get_identity()
+
+    # Patch at the SOURCE (identity module) so the orchestrator's local binding
+    # gets the patched function when it looks up resolve_ruff_identity
+    monkeypatch.setattr(identity_module, "resolve_ruff_identity", hermetic_resolve)
+    # Also patch the orchestrator's local binding directly
+    orchestrator_module.resolve_ruff_identity = hermetic_resolve
+    return capability

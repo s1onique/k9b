@@ -32,6 +32,7 @@ def generate_hermetic_ruff_script(tmp_dir: Path) -> tuple[Path, str]:
     - writes sys.argv and cwd to a JSON log
     - returns exit 0 by default, configurable via env var
     """
+    tmp_dir.mkdir(parents=True, exist_ok=True)
     script_path = tmp_dir / "hermetic_ruff.py"
     sha256_hash = hashlib.sha256()
 
@@ -116,6 +117,8 @@ class HermeticRuffCapability:
             "launcher_sha256": self.launcher_sha256,
             "ruff_version": self.ruff_version,
             "ruff_invocation_mode": self.ruff_invocation_mode,
+            "configuration_files": [],
+            "configuration_file_sha256": {},
         }
 
     def get_recorded_argv(self) -> list[str]:
@@ -124,7 +127,7 @@ class HermeticRuffCapability:
             return []
         with open(self.argv_log_path, encoding="utf-8") as f:
             data = json.load(f)
-        return data.get("argv", [])
+        return list(data.get("argv", []))
 
     def execute(self, extra_args: tuple[str, ...] = ()) -> subprocess.CompletedProcess[bytes]:
         """Execute the hermetic ruff via sys.executable."""
