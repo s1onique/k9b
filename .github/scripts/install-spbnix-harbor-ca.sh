@@ -11,11 +11,12 @@
 #
 set -euo pipefail
 
-# --- Require CA certificate ---
+# --- Check for CA certificate ---
 if [[ -z "${SPBNIX_CA_CERT_PEM:-}" ]]; then
-  echo "ERROR: SPBNIX_CA_CERT_PEM environment variable is not set."
-  echo "Please set SPBNIX_CA_CERT_PEM to the PEM-encoded CA certificate content."
-  exit 1
+  echo "WARNING: SPBNIX_CA_CERT_PEM is not set."
+  echo "Assuming DinD/ARC sidecar mounts CA certificate."
+  echo "If Harbor is not trusted, configure SPBNIX_CA_CERT_PEM secret."
+  exit 0
 fi
 
 # --- Configuration ---

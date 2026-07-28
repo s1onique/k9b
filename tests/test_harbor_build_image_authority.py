@@ -692,3 +692,43 @@ class TestAuthorityCalculation:
         assert result["image_push"] is False
         assert result["cache_write"] is True
         assert result["login_required"] is True
+
+
+# =============================================================================
+# Missing secret regression test - ACT-K9B-IMAGE-BUILDER-REGISTRY-CACHE-AUTHORIZATION01-CORRECTION03
+# =============================================================================
+
+
+class TestMissingSecretRegression:
+    """Regression tests for missing secret interface parity."""
+
+    def test_no_required_secrets_missing_from_callers(self) -> None:
+        """Verify no required secrets are missing from callers."""
+        with open(HARBOR_WORKFLOW) as f:
+            workflow = yaml.safe_load(f)
+
+        with open(HARBOR_BUILD_IMAGE_WORKFLOW) as f:
+            reusable = yaml.safe_load(f)
+
+        # Get reusable workflow_call secrets
+        on = reusable.get("on") or {}
+        wc = on.get("workflow_call") if isinstance(on, dict) else {}
+        reusable_secrets = (wc.get("secrets") or {}) if isinstance(wc, dict) else {}
+        required_secrets = {name: cfg for name, cfg in reusable_secrets.items() if isinstance(cfg, dict) and cfg.get("required") is True}
+
+        # Find all callers
+        callers = []
+        for job_name, job_config in workflow.get("jobs", {}).items():
+            if "uses" in job_config and "harbor-build-image.yml" in job_config["uses"]:
+                callers.append((job_name, job_config))
+
+        assert len(callers) > 0, "Must have at least one harbor-build-image.yml caller"
+
+        missing = []
+        for job_name, job_config in callers:
+            caller_secrets = job_config.get("secrets") or {}
+            for secret_name in required_secrets:
+                if secret_name not in caller_secrets:
+                    missing.append(f"{job_name}: missing required secret '{secret_name}'")
+
+        assert len(missing) == 0, "Required secrets missing from callers:\n" + "\n".join(missing)
