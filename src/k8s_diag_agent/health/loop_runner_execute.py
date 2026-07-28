@@ -1019,15 +1019,29 @@ def execute_health_loop_run(
             selection_mode=automatic_diagnosis_execution.selection_mode,
         )
     else:
-        runner._run_automatic_diagnosis_loop(
-            external_analysis_dir=directories["external_analysis"],
-            canonical_incident_ids=canonical_ids,
-            promotion_result_summary=promotion_summary,
-            backend_endpoint_identity=backend_endpoint_identity,
-            incident_selection_mode=(
-                automatic_diagnosis_execution.selection_mode
-            ),
-        )
+        # R10 P0 (incident-promotion-ci-recovery): pass exactly ONE authority
+        # source. The new contract forbids passing multiple authority args
+        # simultaneously (canonical_incident_ids + incident_selection_mode).
+        # Selection mode determines which authority to use:
+        # - explicit_incident_ids -> pass canonical_incident_ids only
+        # - store_scan / current_run_empty -> pass incident_selection_mode only
+        selection_mode = automatic_diagnosis_execution.selection_mode
+        if selection_mode == INCIDENT_SELECTION_MODE_EXPLICIT_IDS:
+            # Use explicit canonical IDs from promotion accumulator
+            runner._run_automatic_diagnosis_loop(
+                external_analysis_dir=directories["external_analysis"],
+                canonical_incident_ids=canonical_ids,
+                promotion_result_summary=promotion_summary,
+                backend_endpoint_identity=backend_endpoint_identity,
+            )
+        else:
+            # Use incident_selection_mode for store_scan, current_run_empty, etc.
+            runner._run_automatic_diagnosis_loop(
+                external_analysis_dir=directories["external_analysis"],
+                promotion_result_summary=promotion_summary,
+                backend_endpoint_identity=backend_endpoint_identity,
+                incident_selection_mode=selection_mode,
+            )
 
     # Log completion. ``automatic_diagnosis_synchronous`` records that
     # the synchronous automatic diagnosis phase finished before this
