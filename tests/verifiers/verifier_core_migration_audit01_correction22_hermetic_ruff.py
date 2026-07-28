@@ -19,6 +19,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 # =============================================================================
 # Hermetic Ruff Script (written to tmp_path and executed via sys.executable)
 # =============================================================================
@@ -182,3 +184,35 @@ if __name__ == "__main__":
         assert recorded[0] == str(cap.script_path)
         assert recorded[1:] == ["check", "src/", "tests/"]
         print("PASS: argv matches")
+
+
+def install_hermetic_ruff_resolver(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    capability: HermeticRuffCapability,
+) -> None:
+    """Install hermetic Ruff resolver via monkeypatch.
+
+    Patches resolve_ruff_identity at the identity module where it is defined.
+    This is the single authoritative seam for resolver injection.
+    The orchestrator also imports the function, so we patch both.
+    """
+    import scripts.verifiers_audit.range_evidence_identity as identity_module
+    import scripts.verifiers_audit.range_evidence_orchestrator as orchestrator_module
+
+    def hermetic_resolve(*, repo_root: Path, python_paths: tuple[str, ...] = ()):
+        if not python_paths:
+            return {
+                "launcher_argv_prefix": (),
+                "launcher_path": None,
+                "launcher_sha256": None,
+                "ruff_version": None,
+                "ruff_invocation_mode": "skipped_no_python_paths",
+                "configuration_files": [],
+                "configuration_file_sha256": {},
+            }
+        return capability.get_identity()
+
+    # Patch both the identity module (where it's defined) and orchestrator (local binding)
+    monkeypatch.setattr(identity_module, "resolve_ruff_identity", hermetic_resolve)
+    monkeypatch.setattr(orchestrator_module, "resolve_ruff_identity", hermetic_resolve)

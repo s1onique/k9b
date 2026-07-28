@@ -13,6 +13,10 @@ from pathlib import Path
 import pytest
 
 from scripts.verifiers_audit.builder import build_audit_object
+from tests.verifiers.verifier_core_migration_audit01_correction22_hermetic_ruff import (
+    build_hermetic_capability,
+    install_hermetic_ruff_resolver,
+)
 from tests.verifiers.verifier_core_migration_audit01_support import (
     AUDIT01_TEST_MODULES_WITHOUT_SUPPORT,
     RangeRepo,
@@ -78,34 +82,10 @@ def hermetic_ruff_capability(
 ):
     """Inject a hermetic Ruff capability into the evidence orchestrator.
 
-    Patches resolve_ruff_identity using monkeypatch at the source module
-    (identity module). This is the single authoritative seam for resolver
-    injection. The orchestrator's local binding is also patched to ensure
-    it sees the hermetic resolver.
+    Uses the shared install_hermetic_ruff_resolver installer to patch
+    resolve_ruff_identity at the source module where it is defined.
+    This is the single authoritative seam for resolver injection.
     """
-    import scripts.verifiers_audit.range_evidence_identity as identity_module
-    import scripts.verifiers_audit.range_evidence_orchestrator as orchestrator_module
-    from tests.verifiers.verifier_core_migration_audit01_correction22_hermetic_ruff import (
-        build_hermetic_capability,
-    )
-
     capability = build_hermetic_capability(tmp_path / "ruff-capability")
-
-    def hermetic_resolve(*, repo_root: Path, python_paths: tuple[str, ...] = ()):
-        if not python_paths:
-            return {
-                "launcher_argv_prefix": (),
-                "launcher_path": None,
-                "launcher_sha256": None,
-                "ruff_version": None,
-                "ruff_invocation_mode": "skipped_no_python_paths",
-                "configuration_files": [],
-                "configuration_file_sha256": {},
-            }
-        return capability.get_identity()
-
-    # Single seam: patch at the source module where resolve_ruff_identity is defined
-    # Both the identity module and orchestrator's local binding will see the patch
-    monkeypatch.setattr(identity_module, "resolve_ruff_identity", hermetic_resolve)
-    monkeypatch.setattr(orchestrator_module, "resolve_ruff_identity", hermetic_resolve)
+    install_hermetic_ruff_resolver(monkeypatch=monkeypatch, capability=capability)
     return capability
