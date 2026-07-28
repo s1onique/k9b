@@ -3,8 +3,6 @@
 Tests Track B: PR boundary enforcement.
 """
 
-
-
 from harbor_build_image_authority_support import HARBOR_BUILD_IMAGE_WORKFLOW
 
 

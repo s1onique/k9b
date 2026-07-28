@@ -3,7 +3,6 @@
 Tests Track A: Authority inputs explicit and fail-closed defaults.
 """
 
-
 import yaml
 from harbor_build_image_authority_support import (
     HARBOR_BUILD_IMAGE_WORKFLOW,
