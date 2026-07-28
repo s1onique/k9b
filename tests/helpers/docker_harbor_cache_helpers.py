@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -138,56 +139,65 @@ def _parse_conditional_format(value: str) -> RegistryCacheSpec:
     # Strip ${{ and }} to get the inner expression
     inner = value[3:-2].strip()
 
-    # Parse: <condition> && format('<spec>', arg0, ...) || ''
-    # Find the format(...) call using regex
-    format_match = re.search(
-        r"format\(\s*'([^']*)'\s*,\s*(.+)\)",
-        inner,
-        re.DOTALL,
-    )
-    if not format_match:
-        raise CacheSpecParseError(f"No valid format() call in expression: {value}")
-
-    template_str = format_match.group(1)
-    args_str = format_match.group(2).strip()
-
     # Extract condition (everything before the first &&)
-    and_match = re.match(r"(.+?)\s*&&", inner)
+    and_match = re.match(r"(.+?)\s*&&\s*", inner)
     if not and_match:
         raise CacheSpecParseError(f"No condition before format() in: {value}")
 
     condition = and_match.group(1).strip()
 
-    # Parse format arguments - split by commas at depth 0
-    format_arguments: list[str] = []
-    paren_depth = 0
-    current_arg = []
+    # Get the rest after condition &&
+    after_condition = inner[and_match.end() :].strip()
 
-    for c in args_str:
+    # Find the format(...) call - match format('template', args)
+    # We need to match the template string and then parse args properly
+    format_pattern = r"format\(\s*'([^']*)'\s*,"
+    format_match = re.match(format_pattern, after_condition)
+    if not format_match:
+        raise CacheSpecParseError(f"No valid format() call in expression: {value}")
+
+    template_str = format_match.group(1)
+    args_start = after_condition[format_match.end() :]
+
+    # Parse format arguments - split by commas at depth 0
+    # We need to find the closing ) that matches the format(
+    format_arguments: list[str] = []
+    paren_depth = 1  # We've already passed the opening ( of format
+    current_arg = []
+    i = 0
+
+    while i < len(args_start):
+        c = args_start[i]
         if c == "(":
             paren_depth += 1
             current_arg.append(c)
         elif c == ")":
             paren_depth -= 1
+            if paren_depth == 0:
+                # End of format() call
+                break
             current_arg.append(c)
-        elif c == "," and paren_depth == 0:
+        elif c == "," and paren_depth == 1:
+            # Comma at depth 1 (not inside nested parens)
             arg = "".join(current_arg).strip()
             if arg:
                 format_arguments.append(arg)
             current_arg = []
         else:
             current_arg.append(c)
+        i += 1
 
     # Don't forget the last argument
     arg = "".join(current_arg).strip()
     if arg:
         format_arguments.append(arg)
 
+    # Check for || '' fallback (empty false branch)
+    after_format = args_start[i + 1 :].strip() if i < len(args_start) else ""
+    conditional_empty_fallback = "|| ''" in after_format or '|| ""' in after_format
+
     # Parse the template string to extract backend, ref, mode
     spec_result = _parse_literal_cache_spec(template_str)
-
-    # Check for || '' fallback (empty false branch)
-    conditional_empty_fallback = "|| ''" in inner or '|| ""' in inner
 
     return RegistryCacheSpec(
         backend=spec_result.backend,
@@ -237,3 +247,119 @@ def parse_registry_cache_spec(value: str) -> RegistryCacheSpec:
         return _parse_conditional_format(value)
     else:
         return _parse_literal_cache_spec(value)
+
+
+# =============================================================================
+# Strict Harbor cache policy validator
+# Validates parsed specs against Harbor policy requirements
+# =============================================================================
+
+
+class CacheDirection(Enum):
+    """Direction of cache operation."""
+
+    FROM = "from"
+    TO = "to"
+
+
+class CacheContractValidationError(ValueError):
+    """Raised when a cache specification violates Harbor policy."""
+
+    pass
+
+
+def validate_harbor_registry_cache_contract(
+    spec: RegistryCacheSpec,
+    direction: CacheDirection,
+) -> None:
+    """Validate a parsed cache spec against Harbor policy requirements.
+
+    For cache-from:
+    - backend: registry
+    - condition: inputs.registry_cache_read_enabled
+    - ref_template: {0}/{1}/cache/{2}:buildcache
+    - format_arguments: inputs.registry, inputs.harbor_project, inputs.image_name
+    - mode: absent
+    - conditional_empty_fallback: True
+
+    For cache-to:
+    - backend: registry
+    - condition: inputs.registry_cache_write_enabled
+    - ref_template: {0}/{1}/cache/{2}:buildcache
+    - format_arguments: inputs.registry, inputs.harbor_project, inputs.image_name
+    - mode: max
+    - conditional_empty_fallback: True
+
+    Raises:
+        CacheContractValidationError: If any policy requirement is violated
+
+    Examples:
+        >>> spec = parse_registry_cache_spec(
+        ...     "${{ inputs.registry_cache_read_enabled && "
+        ...     "format('type=registry,ref={0}/{1}/cache/{2}:buildcache', "
+        ...     "inputs.registry, inputs.harbor_project, inputs.image_name) || '' }}"
+        ... )
+        >>> validate_harbor_registry_cache_contract(spec, CacheDirection.FROM)
+        # No exception = valid
+    """
+    # Validate backend is registry
+    if spec.backend != "registry":
+        raise CacheContractValidationError(f"Cache {direction.value} must use backend=registry, got: {spec.backend}")
+
+    # Validate conditional_empty_fallback
+    if not spec.conditional_empty_fallback:
+        raise CacheContractValidationError(f"Cache {direction.value} must have empty false branch (|| ''), got: nonempty or missing")
+
+    # Direction-specific validation
+    if direction == CacheDirection.FROM:
+        _validate_cache_from_policy(spec)
+    else:
+        _validate_cache_to_policy(spec)
+
+
+def _validate_cache_from_policy(spec: RegistryCacheSpec) -> None:
+    """Validate cache-from policy requirements."""
+    # Validate condition
+    if spec.condition != "inputs.registry_cache_read_enabled":
+        raise CacheContractValidationError(f"Cache-from condition must be 'inputs.registry_cache_read_enabled', got: {spec.condition}")
+
+    # Validate ref_template ends with :buildcache
+    if not spec.ref_template.endswith(":buildcache"):
+        raise CacheContractValidationError(f"Cache-from ref_template must end with ':buildcache', got: {spec.ref_template}")
+
+    # Validate format arguments
+    expected_args = (
+        "inputs.registry",
+        "inputs.harbor_project",
+        "inputs.image_name",
+    )
+    if spec.format_arguments != expected_args:
+        raise CacheContractValidationError(f"Cache-from format_arguments must be {expected_args}, got: {spec.format_arguments}")
+
+    # Validate no mode for cache-from
+    if spec.mode is not None:
+        raise CacheContractValidationError(f"Cache-from must not have mode, got: {spec.mode}")
+
+
+def _validate_cache_to_policy(spec: RegistryCacheSpec) -> None:
+    """Validate cache-to policy requirements."""
+    # Validate condition
+    if spec.condition != "inputs.registry_cache_write_enabled":
+        raise CacheContractValidationError(f"Cache-to condition must be 'inputs.registry_cache_write_enabled', got: {spec.condition}")
+
+    # Validate ref_template ends with :buildcache
+    if not spec.ref_template.endswith(":buildcache"):
+        raise CacheContractValidationError(f"Cache-to ref_template must end with ':buildcache', got: {spec.ref_template}")
+
+    # Validate format arguments
+    expected_args = (
+        "inputs.registry",
+        "inputs.harbor_project",
+        "inputs.image_name",
+    )
+    if spec.format_arguments != expected_args:
+        raise CacheContractValidationError(f"Cache-to format_arguments must be {expected_args}, got: {spec.format_arguments}")
+
+    # Validate mode is max
+    if spec.mode != "max":
+        raise CacheContractValidationError(f"Cache-to mode must be 'max', got: {spec.mode}")
