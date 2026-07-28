@@ -1506,6 +1506,9 @@ class TestExecuteHealthLoopRunProductionShape:
                 from k8s_diag_agent.collect.incident_promotion_dispatch import (
                     IncidentPromotionResult,
                 )
+                from k8s_diag_agent.collect.promotion_diagnosis_handoff import (
+                    propagate_promotion_result_to_run,
+                )
 
                 if mode_value == "backend":
                     batch = PromotionBatch(
@@ -1581,8 +1584,28 @@ class TestExecuteHealthLoopRunProductionShape:
                     )
                 else:
                     batch = None
+                # CORRECTION07: Use the canonical propagate_promotion_result_to_run
+                # instead of add_batch directly, so workset_state is set to VALID.
+                # Then set promotion_outcome from the batch's promotion_result.
                 if batch is not None:
-                    promotion_accumulator.add_batch(batch)
+                    from k8s_diag_agent.collect.promotion_outcomes import (
+                        PromotionSucceeded,
+                    )
+                    propagate_promotion_result_to_run(
+                        batch=batch,
+                        accumulator=promotion_accumulator,
+                        source="alertmanager",
+                    )
+                    # Set promotion_outcome from the batch's promotion_result
+                    # (propagate_promotion_result_to_run sets workset_state but not promotion_outcome)
+                    promotion_accumulator.promotion_outcome = PromotionSucceeded(
+                        run_id=promotion_accumulator.promotion_outcome_run_id or "r6-test",
+                        requested_signal_ids=(),
+                        records=(),
+                        diagnosis_incident_ids=tuple(
+                            batch.promotion_result.actionable_incident_ids
+                        ),
+                    )
 
             def _log_event(
                 self: Any, *args: Any, **kwargs: Any
@@ -1601,9 +1624,16 @@ class TestExecuteHealthLoopRunProductionShape:
                 diagnosis_selection: Any = None,
                 incident_selection_mode: Any = None,
             ) -> dict[str, Any]:
+                # CORRECTION07: Extract canonical IDs from typed DiagnosisSelection
+                # (sole ID authority) instead of the legacy canonical_incident_ids kwarg.
+                ids_from_selection: list[str] = []
+                if diagnosis_selection is not None:
+                    ids = getattr(diagnosis_selection, "incident_ids", None)
+                    if ids is not None:
+                        ids_from_selection = list(ids)
                 self._diagnosis_calls.append(
                     {
-                        "canonical_incident_ids": list(canonical_incident_ids or []),
+                        "canonical_incident_ids": ids_from_selection,
                         "incident_access_mode": (
                             promotion_result_summary.get("incident_access_mode")
                             if isinstance(promotion_result_summary, dict)
