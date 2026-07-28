@@ -178,29 +178,6 @@ def build_disabled_summary(projection: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_no_trigger_summary(projection: dict[str, Any]) -> dict[str, Any]:
-    """Build the result for an enabled loop with no trigger/authority.
-
-    This is the "no trigger" path where the integration is enabled but no
-    promotion outcome or explicit authority was provided. The loop returns
-    enabled=True with 0 incidents processed.
-    """
-    return {
-        "automatic_diagnosis_enabled": True,
-        "collector_run_id": None,
-        "incidents_processed": 0,
-        "incidents_eligible": 0,
-        "incidents_skipped": 0,
-        "incidents_with_errors": 0,
-        "total_review_packets_written": 0,
-        "skip_reasons": {},
-        "ineligible_reasons": {},
-        "error_reasons": {},
-        "eligibility_schema_version": 2,
-        **projection,
-    }
-
-
 def build_completed_summary(
     *,
     result: Any,

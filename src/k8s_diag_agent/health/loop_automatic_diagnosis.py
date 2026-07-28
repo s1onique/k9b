@@ -49,7 +49,6 @@ from .loop_automatic_diagnosis_reporting import (
     build_completed_summary,
     build_disabled_summary,
     build_error_summary,
-    build_no_trigger_summary,
     build_selection_unavailable_summary,
     emit_complete,
     emit_disabled,
