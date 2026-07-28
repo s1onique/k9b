@@ -95,9 +95,7 @@ def audit01_source_guard_violations() -> dict[str, tuple[str, ...]]:
         "test_cmd_write_no_artifact_changes_after_failed_write",
     }
     allowed_writer_functions: dict[Path, frozenset[str]] = {
-        TESTS_ROOT / "test_verifier_core_migration_audit01_cmd.py": frozenset(
-            {"test_cmd_write_no_artifact_changes_after_failed_write"}
-        ),
+        TESTS_ROOT / "test_verifier_core_migration_audit01_cmd.py": frozenset({"test_cmd_write_no_artifact_changes_after_failed_write"}),
         TESTS_ROOT / "test_verifier_core_migration_audit01_layout.py": frozenset(
             {
                 "test_writes_through_temporary_layout_do_not_touch_canonical",
@@ -105,21 +103,16 @@ def audit01_source_guard_violations() -> dict[str, tuple[str, ...]]:
                 "test_canonical_gate_classification_not_written_by_write_audit",
             }
         ),
-        TESTS_ROOT / "test_verifier_core_migration_audit01_r.py": frozenset(
-            {"test_required_shards_complete"}
-        ),
+        TESTS_ROOT / "test_verifier_core_migration_audit01_r.py": frozenset({"test_required_shards_complete"}),
         TESTS_ROOT / "test_verifier_core_migration_audit01_range.py": frozenset(
             {
                 "test_inconsistent_layout_rejected_by_writer",
                 "test_parallel_layouts_are_isolated",
             }
         ),
-        TESTS_ROOT
-        / "test_verifier_core_migration_audit01_correction13.py": frozenset(
-            {"_build_comparison_layouts"}
-        ),
-        TESTS_ROOT
-        / "test_verifier_core_migration_audit01_correction13_cmd.py": frozenset(
+        TESTS_ROOT / "test_verifier_core_migration_audit01_correction13.py": frozenset({"_build_comparison_layouts"}),
+        TESTS_ROOT / "test_verifier_core_migration_audit01_correction14_layout.py": frozenset({"_build_complete_index"}),
+        TESTS_ROOT / "test_verifier_core_migration_audit01_correction13_cmd.py": frozenset(
             {
                 "_build_comparison_layouts",
                 "test_compare_report_layouts_returns_empty_for_equal_layouts",
@@ -137,7 +130,6 @@ def audit01_source_guard_violations() -> dict[str, tuple[str, ...]]:
             }
         ),
     }
-
 
     cmd_module = TESTS_ROOT / "test_verifier_core_migration_audit01_cmd.py"
 
@@ -157,66 +149,23 @@ def audit01_source_guard_violations() -> dict[str, tuple[str, ...]]:
 
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                imports_conftest = (
-                    node.module == "tests.verifiers.conftest"
-                    or (
-                        node.module == "tests.verifiers"
-                        and any(alias.name == "conftest" for alias in node.names)
-                    )
-                    or (
-                        node.level > 0
-                        and any(alias.name == "conftest" for alias in node.names)
-                    )
-                )
+                imports_conftest = node.module == "tests.verifiers.conftest" or (node.module == "tests.verifiers" and any(alias.name == "conftest" for alias in node.names)) or (node.level > 0 and any(alias.name == "conftest" for alias in node.names))
                 if imports_conftest:
-                    violations["imports_tests_verifiers_conftest"].append(
-                        f"{relative_path}:{node.lineno}"
-                    )
+                    violations["imports_tests_verifiers_conftest"].append(f"{relative_path}:{node.lineno}")
             elif isinstance(node, ast.Import):
-                if any(
-                    alias.name == "tests.verifiers.conftest"
-                    or alias.name.startswith("tests.verifiers.conftest.")
-                    for alias in node.names
-                ):
-                    violations["imports_tests_verifiers_conftest"].append(
-                        f"{relative_path}:{node.lineno}"
-                    )
+                if any(alias.name == "tests.verifiers.conftest" or alias.name.startswith("tests.verifiers.conftest.") for alias in node.names):
+                    violations["imports_tests_verifiers_conftest"].append(f"{relative_path}:{node.lineno}")
 
             if isinstance(node, (ast.Assign, ast.AnnAssign)):
-                targets = (
-                    node.targets
-                    if isinstance(node, ast.Assign)
-                    else [node.target]
-                )
-                bound_names = {
-                    target.id
-                    for target in targets
-                    if isinstance(target, ast.Name)
-                }
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                bound_names = {target.id for target in targets if isinstance(target, ast.Name)}
                 value = node.value
-                value_text = (
-                    value.value
-                    if isinstance(value, ast.Constant)
-                    and isinstance(value.value, str)
-                    else None
-                )
-                if (
-                    fixture_base_name in bound_names
-                    or fixture_subject_name in bound_names
-                    or value_text in forbidden_values
-                ):
-                    violations[
-                        "hardcoded_k9b_commit_fixture_bindings"
-                    ].append(f"{relative_path}:{node.lineno}")
+                value_text = value.value if isinstance(value, ast.Constant) and isinstance(value.value, str) else None
+                if fixture_base_name in bound_names or fixture_subject_name in bound_names or value_text in forbidden_values:
+                    violations["hardcoded_k9b_commit_fixture_bindings"].append(f"{relative_path}:{node.lineno}")
 
-        for function in (
-            node
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        ):
-            for call in (
-                node for node in ast.walk(function) if isinstance(node, ast.Call)
-            ):
+        for function in (node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
+            for call in (node for node in ast.walk(function) if isinstance(node, ast.Call)):
                 if isinstance(call.func, ast.Name):
                     call_name = call.func.id
                 elif isinstance(call.func, ast.Attribute):
@@ -224,40 +173,17 @@ def audit01_source_guard_violations() -> dict[str, tuple[str, ...]]:
                 else:
                     continue
                 if call_name in {"write_audit", "write_all"}:
-                    allowed_function = function.name in allowed_writer_functions.get(
-                        path, frozenset()
-                    )
-                    layout_keywords = [
-                        keyword
-                        for keyword in call.keywords
-                        if keyword.arg == "layout"
-                    ]
-                    if not allowed_function or not layout_keywords or any(
-                        isinstance(keyword.value, ast.Constant)
-                        and keyword.value.value is None
-                        for keyword in layout_keywords
-                    ):
-                        violations[
-                            "direct_canonical_writer_calls_outside_allowed_tests"
-                        ].append(
-                            f"{relative_path}:{call.lineno}:{function.name}"
-                        )
-                elif call_name == "cmd_write" and not (
-                    path == cmd_module
-                    and function.name in allowed_cmd_write_tests
-                ):
-                    violations[
-                        "direct_canonical_writer_calls_outside_allowed_tests"
-                    ].append(
-                        f"{relative_path}:{call.lineno}:{function.name}"
-                    )
+                    allowed_function = function.name in allowed_writer_functions.get(path, frozenset())
+                    layout_keywords = [keyword for keyword in call.keywords if keyword.arg == "layout"]
+                    if not allowed_function or not layout_keywords or any(isinstance(keyword.value, ast.Constant) and keyword.value.value is None for keyword in layout_keywords):
+                        violations["direct_canonical_writer_calls_outside_allowed_tests"].append(f"{relative_path}:{call.lineno}:{function.name}")
+                elif call_name == "cmd_write" and not (path == cmd_module and function.name in allowed_cmd_write_tests):
+                    violations["direct_canonical_writer_calls_outside_allowed_tests"].append(f"{relative_path}:{call.lineno}:{function.name}")
 
     for path in AUDIT01_ALL_PYTHON_MODULES:
         count = len(path.read_text(encoding="utf-8").splitlines())
         if count > 500:
-            violations["files_over_500_lines"].append(
-                f"{path.relative_to(REPO_ROOT).as_posix()}: {count}"
-            )
+            violations["files_over_500_lines"].append(f"{path.relative_to(REPO_ROOT).as_posix()}: {count}")
 
     return {key: tuple(items) for key, items in violations.items()}
 
@@ -290,15 +216,8 @@ def _git_run(repo_root: Path, args: list[str]) -> None:
         },
     )
     if proc.returncode != 0:
-        message = (
-            proc.stderr.decode("utf-8", errors="replace")
-            if proc.stderr
-            else ""
-        )
-        raise RuntimeError(
-            f"git {' '.join(args)} failed in {repo_root}: "
-            f"returncode={proc.returncode}: {message}"
-        )
+        message = proc.stderr.decode("utf-8", errors="replace") if proc.stderr else ""
+        raise RuntimeError(f"git {' '.join(args)} failed in {repo_root}: returncode={proc.returncode}: {message}")
 
 
 def git_init(repo: Path) -> None:
@@ -412,16 +331,10 @@ def hash_canonical_artifact_set() -> dict[str, str]:
     for relative_path in relative_paths:
         path = REPO_ROOT / relative_path
         if path.exists():
-            hashes[relative_path.as_posix()] = hashlib.sha256(
-                path.read_bytes()
-            ).hexdigest()
+            hashes[relative_path.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
 
-    shard_root = (
-        REPO_ROOT / "docs" / "reports" / "verifier-core-migration-audit01"
-    )
+    shard_root = REPO_ROOT / "docs" / "reports" / "verifier-core-migration-audit01"
     for path in sorted(shard_root.glob("*.json")):
         relative_shard_path = path.relative_to(REPO_ROOT).as_posix()
-        hashes[relative_shard_path] = hashlib.sha256(
-            path.read_bytes()
-        ).hexdigest()
+        hashes[relative_shard_path] = hashlib.sha256(path.read_bytes()).hexdigest()
     return hashes

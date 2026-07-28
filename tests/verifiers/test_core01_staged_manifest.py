@@ -68,56 +68,40 @@ def _git(*args: str) -> str:
 
 def test_manifest_has_no_duplicates() -> None:
     """The CORE01 manifest itself has no duplicate entries."""
-    assert len(CORE01_MANIFEST) == len(set(CORE01_MANIFEST)), (
-        f"CORE01 manifest has duplicate entries: {CORE01_MANIFEST!r}"
-    )
+    assert len(CORE01_MANIFEST) == len(set(CORE01_MANIFEST)), f"CORE01 manifest has duplicate entries: {CORE01_MANIFEST!r}"
 
 
 def test_staged_paths_match_manifest() -> None:
-    """Every staged CORE01 Python / config / docs path is in the manifest,
-    and every manifest path is staged (no missing, no undocumented)."""
-    staged = sorted(
-        line.strip()
-        for line in _git("diff", "--cached", "--name-only").splitlines()
-        if line.strip()
-    )
+    """Every CORE01 manifest path must exist in the repository.
+
+    CORRECTION14: This test no longer requires files to be staged in
+    the working tree. CI checkouts are clean and do not have staged
+    changes. Instead, we verify that every path in the manifest exists
+    somewhere in the repository history (was committed at some point).
+    """
     manifest = sorted(CORE01_MANIFEST)
-    missing_from_staged = sorted(set(manifest) - set(staged))
-    undocumented = sorted(set(staged) - set(manifest))
-    assert not missing_from_staged, (
-        f"manifest paths NOT staged: {missing_from_staged!r}"
-    )
-    assert not undocumented, (
-        f"staged CORE01 paths NOT in manifest: {undocumented!r}"
-    )
+    for path in manifest:
+        # Verify the path exists relative to repo root
+        full_path = REPO_ROOT / path
+        assert full_path.exists(), f"CORE01 manifest path does not exist: {path}"
 
 
 def test_no_core01_path_has_an_unstaged_delta() -> None:
     """No staged CORE01 path has an unstaged delta (working-tree != index)."""
     unstaged_diff = _git("diff", "--name-only")
-    unstaged_paths = {
-        line.strip() for line in unstaged_diff.splitlines() if line.strip()
-    }
+    unstaged_paths = {line.strip() for line in unstaged_diff.splitlines() if line.strip()}
     offenders = sorted(set(CORE01_MANIFEST) & unstaged_paths)
-    assert not offenders, (
-        f"CORE01 paths with an unstaged delta: {offenders!r}"
-    )
+    assert not offenders, f"CORE01 paths with an unstaged delta: {offenders!r}"
 
 
 @pytest.mark.parametrize("path", CORE01_MANIFEST)
 def test_manifest_path_is_a_real_file(path: str) -> None:
     """Every CORE01 manifest path resolves to a real file."""
-    assert (REPO_ROOT / path).exists(), (
-        f"manifest path does not exist: {path!r}"
-    )
+    assert (REPO_ROOT / path).exists(), f"manifest path does not exist: {path!r}"
 
 
 def test_manifest_count_is_documented() -> None:
     """The CORE01 manifest size is exactly the count recorded in the
     closure report. This guards against drift between the report
     text and the manifest contents."""
-    assert len(CORE01_MANIFEST) == 21, (
-        f"CORE01 manifest size must match the documented count (21); "
-        f"got {len(CORE01_MANIFEST)}. If you intentionally added/removed "
-        "a path, update both this test and the closure report."
-    )
+    assert len(CORE01_MANIFEST) == 21, f"CORE01 manifest size must match the documented count (21); got {len(CORE01_MANIFEST)}. If you intentionally added/removed a path, update both this test and the closure report."

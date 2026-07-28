@@ -127,13 +127,10 @@ def validate_markdown_totals_match_index(audit: dict | None = None) -> bool:
         f"| AST-discovered helpers | {t['helper_count']} |",
         f"| Exact-duplicate groups | {t['exact_duplicate_group_count']} |",
         f"| Exact-duplicate helpers | {t['exact_duplicate_helper_count']} |",
-        f"| Core public symbols (`__all__`) | "
-        f"{t['core_public_symbol_count']} |",
+        f"| Core public symbols (`__all__`) | {t['core_public_symbol_count']} |",
         f"| Wave-1 candidates | {t['wave_1_candidate_count']} |",
-        f"| Measured net deletion (lines) | "
-        f"{t['measured_net_deletion_lines']} |",
-        f"| Preserved protected paths | "
-        f"{t['preserved_path_count']} |",
+        f"| Measured net deletion (lines) | {t['measured_net_deletion_lines']} |",
+        f"| Preserved protected paths | {t['preserved_path_count']} |",
     }
     return all(s in md for s in expected_strings)
 
@@ -160,15 +157,13 @@ def _git_tracked_paths() -> list[str]:
     import subprocess
 
     proc = subprocess.run(
-        ["git", "ls-files",
-         "scripts/verifiers/*.py", "scripts/verifiers/**/*.py"],
+        ["git", "ls-files", "scripts/verifiers/*.py", "scripts/verifiers/**/*.py"],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
         check=False,
     )
-    return sorted(line.strip() for line in proc.stdout.splitlines()
-                  if line.strip())
+    return sorted(line.strip() for line in proc.stdout.splitlines() if line.strip())
 
 
 def validate_inventory_set_equals_tracked(
@@ -221,11 +216,13 @@ def validate_required_shards_complete(
     """
 
     from scripts.verifiers_audit.report_io import (
+        OPTIONAL_SHARDS,
         REPORT_ROOT,
         REQUIRED_SHARDS,
         _dump_helpers_shard,
         _json_dumps,
     )
+
     if audit is None:
         audit = build_audit_object({})
     root = report_root or REPORT_ROOT
@@ -233,7 +230,11 @@ def validate_required_shards_complete(
     listed = set(index["shards"].keys())
     if not listed:
         return False
-    if listed != set(REQUIRED_SHARDS):
+    required = set(REQUIRED_SHARDS)
+    optional = set(OPTIONAL_SHARDS)
+    if not required.issubset(listed):
+        return False
+    if listed - required - optional:
         return False
     import hashlib
 
@@ -263,6 +264,7 @@ def validate_required_shards_complete(
         from scripts.verifiers_audit.report_io import (
             _relative_to_repo as _canonical,
         )
+
         expected_path = _canonical(path)
         recorded_path = info["path"]
         if recorded_path != expected_path:
@@ -303,25 +305,11 @@ def validate_reports_agree(audit: dict | None = None) -> bool:
     t = audit["index"]["totals"]
     cs = audit["candidates"]
     checks = {
-        "wave_1_count": (
-            f"| Wave-1 candidates | {t['wave_1_candidate_count']} |" in md
-        ),
-        "measured_deletion": (
-            f"| Measured net deletion (lines) | "
-            f"{t['measured_net_deletion_lines']} |" in md
-        ),
-        "candidate_count_match": (
-            cs["totals"]["candidate_count"]
-            == len(cs["candidates"])
-        ),
-        "wave_1_breakdown_match": (
-            cs["totals"]["wave_1_candidate_count"]
-            == len(cs["wave_breakdown"].get("Wave 1", []))
-        ),
-        "measured_deletion_consistent": (
-            cs["totals"]["measured_net_deletion_lines"]
-            == t["measured_net_deletion_lines"]
-        ),
+        "wave_1_count": (f"| Wave-1 candidates | {t['wave_1_candidate_count']} |" in md),
+        "measured_deletion": (f"| Measured net deletion (lines) | {t['measured_net_deletion_lines']} |" in md),
+        "candidate_count_match": (cs["totals"]["candidate_count"] == len(cs["candidates"])),
+        "wave_1_breakdown_match": (cs["totals"]["wave_1_candidate_count"] == len(cs["wave_breakdown"].get("Wave 1", []))),
+        "measured_deletion_consistent": (cs["totals"]["measured_net_deletion_lines"] == t["measured_net_deletion_lines"]),
     }
     return all(checks.values())
 
@@ -332,8 +320,7 @@ from scripts.verifiers_audit.correction08_validators import (
 
 VALIDATORS: tuple = (
     ("inventory_equals_tracked", validate_inventory_equals_tracked),
-    ("inventory_set_equals_tracked",
-     validate_inventory_set_equals_tracked),
+    ("inventory_set_equals_tracked", validate_inventory_set_equals_tracked),
     ("no_excluded_in_helpers", validate_no_excluded_in_helpers),
     ("no_excluded_in_groups", validate_no_excluded_in_groups),
     ("no_excluded_in_candidates", validate_no_excluded_in_candidates),
