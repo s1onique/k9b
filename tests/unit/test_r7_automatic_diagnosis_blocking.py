@@ -161,16 +161,11 @@ class TestDeriveAutomaticDiagnosisInputsSelectionMode(unittest.TestCase):
             updated_ids=(),
             records=(),
         )
-        (
-            _canonical_ids,
-            _summary,
-            _consistency,
-            _endpoint,
-            execution,
-        ) = _derive_automatic_diagnosis_inputs(accumulator)
-        assert execution.incident_access_mode == DISPATCH_LOCAL
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(accumulator)
+
+        assert diagnosis_inputs.execution.incident_access_mode == DISPATCH_LOCAL
         # Zero canonical IDs and a local run mean store_scan.
-        assert execution.selection_mode == INCIDENT_SELECTION_MODE_STORE_SCAN
+        assert diagnosis_inputs.execution.selection_mode == INCIDENT_SELECTION_MODE_STORE_SCAN
 
     def test_backend_zero_id_preserves_backend_access_mode(self) -> None:
         """A backend zero-ID run keeps ``incident_access_mode == "backend"`` (R7 item 2)."""
@@ -188,31 +183,21 @@ class TestDeriveAutomaticDiagnosisInputsSelectionMode(unittest.TestCase):
             updated_ids=(),
             records=(),
         )
-        (
-            _canonical_ids,
-            _summary,
-            _consistency,
-            _endpoint,
-            execution,
-        ) = _derive_automatic_diagnosis_inputs(accumulator)
-        assert execution.incident_access_mode == DISPATCH_BACKEND
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(accumulator)
+
+        assert diagnosis_inputs.execution.incident_access_mode == DISPATCH_BACKEND
         # Zero canonical IDs on a backend run still mean store_scan --
         # the decision is independent of access mode.
-        assert execution.selection_mode == INCIDENT_SELECTION_MODE_STORE_SCAN
+        assert diagnosis_inputs.execution.selection_mode == INCIDENT_SELECTION_MODE_STORE_SCAN
 
     def test_no_promotion_run_preserves_no_promotion_sentinel(self) -> None:
         """A no-promotion run keeps ``incident_access_mode == "no_promotion_run"`` (R7 item 2)."""
         os.environ["K9B_INCIDENT_PROMOTION_MODE"] = "local"
         accumulator = RunPromotionAccumulator()
-        (
-            _canonical_ids,
-            _summary,
-            _consistency,
-            _endpoint,
-            execution,
-        ) = _derive_automatic_diagnosis_inputs(accumulator)
-        assert execution.incident_access_mode == "no_promotion_run"
-        assert execution.selection_mode == INCIDENT_SELECTION_MODE_STORE_SCAN
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(accumulator)
+
+        assert diagnosis_inputs.execution.incident_access_mode == "no_promotion_run"
+        assert diagnosis_inputs.execution.selection_mode == INCIDENT_SELECTION_MODE_STORE_SCAN
 
     def test_blocked_contract_run_preserves_backend_access_mode(self) -> None:
         """A blocked-contract run preserves the dispatcher's actual access mode (R7 item 2)."""
@@ -246,27 +231,22 @@ class TestDeriveAutomaticDiagnosisInputsSelectionMode(unittest.TestCase):
             opened_id_count=0,
             updated_id_count=0,
         )
-        (
-            canonical_ids,
-            summary,
-            consistency,
-            endpoint,
-            execution,
-        ) = _derive_automatic_diagnosis_inputs(accumulator)
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(accumulator)
+
         # The blocked decision preserves the dispatcher's access mode.
-        assert execution.is_blocked
-        assert execution.blocked_reason == (
+        assert diagnosis_inputs.execution.is_blocked
+        assert diagnosis_inputs.execution.blocked_reason == (
             BLOCKED_REASON_PROMOTION_CONSISTENCY_CONTRACT_ERROR
         )
-        assert execution.selection_mode == INCIDENT_SELECTION_MODE_BLOCKED
-        assert execution.incident_access_mode == DISPATCH_BACKEND
+        assert diagnosis_inputs.execution.selection_mode == INCIDENT_SELECTION_MODE_BLOCKED
+        assert diagnosis_inputs.execution.incident_access_mode == DISPATCH_BACKEND
         # The orchestrator MUST NOT pass canonical IDs to the collector
         # on the blocked path.
-        assert canonical_ids == []
+        assert list(diagnosis_inputs.canonical_incident_ids) == []
         # The contract error is preserved in the summary so the
         # terminal completion event can record the blocked reason.
-        assert summary["promotion_consistency_contract_error"] is not None
-        assert endpoint["backend_reachable"] is False
+        assert diagnosis_inputs.promotion_result_summary["promotion_consistency_contract_error"] is not None
+        assert diagnosis_inputs.backend_endpoint_identity["backend_reachable"] is False
 
 
 
