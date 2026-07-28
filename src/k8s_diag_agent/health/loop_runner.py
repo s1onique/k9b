@@ -425,12 +425,19 @@ class HealthLoopRunner:
         promotion_result_summary: dict[str, Any] | None = None,
         backend_endpoint_identity: dict[str, Any] | None = None,
         incident_selection_mode: str | None = None,
+        diagnosis_selection: object | None = None,
     ) -> dict[str, Any]:
         """Run automatic diagnosis loop evidence collection.
 
         This is a compatibility delegator that wraps run_automatic_diagnosis_loop
         from loop_automatic_diagnosis, providing the instance-based interface
         expected by existing tests and production call sites.
+
+        CORRECTION05: This method now accepts ``diagnosis_selection`` as a
+        typed authority source. When supplied, it is the sole authority;
+        ``canonical_incident_ids`` and ``incident_selection_mode`` MUST NOT
+        be supplied simultaneously per the ``AmbiguousDiagnosisSelectionError``
+        contract.
 
         Args:
             external_analysis_dir: External analysis directory.
@@ -442,12 +449,16 @@ class HealthLoopRunner:
                 metadata to attach to the auto-diagnosis summary.
             backend_endpoint_identity: Optional backend endpoint identity (no
                 credentials) to forward to auto-diagnosis for diagnostics.
-            incident_selection_mode: Optional R7 selection mode forwarded
+            incident_selection_mode: Optional R7/R10 selection mode forwarded
                 verbatim to the diagnosis collector. When ``"blocked"``
                 the collector emits a typed
                 ``automatic_diagnosis_blocked`` event and returns a
                 bounded payload without touching the underlying evidence
                 collection.
+            diagnosis_selection: Optional typed :class:`DiagnosisSelection`
+                variant. When supplied, this is the sole authority source;
+                ``canonical_incident_ids`` and ``incident_selection_mode``
+                MUST NOT be supplied simultaneously.
 
         Returns:
             Bounded result summary dict.
@@ -459,6 +470,7 @@ class HealthLoopRunner:
             promotion_result_summary=promotion_result_summary,
             backend_endpoint_identity=backend_endpoint_identity,
             incident_selection_mode=incident_selection_mode,
+            diagnosis_selection=diagnosis_selection,
         )
 
     @staticmethod

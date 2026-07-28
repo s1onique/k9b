@@ -71,6 +71,8 @@ class TestDisabledIntegration:
             result = run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 log_event_fn=mock_log_fn,
+                incident_selection_mode="store_scan",
+                scheduler_run_id="test-run",
             )
 
             assert result["automatic_diagnosis_enabled"] is False
@@ -91,6 +93,8 @@ class TestDisabledIntegration:
             result = run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 log_event_fn=mock_log_fn,
+                incident_selection_mode="store_scan",
+                scheduler_run_id="test-run",
             )
 
             assert result["automatic_diagnosis_enabled"] is False
@@ -111,6 +115,8 @@ class TestDisabledIntegration:
             run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 log_event_fn=mock_log_fn,
+                incident_selection_mode="store_scan",
+                scheduler_run_id="test-run",
             )
 
             # Should have logged disabled status
@@ -140,6 +146,8 @@ class TestEnabledIntegration:
             result = run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 log_event_fn=mock_log_fn,
+                incident_selection_mode="store_scan",
+                scheduler_run_id="test-run",
             )
 
             assert result["automatic_diagnosis_enabled"] is True
@@ -160,6 +168,8 @@ class TestEnabledIntegration:
             result = run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 log_event_fn=mock_log_fn,
+                incident_selection_mode="store_scan",
+                scheduler_run_id="test-run",
             )
 
             # Check all required fields are present
@@ -195,6 +205,8 @@ class TestFailureIsolation:
             result = run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 log_event_fn=mock_log_fn,
+                incident_selection_mode="store_scan",
+                scheduler_run_id="test-run",
             )
 
             # Should return a valid result even if collector had issues
@@ -216,6 +228,8 @@ class TestFailureIsolation:
             run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 log_event_fn=mock_log_fn,
+                incident_selection_mode="store_scan",
+                scheduler_run_id="test-run",
             )
 
             # Check that no log contains traceback indicators

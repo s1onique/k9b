@@ -29,6 +29,11 @@ def _git(*args: str) -> str:
         text=True,
         check=False,
     )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git {' '.join(args)!r} failed with exit code {proc.returncode}: "
+            f"{proc.stderr!r}"
+        )
     return proc.stdout
 
 

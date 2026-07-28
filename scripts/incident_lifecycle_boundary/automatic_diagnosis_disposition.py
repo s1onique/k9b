@@ -242,6 +242,25 @@ def check_reason_maps_keyed_by_enum() -> list[VerifierResult]:
     ]
 
 
+# Import AST scanner from extracted module
+try:
+    from .automatic_diagnosis_disposition_reason_map_scan import (
+        _check_file_has_reason_maps,
+    )
+except ImportError:
+    # Fallback for direct script execution: load from sibling module file
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "automatic_diagnosis_disposition_reason_map_scan",
+        Path(__file__).parent / "automatic_diagnosis_disposition_reason_map_scan.py",
+    )
+    if spec and spec.loader:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _check_file_has_reason_maps = module._check_file_has_reason_maps
+
+
 def check_scheduler_completion_includes_reason_maps() -> list[VerifierResult]:
     """Scheduler completion includes all three reason maps."""
     scheduler_path = REPO_ROOT / "src" / "k8s_diag_agent" / "health" / "loop_automatic_diagnosis.py"
@@ -256,6 +275,36 @@ def check_scheduler_completion_includes_reason_maps() -> list[VerifierResult]:
             detail=f"skip={has_skip} ineligible={has_ineligible} error={has_error}",
         )
     ]
+
+
+def check_scheduler_completion_includes_reason_maps_in_files(
+    candidate_files: list[Path],
+) -> list[VerifierResult]:
+    """Check if candidate files include all three reason maps in build_completed_summary.
+
+    This is the file-based entry point used by the R12 disposition verifier tests.
+    It parses each candidate file as AST and verifies that the canonical
+    serializer (build_completed_summary) returns a dict containing all three
+    required reason map keys: skip_reasons, ineligible_reasons, error_reasons.
+
+    The AST-level check ensures that:
+    - Keys appearing only in comments are rejected
+    - Keys in uncalled helpers are rejected
+    - Keys in helpers whose results are not spread are rejected
+    - Only keys directly present in the returned dict are accepted
+    """
+    results: list[VerifierResult] = []
+    for path in candidate_files:
+        source = _read_source(path)
+        passed, detail = _check_file_has_reason_maps(source)
+        results.append(
+            VerifierResult(
+                name=f"reason_maps_in_{path.name}",
+                passed=passed,
+                detail=detail,
+            )
+        )
+    return results
 
 
 def check_schema_version_is_explicit() -> list[VerifierResult]:

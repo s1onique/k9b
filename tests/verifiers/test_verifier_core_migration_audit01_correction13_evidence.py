@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from scripts.verifiers_audit.scope import RangeResolutionError
+from tests.verifiers.verifier_core_migration_audit01_correction22_hermetic_ruff import HermeticRuffCapability
 from tests.verifiers.verifier_core_migration_audit01_support import (
     commit_fixture_base,
     commit_fixture_subject,
@@ -66,9 +67,7 @@ def test_collect_range_evidence_no_force_replace_kwarg(
     )
 
     sig = inspect.signature(collect_range_evidence)
-    assert "force_replace" not in sig.parameters, (
-        f"force_replace is not supported in CORRECTION13: {sig}"
-    )
+    assert "force_replace" not in sig.parameters, f"force_replace is not supported in CORRECTION13: {sig}"
 
 
 def test_collect_range_evidence_failure_leaves_no_bundle(
@@ -88,20 +87,14 @@ def test_collect_range_evidence_failure_leaves_no_bundle(
             repo_root=repo,
             output_dir=output,
         )
-    assert excinfo.value.stage in ("resolve_base", "diff_names"), (
-        f"unexpected stage {excinfo.value.stage!r}"
-    )
-    assert not output.exists(), (
-        f"final bundle must not exist after range failure: {output}"
-    )
+    assert excinfo.value.stage in ("resolve_base", "diff_names"), f"unexpected stage {excinfo.value.stage!r}"
+    assert not output.exists(), f"final bundle must not exist after range failure: {output}"
     staging = list(tmp_path.glob("*.tmp.*"))
-    assert not staging, (
-        f"staging directory must not remain after range failure: "
-        f"{staging}"
-    )
+    assert not staging, f"staging directory must not remain after range failure: {staging}"
 
 
 def test_collect_range_evidence_success_publishes_bundle(
+    hermetic_ruff_capability: HermeticRuffCapability,
     tmp_path: Path,
 ) -> None:
     """A successful run publishes the bundle and removes the
@@ -123,12 +116,11 @@ def test_collect_range_evidence_success_publishes_bundle(
     assert (output / "manifest.json").exists()
     # No staging directory remains.
     staging = list(tmp_path.glob("*.tmp.*"))
-    assert not staging, (
-        f"staging directory must not remain after success: {staging}"
-    )
+    assert not staging, f"staging directory must not remain after success: {staging}"
 
 
 def test_collect_range_evidence_writes_nul_delimited_manifests(
+    hermetic_ruff_capability: HermeticRuffCapability,
     tmp_path: Path,
 ) -> None:
     """The authoritative .z files are NUL-delimited filesystem
@@ -154,10 +146,7 @@ def test_collect_range_evidence_writes_nul_delimited_manifests(
         raw = z_path.read_bytes()
         assert isinstance(raw, bytes)
     # The Python and Ruff input manifests are byte-equal.
-    assert (
-        (output / "changed-python-paths.z").read_bytes()
-        == (output / "ruff-input-paths.z").read_bytes()
-    )
+    assert (output / "changed-python-paths.z").read_bytes() == (output / "ruff-input-paths.z").read_bytes()
     # The .txt files exist and are labelled non-authoritative.
     for name in ("changed-paths", "changed-python-paths", "ruff-input-paths"):
         txt_path = output / f"{name}.txt"
@@ -173,6 +162,7 @@ def test_collect_range_evidence_writes_nul_delimited_manifests(
 
 
 def test_collect_range_evidence_uses_single_git_diff_query(
+    hermetic_ruff_capability: HermeticRuffCapability,
     tmp_path: Path,
 ) -> None:
     """The evidence transaction calls ``git diff`` EXACTLY
@@ -190,9 +180,7 @@ def test_collect_range_evidence_uses_single_git_diff_query(
     diff_calls: list[tuple[str, ...]] = []
     orig_changed_path_bytes = _orch.changed_path_bytes
 
-    def _spy_changed_path_bytes(
-        b: str, s: str, *, repo_root: Path
-    ) -> tuple[bytes, ...]:
+    def _spy_changed_path_bytes(b: str, s: str, *, repo_root: Path) -> tuple[bytes, ...]:
         # Capture the git diff command and delegate.
         diff_calls.append((b, s))
         return orig_changed_path_bytes(b, s, repo_root=repo_root)
@@ -208,13 +196,9 @@ def test_collect_range_evidence_uses_single_git_diff_query(
     finally:
         _orch.changed_path_bytes = orig_changed_path_bytes
     # Exactly one git diff query per evidence transaction.
-    assert len(diff_calls) == 1, (
-        f"expected exactly one git diff query, got {len(diff_calls)}"
-    )
+    assert len(diff_calls) == 1, f"expected exactly one git diff query, got {len(diff_calls)}"
     # The manifest records the single-query contract.
-    manifest = json.loads(
-        (output / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["git_diff_query_count"] == 1, manifest
     # The .z files are byte-equal (same authoritative source).
     py_z = (output / "changed-python-paths.z").read_bytes()
@@ -223,6 +207,7 @@ def test_collect_range_evidence_uses_single_git_diff_query(
 
 
 def test_collect_range_evidence_records_ruff_identity(
+    hermetic_ruff_capability: HermeticRuffCapability,
     tmp_path: Path,
 ) -> None:
     """``tool-identities.json`` records the resolved launcher
@@ -241,40 +226,37 @@ def test_collect_range_evidence_records_ruff_identity(
         repo_root=repo,
         output_dir=output,
     )
-    identities = json.loads(
-        (output / "tool-identities.json").read_text(encoding="utf-8")
-    )
-    manifest = json.loads(
-        (output / "manifest.json").read_text(encoding="utf-8")
-    )
+    identities = json.loads((output / "tool-identities.json").read_text(encoding="utf-8"))
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     # The recorded identity MUST match the manifest's tool_identities.
-    assert (
-        identities["launcher_path"]
-        == manifest["tool_identities"]["launcher_path"]
-    )
+    assert identities["launcher_path"] == manifest["tool_identities"]["launcher_path"]
     # The ruff_invocation_mode is module or binary (or
     # unresolved when the host has neither).
     assert identities["ruff_invocation_mode"] in (
         "module",
+        "hermetic_test_script",
         "binary",
         "unresolved",
     ), identities
     # The launcher_sha256, when present, is a 64-char hex string.
     if identities["launcher_sha256"]:
-        assert len(identities["launcher_sha256"]) == 64, (
-            identities["launcher_sha256"]
-        )
+        assert len(identities["launcher_sha256"]) == 64, identities["launcher_sha256"]
     # The configuration files were inspected.
     assert "configuration_files" in identities
     assert "configuration_file_sha256" in identities
 
 
 def test_executed_ruff_argv_matches_recorded_identity(
+    hermetic_ruff_capability: HermeticRuffCapability,
     tmp_path: Path,
 ) -> None:
-    """The executed Ruff argv (when the range is non-empty
-    and the identity is resolved) matches the recorded
-    identity prefix."""
+    """The executed Ruff argv matches the recorded evidence.
+
+    Binds the actual script argv from the hermetic capability's log file
+    to the evidence argv written by the orchestrator. The evidence argv
+    includes the launcher prefix; the capability's log records the script's
+    perspective (with script path as argv[0]).
+    """
     from scripts.verifiers_audit.range_evidence import collect_range_evidence
 
     repo = tmp_path / "repo"
@@ -288,28 +270,39 @@ def test_executed_ruff_argv_matches_recorded_identity(
         repo_root=repo,
         output_dir=output,
     )
-    identities = json.loads(
-        (output / "tool-identities.json").read_text(encoding="utf-8")
-    )
-    ruff_argv_doc = json.loads(
-        (output / "ruff-argv.json").read_text(encoding="utf-8")
-    )
+    identities = json.loads((output / "tool-identities.json").read_text(encoding="utf-8"))
+    ruff_argv_doc = json.loads((output / "ruff-argv.json").read_text(encoding="utf-8"))
     recorded_argv = ruff_argv_doc["argv"]
     if recorded_argv is None:
         # Empty range or unresolved identity; no executed argv.
         return
-    # The recorded argv's prefix equals the launcher prefix.
+
+    # Get the actual script argv from the hermetic capability's log file
+    actual_script_argv = hermetic_ruff_capability.get_recorded_argv()
+    assert actual_script_argv, "Hermetic capability should have recorded argv"
+
+    # The evidence argv starts with the launcher prefix (interpreter, script_path)
+    # The capability's log has script_path as argv[0], so capability[1:] = evidence suffix
     prefix = list(identities["launcher_argv_prefix"])
     assert list(recorded_argv[: len(prefix)]) == prefix, (
-        f"recorded argv {recorded_argv} does not start with "
-        f"launcher prefix {prefix}"
+        f"recorded argv {recorded_argv} does not start with launcher prefix {prefix}"
     )
-    # The argv[2:] suffix is the ruff paths (when the launcher
-    # is the standalone binary) or the suffix after the prefix
-    # is the ruff check invocation.  For the venv python -m
-    # ruff launcher, the structure is
-    # (python, -m, ruff, check, *paths).
-    assert "check" in recorded_argv
+
+    # The argv must contain the check subcommand
+    assert "check" in recorded_argv, "argv must contain 'check' subcommand"
+
+    # The evidence argv suffix (after prefix) must match the capability's argv[1:]
+    evidence_suffix = tuple(recorded_argv[len(prefix):])
+    capability_suffix = tuple(actual_script_argv[1:])  # Skip script_path in log
+    assert evidence_suffix == capability_suffix, (
+        f"Evidence argv suffix {evidence_suffix!r} != capability argv[1:] {capability_suffix!r}"
+    )
+
+    # Verify the script path matches what was used
+    script_path_in_argv = recorded_argv[1]  # argv[0] is interpreter, argv[1] is script
+    assert script_path_in_argv == str(hermetic_ruff_capability.script_path), (
+        f"Script path in argv {script_path_in_argv!r} != expected {hermetic_ruff_capability.script_path!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -362,6 +355,7 @@ def test_ruff_failure_prevents_publication(tmp_path: Path) -> None:
         from scripts.verifiers_audit.range_evidence_identity import (
             RuffToolUnavailable,
         )
+
         with pytest.raises(RuffToolUnavailable):
             collect_range_evidence(
                 base=base,
@@ -373,13 +367,9 @@ def test_ruff_failure_prevents_publication(tmp_path: Path) -> None:
         _orch.resolve_ruff_identity = orig_resolve
     # The final destination must NOT exist; the staging
     # directory must NOT remain.
-    assert not output.exists(), (
-        f"final destination must not exist after ruff failure: {output}"
-    )
+    assert not output.exists(), f"final destination must not exist after ruff failure: {output}"
     staging = list(tmp_path.glob("*.tmp.*"))
-    assert not staging, (
-        f"staging directory must not remain after ruff failure: {staging}"
-    )
+    assert not staging, f"staging directory must not remain after ruff failure: {staging}"
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +377,9 @@ def test_ruff_failure_prevents_publication(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_final_classification_claims_are_derived(tmp_path: Path) -> None:
+def test_final_classification_claims_are_derived(
+    hermetic_ruff_capability,
+    tmp_path: Path) -> None:
     """The final-classification.md file is rendered from a
     measured result; every claim is either ``PASS`` (when
     measured) or ``UNMEASURED`` (when the writer has no

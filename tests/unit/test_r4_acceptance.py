@@ -527,19 +527,17 @@ class TestOrchestratorDerivesTruth:
     def test_derive_inputs_returns_verified_summary(self, monkeypatch) -> None:
         """Empty accumulator yields a summary that flags no promotion activity."""
         acc = RunPromotionAccumulator()
-        canonical_ids, summary, consistency, endpoint, _execution = (
-            _derive_automatic_diagnosis_inputs(acc)
-        )
-        assert canonical_ids == []
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
+        assert list(diagnosis_inputs.canonical_incident_ids) == []
         # R5: the explicit ``"no_promotion_run"`` sentinel reaches the
         # summary for both ``promotion_mode`` and
         # ``incident_access_mode``; the previous empty-string sentinel
         # was indistinguishable from the legacy ``backend`` default.
-        assert summary["promotion_mode"] == "no_promotion_run"
-        assert summary["incident_access_mode"] == "no_promotion_run"
-        assert summary["promotion_scan_scope"] == "no_promotion_run"
-        assert summary["has_promotion_activity"] is False
-        assert consistency is None
+        assert diagnosis_inputs.promotion_result_summary["promotion_mode"] == "no_promotion_run"
+        assert diagnosis_inputs.promotion_result_summary["incident_access_mode"] == "no_promotion_run"
+        assert diagnosis_inputs.promotion_result_summary["promotion_scan_scope"] == "no_promotion_run"
+        assert diagnosis_inputs.promotion_result_summary["has_promotion_activity"] is False
+        assert diagnosis_inputs.promotion_consistency_error is None
 
 
 # =============================================================================
@@ -559,10 +557,7 @@ class TestSnapshotSignalsUseBatchAggregates:
         # and routes them into the explicit current-run log payload.
         assert "scanned_signal_count=batch.scanned" in module_text
         assert "opened_incident_count=batch.opened_incidents" in module_text
-        assert (
-            "materially_changed_incident_count=batch.updated_incidents"
-            in module_text
-        )
+        assert "materially_changed_incident_count=batch.updated_incidents" in module_text
         assert "skipped_signal_count=batch.skipped_duplicates" in module_text
         assert "failure_count=batch.errors" in module_text
         # The legacy reconstruction patterns are gone.
@@ -669,9 +664,7 @@ class TestSQLiteTransactionSemantics:
         assert callable(append_events_atomic)
         assert EventAppendSpec.__dataclass_params__.frozen
 
-    def test_two_append_events_then_rollback_isolates_first(
-        self, tmp_path
-    ) -> None:
+    def test_two_append_events_then_rollback_isolates_first(self, tmp_path) -> None:
         """Rollback injection proves ``append_events_atomic`` is one transaction.
 
         R4 pins the contract: multiple ``append_event`` calls are NOT
@@ -746,11 +739,7 @@ class TestSQLiteTransactionSemantics:
 
             # Step 3: rolled-back batch (an exception after the BEGIN
             # MUST roll back every event in this single transaction).
-            rolled_back_count_before = sum(
-                1
-                for event in store.get_incident_events(incident_id)
-                if "rolled_back_marker" in (event.payload_json or "")
-            )
+            rolled_back_count_before = sum(1 for event in store.get_incident_events(incident_id) if "rolled_back_marker" in (event.payload_json or ""))
             assert rolled_back_count_before == 0
 
             # The rollback injection lives outside the store's
@@ -787,11 +776,7 @@ class TestSQLiteTransactionSemantics:
             # The durable Step 2 batch remains present.
             assert len(final_events) >= durable_after_step2
             # The Step 3 marker MUST NOT be persisted anywhere.
-            rolled_back_count = sum(
-                1
-                for event in final_events
-                if "rolled_back_marker" in (event.payload_json or "")
-            )
+            rolled_back_count = sum(1 for event in final_events if "rolled_back_marker" in (event.payload_json or ""))
             assert rolled_back_count == 0
 
             # Sanity: initial_count still holds the OPENED/COLLECTING
@@ -954,12 +939,12 @@ class TestProductionOrchestrationProof:
             )
         )
 
-        _, summary, _, _, _ = _derive_automatic_diagnosis_inputs(acc)
-        assert summary["promotion_mode"] == MODE_BACKEND_API
-        assert summary["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
-        assert summary["errors"] == 1
-        assert summary["error_messages"] == ["backend_http_500"]
-        assert summary["has_promotion_activity"] is True
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
+        assert diagnosis_inputs.promotion_result_summary["promotion_mode"] == MODE_BACKEND_API
+        assert diagnosis_inputs.promotion_result_summary["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
+        assert diagnosis_inputs.promotion_result_summary["errors"] == 1
+        assert diagnosis_inputs.promotion_result_summary["error_messages"] == ["backend_http_500"]
+        assert diagnosis_inputs.promotion_result_summary["has_promotion_activity"] is True
 
     def test_local_mode_stays_local(self, monkeypatch) -> None:
         acc = RunPromotionAccumulator()
@@ -978,22 +963,22 @@ class TestProductionOrchestrationProof:
                 scope="local-scope",
             )
         )
-        _, summary, _, _, _ = _derive_automatic_diagnosis_inputs(acc)
-        assert summary["promotion_mode"] == MODE_LOCAL
-        assert summary["incident_access_mode"] == INCIDENT_ACCESS_MODE_LOCAL
-        assert summary["promotion_scan_scope"] == "local-scope"
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
+        assert diagnosis_inputs.promotion_result_summary["promotion_mode"] == MODE_LOCAL
+        assert diagnosis_inputs.promotion_result_summary["incident_access_mode"] == INCIDENT_ACCESS_MODE_LOCAL
+        assert diagnosis_inputs.promotion_result_summary["promotion_scan_scope"] == "local-scope"
 
     def test_no_promotion_run_yields_explicit_state(self) -> None:
         acc = RunPromotionAccumulator()
-        canonical_ids, summary, consistency, _, _ = _derive_automatic_diagnosis_inputs(acc)
-        assert canonical_ids == []
-        assert summary["has_promotion_activity"] is False
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
+        assert list(diagnosis_inputs.canonical_incident_ids) == []
+        assert diagnosis_inputs.promotion_result_summary["has_promotion_activity"] is False
         # R5: the explicit ``no_promotion_run`` sentinel surfaces on the
         # summary instead of an empty string so downstream consumers
         # can render a neutral / not-attempted state.
-        assert summary["promotion_mode"] == "no_promotion_run"
-        assert summary["incident_access_mode"] == "no_promotion_run"
-        assert summary["promotion_scan_scope"] == "no_promotion_run"
+        assert diagnosis_inputs.promotion_result_summary["promotion_mode"] == "no_promotion_run"
+        assert diagnosis_inputs.promotion_result_summary["incident_access_mode"] == "no_promotion_run"
+        assert diagnosis_inputs.promotion_result_summary["promotion_scan_scope"] == "no_promotion_run"
 
     def test_canonical_ids_reach_diagnosis_exactly_once(self) -> None:
         """Running total canonical IDs (deduped) reach diagnosis input."""
@@ -1013,5 +998,5 @@ class TestProductionOrchestrationProof:
                     ),
                 )
             )
-        canonical_ids, _, _, _, _ = _derive_automatic_diagnosis_inputs(acc)
-        assert canonical_ids == ["inc-a", "inc-b"]
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
+        assert list(diagnosis_inputs.canonical_incident_ids) == ["inc-a", "inc-b"]

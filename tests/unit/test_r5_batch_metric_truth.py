@@ -94,9 +94,7 @@ def _make_batch(
             opened_incident_ids=opened_ids,
             updated_incident_ids=updated_ids,
             promotion_records=tuple(r.to_dict() for r in records),
-            unique_candidate_count=unique_candidate_count
-            or len(records)
-            + len(skipped_records),
+            unique_candidate_count=unique_candidate_count or len(records) + len(skipped_records),
             promotion_scan_scope=scope,
             incident_access_mode=incident_access_mode,
         ),
@@ -164,28 +162,24 @@ class HighCardinalityTests(unittest.TestCase):
                 unique_candidate_count=1,
             )
         )
-        canonical_ids, summary, _consistency, _endpoint, _execution = (
-            _derive_automatic_diagnosis_inputs(acc)
-        )
-        self.assertEqual(canonical_ids, [])
-        self.assertEqual(summary["errors"], 200)
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
+        self.assertEqual(list(diagnosis_inputs.canonical_incident_ids), [])
+        self.assertEqual(diagnosis_inputs.promotion_result_summary["errors"], 200)
         self.assertEqual(
-            len(summary["error_messages"]),
+            len(diagnosis_inputs.promotion_result_summary["error_messages"]),
             DEFAULT_MAX_ERROR_MESSAGES_IN_SUMMARY,
         )
         # The total is 200 messages; the bound is 50 by default,
         # so 150 messages were omitted.
         self.assertEqual(
-            summary["error_messages_omitted"],
+            diagnosis_inputs.promotion_result_summary["error_messages_omitted"],
             200 - DEFAULT_MAX_ERROR_MESSAGES_IN_SUMMARY,
         )
         # The first message in the truncated list is the first
         # message in the input -- deterministic order is preserved.
+        self.assertEqual(diagnosis_inputs.promotion_result_summary["error_messages"][0], "error-0000")
         self.assertEqual(
-            summary["error_messages"][0], "error-0000"
-        )
-        self.assertEqual(
-            summary["error_messages"][-1],
+            diagnosis_inputs.promotion_result_summary["error_messages"][-1],
             f"error-{DEFAULT_MAX_ERROR_MESSAGES_IN_SUMMARY - 1:04d}",
         )
 
@@ -208,18 +202,14 @@ class HighCardinalityTests(unittest.TestCase):
                 unique_candidate_count=2,
             )
         )
-        self.assertEqual(
-            acc.total_unique_candidate_count, 100 * 5 + 2
-        )
-        canonical_ids, _summary, _consistency, _endpoint, _execution = (
-            _derive_automatic_diagnosis_inputs(acc)
-        )
+        self.assertEqual(acc.total_unique_candidate_count, 100 * 5 + 2)
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
         # Dedup: 500 unique + 0 new (the duplicate batch's IDs are
         # already in the dedup set).
-        self.assertEqual(len(canonical_ids), 500)
+        self.assertEqual(len(diagnosis_inputs.canonical_incident_ids), 500)
         # The first-seen order matches the input chunk order.
-        self.assertEqual(canonical_ids[:5], ["inc-0000", "inc-0001", "inc-0002", "inc-0003", "inc-0004"])
-        self.assertEqual(canonical_ids[-1], "inc-0499")
+        self.assertEqual(list(diagnosis_inputs.canonical_incident_ids[:5]), ["inc-0000", "inc-0001", "inc-0002", "inc-0003", "inc-0004"])
+        self.assertEqual(diagnosis_inputs.canonical_incident_ids[-1], "inc-0499")
 
 
 if __name__ == "__main__":

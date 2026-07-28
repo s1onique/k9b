@@ -1,6 +1,6 @@
 # CI-HERMETIC-TOOLCACHE:
 # k9b CI is intentionally shell-first/toolcache-first. Avoid setup/download
-# actions where a pinned runner tool-cache path or checked-in script can be used.
+# actions where a pinned runner tool-cache path or checked-in script can be use.
 # Missing cached tools must fail fast, not download mutable replacements.
 # See docs/ci-hermetic-toolchain.md.
 
@@ -234,16 +234,29 @@ jobs:
           bash scripts/verify_helm_oci_login.sh
 
   # =============================================================================
-  # Build and push jobs - depend on all quality gates
-  # Extracted Docker setup/build logic to .github/workflows/harbor-build-image.yml
+  # Image build jobs - separated by trust class
+  #
+  # CORRECTION07-B: Split PR and trusted publication callers with proper secret isolation
+  #
+  # Secret isolation matrix:
+  # - same-repository PR:  SPBNIX_CA_CERT_PEM only (read-only, no Harbor auth)
+  # - trusted push:        SPBNIX_CA_CERT_PEM + HARBOR_USERNAME + HARBOR_TOKEN
+  #
+  # Fork and Dependabot PRs are skipped - CA secret unavailable under secret-owned model
   # =============================================================================
 
-  build-push:
+  # Same-repository PR backend build (read-only, CA only)
+  build-backend-pr:
     needs:
       - lint-policy
       - python-unit-shard-union
       - frontend-tests
       - helm-chart
+    # Only run for same-repository PRs (not forks, not Dependabot)
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
     uses: ./.github/workflows/harbor-build-image.yml
     with:
       registry: harbor-pve1.spbnix.local
@@ -253,14 +266,26 @@ jobs:
       build_args: |
         KUBECTL_VERSION=v1.29.6
         HELM_VERSION=3.20.1
-    secrets: inherit
+      # Read-only authorities for PR
+      image_push_enabled: false
+      registry_cache_read_enabled: true
+      registry_cache_write_enabled: false
+    # PR callers receive CA only - no Harbor authentication credentials
+    secrets:
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
 
-  frontend:
+  # Same-repository PR frontend build (read-only, CA only)
+  build-frontend-pr:
     needs:
       - lint-policy
       - python-unit-shard-union
       - frontend-tests
       - helm-chart
+    # Only run for same-repository PRs (not forks, not Dependabot)
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
     uses: ./.github/workflows/harbor-build-image.yml
     with:
       registry: harbor-pve1.spbnix.local
@@ -268,4 +293,112 @@ jobs:
       image_name: k9b-frontend
       dockerfile: ./frontend/Dockerfile
       build_args: ""
-    secrets: inherit
+      # Read-only authorities for PR
+      image_push_enabled: false
+      registry_cache_read_enabled: true
+      registry_cache_write_enabled: false
+    # PR callers receive CA only - no Harbor authentication credentials
+    secrets:
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+
+  # Trusted backend publication (write access, full credentials)
+  build-backend-publish:
+    needs:
+      - lint-policy
+      - python-unit-shard-union
+      - frontend-tests
+      - helm-chart
+    # Only run for non-PR events (push, tag, workflow_dispatch)
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/harbor-build-image.yml
+    with:
+      registry: harbor-pve1.spbnix.local
+      harbor_project: k9b
+      image_name: k9b-backend
+      dockerfile: ./Dockerfile.python
+      build_args: |
+        KUBECTL_VERSION=v1.29.6
+        HELM_VERSION=3.20.1
+      # Full publication authorities for trusted push
+      image_push_enabled: true
+      registry_cache_read_enabled: true
+      registry_cache_write_enabled: true
+    # Trusted callers receive all credentials
+    secrets:
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+      HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+      HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
+
+  # Trusted frontend publication (write access, full credentials)
+  build-frontend-publish:
+    needs:
+      - lint-policy
+      - python-unit-shard-union
+      - frontend-tests
+      - helm-chart
+    # Only run for non-PR events (push, tag, workflow_dispatch)
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/harbor-build-image.yml
+    with:
+      registry: harbor-pve1.spbnix.local
+      harbor_project: k9b
+      image_name: k9b-frontend
+      dockerfile: ./frontend/Dockerfile
+      build_args: ""
+      # Full publication authorities for trusted push
+      image_push_enabled: true
+      registry_cache_read_enabled: true
+      registry_cache_write_enabled: true
+    # Trusted callers receive all credentials
+    secrets:
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+      HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+      HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
+
+  # =============================================================================
+  # Untrusted PR skip status
+  # Fork and Dependabot PRs cannot provide Harbor CA secret - skip image builds
+  # =============================================================================
+
+  pr-skip-status:
+    needs:
+      - lint-policy
+      - python-unit-shard-union
+      - frontend-tests
+      - helm-chart
+    # Only run for untrusted PRs (fork or Dependabot)
+    # Same-repository PRs are handled by build-*-pr jobs
+    if: >-
+      github.event_name == 'pull_request' &&
+      (
+        github.event.pull_request.head.repo.full_name != github.repository ||
+        github.actor == 'dependabot[bot]'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      ACTOR: ${{ github.actor }}
+      REPOSITORY: ${{ github.repository }}
+      HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name }}
+    steps:
+      - name: Check PR trust classification
+        run: |
+          echo "=== PR Trust Classification ==="
+          printf 'Event: %s\n' "$EVENT_NAME"
+          printf 'Actor: %s\n' "$ACTOR"
+          printf 'Head repo: %s\n' "$HEAD_REPOSITORY"
+          printf 'Base repo: %s\n' "$BASE_REPOSITORY"
+          echo ""
+          if [[ "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
+            printf 'SKIP REASON: Fork PR - Harbor CA secret unavailable\n'
+            printf 'ERROR_CODE: HARBOR_CA_SECRET_UNAVAILABLE_FOR_FORK_PR\n'
+          elif [[ "$ACTOR" == "dependabot[bot]" ]]; then
+            printf 'SKIP REASON: Dependabot PR - Actions secrets unavailable\n'
+            printf 'ERROR_CODE: HARBOR_CA_SECRET_UNAVAILABLE_FOR_DEPENDABOT\n'
+          else
+            printf 'ERROR: Unexpected untrusted PR context\n'
+            exit 1
+          fi

@@ -116,6 +116,7 @@ class TestHealthWrapperPathEligibilitySummary:
             result = run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 scheduler_run_id=scheduler_run_id,
+                incident_selection_mode="store_scan",
             )
 
             # Find eligibility summary event
@@ -158,6 +159,7 @@ class TestHealthWrapperPathEligibilitySummary:
         result = run_automatic_diagnosis_loop(
             external_analysis_dir=temp_external_dir,
             scheduler_run_id="scheduler-20260710-001122",
+            incident_selection_mode="store_scan",
         )
 
         assert result["automatic_diagnosis_enabled"] is False

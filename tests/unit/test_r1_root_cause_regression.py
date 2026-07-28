@@ -48,6 +48,7 @@ def backend_authoritative_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]
 @pytest.fixture
 def backend_canonical_incident() -> Incident:
     from datetime import datetime as _dt
+
     first = _dt(2026, 7, 10, 12, 0, 0, tzinfo=UTC)
     last = _dt(2026, 7, 10, 13, 0, 0, tzinfo=UTC)
     return Incident(
@@ -204,17 +205,21 @@ class TestRootCauseRegression:
             result.run_id = "test-run"
             return result
 
-        with patch(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop.run_automatic_diagnosis_loop_evidence_collection",
-            side_effect=collector_stub,
-        ), patch(
-            "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
-            return_value=True,
+        with (
+            patch(
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop.run_automatic_diagnosis_loop_evidence_collection",
+                side_effect=collector_stub,
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
+                return_value=True,
+            ),
         ):
             result = run_automatic_diagnosis_loop(
                 external_analysis_dir=tmp_path,
                 log_event_fn=lambda *a, **kw: None,
                 canonical_incident_ids=["incident-canonical-7f3a"],
+                scheduler_run_id="legacy_run",
                 promotion_result_summary={
                     "opened_incident_ids": ["incident-canonical-7f3a"],
                     "updated_incident_ids": [],
@@ -243,10 +248,7 @@ class TestRootCauseRegression:
         backend_authoritative_env: dict[str, str],
         backend_canonical_incident: Incident,
     ) -> None:
-        assert (
-            backend_canonical_incident.incident_id
-            != backend_canonical_incident.source_candidate_id
-        )
+        assert backend_canonical_incident.incident_id != backend_canonical_incident.source_candidate_id
         assert "/" not in backend_canonical_incident.incident_id
         assert "default" not in backend_canonical_incident.incident_id
         assert "my-pod" not in backend_canonical_incident.incident_id

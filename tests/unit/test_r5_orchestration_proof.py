@@ -118,15 +118,13 @@ class OrchestrationContractTests(unittest.TestCase):
                 updated_ids=("inc-d",),
             )
         )
-        canonical_ids, summary, _consistency, endpoint, _execution = (
-            _derive_automatic_diagnosis_inputs(acc)
-        )
-        self.assertEqual(canonical_ids, ["inc-a", "inc-b", "inc-c", "inc-d"])
-        self.assertEqual(summary["promotion_mode"], MODE_BACKEND_API)
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
+        self.assertEqual(list(diagnosis_inputs.canonical_incident_ids), ["inc-a", "inc-b", "inc-c", "inc-d"])
+        self.assertEqual(diagnosis_inputs.promotion_result_summary["promotion_mode"], MODE_BACKEND_API)
         self.assertEqual(
-            summary["incident_access_mode"], INCIDENT_ACCESS_MODE_BACKEND
+            diagnosis_inputs.promotion_result_summary["incident_access_mode"], INCIDENT_ACCESS_MODE_BACKEND
         )
-        self.assertEqual(endpoint["incident_access_mode"], INCIDENT_ACCESS_MODE_BACKEND)
+        self.assertEqual(diagnosis_inputs.backend_endpoint_identity["incident_access_mode"], INCIDENT_ACCESS_MODE_BACKEND)
 
     def test_backend_failure_summary_counted(self) -> None:
         """Backend failure: counts and messages reach the summary."""
@@ -141,12 +139,10 @@ class OrchestrationContractTests(unittest.TestCase):
                 firing=3,
             )
         )
-        _canonical_ids, summary, _consistency, _endpoint, _execution = (
-            _derive_automatic_diagnosis_inputs(acc)
-        )
-        self.assertEqual(summary["errors"], 1)
-        self.assertEqual(summary["error_messages"], ["backend_http_500"])
-        self.assertEqual(summary["has_promotion_activity"], True)
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
+        self.assertEqual(diagnosis_inputs.promotion_result_summary["errors"], 1)
+        self.assertEqual(diagnosis_inputs.promotion_result_summary["error_messages"], ["backend_http_500"])
+        self.assertEqual(diagnosis_inputs.promotion_result_summary["has_promotion_activity"], True)
 
     def test_explicit_local_mode_preserved(self) -> None:
         """Local promotion: access mode reaches derivation as ``local``."""
@@ -158,15 +154,13 @@ class OrchestrationContractTests(unittest.TestCase):
                 opened_ids=("inc-l1",),
             )
         )
-        _canonical_ids, summary, _consistency, endpoint, _execution = (
-            _derive_automatic_diagnosis_inputs(acc)
-        )
-        self.assertEqual(summary["promotion_mode"], MODE_LOCAL)
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
+        self.assertEqual(diagnosis_inputs.promotion_result_summary["promotion_mode"], MODE_LOCAL)
         self.assertEqual(
-            summary["incident_access_mode"], INCIDENT_ACCESS_MODE_LOCAL
+            diagnosis_inputs.promotion_result_summary["incident_access_mode"], INCIDENT_ACCESS_MODE_LOCAL
         )
         self.assertEqual(
-            endpoint["incident_access_mode"], INCIDENT_ACCESS_MODE_LOCAL
+            diagnosis_inputs.backend_endpoint_identity["incident_access_mode"], INCIDENT_ACCESS_MODE_LOCAL
         )
 
     def test_no_promotion_run_uses_explicit_neutral_state(self) -> None:
@@ -179,14 +173,12 @@ class OrchestrationContractTests(unittest.TestCase):
         self.assertEqual(access, NO_PROMOTION_MODE)
         self.assertEqual(scope, NO_PROMOTION_MODE)
 
-        canonical_ids, summary, _consistency, endpoint, _execution = (
-            _derive_automatic_diagnosis_inputs(acc)
-        )
-        self.assertEqual(canonical_ids, [])
-        self.assertEqual(summary["promotion_mode"], NO_PROMOTION_MODE)
-        self.assertEqual(summary["incident_access_mode"], NO_PROMOTION_MODE)
-        self.assertEqual(summary["has_promotion_activity"], False)
-        self.assertEqual(endpoint["incident_access_mode"], NO_PROMOTION_MODE)
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
+        self.assertEqual(list(diagnosis_inputs.canonical_incident_ids), [])
+        self.assertEqual(diagnosis_inputs.promotion_result_summary["promotion_mode"], NO_PROMOTION_MODE)
+        self.assertEqual(diagnosis_inputs.promotion_result_summary["incident_access_mode"], NO_PROMOTION_MODE)
+        self.assertEqual(diagnosis_inputs.promotion_result_summary["has_promotion_activity"], False)
+        self.assertEqual(diagnosis_inputs.backend_endpoint_identity["incident_access_mode"], NO_PROMOTION_MODE)
 
     def test_dedup_canonical_ids_across_batches(self) -> None:
         """Two batches with overlapping IDs MUST yield a single deterministic list."""
@@ -199,11 +191,9 @@ class OrchestrationContractTests(unittest.TestCase):
                     opened_ids=(canonical,),
                 )
             )
-        canonical_ids, _summary, _consistency, _endpoint, _execution = (
-            _derive_automatic_diagnosis_inputs(acc)
-        )
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
         # The accumulator's dedup keeps the first-seen order.
-        self.assertEqual(canonical_ids, ["inc-a", "inc-b", "inc-c"])
+        self.assertEqual(list(diagnosis_inputs.canonical_incident_ids), ["inc-a", "inc-b", "inc-c"])
 
     def test_terminal_event_index_advances_after_diagnosis(self) -> None:
         """The terminal completion event is emitted after the diagnosis call.
@@ -262,15 +252,13 @@ class OrchestrationContractTests(unittest.TestCase):
                 opened_ids=("inc-1",),
             )
         )
-        canonical_ids, summary, _consistency, endpoint, _execution = (
-            _derive_automatic_diagnosis_inputs(acc)
-        )
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(acc)
         # 1. Diagnosis loop runs first.
         recorder._run_automatic_diagnosis_loop(
             external_analysis_dir=Path("/tmp/r5"),
-            canonical_incident_ids=canonical_ids,
-            promotion_result_summary=summary,
-            backend_endpoint_identity=endpoint,
+            canonical_incident_ids=diagnosis_inputs.canonical_incident_ids,
+            promotion_result_summary=diagnosis_inputs.promotion_result_summary,
+            backend_endpoint_identity=diagnosis_inputs.backend_endpoint_identity,
         )
         # 2. Terminal completion log is emitted after the diagnosis.
         recorder._log_event(

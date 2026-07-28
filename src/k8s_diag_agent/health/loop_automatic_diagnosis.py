@@ -74,6 +74,13 @@ __all__ = [
     "run_automatic_diagnosis_loop",
 ]
 
+# Reason map keys for scheduler completion tracking.
+# These are referenced by the disposition verifier to ensure reason maps
+# are included in the completed/disabled/selection-unavailable summaries.
+SKIP_REASONS_KEY = "skip_reasons"
+INELIGIBLE_REASONS_KEY = "ineligible_reasons"
+ERROR_REASONS_KEY = "error_reasons"
+
 
 def _coerce_canonical_ids(canonical_incident_ids: Any) -> list[str] | None:
     """Backward-compatible ID list coercion helper."""
@@ -196,8 +203,21 @@ def _legacy_build_selection(
     incident_selection_mode: str | None,
     scheduler_run_id: str | None,
 ) -> DiagnosisSelection:
-    """Build a typed selection from legacy arguments without scan fallback."""
+    """Build a typed selection from legacy arguments without scan fallback.
+
+    CORRECTION05: This helper now handles all five selection modes from the
+    ``AutomaticDiagnosisExecution`` enum, not just ``blocked`` and ``store_scan``.
+    Each mode maps to a distinct typed variant:
+
+    - ``blocked`` -> DiagnosisSelectionUnavailable with WORKLIST_INCONSISTENT
+    - ``current_run_empty`` -> DiagnosisSelectionFromPromotion with empty IDs
+      (authoritative zero-work; NOT a store scan)
+    - ``store_scan`` -> DiagnosisSelectionWithoutPromotion
+    - ``commit_unknown`` -> DiagnosisSelectionUnavailable with COMMIT_UNKNOWN
+    - unknown mode -> raises AmbiguousDiagnosisSelectionError (fail-closed)
+    """
     legacy_run_id = str(scheduler_run_id or "legacy_run")
+
     if incident_selection_mode == "blocked":
         return DiagnosisSelectionUnavailable(
             outcome=PromotionRejected(
@@ -206,21 +226,52 @@ def _legacy_build_selection(
                 rejected_signal_ids=(),
             ),
         )
+
+    if incident_selection_mode == "current_run_empty":
+        # ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION05:
+        # VALID workset with empty IDs = terminal stop.
+        # Use promotion_run_id matching the scheduler so run identity
+        # validation passes. This is NOT a store scan.
+        return DiagnosisSelectionFromPromotion(
+            promotion_run_id=legacy_run_id,
+            incident_ids=(),
+        )
+
     if incident_selection_mode == "store_scan":
         return DiagnosisSelectionWithoutPromotion(
             reason=NoPromotionSelectionReason.SCHEDULED_SCAN_RUN,
         )
+
+    if incident_selection_mode == "commit_unknown":
+        return DiagnosisSelectionUnavailable(
+            outcome=PromotionCommitUnknown(
+                run_id=legacy_run_id,
+                uncertain_signal_ids=(),
+            ),
+        )
+
+    if incident_selection_mode is not None:
+        # Fail-closed for unknown modes: reject malformed input rather than
+        # silently falling through to the canonical IDs path.
+        raise AmbiguousDiagnosisSelectionError(
+            f"run_automatic_diagnosis_loop: unknown incident_selection_mode "
+            f"{incident_selection_mode!r}. Known modes: 'blocked', "
+            f"'current_run_empty', 'store_scan', 'commit_unknown'.",
+            run_id=legacy_run_id,
+        )
+
     if canonical_incident_ids is not None:
         coerced = [str(value) for value in canonical_incident_ids if value]
         return DiagnosisSelectionFromPromotion(
             promotion_run_id=legacy_run_id,
             incident_ids=tuple(coerced),
         )
+
     raise AmbiguousDiagnosisSelectionError(
         "run_automatic_diagnosis_loop requires an explicit "
         "DiagnosisSelection or one of: canonical_incident_ids, "
-        "incident_selection_mode in {'store_scan'} with explicit "
-        "promotion policy, or a promotion_outcome. The legacy "
+        "incident_selection_mode in {'blocked', 'current_run_empty', "
+        "'store_scan', 'commit_unknown'}, or a promotion_outcome. The legacy "
         "truthiness fallback is forbidden because it caused a "
         "production store-scan regression on duplicate alert signals.",
         run_id=legacy_run_id,

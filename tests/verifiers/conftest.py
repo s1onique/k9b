@@ -13,6 +13,10 @@ from pathlib import Path
 import pytest
 
 from scripts.verifiers_audit.builder import build_audit_object
+from tests.verifiers.verifier_core_migration_audit01_correction22_hermetic_ruff import (
+    build_hermetic_capability,
+    install_hermetic_ruff_resolver,
+)
 from tests.verifiers.verifier_core_migration_audit01_support import (
     AUDIT01_TEST_MODULES_WITHOUT_SUPPORT,
     RangeRepo,
@@ -45,10 +49,7 @@ def audit() -> dict[str, object]:
     """Build a deterministic audit object with a synthetic skip record."""
     return build_audit_object(
         {},
-        gate_classification=_synthetic_skipped_record(
-            "module-scope audit fixture; the persisted "
-            "gate_classification.json is the canonical on-disk record."
-        ),
+        gate_classification=_synthetic_skipped_record("module-scope audit fixture; the persisted gate_classification.json is the canonical on-disk record."),
     )
 
 
@@ -71,8 +72,20 @@ def canonical_audit_artifacts_remain_unchanged(
     before = hash_canonical_artifact_set()
     yield
     after = hash_canonical_artifact_set()
-    assert after == before, (
-        "canonical audit artifacts mutated during "
-        f"{module_path.relative_to(module_path.parents[2])}: "
-        f"before={before} after={after}"
-    )
+    assert after == before, f"canonical audit artifacts mutated during {module_path.relative_to(module_path.parents[2])}: before={before} after={after}"
+
+
+@pytest.fixture
+def hermetic_ruff_capability(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Inject a hermetic Ruff capability into the evidence orchestrator.
+
+    Uses the shared install_hermetic_ruff_resolver installer to patch
+    resolve_ruff_identity at the source module where it is defined.
+    This is the single authoritative seam for resolver injection.
+    """
+    capability = build_hermetic_capability(tmp_path / "ruff-capability")
+    install_hermetic_ruff_resolver(monkeypatch=monkeypatch, capability=capability)
+    return capability

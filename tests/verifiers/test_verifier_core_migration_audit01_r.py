@@ -45,11 +45,7 @@ def test_source_preservation_hashes_match(audit: dict) -> None:
     assert sp["totals"]["staged_drift_count"] == 0
     for row in sp["protected_paths"]:
         assert row["preserved"], row
-        assert (
-            row["head_sha256"]
-            == row["index_sha256"]
-            == row["working_tree_sha256"]
-        )
+        assert row["head_sha256"] == row["index_sha256"] == row["working_tree_sha256"]
 
 
 def test_no_protected_path_in_git_diff() -> None:
@@ -99,18 +95,12 @@ def test_measured_patch_net_deletion_is_positive(audit: dict) -> None:
     assert totals["net_production_lines_removed"] > 0, totals
     assert totals["helpers_removed"] == 3
     assert totals["call_sites_changed"] >= 3
-    assert (
-        audit["index"]["totals"]["measured_net_deletion_lines"]
-        == totals["net_production_lines_removed"]
-    )
+    assert audit["index"]["totals"]["measured_net_deletion_lines"] == totals["net_production_lines_removed"]
 
 
 def test_measured_patch_diff_sums_correctly(audit: dict) -> None:
     t = audit["patch_simulation"]["totals"]
-    assert (
-        t["net_production_lines_removed"]
-        == t["production_lines_removed"] - t["production_lines_added"]
-    )
+    assert t["net_production_lines_removed"] == t["production_lines_removed"] - t["production_lines_added"]
 
 
 # ---------------------------------------------------------------------------
@@ -144,10 +134,7 @@ def test_wave_1_rationale_counts_come_from_live_suite(audit: dict) -> None:
         if suite_name is None:
             continue
         suite = suites[suite_name]
-        expected = (
-            f"{suite['passed']}/{suite['total']} equivalence cases pass"
-            f" ({suite['skipped']} skipped)"
-        )
+        expected = f"{suite['passed']}/{suite['total']} equivalence cases pass ({suite['skipped']} skipped)"
         assert expected in c["rationale"], (c["candidate_id"], c["rationale"])
 
 
@@ -157,11 +144,13 @@ def test_permission_denied_case_status_is_skippable() -> None:
         _STATUS_SKIPPED,
         run_read_source_equivalence,
     )
+
     suite = run_read_source_equivalence()
     cases = {c["name"]: c for c in suite["cases"]}
     assert "permission_denied" in cases
     assert cases["permission_denied"]["status"] in {
-        _STATUS_PASSED, _STATUS_SKIPPED,
+        _STATUS_PASSED,
+        _STATUS_SKIPPED,
     }
 
 
@@ -195,17 +184,11 @@ def test_required_shards_complete(tmp_path) -> None:
     reports = tmp_path / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     layout = report_layout_for_shard_root(reports)
-    skipped = _skipped_record(
-        "test_required_shards_complete synthetic fixture; the "
-        "canonical repository gate is recorded in "
-        ".factory/gate-summary.json."
-    )
+    skipped = _skipped_record("test_required_shards_complete synthetic fixture; the canonical repository gate is recorded in .factory/gate-summary.json.")
     fresh = build_audit_object({}, gate_classification=skipped)
     (reports / "gate_classification.json").write_text(
         json.dumps(skipped, indent=2, sort_keys=False) + "\n",
         encoding="utf-8",
     )
     write_all(layout=layout, audit=fresh)
-    assert validate_required_shards_complete(
-        fresh, report_root=reports
-    )
+    assert validate_required_shards_complete(fresh, report_root=reports)

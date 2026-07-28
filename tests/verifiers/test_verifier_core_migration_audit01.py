@@ -41,7 +41,7 @@ from scripts.verifiers_audit.discovery import (
 )
 from scripts.verifiers_audit.equivalence import run_all_equivalence
 from scripts.verifiers_audit.render import render_markdown
-from scripts.verifiers_audit.report_io import SHARD_NAMES
+from scripts.verifiers_audit.report_io import ALL_SHARDS
 from tests.verifiers.verifier_core_migration_audit01_support import (
     _synthetic_skipped_record,
 )
@@ -63,23 +63,11 @@ def test_source_totals_match_index_totals(audit: dict) -> None:
     assert index["excluded_path_count"] == inv["totals"]["excluded_path_count"]
     assert index["helper_count"] == helpers["totals"]["helper_count"]
     assert index["duplicate_group_count"] == groups["totals"]["duplicate_group_count"]
-    assert (
-        index["exact_duplicate_group_count"]
-        == groups["totals"]["exact_duplicate_group_count"]
-    )
-    assert (
-        index["exact_duplicate_helper_count"]
-        == groups["totals"]["exact_duplicate_helper_count"]
-    )
-    assert (
-        index["core_public_symbol_count"]
-        == usage["totals"]["core_public_symbol_count"]
-    )
+    assert index["exact_duplicate_group_count"] == groups["totals"]["exact_duplicate_group_count"]
+    assert index["exact_duplicate_helper_count"] == groups["totals"]["exact_duplicate_helper_count"]
+    assert index["core_public_symbol_count"] == usage["totals"]["core_public_symbol_count"]
     assert index["candidate_count"] == cands["totals"]["candidate_count"]
-    assert (
-        index["wave_1_candidate_count"]
-        == cands["totals"]["wave_1_candidate_count"]
-    )
+    assert index["wave_1_candidate_count"] == cands["totals"]["wave_1_candidate_count"]
 
 
 # ---------------------------------------------------------------------------
@@ -137,9 +125,7 @@ def _file_helpers(path: str) -> set[tuple[str, int]]:
                 visit(stmt, qual)
             return
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            qual = (
-                f"{parent}.{node.name}" if parent else node.name
-            )
+            qual = f"{parent}.{node.name}" if parent else node.name
             out.add((qual, node.lineno))
             for stmt in node.body:
                 visit(stmt, qual)
@@ -160,9 +146,7 @@ def test_every_helper_resolves_to_real_ast_node(audit: dict) -> None:
     for h in audit["helpers"]["helpers"]:
         path = h["path"]
         key = (h["qualname"], h["line"])
-        assert key in by_path.get(path, set()), (
-            f"helper {key!r} not found in {path}"
-        )
+        assert key in by_path.get(path, set()), f"helper {key!r} not found in {path}"
 
 
 # ---------------------------------------------------------------------------
@@ -173,9 +157,7 @@ def test_every_helper_resolves_to_real_ast_node(audit: dict) -> None:
 def test_every_group_member_is_in_helpers(audit: dict) -> None:
     from scripts.verifiers_audit.discovery import discover_helpers
 
-    shard_keys = {
-        (h["path"], h["qualname"]) for h in audit["helpers"]["helpers"]
-    }
+    shard_keys = {(h["path"], h["qualname"]) for h in audit["helpers"]["helpers"]}
     all_helpers = discover_helpers(audit["inventory"]["included_paths"])
     all_keys = {(h.path, h.qualname) for h in all_helpers}
     for g in audit["groups"]["groups"]:
@@ -183,9 +165,7 @@ def test_every_group_member_is_in_helpers(audit: dict) -> None:
             path, _, qualname = member.partition(":")
             in_shard = (path, qualname) in shard_keys
             in_full = (path, qualname) in all_keys
-            assert in_shard or in_full, (
-                f"group {g['group_id']} member {member!r} not in helpers"
-            )
+            assert in_shard or in_full, f"group {g['group_id']} member {member!r} not in helpers"
 
 
 # ---------------------------------------------------------------------------
@@ -258,9 +238,7 @@ def test_consumer_count_is_real_ast_count(audit: dict) -> None:
     tracked = audit["inventory"]["included_paths"]
     tests = discover_test_paths()
     symbols = core_public_symbols()
-    symbol_modules = {
-        c["symbol"]: c["module"] for c in usage["consumers"]
-    }
+    symbol_modules = {c["symbol"]: c["module"] for c in usage["consumers"]}
     fresh = build_consumer_map(symbols, symbol_modules, tracked, tests)
     by_symbol = {c.symbol: c for c in fresh}
     for c in usage["consumers"]:
@@ -278,66 +256,52 @@ def test_consumer_count_is_real_ast_count(audit: dict) -> None:
 _R2_CASES: tuple[tuple[str, str, frozenset[str]], ...] = (
     (
         "direct_import",
-        "from scripts.verifiers.verifier_core import read_source\n"
-        "def f(p):\n    return read_source(p)\n",
+        "from scripts.verifiers.verifier_core import read_source\ndef f(p):\n    return read_source(p)\n",
         frozenset({"read_source"}),
     ),
     (
         "aliased_direct_import",
-        "from scripts.verifiers.verifier_core import "
-        "SourceLocation as CoreLocation\n"
-        "def f():\n    return CoreLocation(1, 2)\n",
+        "from scripts.verifiers.verifier_core import SourceLocation as CoreLocation\ndef f():\n    return CoreLocation(1, 2)\n",
         frozenset({"SourceLocation"}),
     ),
     (
         "qualified_import",
-        "import scripts.verifiers.verifier_core as vc\n"
-        "def f(p):\n    return vc.read_source(p)\n",
+        "import scripts.verifiers.verifier_core as vc\ndef f(p):\n    return vc.read_source(p)\n",
         frozenset({"read_source"}),
     ),
     (
         "aliased_qualified_import",
-        "import scripts.verifiers.verifier_core as core\n"
-        "def f(p):\n    return core.parse_path(p)\n",
+        "import scripts.verifiers.verifier_core as core\ndef f(p):\n    return core.parse_path(p)\n",
         frozenset({"parse_path"}),
     ),
     (
         "module_import_reexport",
-        "from scripts.verifiers import verifier_core\n"
-        "def f(p):\n    return verifier_core.read_source(p)\n",
+        "from scripts.verifiers import verifier_core\ndef f(p):\n    return verifier_core.read_source(p)\n",
         frozenset({"read_source"}),
     ),
     (
         "module_import_reexport_multi_use",
-        "from scripts.verifiers import verifier_core\n"
-        "def f(p):\n    verifier_core.read_source(p)\n"
-        "def g(p):\n    verifier_core.parse_path(p)\n",
+        "from scripts.verifiers import verifier_core\ndef f(p):\n    verifier_core.read_source(p)\ndef g(p):\n    verifier_core.parse_path(p)\n",
         frozenset({"read_source", "parse_path"}),
     ),
     (
         "submodule_direct_import",
-        "from scripts.verifiers.verifier_core.diagnostics import "
-        "SourceLocation\n"
-        "def f():\n    return SourceLocation(1, 2)\n",
+        "from scripts.verifiers.verifier_core.diagnostics import SourceLocation\ndef f():\n    return SourceLocation(1, 2)\n",
         frozenset({"SourceLocation"}),
     ),
     (
         "submodule_aliased_import",
-        "from scripts.verifiers.verifier_core.diagnostics import "
-        "SourceLocation as SL\n"
-        "def f():\n    return SL(1, 2)\n",
+        "from scripts.verifiers.verifier_core.diagnostics import SourceLocation as SL\ndef f():\n    return SL(1, 2)\n",
         frozenset({"SourceLocation"}),
     ),
     (
         "local_same_name_definition",
-        "class SourceLocation:\n    pass\n"
-        "def f():\n    return SourceLocation()\n",
+        "class SourceLocation:\n    pass\ndef f():\n    return SourceLocation()\n",
         frozenset(),
     ),
     (
         "unrelated_same_name_import",
-        "from another_package import read_source\n"
-        "def f(p):\n    return read_source(p)\n",
+        "from another_package import read_source\ndef f(p):\n    return read_source(p)\n",
         frozenset(),
     ),
     (
@@ -347,14 +311,12 @@ _R2_CASES: tuple[tuple[str, str, frozenset[str]], ...] = (
     ),
     (
         "comment_only_occurrence",
-        "# verifier_core.read_source is great\n"
-        "x = 1\n",
+        "# verifier_core.read_source is great\nx = 1\n",
         frozenset(),
     ),
     (
         "reexport_without_use",
-        "from scripts.verifiers import verifier_core\n"
-        "x = 1\n",
+        "from scripts.verifiers import verifier_core\nx = 1\n",
         frozenset(),
     ),
 )
@@ -365,12 +327,9 @@ _R2_CASES: tuple[tuple[str, str, frozenset[str]], ...] = (
     _R2_CASES,
     ids=[c[0] for c in _R2_CASES],
 )
-def test_import_aware_resolution(label: str, source: str,
-                                 expected: frozenset[str]) -> None:
+def test_import_aware_resolution(label: str, source: str, expected: frozenset[str]) -> None:
     used = _source_core_uses(source)
-    assert used == expected, (
-        f"{label}: used={used!r} expected={expected!r}"
-    )
+    assert used == expected, f"{label}: used={used!r} expected={expected!r}"
 
 
 def test_consumer_count_json_md_progress_agree(audit: dict) -> None:
@@ -378,9 +337,7 @@ def test_consumer_count_json_md_progress_agree(audit: dict) -> None:
     index_total = audit["index"]["totals"]["production_consumer_count"]
     md = render_markdown(audit)
     assert json_total == index_total
-    assert (
-        f"| Symbols with a production consumer | {index_total} |" in md
-    ), md
+    assert f"| Symbols with a production consumer | {index_total} |" in md, md
 
 
 # ---------------------------------------------------------------------------
@@ -395,28 +352,42 @@ def test_index_and_shards_byte_identical_across_runs() -> None:
     a = build_audit_object({}, gate_classification=record)
     b = build_audit_object({}, gate_classification=record)
     assert a["index"] == b["index"]
-    for shard in SHARD_NAMES:
+    for shard in ALL_SHARDS:
         assert a[shard] == b[shard]
 
 
-def test_top_level_index_lists_required_shards(audit: dict) -> None:
-    from scripts.verifiers_audit.report_io import REPORT_ROOT
+def test_index_lists_every_required_shard(audit: dict) -> None:
+    """Every required shard is listed in the index with a valid path and hash."""
+    from scripts.verifiers_audit.report_io import (
+        REPORT_ROOT,
+        REQUIRED_SHARDS,
+    )
 
     shards = audit["index"]["shards"]
-    for name in SHARD_NAMES:
-        expected_path = str(
-            (REPORT_ROOT / f"{name}.json").relative_to(REPO_ROOT)
-        )
-        if name in shards:
-            assert shards[name]["path"] == expected_path
-        if shards:
-            assert "sha256" in shards[name]
-    assert set(SHARD_NAMES) == frozenset({
-        "inventory",
-        "helpers",
-        "groups",
-        "core_usage",
-        "candidates",
-        "source_preservation",
-        "gate_classification",
-    })
+    for name in REQUIRED_SHARDS:
+        assert name in shards, f"Required shard {name!r} is missing from index"
+        expected_path = str((REPORT_ROOT / f"{name}.json").relative_to(REPO_ROOT))
+        assert shards[name]["path"] == expected_path
+        assert "sha256" in shards[name]
+
+
+def test_required_and_optional_sets_are_disjoint(audit: dict) -> None:
+    """Required and optional shard sets are disjoint."""
+    from scripts.verifiers_audit.report_io import (
+        OPTIONAL_SHARDS,
+        REQUIRED_SHARDS,
+    )
+
+    overlap = set(REQUIRED_SHARDS) & set(OPTIONAL_SHARDS)
+    assert not overlap, f"Shard sets must be disjoint, but overlap: {overlap}"
+
+
+def test_all_shards_is_exact_union(audit: dict) -> None:
+    """ALL_SHARDS equals the union of required and optional shards."""
+    from scripts.verifiers_audit.report_io import (
+        ALL_SHARDS,
+        OPTIONAL_SHARDS,
+        REQUIRED_SHARDS,
+    )
+
+    assert set(ALL_SHARDS) == set(REQUIRED_SHARDS) | set(OPTIONAL_SHARDS)

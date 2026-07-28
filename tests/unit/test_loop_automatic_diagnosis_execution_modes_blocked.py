@@ -38,16 +38,11 @@ class TestExecuteHealthLoopRunBlockedPath:
     def test_blocked_helper_decision_is_blocked(self) -> None:
         """A contract error yields a blocked execution decision."""
         accumulator = self._accumulator_with_contract_error()
-        (
-            _,
-            _,
-            _,
-            _,
-            execution,
-        ) = _derive_automatic_diagnosis_inputs(accumulator)
-        assert execution.is_blocked
-        assert not execution.should_run
-        assert execution.blocked_reason == "promotion_consistency_contract_error"
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(accumulator)
+
+        assert diagnosis_inputs.execution.is_blocked
+        assert not diagnosis_inputs.execution.should_run
+        assert diagnosis_inputs.execution.blocked_reason == "promotion_consistency_contract_error"
 
     def test_blocked_branch_does_not_invoke_collector(self) -> None:
         """The real orchestration boundary must not call the collector."""
