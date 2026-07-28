@@ -180,7 +180,7 @@ def build_disabled_summary(projection: dict[str, Any]) -> dict[str, Any]:
 
 def build_no_trigger_summary(projection: dict[str, Any]) -> dict[str, Any]:
     """Build the result for an enabled loop with no trigger/authority.
-    
+
     This is the "no trigger" path where the integration is enabled but no
     promotion outcome or explicit authority was provided. The loop returns
     enabled=True with 0 incidents processed.
