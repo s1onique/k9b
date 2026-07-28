@@ -250,9 +250,13 @@ def test_executed_ruff_argv_matches_recorded_identity(
     hermetic_ruff_capability: HermeticRuffCapability,
     tmp_path: Path,
 ) -> None:
-    """The executed Ruff argv (when the range is non-empty
-    and the identity is resolved) matches the recorded
-    identity prefix."""
+    """The executed Ruff argv matches the recorded evidence.
+
+    Binds the actual script argv from the hermetic capability's log file
+    to the evidence argv written by the orchestrator. The evidence argv
+    includes the launcher prefix; the capability's log records the script's
+    perspective (with script path as argv[0]).
+    """
     from scripts.verifiers_audit.range_evidence import collect_range_evidence
 
     repo = tmp_path / "repo"
@@ -272,15 +276,33 @@ def test_executed_ruff_argv_matches_recorded_identity(
     if recorded_argv is None:
         # Empty range or unresolved identity; no executed argv.
         return
-    # The recorded argv's prefix equals the launcher prefix.
+
+    # Get the actual script argv from the hermetic capability's log file
+    actual_script_argv = hermetic_ruff_capability.get_recorded_argv()
+    assert actual_script_argv, "Hermetic capability should have recorded argv"
+
+    # The evidence argv starts with the launcher prefix (interpreter, script_path)
+    # The capability's log has script_path as argv[0], so capability[1:] = evidence suffix
     prefix = list(identities["launcher_argv_prefix"])
-    assert list(recorded_argv[: len(prefix)]) == prefix, f"recorded argv {recorded_argv} does not start with launcher prefix {prefix}"
-    # The argv[2:] suffix is the ruff paths (when the launcher
-    # is the standalone binary) or the suffix after the prefix
-    # is the ruff check invocation.  For the venv python -m
-    # ruff launcher, the structure is
-    # (python, -m, ruff, check, *paths).
-    assert "check" in recorded_argv
+    assert list(recorded_argv[: len(prefix)]) == prefix, (
+        f"recorded argv {recorded_argv} does not start with launcher prefix {prefix}"
+    )
+
+    # The argv must contain the check subcommand
+    assert "check" in recorded_argv, "argv must contain 'check' subcommand"
+
+    # The evidence argv suffix (after prefix) must match the capability's argv[1:]
+    evidence_suffix = tuple(recorded_argv[len(prefix):])
+    capability_suffix = tuple(actual_script_argv[1:])  # Skip script_path in log
+    assert evidence_suffix == capability_suffix, (
+        f"Evidence argv suffix {evidence_suffix!r} != capability argv[1:] {capability_suffix!r}"
+    )
+
+    # Verify the script path matches what was used
+    script_path_in_argv = recorded_argv[1]  # argv[0] is interpreter, argv[1] is script
+    assert script_path_in_argv == str(hermetic_ruff_capability.script_path), (
+        f"Script path in argv {script_path_in_argv!r} != expected {hermetic_ruff_capability.script_path!r}"
+    )
 
 
 # ---------------------------------------------------------------------------

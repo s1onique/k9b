@@ -72,11 +72,17 @@ class StagedManifestMismatch:
     missing: tuple[str, ...] = field(default_factory=tuple)
     extra: tuple[str, ...] = field(default_factory=tuple)
     unstaged: tuple[str, ...] = field(default_factory=tuple)
+    duplicate_manifest_paths: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def is_valid(self) -> bool:
         """Return True only when the staged state matches the manifest exactly."""
-        return not self.missing and not self.extra and not self.unstaged
+        return (
+            not self.missing
+            and not self.extra
+            and not self.unstaged
+            and not self.duplicate_manifest_paths
+        )
 
     def __str__(self) -> str:
         """Return a deterministic diagnostic string."""
@@ -87,6 +93,8 @@ class StagedManifestMismatch:
             parts.append(f"extra={sorted(self.extra)!r}")
         if self.unstaged:
             parts.append(f"unstaged={sorted(self.unstaged)!r}")
+        if self.duplicate_manifest_paths:
+            parts.append(f"duplicates={sorted(self.duplicate_manifest_paths)!r}")
         return ", ".join(parts) if parts else "valid"
 
 
@@ -106,15 +114,25 @@ def compare_staged_manifest(
         unstaged_paths: Paths with unstaged modifications.
 
     Returns:
-        StagedManifestMismatch with is_valid=True when all three
-        conditions hold:
+        StagedManifestMismatch with is_valid=True when all conditions hold:
         - Every manifest path is staged (missing == empty)
         - Every staged path is in the manifest (extra == empty)
         - No manifest path has an unstaged delta (unstaged == empty)
+        - No duplicate entries in manifest (duplicate_manifest_paths == empty)
     """
-    manifest_set = set(manifest_paths)
+    manifest_list = list(manifest_paths)
+    manifest_set = set(manifest_list)
     staged_set = set(staged_paths)
     unstaged_set = set(unstaged_paths)
+
+    # Detect duplicates in the manifest itself
+    seen: set[str] = set()
+    duplicate_manifest_paths: list[str] = []
+    for path in manifest_list:
+        if path in seen:
+            duplicate_manifest_paths.append(path)
+        seen.add(path)
+    duplicate_manifest_paths_tuple = tuple(sorted(duplicate_manifest_paths))
 
     # Missing: manifest paths not staged
     missing = tuple(sorted(manifest_set - staged_set))
@@ -129,6 +147,7 @@ def compare_staged_manifest(
         missing=missing,
         extra=extra,
         unstaged=unstaged,
+        duplicate_manifest_paths=duplicate_manifest_paths_tuple,
     )
 
 
@@ -204,17 +223,19 @@ class TemporaryStagedRepo:
             _git(self.repo, "reset", "HEAD", "--", path)
 
     def get_staged_paths(self) -> set[str]:
-        """Return the set of currently staged paths."""
-        result = _git(self.repo, "diff", "--cached", "--name-only", check=False)
-        if result.returncode != 0:
-            return set()
+        """Return the set of currently staged paths.
+        
+        Fails closed: raises RuntimeError on Git command failure.
+        """
+        result = _git(self.repo, "diff", "--cached", "--name-only")
         return {line.strip() for line in result.stdout.splitlines() if line.strip()}
 
     def get_unstaged_paths(self) -> set[str]:
-        """Return the set of paths with unstaged modifications."""
-        result = _git(self.repo, "diff", "--name-only", check=False)
-        if result.returncode != 0:
-            return set()
+        """Return the set of paths with unstaged modifications.
+        
+        Fails closed: raises RuntimeError on Git command failure.
+        """
+        result = _git(self.repo, "diff", "--name-only")
         return {line.strip() for line in result.stdout.splitlines() if line.strip()}
 
     def modify_file(self, rel_path: str, content: str) -> None:
@@ -414,3 +435,45 @@ def test_deterministic_diagnostic_ordering(staged_repo: TemporaryStagedRepo) -> 
     # Verify deterministic ordering
     assert mismatch.extra == tuple(sorted(["aaa_extra.txt", "zzz_extra.txt"]))
     assert mismatch.missing == tuple(sorted([CORE01_MANIFEST[0], CORE01_MANIFEST[1]]))
+
+
+def test_duplicate_manifest_entry_is_rejected() -> None:
+    """A duplicate entry in the manifest causes validation to fail.
+
+    CORRECTION27: Duplicate detection is now part of the validator.
+    """
+    manifest_with_dup = (
+        CORE01_MANIFEST[0],
+        CORE01_MANIFEST[1],
+        CORE01_MANIFEST[0],  # duplicate
+    )
+    mismatch = compare_staged_manifest(
+        manifest_paths=manifest_with_dup,
+        staged_paths=manifest_with_dup,
+        unstaged_paths=(),
+    )
+
+    assert not mismatch.is_valid, "Validator should reject duplicate manifest entry"
+    assert CORE01_MANIFEST[0] in mismatch.duplicate_manifest_paths
+
+
+def test_multiple_duplicate_entries_rejected() -> None:
+    """Multiple duplicate entries in the manifest are all detected.
+
+    CORRECTION27: All duplicates are detected and reported.
+    """
+    manifest_with_dups = (
+        CORE01_MANIFEST[0],
+        CORE01_MANIFEST[1],
+        CORE01_MANIFEST[0],  # duplicate of [0]
+        CORE01_MANIFEST[1],  # duplicate of [1]
+    )
+    mismatch = compare_staged_manifest(
+        manifest_paths=manifest_with_dups,
+        staged_paths=manifest_with_dups,
+        unstaged_paths=(),
+    )
+
+    assert not mismatch.is_valid, "Validator should reject all duplicates"
+    assert CORE01_MANIFEST[0] in mismatch.duplicate_manifest_paths
+    assert CORE01_MANIFEST[1] in mismatch.duplicate_manifest_paths

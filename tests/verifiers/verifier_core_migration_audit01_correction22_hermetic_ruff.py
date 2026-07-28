@@ -193,11 +193,11 @@ def install_hermetic_ruff_resolver(
 ) -> None:
     """Install hermetic Ruff resolver via monkeypatch.
 
-    Patches resolve_ruff_identity at the identity module where it is defined.
-    This is the single authoritative seam for resolver injection.
-    The orchestrator also imports the function, so we patch both.
+    Patches the local resolver binding in the orchestrator module, which is
+    where collect_range_evidence() performs its runtime lookup. The identity
+    module's definition is not patched because the orchestrator's local binding
+    shadows it at import time.
     """
-    import scripts.verifiers_audit.range_evidence_identity as identity_module
     import scripts.verifiers_audit.range_evidence_orchestrator as orchestrator_module
 
     def hermetic_resolve(*, repo_root: Path, python_paths: tuple[str, ...] = ()):
@@ -213,6 +213,5 @@ def install_hermetic_ruff_resolver(
             }
         return capability.get_identity()
 
-    # Patch both the identity module (where it's defined) and orchestrator (local binding)
-    monkeypatch.setattr(identity_module, "resolve_ruff_identity", hermetic_resolve)
+    # Patch the orchestrator's local binding (the only runtime lookup owner)
     monkeypatch.setattr(orchestrator_module, "resolve_ruff_identity", hermetic_resolve)
