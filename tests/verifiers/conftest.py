@@ -77,7 +77,7 @@ def hermetic_ruff_capability(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Inject a hermetic Ruff capability into the evidence orchestrator.
-    
+
     Patches resolve_ruff_identity using monkeypatch at the source module
     (identity module). This is the single authoritative seam for resolver
     injection. The orchestrator's local binding is also patched to ensure
@@ -109,20 +109,3 @@ def hermetic_ruff_capability(
     monkeypatch.setattr(identity_module, "resolve_ruff_identity", hermetic_resolve)
     monkeypatch.setattr(orchestrator_module, "resolve_ruff_identity", hermetic_resolve)
     return capability
-
-
-
-def test_hermetic_ruff_capability_fixture_teardown() -> None:
-    """Prove the fixture teardown restores the original resolver.
-    
-    After a fixture-using test runs, the resolver must be restored.
-    This test runs after fixture-using tests (pytest collects in file order,
-    but fixture teardown happens per-test).
-    """
-    import scripts.verifiers_audit.range_evidence_identity as identity_module
-    from scripts.verifiers_audit.range_evidence_identity import resolve_ruff_identity as production_resolver
-
-    # The resolver should be the production resolver, not the hermetic one
-    assert identity_module.resolve_ruff_identity is production_resolver, (
-        "Fixture did not restore the original resolver after teardown"
-    )
