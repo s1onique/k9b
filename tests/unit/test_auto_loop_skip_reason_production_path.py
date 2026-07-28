@@ -152,6 +152,7 @@ class TestThirtySkippedProductionPath:
         result = run_automatic_diagnosis_loop(
             external_analysis_dir=temp_external_dir,
             scheduler_run_id=scheduler_run_id,
+            incident_selection_mode="store_scan",
         )
 
         # Validate wrapper result shape
@@ -224,6 +225,7 @@ class TestExactlyOnceEmission:
         run_automatic_diagnosis_loop(
             external_analysis_dir=temp_external_dir,
             scheduler_run_id="health-run-x",
+            incident_selection_mode="store_scan",
         )
 
         aggregate_lines = [
@@ -259,6 +261,7 @@ class TestExactlyOnceEmission:
         run_automatic_diagnosis_loop(
             external_analysis_dir=temp_external_dir,
             scheduler_run_id="health-run-y",
+            incident_selection_mode="store_scan",
         )
 
         per_incident = [
@@ -293,6 +296,7 @@ class TestExactlyOnceEmission:
         result = run_automatic_diagnosis_loop(
             external_analysis_dir=temp_external_dir,
             scheduler_run_id="health-run-z",
+            incident_selection_mode="store_scan",
         )
         assert result["automatic_diagnosis_enabled"] is False
 
@@ -345,6 +349,7 @@ class TestFormatterContract:
             run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 scheduler_run_id="health-run-formatter",
+                incident_selection_mode="store_scan",
             )
             captured_text = buffer.getvalue()
         finally:
@@ -418,6 +423,7 @@ class TestArtifactLogParity:
             external_analysis_dir=temp_external_dir,
             log_event_fn=fake_log_event,
             scheduler_run_id="health-run-parity",
+            incident_selection_mode="store_scan",
         )
 
         # Read the artifact from the directory.
@@ -437,6 +443,7 @@ class TestArtifactLogParity:
             run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 scheduler_run_id="health-run-parity-2",
+                incident_selection_mode="store_scan",
             )
             captured_text = buffer.getvalue()
         finally:

@@ -113,6 +113,7 @@ class TestEligibleWithDownstreamError:
             external_analysis_dir=temp_external_dir,
             log_event_fn=fake_log_event,
             scheduler_run_id="health-run-exec-error",
+            incident_selection_mode="store_scan",
         )
 
         # 1. Wrapper result.
@@ -165,6 +166,7 @@ class TestEligibleWithDownstreamError:
             run_automatic_diagnosis_loop(
                 external_analysis_dir=temp_external_dir,
                 scheduler_run_id="health-run-exec-error-2",
+                incident_selection_mode="store_scan",
             )
             text = buffer.getvalue()
         finally:
