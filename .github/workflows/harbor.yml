@@ -266,6 +266,7 @@ jobs:
     secrets:
       HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
       HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
 
   frontend:
     needs:
@@ -287,3 +288,4 @@ jobs:
     secrets:
       HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
       HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}

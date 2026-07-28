@@ -59,10 +59,10 @@ on:
       HARBOR_TOKEN:
         required: false
         description: "Harbor token for write operations"
-      # CA certificate - optional; if not provided, assumes DinD/ARC sidecar mounts CA
+      # CA certificate - required; forwarded from caller secret
       SPBNIX_CA_CERT_PEM:
-        required: false
-        description: "SPbNIX CA certificate in PEM format for Harbor TLS (optional if sidecar mounts)"
+        required: true
+        description: "SPbNIX CA certificate in PEM format for Harbor TLS trust"
 
 jobs:
   build:
