@@ -356,24 +356,38 @@ def test_index_and_shards_byte_identical_across_runs() -> None:
         assert a[shard] == b[shard]
 
 
-def test_top_level_index_lists_required_shards(audit: dict) -> None:
-    from scripts.verifiers_audit.report_io import REPORT_ROOT
+def test_index_lists_every_required_shard(audit: dict) -> None:
+    """Every required shard is listed in the index with a valid path and hash."""
+    from scripts.verifiers_audit.report_io import (
+        REPORT_ROOT,
+        REQUIRED_SHARDS,
+    )
 
     shards = audit["index"]["shards"]
-    for name in ALL_SHARDS:
+    for name in REQUIRED_SHARDS:
+        assert name in shards, f"Required shard {name!r} is missing from index"
         expected_path = str((REPORT_ROOT / f"{name}.json").relative_to(REPO_ROOT))
-        if name in shards:
-            assert shards[name]["path"] == expected_path
-        if shards:
-            assert "sha256" in shards[name]
-    assert set(ALL_SHARDS) == frozenset(
-        {
-            "inventory",
-            "helpers",
-            "groups",
-            "core_usage",
-            "candidates",
-            "source_preservation",
-            "gate_classification",
-        }
+        assert shards[name]["path"] == expected_path
+        assert "sha256" in shards[name]
+
+
+def test_required_and_optional_sets_are_disjoint(audit: dict) -> None:
+    """Required and optional shard sets are disjoint."""
+    from scripts.verifiers_audit.report_io import (
+        OPTIONAL_SHARDS,
+        REQUIRED_SHARDS,
     )
+
+    overlap = set(REQUIRED_SHARDS) & set(OPTIONAL_SHARDS)
+    assert not overlap, f"Shard sets must be disjoint, but overlap: {overlap}"
+
+
+def test_all_shards_is_exact_union(audit: dict) -> None:
+    """ALL_SHARDS equals the union of required and optional shards."""
+    from scripts.verifiers_audit.report_io import (
+        ALL_SHARDS,
+        OPTIONAL_SHARDS,
+        REQUIRED_SHARDS,
+    )
+
+    assert set(ALL_SHARDS) == set(REQUIRED_SHARDS) | set(OPTIONAL_SHARDS)
