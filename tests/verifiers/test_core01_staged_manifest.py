@@ -71,19 +71,31 @@ def test_manifest_has_no_duplicates() -> None:
     assert len(CORE01_MANIFEST) == len(set(CORE01_MANIFEST)), f"CORE01 manifest has duplicate entries: {CORE01_MANIFEST!r}"
 
 
-def test_staged_paths_match_manifest() -> None:
-    """Every CORE01 manifest path must exist in the repository.
+def _get_staged_paths() -> set[str]:
+    """Return the set of currently staged paths in the repository."""
+    staged_diff = _git("diff", "--cached", "--name-only")
+    return {line.strip() for line in staged_diff.splitlines() if line.strip()}
 
-    CORRECTION14: This test no longer requires files to be staged in
-    the working tree. CI checkouts are clean and do not have staged
-    changes. Instead, we verify that every path in the manifest exists
-    somewhere in the repository history (was committed at some point).
+
+def test_staged_paths_match_manifest() -> None:
+    """Every CORE01 manifest path must be staged in the working tree.
+
+    The CORE01 ACT closure requires that all manifest paths are
+    staged together. This test verifies:
+    - Every manifest path is staged (no missing paths)
+    - Every staged path is in the manifest (no extra paths)
+    - No CORE01 path has an unstaged delta
     """
-    manifest = sorted(CORE01_MANIFEST)
-    for path in manifest:
-        # Verify the path exists relative to repo root
-        full_path = REPO_ROOT / path
-        assert full_path.exists(), f"CORE01 manifest path does not exist: {path}"
+    manifest = set(CORE01_MANIFEST)
+    staged = _get_staged_paths()
+
+    # Missing: staged paths that are not in the manifest
+    extra = staged - manifest
+    assert not extra, f"Extra staged paths not in CORE01 manifest: {sorted(extra)!r}"
+
+    # Missing: manifest paths not staged
+    missing = manifest - staged
+    assert not missing, f"Missing CORE01 manifest paths (not staged): {sorted(missing)!r}"
 
 
 def test_no_core01_path_has_an_unstaged_delta() -> None:
