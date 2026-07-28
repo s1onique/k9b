@@ -535,6 +535,178 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
         assert kwargs["incident_ids"] == ["incident-1"]
 
 
+class TestBuildDiagnosisSelectionForExecution:
+    """CORRECTION08: Validate outcome.diagnosis_incident_ids is sole ID authority.
+
+    The _build_diagnosis_selection_for_execution function MUST validate that
+    promotion_outcome.diagnosis_incident_ids matches the canonical_incident_ids
+    from the accumulator. A mismatch raises PromotionConsistencyContractError.
+    """
+
+    def test_mismatch_raises_consistency_contract_error(self) -> None:
+        """CORRECTION08 decisive mismatch test.
+
+        When canonical_incident_ids=["inc-a"] but outcome.diagnosis_incident_ids=["inc-b"],
+        _build_diagnosis_selection_for_execution MUST raise PromotionConsistencyContractError.
+        The diagnosis loop must NOT be invoked (diagnosis_called=False).
+        """
+        from k8s_diag_agent.collect.incident_identity_hardening import (
+            PromotionConsistencyContractError,
+        )
+        from k8s_diag_agent.collect.promotion_outcomes import (
+            PromotionSucceeded,
+        )
+        from k8s_diag_agent.health.loop_runner_execute import (
+            INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
+            AutomaticDiagnosisExecution,
+            _build_diagnosis_selection_for_execution,
+        )
+
+        # canonical_incident_ids from accumulator: ["inc-a"]
+        # outcome.diagnosis_incident_ids from promotion: ["inc-b"]
+        # These MUST mismatch!
+        canonical_ids = ["inc-a"]
+        outcome = PromotionSucceeded(
+            run_id="test-run",
+            requested_signal_ids=(),
+            records=(),
+            diagnosis_incident_ids=("inc-b",),  # Different from canonical_ids!
+        )
+        execution = AutomaticDiagnosisExecution(
+            should_run=True,
+            selection_mode=INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
+            incident_access_mode="backend",
+        )
+
+        # CORRECTION08: Must raise PromotionConsistencyContractError
+        with pytest.raises(PromotionConsistencyContractError) as exc_info:
+            _build_diagnosis_selection_for_execution(
+                automatic_diagnosis_execution=execution,
+                promotion_outcome=outcome,
+                canonical_incident_ids=canonical_ids,
+                scheduler_run_id="test-run",
+            )
+
+        # Error message must identify the mismatch
+        assert "SOLE ID AUTHORITY violation" in str(exc_info.value)
+        assert "inc-a" in str(exc_info.value)
+        assert "inc-b" in str(exc_info.value)
+
+    def test_matching_ids_succeeds(self) -> None:
+        """CORRECTION08: Matching IDs pass validation."""
+        from k8s_diag_agent.collect.diagnosis_selection import (
+            DiagnosisSelectionFromPromotion,
+        )
+        from k8s_diag_agent.collect.promotion_outcomes import (
+            PromotionSucceeded,
+        )
+        from k8s_diag_agent.health.loop_runner_execute import (
+            INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
+            AutomaticDiagnosisExecution,
+            _build_diagnosis_selection_for_execution,
+        )
+
+        canonical_ids = ["inc-a", "inc-b"]
+        outcome = PromotionSucceeded(
+            run_id="test-run",
+            requested_signal_ids=(),
+            records=(),
+            diagnosis_incident_ids=("inc-a", "inc-b"),
+        )
+        execution = AutomaticDiagnosisExecution(
+            should_run=True,
+            selection_mode=INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
+            incident_access_mode="backend",
+        )
+
+        # CORRECTION08: Matching IDs must succeed
+        result = _build_diagnosis_selection_for_execution(
+            automatic_diagnosis_execution=execution,
+            promotion_outcome=outcome,
+            canonical_incident_ids=canonical_ids,
+            scheduler_run_id="test-run",
+        )
+
+        assert isinstance(result, DiagnosisSelectionFromPromotion)
+        assert result.promotion_run_id == "test-run"
+        assert result.incident_ids == ("inc-a", "inc-b")
+
+    def test_current_run_empty_requires_empty_outcome_ids(self) -> None:
+        """CORRECTION08: current_run_empty mode requires empty diagnosis_incident_ids."""
+        from k8s_diag_agent.collect.incident_identity_hardening import (
+            PromotionConsistencyContractError,
+        )
+        from k8s_diag_agent.collect.promotion_outcomes import (
+            PromotionSucceeded,
+        )
+        from k8s_diag_agent.health.loop_runner_execute import (
+            INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
+            AutomaticDiagnosisExecution,
+            _build_diagnosis_selection_for_execution,
+        )
+
+        # current_run_empty mode with non-empty outcome IDs MUST fail
+        outcome = PromotionSucceeded(
+            run_id="test-run",
+            requested_signal_ids=(),
+            records=(),
+            diagnosis_incident_ids=("inc-a",),  # Non-empty when should be empty!
+        )
+        execution = AutomaticDiagnosisExecution(
+            should_run=False,
+            selection_mode=INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
+            incident_access_mode="backend",
+        )
+
+        # CORRECTION08: Must raise PromotionConsistencyContractError
+        with pytest.raises(PromotionConsistencyContractError) as exc_info:
+            _build_diagnosis_selection_for_execution(
+                automatic_diagnosis_execution=execution,
+                promotion_outcome=outcome,
+                canonical_incident_ids=[],  # Empty accumulator
+                scheduler_run_id="test-run",
+            )
+
+        assert "SOLE ID AUTHORITY violation" in str(exc_info.value)
+        assert "current_run_empty" in str(exc_info.value)
+
+    def test_current_run_empty_with_empty_ids_succeeds(self) -> None:
+        """CORRECTION08: current_run_empty with empty outcome IDs passes."""
+        from k8s_diag_agent.collect.diagnosis_selection import (
+            DiagnosisSelectionFromPromotion,
+        )
+        from k8s_diag_agent.collect.promotion_outcomes import (
+            PromotionSucceeded,
+        )
+        from k8s_diag_agent.health.loop_runner_execute import (
+            INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
+            AutomaticDiagnosisExecution,
+            _build_diagnosis_selection_for_execution,
+        )
+
+        outcome = PromotionSucceeded(
+            run_id="test-run",
+            requested_signal_ids=(),
+            records=(),
+            diagnosis_incident_ids=(),  # Empty - correct for current_run_empty
+        )
+        execution = AutomaticDiagnosisExecution(
+            should_run=False,
+            selection_mode=INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
+            incident_access_mode="local",
+        )
+
+        result = _build_diagnosis_selection_for_execution(
+            automatic_diagnosis_execution=execution,
+            promotion_outcome=outcome,
+            canonical_incident_ids=[],
+            scheduler_run_id="test-run",
+        )
+
+        assert isinstance(result, DiagnosisSelectionFromPromotion)
+        assert result.incident_ids == ()
+
+
 class TestBackendEndpointIdentityNoCredentials:
     def test_payload_omits_bearer_token_and_secret(self) -> None:
         os.environ["K9B_BACKEND_INTERNAL_URL"] = "https://backend:8443"

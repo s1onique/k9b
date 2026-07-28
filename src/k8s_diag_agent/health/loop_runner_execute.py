@@ -857,7 +857,7 @@ def _build_diagnosis_selection_for_execution(
             )
         return DiagnosisSelectionUnavailable(outcome=promotion_outcome)
 
-    # explicit_incident_ids or current_run_empty: require PromotionSucceeded
+        # explicit_incident_ids or current_run_empty: require PromotionSucceeded
     if selection_mode in (
         INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
         INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
@@ -873,21 +873,43 @@ def _build_diagnosis_selection_for_execution(
                 f"got {type(promotion_outcome).__name__}"
             )
 
-        # Validate run identity matches
+        # CORRECTION08: Validate run identity matches
         if promotion_outcome.run_id != scheduler_run_id:
             raise ValueError(
                 f"promotion_outcome.run_id={promotion_outcome.run_id!r} "
                 f"does not match scheduler_run_id={scheduler_run_id!r}"
             )
 
+        # CORRECTION08: Validate outcome.diagnosis_incident_ids matches canonical_ids
+        # This is the SOLE ID AUTHORITY validation - the outcome's IDs must match
+        # the accumulator's canonical IDs exactly.
+        outcome_ids = promotion_outcome.diagnosis_incident_ids
         if selection_mode == INCIDENT_SELECTION_MODE_EXPLICIT_IDS:
-            # Use the exact canonical IDs from the accumulator (preserves order)
+            # explicit_ids mode: outcome must have the same IDs as canonical_incident_ids
+            if tuple(canonical_incident_ids) != outcome_ids:
+                raise PromotionConsistencyContractError(
+                    f"DiagnosisSelection SOLE ID AUTHORITY violation: "
+                    f"canonical_incident_ids={canonical_incident_ids} does not match "
+                    f"promotion_outcome.diagnosis_incident_ids={list(outcome_ids)}",
+                    promotion_record_count=len(canonical_incident_ids),
+                    opened_incidents=len([i for i in canonical_incident_ids if i in outcome_ids]),
+                    updated_incidents=0,
+                )
             return DiagnosisSelectionFromPromotion(
                 promotion_run_id=scheduler_run_id,
                 incident_ids=tuple(canonical_incident_ids),
             )
         else:
-            # current_run_empty: authoritative zero-work
+            # current_run_empty mode: outcome must have empty IDs
+            if outcome_ids != ():
+                raise PromotionConsistencyContractError(
+                    f"DiagnosisSelection SOLE ID AUTHORITY violation: "
+                    f"selection_mode=current_run_empty requires empty diagnosis_incident_ids, "
+                    f"got {list(outcome_ids)}",
+                    promotion_record_count=0,
+                    opened_incidents=0,
+                    updated_incidents=0,
+                )
             return DiagnosisSelectionFromPromotion(
                 promotion_run_id=scheduler_run_id,
                 incident_ids=(),
