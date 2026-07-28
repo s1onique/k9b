@@ -75,9 +75,7 @@ from k8s_diag_agent.ui.server_incident_internal_models import (
 # ---------------------------------------------------------------------------
 
 
-def _incident(
-    incident_id: str, status: IncidentStatus = IncidentStatus.OPEN
-) -> Incident:
+def _incident(incident_id: str, status: IncidentStatus = IncidentStatus.OPEN) -> Incident:
     """Build a minimal Incident record for tests."""
     first = datetime(2026, 7, 10, 12, 0, 0, tzinfo=UTC)
     last = datetime(2026, 7, 10, 13, 0, 0, tzinfo=UTC)
@@ -156,12 +154,10 @@ class TestDeriveAutomaticDiagnosisInputs:
         )
 
         accumulator = RunPromotionAccumulator()
-        canonical_ids, summary, consistency, endpoint, _execution, _promotion_outcome = (
-            _derive_automatic_diagnosis_inputs(accumulator)
-        )
-        assert canonical_ids == []
-        assert summary["promotion_records"] == []
-        assert consistency is None
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(accumulator)
+        assert diagnosis_inputs.canonical_incident_ids == ()
+        assert diagnosis_inputs.promotion_result_summary["promotion_records"] == []
+        assert diagnosis_inputs.promotion_consistency_error is None
 
     def test_promotion_records_become_canonical_ids(self) -> None:
         # R2: ``_derive_automatic_diagnosis_inputs`` consumes a typed
@@ -232,12 +228,10 @@ class TestDeriveAutomaticDiagnosisInputs:
         # batches. We still rely on the upstream patches to seed the
         # accumulator with backend-mode promotion_records, so the
         # derived summary respects that mode verbatim.
-        canonical_ids, summary, _consistency, _backend, _execution, _promotion_outcome = (
-            _derive_automatic_diagnosis_inputs(accumulator)
-        )
-        assert canonical_ids == ["incident-1", "incident-2"]
-        assert summary["unique_candidate_count"] == 2
-        assert summary["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(accumulator)
+        assert diagnosis_inputs.canonical_incident_ids == ("incident-1", "incident-2")
+        assert diagnosis_inputs.promotion_result_summary["unique_candidate_count"] == 2
+        assert diagnosis_inputs.promotion_result_summary["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
 
 
 class TestRunAutomaticDiagnosisLoopCanonicalIDs:
@@ -324,12 +318,8 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
             AmbiguousDiagnosisSelectionError,
         )
 
-        from_promotion = DiagnosisSelectionFromPromotion(
-            promotion_run_id="run", incident_ids=()
-        )
-        without_promotion = DiagnosisSelectionWithoutPromotion(
-            reason=NoPromotionSelectionReason.SCHEDULED_SCAN_RUN
-        )
+        from_promotion = DiagnosisSelectionFromPromotion(promotion_run_id="run", incident_ids=())
+        without_promotion = DiagnosisSelectionWithoutPromotion(reason=NoPromotionSelectionReason.SCHEDULED_SCAN_RUN)
         commit_unknown = PromotionCommitUnknown(
             run_id="run",
             reason=PromotionUncertaintyCode.AMBIGUOUS_RESPONSE,
@@ -458,9 +448,7 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
         assert exc_info.value.expected_run_id == "run-B"
         assert exc_info.value.actual_run_id == "run-A"
 
-    def test_completion_emits_consistency_propagation_metadata(
-        self, tmp_path: Path
-    ) -> None:
+    def test_completion_emits_consistency_propagation_metadata(self, tmp_path: Path) -> None:
         # Patch the gate to deterministically enable the loop regardless
         # of the deployment env. This pins the test to "scheduler says
         # run" without depending on cluster state.
@@ -481,12 +469,13 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
             ],
         }
 
-        with patch(
-            "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
-            return_value=True,
-        ), patch(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop.run_automatic_diagnosis_loop_evidence_collection"
-        ) as collector:
+        with (
+            patch(
+                "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
+                return_value=True,
+            ),
+            patch("k8s_diag_agent.collect.incident_diagnosis_auto_loop.run_automatic_diagnosis_loop_evidence_collection") as collector,
+        ):
             collector.return_value.incidents_processed = 0
             collector.return_value.incidents_eligible = 0
             collector.return_value.incidents_skipped = 0
@@ -523,9 +512,7 @@ class TestRunAutomaticDiagnosisLoopCanonicalIDs:
         assert start["explicit_canonical_id_count"] == 1
         assert start["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
 
-        complete = next(
-            event for event in captured if event.get("event") == "complete"
-        )
+        complete = next(event for event in captured if event.get("event") == "complete")
         assert complete["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
         assert complete["promotion_propagated_to_diagnosis"] is True
         assert complete["explicit_canonical_id_count"] == 1
@@ -782,12 +769,8 @@ class TestAlertSignalPromotionReturnsCanonicalIDs:
 
         observed_at = _dt.now(_UTC)
 
-        with patch(
-            "k8s_diag_agent.collect.incident_promotion_backend.SchedulerClient"
-        ) as mock_client_class:
-            mock_client_class.return_value.promote_alert_signals.return_value = (
-                response
-            )
+        with patch("k8s_diag_agent.collect.incident_promotion_backend.SchedulerClient") as mock_client_class:
+            mock_client_class.return_value.promote_alert_signals.return_value = response
 
             result = promote_alert_signals(candidates=[], observed_at=observed_at)
 
@@ -846,11 +829,7 @@ class TestAlertSignalPromotionReturnsCanonicalIDs:
             object_name="test-pod",
             candidate_class=CandidateClass.CRASH_LOOP,
             severity=Severity.ERROR,
-            signals=(
-                CandidateSignal(
-                    source="alert", reason="CrashLoopBackOff", message="oops"
-                ),
-            ),
+            signals=(CandidateSignal(source="alert", reason="CrashLoopBackOff", message="oops"),),
             evidence_needed=("alert_evidence",),
         )
 
@@ -869,9 +848,7 @@ class TestAlertSignalPromotionReturnsCanonicalIDs:
         # when the in-memory store is asked to materialize an incident.
         # Pin this to make sure the regression never reintroduces the
         # candidate-shaped-IDs-as-incident-IDs bug.
-        assert (
-            records[0]["canonical_incident_id"] != records[0]["source_candidate_id"]
-        )
+        assert records[0]["canonical_incident_id"] != records[0]["source_candidate_id"]
         reset_incident_store()
 
 
@@ -953,15 +930,10 @@ class TestSchedulerRoleGuard:
             signals=(CandidateSignal(source="alert", reason="X", message="oops"),),
             evidence_needed=("alert_evidence",),
         )
-        result = promote_alert_signals(
-            candidates=[candidate], observed_at=_dt.now(UTC)
-        )
+        result = promote_alert_signals(candidates=[candidate], observed_at=_dt.now(UTC))
         assert result.ok is False
         assert result.errors >= 1
-        assert any(
-            "scheduler cannot use SQLite store directly" in str(message)
-            for message in result.error_messages
-        )
+        assert any("scheduler cannot use SQLite store directly" in str(message) for message in result.error_messages)
 
 
 class TestMultiplePromotedCandidatesOneToOneMapping:
@@ -1286,12 +1258,15 @@ class TestRunPromotionAccumulatorIntegratedRegression:
             result.run_id = "test-run"
             return result
 
-        with patch(
-            "k8s_diag_agent.collect.incident_diagnosis_auto_loop.run_automatic_diagnosis_loop_evidence_collection",
-            side_effect=collector_stub,
-        ), patch(
-            "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
-            return_value=True,
+        with (
+            patch(
+                "k8s_diag_agent.collect.incident_diagnosis_auto_loop.run_automatic_diagnosis_loop_evidence_collection",
+                side_effect=collector_stub,
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_automatic_diagnosis.is_automatic_diagnosis_loop_enabled",
+                return_value=True,
+            ),
         ):
             # Step 1: derive the diagnosis inputs from the typed
             # accumulator. This MUST NOT consult
@@ -1300,31 +1275,18 @@ class TestRunPromotionAccumulatorIntegratedRegression:
             # accumulated batches. We seeded the accumulator with a
             # backend-api batch above so the derived summary respects
             # that mode verbatim.
-            (
-                canonical_ids,
-                summary,
-                consistency,
-                backend_identity,
-                _execution,
-                _promotion_outcome,
-            ) = _derive_automatic_diagnosis_inputs(accumulator)
+            diagnosis_inputs = _derive_automatic_diagnosis_inputs(accumulator)
 
-            assert canonical_ids == [
+            assert diagnosis_inputs.canonical_incident_ids == (
                 "incident-canonical-abc",
                 "incident-canonical-def",
-            ]
+            )
             # The promotion summary carries the typed records
             # straight through so downstream structured logs do not
             # have to re-parse a free-form dict.
-            assert (
-                summary["promotion_records"][0]["canonical_incident_id"]
-                == "incident-canonical-abc"
-            )
-            assert (
-                summary["promotion_records"][1]["canonical_incident_id"]
-                == "incident-canonical-def"
-            )
-            assert summary["incident_access_mode"] == "backend"
+            assert diagnosis_inputs.promotion_result_summary["promotion_records"][0]["canonical_incident_id"] == "incident-canonical-abc"
+            assert diagnosis_inputs.promotion_result_summary["promotion_records"][1]["canonical_incident_id"] == "incident-canonical-def"
+            assert diagnosis_inputs.promotion_result_summary["incident_access_mode"] == "backend"
 
             # Step 2: feed the canonical IDs into the auto-diagnosis
             # loop. The collector stub records zero
@@ -1333,13 +1295,13 @@ class TestRunPromotionAccumulatorIntegratedRegression:
             result = run_automatic_diagnosis_loop(
                 external_analysis_dir=_dt.now(_UTC),
                 log_event_fn=lambda *a, **kw: None,
-                canonical_incident_ids=canonical_ids,
-                promotion_result_summary=summary,
-                backend_endpoint_identity=backend_identity,
+                canonical_incident_ids=diagnosis_inputs.canonical_incident_ids,
+                promotion_result_summary=diagnosis_inputs.promotion_result_summary,
+                backend_endpoint_identity=diagnosis_inputs.backend_endpoint_identity,
                 scheduler_run_id="test-run",
             )
 
-        assert captured_incident_ids["incident_ids"] == canonical_ids
+        assert list(diagnosis_inputs.canonical_incident_ids) == captured_incident_ids["incident_ids"]
         assert result["incidents_processed"] == 2
         assert result["incidents_eligible"] == 2
         assert result["promotion_propagated_to_diagnosis"] is True
@@ -1433,23 +1395,11 @@ class TestRunPromotionAccumulatorIntegratedRegression:
                 "k8s_diag_agent.collect.incident_diagnosis_dispatch.fetch_incident_for_diagnosis",
                 return_value=("incident-canonical-abc-stub", True, None),
             ):
-                (
-                    canonical_ids,
-                    summary,
-                    consistency,
-                    backend_identity,
-                    _execution,
-                    _promotion_outcome,
-                ) = _derive_automatic_diagnosis_inputs(accumulator)
-            assert canonical_ids == ["incident-canonical-abc"]
-            assert (
-                summary["promotion_records"][0]["canonical_incident_id"]
-                == "incident-canonical-abc"
-            )
-            assert consistency is None
-            assert (
-                backend_identity["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
-            )
+                diagnosis_inputs = _derive_automatic_diagnosis_inputs(accumulator)
+            assert diagnosis_inputs.canonical_incident_ids == ("incident-canonical-abc",)
+            assert diagnosis_inputs.promotion_result_summary["promotion_records"][0]["canonical_incident_id"] == "incident-canonical-abc"
+            assert diagnosis_inputs.promotion_consistency_error is None
+            assert diagnosis_inputs.backend_endpoint_identity["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
         finally:
             store_module.IncidentStore.add_incident = original_add
             store_module.IncidentStore.get_incident = original_get
@@ -1565,41 +1515,28 @@ class TestDeriveAutomaticDiagnosisInputsLegacyRegression:
         # ``blocked`` decision so the diagnosis loop is NEVER invoked
         # for a malformed dispatcher response.
         accumulator.last_contract_error = contract
-        (
-            canonical_ids,
-            summary,
-            consistency,
-            endpoint,
-            execution,
-            _promotion_outcome,
-        ) = _derive_automatic_diagnosis_inputs(accumulator)
-        assert canonical_ids == []
-        assert consistency is None
-        assert summary["promotion_consistency_contract_error"] is not None
-        assert (
-            summary["promotion_consistency_contract_error"]["opened_incidents"] == 2
-        )
-        assert (
-            summary["promotion_consistency_contract_error"]["updated_incidents"] == 1
-        )
-        assert "Legacy-backend regression" in (
-            summary["promotion_consistency_contract_error"]["message"]
-        )
+        diagnosis_inputs = _derive_automatic_diagnosis_inputs(accumulator)
+        assert diagnosis_inputs.canonical_incident_ids == ()
+        assert diagnosis_inputs.promotion_consistency_error is None
+        assert diagnosis_inputs.promotion_result_summary["promotion_consistency_contract_error"] is not None
+        assert diagnosis_inputs.promotion_result_summary["promotion_consistency_contract_error"]["opened_incidents"] == 2
+        assert diagnosis_inputs.promotion_result_summary["promotion_consistency_contract_error"]["updated_incidents"] == 1
+        assert "Legacy-backend regression" in (diagnosis_inputs.promotion_result_summary["promotion_consistency_contract_error"]["message"])
         # R7 (item 1): the explicit decision is blocked and carries
         # the contract-error reason. The diagnosis collector is NOT
         # invoked; the orchestrator emits the
         # ``automatic_diagnosis_blocked`` event instead.
-        assert execution.is_blocked
-        assert execution.blocked_reason == "promotion_consistency_contract_error"
-        assert execution.selection_mode == "blocked"
+        assert diagnosis_inputs.execution.is_blocked
+        assert diagnosis_inputs.execution.blocked_reason == "promotion_consistency_contract_error"
+        assert diagnosis_inputs.execution.selection_mode == "blocked"
         # The rejected batch was NOT added to the accumulator, so the
         # blocked decision's incident_access_mode falls back to the
         # no-promotion sentinel. The contract error summary carries
         # the authoritative message so operators can still see the
         # dispatcher drift in the audit log.
-        assert execution.incident_access_mode == "no_promotion_run"
-        assert summary["incident_access_mode"] == "no_promotion_run"
-        assert not execution.should_run
+        assert diagnosis_inputs.execution.incident_access_mode == "no_promotion_run"
+        assert diagnosis_inputs.promotion_result_summary["incident_access_mode"] == "no_promotion_run"
+        assert not diagnosis_inputs.execution.should_run
 
 
 class TestExecuteHealthLoopRunProductionShape:
@@ -1753,11 +1690,7 @@ class TestExecuteHealthLoopRunProductionShape:
                             promotion_scan_scope="local_promotion",
                             incident_access_mode="local",
                         ),
-                        promotion_records=(
-                            PromotionRecord(
-                                "cand-l1", "inc-l1", PROMOTION_OUTCOME_OPENED
-                            ),
-                        ),
+                        promotion_records=(PromotionRecord("cand-l1", "inc-l1", PROMOTION_OUTCOME_OPENED),),
                         source_kind="alertmanager",
                     )
                 else:
@@ -1769,6 +1702,7 @@ class TestExecuteHealthLoopRunProductionShape:
                     from k8s_diag_agent.collect.promotion_outcomes import (
                         PromotionSucceeded,
                     )
+
                     propagate_promotion_result_to_run(
                         batch=batch,
                         accumulator=promotion_accumulator,
@@ -1780,17 +1714,11 @@ class TestExecuteHealthLoopRunProductionShape:
                         run_id=promotion_accumulator.promotion_outcome_run_id or "r6-test",
                         requested_signal_ids=(),
                         records=(),
-                        diagnosis_incident_ids=tuple(
-                            batch.promotion_result.actionable_incident_ids
-                        ),
+                        diagnosis_incident_ids=tuple(batch.promotion_result.actionable_incident_ids),
                     )
 
-            def _log_event(
-                self: Any, *args: Any, **kwargs: Any
-            ) -> None:
-                self._events.append(
-                    (args[0] if args else "", args[2] if len(args) >= 3 else "", kwargs)
-                )
+            def _log_event(self: Any, *args: Any, **kwargs: Any) -> None:
+                self._events.append((args[0] if args else "", args[2] if len(args) >= 3 else "", kwargs))
 
             def _run_automatic_diagnosis_loop(
                 self: Any,
@@ -1812,16 +1740,8 @@ class TestExecuteHealthLoopRunProductionShape:
                 self._diagnosis_calls.append(
                     {
                         "canonical_incident_ids": ids_from_selection,
-                        "incident_access_mode": (
-                            promotion_result_summary.get("incident_access_mode")
-                            if isinstance(promotion_result_summary, dict)
-                            else None
-                        ),
-                        "promotion_mode": (
-                            promotion_result_summary.get("promotion_mode")
-                            if isinstance(promotion_result_summary, dict)
-                            else None
-                        ),
+                        "incident_access_mode": (promotion_result_summary.get("incident_access_mode") if isinstance(promotion_result_summary, dict) else None),
+                        "promotion_mode": (promotion_result_summary.get("promotion_mode") if isinstance(promotion_result_summary, dict) else None),
                     }
                 )
                 return {"incidents_processed": len(canonical_incident_ids or [])}
@@ -1872,39 +1792,51 @@ class TestExecuteHealthLoopRunProductionShape:
 
         # Patch the auxiliary phases so the orchestrator can call them
         # without spinning up the real health-loop machinery.
-        with patch(
-            "k8s_diag_agent.health.loop_runner_execute.build_assessments_for_records",
-            return_value=[],
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.evaluate_triggers_for_records",
-            return_value=[],
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.build_drilldowns_for_records",
-            return_value=[],
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute._run_auto_drilldown_impl",
-            return_value=[],
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.run_external_analysis_for_records",
-            return_value=[],
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.load_runner_history",
-            return_value={},
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.persist_runner_history",
-            return_value=None,
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute._run_review_enrichment_impl",
-            return_value=None,
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.run_next_check_planning",
-            return_value=None,
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.write_health_ui_index",
-            return_value=tmp_path / "ui" / "index.json",
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.scan_and_propose",
-            return_value=[],
+        with (
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.build_assessments_for_records",
+                return_value=[],
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.evaluate_triggers_for_records",
+                return_value=[],
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.build_drilldowns_for_records",
+                return_value=[],
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute._run_auto_drilldown_impl",
+                return_value=[],
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.run_external_analysis_for_records",
+                return_value=[],
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.load_runner_history",
+                return_value={},
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.persist_runner_history",
+                return_value=None,
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute._run_review_enrichment_impl",
+                return_value=None,
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.run_next_check_planning",
+                return_value=None,
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.write_health_ui_index",
+                return_value=tmp_path / "ui" / "index.json",
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.scan_and_propose",
+                return_value=[],
+            ),
         ):
             runner = self._build_minimal_runner()
             directories = self._stub_directories(tmp_path)
@@ -1926,11 +1858,7 @@ class TestExecuteHealthLoopRunProductionShape:
         assert diagnosis["promotion_mode"] == "backend-api"
         # Terminal completion event is emitted AFTER the diagnosis call.
         completion_index = next(
-            (
-                idx
-                for idx, event in enumerate(runner._events)
-                if event[1] == "Health run completed"
-            ),
+            (idx for idx, event in enumerate(runner._events) if event[1] == "Health run completed"),
             None,
         )
         assert completion_index is not None
@@ -1956,39 +1884,51 @@ class TestExecuteHealthLoopRunProductionShape:
         self._run_orchestrator_with_mode(tmp_path, mode="none")
 
     def _run_orchestrator_with_mode(self, tmp_path: Path, mode: str) -> None:
-        with patch(
-            "k8s_diag_agent.health.loop_runner_execute.build_assessments_for_records",
-            return_value=[],
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.evaluate_triggers_for_records",
-            return_value=[],
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.build_drilldowns_for_records",
-            return_value=[],
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute._run_auto_drilldown_impl",
-            return_value=[],
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.run_external_analysis_for_records",
-            return_value=[],
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.load_runner_history",
-            return_value={},
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.persist_runner_history",
-            return_value=None,
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute._run_review_enrichment_impl",
-            return_value=None,
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.run_next_check_planning",
-            return_value=None,
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.write_health_ui_index",
-            return_value=tmp_path / "ui" / "index.json",
-        ), patch(
-            "k8s_diag_agent.health.loop_runner_execute.scan_and_propose",
-            return_value=[],
+        with (
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.build_assessments_for_records",
+                return_value=[],
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.evaluate_triggers_for_records",
+                return_value=[],
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.build_drilldowns_for_records",
+                return_value=[],
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute._run_auto_drilldown_impl",
+                return_value=[],
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.run_external_analysis_for_records",
+                return_value=[],
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.load_runner_history",
+                return_value={},
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.persist_runner_history",
+                return_value=None,
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute._run_review_enrichment_impl",
+                return_value=None,
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.run_next_check_planning",
+                return_value=None,
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.write_health_ui_index",
+                return_value=tmp_path / "ui" / "index.json",
+            ),
+            patch(
+                "k8s_diag_agent.health.loop_runner_execute.scan_and_propose",
+                return_value=[],
+            ),
         ):
             runner = self._build_minimal_runner(mode=mode)
             directories = self._stub_directories(tmp_path)

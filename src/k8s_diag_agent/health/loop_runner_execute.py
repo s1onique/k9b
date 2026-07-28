@@ -793,8 +793,10 @@ def _build_diagnosis_selection_for_execution(
     if selection_mode == INCIDENT_SELECTION_MODE_BLOCKED:
         raise ValueError("blocked selection must be handled before calling this builder")
 
-    # store_scan: no promotion outcome needed
+    # store_scan: no promotion outcome needed (R19 cardinality invariant)
     if selection_mode == INCIDENT_SELECTION_MODE_STORE_SCAN:
+        if promotion_outcome is not None:
+            raise ValueError("store_scan mode does not accept a recorded promotion outcome")
         return DiagnosisSelectionWithoutPromotion(
             reason=NoPromotionSelectionReason.SCHEDULED_SCAN_RUN,
         )
@@ -805,6 +807,9 @@ def _build_diagnosis_selection_for_execution(
             raise ValueError(f"selection_mode={selection_mode!r} requires a PromotionCommitUnknown outcome, got None")
         if not isinstance(promotion_outcome, PromotionCommitUnknown):
             raise ValueError(f"selection_mode={selection_mode!r} requires PromotionCommitUnknown, got {type(promotion_outcome).__name__}")
+        # CORRECTION12: Validate run identity matches
+        if promotion_outcome.run_id != scheduler_run_id:
+            raise ValueError(f"promotion_outcome.run_id={promotion_outcome.run_id!r} does not match scheduler_run_id={scheduler_run_id!r}")
         return DiagnosisSelectionUnavailable(outcome=promotion_outcome)
 
         # explicit_incident_ids or current_run_empty: require PromotionSucceeded
@@ -829,6 +834,14 @@ def _build_diagnosis_selection_for_execution(
         if selection_mode == INCIDENT_SELECTION_MODE_EXPLICIT_IDS:
             # CORRECTION09: explicit_ids mode - validate equality (witness role)
             # but construct from outcome_ids (sole authority).
+            # R19 cardinality invariant: explicit_ids requires non-empty outcome.
+            if not outcome_ids:
+                raise PromotionConsistencyContractError(
+                    "DiagnosisSelection SOLE ID AUTHORITY violation: explicit_incident_ids selection requires non-empty diagnosis_incident_ids, got empty",
+                    promotion_record_count=len(canonical_incident_ids),
+                    opened_incidents=len(canonical_incident_ids),
+                    updated_incidents=0,
+                )
             if tuple(canonical_incident_ids) != outcome_ids:
                 raise PromotionConsistencyContractError(
                     f"DiagnosisSelection SOLE ID AUTHORITY violation: canonical_incident_ids={canonical_incident_ids} does not match promotion_outcome.diagnosis_incident_ids={list(outcome_ids)}",

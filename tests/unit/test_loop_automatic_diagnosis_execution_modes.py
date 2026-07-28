@@ -230,7 +230,7 @@ def test_helper_rejects_current_run_empty_without_promotion_succeeded():
 def test_helper_rejects_store_scan_with_recorded_outcome():
     """``store_scan`` REQUIRES no recorded promotion outcome."""
     scheduler_run_id = "exec-mode-bad-003"
-    with pytest.raises(ValueError, match="store_scan"):
+    with pytest.raises(ValueError, match="does not accept a recorded promotion outcome"):
         _build_diagnosis_selection_for_execution(
             automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_STORE_SCAN),
             promotion_outcome=_succeeded(scheduler_run_id),
@@ -281,7 +281,7 @@ def test_helper_rejects_authority_split_when_parallel_ids_diverge():
         scheduler_run_id,
         diagnosis_ids=("a", "b"),
     )
-    with pytest.raises(ValueError, match="authority split rejected"):
+    with pytest.raises(ValueError, match="SOLE ID AUTHORITY violation"):
         _build_diagnosis_selection_for_execution(
             automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_EXPLICIT_IDS),
             promotion_outcome=outcome,
@@ -303,7 +303,7 @@ def test_helper_rejects_authority_split_when_canonical_empty_but_outcome_has_ids
         scheduler_run_id,
         diagnosis_ids=("a", "b"),
     )
-    with pytest.raises(ValueError, match="authority split rejected"):
+    with pytest.raises(ValueError, match="SOLE ID AUTHORITY violation"):
         _build_diagnosis_selection_for_execution(
             automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_EXPLICIT_IDS),
             promotion_outcome=outcome,
@@ -324,7 +324,7 @@ def test_helper_rejects_explicit_ids_with_empty_outcome():
     scheduler_run_id = "r19-cardinality-explicit-empty"
     outcome = _succeeded(scheduler_run_id)  # empty diagnosis IDs
     execution = _execution(INCIDENT_SELECTION_MODE_EXPLICIT_IDS)
-    with pytest.raises(ValueError, match="non-empty diagnosis_incident_ids"):
+    with pytest.raises(ValueError, match="requires non-empty diagnosis_incident_ids"):
         _build_diagnosis_selection_for_execution(
             automatic_diagnosis_execution=execution,
             promotion_outcome=outcome,
@@ -345,7 +345,7 @@ def test_helper_rejects_current_run_empty_with_non_empty_outcome():
     scheduler_run_id = "r19-cardinality-empty-nonempty"
     outcome = _succeeded(scheduler_run_id, ids=("inc-a",))
     execution = _execution(INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY)
-    with pytest.raises(ValueError, match="EMPTY diagnosis_incident_ids"):
+    with pytest.raises(ValueError, match="requires empty diagnosis_incident_ids"):
         _build_diagnosis_selection_for_execution(
             automatic_diagnosis_execution=execution,
             promotion_outcome=outcome,
@@ -397,7 +397,7 @@ def test_helper_rejects_cross_run_promotion_succeeded():
         "foreign-run-id-zzz",
         diagnosis_ids=("inc-x",),
     )
-    with pytest.raises(ValueError, match="disagrees with run_id"):
+    with pytest.raises(ValueError, match="does not match scheduler_run_id"):
         _build_diagnosis_selection_for_execution(
             automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_EXPLICIT_IDS),
             promotion_outcome=foreign_outcome,
@@ -416,7 +416,7 @@ def test_helper_rejects_cross_run_promotion_commit_unknown():
     """
     scheduler_run_id = "exec-mode-identity-002"
     foreign_outcome = _commit_unknown("foreign-run-id-yyy")
-    with pytest.raises(ValueError, match="disagrees with run_id"):
+    with pytest.raises(ValueError, match="does not match scheduler_run_id"):
         _build_diagnosis_selection_for_execution(
             automatic_diagnosis_execution=_execution(INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN),
             promotion_outcome=foreign_outcome,
