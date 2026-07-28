@@ -3,8 +3,9 @@
 Tests Track B: Buildx authority rendering.
 """
 
-import yaml
 from typing import Any
+
+import yaml
 from harbor_build_image_authority_support import HARBOR_BUILD_IMAGE_WORKFLOW
 
 
