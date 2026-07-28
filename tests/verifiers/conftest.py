@@ -45,10 +45,7 @@ def audit() -> dict[str, object]:
     """Build a deterministic audit object with a synthetic skip record."""
     return build_audit_object(
         {},
-        gate_classification=_synthetic_skipped_record(
-            "module-scope audit fixture; the persisted "
-            "gate_classification.json is the canonical on-disk record."
-        ),
+        gate_classification=_synthetic_skipped_record("module-scope audit fixture; the persisted gate_classification.json is the canonical on-disk record."),
     )
 
 
@@ -71,11 +68,7 @@ def canonical_audit_artifacts_remain_unchanged(
     before = hash_canonical_artifact_set()
     yield
     after = hash_canonical_artifact_set()
-    assert after == before, (
-        "canonical audit artifacts mutated during "
-        f"{module_path.relative_to(module_path.parents[2])}: "
-        f"before={before} after={after}"
-    )
+    assert after == before, f"canonical audit artifacts mutated during {module_path.relative_to(module_path.parents[2])}: before={before} after={after}"
 
 
 @pytest.fixture
@@ -83,7 +76,13 @@ def hermetic_ruff_capability(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Inject a hermetic Ruff capability into the evidence orchestrator."""
+    """Inject a hermetic Ruff capability into the evidence orchestrator.
+    
+    Patches resolve_ruff_identity using monkeypatch at the source module
+    (identity module). This is the single authoritative seam for resolver
+    injection. The orchestrator's local binding is also patched to ensure
+    it sees the hermetic resolver.
+    """
     import scripts.verifiers_audit.range_evidence_identity as identity_module
     import scripts.verifiers_audit.range_evidence_orchestrator as orchestrator_module
     from tests.verifiers.verifier_core_migration_audit01_correction22_hermetic_ruff import (
@@ -100,12 +99,30 @@ def hermetic_ruff_capability(
                 "launcher_sha256": None,
                 "ruff_version": None,
                 "ruff_invocation_mode": "skipped_no_python_paths",
+                "configuration_files": [],
+                "configuration_file_sha256": {},
             }
         return capability.get_identity()
 
-    # Patch at the SOURCE (identity module) so the orchestrator's local binding
-    # gets the patched function when it looks up resolve_ruff_identity
+    # Single seam: patch at the source module where resolve_ruff_identity is defined
+    # Both the identity module and orchestrator's local binding will see the patch
     monkeypatch.setattr(identity_module, "resolve_ruff_identity", hermetic_resolve)
-    # Also patch the orchestrator's local binding directly
-    orchestrator_module.resolve_ruff_identity = hermetic_resolve
+    monkeypatch.setattr(orchestrator_module, "resolve_ruff_identity", hermetic_resolve)
     return capability
+
+
+
+def test_hermetic_ruff_capability_fixture_teardown() -> None:
+    """Prove the fixture teardown restores the original resolver.
+    
+    After a fixture-using test runs, the resolver must be restored.
+    This test runs after fixture-using tests (pytest collects in file order,
+    but fixture teardown happens per-test).
+    """
+    import scripts.verifiers_audit.range_evidence_identity as identity_module
+    from scripts.verifiers_audit.range_evidence_identity import resolve_ruff_identity as production_resolver
+
+    # The resolver should be the production resolver, not the hermetic one
+    assert identity_module.resolve_ruff_identity is production_resolver, (
+        "Fixture did not restore the original resolver after teardown"
+    )

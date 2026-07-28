@@ -355,7 +355,9 @@ def test_ruff_failure_prevents_publication(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_final_classification_claims_are_derived(tmp_path: Path) -> None:
+def test_final_classification_claims_are_derived(
+    hermetic_ruff_capability,
+    tmp_path: Path) -> None:
     """The final-classification.md file is rendered from a
     measured result; every claim is either ``PASS`` (when
     measured) or ``UNMEASURED`` (when the writer has no

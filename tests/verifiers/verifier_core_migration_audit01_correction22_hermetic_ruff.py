@@ -37,7 +37,6 @@ def generate_hermetic_ruff_script(tmp_dir: Path) -> tuple[Path, str]:
     sha256_hash = hashlib.sha256()
 
     content = '''\
-#!/usr/bin/env python3
 """Hermetic Ruff for testing: accepts arguments, logs argv, returns exit 0."""
 import json
 import os
@@ -58,8 +57,10 @@ def main() -> int:
 
     try:
         return int(exit_override)
-    except ValueError:
-        return 0
+    except ValueError as exc:
+        raise SystemExit(
+            f"invalid HERMETIC_RUFF_EXIT={exit_override!r}"
+        ) from exc
 
 if __name__ == "__main__":
     sys.exit(main())
@@ -115,6 +116,8 @@ class HermeticRuffCapability:
             "launcher_argv_prefix": self.launcher_argv_prefix,
             "launcher_path": str(self.launcher_path),
             "launcher_sha256": self.launcher_sha256,
+            "tool_payload_path": str(self.script_path),
+            "tool_payload_sha256": self.script_sha256,
             "ruff_version": self.ruff_version,
             "ruff_invocation_mode": self.ruff_invocation_mode,
             "configuration_files": [],
