@@ -240,6 +240,8 @@ jobs:
   # Authority matrix for image-builder:
   # - pull_request:  image_push=false, cache_read=true, cache_write=false
   # - trusted push:  image_push=true,  cache_read=true, cache_write=true
+  #
+  # IMPORTANT: secrets: inherit is NOT used. Only explicit Harbor credentials are passed.
   # =============================================================================
 
   build-push:
@@ -257,11 +259,13 @@ jobs:
       build_args: |
         KUBECTL_VERSION=v1.29.6
         HELM_VERSION=3.20.1
-      # Explicit publication authorities for security
+      # Explicit publication authorities (required inputs - fail-closed)
       image_push_enabled: ${{ github.event_name != 'pull_request' }}
       registry_cache_read_enabled: true
       registry_cache_write_enabled: ${{ github.event_name != 'pull_request' }}
-    secrets: inherit
+    secrets:
+      HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+      HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
 
   frontend:
     needs:
@@ -276,8 +280,10 @@ jobs:
       image_name: k9b-frontend
       dockerfile: ./frontend/Dockerfile
       build_args: ""
-      # Explicit publication authorities for security
+      # Explicit publication authorities (required inputs - fail-closed)
       image_push_enabled: ${{ github.event_name != 'pull_request' }}
       registry_cache_read_enabled: true
       registry_cache_write_enabled: ${{ github.event_name != 'pull_request' }}
-    secrets: inherit
+    secrets:
+      HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+      HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}

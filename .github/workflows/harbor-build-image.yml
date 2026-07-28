@@ -36,22 +36,32 @@ on:
       # - image_push_enabled: controls application-image registry publication
       # - registry_cache_read_enabled: controls cache-from (BuildKit cache import)
       # - registry_cache_write_enabled: controls cache-to (BuildKit cache export)
+      #
+      # IMPORTANT: All write authorities default to false (fail-closed).
+      # Every caller MUST explicitly supply all three inputs.
       # =============================================================================
       image_push_enabled:
-        description: "Whether to push the application image to registry"
-        required: false
+        description: "Whether to push the application image to registry (write operation)"
+        required: true
         type: boolean
-        default: true
       registry_cache_read_enabled:
-        description: "Whether to read from registry cache (cache-from)"
-        required: false
+        description: "Whether to read from registry cache (cache-from, read-only)"
+        required: true
         type: boolean
-        default: true
       registry_cache_write_enabled:
-        description: "Whether to write to registry cache (cache-to)"
-        required: false
+        description: "Whether to write to registry cache (cache-to, write operation)"
+        required: true
         type: boolean
-        default: true
+    secrets:
+      HARBOR_USERNAME:
+        required: false
+        description: "Harbor username for write operations"
+      HARBOR_TOKEN:
+        required: false
+        description: "Harbor token for write operations"
+      SPBNIX_CA_CERT_PEM:
+        required: true
+        description: "SPbNIX CA certificate in PEM format for Harbor TLS"
 
 jobs:
   build:
@@ -78,92 +88,166 @@ jobs:
 
       # =============================================================================
       # Authority preflight - fail fast before expensive multi-platform build
+      #
+      # Security model:
+      # - All PRs (fork, same-repo, Dependabot, bot) are read-only
+      # - Write authority requires explicit non-PR event AND explicit input=true
+      # - Secrets are never interpolated into shell source
       # =============================================================================
       - name: Authority preflight
         id: authority-preflight
+        env:
+          # External values transferred through env (not interpolated into shell source)
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          BASE_REPO_FULL_NAME: ${{ github.event.pull_request.base.repo.full_name || github.repository }}
+
+          # Input values
+          REGISTRY: ${{ inputs.registry }}
+          HARBOR_PROJECT: ${{ inputs.harbor_project }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+
+          # Authority inputs
+          IMAGE_PUSH_ENABLED: ${{ inputs.image_push_enabled }}
+          CACHE_READ_ENABLED: ${{ inputs.registry_cache_read_enabled }}
+          CACHE_WRITE_ENABLED: ${{ inputs.registry_cache_write_enabled }}
+
+          # Secrets (available in env but never printed)
+          HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+          HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
+
         run: |
           set -euo pipefail
 
           echo "=== Authority Preflight ==="
           echo ""
-          echo "Event classification: ${{ github.event_name }}"
-          echo "Actor: ${{ github.actor }}"
-          echo "Head repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}"
-          echo "Base repository: ${{ github.event.pull_request.base.repo.full_name || github.repository }}"
+          echo "Event classification: ${EVENT_NAME}"
+          echo "Actor: ${ACTOR}"
+          echo "Head repository: ${HEAD_REPO_FULL_NAME}"
+          echo "Base repository: ${BASE_REPO_FULL_NAME}"
           echo ""
 
-          # Validate inputs
-          if [[ -z "${{ inputs.registry }}" ]]; then
+          # =================================================================
+          # Phase 1: Validate required inputs
+          # =================================================================
+          if [[ -z "${REGISTRY}" ]]; then
             echo "ERROR: registry input is empty"
             exit 1
           fi
-          if [[ -z "${{ inputs.harbor_project }}" ]]; then
+          if [[ -z "${HARBOR_PROJECT}" ]]; then
             echo "ERROR: harbor_project input is empty"
             exit 1
           fi
-          if [[ -z "${{ inputs.image_name }}" ]]; then
+          if [[ -z "${IMAGE_NAME}" ]]; then
             echo "ERROR: image_name input is empty"
             exit 1
           fi
 
-          # Validate boolean inputs
-          case "${{ inputs.image_push_enabled }}" in
+          # =================================================================
+          # Phase 2: Validate boolean inputs
+          # =================================================================
+          case "${IMAGE_PUSH_ENABLED}" in
             true|false) ;;
-            *) echo "ERROR: image_push_enabled must be true or false, got '${{ inputs.image_push_enabled }}'"; exit 1 ;;
+            *) echo "ERROR: image_push_enabled must be true or false, got '${IMAGE_PUSH_ENABLED}'"; exit 1 ;;
           esac
-          case "${{ inputs.registry_cache_read_enabled }}" in
+          case "${CACHE_READ_ENABLED}" in
             true|false) ;;
-            *) echo "ERROR: registry_cache_read_enabled must be true or false, got '${{ inputs.registry_cache_read_enabled }}'"; exit 1 ;;
+            *) echo "ERROR: registry_cache_read_enabled must be true or false, got '${CACHE_READ_ENABLED}'"; exit 1 ;;
           esac
-          case "${{ inputs.registry_cache_write_enabled }}" in
+          case "${CACHE_WRITE_ENABLED}" in
             true|false) ;;
-            *) echo "ERROR: registry_cache_write_enabled must be true or false, got '${{ inputs.registry_cache_write_enabled }}'"; exit 1 ;;
+            *) echo "ERROR: registry_cache_write_enabled must be true or false, got '${CACHE_WRITE_ENABLED}'"; exit 1 ;;
           esac
 
-          echo "Image push enabled: ${{ inputs.image_push_enabled }}"
-          echo "Cache read enabled: ${{ inputs.registry_cache_read_enabled }}"
-          echo "Cache write enabled: ${{ inputs.registry_cache_write_enabled }}"
+          echo "Image push enabled: ${IMAGE_PUSH_ENABLED}"
+          echo "Cache read enabled: ${CACHE_READ_ENABLED}"
+          echo "Cache write enabled: ${CACHE_WRITE_ENABLED}"
           echo ""
 
-          # Determine if Harbor write login is required
-          HARBOR_WRITE_REQUIRED="false"
-          if [[ "${{ inputs.image_push_enabled }}" == "true" ]] || [[ "${{ inputs.registry_cache_write_enabled }}" == "true" ]]; then
-            HARBOR_WRITE_REQUIRED="true"
-          fi
-          echo "Harbor login required: ${HARBOR_WRITE_REQUIRED}"
+          # =================================================================
+          # Phase 3: Reject ALL PR write operations (fail-closed policy)
+          #
+          # This applies to ALL PR types:
+          # - Fork PRs
+          # - Same-repository PRs
+          # - Dependabot PRs
+          # - Bot PRs
+          # - Manually approved PRs
+          #
+          # GitHub actor classification may be logged but NEVER grants write.
+          # =================================================================
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            echo "Security policy: ALL pull_request events are read-only"
+            echo "  - Same-repository PR write: REJECTED"
+            echo "  - Dependabot PR write: REJECTED"
+            echo "  - Fork PR write: REJECTED"
+            echo ""
 
-          # Check credential availability when write is required
-          if [[ "${HARBOR_WRITE_REQUIRED}" == "true" ]]; then
-            echo "Harbor credential available: ${{ secrets.HARBOR_USERNAME != '' && secrets.HARBOR_TOKEN != '' }}"
-            if [[ -z "${{ secrets.HARBOR_USERNAME }}" ]] || [[ -z "${{ secrets.HARBOR_TOKEN }}" ]]; then
-              echo "ERROR: Harbor write is requested but credentials are missing"
+            if [[ "${IMAGE_PUSH_ENABLED}" == "true" ]]; then
+              echo "ERROR: PR_WRITE_AUTHORITY_FORBIDDEN"
+              echo "ERROR: Image push requested on pull_request event"
+              echo "  Actor: ${ACTOR}"
+              echo "  Head repository: ${HEAD_REPO_FULL_NAME}"
+              echo ""
+              echo "Pull requests are read-only. Set image_push_enabled=false."
               exit 1
             fi
-          else
-            echo "Harbor credential available: N/A (not required for this build)"
+
+            if [[ "${CACHE_WRITE_ENABLED}" == "true" ]]; then
+              echo "ERROR: PR_WRITE_AUTHORITY_FORBIDDEN"
+              echo "ERROR: Cache write requested on pull_request event"
+              echo "  Actor: ${ACTOR}"
+              echo "  Head repository: ${HEAD_REPO_FULL_NAME}"
+              echo ""
+              echo "Pull requests are read-only. Set registry_cache_write_enabled=false."
+              exit 1
+            fi
+
+            echo "Security: PR correctly configured (read-only)"
+            echo ""
+
+            # PRs do not require Harbor write credentials
+            echo "Harbor credential required: false (PR is read-only)"
+            echo ""
+            echo "=== Authority Preflight: PASSED (read-only PR) ==="
+            exit 0
           fi
 
-          # Security: Prevent write operations on PRs from forks (except Dependabot)
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            IS_FORK="true"
-            if [[ "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" ]]; then
-              IS_FORK="false"
-            elif [[ "${{ github.event.pull_request.head.repo.full_name }}" == *"/dependabot"* ]]; then
-              IS_FORK="false"
+          # =================================================================
+          # Phase 4: Non-PR event - determine write requirements
+          # =================================================================
+          echo "Security policy: Non-PR event - evaluating write requirements"
+          echo ""
+
+          HARBOR_WRITE_REQUIRED="false"
+          if [[ "${IMAGE_PUSH_ENABLED}" == "true" ]] || [[ "${CACHE_WRITE_ENABLED}" == "true" ]]; then
+            HARBOR_WRITE_REQUIRED="true"
+          fi
+          echo "Harbor write required: ${HARBOR_WRITE_REQUIRED}"
+
+          # =================================================================
+          # Phase 5: Validate credential availability when write is required
+          # =================================================================
+          if [[ "${HARBOR_WRITE_REQUIRED}" == "true" ]]; then
+            echo "Write operation requested, validating credentials..."
+
+            if [[ -z "${HARBOR_USERNAME}" ]] || [[ -z "${HARBOR_TOKEN}" ]]; then
+              echo "ERROR: Write operations require HARBOR_USERNAME and HARBOR_TOKEN"
+              echo "ERROR: One or both credentials are missing"
+              exit 1
             fi
 
-            if [[ "${IS_FORK}" == "true" ]]; then
-              if [[ "${{ inputs.image_push_enabled }}" == "true" ]] || [[ "${{ inputs.registry_cache_write_enabled }}" == "true" ]]; then
-                echo "ERROR: Fork PR cannot request write operations. Set image_push_enabled=false and registry_cache_write_enabled=false for fork PRs."
-                exit 1
-              fi
-              echo "Security: Fork PR correctly configured (read-only)"
-            fi
+            echo "Credentials validated: present"
+          else
+            echo "No write operation requested"
+            echo "Credentials: not required"
           fi
 
           echo ""
-          echo "Cache reference: ${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache"
-          echo "Image reference: ${{ inputs.registry }}/${{ inputs.harbor_project }}/${{ inputs.image_name }}"
+          echo "Cache reference: ${REGISTRY}/${HARBOR_PROJECT}/cache/${IMAGE_NAME}:buildcache"
+          echo "Image reference: ${REGISTRY}/${HARBOR_PROJECT}/${IMAGE_NAME}"
           echo ""
           echo "=== Authority Preflight: PASSED ==="
 
