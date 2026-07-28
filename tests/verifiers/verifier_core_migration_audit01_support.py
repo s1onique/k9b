@@ -111,7 +111,6 @@ def audit01_source_guard_violations() -> dict[str, tuple[str, ...]]:
             }
         ),
         TESTS_ROOT / "test_verifier_core_migration_audit01_correction13.py": frozenset({"_build_comparison_layouts"}),
-        TESTS_ROOT / "test_verifier_core_migration_audit01_correction14_layout.py": frozenset({"_build_complete_index"}),
         TESTS_ROOT / "test_verifier_core_migration_audit01_correction13_cmd.py": frozenset(
             {
                 "_build_comparison_layouts",
