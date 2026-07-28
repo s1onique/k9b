@@ -132,12 +132,18 @@ def run_automatic_diagnosis_loop_compat(
     promotion_result_summary: dict[str, Any] | None = None,
     backend_endpoint_identity: dict[str, Any] | None = None,
     incident_selection_mode: str | None = None,
+    diagnosis_selection: object | None = None,
 ) -> dict[str, Any]:
     """Compatibility wrapper for automatic diagnosis loop.
 
     This is a delegator that wraps run_automatic_diagnosis_loop
     from loop_automatic_diagnosis, providing the instance-based interface
     expected by existing tests and production call sites.
+
+    CORRECTION05: This wrapper now accepts ``diagnosis_selection`` as a
+    typed authority source. When supplied, it takes precedence over the
+    legacy ``canonical_incident_ids`` and ``incident_selection_mode`` args
+    per the ``AmbiguousDiagnosisSelectionError`` contract.
 
     Args:
         runner: HealthLoopRunner instance
@@ -150,13 +156,17 @@ def run_automatic_diagnosis_loop_compat(
             metadata to attach to the auto-diagnosis summary.
         backend_endpoint_identity: Optional backend endpoint identity (no
             credentials) to forward to auto-diagnosis for diagnostics.
-        incident_selection_mode: Optional R7 selection mode. When
+        incident_selection_mode: Optional R7/R10 selection mode. When
             ``"blocked"`` the collector emits a typed
             ``automatic_diagnosis_blocked`` event and returns a bounded
             payload without touching the underlying evidence
             collection. When ``"explicit_incident_ids"`` or
             ``"store_scan"`` the collector invokes the underlying
             collector in the matching mode.
+        diagnosis_selection: Optional typed :class:`DiagnosisSelection`
+            variant. When supplied, this is the sole authority source;
+            ``canonical_incident_ids`` and ``incident_selection_mode``
+            MUST NOT be supplied simultaneously.
 
     Returns:
         Bounded result summary dict with:
@@ -181,6 +191,7 @@ def run_automatic_diagnosis_loop_compat(
         promotion_result_summary=promotion_result_summary,
         backend_endpoint_identity=backend_endpoint_identity,
         incident_selection_mode=incident_selection_mode,
+        diagnosis_selection=diagnosis_selection,
     )
 
 

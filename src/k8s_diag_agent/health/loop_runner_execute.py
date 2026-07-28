@@ -32,6 +32,7 @@ from ..collect.incident_promotion_accumulator import (
 from ..external_analysis.alertmanager_durable_learning import scan_and_propose
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
 from .adaptation import HealthProposal
+from .loop_automatic_diagnosis import _legacy_build_selection
 from .loop_history import HealthRating
 from .loop_runner_assessments import build_assessments_for_records
 from .loop_runner_comparisons import evaluate_triggers_for_records
@@ -1019,28 +1020,31 @@ def execute_health_loop_run(
             selection_mode=automatic_diagnosis_execution.selection_mode,
         )
     else:
-        # ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION04:
-        # Pass exactly ONE authority source. The contract forbids passing
-        # multiple authority args simultaneously (canonical_incident_ids +
-        # incident_selection_mode). Selection mode determines which:
-        # - explicit_incident_ids -> pass canonical_incident_ids only
-        # - store_scan / current_run_empty -> pass incident_selection_mode only
+        # ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION05:
+        # Build exactly ONE typed DiagnosisSelection and pass it as the
+        # sole authority source. The contract forbids passing multiple
+        # authority args simultaneously. Each selection mode maps to a
+        # distinct typed variant:
+        # - explicit_incident_ids -> DiagnosisSelectionFromPromotion with IDs
+        # - current_run_empty -> DiagnosisSelectionFromPromotion with empty IDs
+        # - store_scan -> DiagnosisSelectionWithoutPromotion
+        # - commit_unknown -> DiagnosisSelectionUnavailable
         selection_mode = automatic_diagnosis_execution.selection_mode
-        if selection_mode == INCIDENT_SELECTION_MODE_EXPLICIT_IDS:
-            runner._run_automatic_diagnosis_loop(
-                external_analysis_dir=directories["external_analysis"],
-                canonical_incident_ids=canonical_ids,
-                promotion_result_summary=promotion_summary,
-                backend_endpoint_identity=backend_endpoint_identity,
-            )
-        else:
-            # store_scan, current_run_empty, commit_unknown
-            runner._run_automatic_diagnosis_loop(
-                external_analysis_dir=directories["external_analysis"],
-                promotion_result_summary=promotion_summary,
-                backend_endpoint_identity=backend_endpoint_identity,
-                incident_selection_mode=selection_mode,
-            )
+        diagnosis_selection = _legacy_build_selection(
+            canonical_incident_ids=(
+                canonical_ids
+                if selection_mode == INCIDENT_SELECTION_MODE_EXPLICIT_IDS
+                else None
+            ),
+            incident_selection_mode=selection_mode,
+            scheduler_run_id=runner.run_id,
+        )
+        runner._run_automatic_diagnosis_loop(
+            external_analysis_dir=directories["external_analysis"],
+            promotion_result_summary=promotion_summary,
+            backend_endpoint_identity=backend_endpoint_identity,
+            diagnosis_selection=diagnosis_selection,
+        )
 
     # Log completion. ``automatic_diagnosis_synchronous`` records that
     # the synchronous automatic diagnosis phase finished before this
