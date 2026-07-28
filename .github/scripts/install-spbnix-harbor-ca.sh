@@ -2,42 +2,103 @@
 # install-spbnix-harbor-ca.sh
 # Installs SPbNIX Harbor CA certificate into runner, Docker daemon, and BuildKit containers.
 #
-# Required env vars:
-#   SPBNIX_CA_CERT_PEM  - PEM-encoded CA certificate content
+# Valid CA sources (at least one required):
+#   A. SPBNIX_CA_CERT_PEM - nonempty valid PEM certificate content
+#   B. HARBOR_CA_PATH     - existing file with expected SHA-256
 #
-# Optional env vars:
-#   BUILDX_BUILDER_NAME - Buildx builder name; if set, patches BuildKit containers
-#   HARBOR_HOST         - Harbor hostname (default: harbor-pve1.spbnix.local)
+# Exit codes:
+#   0 - CA installed successfully
+#   1 - HARBOR_CA_SOURCE_MISSING (neither source available)
+#   2 - HARBOR_CA_INVALID (invalid PEM or empty file)
+#   3 - HARBOR_CA_SHA256_MISMATCH (fingerprint mismatch)
 #
 set -euo pipefail
 
-# --- Check for CA certificate ---
-if [[ -z "${SPBNIX_CA_CERT_PEM:-}" ]]; then
-  echo "WARNING: SPBNIX_CA_CERT_PEM is not set."
-  echo "Assuming DinD/ARC sidecar mounts CA certificate."
-  echo "If Harbor is not trusted, configure SPBNIX_CA_CERT_PEM secret."
-  exit 0
-fi
-
 # --- Configuration ---
 HARBOR_HOST="${HARBOR_HOST:-harbor-pve1.spbnix.local}"
+HARBOR_CA_PATH="${HARBOR_CA_PATH:-}"
+HARBOR_CA_SHA256="${HARBOR_CA_SHA256:-}"
 CERT_DIR="${RUNNER_TEMP:-/tmp}/spbnix-ca"
 CERT_FILE="${CERT_DIR}/spbnix-harbor-ca.crt"
 mkdir -p "$CERT_DIR"
 
-# --- Write certificate ---
-echo "$SPBNIX_CA_CERT_PEM" > "$CERT_FILE"
+# --- Determine CA source ---
+CA_SOURCE=""
 
-# --- Validate PEM ---
-echo "Validating CA certificate..."
-VALIDATED=$(openssl x509 -in "$CERT_FILE" -noout -subject -issuer -dates 2>&1) || {
-  echo "ERROR: Invalid PEM certificate in SPBNIX_CA_CERT_PEM"
-  echo "openssl output: $VALIDATED"
+# Source A: SPBNIX_CA_CERT_PEM
+if [[ -n "${SPBNIX_CA_CERT_PEM:-}" ]]; then
+  echo "CA source: secret (SPBNIX_CA_CERT_PEM)"
+  CA_SOURCE="secret"
+  
+  # Validate PEM
+  echo "$SPBNIX_CA_CERT_PEM" > "$CERT_FILE"
+  if ! VALIDATED=$(openssl x509 -in "$CERT_FILE" -noout -subject -issuer -dates 2>&1); then
+    echo "ERROR: HARBOR_CA_PEM_INVALID"
+    echo "ERROR: Invalid PEM certificate in SPBNIX_CA_CERT_PEM"
+    echo "openssl output: $VALIDATED"
+    exit 2
+  fi
+  echo "CA certificate validated from secret:"
+  echo "$VALIDATED"
+
+# Source B: HARBOR_CA_PATH
+elif [[ -n "$HARBOR_CA_PATH" ]]; then
+  echo "CA source: runner_mount ($HARBOR_CA_PATH)"
+  CA_SOURCE="runner_mount"
+  
+  # Check file exists
+  if [[ ! -f "$HARBOR_CA_PATH" ]]; then
+    echo "ERROR: HARBOR_CA_PATH_MISSING"
+    echo "ERROR: CA file does not exist: $HARBOR_CA_PATH"
+    exit 1
+  fi
+  
+  # Check file is not empty
+  if [[ ! -s "$HARBOR_CA_PATH" ]]; then
+    echo "ERROR: HARBOR_CA_EMPTY"
+    echo "ERROR: CA file is empty: $HARBOR_CA_PATH"
+    exit 2
+  fi
+  
+  # Copy to working location
+  cp "$HARBOR_CA_PATH" "$CERT_FILE"
+  
+  # Validate PEM
+  if ! VALIDATED=$(openssl x509 -in "$CERT_FILE" -noout -subject -issuer -dates 2>&1); then
+    echo "ERROR: HARBOR_CA_PEM_INVALID"
+    echo "ERROR: Invalid PEM in $HARBOR_CA_PATH"
+    echo "openssl output: $VALIDATED"
+    exit 2
+  fi
+  echo "CA certificate validated from runner mount:"
+  echo "$VALIDATED"
+  
+  # Verify SHA-256 if provided
+  if [[ -n "$HARBOR_CA_SHA256" ]]; then
+    ACTUAL_SHA256=$(openssl x509 -in "$CERT_FILE" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//' | tr -d ':')
+    if [[ "${ACTUAL_SHA256,,}" != "${HARBOR_CA_SHA256,,}" ]]; then
+      echo "ERROR: HARBOR_CA_SHA256_MISMATCH"
+      echo "ERROR: Expected: $HARBOR_CA_SHA256"
+      echo "ERROR: Actual: $ACTUAL_SHA256"
+      exit 3
+    fi
+    echo "CA fingerprint verified: $ACTUAL_SHA256"
+  fi
+
+# No valid source
+else
+  echo "ERROR: HARBOR_CA_SOURCE_MISSING"
+  echo "ERROR: Neither SPBNIX_CA_CERT_PEM nor HARBOR_CA_PATH is available"
+  echo ""
+  echo "At least one CA source is required:"
+  echo "  A. Set SPBNIX_CA_CERT_PEM secret with valid PEM certificate"
+  echo "  B. Set HARBOR_CA_PATH to runner-mounted CA file"
   exit 1
-}
-echo "CA certificate details:"
-echo "$VALIDATED"
-echo ""
+fi
+
+# Emit result
+echo "CA_SOURCE=$CA_SOURCE"
+echo "CA_FILE=$CERT_FILE"
 
 # --- Helper: install with sudo if needed ---
 install_file() {
@@ -52,7 +113,7 @@ install_file() {
     sudo install -D -m "$mode" "$src" "$dest"
   else
     echo "ERROR: Cannot write to $(dirname "$dest")"
-    exit 1
+    exit 4
   fi
 }
 
@@ -84,13 +145,13 @@ install_into_runner_trust() {
         sudo tee -a /etc/ssl/certs/ca-certificates.crt < "$CERT_FILE" > /dev/null
       else
         echo "ERROR: Cannot install CA into runner trust: no write access to system CA store."
-        exit 1
+        exit 4
       fi
     fi
     echo "CA installed into runner system trust: $dest"
   else
     echo "ERROR: Cannot install CA into runner trust: no write access to system CA store."
-    exit 1
+    exit 4
   fi
 }
 
@@ -151,7 +212,7 @@ if [[ -n "${BUILDX_BUILDER_NAME:-}" ]]; then
   if [[ -z "$CONTAINERS" ]]; then
     echo "ERROR: No BuildKit containers found for builder '$BUILDX_BUILDER_NAME'."
     echo "docker/build-push-action uses BuildKit containers that must trust the CA."
-    exit 1
+    exit 4
   fi
   
   echo "Found BuildKit containers:"
@@ -178,7 +239,7 @@ if [[ -n "${BUILDX_BUILDER_NAME:-}" ]]; then
         cat /tmp/spbnix-harbor-ca.crt >> /etc/ssl/certs/ca-certificates.crt
       ' || {
         echo "ERROR: Failed to install CA in BuildKit container $container"
-        exit 1
+        exit 4
       }
     fi
 

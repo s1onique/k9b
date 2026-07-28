@@ -344,8 +344,12 @@ jobs:
             type=sha,prefix=,format=short
 
       - name: BuildKit cache ref
+        env:
+          REGISTRY: ${{ inputs.registry }}
+          HARBOR_PROJECT: ${{ inputs.harbor_project }}
+          IMAGE_NAME: ${{ inputs.image_name }}
         run: |
-          echo "BuildKit cache ref: ${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache"
+          echo "BuildKit cache ref: ${REGISTRY}/${HARBOR_PROJECT}/cache/${IMAGE_NAME}:buildcache"
 
       - name: Build and push image
         id: build-image
@@ -366,14 +370,21 @@ jobs:
       # Post-build summary with authority details
       # =============================================================================
       - name: Build summary
+        env:
+          IMAGE_PUSH_ENABLED: ${{ inputs.image_push_enabled }}
+          CACHE_READ_ENABLED: ${{ inputs.registry_cache_read_enabled }}
+          CACHE_WRITE_ENABLED: ${{ inputs.registry_cache_write_enabled }}
+          REGISTRY: ${{ inputs.registry }}
+          HARBOR_PROJECT: ${{ inputs.harbor_project }}
+          IMAGE_NAME: ${{ inputs.image_name }}
         run: |
           echo "=== Build Summary ==="
           echo ""
           echo "Authority configuration:"
-          echo "  Image push enabled: ${{ inputs.image_push_enabled }}"
-          echo "  Cache read enabled: ${{ inputs.registry_cache_read_enabled }}"
-          echo "  Cache write enabled: ${{ inputs.registry_cache_write_enabled }}"
+          echo "  Image push enabled: ${IMAGE_PUSH_ENABLED}"
+          echo "  Cache read enabled: ${CACHE_READ_ENABLED}"
+          echo "  Cache write enabled: ${CACHE_WRITE_ENABLED}"
           echo ""
           echo "Build outputs:"
-          echo "  Image: ${{ inputs.registry }}/${{ inputs.harbor_project }}/${{ inputs.image_name }}"
-          echo "  Cache: ${{ inputs.registry }}/${{ inputs.harbor_project }}/cache/${{ inputs.image_name }}:buildcache"
+          echo "  Image: ${REGISTRY}/${HARBOR_PROJECT}/${IMAGE_NAME}"
+          echo "  Cache: ${REGISTRY}/${HARBOR_PROJECT}/cache/${IMAGE_NAME}:buildcache"
