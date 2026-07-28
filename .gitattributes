@@ -1,1 +1,0 @@
-src/k8s_diag_agent/health/loop_automatic_diagnosis_reporting.py filter=trailing-whitespace

@@ -32,7 +32,19 @@ from ..collect.incident_promotion_accumulator import (
 from ..external_analysis.alertmanager_durable_learning import scan_and_propose
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
 from .adaptation import HealthProposal
-from .loop_automatic_diagnosis import _legacy_build_selection
+from ..collect.diagnosis_selection import (
+    DiagnosisSelection,
+    DiagnosisSelectionFromPromotion,
+    DiagnosisSelectionUnavailable,
+    DiagnosisSelectionWithoutPromotion,
+    NoPromotionSelectionReason,
+)
+from ..collect.promotion_outcomes import (
+    PromotionCommitUnknown,
+    PromotionRejected,
+    PromotionRejectionCode,
+    PromotionSucceeded,
+)
 from .loop_history import HealthRating
 from .loop_runner_assessments import build_assessments_for_records
 from .loop_runner_comparisons import evaluate_triggers_for_records
@@ -378,6 +390,7 @@ def _derive_automatic_diagnosis_inputs(
     IncidentStoreConsistencyError | None,
     dict[str, Any],
     AutomaticDiagnosisExecution,
+    PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None,
 ]:
     """Build canonical-ID, consistency, and execution-decision inputs.
 
@@ -477,6 +490,7 @@ def _derive_automatic_diagnosis_inputs(
             None,
             preserved_endpoint,
             blocked_decision,
+            None,  # promotion_outcome: no promotion occurred due to contract error
         )
 
     promotion_records: list[PromotionRecord] = list(accumulator.promotion_records)
@@ -592,6 +606,7 @@ def _derive_automatic_diagnosis_inputs(
                 None,
                 backend_endpoint_identity,
                 blocked_decision,
+                None,  # promotion_outcome: contract error blocked promotion
             )
 
     # R6 (item 1): the authoritative lookup consistency check is a
@@ -647,6 +662,7 @@ def _derive_automatic_diagnosis_inputs(
                 None,
                 backend_endpoint_identity,
                 blocked_decision,
+                None,  # promotion_outcome: contract error blocked promotion
             )
         except Exception:
             backend_endpoint_identity["backend_reachable"] = False
@@ -726,12 +742,20 @@ def _derive_automatic_diagnosis_inputs(
         blocked_reason="promotion_workset_contract_failure" if selection_mode == INCIDENT_SELECTION_MODE_BLOCKED else None,
     )
 
+    # ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION06: Extract typed
+    # promotion_outcome from accumulator. This is the real typed outcome,
+    # not fabricated from mode strings.
+    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None = (
+        accumulator.promotion_outcome
+    )
+
     return (
         canonical_ids,
         promotion_summary,
         consistency_error,
         backend_endpoint_identity,
         execution,
+        promotion_outcome,
     )
 
 
@@ -771,6 +795,114 @@ def _build_contract_error_summary(
         "errors": accumulator.total_errors,
         "unique_candidate_count": accumulator.total_unique_candidate_count,
     }
+
+
+def _build_diagnosis_selection_for_execution(
+    *,
+    automatic_diagnosis_execution: AutomaticDiagnosisExecution,
+    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None,
+    canonical_incident_ids: list[str],
+    scheduler_run_id: str,
+) -> DiagnosisSelection:
+    """Build the canonical typed DiagnosisSelection for automatic diagnosis.
+
+    ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION06:
+    This is the ONLY builder the production orchestrator uses. It consumes
+    the real typed promotion_outcome from the accumulator and produces the
+    correct typed variant. It does NOT fabricate outcomes from strings.
+
+    Required algebra:
+    - explicit_incident_ids + PromotionSucceeded -> DiagnosisSelectionFromPromotion
+    - current_run_empty + PromotionSucceeded -> DiagnosisSelectionFromPromotion (empty IDs)
+    - store_scan -> DiagnosisSelectionWithoutPromotion
+    - commit_unknown + PromotionCommitUnknown -> DiagnosisSelectionUnavailable
+    - blocked -> caller handles before reaching here
+
+    Args:
+        automatic_diagnosis_execution: The typed execution decision from the orchestrator.
+        promotion_outcome: The real typed outcome from the accumulator (not fabricated).
+        canonical_incident_ids: Canonical IDs from the accumulator (preserves order).
+        scheduler_run_id: The scheduler run ID for run-identity validation.
+
+    Returns:
+        Typed DiagnosisSelection variant matching the execution decision.
+
+    Raises:
+        ValueError: When selection_mode/outcome combination is invalid.
+    """
+    selection_mode = automatic_diagnosis_execution.selection_mode
+
+    # blocked is handled before reaching here
+    if selection_mode == INCIDENT_SELECTION_MODE_BLOCKED:
+        raise ValueError(
+            "blocked selection must be handled before calling this builder"
+        )
+
+    # store_scan: no promotion outcome needed
+    if selection_mode == INCIDENT_SELECTION_MODE_STORE_SCAN:
+        return DiagnosisSelectionWithoutPromotion(
+            reason=NoPromotionSelectionReason.SCHEDULED_SCAN_RUN,
+        )
+
+    # commit_unknown: requires PromotionCommitUnknown
+    if selection_mode == INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN:
+        if promotion_outcome is None:
+            raise ValueError(
+                f"selection_mode={selection_mode!r} requires a PromotionCommitUnknown "
+                f"outcome, got None"
+            )
+        if not isinstance(promotion_outcome, PromotionCommitUnknown):
+            raise ValueError(
+                f"selection_mode={selection_mode!r} requires PromotionCommitUnknown, "
+                f"got {type(promotion_outcome).__name__}"
+            )
+        return DiagnosisSelectionUnavailable(outcome=promotion_outcome)
+
+    # explicit_incident_ids or current_run_empty: require PromotionSucceeded
+    if selection_mode in (
+        INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
+        INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
+    ):
+        if promotion_outcome is None:
+            raise ValueError(
+                f"selection_mode={selection_mode!r} requires PromotionSucceeded, "
+                f"got None"
+            )
+        if not isinstance(promotion_outcome, PromotionSucceeded):
+            raise ValueError(
+                f"selection_mode={selection_mode!r} requires PromotionSucceeded, "
+                f"got {type(promotion_outcome).__name__}"
+            )
+
+        # Validate run identity matches
+        if promotion_outcome.run_id != scheduler_run_id:
+            raise ValueError(
+                f"promotion_outcome.run_id={promotion_outcome.run_id!r} "
+                f"does not match scheduler_run_id={scheduler_run_id!r}"
+            )
+
+        if selection_mode == INCIDENT_SELECTION_MODE_EXPLICIT_IDS:
+            # Use the exact canonical IDs from the accumulator (preserves order)
+            return DiagnosisSelectionFromPromotion(
+                promotion_run_id=scheduler_run_id,
+                incident_ids=tuple(canonical_incident_ids),
+            )
+        else:
+            # current_run_empty: authoritative zero-work
+            return DiagnosisSelectionFromPromotion(
+                promotion_run_id=scheduler_run_id,
+                incident_ids=(),
+            )
+
+    # Unknown mode: fail-closed
+    raise ValueError(
+        f"Unknown selection_mode={selection_mode!r}. "
+        f"Known modes: {INCIDENT_SELECTION_MODE_EXPLICIT_IDS!r}, "
+        f"{INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY!r}, "
+        f"{INCIDENT_SELECTION_MODE_STORE_SCAN!r}, "
+        f"{INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN!r}, "
+        f"{INCIDENT_SELECTION_MODE_BLOCKED!r}"
+    )
 
 
 def execute_health_loop_run(
@@ -988,6 +1120,7 @@ def execute_health_loop_run(
         promotion_consistency_error,
         backend_endpoint_identity,
         automatic_diagnosis_execution,
+        promotion_outcome,
     ) = _derive_automatic_diagnosis_inputs(
         promotion_accumulator,
     )
@@ -1020,23 +1153,15 @@ def execute_health_loop_run(
             selection_mode=automatic_diagnosis_execution.selection_mode,
         )
     else:
-        # ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION05:
-        # Build exactly ONE typed DiagnosisSelection and pass it as the
-        # sole authority source. The contract forbids passing multiple
-        # authority args simultaneously. Each selection mode maps to a
-        # distinct typed variant:
-        # - explicit_incident_ids -> DiagnosisSelectionFromPromotion with IDs
-        # - current_run_empty -> DiagnosisSelectionFromPromotion with empty IDs
-        # - store_scan -> DiagnosisSelectionWithoutPromotion
-        # - commit_unknown -> DiagnosisSelectionUnavailable
-        selection_mode = automatic_diagnosis_execution.selection_mode
-        diagnosis_selection = _legacy_build_selection(
-            canonical_incident_ids=(
-                canonical_ids
-                if selection_mode == INCIDENT_SELECTION_MODE_EXPLICIT_IDS
-                else None
-            ),
-            incident_selection_mode=selection_mode,
+        # ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION06:
+        # Build typed DiagnosisSelection using the canonical builder that
+        # consumes the real promotion_outcome from the accumulator.
+        # This replaces the legacy _legacy_build_selection() which
+        # fabricated outcomes from strings and lost authoritative data.
+        diagnosis_selection = _build_diagnosis_selection_for_execution(
+            automatic_diagnosis_execution=automatic_diagnosis_execution,
+            promotion_outcome=promotion_outcome,
+            canonical_incident_ids=canonical_ids,
             scheduler_run_id=runner.run_id,
         )
         runner._run_automatic_diagnosis_loop(
