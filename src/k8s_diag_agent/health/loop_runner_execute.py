@@ -880,38 +880,42 @@ def _build_diagnosis_selection_for_execution(
                 f"does not match scheduler_run_id={scheduler_run_id!r}"
             )
 
-        # CORRECTION08: Validate outcome.diagnosis_incident_ids matches canonical_ids
+        # CORRECTION08/CORRECTION09: Validate outcome.diagnosis_incident_ids matches canonical_ids
         # This is the SOLE ID AUTHORITY validation - the outcome's IDs must match
-        # the accumulator's canonical IDs exactly.
+        # the accumulator's canonical IDs exactly (canonical IDs are the witness).
+        # CORRECTION09: Construction source is promotion_outcome.diagnosis_incident_ids.
         outcome_ids = promotion_outcome.diagnosis_incident_ids
         if selection_mode == INCIDENT_SELECTION_MODE_EXPLICIT_IDS:
-            # explicit_ids mode: outcome must have the same IDs as canonical_incident_ids
+            # CORRECTION09: explicit_ids mode - validate equality (witness role)
+            # but construct from outcome_ids (sole authority).
             if tuple(canonical_incident_ids) != outcome_ids:
                 raise PromotionConsistencyContractError(
                     f"DiagnosisSelection SOLE ID AUTHORITY violation: "
                     f"canonical_incident_ids={canonical_incident_ids} does not match "
                     f"promotion_outcome.diagnosis_incident_ids={list(outcome_ids)}",
                     promotion_record_count=len(canonical_incident_ids),
-                    opened_incidents=len([i for i in canonical_incident_ids if i in outcome_ids]),
-                    updated_incidents=0,
+                    opened_incidents=len(canonical_incident_ids),
+                    updated_incidents=len(outcome_ids) - len(canonical_incident_ids),
                 )
+            # CORRECTION09: Use outcome_ids as sole construction authority
             return DiagnosisSelectionFromPromotion(
-                promotion_run_id=scheduler_run_id,
-                incident_ids=tuple(canonical_incident_ids),
+                promotion_run_id=promotion_outcome.run_id,
+                incident_ids=outcome_ids,
             )
         else:
-            # current_run_empty mode: outcome must have empty IDs
+            # CORRECTION08/CORRECTION09: current_run_empty mode - outcome must have empty IDs
             if outcome_ids != ():
                 raise PromotionConsistencyContractError(
                     f"DiagnosisSelection SOLE ID AUTHORITY violation: "
                     f"selection_mode=current_run_empty requires empty diagnosis_incident_ids, "
                     f"got {list(outcome_ids)}",
-                    promotion_record_count=0,
+                    promotion_record_count=len(outcome_ids),
                     opened_incidents=0,
                     updated_incidents=0,
                 )
+            # CORRECTION09: Use empty outcome_ids as sole construction authority
             return DiagnosisSelectionFromPromotion(
-                promotion_run_id=scheduler_run_id,
+                promotion_run_id=promotion_outcome.run_id,
                 incident_ids=(),
             )
 

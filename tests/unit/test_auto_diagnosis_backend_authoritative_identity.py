@@ -593,7 +593,11 @@ class TestBuildDiagnosisSelectionForExecution:
         assert "inc-b" in str(exc_info.value)
 
     def test_matching_ids_succeeds(self) -> None:
-        """CORRECTION08: Matching IDs pass validation."""
+        """CORRECTION08/CORRECTION09: Matching IDs pass validation.
+
+        CORRECTION09: The constructed selection uses outcome_ids as sole
+        construction authority, not canonical_incident_ids.
+        """
         from k8s_diag_agent.collect.diagnosis_selection import (
             DiagnosisSelectionFromPromotion,
         )
@@ -607,11 +611,12 @@ class TestBuildDiagnosisSelectionForExecution:
         )
 
         canonical_ids = ["inc-a", "inc-b"]
+        outcome_ids = ("inc-a", "inc-b")
         outcome = PromotionSucceeded(
             run_id="test-run",
             requested_signal_ids=(),
             records=(),
-            diagnosis_incident_ids=("inc-a", "inc-b"),
+            diagnosis_incident_ids=outcome_ids,
         )
         execution = AutomaticDiagnosisExecution(
             should_run=True,
@@ -619,7 +624,7 @@ class TestBuildDiagnosisSelectionForExecution:
             incident_access_mode="backend",
         )
 
-        # CORRECTION08: Matching IDs must succeed
+        # CORRECTION09: outcome_ids is the sole construction authority
         result = _build_diagnosis_selection_for_execution(
             automatic_diagnosis_execution=execution,
             promotion_outcome=outcome,
@@ -629,7 +634,8 @@ class TestBuildDiagnosisSelectionForExecution:
 
         assert isinstance(result, DiagnosisSelectionFromPromotion)
         assert result.promotion_run_id == "test-run"
-        assert result.incident_ids == ("inc-a", "inc-b")
+        # CORRECTION09: incident_ids derives from outcome_ids (sole authority)
+        assert result.incident_ids == outcome_ids
 
     def test_current_run_empty_requires_empty_outcome_ids(self) -> None:
         """CORRECTION08: current_run_empty mode requires empty diagnosis_incident_ids."""
