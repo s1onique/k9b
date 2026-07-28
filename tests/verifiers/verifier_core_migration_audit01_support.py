@@ -31,6 +31,8 @@ AUDIT01_TEST_MODULES_WITHOUT_SUPPORT: tuple[Path, ...] = (
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction14.py",
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction14_layout.py",
     TESTS_ROOT / "test_verifier_core_migration_audit01_correction14_evidence.py",
+    # CORRECTION29: durable name for the hermetic Ruff fixture test module
+    TESTS_ROOT / "test_verifier_core_migration_audit01_hermetic_ruff_fixture.py",
 )
 
 AUDIT01_TEST_MODULES: tuple[Path, ...] = (
