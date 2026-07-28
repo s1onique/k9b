@@ -29,7 +29,7 @@ CA_SOURCE=""
 if [[ -n "${SPBNIX_CA_CERT_PEM:-}" ]]; then
   echo "CA source: secret (SPBNIX_CA_CERT_PEM)"
   CA_SOURCE="secret"
-  
+
   # Validate PEM
   echo "$SPBNIX_CA_CERT_PEM" > "$CERT_FILE"
   if ! VALIDATED=$(openssl x509 -in "$CERT_FILE" -noout -subject -issuer -dates 2>&1); then
@@ -45,24 +45,24 @@ if [[ -n "${SPBNIX_CA_CERT_PEM:-}" ]]; then
 elif [[ -n "$HARBOR_CA_PATH" ]]; then
   echo "CA source: runner_mount ($HARBOR_CA_PATH)"
   CA_SOURCE="runner_mount"
-  
+
   # Check file exists
   if [[ ! -f "$HARBOR_CA_PATH" ]]; then
     echo "ERROR: HARBOR_CA_PATH_MISSING"
     echo "ERROR: CA file does not exist: $HARBOR_CA_PATH"
     exit 1
   fi
-  
+
   # Check file is not empty
   if [[ ! -s "$HARBOR_CA_PATH" ]]; then
     echo "ERROR: HARBOR_CA_EMPTY"
     echo "ERROR: CA file is empty: $HARBOR_CA_PATH"
     exit 2
   fi
-  
+
   # Copy to working location
   cp "$HARBOR_CA_PATH" "$CERT_FILE"
-  
+
   # Validate PEM
   if ! VALIDATED=$(openssl x509 -in "$CERT_FILE" -noout -subject -issuer -dates 2>&1); then
     echo "ERROR: HARBOR_CA_PEM_INVALID"
@@ -72,7 +72,7 @@ elif [[ -n "$HARBOR_CA_PATH" ]]; then
   fi
   echo "CA certificate validated from runner mount:"
   echo "$VALIDATED"
-  
+
   # Verify SHA-256 if provided
   if [[ -n "$HARBOR_CA_SHA256" ]]; then
     ACTUAL_SHA256=$(openssl x509 -in "$CERT_FILE" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//' | tr -d ':')
@@ -202,23 +202,23 @@ install_into_docker_daemon_trust
 if [[ -n "${BUILDX_BUILDER_NAME:-}" ]]; then
   echo ""
   echo "Patching BuildKit containers for builder: $BUILDX_BUILDER_NAME"
-  
+
   # Ensure builder is bootstrapped
   docker buildx inspect "$BUILDX_BUILDER_NAME" --bootstrap
-  
+
   # Find BuildKit containers
   CONTAINERS=$(docker ps --format '{{.Names}}' | grep -E "^buildx_buildkit_${BUILDX_BUILDER_NAME}" || true)
-  
+
   if [[ -z "$CONTAINERS" ]]; then
     echo "ERROR: No BuildKit containers found for builder '$BUILDX_BUILDER_NAME'."
     echo "docker/build-push-action uses BuildKit containers that must trust the CA."
     exit 4
   fi
-  
+
   echo "Found BuildKit containers:"
   echo "$CONTAINERS"
   echo ""
-  
+
   for container in $CONTAINERS; do
     echo "Patching $container..."
 
@@ -250,7 +250,7 @@ if [[ -n "${BUILDX_BUILDER_NAME:-}" ]]; then
 
     echo "Patched: $container"
   done
-  
+
   echo ""
   echo "BuildKit containers patched successfully"
 fi
