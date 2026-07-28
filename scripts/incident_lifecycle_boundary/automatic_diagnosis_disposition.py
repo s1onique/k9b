@@ -244,12 +244,13 @@ def check_reason_maps_keyed_by_enum() -> list[VerifierResult]:
 
 # Import AST scanner from extracted module
 try:
-    from .automatic_diagnosis_disposition_reason_map_scan import (  # noqa: F401, E402
+    from .automatic_diagnosis_disposition_reason_map_scan import (
         _check_file_has_reason_maps,
     )
 except ImportError:
-    # When run as a script, use absolute import path
+    # Fallback for direct script execution: load from sibling module file
     import importlib.util
+
     spec = importlib.util.spec_from_file_location(
         "automatic_diagnosis_disposition_reason_map_scan",
         Path(__file__).parent / "automatic_diagnosis_disposition_reason_map_scan.py",
