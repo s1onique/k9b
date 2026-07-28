@@ -366,27 +366,39 @@ jobs:
       - python-unit-shard-union
       - frontend-tests
       - helm-chart
-    # Only run for PR events to report skip status
-    if: github.event_name == 'pull_request'
+    # Only run for untrusted PRs (fork or Dependabot)
+    # Same-repository PRs are handled by build-*-pr jobs
+    if: >-
+      github.event_name == 'pull_request' &&
+      (
+        github.event.pull_request.head.repo.full_name != github.repository ||
+        github.actor == 'dependabot[bot]'
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      ACTOR: ${{ github.actor }}
+      REPOSITORY: ${{ github.repository }}
+      HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name }}
     steps:
       - name: Check PR trust classification
         run: |
           echo "=== PR Trust Classification ==="
-          echo "Event: ${{ github.event_name }}"
-          echo "Actor: ${{ github.actor }}"
-          echo "Head repo: ${{ github.event.pull_request.head.repo.full_name }}"
-          echo "Base repo: ${{ github.event.pull_request.base.repo.full_name }}"
+          printf 'Event: %s\n' "$EVENT_NAME"
+          printf 'Actor: %s\n' "$ACTOR"
+          printf 'Head repo: %s\n' "$HEAD_REPOSITORY"
+          printf 'Base repo: %s\n' "$BASE_REPOSITORY"
           echo ""
-          if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
-            echo "SKIP REASON: Fork PR - Harbor CA secret unavailable"
-            echo "ERROR_CODE: HARBOR_CA_SECRET_UNAVAILABLE_FOR_FORK_PR"
-          elif [[ "${{ github.actor }}" == "dependabot[bot]" ]]; then
-            echo "SKIP REASON: Dependabot PR - Actions secrets unavailable"
-            echo "ERROR_CODE: HARBOR_CA_SECRET_UNAVAILABLE_FOR_DEPENDABOT"
+          if [[ "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
+            printf 'SKIP REASON: Fork PR - Harbor CA secret unavailable\n'
+            printf 'ERROR_CODE: HARBOR_CA_SECRET_UNAVAILABLE_FOR_FORK_PR\n'
+          elif [[ "$ACTOR" == "dependabot[bot]" ]]; then
+            printf 'SKIP REASON: Dependabot PR - Actions secrets unavailable\n'
+            printf 'ERROR_CODE: HARBOR_CA_SECRET_UNAVAILABLE_FOR_DEPENDABOT\n'
           else
-            echo "ERROR: Unexpected PR context reached skip status job"
+            printf 'ERROR: Unexpected untrusted PR context\n'
             exit 1
           fi
