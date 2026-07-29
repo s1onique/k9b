@@ -36,10 +36,27 @@ Invariants enforced:
 
 from __future__ import annotations
 
-import ast
 from pathlib import Path
 
 import pytest
+from promotion_hulk_ast_support import (
+    call_name as _call_name,
+)
+from promotion_hulk_ast_support import (
+    calls_in_function as _calls_in_function,
+)
+from promotion_hulk_ast_support import (
+    find_function as _find_function,
+)
+from promotion_hulk_ast_support import (
+    imports_from as _imports_from,
+)
+from promotion_hulk_ast_support import (
+    parse_source as _load,
+)
+from promotion_hulk_ast_support import (
+    scoped_dispatch_result_to_accumulator_handoff_used as _scoped_dispatch_result_to_accumulator_handoff_used,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "src" / "k8s_diag_agent" / "collect"
@@ -51,97 +68,10 @@ ACCUMULATOR_FILE = SRC_ROOT / "incident_promotion_accumulator.py"
 LEGACY_ADAPTER_FILE = SRC_ROOT / "incident_promotion_scoped_legacy_adapter.py"
 
 
-def _load(path: Path) -> ast.Module:
-    return ast.parse(path.read_text(), filename=str(path))
-
-
-def _find_function(
-    tree: ast.Module, qualified_name: str
-) -> ast.FunctionDef | ast.AsyncFunctionDef:
-    """Find a function by qualified name (top-level or class method)."""
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == qualified_name
-        ):
-            return node
-    raise AssertionError(
-        f"function {qualified_name!r} not found in {tree}"
-    )
-
-
-def _calls_in_function(func: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.Call]:
-    """Return all ``Call`` nodes nested anywhere in the function."""
-    calls: list[ast.Call] = []
-    for sub in ast.walk(func):
-        if isinstance(sub, ast.Call):
-            calls.append(sub)
-    return calls
-
-
-def _call_name(call: ast.Call) -> str | None:
-    """Return the qualified name of a call's callable, or ``None``."""
-    func = call.func
-    if isinstance(func, ast.Name):
-        return func.id
-    if isinstance(func, ast.Attribute):
-        parts: list[str] = []
-        current: ast.expr = func
-        while isinstance(current, ast.Attribute):
-            parts.append(current.attr)
-            current = current.value
-        if isinstance(current, ast.Name):
-            parts.append(current.id)
-        return ".".join(reversed(parts))
-    return None
-
-
-def _imports(tree: ast.Module) -> set[str]:
-    """Return the set of imported top-level module names."""
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                names.add(alias.name.split(".")[0])
-        elif isinstance(node, ast.ImportFrom):
-            if node.level and node.module is None:
-                # ``from . import x`` -- relative; module is the package.
-                names.add(f".{node.level}")
-                continue
-            if node.module is None:
-                continue
-            names.add(node.module.split(".")[0])
-    return names
-
-
-def _imports_from(tree: ast.Module) -> list[ast.ImportFrom]:
-    """Return all ``ImportFrom`` nodes (including ``from . import x``)."""
-    return [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
-
-
-def _scoped_dispatch_result_to_accumulator_handoff_used(
-    tree: ast.Module,
-) -> bool:
-    """Return True if the function references the typed handoff adapter."""
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and node.id == (
-            "scoped_dispatch_result_to_accumulator_handoff"
-        ):
-            return True
-        if (
-            isinstance(node, ast.Attribute)
-            and node.attr == "scoped_dispatch_result_to_accumulator_handoff"
-        ):
-            return True
-    return False
-
-
 def test_active_scoped_path_does_not_call_legacy_dict_helpers() -> None:
     """Active scoped accumulator function MUST NOT call legacy dict shims."""
     tree = _load(ACTIVE_DISPATCH_FILE)
-    func = _find_function(
-        tree, "promote_alert_signals_scoped_for_accumulator"
-    )
+    func = _find_function(tree, "promote_alert_signals_scoped_for_accumulator")
     forbidden = {
         "scoped_dispatch_result_to_promotion_result_dict",
         "promote_alert_signals_via_scoped_backend_api_as_dict",
@@ -155,24 +85,16 @@ def test_active_scoped_path_does_not_call_legacy_dict_helpers() -> None:
             continue
         bare = name.split(".")[-1]
         if bare in forbidden:
-            pytest.fail(
-                "Active scoped accumulator path "
-                f"{func.name!r} must not call legacy dict helper "
-                f"{bare!r}; use "
-                "scoped_dispatch_result_to_accumulator_handoff instead."
-            )
+            pytest.fail(f"Active scoped accumulator path {func.name!r} must not call legacy dict helper {bare!r}; use scoped_dispatch_result_to_accumulator_handoff instead.")
+
 
 def test_active_scoped_path_calls_typed_handoff_adapter() -> None:
     """Active scoped path MUST use the typed accumulator handoff adapter."""
     tree = _load(ACTIVE_DISPATCH_FILE)
-    _find_function(
-        tree, "promote_alert_signals_scoped_for_accumulator"
-    )
+    _find_function(tree, "promote_alert_signals_scoped_for_accumulator")
     if not _scoped_dispatch_result_to_accumulator_handoff_used(tree):
-        pytest.fail(
-            "Active scoped path MUST reference "
-            "scoped_dispatch_result_to_accumulator_handoff"
-        )
+        pytest.fail("Active scoped path MUST reference scoped_dispatch_result_to_accumulator_handoff")
+
 
 def test_active_scoped_path_calls_record_scoped_promotion_batch_once() -> None:
     """The active scoped dispatcher MUST call the atomic recorder exactly once.
@@ -184,9 +106,7 @@ def test_active_scoped_path_calls_record_scoped_promotion_batch_once() -> None:
     ``record_promotion_outcome`` for the same scoped handoff.
     """
     tree = _load(ACTIVE_DISPATCH_FILE)
-    func = _find_function(
-        tree, "promote_alert_signals_scoped_for_accumulator"
-    )
+    func = _find_function(tree, "promote_alert_signals_scoped_for_accumulator")
     seen_atomic = 0
     legacy_names: set[str] = set()
     for call in _calls_in_function(func):
@@ -203,17 +123,10 @@ def test_active_scoped_path_calls_record_scoped_promotion_batch_once() -> None:
         elif bare == "record_promotion_outcome":
             legacy_names.add(bare)
     if seen_atomic != 1:
-        pytest.fail(
-            "Active scoped dispatcher MUST call "
-            "RunPromotionAccumulator.record_scoped_promotion_batch "
-            f"exactly once (found {seen_atomic} calls)"
-        )
+        pytest.fail(f"Active scoped dispatcher MUST call RunPromotionAccumulator.record_scoped_promotion_batch exactly once (found {seen_atomic} calls)")
     if legacy_names:
-        pytest.fail(
-            "Active scoped dispatcher MUST NOT call legacy accumulator "
-            f"mutators {sorted(legacy_names)}; route every mutation "
-            "through record_scoped_promotion_batch."
-        )
+        pytest.fail(f"Active scoped dispatcher MUST NOT call legacy accumulator mutators {sorted(legacy_names)}; route every mutation through record_scoped_promotion_batch.")
+
 
 def test_active_dispatcher_does_not_import_legacy_adapter() -> None:
     """The active dispatcher MUST NOT import the legacy dict adapter."""
@@ -221,14 +134,9 @@ def test_active_dispatcher_does_not_import_legacy_adapter() -> None:
     for node in _imports_from(tree):
         if node.module is None:
             continue
-        if node.module.endswith(
-            "incident_promotion_scoped_legacy_adapter"
-        ):
-            pytest.fail(
-                "Active dispatcher imports the legacy adapter "
-                f"({node.module!r}); the active scoped path must "
-                "consume the typed dispatch result directly."
-            )
+        if node.module.endswith("incident_promotion_scoped_legacy_adapter"):
+            pytest.fail(f"Active dispatcher imports the legacy adapter ({node.module!r}); the active scoped path must consume the typed dispatch result directly.")
+
 
 def test_dispatch_result_module_does_not_import_legacy_adapter() -> None:
     """The dispatch-result module MUST NOT depend on the legacy adapter."""
@@ -236,13 +144,9 @@ def test_dispatch_result_module_does_not_import_legacy_adapter() -> None:
     for node in _imports_from(tree):
         if node.module is None:
             continue
-        if node.module.endswith(
-            "incident_promotion_scoped_legacy_adapter"
-        ):
-            pytest.fail(
-                "Dispatch-result module imports the legacy adapter; "
-                "the seam cannot own the mapper+adapter cycle."
-            )
+        if node.module.endswith("incident_promotion_scoped_legacy_adapter"):
+            pytest.fail("Dispatch-result module imports the legacy adapter; the seam cannot own the mapper+adapter cycle.")
+
 
 def test_handoff_module_does_not_import_legacy_adapter() -> None:
     """The handoff module MUST NOT depend on the legacy adapter."""
@@ -250,25 +154,5 @@ def test_handoff_module_does_not_import_legacy_adapter() -> None:
     for node in _imports_from(tree):
         if node.module is None:
             continue
-        if node.module.endswith(
-            "incident_promotion_scoped_legacy_adapter"
-        ):
-            pytest.fail(
-                "Handoff module imports the legacy adapter; the "
-                "active accumulator handoff is the typed authority."
-            )
-
-
-def _module_names(tree: ast.Module) -> set[str]:
-    """Collect names declared at module scope."""
-    names: set[str] = set()
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names.add(node.name)
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    names.add(target.id)
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            names.add(node.target.id)
-    return names
+        if node.module.endswith("incident_promotion_scoped_legacy_adapter"):
+            pytest.fail("Handoff module imports the legacy adapter; the active accumulator handoff is the typed authority.")

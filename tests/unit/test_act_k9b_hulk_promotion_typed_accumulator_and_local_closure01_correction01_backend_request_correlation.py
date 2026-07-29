@@ -109,7 +109,7 @@ class TestBackendRequestCorrelation:
 
         monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "synthetic-token")
         monkeypatch.setattr(
-            "k8s_diag_agent.ui.server_incident_internal_promotion_handlers.get_incident_store",
+            "k8s_diag_agent.collect.incident_store_provider.get_incident_store",
             lambda: _StubIncidentStore(),
             raising=False,
         )
@@ -145,7 +145,7 @@ class TestBackendRequestCorrelation:
 
         monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "synthetic-token")
         monkeypatch.setattr(
-            "k8s_diag_agent.ui.server_incident_internal_promotion_handlers.get_incident_store",
+            "k8s_diag_agent.collect.incident_store_provider.get_incident_store",
             lambda: _StubIncidentStore(),
             raising=False,
         )
@@ -187,7 +187,7 @@ class TestBackendRequestCorrelation:
 
         monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", sentinel_token)
         monkeypatch.setattr(
-            "k8s_diag_agent.ui.server_incident_internal_promotion_handlers.get_incident_store",
+            "k8s_diag_agent.collect.incident_store_provider.get_incident_store",
             lambda: _StubIncidentStore(),
             raising=False,
         )

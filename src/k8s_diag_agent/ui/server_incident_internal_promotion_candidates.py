@@ -6,7 +6,6 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from ..collect.incident_store_provider import get_incident_store
 from .server_incident_internal_models import PromoteCandidatesRequest, PromotionResponse
 
 _logger = logging.getLogger(__name__)
@@ -129,6 +128,8 @@ def handle_promote_candidates(handler: Any) -> None:
         return
 
     try:
+        from ..collect.incident_store_provider import get_incident_store
+
         store = get_incident_store()
 
         outcomes = store.promote_candidates_with_records(

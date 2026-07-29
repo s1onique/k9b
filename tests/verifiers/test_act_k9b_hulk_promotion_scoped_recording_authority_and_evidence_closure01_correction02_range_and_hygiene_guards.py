@@ -56,7 +56,6 @@ regresses any of the closure invariants:
 
 from __future__ import annotations
 
-import ast
 from pathlib import Path
 
 import pytest
@@ -97,48 +96,6 @@ BATCH_MUTATION_FIELDS = (
 # ---------------------------------------------------------------------------
 
 
-def _collect_function_bodies(text: str) -> dict[str, list[ast.stmt]]:
-    """Return ``{function_name: list[statement nodes]}`` for every function."""
-    tree = ast.parse(text)
-    bodies: dict[str, list[ast.stmt]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            bodies[node.name] = list(node.body)
-    return bodies
-
-
-def _assignment_targets(stmt: ast.stmt) -> list[str]:
-    """Return the textual target names of an assignment / augmented assignment."""
-    targets: list[str] = []
-    if isinstance(stmt, ast.Assign):
-        for target in stmt.targets:
-            if isinstance(target, ast.Name):
-                targets.append(target.id)
-            elif isinstance(target, ast.Attribute):
-                targets.append(ast.unparse(target))
-    elif isinstance(stmt, ast.AugAssign):
-        targets.append(ast.unparse(stmt.target))
-    return targets
-
-
-def _statements_contain_mutation(body: list[ast.stmt]) -> bool:
-    """Return True when the function body contains a batch mutation statement."""
-    for stmt in body:
-        if isinstance(stmt, ast.Expr):
-            continue
-        for target in _assignment_targets(stmt):
-            for field in BATCH_MUTATION_FIELDS:
-                if target == field or target.endswith(f".{field}"):
-                    return True
-        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-            func = stmt.value.func
-            if isinstance(func, ast.Attribute) and func.attr == "append":
-                return True
-            if isinstance(func, ast.Name) and func.id == "append":
-                return True
-    return False
-
-
 def test_closure01_parent_file_is_labeled_as_historical_checkpoint() -> None:
     """The older closure01 progress file MUST be labelled as historical.
 
@@ -146,36 +103,21 @@ def test_closure01_parent_file_is_labeled_as_historical_checkpoint() -> None:
     ``HISTORICAL CHECKPOINT`` / ``NOT CURRENT CLOSURE AUTHORITY``
     block. The header MUST be present in the first ~30 lines.
     """
-    target = (
-        REPO_ROOT
-        / "task_progress_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01.md"
-    )
+    target = REPO_ROOT / "task_progress_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01.md"
     if not target.exists():
-        pytest.skip(
-            "The closure01 parent progress file is missing."
-        )
+        pytest.skip("The closure01 parent progress file is missing.")
     head = "\n".join(target.read_text().splitlines()[:30])
     if "HISTORICAL CHECKPOINT" not in head:
-        pytest.fail(
-            "The closure01 parent progress file MUST declare "
-            "HISTORICAL CHECKPOINT in its header."
-        )
+        pytest.fail("The closure01 parent progress file MUST declare HISTORICAL CHECKPOINT in its header.")
     if "NOT CURRENT CLOSURE AUTHORITY" not in head:
-        pytest.fail(
-            "The closure01 parent progress file MUST declare "
-            "NOT CURRENT CLOSURE AUTHORITY in its header."
-        )
+        pytest.fail("The closure01 parent progress file MUST declare NOT CURRENT CLOSURE AUTHORITY in its header.")
+
 
 def test_clean_subject_binding_no_self_referential_commit() -> None:
     """The CORRECTION02 progress file MUST NOT claim its own commit SHA."""
-    target = (
-        REPO_ROOT
-        / "task_progress_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction02_clean_range_and_single_owner_truth01.md"
-    )
+    target = REPO_ROOT / "task_progress_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction02_clean_range_and_single_owner_truth01.md"
     if not target.exists():
-        pytest.skip(
-            "The CORRECTION02 progress file is missing."
-        )
+        pytest.skip("The CORRECTION02 progress file is missing.")
     text = target.read_text()
     # The subject section MUST be non-self-referential.
     forbidden_substrings = (
@@ -184,7 +126,4 @@ def test_clean_subject_binding_no_self_referential_commit() -> None:
     )
     for forbidden in forbidden_substrings:
         if forbidden in text:
-            pytest.fail(
-                f"progress file MUST NOT embed its own commit SHA: "
-                f"found {forbidden!r}"
-            )
+            pytest.fail(f"progress file MUST NOT embed its own commit SHA: found {forbidden!r}")

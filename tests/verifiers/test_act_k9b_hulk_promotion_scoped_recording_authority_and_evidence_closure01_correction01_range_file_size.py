@@ -143,10 +143,7 @@ def test_exact_range_file_size_gate() -> None:
         r"(incident_promotion_scoped_atomic|incident_promotion_result_contract|"
         r"incident_promotion_dispatch_constants)\.py$"
     )
-    in_scope += [
-        p for p in py_files
-        if extra_in_scope_pattern.match(p.relative_to(REPO_ROOT).as_posix())
-    ]
+    in_scope += [p for p in py_files if extra_in_scope_pattern.match(p.relative_to(REPO_ROOT).as_posix())]
     # The CORRECTION01 contract says 'each new production file
     # must be below 500 physical lines'. Test files are owned by
     # earlier ACTs and are NOT in scope for this ACT. Only
@@ -171,9 +168,7 @@ def test_exact_range_file_size_gate() -> None:
     if offenders:
         for rel in offenders:
             print(f"  EXCEEDS 500: {rel}")
-        pytest.fail(
-            "Exact-range file-size gate FAIL: " + ", ".join(offenders)
-        )
+        pytest.fail("Exact-range file-size gate FAIL: " + ", ".join(offenders))
 
 
 def test_accumulator_allowlisted_against_base() -> None:
@@ -197,17 +192,12 @@ def test_accumulator_allowlisted_against_base() -> None:
         r'"src/k8s_diag_agent/collect/incident_promotion_accumulator\.py"',
         worktree_allowlist,
     )
-    print(
-        f"ACCUMULATOR_ALLOWLISTED=false; base={CANONICAL_BASE} head={head}; "
-        f"base_count={len(accumulator_in_base)} worktree_count={len(accumulator_in_worktree)}"
-    )
+    print(f"ACCUMULATOR_ALLOWLISTED=false; base={CANONICAL_BASE} head={head}; base_count={len(accumulator_in_base)} worktree_count={len(accumulator_in_worktree)}")
     # The accumulator entry added in CORRECTION06 (line 244 of
     # scripts/llm_friendly_allowlist.py) is now removed. The base
     # never had it. The worktree should also not have it.
     assert not accumulator_in_base, "accumulator entry existed in base (unexpected)"
-    assert not accumulator_in_worktree, (
-        "accumulator entry still in worktree allowlist; remove it"
-    )
+    assert not accumulator_in_worktree, "accumulator entry still in worktree allowlist; remove it"
 
 
 def test_no_new_llm_allowlist() -> None:
@@ -218,9 +208,7 @@ def test_no_new_llm_allowlist() -> None:
     NEW entries beyond what existed at the base ``b1294cee``.
     """
     head = _resolve_head(CANONICAL_BASE)
-    base_allowlist = _git_text(
-        "show", f"{CANONICAL_BASE}:scripts/llm_friendly_allowlist.py"
-    )
+    base_allowlist = _git_text("show", f"{CANONICAL_BASE}:scripts/llm_friendly_allowlist.py")
     worktree_allowlist = (REPO_ROOT / "scripts" / "llm_friendly_allowlist.py").read_text()
     # Compare canonical-path lists
     base_paths = set(re.findall(r'"([^"]+\.py)"', base_allowlist))
@@ -231,6 +219,4 @@ def test_no_new_llm_allowlist() -> None:
     if new_paths:
         for p in sorted(new_paths):
             print(f"  NEW: {p}")
-        pytest.fail(
-            f"New allowlist entries: {sorted(new_paths)}"
-        )
+        pytest.fail(f"New allowlist entries: {sorted(new_paths)}")

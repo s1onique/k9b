@@ -60,6 +60,12 @@ import ast
 from pathlib import Path
 
 import pytest
+from promotion_hulk_ast_support import (
+    function_bodies as _collect_function_bodies,
+)
+from promotion_hulk_ast_support import (
+    statements_contain_mutation as _statements_contain_mutation,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "src" / "k8s_diag_agent" / "collect"
@@ -97,48 +103,6 @@ BATCH_MUTATION_FIELDS = (
 # ---------------------------------------------------------------------------
 
 
-def _collect_function_bodies(text: str) -> dict[str, list[ast.stmt]]:
-    """Return ``{function_name: list[statement nodes]}`` for every function."""
-    tree = ast.parse(text)
-    bodies: dict[str, list[ast.stmt]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            bodies[node.name] = list(node.body)
-    return bodies
-
-
-def _assignment_targets(stmt: ast.stmt) -> list[str]:
-    """Return the textual target names of an assignment / augmented assignment."""
-    targets: list[str] = []
-    if isinstance(stmt, ast.Assign):
-        for target in stmt.targets:
-            if isinstance(target, ast.Name):
-                targets.append(target.id)
-            elif isinstance(target, ast.Attribute):
-                targets.append(ast.unparse(target))
-    elif isinstance(stmt, ast.AugAssign):
-        targets.append(ast.unparse(stmt.target))
-    return targets
-
-
-def _statements_contain_mutation(body: list[ast.stmt]) -> bool:
-    """Return True when the function body contains a batch mutation statement."""
-    for stmt in body:
-        if isinstance(stmt, ast.Expr):
-            continue
-        for target in _assignment_targets(stmt):
-            for field in BATCH_MUTATION_FIELDS:
-                if target == field or target.endswith(f".{field}"):
-                    return True
-        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-            func = stmt.value.func
-            if isinstance(func, ast.Attribute) and func.attr == "append":
-                return True
-            if isinstance(func, ast.Name) and func.id == "append":
-                return True
-    return False
-
-
 def test_exactly_one_function_owns_batch_mutation_statements() -> None:
     """Exactly one function owns the batch mutation statements.
 
@@ -148,21 +112,13 @@ def test_exactly_one_function_owns_batch_mutation_statements() -> None:
     statements. A future split into a second implementation is
     forbidden.
     """
-    mutation_bodies = _collect_function_bodies(
-        ACCUMULATOR_MUTATION_FILE.read_text()
-    )
+    mutation_bodies = _collect_function_bodies(ACCUMULATOR_MUTATION_FILE.read_text())
     canonical_owner = "_apply_batch_mutation"
     if canonical_owner not in mutation_bodies:
-        pytest.fail(
-            f"{ACCUMULATOR_MUTATION_FILE.name} MUST define "
-            f"_apply_batch_mutation; it is the canonical owner."
-        )
+        pytest.fail(f"{ACCUMULATOR_MUTATION_FILE.name} MUST define _apply_batch_mutation; it is the canonical owner.")
     # The canonical owner MUST carry the mutations.
     if not _statements_contain_mutation(mutation_bodies[canonical_owner]):
-        pytest.fail(
-            f"{canonical_owner} MUST own the batch mutation statements; "
-            "the canonical owner is empty."
-        )
+        pytest.fail(f"{canonical_owner} MUST own the batch mutation statements; the canonical owner is empty.")
     # No other function in the same module MAY carry the mutations.
     leaked: list[str] = []
     for name, body in mutation_bodies.items():
@@ -171,11 +127,8 @@ def test_exactly_one_function_owns_batch_mutation_statements() -> None:
         if _statements_contain_mutation(body):
             leaked.append(name)
     if leaked:
-        pytest.fail(
-            f"Functions in {ACCUMULATOR_MUTATION_FILE.name} other than "
-            f"the canonical owner MUST NOT carry batch mutation "
-            f"statements: {leaked}"
-        )
+        pytest.fail(f"Functions in {ACCUMULATOR_MUTATION_FILE.name} other than the canonical owner MUST NOT carry batch mutation statements: {leaked}")
+
 
 def test_apply_batch_class_method_is_delegation_only() -> None:
     """``RunPromotionAccumulator._apply_batch`` MUST be a pure delegate.
@@ -190,24 +143,14 @@ def test_apply_batch_class_method_is_delegation_only() -> None:
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef) and node.name == "RunPromotionAccumulator":
             for stmt in node.body:
-                if (
-                    isinstance(stmt, ast.FunctionDef)
-                    and stmt.name == "_apply_batch"
-                ):
+                if isinstance(stmt, ast.FunctionDef) and stmt.name == "_apply_batch":
                     target_func = stmt
                     break
     if target_func is None:
-        pytest.fail(
-            "RunPromotionAccumulator MUST retain _apply_batch so the "
-            "recorder host Protocol contract is preserved."
-        )
+        pytest.fail("RunPromotionAccumulator MUST retain _apply_batch so the recorder host Protocol contract is preserved.")
     # The method body MUST NOT contain batch mutation statements.
     if _statements_contain_mutation(list(target_func.body)):
-        pytest.fail(
-            "RunPromotionAccumulator._apply_batch MUST be a pure "
-            "compatibility delegate; the body still carries batch "
-            "mutation statements."
-        )
+        pytest.fail("RunPromotionAccumulator._apply_batch MUST be a pure compatibility delegate; the body still carries batch mutation statements.")
     # The body MUST end with a Call to ``_apply_batch_mutation``.
     delegated = False
     for stmt in target_func.body:
@@ -217,10 +160,8 @@ def test_apply_batch_class_method_is_delegation_only() -> None:
                 delegated = True
                 break
     if not delegated:
-        pytest.fail(
-            "RunPromotionAccumulator._apply_batch MUST delegate to "
-            "_apply_batch_mutation; the helper call is missing."
-        )
+        pytest.fail("RunPromotionAccumulator._apply_batch MUST delegate to _apply_batch_mutation; the helper call is missing.")
+
 
 def test_legacy_and_scoped_batch_mutation_converge() -> None:
     """``add_batch_mutation`` and the recorder reach the SAME helper.
@@ -230,26 +171,18 @@ def test_legacy_and_scoped_batch_mutation_converge() -> None:
     MUST also reach ``_apply_batch_mutation`` via the class
     method delegate. The two code paths MUST NOT diverge.
     """
-    mutation_text = ACCUMULATOR_MUTATION_FILE.read_text()
-    if "_apply_batch_mutation(acc, batch)" not in mutation_text:
-        pytest.fail(
-            "_apply_batch_mutation MUST be invoked with (acc, batch) "
-            "from add_batch_mutation; the convergence call is missing."
-        )
-    recorder_text = RECORDER_FILE.read_text()
-    # The recorder MUST reach the class method or the canonical
-    # helper -- whichever the host Protocol exposes. The class
-    # method delegate already invokes ``_apply_batch_mutation``,
-    # so we confirm the recorder does NOT redefine mutation logic.
-    if "_apply_batch" not in recorder_text:
-        # The recorder MUST consult the host's batch application
-        # path; otherwise it has drifted from the canonical owner.
-        # We accept either an explicit ``host._apply_batch`` call
-        # or any reference to ``_apply_batch`` on the host. We
-        # do not require a specific token because the recorder
-        # may name it differently (e.g. ``apply_batch`` /
-        # ``_apply_batch``).
-        pass
+    mutation_tree = ast.parse(ACCUMULATOR_MUTATION_FILE.read_text())
+    add_batch = next(
+        (node for node in ast.walk(mutation_tree) if isinstance(node, ast.FunctionDef) and node.name == "add_batch_mutation"),
+        None,
+    )
+    if add_batch is None or not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_apply_batch_mutation" for node in ast.walk(add_batch)):
+        pytest.fail("add_batch_mutation MUST invoke _apply_batch_mutation; the convergence call is missing.")
+
+    recorder_tree = ast.parse(RECORDER_FILE.read_text())
+    if not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "_apply_batch" for node in ast.walk(recorder_tree)):
+        pytest.fail("The scoped recorder MUST invoke the host's _apply_batch method.")
+
 
 def test_no_duplicate_counter_assignments_in_facade() -> None:
     """The facade declares each batch counter exactly once.
@@ -262,16 +195,11 @@ def test_no_duplicate_counter_assignments_in_facade() -> None:
     """
     tree = ast.parse(ACCUMULATOR_FILE.read_text())
     for node in ast.walk(tree):
-        if not (
-            isinstance(node, ast.ClassDef)
-            and node.name == "RunPromotionAccumulator"
-        ):
+        if not (isinstance(node, ast.ClassDef) and node.name == "RunPromotionAccumulator"):
             continue
         declared: dict[str, int] = {}
         for stmt in node.body:
-            if isinstance(stmt, ast.AnnAssign) and isinstance(
-                stmt.target, ast.Name
-            ):
+            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                 declared[stmt.target.id] = declared.get(stmt.target.id, 0) + 1
         for field_name in (
             "total_scanned",
@@ -283,7 +211,4 @@ def test_no_duplicate_counter_assignments_in_facade() -> None:
         ):
             count = declared.get(field_name, 0)
             if count != 1:
-                pytest.fail(
-                    f"RunPromotionAccumulator MUST declare {field_name} "
-                    f"exactly once; found {count} declaration(s)."
-                )
+                pytest.fail(f"RunPromotionAccumulator MUST declare {field_name} exactly once; found {count} declaration(s).")

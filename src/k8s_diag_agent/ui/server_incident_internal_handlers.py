@@ -1,7 +1,9 @@
 """Compatibility facade for internal incident promotion handlers.
 
-The implementations live in :mod:`server_incident_internal_promotion_handlers`;
-this module intentionally preserves the historical import path.
+The alert-signal implementation lives in
+:mod:`server_incident_internal_promotion_handlers`; the candidate implementation
+lives in :mod:`server_incident_internal_promotion_candidates`. This module
+intentionally preserves the historical import path for both handlers.
 """
 
 from .server_incident_internal_promotion_candidates import handle_promote_candidates

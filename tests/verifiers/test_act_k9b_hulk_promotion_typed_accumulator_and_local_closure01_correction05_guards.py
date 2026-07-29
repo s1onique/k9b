@@ -81,21 +81,11 @@ def test_atomic_recorder_uses_typed_host_protocol() -> None:
     """The split recorder module MUST type the host through the Protocol."""
     text = ATOMIC_RECORDER_FILE.read_text()
     if "ScopedPromotionAccumulatorHost" not in text:
-        pytest.fail(
-            "incident_promotion_scoped_atomic_recorder.py MUST depend on "
-            "the typed ScopedPromotionAccumulatorHost Protocol."
-        )
+        pytest.fail("incident_promotion_scoped_atomic_recorder.py MUST depend on the typed ScopedPromotionAccumulatorHost Protocol.")
     if "AccumulatorSnapshot" not in text:
-        pytest.fail(
-            "incident_promotion_scoped_atomic_recorder.py MUST consume "
-            "the typed AccumulatorSnapshot value object."
-        )
+        pytest.fail("incident_promotion_scoped_atomic_recorder.py MUST consume the typed AccumulatorSnapshot value object.")
     if "dict[str, object]" in text:
-        pytest.fail(
-            "incident_promotion_scoped_atomic_recorder.py MUST NOT use "
-            "dict[str, object] snapshots; use the typed "
-            "AccumulatorSnapshot dataclass."
-        )
+        pytest.fail("incident_promotion_scoped_atomic_recorder.py MUST NOT use dict[str, object] snapshots; use the typed AccumulatorSnapshot dataclass.")
 
 
 def test_atomic_recorder_excludes_global_probes() -> None:
@@ -110,54 +100,30 @@ def test_atomic_recorder_excludes_global_probes() -> None:
     }
     found = sorted(name for name in forbidden if name in text)
     if found:
-        pytest.fail(
-            "incident_promotion_scoped_atomic_recorder.py MUST NOT expose "
-            f"the removed global probes: {found}; use test subclass "
-            "overrides or monkeypatch of the host instance method."
-        )
+        pytest.fail(f"incident_promotion_scoped_atomic_recorder.py MUST NOT expose the removed global probes: {found}; use test subclass overrides or monkeypatch of the host instance method.")
 
 
 def test_validator_uses_assert_never() -> None:
     """The validator MUST end with ``assert_never`` for static exhaustiveness."""
     text = ATOMIC_VALIDATION_FILE.read_text()
     if "assert_never(handoff)" not in text:
-        pytest.fail(
-            "incident_promotion_scoped_atomic_validation."
-            "validate_scoped_handoff_batch_consistency MUST end with "
-            "assert_never(handoff) so a new variant fails mypy."
-        )
+        pytest.fail("incident_promotion_scoped_atomic_validation.validate_scoped_handoff_batch_consistency MUST end with assert_never(handoff) so a new variant fails mypy.")
     if "raise TypeError" in text and "unsupported" in text:
-        pytest.fail(
-            "validate_scoped_handoff_batch_consistency MUST NOT carry "
-            "an ad-hoc TypeError fallback for unhandled variants; "
-            "assert_never(handoff) is the canonical exhaustiveness "
-            "boundary."
-        )
+        pytest.fail("validate_scoped_handoff_batch_consistency MUST NOT carry an ad-hoc TypeError fallback for unhandled variants; assert_never(handoff) is the canonical exhaustiveness boundary.")
 
 
 def test_validator_types_batch_as_promotion_batch() -> None:
     """The validator's per-variant helpers MUST accept typed PromotionBatch."""
     text = ATOMIC_VALIDATION_FILE.read_text()
-    if (
-        "def _require_common_batch_frame" in text
-        and "batch: PromotionBatch" not in text
-    ):
-        pytest.fail(
-            "incident_promotion_scoped_atomic_validation."
-            "_require_common_batch_frame MUST type batch as PromotionBatch."
-        )
+    if "def _require_common_batch_frame" in text and "batch: PromotionBatch" not in text:
+        pytest.fail("incident_promotion_scoped_atomic_validation._require_common_batch_frame MUST type batch as PromotionBatch.")
 
 
 def test_validator_uses_cycle_free_constants() -> None:
     """The validator MUST import access-mode constants from the cycle-free module."""
     text = ATOMIC_VALIDATION_FILE.read_text()
     if "from .incident_promotion_dispatch_constants import" not in text:
-        pytest.fail(
-            "incident_promotion_scoped_atomic_validation.py MUST import "
-            "INCIDENT_ACCESS_MODE_BACKEND and MODE_BACKEND_API from "
-            "incident_promotion_dispatch_constants so the validator does "
-            "not depend on the dispatcher module directly."
-        )
+        pytest.fail("incident_promotion_scoped_atomic_validation.py MUST import INCIDENT_ACCESS_MODE_BACKEND and MODE_BACKEND_API from incident_promotion_dispatch_constants so the validator does not depend on the dispatcher module directly.")
 
 
 def test_recorder_restore_preserves_container_identity() -> None:
@@ -165,25 +131,14 @@ def test_recorder_restore_preserves_container_identity() -> None:
     snapshot_file = SRC_ROOT / "incident_promotion_accumulator_snapshot.py"
     text = ACCUMULATOR_FILE.read_text() + snapshot_file.read_text()
     if ".clear()" not in text or ".update(" not in text:
-        pytest.fail(
-            "RunPromotionAccumulator._restore MUST rewrite the mutable "
-            "containers (batches, promotion_records, _seen_canonical_ids) "
-            "in place via .clear()/.update()/.extend() so external "
-            "references retain their identity."
-        )
+        pytest.fail("RunPromotionAccumulator._restore MUST rewrite the mutable containers (batches, promotion_records, _seen_canonical_ids) in place via .clear()/.update()/.extend() so external references retain their identity.")
 
 
 def test_recorder_snapshot_returns_typed_dataclass() -> None:
     """``_snapshot`` MUST return the typed AccumulatorSnapshot value."""
     text = ACCUMULATOR_FILE.read_text()
-    if (
-        "def _snapshot(self) -> AccumulatorSnapshot" not in text
-        and 'def _snapshot(self) -> "AccumulatorSnapshot"' not in text
-    ):
-        pytest.fail(
-            "RunPromotionAccumulator._snapshot MUST return the typed "
-            "AccumulatorSnapshot dataclass, not a dict[str, object]."
-        )
+    if "def _snapshot(self) -> AccumulatorSnapshot" not in text and 'def _snapshot(self) -> "AccumulatorSnapshot"' not in text:
+        pytest.fail("RunPromotionAccumulator._snapshot MUST return the typed AccumulatorSnapshot dataclass, not a dict[str, object].")
 
 
 def test_mypy_ini_has_no_atomic_recorder_overrides() -> None:
@@ -193,17 +148,9 @@ def test_mypy_ini_has_no_atomic_recorder_overrides() -> None:
         "mypy-k8s_diag_agent.collect.incident_promotion_scoped_atomic_recorder",
         "mypy-k8s_diag_agent.collect.incident_promotion_scoped_atomic_validation",
     ]
-    found = [
-        section
-        for section in forbidden_sections
-        if re.search(rf"\[{re.escape(section)}\]", ini)
-    ]
+    found = [section for section in forbidden_sections if re.search(rf"\[{re.escape(section)}\]", ini)]
     if found:
-        pytest.fail(
-            "mypy.ini MUST NOT carry per-module overrides for the "
-            f"atomic recorder modules: {found}; strict typing is "
-            "preserved by the typed host Protocol + AccumulatorSnapshot."
-        )
+        pytest.fail(f"mypy.ini MUST NOT carry per-module overrides for the atomic recorder modules: {found}; strict typing is preserved by the typed host Protocol + AccumulatorSnapshot.")
 
 
 def test_each_split_recorder_module_under_canonical_physical_line_limit() -> None:
@@ -218,14 +165,9 @@ def test_each_split_recorder_module_under_canonical_physical_line_limit() -> Non
     for path in SPLIT_ATOMIC_MODULES:
         line_count = sum(1 for _ in path.open("r", encoding="utf-8"))
         if line_count > 500:
-            offenders.append(
-                f"{path.name} has {line_count} physical lines (limit 500)"
-            )
+            offenders.append(f"{path.name} has {line_count} physical lines (limit 500)")
     if offenders:
-        pytest.fail(
-            "Atomic recorder modules exceed the canonical 500-line "
-            "limit: " + ", ".join(offenders)
-        )
+        pytest.fail("Atomic recorder modules exceed the canonical 500-line limit: " + ", ".join(offenders))
 
 
 def test_dataclass_equality_authority_for_replay_predicates() -> None:
@@ -272,11 +214,7 @@ def test_dataclass_equality_authority_for_replay_predicates() -> None:
             if f.compare is False:
                 offenders.append(f"{cls.__name__}.{f.name}")
     if offenders:
-        pytest.fail(
-            "Authority dataclass fields MUST keep compare=True so the "
-            "replay equivalence predicates cannot silently exclude "
-            f"them: {offenders}"
-        )
+        pytest.fail(f"Authority dataclass fields MUST keep compare=True so the replay equivalence predicates cannot silently exclude them: {offenders}")
 
 
 def test_atomic_recorder_defensive_corrupt_state() -> None:
@@ -308,9 +246,7 @@ def test_atomic_recorder_defensive_corrupt_state() -> None:
         diagnosis_incident_ids=("canonical-corrupt",),
     )
     batch = build_compatibility_batch_from_handoff(handoff)
-    recording = acc.record_scoped_promotion_batch(
-        handoff=handoff, batch=batch
-    )
+    recording = acc.record_scoped_promotion_batch(handoff=handoff, batch=batch)
     assert recording is PromotionOutcomeRecording.NEW
     # Wipe the outcome to simulate persisted-state drift; the
     # recorded authority remains.
@@ -323,27 +259,16 @@ def test_replay_conflict_tests_split_into_three_files() -> None:
     """The split atomic recorder replay tests live in three focused files."""
     expected = {
         TESTS_UNIT_ROOT / "test_scoped_replay_handoff_conflicts.py",
-        TESTS_UNIT_ROOT
-        / "test_scoped_replay_batch_identity_conflicts.py",
-        TESTS_UNIT_ROOT
-        / "test_scoped_replay_batch_accounting_conflicts.py",
+        TESTS_UNIT_ROOT / "test_scoped_replay_batch_identity_conflicts.py",
+        TESTS_UNIT_ROOT / "test_scoped_replay_batch_accounting_conflicts.py",
     }
     missing = [p for p in expected if not p.exists()]
     if missing:
-        pytest.fail(
-            "Replay-conflict tests MUST be split into three focused "
-            f"files: {sorted(str(p) for p in missing)}"
-        )
+        pytest.fail(f"Replay-conflict tests MUST be split into three focused files: {sorted(str(p) for p in missing)}")
     legacy = TESTS_UNIT_ROOT / "test_scoped_accumulator_replay_conflicts.py"
     if legacy.exists():
-        pytest.fail(
-            f"{legacy.name} MUST be removed; the replay-conflict "
-            "matrix now lives in the three focused files."
-        )
+        pytest.fail(f"{legacy.name} MUST be removed; the replay-conflict matrix now lives in the three focused files.")
     for path in expected:
         line_count = sum(1 for _ in path.open("r", encoding="utf-8"))
         if line_count > 500:
-            pytest.fail(
-                f"{path.name} has {line_count} physical lines "
-                "(limit 500)"
-            )
+            pytest.fail(f"{path.name} has {line_count} physical lines (limit 500)")

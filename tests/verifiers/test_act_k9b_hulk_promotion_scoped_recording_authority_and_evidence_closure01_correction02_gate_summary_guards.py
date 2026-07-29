@@ -99,48 +99,6 @@ BATCH_MUTATION_FIELDS = (
 # ---------------------------------------------------------------------------
 
 
-def _collect_function_bodies(text: str) -> dict[str, list[ast.stmt]]:
-    """Return ``{function_name: list[statement nodes]}`` for every function."""
-    tree = ast.parse(text)
-    bodies: dict[str, list[ast.stmt]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            bodies[node.name] = list(node.body)
-    return bodies
-
-
-def _assignment_targets(stmt: ast.stmt) -> list[str]:
-    """Return the textual target names of an assignment / augmented assignment."""
-    targets: list[str] = []
-    if isinstance(stmt, ast.Assign):
-        for target in stmt.targets:
-            if isinstance(target, ast.Name):
-                targets.append(target.id)
-            elif isinstance(target, ast.Attribute):
-                targets.append(ast.unparse(target))
-    elif isinstance(stmt, ast.AugAssign):
-        targets.append(ast.unparse(stmt.target))
-    return targets
-
-
-def _statements_contain_mutation(body: list[ast.stmt]) -> bool:
-    """Return True when the function body contains a batch mutation statement."""
-    for stmt in body:
-        if isinstance(stmt, ast.Expr):
-            continue
-        for target in _assignment_targets(stmt):
-            for field in BATCH_MUTATION_FIELDS:
-                if target == field or target.endswith(f".{field}"):
-                    return True
-        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-            func = stmt.value.func
-            if isinstance(func, ast.Attribute) and func.attr == "append":
-                return True
-            if isinstance(func, ast.Name) and func.id == "append":
-                return True
-    return False
-
-
 def test_gate_summary_internal_consistency_from_disk() -> None:
     """``checks_total == len(checks) == len(required_check_names)``.
 
@@ -149,101 +107,56 @@ def test_gate_summary_internal_consistency_from_disk() -> None:
     """
     target = REPO_ROOT / ".factory" / "gate-summary.json"
     if not target.exists():
-        pytest.skip(
-            ".factory/gate-summary.json is missing; the populate step "
-            "must run before this assertion can be evaluated."
-        )
+        pytest.skip(".factory/gate-summary.json is missing; the populate step must run before this assertion can be evaluated.")
     data = json.loads(target.read_text(encoding="utf-8"))
     checks = data.get("checks", [])
-    declared = (
-        data.get("extras", {}).get("required_check_names", [])
-        if isinstance(data.get("extras"), dict)
-        else []
-    )
-    assert data.get("checks_total") == len(checks) == len(declared), (
-        f"checks_total={data.get('checks_total')} len(checks)={len(checks)} "
-        f"len(required_check_names)={len(declared)}"
-    )
+    declared = data.get("extras", {}).get("required_check_names", []) if isinstance(data.get("extras"), dict) else []
+    assert data.get("checks_total") == len(checks) == len(declared), f"checks_total={data.get('checks_total')} len(checks)={len(checks)} len(required_check_names)={len(declared)}"
     failed = data.get("checks_failed")
-    assert failed == sum(1 for c in checks if c.get("status") == "fail"), (
-        f"checks_failed={failed} != count(status == fail)"
-    )
+    assert failed == sum(1 for c in checks if c.get("status") == "fail"), f"checks_failed={failed} != count(status == fail)"
+
 
 def test_gate_summary_required_check_names_are_unique() -> None:
     """``required_check_names`` MUST NOT contain duplicates."""
     target = REPO_ROOT / ".factory" / "gate-summary.json"
     if not target.exists():
-        pytest.skip(
-            ".factory/gate-summary.json is missing; the populate step "
-            "must run before this assertion can be evaluated."
-        )
+        pytest.skip(".factory/gate-summary.json is missing; the populate step must run before this assertion can be evaluated.")
     data = json.loads(target.read_text(encoding="utf-8"))
-    declared = (
-        data.get("extras", {}).get("required_check_names", [])
-        if isinstance(data.get("extras"), dict)
-        else []
-    )
+    declared = data.get("extras", {}).get("required_check_names", []) if isinstance(data.get("extras"), dict) else []
     if len(declared) != len(set(declared)):
-        pytest.fail(
-            f"required_check_names contains duplicates: {declared}"
-        )
+        pytest.fail(f"required_check_names contains duplicates: {declared}")
+
 
 def test_gate_summary_every_required_check_appears_exactly_once() -> None:
     """Every required check name appears exactly once in ``checks``."""
     target = REPO_ROOT / ".factory" / "gate-summary.json"
     if not target.exists():
-        pytest.skip(
-            ".factory/gate-summary.json is missing; the populate step "
-            "must run before this assertion can be evaluated."
-        )
+        pytest.skip(".factory/gate-summary.json is missing; the populate step must run before this assertion can be evaluated.")
     data = json.loads(target.read_text(encoding="utf-8"))
-    declared = (
-        data.get("extras", {}).get("required_check_names", [])
-        if isinstance(data.get("extras"), dict)
-        else []
-    )
-    check_names = [
-        c.get("name", "") for c in data.get("checks", []) if isinstance(c, dict)
-    ]
+    declared = data.get("extras", {}).get("required_check_names", []) if isinstance(data.get("extras"), dict) else []
+    check_names = [c.get("name", "") for c in data.get("checks", []) if isinstance(c, dict)]
     missing = [n for n in declared if n not in check_names]
     duplicates = [n for n in set(check_names) if check_names.count(n) > 1]
     if missing or duplicates:
-        pytest.fail(
-            f"missing={missing} duplicates={duplicates}"
-        )
+        pytest.fail(f"missing={missing} duplicates={duplicates}")
+
 
 def test_gate_summary_overall_status_reflects_checks() -> None:
     """``overall_status == pass`` only when every required check passes."""
     target = REPO_ROOT / ".factory" / "gate-summary.json"
     if not target.exists():
-        pytest.skip(
-            ".factory/gate-summary.json is missing; the populate step "
-            "must run before this assertion can be evaluated."
-        )
+        pytest.skip(".factory/gate-summary.json is missing; the populate step must run before this assertion can be evaluated.")
     data = json.loads(target.read_text(encoding="utf-8"))
-    declared = (
-        data.get("extras", {}).get("required_check_names", [])
-        if isinstance(data.get("extras"), dict)
-        else []
-    )
-    check_status = {
-        c.get("name", ""): c.get("status", "")
-        for c in data.get("checks", [])
-        if isinstance(c, dict)
-    }
+    declared = data.get("extras", {}).get("required_check_names", []) if isinstance(data.get("extras"), dict) else []
+    check_status = {c.get("name", ""): c.get("status", "") for c in data.get("checks", []) if isinstance(c, dict)}
     declared_check_status = {n: check_status.get(n, "missing") for n in declared}
     all_pass = all(v == "pass" for v in declared_check_status.values())
     overall = data.get("overall_status", "fail")
     if overall == "pass" and not all_pass:
-        pytest.fail(
-            f"overall_status=pass but declared checks not all passing: "
-            f"{declared_check_status}"
-        )
+        pytest.fail(f"overall_status=pass but declared checks not all passing: {declared_check_status}")
     if overall != "pass" and all_pass:
-        pytest.fail(
-            f"overall_status={overall!r} but every declared check passes: "
-            f"{declared_check_status}"
-        )
+        pytest.fail(f"overall_status={overall!r} but every declared check passes: {declared_check_status}")
+
 
 def test_gate_summary_no_self_referential_parser_postcondition() -> None:
     """The artifact MUST NOT carry a self-referential parser result.
@@ -257,20 +170,12 @@ def test_gate_summary_no_self_referential_parser_postcondition() -> None:
     """
     target = REPO_ROOT / ".factory" / "gate-summary.json"
     if not target.exists():
-        pytest.skip(
-            ".factory/gate-summary.json is missing; the populate "
-            "step must run before this assertion can be evaluated."
-        )
+        pytest.skip(".factory/gate-summary.json is missing; the populate step must run before this assertion can be evaluated.")
     data = json.loads(target.read_text(encoding="utf-8"))
     extras = data.get("extras", {})
     if isinstance(extras, dict) and "parser_postcondition" in extras:
-        pytest.fail(
-            ".factory/gate-summary.json MUST NOT carry "
-            "extras.parser_postcondition; the validation result "
-            "belongs in the separate gate-summary-validation.json "
-            "attestation so a subsequent SHA-256 mismatch is "
-            "detectable."
-        )
+        pytest.fail(".factory/gate-summary.json MUST NOT carry extras.parser_postcondition; the validation result belongs in the separate gate-summary-validation.json attestation so a subsequent SHA-256 mismatch is detectable.")
+
 
 def test_populate_writes_separate_validation_attestation() -> None:
     """The producer MUST write ``gate-summary-validation.json``.
@@ -283,49 +188,25 @@ def test_populate_writes_separate_validation_attestation() -> None:
     """
     target = REPO_ROOT / ".factory" / "gate-summary.json"
     if not target.exists():
-        pytest.skip(
-            ".factory/gate-summary.json is missing; the populate "
-            "step must run before this assertion can be evaluated."
-        )
-    attestation = (
-        REPO_ROOT / ".factory" / "gate-summary-validation.json"
-    )
+        pytest.skip(".factory/gate-summary.json is missing; the populate step must run before this assertion can be evaluated.")
+    attestation = REPO_ROOT / ".factory" / "gate-summary-validation.json"
     if not attestation.exists():
-        pytest.fail(
-            "populate_gate_summary MUST write "
-            ".factory/gate-summary-validation.json alongside "
-            "gate-summary.json."
-        )
+        pytest.fail("populate_gate_summary MUST write .factory/gate-summary-validation.json alongside gate-summary.json.")
     data = json.loads(attestation.read_text(encoding="utf-8"))
     if data.get("validated_path") != str(target):
-        pytest.fail(
-            "gate-summary-validation.json.validated_path MUST "
-            f"match the gate-summary path; got {data.get('validated_path')!r}"
-        )
+        pytest.fail(f"gate-summary-validation.json.validated_path MUST match the gate-summary path; got {data.get('validated_path')!r}")
     if not data.get("validated_sha256"):
-        pytest.fail(
-            "gate-summary-validation.json.validated_sha256 MUST "
-            "be populated."
-        )
+        pytest.fail("gate-summary-validation.json.validated_sha256 MUST be populated.")
     if data.get("decode_status") not in {"pass", "fail"}:
-        pytest.fail(
-            "gate-summary-validation.json.decode_status MUST be "
-            f"pass|fail; got {data.get('decode_status')!r}"
-        )
+        pytest.fail(f"gate-summary-validation.json.decode_status MUST be pass|fail; got {data.get('decode_status')!r}")
     if data.get("acceptance_status") not in {"pass", "fail"}:
-        pytest.fail(
-            "gate-summary-validation.json.acceptance_status MUST "
-            f"be pass|fail; got {data.get('acceptance_status')!r}"
-        )
+        pytest.fail(f"gate-summary-validation.json.acceptance_status MUST be pass|fail; got {data.get('acceptance_status')!r}")
     # Verify the attested SHA-256 matches the actual file bytes.
     expected_sha = data["validated_sha256"]
     actual_sha = hashlib.sha256(target.read_bytes()).hexdigest()
     if expected_sha != actual_sha:
-        pytest.fail(
-            "gate-summary-validation.json.validated_sha256 MUST "
-            f"equal the SHA-256 of gate-summary.json bytes "
-            f"({expected_sha} != {actual_sha})"
-        )
+        pytest.fail(f"gate-summary-validation.json.validated_sha256 MUST equal the SHA-256 of gate-summary.json bytes ({expected_sha} != {actual_sha})")
+
 
 def test_gate_summary_no_parser_postcondition_field_in_producer() -> None:
     """The producer MUST NOT embed ``parser_postcondition`` in extras."""
@@ -336,16 +217,11 @@ def test_gate_summary_no_parser_postcondition_field_in_producer() -> None:
         '"parser_postcondition":',
         "'parser_postcondition':",
         '    "parser_postcondition":',
-        '    \'parser_postcondition\':',
+        "    'parser_postcondition':",
     ]
     for needle in forbidden:
         if needle in text:
-            pytest.fail(
-                f"populate_gate_summary.py MUST NOT embed "
-                f"``parser_postcondition`` in extras; found "
-                f"{needle!r}.  Validation evidence belongs in "
-                f"the separate validation attestation."
-            )
+            pytest.fail(f"populate_gate_summary.py MUST NOT embed ``parser_postcondition`` in extras; found {needle!r}.  Validation evidence belongs in the separate validation attestation.")
 
 
 def test_handoff_reconciliation_token_local_renamed() -> None:
@@ -362,9 +238,4 @@ def test_handoff_reconciliation_token_local_renamed() -> None:
                 if isinstance(target, ast.Name) and target.id == "token":
                     rhs = ast.unparse(node.value)
                     if "reconciliation_token" in rhs:
-                        pytest.fail(
-                            "promotion_scoped_accumulator_handoff.py "
-                            "MUST NOT use ``token = ...reconciliation_token``; "
-                            "rename the local to a non-secret identifier "
-                            "(e.g. ``reconciliation_identity``)."
-                        )
+                        pytest.fail("promotion_scoped_accumulator_handoff.py MUST NOT use ``token = ...reconciliation_token``; rename the local to a non-secret identifier (e.g. ``reconciliation_identity``).")

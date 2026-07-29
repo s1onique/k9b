@@ -20,7 +20,6 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from ..collect.incident_store_provider import get_incident_store
 from ..collect.promotion_scoped_http_seam import (
     MAX_REQUEST_ID_LENGTH as _MAX_REQUEST_ID_LENGTH,
 )
@@ -28,7 +27,6 @@ from ..incident_alert_promotion_contract import (
     PromotionScopeError,
     parse_promote_alert_signals_request,
 )
-from ..incident_alert_promotion_scoped import promote_scoped_alert_signals
 from .server_incident_internal_scoped_client import (
     REQUEST_ID_HEADER as _REQUEST_ID_HEADER,
 )
@@ -219,6 +217,9 @@ def handle_promote_alert_signals(handler: Any) -> None:
     )
 
     try:
+        from ..collect.incident_store_provider import get_incident_store
+        from ..incident_alert_promotion_scoped import promote_scoped_alert_signals
+
         store = get_incident_store()
         result = promote_scoped_alert_signals(
             request=request,

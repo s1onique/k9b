@@ -40,6 +40,21 @@ import ast
 from pathlib import Path
 
 import pytest
+from promotion_hulk_ast_support import (
+    call_name as _call_name,
+)
+from promotion_hulk_ast_support import (
+    find_function as _find_function,
+)
+from promotion_hulk_ast_support import (
+    imports_from as _imports_from,
+)
+from promotion_hulk_ast_support import (
+    module_names as _module_names,
+)
+from promotion_hulk_ast_support import (
+    parse_source as _load,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "src" / "k8s_diag_agent" / "collect"
@@ -49,91 +64,6 @@ DISPATCH_RESULT_FILE = SRC_ROOT / "promotion_scoped_http_seam.py"
 HANDOFF_FILE = SRC_ROOT / "promotion_scoped_accumulator_handoff.py"
 ACCUMULATOR_FILE = SRC_ROOT / "incident_promotion_accumulator.py"
 LEGACY_ADAPTER_FILE = SRC_ROOT / "incident_promotion_scoped_legacy_adapter.py"
-
-
-def _load(path: Path) -> ast.Module:
-    return ast.parse(path.read_text(), filename=str(path))
-
-
-def _find_function(
-    tree: ast.Module, qualified_name: str
-) -> ast.FunctionDef | ast.AsyncFunctionDef:
-    """Find a function by qualified name (top-level or class method)."""
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == qualified_name
-        ):
-            return node
-    raise AssertionError(
-        f"function {qualified_name!r} not found in {tree}"
-    )
-
-
-def _calls_in_function(func: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.Call]:
-    """Return all ``Call`` nodes nested anywhere in the function."""
-    calls: list[ast.Call] = []
-    for sub in ast.walk(func):
-        if isinstance(sub, ast.Call):
-            calls.append(sub)
-    return calls
-
-
-def _call_name(call: ast.Call) -> str | None:
-    """Return the qualified name of a call's callable, or ``None``."""
-    func = call.func
-    if isinstance(func, ast.Name):
-        return func.id
-    if isinstance(func, ast.Attribute):
-        parts: list[str] = []
-        current: ast.expr = func
-        while isinstance(current, ast.Attribute):
-            parts.append(current.attr)
-            current = current.value
-        if isinstance(current, ast.Name):
-            parts.append(current.id)
-        return ".".join(reversed(parts))
-    return None
-
-
-def _imports(tree: ast.Module) -> set[str]:
-    """Return the set of imported top-level module names."""
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                names.add(alias.name.split(".")[0])
-        elif isinstance(node, ast.ImportFrom):
-            if node.level and node.module is None:
-                # ``from . import x`` -- relative; module is the package.
-                names.add(f".{node.level}")
-                continue
-            if node.module is None:
-                continue
-            names.add(node.module.split(".")[0])
-    return names
-
-
-def _imports_from(tree: ast.Module) -> list[ast.ImportFrom]:
-    """Return all ``ImportFrom`` nodes (including ``from . import x``)."""
-    return [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
-
-
-def _scoped_dispatch_result_to_accumulator_handoff_used(
-    tree: ast.Module,
-) -> bool:
-    """Return True if the function references the typed handoff adapter."""
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and node.id == (
-            "scoped_dispatch_result_to_accumulator_handoff"
-        ):
-            return True
-        if (
-            isinstance(node, ast.Attribute)
-            and node.attr == "scoped_dispatch_result_to_accumulator_handoff"
-        ):
-            return True
-    return False
 
 
 def test_handoff_module_exposes_closed_union_and_adapter() -> None:
@@ -149,27 +79,17 @@ def test_handoff_module_exposes_closed_union_and_adapter() -> None:
     }
     missing = required - names
     if missing:
-        pytest.fail(
-            "Handoff module is missing required symbols: "
-            f"{sorted(missing)}"
-        )
+        pytest.fail(f"Handoff module is missing required symbols: {sorted(missing)}")
+
 
 def test_handoff_uses_assert_never() -> None:
     """The adapter MUST end with ``assert_never(result)`` for exhaustiveness."""
     tree = _load(HANDOFF_FILE)
-    func = _find_function(
-        tree, "scoped_dispatch_result_to_accumulator_handoff"
-    )
+    func = _find_function(tree, "scoped_dispatch_result_to_accumulator_handoff")
     last_statement = func.body[-1]
-    if not (
-        isinstance(last_statement, ast.Expr)
-        and isinstance(last_statement.value, ast.Call)
-        and _call_name(last_statement.value) == "assert_never"
-    ):
-        pytest.fail(
-            "scoped_dispatch_result_to_accumulator_handoff MUST end "
-            "with assert_never(result) for exhaustiveness."
-        )
+    if not (isinstance(last_statement, ast.Expr) and isinstance(last_statement.value, ast.Call) and _call_name(last_statement.value) == "assert_never"):
+        pytest.fail("scoped_dispatch_result_to_accumulator_handoff MUST end with assert_never(result) for exhaustiveness.")
+
 
 def test_active_scoped_path_does_not_synthesise_records() -> None:
     """Aggregate scoped result MUST NOT carry a synthesised
@@ -178,26 +98,13 @@ def test_active_scoped_path_does_not_synthesise_records() -> None:
     construction with a non-empty literal that contradicts the
     closed handoff invariant."""
     tree = _load(ACTIVE_DISPATCH_FILE)
-    func = _find_function(
-        tree, "promote_alert_signals_scoped_for_accumulator"
-    )
+    func = _find_function(tree, "promote_alert_signals_scoped_for_accumulator")
     for sub in ast.walk(func):
-        if (
-            isinstance(sub, ast.Call)
-            and isinstance(sub.func, ast.Name)
-            and sub.func.id == "PromotionBatch"
-        ):
+        if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name) and sub.func.id == "PromotionBatch":
             for kw in sub.keywords:
-                if (
-                    kw.arg == "promotion_records"
-                    and not isinstance(kw.value, ast.Tuple)
-                ):
-                    pytest.fail(
-                        "Active scoped path MUST construct "
-                        "PromotionBatch with promotion_records=() "
-                        "(the empty tuple); aggregate scoped results "
-                        "do not carry per-signal records."
-                    )
+                if kw.arg == "promotion_records" and not isinstance(kw.value, ast.Tuple):
+                    pytest.fail("Active scoped path MUST construct PromotionBatch with promotion_records=() (the empty tuple); aggregate scoped results do not carry per-signal records.")
+
 
 def test_legacy_adapter_does_not_depend_on_active_modules() -> None:
     """The legacy adapter MUST NOT import the active dispatcher
@@ -212,26 +119,5 @@ def test_legacy_adapter_does_not_depend_on_active_modules() -> None:
     for node in _imports_from(tree):
         if node.module is None:
             continue
-        if any(
-            substring in node.module
-            for substring in forbidden_substrings
-        ):
-            pytest.fail(
-                "Legacy adapter MUST NOT import active module "
-                f"{node.module!r}"
-            )
-
-
-def _module_names(tree: ast.Module) -> set[str]:
-    """Collect names declared at module scope."""
-    names: set[str] = set()
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names.add(node.name)
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    names.add(target.id)
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            names.add(node.target.id)
-    return names
+        if any(substring in node.module for substring in forbidden_substrings):
+            pytest.fail(f"Legacy adapter MUST NOT import active module {node.module!r}")

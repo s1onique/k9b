@@ -47,76 +47,7 @@ PARSE_FILE = SCRIPTS_ROOT / "parse_gate_summary.py"
 POPULATE_FILE = SCRIPTS_ROOT / "populate_gate_summary.py"
 
 GATE_SUMMARY_PATH = REPO_ROOT / ".factory" / "gate-summary.json"
-VALIDATION_ATTESTATION_PATH = (
-    REPO_ROOT / ".factory" / "gate-summary-validation.json"
-)
-
-
-def _write_atomic(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-
-def _minimal_passing_artifact() -> dict:
-    return {
-        "schema_version": 1,
-        "profile": "act-local",
-        "source_status": "present",
-        "overall_status": "pass",
-        "generated_at": "2026-07-29T17:00:00+00:00",
-        "checks_total": 17,
-        "checks_failed": 0,
-        "checks": [
-            {
-                "name": name,
-                "status": "pass",
-                "duration_ms": 1,
-                "error_message": None,
-                "command": "echo",
-                "exit_code": 0,
-            }
-            for name in (
-                "canonical-verifier-self-test",
-                "standalone-production-verifier",
-                "production-mypy-positive",
-                "production-mypy-negative",
-                "full-gate-negative-proofs",
-                "opaque-bearer-regression",
-                "sanitizer-regression-matrix",
-                "credential-matrix",
-                "omission-boundary",
-                "serializer-multi-return",
-                "ruff",
-                "mypy",
-                "git-diff-check",
-                "git-diff-cached-check",
-                "llm-friendly",
-                "no-new-llm-allowlist",
-                "targeted-repository-gate",
-            )
-        ],
-        "self_tests": {},
-        "r10_definition_of_done": {},
-        "extras": {"required_check_names": [
-            "canonical-verifier-self-test",
-            "standalone-production-verifier",
-            "production-mypy-positive",
-            "production-mypy-negative",
-            "full-gate-negative-proofs",
-            "opaque-bearer-regression",
-            "sanitizer-regression-matrix",
-            "credential-matrix",
-            "omission-boundary",
-            "serializer-multi-return",
-            "ruff",
-            "mypy",
-            "git-diff-check",
-            "git-diff-cached-check",
-            "llm-friendly",
-            "no-new-llm-allowlist",
-            "targeted-repository-gate",
-        ]},
-    }
+VALIDATION_ATTESTATION_PATH = REPO_ROOT / ".factory" / "gate-summary-validation.json"
 
 
 # ---------------------------------------------------------------------------
@@ -127,34 +58,23 @@ def _minimal_passing_artifact() -> dict:
 def test_validation_attestation_present_when_summary_present() -> None:
     """When ``gate-summary.json`` exists, the validation attestation MUST exist."""
     if not GATE_SUMMARY_PATH.exists():
-        pytest.skip(
-            ".factory/gate-summary.json is missing; the populate "
-            "step must run before this assertion can be evaluated."
-        )
+        pytest.skip(".factory/gate-summary.json is missing; the populate step must run before this assertion can be evaluated.")
     if not VALIDATION_ATTESTATION_PATH.exists():
-        pytest.fail(
-            "populate_gate_summary MUST write "
-            ".factory/gate-summary-validation.json whenever "
-            "gate-summary.json is written."
-        )
+        pytest.fail("populate_gate_summary MUST write .factory/gate-summary-validation.json whenever gate-summary.json is written.")
+
 
 def test_validation_attestation_sha256_binds_final_bytes() -> None:
     """The attestation SHA-256 MUST match the actual gate-summary bytes."""
     if not VALIDATION_ATTESTATION_PATH.exists():
-        pytest.skip(
-            "validation attestation is missing; the populate step "
-            "must run before this assertion can be evaluated."
-        )
+        pytest.skip("validation attestation is missing; the populate step must run before this assertion can be evaluated.")
     data = json.loads(VALIDATION_ATTESTATION_PATH.read_text(encoding="utf-8"))
     attested_sha = data.get("validated_sha256")
     if not attested_sha:
         pytest.fail("validated_sha256 missing from attestation")
     actual_sha = hashlib.sha256(GATE_SUMMARY_PATH.read_bytes()).hexdigest()
     if attested_sha != actual_sha:
-        pytest.fail(
-            f"attested SHA-256 ({attested_sha}) MUST equal the "
-            f"actual SHA-256 ({actual_sha}) of gate-summary.json"
-        )
+        pytest.fail(f"attested SHA-256 ({attested_sha}) MUST equal the actual SHA-256 ({actual_sha}) of gate-summary.json")
+
 
 def test_validation_attestation_includes_decode_and_acceptance() -> None:
     """The attestation MUST carry typed ``decode_status`` and ``acceptance_status``."""
@@ -162,30 +82,20 @@ def test_validation_attestation_includes_decode_and_acceptance() -> None:
         pytest.skip("validation attestation is missing")
     data = json.loads(VALIDATION_ATTESTATION_PATH.read_text(encoding="utf-8"))
     if data.get("decode_status") not in {"pass", "fail"}:
-        pytest.fail(
-            f"attestation.decode_status MUST be pass|fail; "
-            f"got {data.get('decode_status')!r}"
-        )
+        pytest.fail(f"attestation.decode_status MUST be pass|fail; got {data.get('decode_status')!r}")
     if data.get("acceptance_status") not in {"pass", "fail"}:
-        pytest.fail(
-            f"attestation.acceptance_status MUST be pass|fail; "
-            f"got {data.get('acceptance_status')!r}"
-        )
+        pytest.fail(f"attestation.acceptance_status MUST be pass|fail; got {data.get('acceptance_status')!r}")
+
 
 def test_validation_attestation_excludes_self_referential_evidence() -> None:
     """The attestation MUST NOT live inside ``gate-summary.json``."""
     if not GATE_SUMMARY_PATH.exists():
-        pytest.skip(
-            ".factory/gate-summary.json is missing; the populate "
-            "step must run before this assertion can be evaluated."
-        )
+        pytest.skip(".factory/gate-summary.json is missing; the populate step must run before this assertion can be evaluated.")
     data = json.loads(GATE_SUMMARY_PATH.read_text(encoding="utf-8"))
     extras = data.get("extras", {})
     if isinstance(extras, dict) and "parser_postcondition" in extras:
-        pytest.fail(
-            "gate-summary.json MUST NOT carry parser_postcondition; "
-            "the validator result lives in the sibling attestation."
-        )
+        pytest.fail("gate-summary.json MUST NOT carry parser_postcondition; the validator result lives in the sibling attestation.")
+
 
 def test_parser_runs_after_final_write_in_producer() -> None:
     """The producer MUST write the artifact THEN run the parser.
@@ -198,16 +108,9 @@ def test_parser_runs_after_final_write_in_producer() -> None:
     # The producer MUST capture the SHA-256 AFTER writing the
     # artifact and BEFORE consulting the parser outcome.
     if "final_bytes = target.read_bytes()" not in text:
-        pytest.fail(
-            "populate_gate_summary.main MUST capture the artifact "
-            "bytes (e.g. via target.read_bytes()) so the SHA-256 "
-            "binds the validated content."
-        )
+        pytest.fail("populate_gate_summary.main MUST capture the artifact bytes (e.g. via target.read_bytes()) so the SHA-256 binds the validated content.")
     if "final_sha256 = hashlib.sha256" not in text:
-        pytest.fail(
-            "populate_gate_summary.main MUST compute the final "
-            "SHA-256 from the captured bytes."
-        )
+        pytest.fail("populate_gate_summary.main MUST compute the final SHA-256 from the captured bytes.")
     # The producer MUST NOT embed the parser result inside
     # the artifact's ``extras``.  The forbidden construction is
     # ``extras[`` ``] = ...`` with the field name.  We accept
@@ -224,11 +127,7 @@ def test_parser_runs_after_final_write_in_producer() -> None:
             # Allow the diagnostic-dict construction that only
             # reports the extras keys (the value is a list, not
             # an ``extras[...] = `` assignment).
-            if needle == '"parser_postcondition":' and 'extras_keys' in text:
+            if needle == '"parser_postcondition":' and "extras_keys" in text:
                 # Acceptable diagnostic-list construction.
                 continue
-            pytest.fail(
-                f"populate_gate_summary.main MUST NOT embed "
-                f"``parser_postcondition`` in the artifact; found "
-                f"{needle!r}."
-            )
+            pytest.fail(f"populate_gate_summary.main MUST NOT embed ``parser_postcondition`` in the artifact; found {needle!r}.")
