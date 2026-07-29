@@ -140,42 +140,72 @@ def _promotion_rejected() -> PromotionRejected:
 
 @pytest.mark.parametrize(
     ("outcome_factory", "expected_mode", "expected_source", "expected_access_mode",
-     "expected_reconciliation"),
+     "expected_reconciliation", "dispatcher_access_mode"),
     [
+        # ACT-K9B-HULK-PROMOTION-SUCCESSFUL-ZERO-ACCESS-MODE01:
+        # ``None`` + ``no_promotion_run`` dispatcher -> ``no_promotion_run`` access mode.
         (
             lambda: None,
             INCIDENT_SELECTION_MODE_STORE_SCAN,
             DIAGNOSIS_SELECTION_SOURCE_EXPLICIT_NON_PROMOTION,
             INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN,
             False,
+            INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN,
         ),
+        # ``None`` + backend dispatcher -> backend access mode (preserve transport).
+        (
+            lambda: None,
+            INCIDENT_SELECTION_MODE_STORE_SCAN,
+            DIAGNOSIS_SELECTION_SOURCE_EXPLICIT_NON_PROMOTION,
+            "backend",
+            False,
+            "backend",
+        ),
+        # ``PromotionSucceeded`` with non-empty IDs -> backend access mode.
         (
             _promotion_succeeded_with_ids,
             INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
             DIAGNOSIS_SELECTION_SOURCE_PROMOTION,
             "backend",
             False,
+            "backend",
         ),
+        # ``PromotionSucceeded`` with empty IDs -> backend access mode
+        # (zero IDs MUST NOT collapse transport authority).
         (
             _promotion_succeeded_empty,
             INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
             DIAGNOSIS_SELECTION_SOURCE_PROMOTION,
             "backend",
             False,
+            "backend",
         ),
+        # ``PromotionCommitUnknown`` -> ``reconciliation_required``.
         (
             _commit_unknown_ambiguous_response,
             INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN,
             DIAGNOSIS_SELECTION_SOURCE_PROMOTION_COMMIT_UNKNOWN,
             INCIDENT_ACCESS_MODE_RECONCILIATION_REQUIRED,
             True,
+            "backend",
         ),
+        # ``PromotionRejected`` -> ``blocked``, preserves dispatcher mode.
         (
             _promotion_rejected,
             INCIDENT_SELECTION_MODE_BLOCKED,
             DIAGNOSIS_SELECTION_SOURCE_PROMOTION_BLOCKED,
             "backend",
             False,
+            "backend",
+        ),
+        # ``PromotionSucceeded`` with empty IDs + local dispatcher -> local.
+        (
+            _promotion_succeeded_empty,
+            INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
+            DIAGNOSIS_SELECTION_SOURCE_PROMOTION,
+            "local",
+            False,
+            "local",
         ),
     ],
 )
@@ -185,12 +215,13 @@ def test_authority_outcome_to_mode_matrix(
     expected_source: str,
     expected_access_mode: str,
     expected_reconciliation: bool,
+    dispatcher_access_mode: str,
 ) -> None:
     """Every closed ``PromotionOutcome | None`` variant maps to a typed mode."""
     promotion_outcome = outcome_factory()
     authority = _build_diagnosis_execution_authority(
         promotion_outcome=promotion_outcome,
-        dispatcher_incident_access_mode="backend",
+        dispatcher_incident_access_mode=dispatcher_access_mode,
     )
     assert authority.selection_mode == expected_mode
     assert authority.selection_source == expected_source

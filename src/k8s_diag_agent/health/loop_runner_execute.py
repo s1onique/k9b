@@ -883,11 +883,28 @@ def _build_diagnosis_execution_authority(
     from typing import assert_never
 
     if promotion_outcome is None:
+        # ACT-K9B-HULK-PROMOTION-SUCCESSFUL-ZERO-ACCESS-MODE01:
+        # ``no_promotion_run`` is reserved exclusively for runs that
+        # NEVER reached promotion (no batch, no outcome). When the
+        # accumulator accepted a batch whose dispatcher actually
+        # consumed backend/local, the access mode must reflect that
+        # transport even though the typed outcome has not yet been
+        # recorded -- the ``dispatcher_incident_access_mode`` carries
+        # the truth the orchestrator already derived from the
+        # accepted batch. ``no_promotion_run`` would otherwise collapse
+        # a real backend or local run onto the no-attempt sentinel,
+        # hiding the transport authority behind cardinality.
+        access_mode = (
+            dispatcher_incident_access_mode
+            if dispatcher_incident_access_mode
+            != INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN
+            else INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN
+        )
         return DiagnosisExecutionAuthority(
             promotion_outcome=None,
             selection_mode=INCIDENT_SELECTION_MODE_STORE_SCAN,
             selection_source=DIAGNOSIS_SELECTION_SOURCE_EXPLICIT_NON_PROMOTION,
-            incident_access_mode=INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN,
+            incident_access_mode=access_mode,
             reconciliation_required=False,
         )
 
