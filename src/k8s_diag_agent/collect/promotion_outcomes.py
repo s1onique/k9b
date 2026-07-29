@@ -79,6 +79,28 @@ class PromotionRejectionCode(StrEnum):
     """Catch-all bucket. Use sparingly; prefer a specific code."""
 
 
+class PromotionCommitDisposition(StrEnum):
+    """Closed commit-certainty disposition for any promotion outcome.
+
+    Three values exhaust the possible states:
+    ``DEFINITELY_COMMITTED``, ``DEFINITELY_NOT_COMMITTED``, and
+    ``MAY_HAVE_COMMITTED``. A compatibility property exposes the
+    legacy ``may_have_committed`` boolean where required.
+    """
+
+    DEFINITELY_COMMITTED = "definitely_committed"
+    """The backend acknowledged a completed commit."""
+
+    DEFINITELY_NOT_COMMITTED = "definitely_not_committed"
+    """The backend rejected before promotion execution could begin,
+    OR no request body was transmitted."""
+
+    MAY_HAVE_COMMITTED = "may_have_committed"
+    """Transport returned without proving whether the request body
+    was processed; reconciliation is required before commit
+    certainty is established."""
+
+
 class PromotionUncertaintyCode(StrEnum):
     """Bounded reason codes for :class:`PromotionCommitUnknown`.
 
@@ -136,6 +158,11 @@ class PromotionUncertaintyCode(StrEnum):
 
     HTTP_CONNECTION_LOST_AFTER_SEND = "http_connection_lost_after_send"
     """Connection lost after the request body was transmitted."""
+
+    PROMOTION_HTTP_ERROR_UNCERTAIN = "promotion_http_error_uncertain"
+    """Generic untyped HTTP error (4xx / 5xx) whose commit status
+    cannot be inferred from the status code alone; reconciliation
+    is required before commit certainty is established."""
 
     HTTP_FAILURE_BEFORE_SEND = "http_failure_before_send"
     """Transport failure before the request was transmitted."""

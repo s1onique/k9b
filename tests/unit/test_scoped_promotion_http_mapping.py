@@ -30,6 +30,7 @@ from k8s_diag_agent.collect.promotion_http_transport import (
     RequestTransmissionState,
 )
 from k8s_diag_agent.collect.promotion_outcomes import (
+    PromotionCommitDisposition,
     PromotionCommitUnknown,
     PromotionRejected,
     PromotionSucceeded,
@@ -142,7 +143,9 @@ class TestSuccessProjection:
         assert projection.request_fingerprint == (
             scoped_promotion_request_fingerprint(transport.bound.request)
         )
-        assert projection.may_have_committed is False
+        assert projection.commit_disposition is (
+            PromotionCommitDisposition.DEFINITELY_COMMITTED
+        )
 
     def test_aggregate_successful_zero_preserves_authority(self) -> None:
         """Aggregate successful zero is preserved as ``PromotionSucceeded``.
@@ -243,7 +246,9 @@ class TestBoundedReasonCodes:
         outcome = projection.promotion_outcome
         assert isinstance(outcome, PromotionRejected)
         assert outcome.reason.value == "configuration_blocked"
-        assert projection.may_have_committed is False
+        assert projection.commit_disposition is (
+            PromotionCommitDisposition.DEFINITELY_NOT_COMMITTED
+        )
 
     def test_http_error_is_commit_uncertain(self) -> None:
         """A malformed ``500`` MUST NOT be classified as ``PromotionRejected``."""

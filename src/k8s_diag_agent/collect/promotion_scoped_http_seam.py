@@ -1,11 +1,12 @@
 """Typed HTTP seam for the canonical scoped current-run promotion path.
 
-ACT-K9B-HULK-PROMOTION-SCOPED-DISPATCH-ACTIVATION-AND-CERTAINTY01.
+ACT-K9B-HULK-PROMOTION-SCOPED-TRANSPORT-MAPPING-TRUTH01-CORRECTION01.
 
 This module owns the typed request context, the typed success
-variant, the typed aggregate receipt, the bounded request
-fingerprint, and the bounded HTTP observation for the scoped
-path.
+variant, the typed aggregate receipt (with construction-time
+validation), the typed distinct body-read variants, the typed
+authentication rejection variant, the bounded request fingerprint,
+and the bounded HTTP observation for the scoped path.
 
 Identity ownership:
 
@@ -15,15 +16,6 @@ Identity ownership:
   in transport logs, the ``X-K9B-Promotion-Request-ID`` header, and
   the ``PromotionHttpObservation`` only; it MUST never be used as
   ``runId`` or be promoted into a domain identifier.
-
-The single canonical request authority is
-:class:`PromoteAlertSignalsRequest`. The HTTP context wraps it
-directly so the client never reconstructs a second request.
-
-The closed ``ScopedPromotionHttpTransportOutcome`` union is the
-bounded set of HTTP transport shapes the scoped client may return.
-``typing.assert_never`` is used at the consumer boundary so a
-newly added variant cannot silently disappear from the dispatch.
 
 The deterministic :func:`scoped_promotion_request_fingerprint`
 computes a SHA-256 digest over the canonical request payload; two
@@ -80,21 +72,12 @@ class ScopedPromotionHttpRequestContext:
       ever appears on the ``X-K9B-Promotion-Request-ID`` header, in
       ``PromotionHttpObservation``, and in structured transport
       events; never on a domain outcome.
-
-    The canonical :class:`PromoteAlertSignalsRequest` is the SINGLE
-    request authority. The client MUST NOT reconstruct a second
-    request from the convenience properties below.
     """
 
     request: PromoteAlertSignalsRequest
     request_id: str
 
     def __post_init__(self) -> None:
-        # ``HealthRunId`` and ``AlertSignalId`` are ``typing.NewType``
-        # aliases over ``str``; runtime ``isinstance`` against a
-        # ``NewType`` is rejected on Python 3.14. Validate against
-        # the underlying ``str`` instead; the static type checker
-        # is the authority for the NewType contract.
         if not isinstance(self.request, PromoteAlertSignalsRequest):
             raise TypeError(
                 "ScopedPromotionHttpRequestContext.request MUST be a "
@@ -156,27 +139,49 @@ class ScopedPromotionHttpRequestContext:
 
 @dataclass(frozen=True, slots=True)
 class ScopedPromotionHttpSucceeded:
-    """Scoped transport outcome: 2xx with a valid bounded wire result.
-
-    Carries the bounded observation plus the typed bound result so
-    the dispatcher can drive the closed ``PromotionOutcome``
-    projection without re-parsing the response body.
-    """
-
+    """Scoped transport outcome: 2xx with a valid bounded wire result."""
     observation: PromotionHttpObservation
     bound: BoundScopedPromotionResult
+
+
+@dataclass(frozen=True, slots=True)
+class ScopedPromotionHttpBodyLimitExceeded:
+    """Body exceeded the bounded cap; the body is dropped."""
+    observation: PromotionHttpObservation
+
+
+@dataclass(frozen=True, slots=True)
+class ScopedPromotionHttpShortRead:
+    """Declared Content-Length exceeds the bytes actually received."""
+    observation: PromotionHttpObservation
+
+
+@dataclass(frozen=True, slots=True)
+class ScopedPromotionHttpReadFailed:
+    """Read raised after response headers were received."""
+    observation: PromotionHttpObservation
+
+
+@dataclass(frozen=True, slots=True)
+class ScopedPromotionHttpAuthenticationRejected:
+    """Backend returned ``401`` or ``403`` before promotion execution.
+
+    A 401 / 403 from the authentication layer proves no promotion
+    could have started, so this variant maps to ``PromotionRejected``
+    with ``commit_disposition=D DEFINITELY_NOT_COMMITTED``.
+    """
+    observation: PromotionHttpObservation
 
 
 @dataclass(frozen=True, slots=True)
 class ScopedPromotionReceipt:
     """Aggregate scoped receipt carried alongside PromotionSucceeded.
 
-    The scoped canonical wire does NOT carry per-signal promotion
-    records. Downstream consumers MUST NOT derive
-    ``promotion_record_count=0`` / ``no_promotion_run`` from the
-    absence of records. The aggregate receipt proves that a
-    promotion was attempted and completed, even when every
-    category list is empty (aggregate successful zero).
+    Construction is authoritative: every field must agree with the
+    bound ``PromoteAlertSignalsRequest`` and ``IncidentPromotionResult``.
+    Use :meth:`from_bound_result` to construct; the default
+    ``__init__`` is restricted to direct construction only via the
+    factory.
     """
 
     requested_signal_ids: tuple[str, ...]
@@ -188,16 +193,74 @@ class ScopedPromotionReceipt:
     skipped_signal_ids: tuple[str, ...]
     failure_count: int
 
+    @classmethod
+    def from_bound_result(
+        cls,
+        bound: BoundScopedPromotionResult,
+    ) -> ScopedPromotionReceipt:
+        """Authoritatively build the receipt from a valid bound result.
+
+        Cross-checks every field against the bound request and
+        result. Contradictory construction raises ``ValueError``
+        rather than producing a contradictory receipt.
+        """
+        request_ids = tuple(
+            str(signal_id) for signal_id in bound.request.signal_ids
+        )
+        scanned_ids = tuple(
+            str(signal_id) for signal_id in bound.result.scanned_signal_ids
+        )
+        if request_ids != scanned_ids:
+            raise ValueError(
+                "ScopedPromotionReceipt construction failed: bound "
+                "result scanned_signal_ids do not match the request "
+                "signal_ids"
+            )
+        receipt = cls(
+            requested_signal_ids=request_ids,
+            scanned_signal_ids=scanned_ids,
+            opened_incident_ids=tuple(
+                str(i) for i in bound.result.opened_incident_ids
+            ),
+            materially_changed_incident_ids=tuple(
+                str(i) for i in bound.result.materially_changed_incident_ids
+            ),
+            observation_refreshed_incident_ids=tuple(
+                str(i) for i in bound.result.observation_refreshed_incident_ids
+            ),
+            unchanged_incident_ids=tuple(
+                str(i) for i in bound.result.unchanged_incident_ids
+            ),
+            skipped_signal_ids=tuple(
+                str(signal_id)
+                for signal_id in bound.result.skipped_signal_ids
+            ),
+            failure_count=len(bound.result.failures),
+        )
+        return receipt
+
 
 def scoped_promotion_request_fingerprint(
     request: PromoteAlertSignalsRequest,
 ) -> str:
     """Stable SHA-256 fingerprint over the canonical request payload.
 
-    Two attempts for the same promotion scope produce the same
-    fingerprint even if they carry different transport correlation
-    ``request_id`` values. Used as the deterministic half of the
-    :class:`PromotionReconciliationToken`.
+    The canonical byte representation is a length-prefixed,
+    sorted-keyed JSON object containing:
+
+    * wire contract version
+    * HTTP method
+    * endpoint path
+    * ``runId``
+    * ``sourceIdentity``
+    * ordered ``signalIds`` (order matters: ``["a", "b"]`` and
+      ``["b", "a"]`` produce different fingerprints so callers MUST
+      preserve the request order)
+
+    Two attempts of the same promotion scope (same runId,
+    sourceIdentity, and ordered signalIds) produce the same
+    fingerprint even when they carry different transport correlation
+    ``request_id`` values.
     """
     wire = {
         "wire_contract_version": _WIRE_CONTRACT_VERSION,
@@ -215,12 +278,13 @@ def scoped_promotion_request_fingerprint(
     return hashlib.sha256(canonical).hexdigest()
 
 
-# Closed union for the scoped HTTP transport surface. The success
-# variant is endpoint-specific; the remaining variants are shared
-# with the generic transport module because the failure / bounded-
-# uncertainty shapes are endpoint-agnostic.
+# Closed union for the scoped HTTP transport surface.
 ScopedPromotionHttpTransportOutcome = (
     ScopedPromotionHttpSucceeded
+    | ScopedPromotionHttpAuthenticationRejected
+    | ScopedPromotionHttpBodyLimitExceeded
+    | ScopedPromotionHttpShortRead
+    | ScopedPromotionHttpReadFailed
     | PromotionHttpAccepted
     | PromotionHttpNoContent
     | PromotionHttpRejected
@@ -236,9 +300,12 @@ __all__ = [
     "MAX_REQUEST_ID_LENGTH",
     "MAX_SIGNAL_IDS",
     "MAX_SOURCE_IDENTITY_LENGTH",
+    "ScopedPromotionHttpAuthenticationRejected",
+    "ScopedPromotionHttpBodyLimitExceeded",
+    "ScopedPromotionHttpReadFailed",
     "ScopedPromotionHttpRequestContext",
+    "ScopedPromotionHttpShortRead",
     "ScopedPromotionHttpSucceeded",
     "ScopedPromotionHttpTransportOutcome",
-    "ScopedPromotionReceipt",
     "scoped_promotion_request_fingerprint",
 ]
