@@ -31,6 +31,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from enum import StrEnum
 
 from ..domain.identifiers import AlertSignalId, HealthRunId
 from ..incident_alert_promotion_binding import BoundScopedPromotionResult
@@ -156,10 +157,26 @@ class ScopedPromotionHttpShortRead:
     observation: PromotionHttpObservation
 
 
+class ScopedReadFailureReason(StrEnum):
+    """Closed read-failure reason vocabulary.
+
+    Excludes the unrestricted generic transport reason so the
+    mapper can do exhaustive matching on a closed set.
+    """
+
+    TIMEOUT = "timeout"
+    CONNECTION_LOST = "connection_lost"
+
+
 @dataclass(frozen=True, slots=True)
 class ScopedPromotionHttpReadFailed:
-    """Read raised after response headers were received."""
+    """Read raised after response headers were received.
+
+    Carries a closed :class:`ScopedReadFailureReason` so the
+    mapper can do exhaustive matching.
+    """
     observation: PromotionHttpObservation
+    reason_code: ScopedReadFailureReason
 
 
 @dataclass(frozen=True, slots=True)

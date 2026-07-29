@@ -45,10 +45,9 @@ from k8s_diag_agent.collect.promotion_http_transport import (
 from k8s_diag_agent.collect.promotion_outcomes import (
     PromotionCommitDisposition,
     PromotionCommitUnknown,
-    PromotionOutcome,
     PromotionReconciliationToken,
-    PromotionRejectionCode,
     PromotionRejected,
+    PromotionRejectionCode,
     PromotionSucceeded,
     PromotionUncertaintyCode,
 )
@@ -61,9 +60,9 @@ from k8s_diag_agent.collect.promotion_scoped_http_seam import (
     ScopedPromotionHttpSucceeded,
     ScopedPromotionHttpTransportOutcome,
     ScopedPromotionReceipt,
+    ScopedReadFailureReason,
     scoped_promotion_request_fingerprint,
 )
-
 
 # ---------------------------------------------------------------------------
 # Closed projection algebra
@@ -287,21 +286,19 @@ def map_scoped_http_transport_to_promotion_outcome(
             request_fingerprint=fingerprint,
         )
     if isinstance(transport, ScopedPromotionHttpReadFailed):
-        # The body-read failure preserves its typed reason code:
-        # timeout vs connection loss. The mapper branches on the
-        # reason rather than collapsing both into HTTP_READ_TIMEOUT.
-        reason_code = transport.reason_code
-        if reason_code == PromotionHttpTransportReasonCode.HTTP_READ_TIMEOUT_AFTER_SEND:
+        # Exhaustive matching over the closed read-failure reason
+        # vocabulary. No silent timeout fallback.
+        if transport.reason_code == ScopedReadFailureReason.TIMEOUT:
             code = PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
         elif (
-            reason_code
-            == PromotionHttpTransportReasonCode.HTTP_CONNECTION_LOST_AFTER_SEND
+            transport.reason_code == ScopedReadFailureReason.CONNECTION_LOST
         ):
             code = (
                 PromotionUncertaintyCode
                 .HTTP_CONNECTION_LOST_AFTER_SEND
             )
         else:
+            assert_never(transport.reason_code)
             code = PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
         return ScopedPromotionUncertainProjection(
             promotion_outcome=_commit_unknown(context, code=code),
@@ -367,13 +364,13 @@ def map_scoped_http_transport_to_promotion_outcome(
             request_fingerprint=fingerprint,
         )
     if isinstance(transport, PromotionHttpTransportFailureAfterSend):
-        # Distinct after-send reasons: timeout vs connection loss.
-        reason_code = transport.reason_code
-        if reason_code == (
+        # Exhaustive matching over the closed transport reason
+        # vocabulary. No silent timeout fallback.
+        if transport.reason_code == (
             PromotionHttpTransportReasonCode.HTTP_READ_TIMEOUT_AFTER_SEND
         ):
             code = PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
-        elif reason_code == (
+        elif transport.reason_code == (
             PromotionHttpTransportReasonCode
             .HTTP_CONNECTION_LOST_AFTER_SEND
         ):
@@ -382,6 +379,7 @@ def map_scoped_http_transport_to_promotion_outcome(
                 .HTTP_CONNECTION_LOST_AFTER_SEND
             )
         else:
+            assert_never(transport.reason_code)
             code = PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
         return ScopedPromotionUncertainProjection(
             promotion_outcome=_commit_unknown(context, code=code),
