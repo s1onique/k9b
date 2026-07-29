@@ -258,11 +258,10 @@ class TestBoundedReasonCodes:
         )
         outcome = projection.promotion_outcome
         assert isinstance(outcome, PromotionCommitUnknown)
-        # The may_have_committed signal lives on the projection,
-        # not on the outcome itself; HTTP error is commit-unknown
-        # because no validated backend disposition proved
-        # execution did not start.
-        assert projection.may_have_committed is True
+        # The disposition lives on the projection, not the outcome;
+        # HTTP error is commit-unknown because no validated
+        # backend disposition proved execution did not start.
+        assert projection.requires_reconciliation is True
 
 
 class TestIdentitySeparation:

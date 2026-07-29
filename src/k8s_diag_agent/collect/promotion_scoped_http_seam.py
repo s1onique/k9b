@@ -175,69 +175,60 @@ class ScopedPromotionHttpAuthenticationRejected:
 
 @dataclass(frozen=True, slots=True)
 class ScopedPromotionReceipt:
-    """Aggregate scoped receipt carried alongside PromotionSucceeded.
+    """Aggregate scoped receipt held alongside the completed projection.
 
-    Construction is authoritative: every field must agree with the
-    bound ``PromoteAlertSignalsRequest`` and ``IncidentPromotionResult``.
-    Use :meth:`from_bound_result` to construct; the default
-    ``__init__`` is restricted to direct construction only via the
-    factory.
+    The receipt is intrinsically authoritative: it holds exactly
+    one :class:`BoundScopedPromotionResult` and every aggregate
+    property derives from it. Consumers MUST NOT reconstruct
+    copy-state by hand; the bound is the only source of truth.
     """
 
-    requested_signal_ids: tuple[str, ...]
-    scanned_signal_ids: tuple[str, ...]
-    opened_incident_ids: tuple[str, ...]
-    materially_changed_incident_ids: tuple[str, ...]
-    observation_refreshed_incident_ids: tuple[str, ...]
-    unchanged_incident_ids: tuple[str, ...]
-    skipped_signal_ids: tuple[str, ...]
-    failure_count: int
+    bound: BoundScopedPromotionResult
 
-    @classmethod
-    def from_bound_result(
-        cls,
-        bound: BoundScopedPromotionResult,
-    ) -> ScopedPromotionReceipt:
-        """Authoritatively build the receipt from a valid bound result.
+    @property
+    def requested_signal_ids(self) -> tuple[str, ...]:
+        return tuple(
+            str(signal_id) for signal_id in self.bound.request.signal_ids
+        )
 
-        Cross-checks every field against the bound request and
-        result. Contradictory construction raises ``ValueError``
-        rather than producing a contradictory receipt.
-        """
-        request_ids = tuple(
-            str(signal_id) for signal_id in bound.request.signal_ids
+    @property
+    def scanned_signal_ids(self) -> tuple[str, ...]:
+        return tuple(
+            str(signal_id) for signal_id in self.bound.result.scanned_signal_ids
         )
-        scanned_ids = tuple(
-            str(signal_id) for signal_id in bound.result.scanned_signal_ids
+
+    @property
+    def opened_incident_ids(self) -> tuple[str, ...]:
+        return tuple(str(i) for i in self.bound.result.opened_incident_ids)
+
+    @property
+    def materially_changed_incident_ids(self) -> tuple[str, ...]:
+        return tuple(
+            str(i) for i in self.bound.result.materially_changed_incident_ids
         )
-        if request_ids != scanned_ids:
-            raise ValueError(
-                "ScopedPromotionReceipt construction failed: bound "
-                "result scanned_signal_ids do not match the request "
-                "signal_ids"
-            )
-        receipt = cls(
-            requested_signal_ids=request_ids,
-            scanned_signal_ids=scanned_ids,
-            opened_incident_ids=tuple(
-                str(i) for i in bound.result.opened_incident_ids
-            ),
-            materially_changed_incident_ids=tuple(
-                str(i) for i in bound.result.materially_changed_incident_ids
-            ),
-            observation_refreshed_incident_ids=tuple(
-                str(i) for i in bound.result.observation_refreshed_incident_ids
-            ),
-            unchanged_incident_ids=tuple(
-                str(i) for i in bound.result.unchanged_incident_ids
-            ),
-            skipped_signal_ids=tuple(
-                str(signal_id)
-                for signal_id in bound.result.skipped_signal_ids
-            ),
-            failure_count=len(bound.result.failures),
+
+    @property
+    def observation_refreshed_incident_ids(self) -> tuple[str, ...]:
+        return tuple(
+            str(i) for i in self.bound.result.observation_refreshed_incident_ids
         )
-        return receipt
+
+    @property
+    def unchanged_incident_ids(self) -> tuple[str, ...]:
+        return tuple(str(i) for i in self.bound.result.unchanged_incident_ids)
+
+    @property
+    def skipped_signal_ids(self) -> tuple[str, ...]:
+        return tuple(
+            str(signal_id)
+            for signal_id in self.bound.result.skipped_signal_ids
+        )
+
+    @property
+    def failure_count(self) -> int:
+        return len(self.bound.result.failures)
+
+
 
 
 def scoped_promotion_request_fingerprint(
