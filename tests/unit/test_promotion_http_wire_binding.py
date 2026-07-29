@@ -2,9 +2,13 @@
 
 ACT-K9B-HULK-PROMOTION-HTTP-TRANSPORT-PRODUCTION-WIRING01-PHASE-2B.
 
-``BoundPromotionHttpWireResult`` enforces exact request coverage in
-``__post_init__``. An unbound instance cannot exist. These tests
-exercise both the happy paths and the negative matrix.
+``BoundPromotionHttpWireResult`` enforces exact request coverage
+in ``__post_init__``. An unbound instance cannot exist. These
+tests cover basic happy-path and failure-path binding.
+
+The additional binding invariants introduced by the correction
+(success-only binding, request-counter binding, successful zero)
+live in :mod:`test_promotion_http_wire_binding_invariants`.
 """
 
 from __future__ import annotations
@@ -120,6 +124,15 @@ class TestManyToOneCanonicalBinding:
         assert bound.result.canonical_incident_ids == ("canonical-inc-001",)
 
     def test_34_signal_production_shape(self) -> None:
+        """Bijective opened reconciliation across 34 signals.
+
+        Records 0-1 open ``canonical-inc-001``; record 2 opens
+        ``canonical-inc-002``; records 3..33 are
+        ``observation_refreshed`` against ``canonical-inc-002``.
+        The first three records collectively populate
+        ``opened_incident_ids`` and ``canonical_incident_ids``
+        in first-occurrence order.
+        """
         requested = tuple(f"sig-{i:03d}" for i in range(34))
         records = [
             {
@@ -128,7 +141,7 @@ class TestManyToOneCanonicalBinding:
                     "canonical-inc-001" if i < 2 else "canonical-inc-002"
                 ),
                 "promotion_outcome": (
-                    "opened" if i < 2 else "observation_refreshed"
+                    "opened" if i < 3 else "observation_refreshed"
                 ),
             }
             for i, source_id in enumerate(requested)
@@ -158,6 +171,14 @@ class TestManyToOneCanonicalBinding:
         }
         bound = _bind(payload, requested)
         assert bound.categorised_source_ids() == requested
+        assert bound.result.opened_incident_ids == (
+            "canonical-inc-001",
+            "canonical-inc-002",
+        )
+        assert bound.result.canonical_incident_ids == (
+            "canonical-inc-001",
+            "canonical-inc-002",
+        )
 
 
 class TestSuccessfulZeroWithFullCategorisation:
@@ -219,7 +240,11 @@ class TestBindingFailures:
                 result=PromotionHttpWireResult.from_payload(payload),
                 requested_signal_ids=(),
             )
-        assert "cover" in str(exc_info.value).lower()
+        # The request-counter matched check now fires first: an
+        # empty request cannot satisfy ``scanned == len(request)``
+        # when the payload reports scanned=1.
+        assert "scanned" in str(exc_info.value).lower()
+        assert "request count" in str(exc_info.value).lower()
 
     def test_extra_unrequested_record_raises(self) -> None:
         payload = _valid_payload(source_ids=("sig-001", "sig-extra"))

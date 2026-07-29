@@ -259,3 +259,175 @@ class TestClosedEnumReachability:
             "backend",
             "local",
         }
+
+
+class TestDirectConstructionParity:
+    """Direct dataclass construction must enforce the same
+    entry-parity invariants as :meth:`from_payload`.
+
+    The dataclass-generated ``__init__`` invokes ``__post_init__``,
+    so every invariant that ``from_payload`` validates must also
+    fire for callers using the constructor directly.
+    """
+
+    def _kwargs(
+        self,
+        *,
+        opened_incident_ids: Any = ("canonical-inc-001",),
+        updated_incident_ids: Any = (),
+        canonical_incident_ids: Any = ("canonical-inc-001",),
+        promotion_records: Any = (
+            PromotionWireRecord(
+                source_candidate_id="sig-001",
+                canonical_incident_id="canonical-inc-001",
+                promotion_outcome=PromotionWireRecordOutcome.OPENED,
+            ),
+        ),
+    ) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "scanned": 1,
+            "firing": 1,
+            "opened_incidents": 1,
+            "updated_incidents": 0,
+            "skipped_duplicates": 0,
+            "errors": 0,
+            "error_messages": (),
+            "opened_incident_ids": opened_incident_ids,
+            "updated_incident_ids": updated_incident_ids,
+            "canonical_incident_ids": canonical_incident_ids,
+            "promotion_records": promotion_records,
+            "unique_candidate_count": 1,
+            "promotion_scan_scope": PromotionWireScanScope.INTERNAL_API_ALERT_SIGNALS_SCOPED,
+            "incident_access_mode": PromotionWireIncidentAccessMode.BACKEND,
+        }
+
+    @pytest.mark.parametrize(
+        "field_name",
+        ["opened_incident_ids", "updated_incident_ids", "canonical_incident_ids"],
+    )
+    def test_non_tuple_collection_raises(self, field_name: str) -> None:
+        kwargs = self._kwargs()
+        kwargs[field_name] = ["canonical-inc-001"]
+        with pytest.raises(PromotionHttpWireValidationError) as exc_info:
+            PromotionHttpWireResult(**kwargs)
+        assert field_name in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "field_name",
+        ["opened_incident_ids", "updated_incident_ids", "canonical_incident_ids"],
+    )
+    def test_non_string_entry_raises(self, field_name: str) -> None:
+        kwargs = self._kwargs()
+        kwargs[field_name] = (123,)
+        with pytest.raises(PromotionHttpWireValidationError) as exc_info:
+            PromotionHttpWireResult(**kwargs)
+        assert field_name in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "field_name",
+        ["opened_incident_ids", "updated_incident_ids", "canonical_incident_ids"],
+    )
+    def test_empty_string_entry_raises(self, field_name: str) -> None:
+        kwargs = self._kwargs()
+        kwargs[field_name] = ("",)
+        with pytest.raises(PromotionHttpWireValidationError) as exc_info:
+            PromotionHttpWireResult(**kwargs)
+        assert field_name in str(exc_info.value)
+
+    def test_error_messages_non_tuple_raises(self) -> None:
+        kwargs = self._kwargs()
+        kwargs["error_messages"] = ["non-empty"]
+        with pytest.raises(PromotionHttpWireValidationError):
+            PromotionHttpWireResult(**kwargs)
+
+    def test_error_messages_non_string_entry_raises(self) -> None:
+        kwargs = self._kwargs()
+        kwargs["error_messages"] = (123,)
+        with pytest.raises(PromotionHttpWireValidationError):
+            PromotionHttpWireResult(**kwargs)
+
+    def test_error_messages_empty_string_entry_raises(self) -> None:
+        kwargs = self._kwargs()
+        kwargs["error_messages"] = ("",)
+        with pytest.raises(PromotionHttpWireValidationError):
+            PromotionHttpWireResult(**kwargs)
+
+    def test_promotion_records_not_tuple_raises(self) -> None:
+        kwargs = self._kwargs()
+        kwargs["promotion_records"] = [
+            PromotionWireRecord(
+                source_candidate_id="sig-001",
+                canonical_incident_id="canonical-inc-001",
+                promotion_outcome=PromotionWireRecordOutcome.OPENED,
+            ),
+        ]
+        with pytest.raises(PromotionHttpWireValidationError):
+            PromotionHttpWireResult(**kwargs)
+
+    def test_promotion_records_contains_non_record_raises(self) -> None:
+        kwargs = self._kwargs()
+        kwargs["promotion_records"] = ({"not": "a record"},)
+        with pytest.raises(PromotionHttpWireValidationError):
+            PromotionHttpWireResult(**kwargs)
+
+    def test_promotion_scan_scope_not_enum_raises(self) -> None:
+        kwargs = self._kwargs()
+        kwargs["promotion_scan_scope"] = "internal_api_alert_signals:scoped"
+        with pytest.raises(PromotionHttpWireValidationError):
+            PromotionHttpWireResult(**kwargs)
+
+    def test_incident_access_mode_not_enum_raises(self) -> None:
+        kwargs = self._kwargs()
+        kwargs["incident_access_mode"] = "backend"
+        with pytest.raises(PromotionHttpWireValidationError):
+            PromotionHttpWireResult(**kwargs)
+
+
+class TestMalformedEnumBoundary:
+    """Every malformed wire value MUST converge on
+    :class:`PromotionHttpWireValidationError`.
+
+    Both ``TypeError`` (non-string arguments to ``StrEnum``) and
+    ``ValueError`` (unknown string literal) are captured so no
+    raw enum exception leaks to the client.
+    """
+
+    @pytest.mark.parametrize(
+        "malformed_value", [[], {}, [1, 2], {"a": 1}, 0, 1, 1.5, None, True]
+    )
+    def test_promotion_outcome_malformed_value_raises_validation_error(
+        self, malformed_value: Any
+    ) -> None:
+        payload = _valid_payload()
+        payload["promotion_records"] = [
+            {
+                "source_candidate_id": "sig-001",
+                "canonical_incident_id": "canonical-inc-001",
+                "promotion_outcome": malformed_value,
+            }
+        ]
+        with pytest.raises(PromotionHttpWireValidationError):
+            PromotionHttpWireResult.from_payload(payload)
+
+    @pytest.mark.parametrize(
+        "malformed_value", [[], {}, 1, 1.5, None, True, False]
+    )
+    def test_promotion_scan_scope_malformed_value_raises_validation_error(
+        self, malformed_value: Any
+    ) -> None:
+        payload = _valid_payload()
+        payload["promotion_scan_scope"] = malformed_value
+        with pytest.raises(PromotionHttpWireValidationError):
+            PromotionHttpWireResult.from_payload(payload)
+
+    @pytest.mark.parametrize(
+        "malformed_value", [[], {}, 1, 1.5, None, True, False]
+    )
+    def test_incident_access_mode_malformed_value_raises_validation_error(
+        self, malformed_value: Any
+    ) -> None:
+        payload = _valid_payload()
+        payload["incident_access_mode"] = malformed_value
+        with pytest.raises(PromotionHttpWireValidationError):
+            PromotionHttpWireResult.from_payload(payload)

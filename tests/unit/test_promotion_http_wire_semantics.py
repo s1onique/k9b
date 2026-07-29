@@ -2,8 +2,15 @@
 
 ACT-K9B-HULK-PROMOTION-HTTP-TRANSPORT-PRODUCTION-WIRING01-PHASE-2B.
 
-Covers counter consistency, outcome reconciliation, source/canonical
-identity rules, and record-outcome semantics.
+Covers decoder-level invariants: counter consistency,
+source-ID identity, ok/error consistency, canonical union,
+closed-vocabulary record outcomes, and many-to-one canonical
+mapping.
+
+Aggregate-level reconciliation invariants (canonical order
+authority, bidirectional opened/updated reconciliation,
+refreshed/unchanged exclusion, mixed-outcome fixtures) live in
+:mod:`test_promotion_http_wire_semantics_reconciliation`.
 """
 
 from __future__ import annotations
@@ -160,7 +167,16 @@ class TestCanonicalIdentityManyToOne:
         assert canonical_ids.count("canonical-inc-001") == 29
 
     def test_34_signal_production_shape_with_many_to_one(self) -> None:
-        """The 34-signal witness observed in production."""
+        """The 34-signal witness observed in production.
+
+        Bijective opened reconciliation: records 0-1 open
+        ``canonical-inc-001``; record 2 opens
+        ``canonical-inc-002``; records 3..33 are
+        ``observation_refreshed`` against ``canonical-inc-002``.
+        The first three records collectively populate
+        ``opened_incident_ids`` and ``canonical_incident_ids``
+        in first-occurrence order.
+        """
         records = [
             {
                 "source_candidate_id": f"sig-{i:03d}",
@@ -168,7 +184,7 @@ class TestCanonicalIdentityManyToOne:
                     "canonical-inc-001" if i < 2 else "canonical-inc-002"
                 ),
                 "promotion_outcome": (
-                    "opened" if i < 2 else "observation_refreshed"
+                    "opened" if i < 3 else "observation_refreshed"
                 ),
             }
             for i in range(34)
