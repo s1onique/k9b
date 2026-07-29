@@ -1,6 +1,7 @@
 """Request-relative binding for the scoped current-run promotion result.
 
 ACT-K9B-HULK-PROMOTION-SCOPED-WIRE-DIALECT-CONVERGENCE01.
+ACT-K9B-HULK-PROMOTION-SCOPED-CLIENT-TYPED-HTTP-SEAM01.
 
 :class:`BoundScopedPromotionResult` binds a validated
 :class:`IncidentPromotionResult` to the
@@ -13,45 +14,55 @@ that endpoint. It MUST NOT be wired to the legacy
 ``/promote-candidates`` endpoint, which uses the snake_case
 ``PromotionResponse`` shape.
 
-Construction invariants:
+Aggregate semantics (not per-signal outcome accounting)
+--------------------------------------------------------
 
-* ``result.run_id == request.run_id``.
-* ``result.source_identity == request.source_identity``.
-* ``request.signal_ids`` is non-empty (a zero-signal request does
-  NOT produce a bound successful promotion; it belongs to the
-  no-promotion path).
-* ``result.scanned_signal_ids`` is exactly the requested signal
-  IDs in stable first-occurrence order: equal length, equal
-  content, no requested signal silently disappearing, no
-  unrequested signal present.
-* ``result.skipped_signal_ids`` is a subset of ``request.signal_ids``.
-* ``result.failures[*].signal_id`` is a subset of
-  ``request.signal_ids``.
-* ``result.skipped_signal_ids`` and
-  ``set(result.failures[*].signal_id)`` are disjoint -- a signal
-  cannot be both skipped and failed in the same atomic request.
-* The backend producer preserves the request signal order, so
-  ordered equality is enforced. Order is authoritative.
+The canonical scoped wire is **aggregate**: it carries the
+scanned signal IDs, four per-category incident ID lists, and the
+skipped/failed signal IDs. It does NOT carry a per-signal
+``record.outcome`` mapping. ``BoundScopedPromotionResult``
+therefore proves the following aggregate properties and nothing
+more:
+
+* run identity match between request and response;
+* source identity match between request and response;
+* non-empty request scope;
+* exact scanned-signal scope match in stable first-occurrence
+  order;
+* subset and disjoint invariants over ``skipped_signal_ids`` and
+  ``failures[*].signal_id`` (these are the only two ID lists that
+  retain signal identity);
+* all aggregate category invariants enforced by the parser
+  (pairwise disjoint categories, ``actionableIncidentIds`` matches
+  opened plus materially changed, every ID is a safe bounded
+  string).
+
+The binding does NOT independently prove that every requested
+signal had a per-signal incident disposition. The fact that 29
+signals converge on one canonical incident lives inside the
+backend execution and is erased by the aggregate response.
 
 Authoritative success:
 
 * every invariant above holds,
 * wire parsing via :meth:`IncidentPromotionResult.from_wire_dict`
   already passed,
-* all category invariants enforced by the parser (pairwise
-  disjoint categories, ``actionableIncidentIds`` matches opened
-  plus materially changed, every ID is a safe bounded string)
-  hold.
+* all category invariants enforced by the parser hold.
 
-A successful zero is allowed: every request has a categorisation
-record, but ``actionable_incident_ids`` is empty when the result
-contains only refreshed, unchanged, or skipped outcomes.
+Scoped aggregate successful zero: ``request.signal_ids`` is
+non-empty, ``result.scanned_signal_ids`` exactly equals the
+request, and ``actionable_incident_ids`` is empty. The transport
+MUST have completed and the body MUST have parsed successfully;
+``204 No Content`` / empty / unknown shapes are NOT aggregate
+successful zero.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .domain.identifiers import AlertSignalId
+from .domain.incident_lifecycle import IncidentId
 from .incident_alert_promotion_contract import (
     IncidentPromotionResult,
     PromoteAlertSignalsRequest,
@@ -117,11 +128,14 @@ class BoundScopedPromotionResult:
             )
 
         # 4. ``skipped_signal_ids`` is a subset of the request.
-        requested_set = set(self.request.signal_ids)
-        skipped_set = set(self.result.skipped_signal_ids)
-        if not skipped_set.issubset(requested_set):
+        # Compare on the typed ``AlertSignalId`` value directly so
+        # equality semantics are owned by the typed wrapper, not by
+        # an accidental ``str(...)`` coercion at the boundary.
+        requested_signal_set = set(self.request.signal_ids)
+        skipped_signal_set = set(self.result.skipped_signal_ids)
+        if not skipped_signal_set.issubset(requested_signal_set):
             outside = sorted(
-                str(value) for value in skipped_set - requested_set
+                str(value) for value in skipped_signal_set - requested_signal_set
             )
             raise PromotionScopeError(
                 "scoped promotion result.skipped_signal_ids contains "
@@ -129,12 +143,16 @@ class BoundScopedPromotionResult:
             )
 
         # 5. Every ``failures[*].signal_id`` is a subset of the
-        # request.
+        # request. Compare on the typed ``AlertSignalId`` value
+        # directly; ``str(...)`` coercion is reserved for logging
+        # and JSON projection.
         failure_signal_set = {
-            str(failure.signal_id) for failure in self.result.failures
+            failure.signal_id for failure in self.result.failures
         }
-        if not failure_signal_set.issubset(requested_set):
-            outside = sorted(failure_signal_set - requested_set)
+        if not failure_signal_set.issubset(requested_signal_set):
+            outside = sorted(
+                str(value) for value in failure_signal_set - requested_signal_set
+            )
             raise PromotionScopeError(
                 "scoped promotion result.failures contains signalIds "
                 f"outside the request scope: {outside}"
@@ -143,7 +161,7 @@ class BoundScopedPromotionResult:
         # 6. ``skipped_signal_ids`` and failure signal IDs MUST be
         # disjoint: a signal cannot be both skipped and failed in
         # the same atomic request.
-        overlap = skipped_set & failure_signal_set
+        overlap = skipped_signal_set & failure_signal_set
         if overlap:
             raise PromotionScopeError(
                 "scoped promotion result has overlapping skipped and "
@@ -151,12 +169,16 @@ class BoundScopedPromotionResult:
             )
 
     @property
-    def actionable_incident_ids(self) -> tuple[object, ...]:
+    def actionable_incident_ids(self) -> tuple[IncidentId, ...]:
         """The diagnosis-handoff projection from the bound result.
 
         Defined as the stable first-occurrence union of
         ``opened_incident_ids`` and ``materially_changed_incident_ids``.
         Excludes refreshed, unchanged, skipped, and failed outcomes.
+
+        The return type is the typed ``IncidentId`` sequence, not a
+        loose ``object`` tuple; every consumer that traverses this
+        list gets the bounded wrapper.
         """
         return self.result.actionable_incident_ids
 
@@ -164,6 +186,11 @@ class BoundScopedPromotionResult:
     def requested_signal_count(self) -> int:
         """Number of distinct requested signal IDs."""
         return len(self.request.signal_ids)
+
+    @property
+    def requested_signal_ids(self) -> tuple[AlertSignalId, ...]:
+        """Typed requested signal IDs."""
+        return self.request.signal_ids
 
 
 __all__ = ["BoundScopedPromotionResult"]
