@@ -44,8 +44,6 @@ from .promotion_http_transport import (
     PromotionHttpObservation,
     PromotionHttpRejected,
     PromotionHttpResponseTruncated,
-    PromotionHttpTransportFailureAfterSend,
-    PromotionHttpTransportFailureBeforeSend,
 )
 
 MAX_REQUEST_ID_LENGTH = 128
@@ -179,6 +177,74 @@ class ScopedPromotionHttpReadFailed:
     reason_code: ScopedReadFailureReason
 
 
+class ScopedBeforeSendFailureReason(StrEnum):
+    """Closed before-send failure reason vocabulary.
+
+    ``MISSING_BACKEND_URL`` and ``MISSING_INTERNAL_TOKEN`` are
+    configuration defects that prove the request cannot be sent;
+    they map to ``CONFIGURATION_BLOCKED``.
+
+    ``DNS_FAILED``, ``CONNECTION_REFUSED`` and
+    ``TLS_PRECONNECT_FAILED`` are pre-connect transport failures
+    that prove the request was never transmitted; they map to
+    ``BACKEND_UNREACHABLE``.
+
+    Generic :class:`TimeoutError`, connection reset, or unknown
+    ``URLError`` after dispatch begins are transmission-uncertain
+    and use :class:`ScopedPromotionHttpDispatchUncertain` instead.
+    """
+
+    MISSING_BACKEND_URL = "missing_backend_url"
+    MISSING_INTERNAL_TOKEN = "missing_internal_token"
+    DNS_FAILED = "dns_failed"
+    CONNECTION_REFUSED = "connection_refused"
+    TLS_PRECONNECT_FAILED = "tls_preconnect_failed"
+
+
+@dataclass(frozen=True, slots=True)
+class ScopedPromotionHttpBeforeSendFailed:
+    """Scoped transport outcome: before-send reachability failure.
+
+    Carries a closed :class:`ScopedBeforeSendFailureReason` so the
+    mapper can do exhaustive matching without inspecting exception
+    text. The legacy
+    :class:`PromotionHttpTransportFailureBeforeSend` from the generic
+    transport module is no longer used by the active scoped path.
+    """
+
+    observation: PromotionHttpObservation
+    reason_code: ScopedBeforeSendFailureReason
+
+
+class ScopedDispatchUncertaintyReason(StrEnum):
+    """Closed dispatch-uncertainty reason vocabulary.
+
+    Used when the request was dispatched but the transmission
+    state cannot be proven without an instrumented transport seam.
+    The legacy
+    :class:`PromotionHttpTransportFailureAfterSend` from the generic
+    transport module is no longer used by the active scoped path.
+    """
+
+    TIMEOUT = "timeout"
+    CONNECTION_LOST = "connection_lost"
+    TRANSMISSION_UNKNOWN = "transmission_unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class ScopedPromotionHttpDispatchUncertain:
+    """Scoped transport outcome: post-send transmission uncertainty.
+
+    ``reason_code`` is a closed :class:`ScopedDispatchUncertaintyReason`
+    so the mapper can do exhaustive matching. The mapper projects
+    this variant to ``PromotionCommitUnknown`` with
+    ``commit_disposition=MAY_HAVE_COMMITTED``.
+    """
+
+    observation: PromotionHttpObservation
+    reason_code: ScopedDispatchUncertaintyReason
+
+
 @dataclass(frozen=True, slots=True)
 class ScopedPromotionHttpAuthenticationRejected:
     """Backend returned ``401`` or ``403`` before promotion execution.
@@ -287,19 +353,29 @@ def scoped_promotion_request_fingerprint(
 
 
 # Closed union for the scoped HTTP transport surface.
+#
+# The active scoped HTTP path emits only the typed scoped variants
+# and the generic ``PromotionHttp*`` semantic variants that
+# originate inside the response decoder (accepted, no-content,
+# invalid-json, invalid-schema, rejected, response-truncated). The
+# generic pre-send / post-send transport failure variants are
+# intentionally NOT part of this union: the typed client surfaces
+# them as ``ScopedPromotionHttpBeforeSendFailed`` and
+# ``ScopedPromotionHttpDispatchUncertain`` so the mapper can do
+# exhaustive matching over closed reason vocabularies.
 ScopedPromotionHttpTransportOutcome = (
     ScopedPromotionHttpSucceeded
     | ScopedPromotionHttpAuthenticationRejected
     | ScopedPromotionHttpBodyLimitExceeded
     | ScopedPromotionHttpShortRead
     | ScopedPromotionHttpReadFailed
+    | ScopedPromotionHttpBeforeSendFailed
+    | ScopedPromotionHttpDispatchUncertain
     | PromotionHttpAccepted
     | PromotionHttpNoContent
     | PromotionHttpRejected
     | PromotionHttpInvalidJson
     | PromotionHttpInvalidSchema
-    | PromotionHttpTransportFailureBeforeSend
-    | PromotionHttpTransportFailureAfterSend
     | PromotionHttpResponseTruncated
 )
 
@@ -308,12 +384,17 @@ __all__ = [
     "MAX_REQUEST_ID_LENGTH",
     "MAX_SIGNAL_IDS",
     "MAX_SOURCE_IDENTITY_LENGTH",
+    "ScopedBeforeSendFailureReason",
+    "ScopedDispatchUncertaintyReason",
     "ScopedPromotionHttpAuthenticationRejected",
+    "ScopedPromotionHttpBeforeSendFailed",
     "ScopedPromotionHttpBodyLimitExceeded",
+    "ScopedPromotionHttpDispatchUncertain",
     "ScopedPromotionHttpReadFailed",
     "ScopedPromotionHttpRequestContext",
     "ScopedPromotionHttpShortRead",
     "ScopedPromotionHttpSucceeded",
     "ScopedPromotionHttpTransportOutcome",
+    "ScopedReadFailureReason",
     "scoped_promotion_request_fingerprint",
 ]

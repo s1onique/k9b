@@ -15,15 +15,15 @@ rejected projections carry no receipt; the receipt cannot be
 falsified for a failed attempt.
 
 The mapping preserves the exact bounded reason codes established
-in ``PromotionUncertaintyCode`` and ``PromotionRejectionCode``. Each
-known HTTP shape maps to one specific reason so the operator can
-correlate the selection handoff with the actual transport
+in :class:`PromotionUncertaintyCode` and :class:`PromotionRejectionCode`.
+Each known HTTP shape maps to one specific reason so the operator
+can correlate the selection handoff with the actual transport
 observation. There is no ``AMBIGUOUS_RESPONSE`` catch-all bucket
 for known shapes.
 
 The deterministic SHA-256 request fingerprint is the stable
-half of ``PromotionReconciliationToken``; the request id is the
-transport half. ``request_id`` is NEVER used as the fingerprint.
+half of :class:`PromotionReconciliationToken`; the request id is
+the transport half. ``request_id`` is NEVER used as the fingerprint.
 """
 
 from __future__ import annotations
@@ -38,9 +38,6 @@ from k8s_diag_agent.collect.promotion_http_transport import (
     PromotionHttpNoContent,
     PromotionHttpRejected,
     PromotionHttpResponseTruncated,
-    PromotionHttpTransportFailureAfterSend,
-    PromotionHttpTransportFailureBeforeSend,
-    PromotionHttpTransportReasonCode,
 )
 from k8s_diag_agent.collect.promotion_outcomes import (
     PromotionCommitDisposition,
@@ -52,8 +49,12 @@ from k8s_diag_agent.collect.promotion_outcomes import (
     PromotionUncertaintyCode,
 )
 from k8s_diag_agent.collect.promotion_scoped_http_seam import (
+    ScopedBeforeSendFailureReason,
+    ScopedDispatchUncertaintyReason,
     ScopedPromotionHttpAuthenticationRejected,
+    ScopedPromotionHttpBeforeSendFailed,
     ScopedPromotionHttpBodyLimitExceeded,
+    ScopedPromotionHttpDispatchUncertain,
     ScopedPromotionHttpReadFailed,
     ScopedPromotionHttpRequestContext,
     ScopedPromotionHttpShortRead,
@@ -229,6 +230,58 @@ def _fingerprint(
     return fp
 
 
+def _map_before_send_reason(
+    reason_code: ScopedBeforeSendFailureReason,
+) -> PromotionRejectionCode:
+    """Exhaustive mapping of before-send reasons to rejection codes.
+
+    Configuration defects map to ``CONFIGURATION_BLOCKED``; pre-connect
+    transport failures map to ``BACKEND_UNREACHABLE``. A new variant
+    in :class:`ScopedBeforeSendFailureReason` will fail typing
+    immediately because ``assert_never`` requires the argument to be
+    ``Never``.
+    """
+    if reason_code == ScopedBeforeSendFailureReason.MISSING_BACKEND_URL:
+        return PromotionRejectionCode.CONFIGURATION_BLOCKED
+    if reason_code == ScopedBeforeSendFailureReason.MISSING_INTERNAL_TOKEN:
+        return PromotionRejectionCode.CONFIGURATION_BLOCKED
+    if reason_code == ScopedBeforeSendFailureReason.DNS_FAILED:
+        return PromotionRejectionCode.BACKEND_UNREACHABLE
+    if reason_code == ScopedBeforeSendFailureReason.CONNECTION_REFUSED:
+        return PromotionRejectionCode.BACKEND_UNREACHABLE
+    if reason_code == ScopedBeforeSendFailureReason.TLS_PRECONNECT_FAILED:
+        return PromotionRejectionCode.BACKEND_UNREACHABLE
+    assert_never(reason_code)
+
+
+def _map_read_failure_reason(
+    reason_code: ScopedReadFailureReason,
+) -> PromotionUncertaintyCode:
+    """Exhaustive mapping of read-failure reasons to uncertainty codes."""
+    if reason_code == ScopedReadFailureReason.TIMEOUT:
+        return PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
+    if reason_code == ScopedReadFailureReason.CONNECTION_LOST:
+        return PromotionUncertaintyCode.HTTP_CONNECTION_LOST_AFTER_SEND
+    assert_never(reason_code)
+
+
+def _map_dispatch_uncertainty_reason(
+    reason_code: ScopedDispatchUncertaintyReason,
+) -> PromotionUncertaintyCode:
+    """Exhaustive mapping of dispatch-uncertainty reasons to
+    uncertainty codes.
+    """
+    if reason_code == ScopedDispatchUncertaintyReason.TIMEOUT:
+        return PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
+    if reason_code == ScopedDispatchUncertaintyReason.CONNECTION_LOST:
+        return PromotionUncertaintyCode.HTTP_CONNECTION_LOST_AFTER_SEND
+    if reason_code == (
+        ScopedDispatchUncertaintyReason.TRANSMISSION_UNKNOWN
+    ):
+        return PromotionUncertaintyCode.HTTP_TRANSMISSION_UNKNOWN
+    assert_never(reason_code)
+
+
 def map_scoped_http_transport_to_promotion_outcome(
     transport: ScopedPromotionHttpTransportOutcome,
     *,
@@ -286,22 +339,37 @@ def map_scoped_http_transport_to_promotion_outcome(
             request_fingerprint=fingerprint,
         )
     if isinstance(transport, ScopedPromotionHttpReadFailed):
-        # Exhaustive matching over the closed read-failure reason
-        # vocabulary. No silent timeout fallback.
-        if transport.reason_code == ScopedReadFailureReason.TIMEOUT:
-            code = PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
-        elif (
-            transport.reason_code == ScopedReadFailureReason.CONNECTION_LOST
-        ):
-            code = (
-                PromotionUncertaintyCode
-                .HTTP_CONNECTION_LOST_AFTER_SEND
-            )
-        else:
-            assert_never(transport.reason_code)
-            code = PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
         return ScopedPromotionUncertainProjection(
-            promotion_outcome=_commit_unknown(context, code=code),
+            promotion_outcome=_commit_unknown(
+                context,
+                code=_map_read_failure_reason(transport.reason_code),
+            ),
+            request_id=context.request_id,
+            request_fingerprint=fingerprint,
+        )
+
+    if isinstance(transport, ScopedPromotionHttpBeforeSendFailed):
+        # Before-send failure preserves its typed reason: configuration
+        # vs unreachable. The client attaches the typed reason code
+        # so the mapper branches rather than collapsing both into a
+        # single bucket.
+        return ScopedPromotionRejectedProjection(
+            promotion_outcome=_rejected(
+                context,
+                code=_map_before_send_reason(transport.reason_code),
+            ),
+            request_id=context.request_id,
+            request_fingerprint=fingerprint,
+        )
+
+    if isinstance(transport, ScopedPromotionHttpDispatchUncertain):
+        return ScopedPromotionUncertainProjection(
+            promotion_outcome=_commit_unknown(
+                context,
+                code=_map_dispatch_uncertainty_reason(
+                    transport.reason_code
+                ),
+            ),
             request_id=context.request_id,
             request_fingerprint=fingerprint,
         )
@@ -360,46 +428,6 @@ def map_scoped_http_transport_to_promotion_outcome(
                 context,
                 code=PromotionUncertaintyCode.HTTP_RESPONSE_TRUNCATED,
             ),
-            request_id=context.request_id,
-            request_fingerprint=fingerprint,
-        )
-    if isinstance(transport, PromotionHttpTransportFailureAfterSend):
-        # Exhaustive matching over the closed transport reason
-        # vocabulary. No silent timeout fallback.
-        if transport.reason_code == (
-            PromotionHttpTransportReasonCode.HTTP_READ_TIMEOUT_AFTER_SEND
-        ):
-            code = PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
-        elif transport.reason_code == (
-            PromotionHttpTransportReasonCode
-            .HTTP_CONNECTION_LOST_AFTER_SEND
-        ):
-            code = (
-                PromotionUncertaintyCode
-                .HTTP_CONNECTION_LOST_AFTER_SEND
-            )
-        else:
-            assert_never(transport.reason_code)
-            code = PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
-        return ScopedPromotionUncertainProjection(
-            promotion_outcome=_commit_unknown(context, code=code),
-            request_id=context.request_id,
-            request_fingerprint=fingerprint,
-        )
-    if isinstance(transport, PromotionHttpTransportFailureBeforeSend):
-        # Before-send failure preserves its typed reason:
-        # configuration vs unreachable. The client attaches the
-        # typed reason code so the mapper branches rather than
-        # collapsing both into a single bucket.
-        reason_code = transport.reason_code
-        if reason_code == (
-            PromotionHttpTransportReasonCode.HTTP_FAILURE_BEFORE_SEND
-        ):
-            code = PromotionRejectionCode.CONFIGURATION_BLOCKED
-        else:
-            code = PromotionRejectionCode.BACKEND_UNREACHABLE
-        return ScopedPromotionRejectedProjection(
-            promotion_outcome=_rejected(context, code=code),
             request_id=context.request_id,
             request_fingerprint=fingerprint,
         )

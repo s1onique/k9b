@@ -170,16 +170,26 @@ class TestLegacyDecoderUnreachableFromScopedClient:
         )
 
     def test_scoped_client_method_uses_canonical_binding(self) -> None:
-        """``ScopedSchedulerClient.promote_alert_signals_scoped``
-        must reference the canonical bound-result type.
+        """``ScopedSchedulerClient.promote_alert_signals_scoped`` must
+        reference the canonical typed context and the canonical
+        typed scoped seam types involved in the active path.
+
+        The canonical ``BoundScopedPromotionResult`` binding is held
+        by :class:`ScopedPromotionHttpSucceeded`; the seam module
+        declares both types and is the correct authority for the
+        cross-reference assertion.
         """
-        text = SCOPED_CLIENT_FILES[1].read_text(encoding="utf-8")
-        assert "BoundScopedPromotionResult" in text, (
-            "scoped client must reference the canonical binding type"
-        )
-        assert "ScopedPromotionHttpRequestContext" in text, (
+        client_text = SCOPED_CLIENT_FILES[1].read_text(encoding="utf-8")
+        seam_text = SCOPED_CLIENT_FILES[2].read_text(encoding="utf-8")
+        # The client surface directly references the context.
+        assert "ScopedPromotionHttpRequestContext" in client_text, (
             "scoped client must reference the canonical request context"
         )
-        assert "ScopedPromotionHttpSucceeded" in text, (
-            "scoped client must reference the canonical success variant"
+        # The seam module is the canonical home of the canonical
+        # typed binding and the success variant carrying it.
+        assert "BoundScopedPromotionResult" in seam_text, (
+            "scoped seam must reference the canonical binding type"
+        )
+        assert "ScopedPromotionHttpSucceeded" in seam_text, (
+            "scoped seam must reference the canonical success variant"
         )

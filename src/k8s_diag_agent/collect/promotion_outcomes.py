@@ -159,6 +159,12 @@ class PromotionUncertaintyCode(StrEnum):
     HTTP_CONNECTION_LOST_AFTER_SEND = "http_connection_lost_after_send"
     """Connection lost after the request body was transmitted."""
 
+    HTTP_TRANSMISSION_UNKNOWN = "http_transmission_unknown"
+    """Transport failure after dispatch where the boundary cannot
+    prove whether the request bytes reached the wire. The active
+    scoped path emits this only after the dispatcher exhausts the
+    closed :class:`ScopedDispatchUncertaintyReason` vocabulary."""
+
     PROMOTION_HTTP_ERROR_UNCERTAIN = "promotion_http_error_uncertain"
     """Generic untyped HTTP error (4xx / 5xx) whose commit status
     cannot be inferred from the status code alone; reconciliation

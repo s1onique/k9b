@@ -31,9 +31,10 @@ from k8s_diag_agent.collect.promotion_http_transport import (
     PromotionHttpInvalidSchema,
     PromotionHttpNoContent,
     PromotionHttpRejected,
-    PromotionHttpTransportFailureBeforeSend,
 )
 from k8s_diag_agent.collect.promotion_scoped_http_seam import (
+    ScopedPromotionHttpAuthenticationRejected,
+    ScopedPromotionHttpBeforeSendFailed,
     ScopedPromotionHttpRequestContext,
     ScopedPromotionHttpSucceeded,
 )
@@ -301,27 +302,37 @@ class TestLoopbackScenarios:
         outcome = captured["outcome"]
         assert isinstance(outcome, PromotionHttpNoContent)
 
-    def test_401_returns_rejected(self) -> None:
+    def test_401_returns_authentication_rejected(self) -> None:
         def handler(request: _LoopboxRequest) -> None:
             request.respond(401, json.dumps({"message": "unauthorized"}).encode())
 
         _, captured = _run_with_loopback(handler)
         outcome = captured["outcome"]
-        assert isinstance(outcome, PromotionHttpRejected)
+        assert isinstance(outcome, ScopedPromotionHttpAuthenticationRejected)
         assert outcome.observation.status_code == 401
 
-    def test_500_malformed_body_returns_rejected(self) -> None:
+    def test_403_returns_authentication_rejected(self) -> None:
+        def handler(request: _LoopboxRequest) -> None:
+            request.respond(403, json.dumps({"message": "forbidden"}).encode())
+
+        _, captured = _run_with_loopback(handler)
+        outcome = captured["outcome"]
+        assert isinstance(outcome, ScopedPromotionHttpAuthenticationRejected)
+        assert outcome.observation.status_code == 403
+
+    def test_500_malformed_body_returns_commit_uncertain(self) -> None:
         def handler(request: _LoopboxRequest) -> None:
             request.respond(500, b"internal server error stack trace...")
 
         _, captured = _run_with_loopback(handler)
         outcome = captured["outcome"]
+        # A malformed 500 MUST NOT become authentication rejection.
         assert isinstance(outcome, PromotionHttpRejected)
         assert outcome.observation.status_code == 500
         # The active scoped path MUST NOT retain response-body text.
         assert outcome.body_excerpt == ""
 
-    def test_missing_backend_url_returns_before_send_failure(self) -> None:
+    def test_missing_backend_url_returns_typed_before_send_failure(self) -> None:
         from k8s_diag_agent.ui.server_incident_internal_scoped_client import (
             ScopedSchedulerClient,
         )
@@ -330,9 +341,16 @@ class TestLoopbackScenarios:
         outcome = client.promote_alert_signals_scoped(
             context=_scoped_context(),
         )
-        assert isinstance(outcome, PromotionHttpTransportFailureBeforeSend)
+        assert isinstance(outcome, ScopedPromotionHttpBeforeSendFailed)
+        from k8s_diag_agent.collect.promotion_scoped_http_seam import (
+            ScopedBeforeSendFailureReason,
+        )
 
-    def test_missing_token_returns_before_send_failure(self) -> None:
+        assert outcome.reason_code == (
+            ScopedBeforeSendFailureReason.MISSING_BACKEND_URL
+        )
+
+    def test_missing_token_returns_typed_before_send_failure(self) -> None:
         from k8s_diag_agent.ui.server_incident_internal_scoped_client import (
             ScopedSchedulerClient,
         )
@@ -342,7 +360,14 @@ class TestLoopbackScenarios:
             outcome = client.promote_alert_signals_scoped(
                 context=_scoped_context(),
             )
-        assert isinstance(outcome, PromotionHttpTransportFailureBeforeSend)
+        assert isinstance(outcome, ScopedPromotionHttpBeforeSendFailed)
+        from k8s_diag_agent.collect.promotion_scoped_http_seam import (
+            ScopedBeforeSendFailureReason,
+        )
+
+        assert outcome.reason_code == (
+            ScopedBeforeSendFailureReason.MISSING_BACKEND_URL
+        )
 
     def test_request_id_header_reaches_backend(self) -> None:
         def handler(request: _LoopboxRequest) -> None:

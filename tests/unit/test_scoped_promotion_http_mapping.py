@@ -24,8 +24,6 @@ from k8s_diag_agent.collect.promotion_http_transport import (
     PromotionHttpObservation,
     PromotionHttpRejected,
     PromotionHttpResponseTruncated,
-    PromotionHttpTransportFailureAfterSend,
-    PromotionHttpTransportFailureBeforeSend,
     PromotionResponseDecodingStage,
     RequestTransmissionState,
 )
@@ -40,6 +38,10 @@ from k8s_diag_agent.collect.promotion_scoped_http_mapping import (
     map_scoped_http_transport_to_promotion_outcome,
 )
 from k8s_diag_agent.collect.promotion_scoped_http_seam import (
+    ScopedBeforeSendFailureReason,
+    ScopedDispatchUncertaintyReason,
+    ScopedPromotionHttpBeforeSendFailed,
+    ScopedPromotionHttpDispatchUncertain,
     ScopedPromotionHttpRequestContext,
     ScopedPromotionHttpSucceeded,
     ScopedPromotionReceipt,
@@ -215,14 +217,10 @@ class TestBoundedReasonCodes:
         assert isinstance(outcome, PromotionCommitUnknown)
         assert outcome.reason.value == "http_response_truncated"
 
-    def test_after_send_failure_uses_read_timeout_code(self) -> None:
-        from k8s_diag_agent.collect.promotion_http_transport import (
-            PromotionHttpTransportReasonCode,
-        )
-
-        transport = PromotionHttpTransportFailureAfterSend(
+    def test_dispatch_uncertain_timeout_uses_read_timeout_code(self) -> None:
+        transport = ScopedPromotionHttpDispatchUncertain(
             observation=_observation(),
-            reason_code=PromotionHttpTransportReasonCode.HTTP_READ_TIMEOUT_AFTER_SEND,
+            reason_code=ScopedDispatchUncertaintyReason.TIMEOUT,
         )
         projection = map_scoped_http_transport_to_promotion_outcome(
             transport, context=_context()
@@ -231,14 +229,42 @@ class TestBoundedReasonCodes:
         assert isinstance(outcome, PromotionCommitUnknown)
         assert outcome.reason.value == "http_read_timeout_after_send"
 
-    def test_before_send_failure_uses_configuration_blocked_code(self) -> None:
-        from k8s_diag_agent.collect.promotion_http_transport import (
-            PromotionHttpTransportReasonCode,
-        )
-
-        transport = PromotionHttpTransportFailureBeforeSend(
+    def test_dispatch_uncertain_connection_lost_uses_connection_lost_code(
+        self,
+    ) -> None:
+        transport = ScopedPromotionHttpDispatchUncertain(
             observation=_observation(),
-            reason_code=PromotionHttpTransportReasonCode.HTTP_FAILURE_BEFORE_SEND,
+            reason_code=ScopedDispatchUncertaintyReason.CONNECTION_LOST,
+        )
+        projection = map_scoped_http_transport_to_promotion_outcome(
+            transport, context=_context()
+        )
+        outcome = projection.promotion_outcome
+        assert isinstance(outcome, PromotionCommitUnknown)
+        assert outcome.reason.value == "http_connection_lost_after_send"
+
+    def test_dispatch_uncertain_transmission_unknown_uses_unknown_code(
+        self,
+    ) -> None:
+        transport = ScopedPromotionHttpDispatchUncertain(
+            observation=_observation(),
+            reason_code=(
+                ScopedDispatchUncertaintyReason.TRANSMISSION_UNKNOWN
+            ),
+        )
+        projection = map_scoped_http_transport_to_promotion_outcome(
+            transport, context=_context()
+        )
+        outcome = projection.promotion_outcome
+        assert isinstance(outcome, PromotionCommitUnknown)
+        assert outcome.reason.value == "http_transmission_unknown"
+
+    def test_before_send_missing_backend_url_uses_configuration_blocked(
+        self,
+    ) -> None:
+        transport = ScopedPromotionHttpBeforeSendFailed(
+            observation=_observation(),
+            reason_code=ScopedBeforeSendFailureReason.MISSING_BACKEND_URL,
         )
         projection = map_scoped_http_transport_to_promotion_outcome(
             transport, context=_context()
@@ -249,6 +275,46 @@ class TestBoundedReasonCodes:
         assert projection.commit_disposition is (
             PromotionCommitDisposition.DEFINITELY_NOT_COMMITTED
         )
+
+    def test_before_send_missing_token_uses_configuration_blocked(self) -> None:
+        transport = ScopedPromotionHttpBeforeSendFailed(
+            observation=_observation(),
+            reason_code=(
+                ScopedBeforeSendFailureReason.MISSING_INTERNAL_TOKEN
+            ),
+        )
+        projection = map_scoped_http_transport_to_promotion_outcome(
+            transport, context=_context()
+        )
+        outcome = projection.promotion_outcome
+        assert isinstance(outcome, PromotionRejected)
+        assert outcome.reason.value == "configuration_blocked"
+
+    def test_before_send_dns_failed_uses_backend_unreachable(self) -> None:
+        transport = ScopedPromotionHttpBeforeSendFailed(
+            observation=_observation(),
+            reason_code=ScopedBeforeSendFailureReason.DNS_FAILED,
+        )
+        projection = map_scoped_http_transport_to_promotion_outcome(
+            transport, context=_context()
+        )
+        outcome = projection.promotion_outcome
+        assert isinstance(outcome, PromotionRejected)
+        assert outcome.reason.value == "backend_unreachable"
+
+    def test_before_send_connection_refused_uses_backend_unreachable(
+        self,
+    ) -> None:
+        transport = ScopedPromotionHttpBeforeSendFailed(
+            observation=_observation(),
+            reason_code=ScopedBeforeSendFailureReason.CONNECTION_REFUSED,
+        )
+        projection = map_scoped_http_transport_to_promotion_outcome(
+            transport, context=_context()
+        )
+        outcome = projection.promotion_outcome
+        assert isinstance(outcome, PromotionRejected)
+        assert outcome.reason.value == "backend_unreachable"
 
     def test_http_error_is_commit_uncertain(self) -> None:
         """A malformed ``500`` MUST NOT be classified as ``PromotionRejected``."""
