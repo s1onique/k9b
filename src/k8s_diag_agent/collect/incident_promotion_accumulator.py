@@ -50,7 +50,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from .incident_identity_hardening import (
     INCIDENT_ACCESS_MODE_BACKEND,
@@ -60,10 +60,14 @@ from .incident_identity_hardening import (
     PromotionRecord,
     _validate_response_contracts,
 )
+from .incident_promotion_batch import PromotionBatch
 from .incident_promotion_outcome_recorder import (
     PromotionOutcomeConflictError,
     PromotionOutcomeRecorderMixin,
     PromotionOutcomeRecording,
+)
+from .incident_promotion_scoped_atomic_host_protocol import (
+    AccumulatorSnapshot,
 )
 from .incident_promotion_scoped_atomic_recorder import (
     ScopedPromotionAtomicRecorderMixin,
@@ -73,7 +77,6 @@ from .promotion_scoped_accumulator_handoff import (
 )
 
 if TYPE_CHECKING:
-    from .incident_promotion_batch import PromotionBatch
     from .promotion_diagnosis_handoff import (
         PromotionDiagnosisHandoffError,
         PromotionPropagationResult,
@@ -250,8 +253,8 @@ class RunPromotionAccumulator(
 
     # ---------------- R4 atomic insertion helpers (validate-before-mutate) ----
 
-    def _snapshot(self) -> dict[str, object]:
-        """Return a deep snapshot of the accumulator's mutable state.
+    def _snapshot(self) -> AccumulatorSnapshot:
+        """Return a typed snapshot of every mutable accumulator field.
 
         Used by :meth:`add_batch` AND by the atomic
         :meth:`record_scoped_promotion_batch` transaction to
@@ -260,62 +263,71 @@ class RunPromotionAccumulator(
         that the atomic recorder can touch (including
         :attr:`scoped_promotion_handoff`) or the rollback
         transaction will leave the handoff slot stale.
-        """
-        return {
-            "promotion_records": list(self.promotion_records),
-            "_seen_canonical_ids": set(self._seen_canonical_ids),
-            "batches": list(self.batches),
-            "total_scanned": self.total_scanned,
-            "total_firing": self.total_firing,
-            "total_opened_incidents": self.total_opened_incidents,
-            "total_updated_incidents": self.total_updated_incidents,
-            "total_skipped_duplicates": self.total_skipped_duplicates,
-            "total_errors": self.total_errors,
-            "total_unique_candidate_count": self.total_unique_candidate_count,
-            "last_promotion_mode": self.last_promotion_mode,
-            "last_incident_access_mode": self.last_incident_access_mode,
-            "last_source_kind": self.last_source_kind,
-            "last_promotion_scan_scope": self.last_promotion_scan_scope,
-            "promotion_outcome": self.promotion_outcome,
-            "promotion_outcome_run_id": self.promotion_outcome_run_id,
-            "scoped_promotion_handoff": self.scoped_promotion_handoff,
-        }
-
-    def _restore(self, snap: dict[str, object]) -> None:
-        """Restore mutable state from a previously taken snapshot.
 
         ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
-        CORRECTION04-REPLAY-TRUTH-AND-ATOMIC-RECORDER-SPLIT01: the
-        restore path MUST also reset
+        CORRECTION05-STRICT-TYPING-AND-ROLLBACK-CLOSURE01: the
+        snapshot is a frozen typed dataclass (``AccumulatorSnapshot``)
+        instead of ``dict[str, object]`` so the recorder type checks
+        without any ``Any`` slot. Container copies are stored as
+        immutable tuples / frozensets so the restore path can
+        detect drift via tuple equality.
+        """
+        return AccumulatorSnapshot(
+            promotion_records=tuple(self.promotion_records),
+            seen_canonical_ids=frozenset(self._seen_canonical_ids),
+            batches=tuple(self.batches),
+            total_scanned=self.total_scanned,
+            total_firing=self.total_firing,
+            total_opened_incidents=self.total_opened_incidents,
+            total_updated_incidents=self.total_updated_incidents,
+            total_skipped_duplicates=self.total_skipped_duplicates,
+            total_errors=self.total_errors,
+            total_unique_candidate_count=self.total_unique_candidate_count,
+            last_promotion_mode=self.last_promotion_mode,
+            last_incident_access_mode=self.last_incident_access_mode,
+            last_source_kind=self.last_source_kind,
+            last_promotion_scan_scope=self.last_promotion_scan_scope,
+            promotion_outcome=self.promotion_outcome,
+            promotion_outcome_run_id=self.promotion_outcome_run_id,
+            scoped_promotion_handoff=self.scoped_promotion_handoff,
+        )
+
+    def _restore(self, snap: AccumulatorSnapshot) -> None:
+        """Restore every mutable field from a typed snapshot, in place.
+
+        ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
+        CORRECTION05-STRICT-TYPING-AND-ROLLBACK-CLOSURE01: the
+        restore path rewrites the mutable containers IN PLACE
+        (slice assignment for lists, ``clear()``/``update()`` for
+        sets) so any external observer holding a reference to the
+        original list/set sees the same Python object after the
+        rollback. Replacing the field with a new container would
+        silently orphan externally retained references.
+
+        The restore path also resets
         :attr:`scoped_promotion_handoff` so the rollback transaction
         leaves the handoff slot in its pre-call state.
         """
-        self.promotion_records = cast("list[PromotionRecord]", snap["promotion_records"])
-        self._seen_canonical_ids = cast("set[str]", snap["_seen_canonical_ids"])
-        self.batches = cast("list[PromotionBatch]", snap["batches"])
-        self.total_scanned = cast(int, snap["total_scanned"])
-        self.total_firing = cast(int, snap["total_firing"])
-        self.total_opened_incidents = cast(int, snap["total_opened_incidents"])
-        self.total_updated_incidents = cast(int, snap["total_updated_incidents"])
-        self.total_skipped_duplicates = cast(int, snap["total_skipped_duplicates"])
-        self.total_errors = cast(int, snap["total_errors"])
-        self.total_unique_candidate_count = cast(
-            int, snap["total_unique_candidate_count"]
-        )
-        self.last_promotion_mode = cast(str, snap["last_promotion_mode"])
-        self.last_incident_access_mode = cast(str, snap["last_incident_access_mode"])
-        self.last_source_kind = cast(str, snap["last_source_kind"])
-        self.last_promotion_scan_scope = cast(str, snap["last_promotion_scan_scope"])
-        self.promotion_outcome = cast(
-            "PromotionOutcome | None", snap["promotion_outcome"]
-        )
-        self.promotion_outcome_run_id = cast(
-            str, snap["promotion_outcome_run_id"]
-        )
-        self.scoped_promotion_handoff = cast(
-            "ScopedPromotionAccumulatorHandoff | None",
-            snap["scoped_promotion_handoff"],
-        )
+        self.promotion_records.clear()
+        self.promotion_records.extend(snap.promotion_records)
+        self._seen_canonical_ids.clear()
+        self._seen_canonical_ids.update(snap.seen_canonical_ids)
+        self.batches.clear()
+        self.batches.extend(snap.batches)
+        self.total_scanned = snap.total_scanned
+        self.total_firing = snap.total_firing
+        self.total_opened_incidents = snap.total_opened_incidents
+        self.total_updated_incidents = snap.total_updated_incidents
+        self.total_skipped_duplicates = snap.total_skipped_duplicates
+        self.total_errors = snap.total_errors
+        self.total_unique_candidate_count = snap.total_unique_candidate_count
+        self.last_promotion_mode = snap.last_promotion_mode
+        self.last_incident_access_mode = snap.last_incident_access_mode
+        self.last_source_kind = snap.last_source_kind
+        self.last_promotion_scan_scope = snap.last_promotion_scan_scope
+        self.promotion_outcome = snap.promotion_outcome
+        self.promotion_outcome_run_id = snap.promotion_outcome_run_id
+        self.scoped_promotion_handoff = snap.scoped_promotion_handoff
 
     def _local_skipped_duplicate_count(self) -> int:
         """Count ``skipped_duplicate`` outcomes from local records.

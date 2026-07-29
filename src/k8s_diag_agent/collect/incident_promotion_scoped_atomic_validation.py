@@ -1,7 +1,9 @@
 """Exhaustive handoff/batch consistency validators for the scoped atomic recorder.
 
-ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION04-
-REPLAY-TRUTH-AND-ATOMIC-RECORDER-SPLIT01.
+ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
+CORRECTION04-REPLAY-TRUTH-AND-ATOMIC-RECORDER-SPLIT01.
+ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
+CORRECTION05-STRICT-TYPING-AND-ROLLBACK-CLOSURE01.
 
 The validators enforce, for every dispatch variant, that the
 accompanying :class:`PromotionBatch` is a faithful accounting
@@ -26,11 +28,21 @@ The shape of each validator mirrors the
 :class:`ScopedPromotionAccumulatorRejected` construction
 invariant documented in :mod:`promotion_scoped_accumulator_handoff`
 so a future variant addition fails the static check rather
-than silently bypassing validation.
+than silently bypassing validation. The dispatcher
+:func:`validate_scoped_handoff_batch_consistency` ends with
+:func:`typing.assert_never` so a new variant addition MUST
+satisfy the static check.
 """
 
 from __future__ import annotations
 
+from typing import assert_never
+
+from .incident_promotion_batch import PromotionBatch
+from .incident_promotion_dispatch_constants import (
+    INCIDENT_ACCESS_MODE_BACKEND,
+    MODE_BACKEND_API,
+)
 from .promotion_scoped_accumulator_handoff import (
     ScopedPromotionAccumulatorCompleted,
     ScopedPromotionAccumulatorHandoff,
@@ -47,39 +59,10 @@ _EXPECTED_SCAN_SCOPE = "internal_api_alert_signals:scoped"
 _EMPTY_RECORDS: tuple[object, ...] = ()
 
 
-def _backend_mode() -> str:
-    """Late-bound resolution of the bounded backend access-mode string.
-
-    Importing :mod:`incident_promotion_dispatch` at module load
-    creates a cycle through
-    :class:`RunPromotionAccumulator` ->
-    :class:`ScopedPromotionAtomicRecorderMixin` ->
-    :mod:`incident_promotion_scoped_atomic_validation`.
-    Resolving the constant lazily breaks that cycle.
-    """
-    from .incident_promotion_dispatch import INCIDENT_ACCESS_MODE_BACKEND
-
-    return INCIDENT_ACCESS_MODE_BACKEND
-
-
-def _backend_promotion_mode() -> str:
-    """Late-bound resolution of the bounded ``backend-api`` mode string."""
-    from .incident_promotion_dispatch import MODE_BACKEND_API
-
-    return MODE_BACKEND_API
-
-
-def _promotion_batch_class() -> type:
-    """Late-bound resolution of the :class:`PromotionBatch` class."""
-    from .incident_promotion_batch import PromotionBatch
-
-    return PromotionBatch
-
-
 def _require_common_batch_frame(
     *,
     handoff: ScopedPromotionAccumulatorHandoff,
-    batch: object,
+    batch: PromotionBatch,
     signal_count: int,
 ) -> tuple[
     object,  # promotion_result
@@ -90,23 +73,13 @@ def _require_common_batch_frame(
     """Enforce the bounded cross-variant batch envelope.
 
     Called by every variant validator. The check returns the bounded
-    fields the variant tests consult in the next step.
+    fields the variant tests consult in the next step. The
+    ``batch`` parameter is typed as the canonical
+    :class:`PromotionBatch` so the static checker can verify the
+    full surface of the batch envelope is consulted; no
+    ``object``-typed dynamic dispatch remains inside the
+    validator.
     """
-    # Type and handoff validations run BEFORE any attribute access.
-    # The earlier version accessed ``batch.promotion_result`` before
-    # asserting the runtime batch type, which made a single bad
-    # test input produce a confusing ``AttributeError`` instead of
-    # the bounded TypeError the contract documents.
-    if not isinstance(handoff, ScopedPromotionAccumulatorHandoff):
-        raise TypeError(
-            "record_scoped_promotion_batch requires a "
-            f"ScopedPromotionAccumulatorHandoff; got {type(handoff).__name__}"
-        )
-    if not isinstance(batch, _promotion_batch_class()):
-        raise TypeError(
-            "record_scoped_promotion_batch requires a PromotionBatch; "
-            f"got {type(batch).__name__}"
-        )
     pr = batch.promotion_result
     if batch.promotion_records != _EMPTY_RECORDS:
         raise ValueError(
@@ -124,18 +97,18 @@ def _require_common_batch_frame(
             "Scoped aggregate batch MUST carry promotion_scan_scope="
             f"{_EXPECTED_SCAN_SCOPE!r}; got {batch.promotion_scan_scope!r}"
         )
-    if batch.promotion_mode != _backend_promotion_mode():
+    if batch.promotion_mode != MODE_BACKEND_API:
         raise ValueError(
             "Scoped aggregate batch MUST carry promotion_mode="
-            f"{_backend_promotion_mode()!r}; got {batch.promotion_mode!r}"
+            f"{MODE_BACKEND_API!r}; got {batch.promotion_mode!r}"
         )
-    return pr, _backend_mode(), signal_count, signal_count
+    return pr, INCIDENT_ACCESS_MODE_BACKEND, signal_count, signal_count
 
 
 def _validate_completed(
     *,
     handoff: ScopedPromotionAccumulatorCompleted,
-    batch: object,
+    batch: PromotionBatch,
     receipt: ScopedPromotionReceipt,
     requested_signal_count: int,
 ) -> None:
@@ -223,7 +196,7 @@ def _validate_completed(
 def _validate_uncertain(
     *,
     handoff: ScopedPromotionAccumulatorUncertain,
-    batch: object,
+    batch: PromotionBatch,
     requested_signal_count: int,
 ) -> None:
     """Validate an uncertain-handoff / batch pair exhaustively."""
@@ -294,7 +267,7 @@ def _validate_uncertain(
 def _validate_rejected(
     *,
     handoff: ScopedPromotionAccumulatorRejected,
-    batch: object,
+    batch: PromotionBatch,
     rejected_signal_count: int,
 ) -> None:
     """Validate a rejected-handoff / batch pair exhaustively."""
@@ -373,8 +346,27 @@ def validate_scoped_handoff_batch_consistency(
 
     Dispatches to the per-variant validator. Each variant enforces
     every bounded cross-variant invariant first, then its
-    variant-specific aggregate deltas.
+    variant-specific aggregate deltas. A new handoff variant added
+    without updating this dispatcher fails the static check via
+    :func:`typing.assert_never` so an unhandled variant cannot
+    silently bypass validation.
+
+    The ``batch`` parameter is typed as ``object`` because the
+    validator is the single canonical boundary that converts the
+    untyped caller payload into a typed :class:`PromotionBatch`;
+    once narrowed, the per-variant validators operate strictly
+    on ``PromotionBatch`` instances.
     """
+    if not isinstance(handoff, ScopedPromotionAccumulatorHandoff):
+        raise TypeError(
+            "record_scoped_promotion_batch requires a "
+            f"ScopedPromotionAccumulatorHandoff; got {type(handoff).__name__}"
+        )
+    if not isinstance(batch, PromotionBatch):
+        raise TypeError(
+            "record_scoped_promotion_batch requires a PromotionBatch; "
+            f"got {type(batch).__name__}"
+        )
     if isinstance(handoff, ScopedPromotionAccumulatorCompleted):
         _validate_completed(
             handoff=handoff,
@@ -403,15 +395,8 @@ def validate_scoped_handoff_batch_consistency(
             ),
         )
         return
-    # Exhaustiveness: a new handoff variant MUST fail typing. The
-    # explicit raise is here so a future runtime ad-hoc value is
-    # caught loudly. Mypy intentionally rejects ``assert_never`` on
-    # a non-closed union here because the variant isinstance above
-    # already narrows all known members.
-    raise TypeError(
-        "validate_scoped_handoff_batch_consistency got an unsupported "
-        f"handoff variant: {type(handoff).__name__}"
-    )
+    # Exhaustiveness: a new handoff variant MUST fail typing.
+    assert_never(handoff)
 
 
 __all__ = [

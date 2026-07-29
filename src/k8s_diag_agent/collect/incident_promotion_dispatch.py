@@ -39,6 +39,13 @@ from .incident_candidates import (
 from .incident_identity_hardening import PromotionRecord
 from .incident_promotion_accumulator import RunPromotionAccumulator
 from .incident_promotion_batch import PromotionBatch
+from .incident_promotion_dispatch_constants import (
+    INCIDENT_ACCESS_MODE_BACKEND,
+    INCIDENT_ACCESS_MODE_LOCAL,
+    MODE_AUTO,
+    MODE_BACKEND_API,
+    MODE_LOCAL,
+)
 from .promotion_scoped_accumulator_handoff import (
     ScopedPromotionAccumulatorCompleted,
     ScopedPromotionAccumulatorHandoff,
@@ -55,18 +62,9 @@ ENV_INTERNAL_API_TOKEN = "K9B_INTERNAL_API_TOKEN"
 ENV_STORE_BACKEND = "K9B_INCIDENT_STORE_BACKEND"
 ENV_PROCESS_ROLE = "K9B_PROCESS_ROLE"
 
-# Promotion modes
-MODE_LOCAL: Literal["local"] = "local"
-MODE_BACKEND_API: Literal["backend-api"] = "backend-api"
-MODE_AUTO: Literal["auto"] = "auto"
-
 # Process roles
 ROLE_BACKEND = "backend"
 ROLE_SCHEDULER = "scheduler"
-
-# Incident access modes
-INCIDENT_ACCESS_MODE_LOCAL = "local"
-INCIDENT_ACCESS_MODE_BACKEND = "backend"
 
 
 def _incident_access_mode_for_promotion_mode(
