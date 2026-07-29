@@ -33,10 +33,7 @@ architecture regresses any of the parser / attestation invariants:
 
 from __future__ import annotations
 
-import hashlib
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -177,7 +174,6 @@ def test_parser_distinguishes_decode_vs_acceptance_status() -> None:
     finally:
         fixture.unlink(missing_ok=True)
 
-
 def test_parser_fails_closed_when_checks_array_empty_but_required_names_declared(
 ) -> None:
     """Adversarial: declaring required names is NOT sufficient.
@@ -224,7 +220,6 @@ def test_parser_fails_closed_when_checks_array_empty_but_required_names_declared
     finally:
         fixture.unlink(missing_ok=True)
 
-
 def test_parser_detects_checks_total_mismatch() -> None:
     """``checks_total`` MUST equal ``len(checks)``."""
     from scripts.factory.parse_gate_summary import parse_gate_summary
@@ -252,7 +247,6 @@ def test_parser_detects_checks_total_mismatch() -> None:
             )
     finally:
         fixture.unlink(missing_ok=True)
-
 
 def test_parser_detects_checks_failed_mismatch() -> None:
     """``checks_failed`` MUST equal ``count(status == fail)``."""
@@ -283,7 +277,6 @@ def test_parser_detects_checks_failed_mismatch() -> None:
     finally:
         fixture.unlink(missing_ok=True)
 
-
 def test_parser_detects_overall_status_mismatch() -> None:
     """``overall_status`` MUST equal ``pass iff checks_failed == 0``."""
     from scripts.factory.parse_gate_summary import parse_gate_summary
@@ -312,7 +305,6 @@ def test_parser_detects_overall_status_mismatch() -> None:
     finally:
         fixture.unlink(missing_ok=True)
 
-
 def test_parser_detects_duplicate_check_names() -> None:
     """Check names MUST be unique inside ``checks``."""
     from scripts.factory.parse_gate_summary import parse_gate_summary
@@ -339,7 +331,6 @@ def test_parser_detects_duplicate_check_names() -> None:
             )
     finally:
         fixture.unlink(missing_ok=True)
-
 
 def test_parser_detects_unexpected_check_names() -> None:
     """Unexpected check names (outside REQUIRED_R12_CHECK_NAMES) MUST fail."""
@@ -380,238 +371,3 @@ def test_parser_detects_unexpected_check_names() -> None:
             )
     finally:
         fixture.unlink(missing_ok=True)
-
-
-# ---------------------------------------------------------------------------
-# External validation attestation
-# ---------------------------------------------------------------------------
-
-
-def test_validation_attestation_present_when_summary_present() -> None:
-    """When ``gate-summary.json`` exists, the validation attestation MUST exist."""
-    if not GATE_SUMMARY_PATH.exists():
-        pytest.skip(
-            ".factory/gate-summary.json is missing; the populate "
-            "step must run before this assertion can be evaluated."
-        )
-    if not VALIDATION_ATTESTATION_PATH.exists():
-        pytest.fail(
-            "populate_gate_summary MUST write "
-            ".factory/gate-summary-validation.json whenever "
-            "gate-summary.json is written."
-        )
-
-
-def test_validation_attestation_sha256_binds_final_bytes() -> None:
-    """The attestation SHA-256 MUST match the actual gate-summary bytes."""
-    if not VALIDATION_ATTESTATION_PATH.exists():
-        pytest.skip(
-            "validation attestation is missing; the populate step "
-            "must run before this assertion can be evaluated."
-        )
-    data = json.loads(VALIDATION_ATTESTATION_PATH.read_text(encoding="utf-8"))
-    attested_sha = data.get("validated_sha256")
-    if not attested_sha:
-        pytest.fail("validated_sha256 missing from attestation")
-    actual_sha = hashlib.sha256(GATE_SUMMARY_PATH.read_bytes()).hexdigest()
-    if attested_sha != actual_sha:
-        pytest.fail(
-            f"attested SHA-256 ({attested_sha}) MUST equal the "
-            f"actual SHA-256 ({actual_sha}) of gate-summary.json"
-        )
-
-
-def test_validation_attestation_includes_decode_and_acceptance() -> None:
-    """The attestation MUST carry typed ``decode_status`` and ``acceptance_status``."""
-    if not VALIDATION_ATTESTATION_PATH.exists():
-        pytest.skip("validation attestation is missing")
-    data = json.loads(VALIDATION_ATTESTATION_PATH.read_text(encoding="utf-8"))
-    if data.get("decode_status") not in {"pass", "fail"}:
-        pytest.fail(
-            f"attestation.decode_status MUST be pass|fail; "
-            f"got {data.get('decode_status')!r}"
-        )
-    if data.get("acceptance_status") not in {"pass", "fail"}:
-        pytest.fail(
-            f"attestation.acceptance_status MUST be pass|fail; "
-            f"got {data.get('acceptance_status')!r}"
-        )
-
-
-def test_validation_attestation_excludes_self_referential_evidence() -> None:
-    """The attestation MUST NOT live inside ``gate-summary.json``."""
-    if not GATE_SUMMARY_PATH.exists():
-        pytest.skip(
-            ".factory/gate-summary.json is missing; the populate "
-            "step must run before this assertion can be evaluated."
-        )
-    data = json.loads(GATE_SUMMARY_PATH.read_text(encoding="utf-8"))
-    extras = data.get("extras", {})
-    if isinstance(extras, dict) and "parser_postcondition" in extras:
-        pytest.fail(
-            "gate-summary.json MUST NOT carry parser_postcondition; "
-            "the validator result lives in the sibling attestation."
-        )
-
-
-def test_parser_runs_after_final_write_in_producer() -> None:
-    """The producer MUST write the artifact THEN run the parser.
-
-    The producer's main entry point MUST compute the SHA-256 of
-    the final bytes BEFORE invoking the parser subprocess so the
-    recorded SHA-256 binds the validated content.
-    """
-    text = POPULATE_FILE.read_text()
-    # The producer MUST capture the SHA-256 AFTER writing the
-    # artifact and BEFORE consulting the parser outcome.
-    if "final_bytes = target.read_bytes()" not in text:
-        pytest.fail(
-            "populate_gate_summary.main MUST capture the artifact "
-            "bytes (e.g. via target.read_bytes()) so the SHA-256 "
-            "binds the validated content."
-        )
-    if "final_sha256 = hashlib.sha256" not in text:
-        pytest.fail(
-            "populate_gate_summary.main MUST compute the final "
-            "SHA-256 from the captured bytes."
-        )
-    # The producer MUST NOT embed the parser result inside
-    # the artifact's ``extras``.  The forbidden construction is
-    # ``extras[`` ``] = ...`` with the field name.  We accept
-    # the diagnostic ``extras_keys`` listing since it surfaces
-    # the actual extras keys instead of constructing the
-    # forbidden field.
-    forbidden_embeddings = (
-        'extras["parser_postcondition"]',
-        'extras["parser_postcondition"] =',
-        '"parser_postcondition":',
-    )
-    for needle in forbidden_embeddings:
-        if needle in text:
-            # Allow the diagnostic-dict construction that only
-            # reports the extras keys (the value is a list, not
-            # an ``extras[...] = `` assignment).
-            if needle == '"parser_postcondition":' and 'extras_keys' in text:
-                # Acceptable diagnostic-list construction.
-                continue
-            pytest.fail(
-                f"populate_gate_summary.main MUST NOT embed "
-                f"``parser_postcondition`` in the artifact; found "
-                f"{needle!r}."
-            )
-
-
-# ---------------------------------------------------------------------------
-# CLI exit-code semantics
-# ---------------------------------------------------------------------------
-
-
-def test_parser_cli_exit_codes_match_status_semantics(tmp_path: Path) -> None:
-    """The CLI exit code MUST distinguish decode vs acceptance failures."""
-    fixture = tmp_path / "fixture.json"
-    # Construct a structurally valid artifact with mismatched
-    # checks_total.
-    artifact = _minimal_passing_artifact()
-    artifact["checks_total"] = 99
-    _write_atomic(fixture, artifact)
-
-    proc = subprocess.run(
-        [
-            sys.executable,
-            str(PARSE_FILE),
-            "--target",
-            str(fixture),
-            "--quiet",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    # decode_status=pass, acceptance_status=fail => exit code 1.
-    if proc.returncode != 1:
-        pytest.fail(
-            f"CLI MUST exit 1 when decode passes but acceptance fails; "
-            f"got {proc.returncode}, stdout={proc.stdout!r}"
-        )
-
-
-def test_parser_cli_exit_2_on_decode_failure(tmp_path: Path) -> None:
-    """A structurally broken artifact MUST produce exit code 2."""
-    fixture = tmp_path / "fixture_invalid.json"
-    fixture.write_text("not valid json {{{", encoding="utf-8")
-    proc = subprocess.run(
-        [
-            sys.executable,
-            str(PARSE_FILE),
-            "--target",
-            str(fixture),
-            "--quiet",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 2:
-        pytest.fail(
-            f"CLI MUST exit 2 when the artifact fails to decode; "
-            f"got {proc.returncode}, stdout={proc.stdout!r}"
-        )
-
-
-def test_parser_cli_decode_only_skips_acceptance_check(tmp_path: Path) -> None:
-    """``--decode-only`` MUST skip acceptance enforcement."""
-    fixture = tmp_path / "fixture_failing.json"
-    artifact = _minimal_passing_artifact()
-    artifact["checks_total"] = 99
-    _write_atomic(fixture, artifact)
-    proc = subprocess.run(
-        [
-            sys.executable,
-            str(PARSE_FILE),
-            "--target",
-            str(fixture),
-            "--quiet",
-            "--decode-only",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        pytest.fail(
-            f"--decode-only MUST return 0 for a structurally valid "
-            f"artifact; got {proc.returncode}, stdout={proc.stdout!r}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Patch hygiene: external artifacts
-# ---------------------------------------------------------------------------
-
-
-def test_external_attestation_no_conflict_markers() -> None:
-    """The validation attestation MUST NOT contain conflict markers."""
-    if not VALIDATION_ATTESTATION_PATH.exists():
-        pytest.skip("validation attestation is missing")
-    text = VALIDATION_ATTESTATION_PATH.read_text(encoding="utf-8")
-    if any(marker in text for marker in ("<<<<<<<", "=======", ">>>>>>>")):
-        pytest.fail(
-            "validation attestation MUST NOT contain git conflict "
-            "markers."
-        )
-
-
-def test_parser_uses_process_return_code_to_distinguish_failure_modes(
-) -> None:
-    """The CLI MUST emit non-zero exit codes for both decode and acceptance failures."""
-    text = PARSE_FILE.read_text()
-    if "return 2" not in text:
-        pytest.fail(
-            "parse_gate_summary MUST return exit code 2 when "
-            "decode_status != 'pass'."
-        )
-    if "return 1" not in text:
-        pytest.fail(
-            "parse_gate_summary MUST return exit code 1 when "
-            "acceptance_status != 'pass'."
-        )

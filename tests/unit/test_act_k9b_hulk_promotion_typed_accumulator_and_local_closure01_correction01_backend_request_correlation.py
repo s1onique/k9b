@@ -72,7 +72,7 @@ def _make_handler(
 def _event_records(handler: Any) -> list[logging.LogRecord]:
     """Return the captured log records emitted by the handler."""
     logger = logging.getLogger(
-        "k8s_diag_agent.ui.server_incident_internal_handlers"
+        "k8s_diag_agent.ui.server_incident_internal_promotion_handlers"
     )
     capturing = _CapturingLogHandler()
     logger.addHandler(capturing)
@@ -109,7 +109,7 @@ class TestBackendRequestCorrelation:
 
         monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "synthetic-token")
         monkeypatch.setattr(
-            "k8s_diag_agent.ui.server_incident_internal_handlers.get_incident_store",
+            "k8s_diag_agent.ui.server_incident_internal_promotion_handlers.get_incident_store",
             lambda: _StubIncidentStore(),
             raising=False,
         )
@@ -119,7 +119,7 @@ class TestBackendRequestCorrelation:
         # Every event that carries a request_id MUST carry the
         # bounded value sent on the wire.
         ids_in_events = {
-            record.request_id  # type: ignore[attr-defined]
+            record.request_id
             for record in records
             if getattr(record, "request_id", None)
         }
@@ -145,7 +145,7 @@ class TestBackendRequestCorrelation:
 
         monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", "synthetic-token")
         monkeypatch.setattr(
-            "k8s_diag_agent.ui.server_incident_internal_handlers.get_incident_store",
+            "k8s_diag_agent.ui.server_incident_internal_promotion_handlers.get_incident_store",
             lambda: _StubIncidentStore(),
             raising=False,
         )
@@ -187,7 +187,7 @@ class TestBackendRequestCorrelation:
 
         monkeypatch.setenv("K9B_INTERNAL_API_TOKEN", sentinel_token)
         monkeypatch.setattr(
-            "k8s_diag_agent.ui.server_incident_internal_handlers.get_incident_store",
+            "k8s_diag_agent.ui.server_incident_internal_promotion_handlers.get_incident_store",
             lambda: _StubIncidentStore(),
             raising=False,
         )

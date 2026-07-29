@@ -1,0 +1,212 @@
+"""Manual/admin candidate-promotion handler and request conversion."""
+from __future__ import annotations
+
+import json
+import logging
+from datetime import UTC, datetime
+from typing import Any
+
+from ..collect.incident_store_provider import get_incident_store
+from .server_incident_internal_models import PromoteCandidatesRequest, PromotionResponse
+
+_logger = logging.getLogger(__name__)
+
+def _validate_internal_token(handler: Any) -> bool:
+    from .server_incident_internal_auth import _validate_internal_token as validate
+    return validate(handler)
+
+def _convert_candidates_to_objects(
+    candidates_data: list[dict[str, Any]],
+) -> list[Any]:
+    from ..collect.incident_candidates import (
+        CandidateClass,
+        CandidateSignal,
+        IncidentCandidate,
+        ObjectKind,
+        Severity,
+    )
+
+    incident_candidates = []
+    for cand_data in candidates_data:
+        sev_str = cand_data.get("severity", "warning")
+        severity = Severity.ERROR if sev_str.lower() == "error" else Severity.WARNING
+
+        kind_str = cand_data.get("object_kind", "Unknown")
+        try:
+            object_kind = ObjectKind(kind_str)
+        except ValueError:
+            object_kind = ObjectKind.UNKNOWN
+
+        class_str = cand_data.get("candidate_class", "unknown")
+        try:
+            candidate_class = CandidateClass(class_str)
+        except ValueError:
+            candidate_class = CandidateClass.UNKNOWN
+
+        signals = []
+        for sig_data in cand_data.get("signals", []):
+            signals.append(
+                CandidateSignal(
+                    source=sig_data.get("source", "detector"),
+                    reason=sig_data.get("reason", ""),
+                    message=sig_data.get("message", ""),
+                    fingerprint=sig_data.get("fingerprint"),
+                )
+            )
+
+        evidence_needed = tuple(cand_data.get("evidence_needed", []))
+
+        incident_candidates.append(
+            IncidentCandidate(
+                candidate_id=cand_data.get("candidate_id", ""),
+                namespace=cand_data.get("namespace", ""),
+                object_kind=object_kind,
+                object_name=cand_data.get("object_name", ""),
+                candidate_class=candidate_class,
+                severity=severity,
+                signals=tuple(signals),
+                evidence_needed=evidence_needed,
+                raw_object_kind=cand_data.get("raw_object_kind"),
+            )
+        )
+
+    return incident_candidates
+
+def _parse_observed_at(observed_at_str: str) -> datetime | None:
+    try:
+        observed_at = datetime.fromisoformat(observed_at_str)
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=UTC)
+        return observed_at
+    except ValueError:
+        return None
+
+def handle_promote_candidates(handler: Any) -> None:
+    """Handle POST /api/internal/incidents/promote-candidates (manual/admin)."""
+    if not _validate_internal_token(handler):
+        handler._send_json(
+            {"error": "Unauthorized", "message": "Valid internal API token required"},
+            401,
+        )
+        return
+
+    try:
+        content_length = int(handler.headers.get("Content-Length", 0))
+        body = handler.rfile.read(content_length).decode("utf-8")
+        data = json.loads(body)
+    except (json.JSONDecodeError, ValueError) as e:
+        handler._send_json(
+            {"error": "Bad Request", "message": f"Invalid JSON: {e}"},
+            400,
+        )
+        return
+
+    try:
+        request = PromoteCandidatesRequest.from_dict(data)
+    except Exception as e:
+        handler._send_json(
+            {"error": "Bad Request", "message": f"Invalid request: {e}"},
+            400,
+        )
+        return
+
+    observed_at = _parse_observed_at(request.observed_at)
+    if observed_at is None:
+        handler._send_json(
+            {"error": "Bad Request", "message": "Invalid observed_at format"},
+            400,
+        )
+        return
+
+    try:
+        incident_candidates = _convert_candidates_to_objects(request.candidates)
+    except Exception as e:
+        _logger.exception("Failed to convert candidates")
+        handler._send_json(
+            {"error": "Bad Request", "message": f"Invalid candidate data: {e}"},
+            400,
+        )
+        return
+
+    try:
+        store = get_incident_store()
+
+        outcomes = store.promote_candidates_with_records(
+            candidates=incident_candidates,
+            observed_at=observed_at,
+            snapshot_bundle_id=request.snapshot_bundle_id,
+        )
+
+        opened_count = 0
+        updated_count = 0
+        skipped_duplicate_count = 0
+        opened_incident_ids: list[str] = []
+        updated_incident_ids: list[str] = []
+        promotion_records: list[dict[str, str | None]] = []
+        for outcome in outcomes:
+            record = outcome.record
+            promotion_records.append(record.to_dict())
+            if record.canonical_incident_id is None:
+                continue
+            from ..collect.incident_identity_hardening import (
+                PROMOTION_OUTCOME_OPENED,
+                PROMOTION_OUTCOME_SKIPPED_DUPLICATE,
+                PROMOTION_OUTCOME_UPDATED,
+            )
+            if record.promotion_outcome == PROMOTION_OUTCOME_OPENED:
+                opened_count += 1
+                opened_incident_ids.append(record.canonical_incident_id)
+            elif record.promotion_outcome == PROMOTION_OUTCOME_UPDATED:
+                updated_count += 1
+                updated_incident_ids.append(record.canonical_incident_id)
+            elif record.promotion_outcome == PROMOTION_OUTCOME_SKIPPED_DUPLICATE:
+                skipped_duplicate_count += 1
+
+        unique_candidate_count = len({c.candidate_id for c in incident_candidates})
+
+        response = PromotionResponse(
+            ok=True,
+            scanned=len(incident_candidates),
+            opened_incidents=opened_count,
+            updated_incidents=updated_count,
+            skipped_duplicates=skipped_duplicate_count,
+            errors=0,
+            opened_incident_ids=opened_incident_ids,
+            updated_incident_ids=updated_incident_ids,
+            promotion_records=promotion_records,
+            unique_candidate_count=unique_candidate_count,
+            promotion_scan_scope=(
+                f"internal_api_candidates:bundle={request.snapshot_bundle_id or 'none'}"
+            ),
+            incident_access_mode="backend",
+        )
+
+        _logger.info(
+            "Candidates promoted via internal API",
+            extra={
+                "event": "incident-promotion-ingested",
+                "source": "scheduler",
+                "scanned": response.scanned,
+                "opened_incidents": response.opened_incidents,
+                "updated_incidents": response.updated_incidents,
+                "opened_incident_ids": list(response.opened_incident_ids),
+                "updated_incident_ids": list(response.updated_incident_ids),
+                "unique_candidate_count": response.unique_candidate_count,
+                "promotion_scan_scope": response.promotion_scan_scope,
+                "incident_access_mode": response.incident_access_mode,
+                "store_kind": getattr(store, "store_kind", "unknown"),
+            },
+        )
+
+        handler._send_json(response.to_dict(), 200)
+
+    except Exception as e:
+        _logger.exception("Failed to promote candidates")
+        response = PromotionResponse(
+            ok=False,
+            errors=1,
+            error_messages=[str(e)],
+        )
+        handler._send_json(response.to_dict(), 500)
+
+__all__ = ["handle_promote_candidates"]
