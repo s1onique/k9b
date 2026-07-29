@@ -46,13 +46,15 @@ class RequestTransmissionState(StrEnum):
     The discriminator mirrors the natural lifecycle of an HTTP
     request. ``NOT_STARTED`` covers the pre-send branch (DNS,
     connect refused, TLS handshake); ``HEADERS_SENT`` and
-    ``BODY_SENT`` mark the moments after partial transmission where
-    the backend MAY have committed a side effect.
+    ``DISPATCH_STARTED_TRANSMISSION_UNKNOWN`` is the conservative
+    post-send state when ``urllib`` cannot prove the body reached
+    the backend. ``HEADERS_SENT`` is reserved for instrumented
+    transport seams that can prove flush.
     """
 
     NOT_STARTED = "not_started"
     HEADERS_SENT = "headers_sent"
-    BODY_SENT = "body_sent"
+    DISPATCH_STARTED_TRANSMISSION_UNKNOWN = "dispatch_started_transmission_unknown"
     RESPONSE_STARTED = "response_started"
     RESPONSE_COMPLETED = "response_completed"
 

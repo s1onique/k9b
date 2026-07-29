@@ -304,7 +304,7 @@ class ScopedSchedulerClient:
         elapsed_ms = self._elapsed(start)
         observation = PromotionHttpObservation(
             request_id=context.request_id,
-            request_transmission=RequestTransmissionState.BODY_SENT,
+            request_transmission=RequestTransmissionState.DISPATCH_STARTED_TRANSMISSION_UNKNOWN,
             status_code=None,
             content_type=None,
             declared_content_length=None,
