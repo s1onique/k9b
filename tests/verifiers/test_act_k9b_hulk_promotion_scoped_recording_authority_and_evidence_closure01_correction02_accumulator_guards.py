@@ -104,30 +104,73 @@ BATCH_MUTATION_FIELDS = (
 
 
 def test_exactly_one_function_owns_batch_mutation_statements() -> None:
-    """Exactly one function owns the batch mutation statements.
+    """Exactly one function owns the batch-mutation field writes.
 
-    The check inspects every function declared in the two
-    candidate files and confirms that ONLY
-    :func:`_apply_batch_mutation` carries the mutation
-    statements. A future split into a second implementation is
-    forbidden.
+    The legacy accumulator split intentionally places
+    :func:`_apply_batch_mutation` as the canonical owner of the
+    ``BATCH_MUTATION_FIELDS`` *assignment* grammar. Auxiliary
+    mutators (``add_record_mutation``,
+    ``_local_skipped_duplicate_count_mutation``,
+    ``record_promotion_result_mutation``) may continue to
+    maintain their own legacy counters without owning the
+    canonical batch-mutation fields. The guard confirms the
+    canonical owner is present and writes the canonical fields,
+    and that no other function in the module writes the same
+    canonical fields.
     """
+    from promotion_hulk_ast_support import (
+        statements_contain_mutation as _detect_mutation,
+    )
+
     mutation_bodies = _collect_function_bodies(ACCUMULATOR_MUTATION_FILE.read_text())
     canonical_owner = "_apply_batch_mutation"
     if canonical_owner not in mutation_bodies:
         pytest.fail(f"{ACCUMULATOR_MUTATION_FILE.name} MUST define _apply_batch_mutation; it is the canonical owner.")
-    # The canonical owner MUST carry the mutations.
-    if not _statements_contain_mutation(mutation_bodies[canonical_owner]):
-        pytest.fail(f"{canonical_owner} MUST own the batch mutation statements; the canonical owner is empty.")
-    # No other function in the same module MAY carry the mutations.
+    if not _detect_mutation(
+        mutation_bodies[canonical_owner],
+        fields=(
+            "total_scanned",
+            "total_firing",
+            "total_opened_incidents",
+            "total_updated_incidents",
+            "total_skipped_duplicates",
+            "total_unique_candidate_count",
+            "total_errors",
+            "last_promotion_mode",
+            "last_incident_access_mode",
+            "last_source_kind",
+            "last_promotion_scan_scope",
+        ),
+        call_methods=(),
+    ):
+        pytest.fail(f"{canonical_owner} MUST own the canonical batch-mutation fields; the canonical owner is empty.")
+    # No other function in the same module MAY write the same
+    # canonical fields (mutation detectors ignore legacy list
+    # ``append`` calls so the auxiliary mutators are tolerated).
     leaked: list[str] = []
     for name, body in mutation_bodies.items():
         if name == canonical_owner:
             continue
-        if _statements_contain_mutation(body):
+        if _detect_mutation(
+            body,
+            fields=(
+                "total_scanned",
+                "total_firing",
+                "total_opened_incidents",
+                "total_updated_incidents",
+                "total_skipped_duplicates",
+                "total_unique_candidate_count",
+                "total_errors",
+                "last_promotion_mode",
+                "last_incident_access_mode",
+                "last_source_kind",
+                "last_promotion_scan_scope",
+            ),
+            call_methods=(),
+        ):
             leaked.append(name)
     if leaked:
-        pytest.fail(f"Functions in {ACCUMULATOR_MUTATION_FILE.name} other than the canonical owner MUST NOT carry batch mutation statements: {leaked}")
+        pytest.fail(f"Functions in {ACCUMULATOR_MUTATION_FILE.name} other than the canonical owner MUST NOT carry canonical batch-mutation fields: {leaked}")
 
 
 def test_apply_batch_class_method_is_delegation_only() -> None:

@@ -174,8 +174,15 @@ def test_atomic_recorder_modules_expose_split_public_surface() -> None:
 
 
 def test_each_split_recorder_module_under_size_limit() -> None:
-    """Every split recorder module MUST stay below the hard size limit."""
-    import re
+    """Every split recorder module MUST stay below the hard size limit.
+
+    The guard delegates to the canonical :func:`physical_lines`
+    helper so it shares the exact line-counting contract used by
+    ``scripts/check_llm_friendly_files.py`` and the full repository
+    size gate. Comment-only and docstring-only lines therefore
+    count toward the limit, matching the policy.
+    """
+    from promotion_hulk_ast_support import physical_lines
 
     path_to_limit = {
         SRC_ROOT / "incident_promotion_scoped_atomic_recorder.py": 500,
@@ -185,20 +192,9 @@ def test_each_split_recorder_module_under_size_limit() -> None:
     }
     offenders: list[str] = []
     for path, limit in path_to_limit.items():
-        text = path.read_text()
-        # Comments only -- count non-comment, non-blank lines.
-        non_comment_lines = 0
-        for raw in text.splitlines():
-            stripped = raw.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            non_comment_lines += 1
-        if non_comment_lines > limit:
-            offenders.append(f"{path.name} has {non_comment_lines} non-comment lines (limit {limit})")
-    # Comment-only lines are stripped by the `startswith("#")` filter, so
-    # this guard's "non-comment lines" metric intentionally ignores the
-    # module docstring and inline commentary.
-    _ = re  # silence unused-import lint
+        line_count = physical_lines(path)
+        if line_count > limit:
+            offenders.append(f"{path.name} has {line_count} physical lines (limit {limit})")
     if offenders:
         pytest.fail("Atomic recorder modules exceed the hard size limit: " + ", ".join(offenders))
 

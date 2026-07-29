@@ -102,12 +102,55 @@ BATCH_MUTATION_FIELDS = (
     "last_source_kind",
     "last_promotion_scan_scope",
 )
+BATCH_MUTATION_CALL_METHODS = (
+    "append",
+    "add",
+    "update",
+    "add_record",
+    "record_successful_write",
+    "_apply_batch_mutation",
+)
 
 
-def statements_contain_mutation(body: list[ast.stmt], fields: tuple[str, ...] = BATCH_MUTATION_FIELDS) -> bool:
+def _call_target_text(call: ast.Call) -> str:
+    """Return the textual target of a call (``self.batches.append``).
+
+    Used by :func:`statements_contain_mutation` to recognise the
+    canonical mutation call grammar in addition to plain assignment
+    targets.
+    """
+    if isinstance(call.func, ast.Attribute):
+        return ast.unparse(call.func)
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    return ""
+
+
+def statements_contain_mutation(
+    body: list[ast.stmt],
+    fields: tuple[str, ...] = BATCH_MUTATION_FIELDS,
+    call_methods: tuple[str, ...] = BATCH_MUTATION_CALL_METHODS,
+) -> bool:
+    """Return True when the body mutates a batch-mutation container.
+
+    The helper detects BOTH the assignment-target grammar (the
+    canonical ``fields`` tuple) and the call-based grammar
+    (``self.batches.append(...)``, ``acc.add_record(...)``). A
+    future split that introduces a second implementation using
+    only call-based mutations is therefore caught.
+    """
     for stmt in body:
-        if any(target == field or target.endswith(f".{field}") for target in assignment_targets(stmt) for field in fields):
+        if any(
+            target == field or target.endswith(f".{field}")
+            for target in assignment_targets(stmt)
+            for field in fields
+        ):
             return True
+        for sub in ast.walk(stmt):
+            if isinstance(sub, ast.Call):
+                target = _call_target_text(sub)
+                if any(target.endswith(f".{method}") for method in call_methods):
+                    return True
     return False
 
 
