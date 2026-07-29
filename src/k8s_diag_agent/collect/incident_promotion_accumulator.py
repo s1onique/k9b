@@ -65,6 +65,9 @@ from .incident_promotion_outcome_recorder import (
     PromotionOutcomeRecorderMixin,
     PromotionOutcomeRecording,
 )
+from .incident_promotion_scoped_atomic_recorder import (
+    ScopedPromotionAtomicRecorderMixin,
+)
 from .promotion_scoped_accumulator_handoff import (
     ScopedPromotionAccumulatorHandoff,
 )
@@ -128,6 +131,7 @@ class AccumulatorAccessModeError(ValueError):
 @dataclass
 class RunPromotionAccumulator(
     PromotionOutcomeRecorderMixin,
+    ScopedPromotionAtomicRecorderMixin,
 ):
     """Aggregates promotion results from every cluster / source in a run.
 
@@ -238,8 +242,11 @@ class RunPromotionAccumulator(
     scoped_promotion_handoff: ScopedPromotionAccumulatorHandoff | None = (
         field(default=None, repr=False)
     )
-    scoped_promotion_request_id: str = ""
-    scoped_promotion_request_fingerprint: str = ""
+    # Request identity (``request_id`` / ``request_fingerprint``)
+    # has ONE stored authority: the typed handoff above. The
+    # string-shaped projections below are derived @property
+    # accessors; assignment is structurally forbidden because the
+    # dataclass no longer declares them as mutable fields.
 
     # ---------------- R4 atomic insertion helpers (validate-before-mutate) ----
 
@@ -474,13 +481,65 @@ class RunPromotionAccumulator(
             messages.extend(batch.error_messages)
         return tuple(messages)
 
+    @property
+    def scoped_promotion_request_id(self) -> str:
+        """Return the recorded handoff's request id, or ``""`` when absent.
+
+        Derived projection of :attr:`scoped_promotion_handoff`. The
+        accumulator does NOT store a mutable copy of this value;
+        callers MUST NOT assign to the property.
+        """
+        handoff = self.scoped_promotion_handoff
+        return "" if handoff is None else handoff.request_id
+
+    @property
+    def scoped_promotion_request_fingerprint(self) -> str:
+        """Return the recorded handoff's fingerprint, or ``""`` when absent.
+
+        Derived projection of :attr:`scoped_promotion_handoff`. The
+        accumulator does NOT store a mutable copy of this value;
+        callers MUST NOT assign to the property.
+        """
+        handoff = self.scoped_promotion_handoff
+        return "" if handoff is None else handoff.request_fingerprint
+
+    def __setattr__(self, name: str, value: object) -> None:
+        """Reject writes to derived request-identity projections."""
+        if name in {
+            "scoped_promotion_request_id",
+            "scoped_promotion_request_fingerprint",
+        }:
+            raise AttributeError(
+                f"{name} is a derived projection of "
+                "scoped_promotion_handoff; assignment is forbidden."
+            )
+        super().__setattr__(name, value)
+
     def record_scoped_promotion(
         self,
         handoff: ScopedPromotionAccumulatorHandoff,
     ) -> None:
-        """Record the typed scoped promotion handoff as the run authority.
+        """Compatibility wrapper around :meth:`record_scoped_promotion_batch`.
 
-        ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION01-FINALIZATION01.
+        ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
+        CORRECTION03-ATOMIC-RECORDING-AND-ACCOUNTING-TRUTH01.
+
+        The active scoped dispatcher MUST call
+        :meth:`record_scoped_promotion_batch` with both the typed
+        handoff and the dispatcher's accounting batch. This wrapper
+        exists only so existing unit tests that exercise
+        ``record_scoped_promotion(handoff)`` still record the typed
+        handoff and outcome; it routes through the new atomic
+        operation so the single-request-identity-authority invariant
+        is preserved.
+
+        The wrapper builds the bounded accounting batch from the
+        handoff itself (the dispatcher's projection has already
+        produced the canonical ``IncidentPromotionResult``); it
+        then forwards everything through the atomic recorder. When
+        the caller has its own batch (the production dispatcher
+        path) it MUST bypass this wrapper and call the atomic
+        method directly.
 
         The handoff is the only authority for the active scoped
         path. The original :class:`PromotionOutcome` reaches the
@@ -493,29 +552,19 @@ class RunPromotionAccumulator(
         ``promotion_records``, ``promotion_record_count``, canonical
         incident counts, diagnosis incident counts, or
         ``ok``/``errors`` fields.
-
-        Recording the handoff sets:
-
-        * ``scoped_promotion_handoff`` -- the closed handoff
-          variant.
-        * ``scoped_promotion_request_id`` -- the request id from
-          the dispatch side, preserved by identity.
-        * ``scoped_promotion_request_fingerprint`` -- the request
-          fingerprint, preserved by identity.
-        * ``promotion_outcome`` -- the original typed outcome
-          forwarded by identity.
-        * ``promotion_outcome_run_id`` -- the run_id taken from
-          the original outcome for the run-cross-check.
         """
-        self.scoped_promotion_handoff = handoff
-        self.scoped_promotion_request_id = handoff.request_id
-        self.scoped_promotion_request_fingerprint = handoff.request_fingerprint
-        # Forward the typed outcome so the existing
-        # ``promotion_outcome``-based telemetry works unchanged.
-        # The outcome is preserved by identity. The recorder
-        # already mirrors the run_id into ``promotion_outcome_run_id``
-        # so no extra assignment is needed here.
-        self.record_promotion_outcome(outcome=handoff.outcome)
+        from .incident_promotion_scoped_atomic_recorder import (
+            _build_compatibility_batch_from_handoff,
+        )
+
+        accounting_batch = _build_compatibility_batch_from_handoff(handoff)
+        # Forward through the atomic path. The return value is
+        # discarded for backward compatibility with the prior
+        # signature, which returned ``None``.
+        self.record_scoped_promotion_batch(
+            handoff=handoff,
+            batch=accounting_batch,
+        )
 
     def scoped_promotion_handoff_value(
         self,
@@ -527,7 +576,6 @@ class RunPromotionAccumulator(
         incident IDs.
         """
         return self.scoped_promotion_handoff
-
 
 
     def as_dict(self) -> dict[str, object]:

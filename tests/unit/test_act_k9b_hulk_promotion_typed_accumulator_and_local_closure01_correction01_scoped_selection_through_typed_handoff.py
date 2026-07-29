@@ -604,8 +604,18 @@ class TestScopedAccumulatorInvariants:
         )
         accumulator = RunPromotionAccumulator()
         accumulator.record_scoped_promotion(handoff)
+        # Aggregate scoped result MUST NOT add per-signal records.
         assert accumulator.promotion_records == []
-        assert accumulator.total_errors == 0
+        # ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
+        # CORRECTION03-ATOMIC-RECORDING-AND-ACCOUNTING-TRUTH01:
+        # the atomic wrapper routes through
+        # ``record_scoped_promotion_batch``, so the bounded
+        # rejection now correctly populates the aggregate error
+        # counter (errors == 1). The previous behaviour that
+        # silently swallowed the rejection error count was an
+        # accounting bug; the test name continues to pin the
+        # store-scan invariant.
+        assert accumulator.total_errors == 1
 
     def test_idempotent_record_for_identical_handoff(
         self,

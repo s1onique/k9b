@@ -1,6 +1,7 @@
 """AST architecture guards for the active scoped promotion path.
 
-ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION01-FINALIZATION01.
+ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION03-
+ATOMIC-RECORDING-AND-ACCOUNTING-TRUTH01.
 
 The guards in this module fail at test time when the active
 scoped dispatcher path violates any of the typed-accumulator
@@ -20,15 +21,17 @@ Invariants enforced:
 4. The typed dispatch-result module MUST NOT import the legacy
    adapter module that holds the legacy dict shim.
 5. The closed ``ScopedPromotionAccumulatorHandoff`` MUST be
-   consumed by ``RunPromotionAccumulator.record_scoped_promotion``.
-6. ``RunPromotionAccumulator.record_scoped_promotion`` MUST set
-   the typed outcome, request id and fingerprint fields.
-7. The active dispatcher's scoped accumulator function MUST call
-   ``record_scoped_promotion`` and MUST call
+   consumed by ``RunPromotionAccumulator.record_scoped_promotion_batch``.
+6. The active dispatcher's scoped accumulator function MUST call
+   ``record_scoped_promotion_batch`` exactly ONCE and MUST call
    ``scoped_dispatch_result_to_accumulator_handoff``.
-8. The active dispatcher's scoped accumulator function MUST NOT
+7. The active dispatcher's scoped accumulator function MUST NOT
    invent a per-signal ``promotion_records`` tuple for aggregate
    scoped results.
+8. The legacy compatibility wrapper
+   ``RunPromotionAccumulator.record_scoped_promotion`` MUST forward
+   to ``record_scoped_promotion_batch`` so request-identity authority
+   remains singular.
 """
 
 from __future__ import annotations
@@ -173,24 +176,45 @@ def test_active_scoped_path_calls_typed_handoff_adapter() -> None:
         )
 
 
-def test_active_scoped_path_calls_record_scoped_promotion() -> None:
-    """Active scoped path MUST call ``record_scoped_promotion`` on the accumulator."""
+def test_active_scoped_path_calls_record_scoped_promotion_batch_once() -> None:
+    """The active scoped dispatcher MUST call the atomic recorder exactly once.
+
+    ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
+    CORRECTION03-ATOMIC-RECORDING-AND-ACCOUNTING-TRUTH01: the
+    single-call invariant forbids the dispatcher from also calling
+    ``record_scoped_promotion``, ``add_batch``, or
+    ``record_promotion_outcome`` for the same scoped handoff.
+    """
     tree = _load(ACTIVE_DISPATCH_FILE)
     func = _find_function(
         tree, "promote_alert_signals_scoped_for_accumulator"
     )
-    seen = False
+    seen_atomic = 0
+    legacy_names: set[str] = set()
     for call in _calls_in_function(func):
         name = _call_name(call)
         if name is None:
             continue
-        if name.endswith("record_scoped_promotion"):
-            seen = True
-            break
-    if not seen:
+        bare = name.split(".")[-1]
+        if bare == "record_scoped_promotion_batch":
+            seen_atomic += 1
+        elif bare == "record_scoped_promotion":
+            legacy_names.add(bare)
+        elif bare == "add_batch":
+            legacy_names.add(bare)
+        elif bare == "record_promotion_outcome":
+            legacy_names.add(bare)
+    if seen_atomic != 1:
         pytest.fail(
-            "Active scoped path MUST forward the typed handoff via "
-            "RunPromotionAccumulator.record_scoped_promotion"
+            "Active scoped dispatcher MUST call "
+            "RunPromotionAccumulator.record_scoped_promotion_batch "
+            f"exactly once (found {seen_atomic} calls)"
+        )
+    if legacy_names:
+        pytest.fail(
+            "Active scoped dispatcher MUST NOT call legacy accumulator "
+            f"mutators {sorted(legacy_names)}; route every mutation "
+            "through record_scoped_promotion_batch."
         )
 
 
@@ -395,21 +419,104 @@ def test_handoff_carries_original_outcome_by_identity() -> None:
                 )
 
 
-def test_record_scoped_promotion_calls_recorder() -> None:
-    """``record_scoped_promotion`` MUST call ``record_promotion_outcome``."""
+def test_record_scoped_promotion_forwards_to_atomic_recorder() -> None:
+    """``record_scoped_promotion`` MUST forward to the atomic recorder.
+
+    ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
+    CORRECTION03-ATOMIC-RECORDING-AND-ACCOUNTING-TRUTH01: the legacy
+    one-argument wrapper exists only as a compatibility shim for
+    direct unit tests; it MUST funnel every mutation through
+    ``record_scoped_promotion_batch`` so the
+    single-request-identity-authority invariant is preserved.
+    """
     tree = _load(ACCUMULATOR_FILE)
     func = _find_function(tree, "record_scoped_promotion")
-    seen = False
+    seen_atomic = False
+    seen_legacy = False
     for call in _calls_in_function(func):
         name = _call_name(call)
         if name is None:
             continue
-        if name.endswith("record_promotion_outcome"):
-            seen = True
-            break
-    if not seen:
+        bare = name.split(".")[-1]
+        if bare == "record_scoped_promotion_batch":
+            seen_atomic = True
+        elif bare == "record_promotion_outcome":
+            seen_legacy = True
+        elif bare == "add_batch":
+            seen_legacy = True
+    if not seen_atomic:
         pytest.fail(
             "RunPromotionAccumulator.record_scoped_promotion MUST "
-            "forward the typed outcome through "
-            "record_promotion_outcome."
+            "forward through record_scoped_promotion_batch."
         )
+    if seen_legacy:
+        pytest.fail(
+            "RunPromotionAccumulator.record_scoped_promotion MUST NOT "
+            "mutate via record_promotion_outcome/add_batch; route "
+            "everything through record_scoped_promotion_batch."
+        )
+
+
+def test_atomic_recorder_module_exposes_mixin_and_helpers() -> None:
+    """The atomic recorder module MUST expose the required public surface."""
+    tree = _load(
+        SRC_ROOT / "incident_promotion_scoped_atomic_recorder.py"
+    )
+    names = _module_names(tree)
+    required = {
+        "ScopedPromotionAtomicRecorderMixin",
+        "_validate_scoped_handoff_batch_consistency",
+        "_scoped_handoff_equivalent",
+        "_batch_accounting_equivalent",
+        "_build_compatibility_batch_from_handoff",
+    }
+    missing = required - names
+    if missing:
+        pytest.fail(
+            "Atomic recorder module is missing required symbols: "
+            f"{sorted(missing)}"
+        )
+
+
+def test_accumulator_does_not_assign_to_derived_request_id_fields() -> None:
+    """The accumulator MUST NOT assign to ``scoped_promotion_request_id`` /
+    ``scoped_promotion_request_fingerprint`` -- both are derived @property
+    projections of ``scoped_promotion_handoff`` and assignment is forbidden.
+    """
+    tree = _load(ACCUMULATOR_FILE)
+    accumulator_cls = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        and node.name == "RunPromotionAccumulator"
+    )
+    forbidden_targets = {
+        "scoped_promotion_request_id",
+        "scoped_promotion_request_fingerprint",
+    }
+    forbidden_field_anns = []
+    for stmt in accumulator_cls.body:
+        if isinstance(stmt, ast.AnnAssign) and isinstance(
+            stmt.target, ast.Name
+        ):
+            if stmt.target.id in forbidden_targets:
+                forbidden_field_anns.append(stmt.target.id)
+    if forbidden_field_anns:
+        pytest.fail(
+            "RunPromotionAccumulator MUST NOT declare mutable fields "
+            f"{forbidden_field_anns!r}; they are derived projections "
+            "of scoped_promotion_handoff."
+        )
+    # Walk methods to ensure no plain assignment is performed on
+    # these names either.
+    for node in ast.walk(accumulator_cls):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Name)
+                    and target.id in forbidden_targets
+                ):
+                    pytest.fail(
+                        f"RunPromotionAccumulator MUST NOT assign to "
+                        f"{target.id!r}; assignment is forbidden."
+                    )

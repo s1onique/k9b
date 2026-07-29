@@ -870,7 +870,18 @@ def promote_alert_signals_scoped_for_accumulator(
         snapshot_bundle_id=None,
     )
     if accumulator is not None:
-        accumulator.record_scoped_promotion(handoff)
+        # ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
+        # CORRECTION03-ATOMIC-RECORDING-AND-ACCOUNTING-TRUTH01: the
+        # active scoped dispatcher makes ONE atomic accumulator
+        # mutation call. The legacy ``record_scoped_promotion``,
+        # ``add_batch``, and ``record_promotion_outcome`` paths
+        # MUST NOT be invoked from this function -- atomic
+        # recording, accounting, and outcome-forwarding all
+        # happen inside ``record_scoped_promotion_batch``.
+        accumulator.record_scoped_promotion_batch(
+            handoff=handoff,
+            batch=batch,
+        )
     return batch
 
 
@@ -983,8 +994,14 @@ def _build_empty_batch(
         cluster_context=cluster_context,
         snapshot_bundle_id=snapshot_bundle_id,
     )
-    if accumulator is not None:
-        accumulator.add_batch(empty_batch)
+    # ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
+    # CORRECTION03-ATOMIC-RECORDING-AND-ACCOUNTING-TRUTH01: the
+    # active scoped dispatcher MUST NOT mutate the accumulator
+    # outside the atomic ``record_scoped_promotion_batch`` call.
+    # The empty-batch projection is returned for callers without a
+    # real handoff; the accumulator's legacy ``add_batch`` path is
+    # intentionally not used here.
+    del accumulator  # explicit ignore; documented single-call invariant
     return empty_batch
 
 
