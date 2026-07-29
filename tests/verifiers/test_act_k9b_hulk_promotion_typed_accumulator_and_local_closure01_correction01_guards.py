@@ -457,24 +457,80 @@ def test_record_scoped_promotion_forwards_to_atomic_recorder() -> None:
         )
 
 
-def test_atomic_recorder_module_exposes_mixin_and_helpers() -> None:
-    """The atomic recorder module MUST expose the required public surface."""
-    tree = _load(
-        SRC_ROOT / "incident_promotion_scoped_atomic_recorder.py"
-    )
-    names = _module_names(tree)
+def test_atomic_recorder_modules_expose_split_public_surface() -> None:
+    """The split atomic-recorder modules MUST expose the required surface.
+
+    ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION04-
+    REPLAY-TRUTH-AND-ATOMIC-RECORDER-SPLIT01 split the previous
+    739-line recorder into four small modules. The guard pins the
+    public surface across those modules.
+    """
     required = {
-        "ScopedPromotionAtomicRecorderMixin",
-        "_validate_scoped_handoff_batch_consistency",
-        "_scoped_handoff_equivalent",
-        "_batch_accounting_equivalent",
-        "_build_compatibility_batch_from_handoff",
+        SRC_ROOT / "incident_promotion_scoped_atomic_recorder.py": {
+            "ScopedPromotionAtomicRecorderMixin",
+        },
+        SRC_ROOT
+        / "incident_promotion_scoped_atomic_validation.py": {
+            "validate_scoped_handoff_batch_consistency",
+        },
+        SRC_ROOT / "incident_promotion_scoped_atomic_equivalence.py": {
+            "_receipt_equivalent",
+            "_batch_accounting_equivalent",
+        },
+        SRC_ROOT
+        / "incident_promotion_scoped_atomic_projection.py": {
+            "build_compatibility_batch_from_handoff",
+        },
     }
-    missing = required - names
+    missing: list[str] = []
+    for path, expected in required.items():
+        tree = _load(path)
+        names = _module_names(tree)
+        for symbol in expected:
+            if symbol not in names:
+                missing.append(f"{path.name}::{symbol}")
     if missing:
         pytest.fail(
-            "Atomic recorder module is missing required symbols: "
+            "Atomic recorder modules are missing required symbols: "
             f"{sorted(missing)}"
+        )
+
+
+def test_each_split_recorder_module_under_size_limit() -> None:
+    """Every split recorder module MUST stay below the hard size limit."""
+    import re
+
+    path_to_limit = {
+        SRC_ROOT / "incident_promotion_scoped_atomic_recorder.py": 500,
+        SRC_ROOT
+        / "incident_promotion_scoped_atomic_validation.py": 500,
+        SRC_ROOT / "incident_promotion_scoped_atomic_equivalence.py": 500,
+        SRC_ROOT
+        / "incident_promotion_scoped_atomic_projection.py": 500,
+    }
+    offenders: list[str] = []
+    for path, limit in path_to_limit.items():
+        text = path.read_text()
+        # Comments only -- count non-comment, non-blank lines.
+        non_comment_lines = 0
+        for raw in text.splitlines():
+            stripped = raw.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            non_comment_lines += 1
+        if non_comment_lines > limit:
+            offenders.append(
+                f"{path.name} has {non_comment_lines} non-comment lines "
+                f"(limit {limit})"
+            )
+    # Comment-only lines are stripped by the `startswith("#")` filter, so
+    # this guard's "non-comment lines" metric intentionally ignores the
+    # module docstring and inline commentary.
+    _ = re  # silence unused-import lint
+    if offenders:
+        pytest.fail(
+            "Atomic recorder modules exceed the hard size limit: "
+            + ", ".join(offenders)
         )
 
 

@@ -253,9 +253,13 @@ class RunPromotionAccumulator(
     def _snapshot(self) -> dict[str, object]:
         """Return a deep snapshot of the accumulator's mutable state.
 
-        Used by :meth:`add_batch` to guarantee that a rejected batch
-        leaves the accumulator unchanged. The caller restores fields
-        from the snapshot on the validation-failure path.
+        Used by :meth:`add_batch` AND by the atomic
+        :meth:`record_scoped_promotion_batch` transaction to
+        guarantee that a rejected call leaves the accumulator
+        unchanged. The snapshot MUST include every mutable field
+        that the atomic recorder can touch (including
+        :attr:`scoped_promotion_handoff`) or the rollback
+        transaction will leave the handoff slot stale.
         """
         return {
             "promotion_records": list(self.promotion_records),
@@ -274,10 +278,18 @@ class RunPromotionAccumulator(
             "last_promotion_scan_scope": self.last_promotion_scan_scope,
             "promotion_outcome": self.promotion_outcome,
             "promotion_outcome_run_id": self.promotion_outcome_run_id,
+            "scoped_promotion_handoff": self.scoped_promotion_handoff,
         }
 
     def _restore(self, snap: dict[str, object]) -> None:
-        """Restore mutable state from a previously taken snapshot."""
+        """Restore mutable state from a previously taken snapshot.
+
+        ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
+        CORRECTION04-REPLAY-TRUTH-AND-ATOMIC-RECORDER-SPLIT01: the
+        restore path MUST also reset
+        :attr:`scoped_promotion_handoff` so the rollback transaction
+        leaves the handoff slot in its pre-call state.
+        """
         self.promotion_records = cast("list[PromotionRecord]", snap["promotion_records"])
         self._seen_canonical_ids = cast("set[str]", snap["_seen_canonical_ids"])
         self.batches = cast("list[PromotionBatch]", snap["batches"])
@@ -299,6 +311,10 @@ class RunPromotionAccumulator(
         )
         self.promotion_outcome_run_id = cast(
             str, snap["promotion_outcome_run_id"]
+        )
+        self.scoped_promotion_handoff = cast(
+            "ScopedPromotionAccumulatorHandoff | None",
+            snap["scoped_promotion_handoff"],
         )
 
     def _local_skipped_duplicate_count(self) -> int:
@@ -553,11 +569,13 @@ class RunPromotionAccumulator(
         incident counts, diagnosis incident counts, or
         ``ok``/``errors`` fields.
         """
-        from .incident_promotion_scoped_atomic_recorder import (
-            _build_compatibility_batch_from_handoff,
+        from .incident_promotion_scoped_atomic_projection import (
+            build_compatibility_batch_from_handoff,
         )
 
-        accounting_batch = _build_compatibility_batch_from_handoff(handoff)
+        accounting_batch = build_compatibility_batch_from_handoff(
+            handoff
+        )
         # Forward through the atomic path. The return value is
         # discarded for backward compatibility with the prior
         # signature, which returned ``None``.

@@ -20,8 +20,8 @@ from __future__ import annotations
 from k8s_diag_agent.collect.incident_promotion_accumulator import (
     RunPromotionAccumulator,
 )
-from k8s_diag_agent.collect.incident_promotion_scoped_atomic_recorder import (
-    _build_compatibility_batch_from_handoff,
+from k8s_diag_agent.collect.incident_promotion_scoped_atomic_projection import (
+    build_compatibility_batch_from_handoff,
 )
 from tests.unit.scoped_handoff_atomic_support import (
     completed_handoff,
@@ -110,7 +110,7 @@ class TestUncertainAggregateAccounting:
             requested_signal_ids=tuple(f"sig-{i:02d}" for i in range(7))
         )
         acc = RunPromotionAccumulator()
-        batch = _build_compatibility_batch_from_handoff(handoff)
+        batch = build_compatibility_batch_from_handoff(handoff)
         acc.record_scoped_promotion_batch(handoff=handoff, batch=batch)
 
         assert acc.total_scanned == 7
@@ -136,7 +136,7 @@ class TestRejectedAggregateAccounting:
             requested_signal_ids=tuple(f"sig-{i:02d}" for i in range(4))
         )
         acc = RunPromotionAccumulator()
-        batch = _build_compatibility_batch_from_handoff(handoff)
+        batch = build_compatibility_batch_from_handoff(handoff)
         acc.record_scoped_promotion_batch(handoff=handoff, batch=batch)
 
         assert acc.total_scanned == 4

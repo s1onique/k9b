@@ -19,8 +19,8 @@ from k8s_diag_agent.collect.incident_promotion_accumulator import (
 from k8s_diag_agent.collect.incident_promotion_outcome_recorder import (
     PromotionOutcomeRecording,
 )
-from k8s_diag_agent.collect.incident_promotion_scoped_atomic_recorder import (
-    _build_compatibility_batch_from_handoff,
+from k8s_diag_agent.collect.incident_promotion_scoped_atomic_projection import (
+    build_compatibility_batch_from_handoff,
 )
 from k8s_diag_agent.collect.promotion_outcomes import (
     PromotionCommitUnknown,
@@ -126,7 +126,7 @@ class TestRejectedAtomicRecording:
     def test_rejected_handoff_records_typed_outcome(self) -> None:
         handoff = rejected_handoff()
         acc = RunPromotionAccumulator()
-        batch = _build_compatibility_batch_from_handoff(handoff)
+        batch = build_compatibility_batch_from_handoff(handoff)
         recording = acc.record_scoped_promotion_batch(
             handoff=handoff, batch=batch
         )
@@ -138,13 +138,13 @@ class TestRejectedAtomicRecording:
         """Rejected handoffs MUST NOT fabricate per-signal records."""
         handoff = rejected_handoff()
         acc = RunPromotionAccumulator()
-        batch = _build_compatibility_batch_from_handoff(handoff)
+        batch = build_compatibility_batch_from_handoff(handoff)
         acc.record_scoped_promotion_batch(handoff=handoff, batch=batch)
         assert acc.promotion_records == []
 
     def test_rejected_bounded_error_is_carried(self) -> None:
         handoff = rejected_handoff()
-        batch = _build_compatibility_batch_from_handoff(handoff)
+        batch = build_compatibility_batch_from_handoff(handoff)
         assert batch.promotion_result.errors == 1
         assert batch.promotion_result.error_messages == (
             handoff.outcome.reason.value,

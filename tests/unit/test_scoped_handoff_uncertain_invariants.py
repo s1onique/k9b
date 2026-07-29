@@ -21,8 +21,8 @@ from k8s_diag_agent.collect.incident_promotion_accumulator import (
 from k8s_diag_agent.collect.incident_promotion_outcome_recorder import (
     PromotionOutcomeRecording,
 )
-from k8s_diag_agent.collect.incident_promotion_scoped_atomic_recorder import (
-    _build_compatibility_batch_from_handoff,
+from k8s_diag_agent.collect.incident_promotion_scoped_atomic_projection import (
+    build_compatibility_batch_from_handoff,
 )
 from k8s_diag_agent.collect.promotion_outcomes import (
     PromotionCommitUnknown,
@@ -106,7 +106,7 @@ class TestUncertainReconciliationIdentity:
     def test_reconciliation_token_survives_atomic_recording(self) -> None:
         handoff = uncertain_handoff()
         acc = RunPromotionAccumulator()
-        batch = _build_compatibility_batch_from_handoff(handoff)
+        batch = build_compatibility_batch_from_handoff(handoff)
         recording = acc.record_scoped_promotion_batch(
             handoff=handoff, batch=batch
         )
@@ -120,7 +120,7 @@ class TestUncertainReconciliationIdentity:
     def test_uncertain_handoff_records_typed_outcome_by_identity(self) -> None:
         handoff = uncertain_handoff()
         acc = RunPromotionAccumulator()
-        batch = _build_compatibility_batch_from_handoff(handoff)
+        batch = build_compatibility_batch_from_handoff(handoff)
         acc.record_scoped_promotion_batch(handoff=handoff, batch=batch)
         assert acc.promotion_outcome is handoff.outcome
         assert acc.scoped_promotion_handoff is handoff
@@ -177,7 +177,7 @@ def test_uncertain_atomic_recording_keeps_accumulator_intact() -> None:
     """Uncertain outcome MUST NOT add per-signal records or opened IDs."""
     handoff = uncertain_handoff()
     acc = RunPromotionAccumulator()
-    batch = _build_compatibility_batch_from_handoff(handoff)
+    batch = build_compatibility_batch_from_handoff(handoff)
     acc.record_scoped_promotion_batch(handoff=handoff, batch=batch)
     assert acc.promotion_records == []
     assert acc.total_errors == 0
@@ -187,7 +187,7 @@ def test_uncertain_atomic_recording_keeps_accumulator_intact() -> None:
 
 def test_uncertain_batch_carries_reconciliation_required_access_mode() -> None:
     handoff = uncertain_handoff()
-    batch = _build_compatibility_batch_from_handoff(handoff)
+    batch = build_compatibility_batch_from_handoff(handoff)
     assert batch.promotion_result.incident_access_mode == (
         "reconciliation_required"
     )

@@ -44,6 +44,7 @@ from k8s_diag_agent.collect.promotion_scoped_http_seam import (
 )
 from tests.unit.scoped_handoff_atomic_support import (
     completed_handoff,
+    make_completed_batch,
 )
 
 # ---------------------------------------------------------------------------
@@ -266,10 +267,7 @@ class TestIdentityProjectionAfterRecord:
         )
         recording = acc.record_scoped_promotion_batch(
             handoff=handoff,
-            batch=__import__(
-                "tests.unit.scoped_handoff_atomic_support",  # noqa: E402
-                fromlist=["make_completed_batch"],
-            ).make_completed_batch(handoff=handoff),
+            batch=make_completed_batch(handoff=handoff),
         )
         assert recording is PromotionOutcomeRecording.NEW
         assert acc.scoped_promotion_handoff is handoff

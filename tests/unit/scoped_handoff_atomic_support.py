@@ -1,14 +1,19 @@
 """Shared builders for the scoped handoff atomic-recording test matrix.
 
-ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION03-
-ATOMIC-RECORDING-AND-ACCOUNTING-TRUTH01.
+ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION04-
+REPLAY-TRUTH-AND-ATOMIC-RECORDER-SPLIT01.
 
-Each test in :mod:`test_scoped_handoff_*` and
-:mod:`test_scoped_accumulator_atomic_*` exercises a distinct typed
-handoff variant and the dispatcher's accounting batch that should
-accompany it. The builders below keep every fixture deterministic and
-loudly typed so the focused matrix stays under the 350-line cap per
-file.
+The fixtures keep every scoped aggregate result free of fabricated
+``PromotionRecord`` entries. The diagnosis IDs / receipt aggregates
+already carry the authoritative aggregate result; the supporting
+projections below pass ``records=()`` even when ``diagnosis_incident_ids``
+are non-empty, so the
+:data:`SCOPED_RECORD_FABRICATION` invariant remains ``false``.
+
+The compatibility batch builder delegates to the production
+projection module, :func:`build_compatibility_batch_from_handoff`,
+so every test exercises the same accounting projection the
+dispatcher would build.
 """
 
 from __future__ import annotations
@@ -17,6 +22,9 @@ from typing import Any
 
 from k8s_diag_agent.collect.incident_promotion_accumulator import (
     RunPromotionAccumulator,
+)
+from k8s_diag_agent.collect.incident_promotion_scoped_atomic_projection import (  # noqa: E501
+    build_compatibility_batch_from_handoff,
 )
 from k8s_diag_agent.collect.promotion_outcomes import (
     PromotionCommitUnknown,
@@ -59,10 +67,13 @@ def make_completed_projection(
     ),
     diagnosis_incident_ids: tuple[str, ...] = (),
 ) -> ScopedPromotionCompletedProjection:
-    """Build a completed projection with empty aggregate (records=())."""
-    from k8s_diag_agent.collect.incident_identity_hardening import (
-        PromotionRecord,
-    )
+    """Build a completed projection with empty aggregate (records=()).
+
+    The closed :class:`PromotionSucceeded` carries ``records=()`` for
+    every aggregate result. Diagnosis IDs live on the outcome's
+    ``diagnosis_incident_ids`` field and on the receipt's
+    ``opened_incident_ids``; per-signal fabrication is forbidden.
+    """
 
     bound_obj = _make_bound(
         run_id=run_id,
@@ -73,16 +84,7 @@ def make_completed_projection(
         promotion_outcome=PromotionSucceeded(
             run_id=run_id,
             requested_signal_ids=requested_signal_ids,
-            records=tuple(
-                PromotionRecord(
-                    source_candidate_id=f"<scoped:{sid}>",
-                    canonical_incident_id=cid,
-                    promotion_outcome="opened",
-                )
-                for sid, cid in zip(
-                    requested_signal_ids, diagnosis_incident_ids
-                )
-            ),
+            records=(),  # SCOPED_RECORD_FABRICATION invariant
             diagnosis_incident_ids=diagnosis_incident_ids,
         ),
         aggregate_receipt=ScopedPromotionReceipt(bound=bound_obj),
@@ -98,6 +100,10 @@ def make_uncertain_projection(
         f"sig-{i:02d}" for i in range(5)
     ),
 ) -> ScopedPromotionUncertainProjection:
+    """Build an uncertain projection with empty aggregate (records=())."""
+    # Defensive: dump-guard so a future regression that re-introduces
+    # per-signal fabrication here is detected loudly.
+
     return ScopedPromotionUncertainProjection(
         promotion_outcome=PromotionCommitUnknown(
             run_id=run_id,
@@ -120,6 +126,7 @@ def make_rejected_projection(
         f"sig-{i:02d}" for i in range(5)
     ),
 ) -> ScopedPromotionRejectedProjection:
+    """Build a rejected projection with empty aggregate (records=())."""
     return ScopedPromotionRejectedProjection(
         promotion_outcome=PromotionRejected(
             run_id=run_id,
@@ -131,7 +138,9 @@ def make_rejected_projection(
     )
 
 
-def to_handoff(result: ScopedPromotionDispatchResult) -> ScopedPromotionAccumulatorHandoff:
+def to_handoff(
+    result: ScopedPromotionDispatchResult,
+) -> ScopedPromotionAccumulatorHandoff:
     """Convert a typed dispatch result to its accumulator handoff."""
     from k8s_diag_agent.collect.promotion_scoped_accumulator_handoff import (
         scoped_dispatch_result_to_accumulator_handoff,
@@ -140,27 +149,24 @@ def to_handoff(result: ScopedPromotionDispatchResult) -> ScopedPromotionAccumula
     return scoped_dispatch_result_to_accumulator_handoff(result)
 
 
-def completed_handoff(
-    **kwargs: Any,
-) -> ScopedPromotionAccumulatorCompleted:
+def completed_handoff(**kwargs: Any) -> ScopedPromotionAccumulatorCompleted:
+    """Build a completed handoff variant from the typed dispatch projection."""
     projection = make_completed_projection(**kwargs)
     return to_handoff(
         ScopedPromotionDispatchCompleted(projection=projection)
     )  # type: ignore[return-value]
 
 
-def uncertain_handoff(
-    **kwargs: Any,
-) -> ScopedPromotionAccumulatorUncertain:
+def uncertain_handoff(**kwargs: Any) -> ScopedPromotionAccumulatorUncertain:
+    """Build an uncertain handoff variant from the typed dispatch projection."""
     projection = make_uncertain_projection(**kwargs)
     return to_handoff(
         ScopedPromotionDispatchUncertain(projection=projection)
     )  # type: ignore[return-value]
 
 
-def rejected_handoff(
-    **kwargs: Any,
-) -> ScopedPromotionAccumulatorRejected:
+def rejected_handoff(**kwargs: Any) -> ScopedPromotionAccumulatorRejected:
+    """Build a rejected handoff variant from the typed dispatch projection."""
     projection = make_rejected_projection(**kwargs)
     return to_handoff(
         ScopedPromotionDispatchRejected(projection=projection)
@@ -170,12 +176,18 @@ def rejected_handoff(
 def make_completed_batch(
     *, handoff: ScopedPromotionAccumulatorCompleted
 ) -> Any:
-    """Project a typed handoff into the dispatcher's accounting batch."""
-    from k8s_diag_agent.collect.incident_promotion_scoped_atomic_recorder import (
-        _build_compatibility_batch_from_handoff,
-    )
+    """Project a typed handoff into the dispatcher's accounting batch.
 
-    return _build_compatibility_batch_from_handoff(handoff)
+    Delegates to the production projection module so the tests
+    exercise the same accounting projection the dispatcher would
+    build.
+    """
+    return build_compatibility_batch_from_handoff(handoff)
+
+
+def make_batch_for_handoff(handoff: ScopedPromotionAccumulatorHandoff) -> Any:
+    """Return the bounded accounting batch for any handoff variant."""
+    return build_compatibility_batch_from_handoff(handoff)
 
 
 def _make_bound(

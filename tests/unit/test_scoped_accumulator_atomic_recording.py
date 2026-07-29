@@ -26,8 +26,8 @@ from k8s_diag_agent.collect.incident_promotion_outcome_recorder import (
     PromotionOutcomeConflictError,
     PromotionOutcomeRecording,
 )
-from k8s_diag_agent.collect.incident_promotion_scoped_atomic_recorder import (
-    _build_compatibility_batch_from_handoff,
+from k8s_diag_agent.collect.incident_promotion_scoped_atomic_projection import (
+    build_compatibility_batch_from_handoff,
 )
 from k8s_diag_agent.collect.promotion_scoped_accumulator_handoff import (
     ScopedPromotionAccumulatorCompleted,
@@ -194,7 +194,7 @@ class TestConflictLeavesAccumulatorIntact:
         with pytest.raises(PromotionOutcomeConflictError):
             acc.record_scoped_promotion_batch(
                 handoff=uncertain,
-                batch=_build_compatibility_batch_from_handoff(uncertain),
+                batch=build_compatibility_batch_from_handoff(uncertain),
             )
         assert accumulator_snapshot(acc) == before
 
@@ -204,7 +204,7 @@ class TestConflictLeavesAccumulatorIntact:
         uncertain = uncertain_handoff()
         acc.record_scoped_promotion_batch(
             handoff=uncertain,
-            batch=_build_compatibility_batch_from_handoff(uncertain),
+            batch=build_compatibility_batch_from_handoff(uncertain),
         )
         before = accumulator_snapshot(acc)
 
@@ -212,7 +212,7 @@ class TestConflictLeavesAccumulatorIntact:
         with pytest.raises(PromotionOutcomeConflictError):
             acc.record_scoped_promotion_batch(
                 handoff=rejected,
-                batch=_build_compatibility_batch_from_handoff(rejected),
+                batch=build_compatibility_batch_from_handoff(rejected),
             )
         assert accumulator_snapshot(acc) == before
 

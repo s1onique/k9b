@@ -274,15 +274,15 @@ class TestVariantMismatchRejections:
 
 def test_dispatch_result_adapter_handles_completed_variant() -> None:
     """The typed dispatch adapter MUST reach the Completed handoff branch."""
-    from k8s_diag_agent.collect.incident_promotion_scoped_atomic_recorder import (
-        _build_compatibility_batch_from_handoff,
+    from k8s_diag_agent.collect.incident_promotion_scoped_atomic_projection import (
+        build_compatibility_batch_from_handoff,
     )
 
     handoff = completed_handoff()
     # Construct a fake ScopedPromotionDispatchCompleted by reusing
     # the support projection, then verify the adapter preserves the
     # outcome and receipt by identity.
-    rebuilt = _build_compatibility_batch_from_handoff(handoff)
+    rebuilt = build_compatibility_batch_from_handoff(handoff)
     assert rebuilt.promotion_result.ok is True
     assert rebuilt.promotion_result.opened_incident_ids == (
         handoff.receipt.opened_incident_ids
