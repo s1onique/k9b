@@ -49,16 +49,39 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from .incident_identity_hardening import (
-    INCIDENT_ACCESS_MODE_BACKEND,
-    PROMOTION_OUTCOME_OPENED,
-    PROMOTION_OUTCOME_SKIPPED_DUPLICATE,
     PromotionConsistencyContractError,
     PromotionRecord,
-    _validate_response_contracts,
+)
+from .incident_promotion_accumulator_compat import (
+    record_scoped_promotion_compat,
+)
+from .incident_promotion_accumulator_errors import (
+    AccumulatorAccessModeError,
+    PromotionWorksetState,
+)
+from .incident_promotion_accumulator_mutation import (
+    _local_skipped_duplicate_count_mutation,
+    add_batch_mutation,
+    add_record_mutation,
+    add_records_mutation,
+    record_promotion_result_mutation,
+)
+from .incident_promotion_accumulator_projection import (
+    aggregated_error_messages,
+    as_dict,
+    has_promotion_activity,
+    reject_derived_assignment,
+    scoped_promotion_batch_projection,
+    scoped_promotion_handoff_value,
+    scoped_promotion_request_fingerprint_projection,
+    scoped_promotion_request_id_projection,
+)
+from .incident_promotion_accumulator_snapshot import (
+    restore_state,
+    snapshot_state,
 )
 from .incident_promotion_batch import PromotionBatch
 from .incident_promotion_outcome_recorder import (
@@ -87,51 +110,6 @@ if TYPE_CHECKING:
     from .promotion_outcomes import (
         PromotionOutcome,
     )
-
-
-class PromotionWorksetState(StrEnum):
-    """Explicit workset state for promotion-to-diagnosis propagation.
-
-    SEAM01 R2: State is EXPLICIT, not inferred from ID tuple emptiness.
-
-    State matrix:
-    - VALID + IDs:     explicit current-run diagnosis
-    - VALID + empty:   successful stop; zero store operations
-    - INVALID:         blocked diagnosis; zero store operations
-    - NOT_APPLICABLE: store scan only when explicitly configured
-    """
-
-    VALID = "valid"
-    """Workset is valid for diagnosis propagation."""
-
-    INVALID = "invalid"
-    """Workset is invalid; diagnosis must be blocked."""
-
-    NOT_APPLICABLE = "not_applicable"
-    """Workset not applicable; store scan may be used if configured."""
-
-
-class AccumulatorAccessModeError(ValueError):
-    """Raised when a batch violates the run-scoped access-mode contract.
-
-    The accumulator refuses to accept a batch whose ``incident_access_mode``
-    disagrees with the running value. The dispatcher is responsible for
-    routing every batch through a single access-mode boundary; mixing
-    backend and local batches in one run is a fail-closed contract
-    violation. The exception carries the rejected batch and the running
-    state so callers can introspect the drift.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        running_mode: str,
-        rejected_mode: str,
-    ) -> None:
-        super().__init__(message)
-        self.running_mode = running_mode
-        self.rejected_mode = rejected_mode
 
 
 @dataclass
@@ -261,128 +239,38 @@ class RunPromotionAccumulator(
     # ---------------- R4 atomic insertion helpers (validate-before-mutate) ----
 
     def _snapshot(self) -> AccumulatorSnapshot:
-        """Return a typed snapshot of every mutable accumulator field.
+        """Delegate to :mod:`incident_promotion_accumulator_snapshot`.
 
-        Used by :meth:`add_batch` AND by the atomic
-        :meth:`record_scoped_promotion_batch` transaction to
-        guarantee that a rejected call leaves the accumulator
-        unchanged. The snapshot MUST include every mutable field
-        that the atomic recorder can touch (including
-        :attr:`scoped_promotion_handoff`) or the rollback
-        transaction will leave the handoff slot stale.
-
-        ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
-        CORRECTION05-STRICT-TYPING-AND-ROLLBACK-CLOSURE01: the
-        snapshot is a frozen typed dataclass (``AccumulatorSnapshot``)
-        instead of ``dict[str, object]`` so the recorder type checks
-        without any ``Any`` slot. Container copies are stored as
-        immutable tuples / frozensets so the restore path can
-        detect drift via tuple equality.
+        The single canonical implementation lives in
+        :func:`snapshot_state` so the dataclass state remains
+        declared in one canonical place while the snapshot
+        logic lives in a focused module under the hard 500-line
+        size cap.
         """
-        return AccumulatorSnapshot(
-            promotion_records=tuple(self.promotion_records),
-            seen_canonical_ids=frozenset(self._seen_canonical_ids),
-            batches=tuple(self.batches),
-            total_scanned=self.total_scanned,
-            total_firing=self.total_firing,
-            total_opened_incidents=self.total_opened_incidents,
-            total_updated_incidents=self.total_updated_incidents,
-            total_skipped_duplicates=self.total_skipped_duplicates,
-            total_errors=self.total_errors,
-            total_unique_candidate_count=self.total_unique_candidate_count,
-            last_promotion_mode=self.last_promotion_mode,
-            last_incident_access_mode=self.last_incident_access_mode,
-            last_source_kind=self.last_source_kind,
-            last_promotion_scan_scope=self.last_promotion_scan_scope,
-            promotion_outcome=self.promotion_outcome,
-            promotion_outcome_run_id=self.promotion_outcome_run_id,
-            scoped_promotion_handoff=(
-                self.scoped_promotion_recording.handoff
-                if self.scoped_promotion_recording is not None
-                else None
-            ),
-            scoped_promotion_recording=self.scoped_promotion_recording,
-        )
+        return snapshot_state(self)
 
     def _restore(self, snap: AccumulatorSnapshot) -> None:
-        """Restore every mutable field from a typed snapshot, in place.
+        """Delegate to :mod:`incident_promotion_accumulator_snapshot`.
 
-        ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
-        CORRECTION05-STRICT-TYPING-AND-ROLLBACK-CLOSURE01: the
-        restore path rewrites the mutable containers IN PLACE
-        (slice assignment for lists, ``clear()``/``update()`` for
-        sets) so any external observer holding a reference to the
-        original list/set sees the same Python object after the
-        rollback. Replacing the field with a new container would
-        silently orphan externally retained references.
-
-        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
-        the restore path also resets
-        :attr:`scoped_promotion_recording` (and the derived
-        :attr:`scoped_promotion_handoff`) so the rollback
-        transaction leaves the scoped authority in its pre-call
-        state.
+        The single canonical implementation lives in
+        :func:`restore_state` so the dataclass state remains
+        declared in one canonical place while the restore logic
+        lives in a focused module under the hard 500-line size
+        cap.
         """
-        self.promotion_records.clear()
-        self.promotion_records.extend(snap.promotion_records)
-        self._seen_canonical_ids.clear()
-        self._seen_canonical_ids.update(snap.seen_canonical_ids)
-        self.batches.clear()
-        self.batches.extend(snap.batches)
-        self.total_scanned = snap.total_scanned
-        self.total_firing = snap.total_firing
-        self.total_opened_incidents = snap.total_opened_incidents
-        self.total_updated_incidents = snap.total_updated_incidents
-        self.total_skipped_duplicates = snap.total_skipped_duplicates
-        self.total_errors = snap.total_errors
-        self.total_unique_candidate_count = snap.total_unique_candidate_count
-        self.last_promotion_mode = snap.last_promotion_mode
-        self.last_incident_access_mode = snap.last_incident_access_mode
-        self.last_source_kind = snap.last_source_kind
-        self.last_promotion_scan_scope = snap.last_promotion_scan_scope
-        self.promotion_outcome = snap.promotion_outcome
-        self.promotion_outcome_run_id = snap.promotion_outcome_run_id
-        self.scoped_promotion_recording = snap.scoped_promotion_recording
-        # ``scoped_promotion_handoff`` and ``scoped_promotion_batch``
-        # are derived properties of the authority; nothing to
-        # restore.
+        restore_state(self, snap)
 
     def _local_skipped_duplicate_count(self) -> int:
-        """Count ``skipped_duplicate`` outcomes from local records.
-
-        R5 (item 5): the batch-level ``skipped_duplicates`` aggregate
-        is sourced from the dispatcher's authoritative count, but
-        ``local`` promotion only knows about :class:`PromotionRecord`
-        values. Counting the local records directly means the
-        accumulator surfaces the same number whichever path produced the
-        batch.
-        """
-        return sum(
-            1
-            for record in self.promotion_records
-            if record.promotion_outcome
-            == PROMOTION_OUTCOME_SKIPPED_DUPLICATE
-        )
+        """Delegate to :mod:`incident_promotion_accumulator_mutation`."""
+        return _local_skipped_duplicate_count_mutation(self)
 
     def add_record(self, record: PromotionRecord) -> None:
-        """Append a single ``PromotionRecord`` to the accumulator.
-
-        Records with a ``None`` canonical incident ID do NOT populate the
-        dedup set so they can never mask a later authoritative
-        ``canonical_incident_id`` with the same value.
-
-        Note: this method only mutates the legacy accumulator state.
-        The typed outcome (when recorded) is the single source of
-        truth for downstream projections; legacy state is the fallback
-        only when no typed outcome is recorded.
-        """
-        self.promotion_records.append(record)
-        if record.canonical_incident_id:
-            self._seen_canonical_ids.add(record.canonical_incident_id)
+        """Delegate to :mod:."""
+        add_record_mutation(self, record)
 
     def add_records(self, records: Iterable[PromotionRecord]) -> None:
-        for record in records:
-            self.add_record(record)
+        """Delegate to :mod:."""
+        add_records_mutation(self, records)
 
     def record_promotion_result(
         self,
@@ -390,85 +278,26 @@ class RunPromotionAccumulator(
         source: str,
         incident_ids: tuple[str, ...],
     ) -> None:
-        """Record canonical incident IDs from a promotion result atomically.
+        """Delegate to :mod:`incident_promotion_accumulator_mutation`.
 
-        This method provides the canonical atomic API for recording promotion
-        results into the accumulator. It should be used instead of directly
-        mutating ``_seen_canonical_ids`` to ensure consistent behavior.
-
-        Each ID is recorded with a synthetic ``PromotionRecord`` using the
-        "opened" outcome (since we only record actionable IDs from promotion).
-
-        If any ID is already in the accumulator, it is not duplicated.
-
-        Args:
-            source: The source of the promotion (e.g. 'alertmanager').
-            incident_ids: The actionable canonical incident IDs to record.
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        the canonical implementation lives in
+        :func:`record_promotion_result_mutation`.
         """
-        for incident_id in incident_ids:
-            if incident_id not in self._seen_canonical_ids:
-                self._seen_canonical_ids.add(incident_id)
-                self.promotion_records.append(
-                    PromotionRecord(
-                        source_candidate_id=f"<{source}>",
-                        canonical_incident_id=incident_id,
-                        promotion_outcome=PROMOTION_OUTCOME_OPENED,
-                    )
-                )
+        record_promotion_result_mutation(
+            self, source=source, incident_ids=incident_ids
+        )
 
 
     def add_batch(self, batch: PromotionBatch) -> None:
-        """Consume a typed ``PromotionBatch`` and aggregate it atomically.
+        """Delegate to :mod:`incident_promotion_accumulator_mutation`.
 
-        R4 contract: ``add_batch`` is validate-before-mutate. The batch's
-        ``incident_access_mode`` MUST agree with the running value (or
-        with the empty accumulator's absent value). If the running
-        accumulator has been seeded with one mode and a subsequent batch
-        disagrees, the call raises :class:`AccumulatorAccessModeError`
-        and restores the accumulator to the exact state it had before
-        the call. ``promotion_records``, ``_seen_canonical_ids``,
-        ``batches``, ``total_*``, and ``last_*`` are all preserved.
-
-        R3 contract (carried forward): batch records are added via
-        :meth:`add_record` so canonical-ID dedup stays consistent. The
-        aggregate metrics are added to the running totals and the
-        latest batch's ``promotion_mode`` / ``incident_access_mode`` /
-        ``source_kind`` / ``promotion_scan_scope`` are stored verbatim
-        for downstream structured logging.
-
-        R7 contract (item 3): every backend-authoritative batch is
-        validated against the ordered-sequence-with-multiplicity
-        contract BEFORE any field on the accumulator is mutated. The
-        authoritative ``opened_incident_ids`` /
-        ``updated_incident_ids`` arrays carried by the dispatcher's
-        ``IncidentPromotionResult`` MUST match the ordered sequence of
-        ``canonical_incident_id`` values on the ``promotion_records``
-        list (with multiplicity). The legacy-backend regression --
-        nonzero counts, empty records, empty IDs -- is one of the
-        failure shapes that surfaces here. Local-mode batches are NOT
-        validated here because local promotion uses the legacy
-        synthesized-aggregate records shape which is intentionally not
-        subject to the strict contract; local batches that introduce
-        authoritative canonical IDs (the future R8 path) will be
-        validated through a future contract expansion.
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        the canonical implementation lives in
+        :func:`add_batch_mutation`. The R4 / R3 / R7 contracts
+        are documented on the canonical implementation.
         """
-        snap = self._snapshot()
-        try:
-            if batch.incident_access_mode == INCIDENT_ACCESS_MODE_BACKEND:
-                _validate_response_contracts(
-                    promotion_records=list(batch.promotion_records),
-                    opened_incidents=batch.opened_incidents,
-                    updated_incidents=batch.updated_incidents,
-                    opened_incident_ids=batch.opened_incident_ids,
-                    updated_incident_ids=batch.updated_incident_ids,
-                )
-            self._apply_batch(batch)
-        except AccumulatorAccessModeError:
-            self._restore(snap)
-            raise
-        except PromotionConsistencyContractError:
-            self._restore(snap)
-            raise
+        add_batch_mutation(self, batch)
 
     def _apply_batch(self, batch: PromotionBatch) -> None:
         """Internal: actually merge a batch (no rollback handling)."""
@@ -513,179 +342,109 @@ class RunPromotionAccumulator(
     # ---------------- R4 consume-accumulator-truth helpers --------------------
 
     def has_promotion_activity(self) -> bool:
-        """Return True if at least one batch has been accepted.
+        """Delegate to :mod:`incident_promotion_accumulator_projection`.
 
-        The orchestrator uses this to distinguish a deliberate
-        empty promotion run from one that never reached promotion.
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        the canonical implementation lives in
+        :func:`has_promotion_activity`.
         """
-        return bool(self.batches)
+        return has_promotion_activity(self)
 
     def aggregated_error_messages(self) -> tuple[str, ...]:
-        """Return bounded error messages from every accepted batch."""
-        messages: list[str] = []
-        for batch in self.batches:
-            messages.extend(batch.error_messages)
-        return tuple(messages)
+        """Delegate to :mod:`incident_promotion_accumulator_projection`.
+
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        the canonical implementation lives in
+        :func:`aggregated_error_messages`.
+        """
+        return aggregated_error_messages(self)
 
     @property
     def scoped_promotion_handoff(
         self,
     ) -> ScopedPromotionAccumulatorHandoff | None:
-        """Derived projection of the single scoped recording authority.
+        """Delegate to :mod:`incident_promotion_accumulator_projection`.
 
-        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
-        the canonical stored authority is
-        :attr:`scoped_promotion_recording`; this property is a
-        backward-compatibility derived projection. External
-        callers MUST NOT assign to it; the authoritative write
-        path is the recorder's atomic commit.
+        Derived projection of the single scoped recording
+        authority. The canonical implementation lives in
+        :func:`scoped_promotion_handoff_value`.
         """
-        authority = self.scoped_promotion_recording
-        if authority is None:
-            return None
-        return authority.handoff
+        return scoped_promotion_handoff_value(self)
 
     @property
     def scoped_promotion_batch(self) -> PromotionBatch | None:
-        """Return the recorded batch from the scoped authority.
+        """Delegate to :mod:`incident_promotion_accumulator_projection`.
 
-        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
-        derived projection of :attr:`scoped_promotion_recording`.
-        External callers MUST NOT assign to it; the recorder is
-        the authoritative write path.
+        Derived projection of the single scoped recording
+        authority. The canonical implementation lives in
+        :func:`scoped_promotion_batch_projection`.
         """
-        authority = self.scoped_promotion_recording
-        if authority is None:
-            return None
-        return authority.batch
+        return scoped_promotion_batch_projection(self)
 
     @property
     def scoped_promotion_request_id(self) -> str:
-        """Return the recorded handoff's request id, or ``""`` when absent.
+        """Delegate to :mod:`incident_promotion_accumulator_projection`.
 
         Derived projection of the scoped recording authority's
-        handoff. The accumulator does NOT store a mutable copy of
-        this value; callers MUST NOT assign to the property.
+        handoff. The canonical implementation lives in
+        :func:`scoped_promotion_request_id_projection`.
         """
-        authority = self.scoped_promotion_recording
-        if authority is None:
-            return ""
-        return authority.handoff.request_id
+        return scoped_promotion_request_id_projection(self)
 
     @property
     def scoped_promotion_request_fingerprint(self) -> str:
-        """Return the recorded handoff's fingerprint, or ``""`` when absent.
+        """Delegate to :mod:`incident_promotion_accumulator_projection`.
 
         Derived projection of the scoped recording authority's
-        handoff. The accumulator does NOT store a mutable copy of
-        this value; callers MUST NOT assign to the property.
+        handoff. The canonical implementation lives in
+        :func:`scoped_promotion_request_fingerprint_projection`.
         """
-        authority = self.scoped_promotion_recording
-        if authority is None:
-            return ""
-        return authority.handoff.request_fingerprint
+        return scoped_promotion_request_fingerprint_projection(self)
 
     def __setattr__(self, name: str, value: object) -> None:
-        """Reject writes to derived scoped-recording projections."""
-        if name in {
-            "scoped_promotion_request_id",
-            "scoped_promotion_request_fingerprint",
-            "scoped_promotion_handoff",
-            "scoped_promotion_batch",
-        }:
-            raise AttributeError(
-                f"{name} is a derived projection of "
-                "scoped_promotion_recording; assignment is forbidden."
-            )
+        """Reject writes to derived scoped-recording projections.
+
+        The canonical list of forbidden derived names is owned by
+        :mod:`incident_promotion_accumulator_projection` so a
+        future derived projection is added in exactly one place.
+        """
+        reject_derived_assignment(name, value)
         super().__setattr__(name, value)
 
     def record_scoped_promotion(
         self,
         handoff: ScopedPromotionAccumulatorHandoff,
     ) -> None:
-        """Compatibility wrapper around :meth:`record_scoped_promotion_batch`.
+        """Delegate to :mod:`incident_promotion_accumulator_compat`.
 
-        ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
-        CORRECTION03-ATOMIC-RECORDING-AND-ACCOUNTING-TRUTH01.
-
-        The active scoped dispatcher MUST call
-        :meth:`record_scoped_promotion_batch` with both the typed
-        handoff and the dispatcher's accounting batch. This wrapper
-        exists only so existing unit tests that exercise
-        ``record_scoped_promotion(handoff)`` still record the typed
-        handoff and outcome; it routes through the new atomic
-        operation so the single-request-identity-authority invariant
-        is preserved.
-
-        The wrapper builds the bounded accounting batch from the
-        handoff itself (the dispatcher's projection has already
-        produced the canonical ``IncidentPromotionResult``); it
-        then forwards everything through the atomic recorder. When
-        the caller has its own batch (the production dispatcher
-        path) it MUST bypass this wrapper and call the atomic
-        method directly.
-
-        The handoff is the only authority for the active scoped
-        path. The original :class:`PromotionOutcome` reaches the
-        accumulator unchanged by identity. Receipt presence is
-        governed by the handoff variant: only the completed variant
-        carries a receipt; uncertain and rejected variants are
-        structurally incapable of carrying one. Commit authority
-        is derived from :attr:`commit_disposition`; the function
-        MUST NOT infer whether promotion ran from
-        ``promotion_records``, ``promotion_record_count``, canonical
-        incident counts, diagnosis incident counts, or
-        ``ok``/``errors`` fields.
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        the canonical implementation of the legacy compatibility
+        wrapper lives in
+        :func:`record_scoped_promotion_compat` so the active
+        recorder API stays under the hard 500-line size cap.
         """
-        from .incident_promotion_scoped_atomic_projection import (
-            build_compatibility_batch_from_handoff,
-        )
-
-        accounting_batch = build_compatibility_batch_from_handoff(
-            handoff
-        )
-        # Forward through the atomic path. The return value is
-        # discarded for backward compatibility with the prior
-        # signature, which returned ``None``.
-        self.record_scoped_promotion_batch(
-            handoff=handoff,
-            batch=accounting_batch,
-        )
+        record_scoped_promotion_compat(self, handoff)
 
     def scoped_promotion_handoff_value(
         self,
     ) -> ScopedPromotionAccumulatorHandoff | None:
-        """Return the recorded scoped promotion handoff, if any.
+        """Delegate to :mod:`incident_promotion_accumulator_projection`.
 
         ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
         derived projection of the scoped recording authority. The
-        accessor MUST NOT be reconstructed from legacy counters or
-        aggregate incident IDs.
+        canonical implementation lives in
+        :func:`scoped_promotion_handoff_value`.
         """
-        authority = self.scoped_promotion_recording
-        if authority is None:
-            return None
-        return authority.handoff
+        return scoped_promotion_handoff_value(self)
 
 
     def as_dict(self) -> dict[str, object]:
-        """Return a JSON-friendly snapshot of the accumulator.
+        """Delegate to :mod:`incident_promotion_accumulator_projection`.
 
-        The shape mirrors the existing ``promotion_summary_propagated``
-        dict consumed by ``loop_automatic_diagnosis.run_automatic_diagnosis_loop``
-        so we can keep the existing structured-log paths intact.
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        the canonical implementation lives in :func:`as_dict`.
         """
-        return {
-            "promotion_records": [
-                record.to_dict() for record in self.promotion_records
-            ],
-            "opened_incident_ids": self.canonical_incident_ids(),
-            "promotion_outcomes": list(self.promotion_outcomes()),
-            "unique_candidate_count": len({
-                record.source_candidate_id
-                for record in self.promotion_records
-            }),
-        }
+        return as_dict(self)
 
 
 __all__ = [

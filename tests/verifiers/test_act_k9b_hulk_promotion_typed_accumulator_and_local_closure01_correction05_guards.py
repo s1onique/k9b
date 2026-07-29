@@ -162,7 +162,8 @@ def test_validator_uses_cycle_free_constants() -> None:
 
 def test_recorder_restore_preserves_container_identity() -> None:
     """``_restore`` MUST rewrite mutable containers in place."""
-    text = ACCUMULATOR_FILE.read_text()
+    snapshot_file = SRC_ROOT / "incident_promotion_accumulator_snapshot.py"
+    text = ACCUMULATOR_FILE.read_text() + snapshot_file.read_text()
     if ".clear()" not in text or ".update(" not in text:
         pytest.fail(
             "RunPromotionAccumulator._restore MUST rewrite the mutable "

@@ -2,15 +2,15 @@
   "schema_version": 1,
   "profile": "act-local",
   "source_status": "present",
-  "overall_status": "fail",
-  "generated_at": "2026-07-29T16:30:58.243694+00:00",
+  "overall_status": "pass",
+  "generated_at": "2026-07-29T16:58:02.560494+00:00",
   "checks_total": 17,
-  "checks_failed": 1,
+  "checks_failed": 0,
   "checks": [
     {
       "name": "canonical-verifier-self-test",
       "status": "pass",
-      "duration_ms": 52,
+      "duration_ms": 47,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/incident_lifecycle_boundary/redaction_types.py --self-test",
       "exit_code": 0
@@ -18,7 +18,7 @@
     {
       "name": "standalone-production-verifier",
       "status": "pass",
-      "duration_ms": 908,
+      "duration_ms": 862,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/incident_lifecycle_boundary/redaction_types.py --repo-root /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/src",
       "exit_code": 0
@@ -26,7 +26,7 @@
     {
       "name": "production-mypy-positive",
       "status": "pass",
-      "duration_ms": 1126,
+      "duration_ms": 1250,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_mypy_fixtures.py::TestMypyPositiveFixture",
       "exit_code": 0
@@ -34,7 +34,7 @@
     {
       "name": "production-mypy-negative",
       "status": "pass",
-      "duration_ms": 1125,
+      "duration_ms": 1029,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_mypy_fixtures.py::TestMypyNegativeFixture",
       "exit_code": 0
@@ -42,7 +42,7 @@
     {
       "name": "full-gate-negative-proofs",
       "status": "pass",
-      "duration_ms": 51873,
+      "duration_ms": 50307,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/incident_lifecycle_boundary/redaction_full_gate_negative_proofs.py",
       "exit_code": 0
@@ -50,7 +50,7 @@
     {
       "name": "opaque-bearer-regression",
       "status": "pass",
-      "duration_ms": 419,
+      "duration_ms": 409,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r11_sanitizer_opaque_bearer.py",
       "exit_code": 0
@@ -58,7 +58,7 @@
     {
       "name": "sanitizer-regression-matrix",
       "status": "pass",
-      "duration_ms": 433,
+      "duration_ms": 411,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_sanitizer_credential.py::test_sentinel_secret_is_absent_from_every_sanitizer_path",
       "exit_code": 0
@@ -66,7 +66,7 @@
     {
       "name": "credential-matrix",
       "status": "pass",
-      "duration_ms": 404,
+      "duration_ms": 400,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_sanitizer_credential.py::TestCredentialMatrix",
       "exit_code": 0
@@ -74,7 +74,7 @@
     {
       "name": "omission-boundary",
       "status": "pass",
-      "duration_ms": 389,
+      "duration_ms": 387,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r8_omission_branch.py",
       "exit_code": 0
@@ -82,7 +82,7 @@
     {
       "name": "serializer-multi-return",
       "status": "pass",
-      "duration_ms": 398,
+      "duration_ms": 385,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r12_serializer_multi_return.py",
       "exit_code": 0
@@ -90,15 +90,15 @@
     {
       "name": "ruff",
       "status": "pass",
-      "duration_ms": 28,
+      "duration_ms": 27,
       "error_message": null,
-      "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m ruff check scripts/llm_friendly_allowlist.py src/k8s_diag_agent/collect/incident_promotion_accumulator.py src/k8s_diag_agent/collect/incident_promotion_dispatch.py src/k8s_diag_agent/collect/incident_promotion_scoped_atomic_host_protocol.py src/k8s_diag_agent/collect/incident_promotion_scoped_atomic_projection.py src/k8s_diag_agent/collect/incident_promotion_scoped_atomic_recorder.py src/k8s_diag_agent/collect/promotion_scoped_accumulator_handoff.py tests/unit/scoped_handoff_atomic_support.py tests/verifiers/test_act_k9b_hulk_promotion_typed_accumulator_and_local_closure01_correction05_guards.py",
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m ruff check scripts/llm_friendly_allowlist.py src/k8s_diag_agent/collect/incident_promotion_accumulator.py src/k8s_diag_agent/collect/incident_promotion_scoped_atomic_validation.py tests/unit/test_scoped_recording_authority_first_replay.py tests/verifiers/test_act_k9b_hulk_promotion_typed_accumulator_and_local_closure01_correction05_guards.py",
       "exit_code": 0
     },
     {
       "name": "mypy",
       "status": "pass",
-      "duration_ms": 1425,
+      "duration_ms": 1532,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m mypy src/k8s_diag_agent/collect/incident_evidence_redaction.py src/k8s_diag_agent/collect/incident_evidence_llm_safe.py src/k8s_diag_agent/security/redaction_policy.py src/k8s_diag_agent/security/sanitizer.py scripts/verifiers/verifier_core/ scripts/verifiers/incident_current_run_promotion_workset01.py tests/verifiers/test_verifier_core.py tests/verifiers/test_canonical_doctrine_matches_production.py tests/verifiers/test_verifier_core_mypy_fixture.py --ignore-missing-imports",
       "exit_code": 0
@@ -114,7 +114,7 @@
     {
       "name": "git-diff-cached-check",
       "status": "pass",
-      "duration_ms": 5,
+      "duration_ms": 6,
       "error_message": null,
       "command": "git diff --cached --check",
       "exit_code": 0
@@ -122,7 +122,7 @@
     {
       "name": "llm-friendly",
       "status": "pass",
-      "duration_ms": 198,
+      "duration_ms": 171,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/check_llm_friendly_files.py --changed-only",
       "exit_code": 0
@@ -130,18 +130,18 @@
     {
       "name": "no-new-llm-allowlist",
       "status": "pass",
-      "duration_ms": 91,
+      "duration_ms": 143,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/verify_no_new_llm_allowlist.py",
       "exit_code": 0
     },
     {
       "name": "targeted-repository-gate",
-      "status": "fail",
-      "duration_ms": 5832,
-      "error_message": "\n============================================================\nACT-local verification result: FAIL\n============================================================\n\nChanged files checked:\n  - .factory/gate-summary.json\n  - .venv\n  - mypy.ini\n  - scripts/llm_friendly_allowlist.py\n  - src/k8s_diag_agent/collect/incident_promotion_accumulator.py\n  - src/k8s_diag_agent/collect/incident_promotion_dispatch.py\n  - src/k8s_diag_agent/collect/incident_promotion_result_contract.py\n  - src/k8s_diag_agent/collect/incident_promotion_scoped_atomic_host_protocol.py\n  - src/k8s_diag_agent/collect/incident_promotion_scoped_atomic_projection.py\n  - src/k8s_diag_agent/collect/incident_promotion_scoped_atomic_recorder.py\n  - src/k8s_diag_agent/collect/incident_promotion_scoped_atomic_recording_authority.py\n  - src/k8s_diag_agent/collect/promotion_scoped_accumulator_handoff.py\n  - tests/unit/scoped_handoff_atomic_support.py\n  - tests/unit/test_scoped_recording_authority_first_replay.py\n  - tests/unit/test_scope",
+      "status": "pass",
+      "duration_ms": 7021,
+      "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/verify_all.sh --act-local --skip-gate-summary",
-      "exit_code": 1
+      "exit_code": 0
     }
   ],
   "self_tests": {

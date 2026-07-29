@@ -43,6 +43,7 @@ from .incident_promotion_dispatch_constants import (
     INCIDENT_ACCESS_MODE_BACKEND,
     MODE_BACKEND_API,
 )
+from .incident_promotion_result_contract import IncidentPromotionResult
 from .promotion_scoped_accumulator_handoff import (
     ScopedPromotionAccumulatorCompleted,
     ScopedPromotionAccumulatorHandoff,
@@ -65,10 +66,10 @@ def _require_common_batch_frame(
     batch: PromotionBatch,
     signal_count: int,
 ) -> tuple[
-    object,  # promotion_result
-    str,  # backend access-mode
-    int,  # expected_scanned
-    int,  # expected_unique_candidate_count
+    IncidentPromotionResult,
+    str,
+    int,
+    int,
 ]:
     """Enforce the bounded cross-variant batch envelope.
 
