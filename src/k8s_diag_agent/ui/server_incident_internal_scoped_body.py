@@ -18,11 +18,31 @@ from k8s_diag_agent.collect.promotion_scoped_http_seam import MAX_RESPONSE_BYTES
 
 
 class ScopedBodyReadReasonCode(StrEnum):
-    """Closed reason codes for body-read outcomes."""
+    """Closed body-read reason codes used outside the body reader.
+
+    New variants that need closed type inference are added to
+    :class:`ScopedBodyReadReason` so the reader can carry the
+    typed reason into the transport outcome.
+    """
 
     BODY_READ_LIMIT_EXCEEDED = "HTTP_RESPONSE_BODY_LIMIT_EXCEEDED"
     BODY_READ_SHORT = "HTTP_RESPONSE_SHORT_READ"
     BODY_READ_FAILED = "HTTP_RESPONSE_READ_FAILED"
+
+
+class ScopedBodyReadReason(StrEnum):
+    """Closed body-read failure reason vocabulary.
+
+    Used when the body reader observed a read failure AFTER the
+    response headers were received. The reader classifies the
+    underlying ``OSError`` into one of the closed values below
+    so the transport mapper can do exhaustive matching against
+    :class:`ScopedReadFailureReason`.
+    """
+
+    TIMEOUT = "timeout"
+    CONNECTION_LOST = "connection_lost"
+    TRANSMISSION_UNKNOWN = "transmission_unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,12 +104,31 @@ class ScopedBodyReadFailed:
 
     No body bytes are returned; ``declared_content_length`` and
     ``body_sha256`` may be ``None`` because the read failed before
-    any bounded bytes were captured.
+    any bounded bytes were captured. ``reason`` is a closed
+    :class:`ScopedBodyReadReason` so the caller can build the
+    correct scoped transport variant.
     """
 
     declared_content_length: int | None
     actual_byte_count: int = 0
     body_sha256: str | None = None
+    reason: ScopedBodyReadReason = ScopedBodyReadReason.TRANSMISSION_UNKNOWN
+
+
+def _classify_body_read_failure_reason(exc: BaseException) -> ScopedBodyReadReason:
+    """Classify a body-read failure into the closed reason vocabulary.
+
+    ``TimeoutError`` is a separate type in Python 3.11+; treated
+    as TIMEOUT. ``ConnectionError`` (a base class whose
+    subclasses include ``ConnectionResetError``,
+    ``ConnectionAbortedError``, and ``BrokenPipeError``) maps to
+    CONNECTION_LOST. Everything else is TRANSMISSION_UNKNOWN.
+    """
+    if isinstance(exc, TimeoutError):
+        return ScopedBodyReadReason.TIMEOUT
+    if isinstance(exc, ConnectionError):
+        return ScopedBodyReadReason.CONNECTION_LOST
+    return ScopedBodyReadReason.TRANSMISSION_UNKNOWN
 
 
 def read_scoped_body(
@@ -120,11 +159,12 @@ def read_scoped_body(
 
     try:
         chunk = response.read(MAX_RESPONSE_BYTES + 1)
-    except (TimeoutError, ConnectionError, OSError):
+    except (TimeoutError, ConnectionError, OSError) as exc:
         return ScopedBodyReadFailed(
             declared_content_length=declared_content_length,
             actual_byte_count=0,
             body_sha256=None,
+            reason=_classify_body_read_failure_reason(exc),
         )
 
     if len(chunk) > MAX_RESPONSE_BYTES:
@@ -175,6 +215,7 @@ __all__ = [
     "ScopedBodyReadComplete",
     "ScopedBodyReadFailed",
     "ScopedBodyReadLimitExceeded",
+    "ScopedBodyReadReason",
     "ScopedBodyReadReasonCode",
     "ScopedBodyReadResult",
     "ScopedBodyReadShort",

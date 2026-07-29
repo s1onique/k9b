@@ -346,6 +346,9 @@ class TestLoopbackScenarios:
             ScopedBeforeSendFailureReason,
         )
 
+        # Base URL is empty; the typed client distinguishes
+        # this from a missing-token test (which uses a
+        # non-empty URL).
         assert outcome.reason_code == (
             ScopedBeforeSendFailureReason.MISSING_BACKEND_URL
         )
@@ -365,8 +368,12 @@ class TestLoopbackScenarios:
             ScopedBeforeSendFailureReason,
         )
 
+        # The backend URL is non-empty (came from the loopback
+        # server) but the token was passed as None; the typed
+        # client distinguishes the missing token from the missing
+        # URL.
         assert outcome.reason_code == (
-            ScopedBeforeSendFailureReason.MISSING_BACKEND_URL
+            ScopedBeforeSendFailureReason.MISSING_INTERNAL_TOKEN
         )
 
     def test_request_id_header_reaches_backend(self) -> None:

@@ -32,6 +32,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from ..domain.identifiers import AlertSignalId, HealthRunId
 from ..incident_alert_promotion_binding import BoundScopedPromotionResult
@@ -45,6 +46,13 @@ from .promotion_http_transport import (
     PromotionHttpRejected,
     PromotionHttpResponseTruncated,
 )
+
+if TYPE_CHECKING:
+    from .promotion_scoped_http_mapping import (
+        ScopedPromotionCompletedProjection,
+        ScopedPromotionRejectedProjection,
+        ScopedPromotionUncertainProjection,
+    )
 
 MAX_REQUEST_ID_LENGTH = 128
 MAX_SOURCE_IDENTITY_LENGTH = 512
@@ -380,12 +388,83 @@ ScopedPromotionHttpTransportOutcome = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Typed dispatch result (Phase 3 of
+# ACT-K9B-HULK-PROMOTION-TYPED-DISPATCH-RESULT-AND-SUMMARY-CONVERGENCE01)
+# ---------------------------------------------------------------------------
+#
+# The active dispatcher returns this typed union. Each variant
+# carries the closed projection algebra so the dispatcher's
+# caller receives the bounded ``PromotionOutcome`` variant, the
+# receipt presence/absence, the request identity, the request
+# fingerprint, and the commit disposition -- without any
+# conversion through a legacy dict.
+#
+# The projection algebra is the only authority; the active
+# dispatcher NEVER fabricates a ``promotion_records`` array.
+
+
+@dataclass(frozen=True, slots=True)
+class ScopedPromotionDispatchCompleted:
+    """Completed dispatch result carries the closed projection.
+
+    The completed projection already carries the
+    ``PromotionSucceeded`` outcome, the aggregate receipt, the
+    request_id, the request_fingerprint, and the
+    ``DEFINITELY_COMMITTED`` disposition. The legacy
+    ``promotion_records`` array is intentionally NOT synthesized
+    here; the canonical scoped endpoint carries aggregate
+    evidence, not per-signal records.
+    """
+
+    projection: ScopedPromotionCompletedProjection  # noqa: F821
+
+
+@dataclass(frozen=True, slots=True)
+class ScopedPromotionDispatchUncertain:
+    """Uncertain dispatch result carries the closed projection.
+
+    The uncertain projection already carries the
+    ``PromotionCommitUnknown`` outcome with its reconciliation
+    token and bounded uncertainty code.
+    """
+
+    projection: ScopedPromotionUncertainProjection  # noqa: F821
+
+
+@dataclass(frozen=True, slots=True)
+class ScopedPromotionDispatchRejected:
+    """Rejected dispatch result carries the closed projection.
+
+    The rejected projection already carries the
+    ``PromotionRejected`` outcome with its bounded rejection
+    code and the ``DEFINITELY_NOT_COMMITTED`` disposition.
+    """
+
+    projection: ScopedPromotionRejectedProjection  # noqa: F821
+
+
+# Closed union: the only authority returned from the active
+# scoped dispatcher. Downstream consumers MUST narrow on the
+# concrete variant and MUST NOT pull legacy counters or
+# ``ok``/``errors`` dict fields.
+ScopedPromotionDispatchResult = (
+    ScopedPromotionDispatchCompleted
+    | ScopedPromotionDispatchUncertain
+    | ScopedPromotionDispatchRejected
+)
+
+
 __all__ = [
     "MAX_REQUEST_ID_LENGTH",
     "MAX_SIGNAL_IDS",
     "MAX_SOURCE_IDENTITY_LENGTH",
     "ScopedBeforeSendFailureReason",
     "ScopedDispatchUncertaintyReason",
+    "ScopedPromotionDispatchCompleted",
+    "ScopedPromotionDispatchRejected",
+    "ScopedPromotionDispatchResult",
+    "ScopedPromotionDispatchUncertain",
     "ScopedPromotionHttpAuthenticationRejected",
     "ScopedPromotionHttpBeforeSendFailed",
     "ScopedPromotionHttpBodyLimitExceeded",

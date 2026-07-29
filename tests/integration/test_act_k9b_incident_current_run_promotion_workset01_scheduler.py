@@ -176,23 +176,62 @@ def test_scheduler_ingestion_posts_one_signal_id_for_thirty_five_alerts(
         source_identity: str,
         signal_ids: list[str],
         _snapshot_bundle_id: object = None,
-    ) -> dict[str, object]:
+    ) -> object:
+        from k8s_diag_agent.collect.promotion_scoped_http_mapping import (
+            ScopedPromotionCompletedProjection,
+        )
+        from k8s_diag_agent.collect.promotion_scoped_http_seam import (
+            ScopedPromotionDispatchCompleted,
+            ScopedPromotionReceipt,
+        )
+        from k8s_diag_agent.domain.identifiers import (
+            AlertSignalId,
+            HealthRunId,
+        )
+        from k8s_diag_agent.incident_alert_promotion_binding import (
+            BoundScopedPromotionResult,
+        )
+        from k8s_diag_agent.incident_alert_promotion_contract import (
+            IncidentPromotionResult,
+            PromoteAlertSignalsRequest,
+        )
+
         captured["run_id"] = run_id
         captured["source_identity"] = source_identity
         captured["signal_ids"] = list(signal_ids)
-        return {
-            "ok": True,
-            "scanned": 1,
-            "opened_incidents": 1,
-            "updated_incidents": 0,
-            "opened_incident_ids": [
-                "http-alertmanager-9093:crash_loop:prod:pod:redis-0"
-            ],
-            "updated_incident_ids": [],
-            "skipped_duplicates": 0,
-            "errors": 0,
-            "promotion_mode": "backend-api",
-        }
+        request = PromoteAlertSignalsRequest(
+            run_id=HealthRunId(run_id),
+            source_identity=source_identity,
+            signal_ids=tuple(
+                AlertSignalId(value) for value in signal_ids
+            ),
+        )
+        result = IncidentPromotionResult(
+            run_id=request.run_id,
+            source_identity=request.source_identity,
+            scanned_signal_ids=request.signal_ids,
+            opened_incident_ids=(
+                "http-alertmanager-9093:crash_loop:prod:pod:redis-0",
+            ),
+        )
+        bound = BoundScopedPromotionResult(request=request, result=result)
+        projection = ScopedPromotionCompletedProjection(
+            promotion_outcome=__import__(
+                "k8s_diag_agent.collect.promotion_outcomes",
+                fromlist=["PromotionSucceeded"],
+            ).PromotionSucceeded(
+                run_id=request.run_id,
+                requested_signal_ids=tuple(
+                    str(s) for s in request.signal_ids
+                ),
+                records=(),
+                diagnosis_incident_ids=("http-alertmanager-9093:crash_loop:prod:pod:redis-0",),
+            ),
+            aggregate_receipt=ScopedPromotionReceipt(bound=bound),
+            request_id="stubbed",
+            request_fingerprint="x" * 64,
+        )
+        return ScopedPromotionDispatchCompleted(projection=projection)
 
     # The dispatcher imports ``promote_alert_signals_via_scoped_backend_api``
     # lazily from ``incident_promotion_backend`` inside the function

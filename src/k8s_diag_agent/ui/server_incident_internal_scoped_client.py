@@ -13,9 +13,10 @@ modules:
 
 The facade owns only the request dispatch, the header injection
 (including the ``X-K9B-Promotion-Request-ID`` correlation header),
-the elapsed-time measurement, the typed exception classification
-(DNS, connection refused, TLS pre-connect, timeout, connection
-resets), and the typed outcome assembly.
+the elapsed-time measurement (covering the entire operation),
+the typed exception classification (DNS, connection refused, TLS
+pre-connect, timeout, connection resets), and the typed outcome
+assembly.
 
 The active scoped path emits typed scoped variants exclusively:
 ``ScopedPromotionHttpSucceeded``,
@@ -37,6 +38,8 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -56,14 +59,18 @@ from k8s_diag_agent.collect.promotion_scoped_http_seam import (
     ScopedPromotionHttpBeforeSendFailed,
     ScopedPromotionHttpBodyLimitExceeded,
     ScopedPromotionHttpDispatchUncertain,
+    ScopedPromotionHttpReadFailed,
     ScopedPromotionHttpRequestContext,
     ScopedPromotionHttpShortRead,
+    ScopedPromotionHttpSucceeded,
     ScopedPromotionHttpTransportOutcome,
+    ScopedReadFailureReason,
 )
 from k8s_diag_agent.ui.server_incident_internal_scoped_body import (
     ScopedBodyReadComplete,
     ScopedBodyReadFailed,
     ScopedBodyReadLimitExceeded,
+    ScopedBodyReadReason,
     ScopedBodyReadShort,
     read_scoped_body,
 )
@@ -80,7 +87,11 @@ REQUEST_ID_HEADER = "X-K9B-Promotion-Request-ID"
 
 
 class ScopedSchedulerBackendConfigError(Exception):
-    """Raised when the scheduler backend URL or token is not configured."""
+    """Raised when the scheduler backend URL is not configured."""
+
+
+class ScopedSchedulerMissingTokenError(Exception):
+    """Raised when the scheduler internal API token is not configured."""
 
 
 class _MonotonicClock:
@@ -90,7 +101,10 @@ class _MonotonicClock:
     measured ``elapsed_milliseconds`` reflects the entire
     operation -- HTTP response / body reading, status
     classification, JSON decoding, wire parsing, and bounded
-    outcome construction.
+    outcome construction. The clock is referenced at the END
+    of the operation (after status classification, JSON decode,
+    wire parse, request/result binding, and transport-variant
+    construction) so the elapsed time is comprehensive.
     """
 
     def __call__(self) -> float:
@@ -105,23 +119,36 @@ def _require_authenticated_config(
     base_url: str,
     token: str | None,
 ) -> tuple[str, str]:
-    """Require both a backend URL and an internal API token.
+    """Validate configuration; raise a typed exception naming the
+    missing field.
 
-    The internal scoped endpoint is authenticated. The active
-    scoped path MUST NOT silently send an unauthenticated request;
-    a missing URL or token fails before send with a typed config
-    error.
+    The active scoped path MUST NOT silently send an unauthenticated
+    request or a request with a missing backend URL. Each missing
+    field raises its own typed exception so the caller can carry
+    the exact reason into the active scoped path.
     """
+    backend_url = _require_valid_backend_url(base_url)
+    internal_token = _require_valid_internal_token(token)
+    return backend_url, internal_token
+
+
+def _require_valid_backend_url(base_url: str) -> str:
+    """Validate the backend URL; raise typed exception when missing."""
     backend_url = (base_url or "").strip()
     if not backend_url:
         raise ScopedSchedulerBackendConfigError(
             "scoped scheduler backend URL is not configured"
         )
+    return backend_url
+
+
+def _require_valid_internal_token(token: str | None) -> str:
+    """Validate the internal API token; raise typed exception when missing."""
     if not token:
-        raise ScopedSchedulerBackendConfigError(
+        raise ScopedSchedulerMissingTokenError(
             "scoped scheduler internal API token is not configured"
         )
-    return backend_url, token
+    return token
 
 
 def _declared_content_length(headers: Any) -> int | None:
@@ -161,16 +188,30 @@ def _classify_url_error_reason(
         underlying = getattr(underlying, "reason", None)
     if isinstance(underlying, ConnectionRefusedError):
         return ScopedBeforeSendFailureReason.CONNECTION_REFUSED
-    # ``socket.gaierror`` is NOT a subclass of ``ConnectionError``;
-    # check the class name explicitly because Python does not export
-    # ``gaierror`` from the ``socket`` module guarantees.
-    if underlying is not None and type(underlying).__name__ == "gaierror":
+    if isinstance(underlying, socket.gaierror):
         return ScopedBeforeSendFailureReason.DNS_FAILED
-    # ``ssl.SSLError`` is a subclass of ``OSError`` and surfaces a
-    # TLS pre-connect failure.
-    if underlying is not None and type(underlying).__name__ == "SSLError":
+    if isinstance(underlying, ssl.SSLError):
         return ScopedBeforeSendFailureReason.TLS_PRECONNECT_FAILED
     # Treat everything else as a post-send transmission uncertainty.
+    return ScopedDispatchUncertaintyReason.TRANSMISSION_UNKNOWN
+
+
+def _body_read_failure_to_dispatch_reason(
+    reason: ScopedBodyReadReason,
+) -> ScopedDispatchUncertaintyReason:
+    """Map a typed body-read failure reason to a dispatch uncertainty reason.
+
+    The body-read failure happens AFTER response headers were
+    received, so the request MAY have been transmitted. The
+    dispatcher cannot prove whether the request reached the wire,
+    so the choice is a conservative commit-unknown via the
+    dispatch-uncertainty branch. The mapper is responsible for
+    the more specific ``ScopedPromotionHttpReadFailed`` projection.
+    """
+    if reason == ScopedBodyReadReason.TIMEOUT:
+        return ScopedDispatchUncertaintyReason.TIMEOUT
+    if reason == ScopedBodyReadReason.CONNECTION_LOST:
+        return ScopedDispatchUncertaintyReason.CONNECTION_LOST
     return ScopedDispatchUncertaintyReason.TRANSMISSION_UNKNOWN
 
 
@@ -180,7 +221,9 @@ class ScopedSchedulerClient:
     The client is the single producer of
     :class:`ScopedPromotionHttpTransportOutcome` variants; every
     variant is emitted from the typed path with bound reasons so
-    the mapper can do exhaustive matching.
+    the mapper can do exhaustive matching. Duration is measured
+    via the injected monotonic clock from the start of the HTTP
+    loop until the bound transport variant is constructed.
     """
 
     def __init__(
@@ -211,23 +254,41 @@ class ScopedSchedulerClient:
                 self._base_url, self._token
             )
         except ScopedSchedulerBackendConfigError:
-            observation = self._build_observation(
-                context=context,
-                transmission=RequestTransmissionState.NOT_STARTED,
-                status_code=None,
-                content_type=None,
-                declared_content_length=None,
-                response_byte_count=0,
-                body_sha256=None,
-                decoding_stage=(
-                    PromotionResponseDecodingStage.NOT_ATTEMPTED
-                ),
-                elapsed_milliseconds=0,
-            )
             return ScopedPromotionHttpBeforeSendFailed(
-                observation=observation,
+                observation=self._build_observation(
+                    context=context,
+                    transmission=RequestTransmissionState.NOT_STARTED,
+                    status_code=None,
+                    content_type=None,
+                    declared_content_length=None,
+                    response_byte_count=0,
+                    body_sha256=None,
+                    decoding_stage=(
+                        PromotionResponseDecodingStage.NOT_ATTEMPTED
+                    ),
+                    elapsed_milliseconds=0,
+                ),
                 reason_code=(
                     ScopedBeforeSendFailureReason.MISSING_BACKEND_URL
+                ),
+            )
+        except ScopedSchedulerMissingTokenError:
+            return ScopedPromotionHttpBeforeSendFailed(
+                observation=self._build_observation(
+                    context=context,
+                    transmission=RequestTransmissionState.NOT_STARTED,
+                    status_code=None,
+                    content_type=None,
+                    declared_content_length=None,
+                    response_byte_count=0,
+                    body_sha256=None,
+                    decoding_stage=(
+                        PromotionResponseDecodingStage.NOT_ATTEMPTED
+                    ),
+                    elapsed_milliseconds=0,
+                ),
+                reason_code=(
+                    ScopedBeforeSendFailureReason.MISSING_INTERNAL_TOKEN
                 ),
             )
 
@@ -257,35 +318,31 @@ class ScopedSchedulerClient:
         start = self._clock()
         try:
             with urllib.request.urlopen(request, timeout=timeout) as resp:
-                return self._consume_success(
+                typed_outcome = self._consume_success(
                     context=context,
                     resp=resp,
                     start=start,
                 )
         except urllib.error.HTTPError as exc:
-            return self._consume_http_error(
+            typed_outcome = self._consume_http_error(
                 context=context,
                 error=exc,
                 start=start,
             )
         except urllib.error.URLError as exc:
-            return self._consume_url_error(
+            typed_outcome = self._consume_url_error(
                 context=context,
                 exc=exc,
                 start=start,
             )
         except TimeoutError:
-            # Without an instrumented transport seam that can
-            # prove byte transmission, ``urllib`` cannot confirm
-            # whether the request reached the wire. Model as
-            # dispatch-unknown via the closed reason.
-            return self._dispatch_uncertain(
+            typed_outcome = self._dispatch_uncertain(
                 context=context,
                 start=start,
                 reason_code=ScopedDispatchUncertaintyReason.TIMEOUT,
             )
         except ConnectionError:
-            return self._dispatch_uncertain(
+            typed_outcome = self._dispatch_uncertain(
                 context=context,
                 start=start,
                 reason_code=(
@@ -293,15 +350,22 @@ class ScopedSchedulerClient:
                 ),
             )
         except OSError:
-            # Connection reset or other low-level ``OSError`` is
-            # treated as transmission-uncertain.
-            return self._dispatch_uncertain(
+            typed_outcome = self._dispatch_uncertain(
                 context=context,
                 start=start,
                 reason_code=(
                     ScopedDispatchUncertaintyReason.TRANSMISSION_UNKNOWN
                 ),
             )
+        # Record the final elapsed time AFTER the transport variant
+        # is constructed. The clock is referenced here -- at the
+        # end of the operation -- so the measurement includes the
+        # decoding and binding work that follows the body read.
+        return self._finalize_observation(
+            context=context,
+            typed_outcome=typed_outcome,
+            start=start,
+        )
 
     def _consume_success(
         self,
@@ -346,9 +410,6 @@ class ScopedSchedulerClient:
         )
         elapsed_ms = self._elapsed_ms(start)
         sha256 = getattr(body_result, "body_sha256", None)
-        # ``HTTPError`` is response-shaped: status, headers, and
-        # body are available. We never store body text; only the
-        # bounded metadata flows back.
         observation = self._build_observation(
             context=context,
             transmission=RequestTransmissionState.RESPONSE_COMPLETED,
@@ -362,16 +423,10 @@ class ScopedSchedulerClient:
             decoding_stage=PromotionResponseDecodingStage.COMPLETED,
             elapsed_milliseconds=elapsed_ms,
         )
-        # 401 / 403 prove no promotion execution could begin;
-        # ``HTTPError`` retains the status, headers, and readable
-        # body so we MUST NOT collapse it into a generic exception.
         if status_code in (401, 403):
             return ScopedPromotionHttpAuthenticationRejected(
                 observation=observation
             )
-        # All other HTTP errors (400 / 409 / 429 / 5xx) without a
-        # validated backend no-execution disposition are
-        # commit-uncertainty at the dispatch layer.
         return PromotionHttpRejected(
             observation=observation,
             body_excerpt="",
@@ -481,6 +536,134 @@ class ScopedSchedulerClient:
             elapsed_milliseconds=elapsed_milliseconds,
         )
 
+    def _finalize_observation(
+        self,
+        *,
+        context: ScopedPromotionHttpRequestContext,
+        typed_outcome: ScopedPromotionHttpTransportOutcome,
+        start: float,
+    ) -> ScopedPromotionHttpTransportOutcome:
+        """Re-stamp the elapsed time on the observation.
+
+        The clock is referenced at the END of the operation
+        AFTER the transport variant is constructed so the
+        measurement covers status classification, JSON
+        decode, wire parse, request/result binding, and the
+        construction of the typed transport variant.
+        """
+        elapsed_ms = self._elapsed_ms(start)
+        # ``Observation`` is frozen; rebuild a new instance so the
+        # final elapsed time is correct. The other fields are
+        # preserved from the original.
+        new_observation = PromotionHttpObservation(
+            request_id=typed_outcome.observation.request_id,
+            request_transmission=(
+                typed_outcome.observation.request_transmission
+            ),
+            status_code=typed_outcome.observation.status_code,
+            content_type=typed_outcome.observation.content_type,
+            declared_content_length=(
+                typed_outcome.observation.declared_content_length
+            ),
+            response_byte_count=(
+                typed_outcome.observation.response_byte_count
+            ),
+            response_body_sha256=(
+                typed_outcome.observation.response_body_sha256
+            ),
+            decoding_stage=typed_outcome.observation.decoding_stage,
+            elapsed_milliseconds=elapsed_ms,
+        )
+        return self._replace_observation(
+            typed_outcome, new_observation
+        )
+
+    @staticmethod
+    def _replace_observation(
+        typed_outcome: ScopedPromotionHttpTransportOutcome,
+        new_observation: PromotionHttpObservation,
+    ) -> ScopedPromotionHttpTransportOutcome:
+        """Construct a copy of ``typed_outcome`` whose observation
+        is ``new_observation``. Frozen dataclasses cannot be
+        mutated in place, so the variant is rebuilt with the
+        updated observation.
+        """
+        from typing import assert_never
+
+        if isinstance(typed_outcome, ScopedPromotionHttpSucceeded):
+            return ScopedPromotionHttpSucceeded(
+                observation=new_observation,
+                bound=typed_outcome.bound,
+            )
+        if isinstance(typed_outcome, ScopedPromotionHttpAuthenticationRejected):
+            return ScopedPromotionHttpAuthenticationRejected(
+                observation=new_observation
+            )
+        if isinstance(typed_outcome, ScopedPromotionHttpBodyLimitExceeded):
+            return ScopedPromotionHttpBodyLimitExceeded(
+                observation=new_observation
+            )
+        if isinstance(typed_outcome, ScopedPromotionHttpShortRead):
+            return ScopedPromotionHttpShortRead(
+                observation=new_observation
+            )
+        if isinstance(typed_outcome, ScopedPromotionHttpReadFailed):
+            return ScopedPromotionHttpReadFailed(
+                observation=new_observation,
+                reason_code=typed_outcome.reason_code,
+            )
+        if isinstance(typed_outcome, ScopedPromotionHttpBeforeSendFailed):
+            return ScopedPromotionHttpBeforeSendFailed(
+                observation=new_observation,
+                reason_code=typed_outcome.reason_code,
+            )
+        if isinstance(typed_outcome, ScopedPromotionHttpDispatchUncertain):
+            return ScopedPromotionHttpDispatchUncertain(
+                observation=new_observation,
+                reason_code=typed_outcome.reason_code,
+            )
+        # Generic ``PromotionHttp*`` semantic variants are
+        # dataclasses with an ``observation`` (and sometimes
+        # additional fields). Rebuild each one preserving the
+        # other fields.
+        from k8s_diag_agent.collect.promotion_http_transport import (
+            PromotionHttpAccepted,
+            PromotionHttpInvalidJson,
+            PromotionHttpInvalidSchema,
+            PromotionHttpNoContent,
+            PromotionHttpRejected,
+            PromotionHttpResponseTruncated,
+        )
+
+        if isinstance(typed_outcome, PromotionHttpAccepted):
+            return PromotionHttpAccepted(
+                observation=new_observation,
+            )
+        if isinstance(typed_outcome, PromotionHttpNoContent):
+            return PromotionHttpNoContent(
+                observation=new_observation,
+            )
+        if isinstance(typed_outcome, PromotionHttpInvalidJson):
+            return PromotionHttpInvalidJson(
+                observation=new_observation,
+                body_excerpt=typed_outcome.body_excerpt,
+            )
+        if isinstance(typed_outcome, PromotionHttpInvalidSchema):
+            return PromotionHttpInvalidSchema(
+                observation=new_observation,
+                schema_error=typed_outcome.schema_error,
+            )
+        if isinstance(typed_outcome, PromotionHttpResponseTruncated):
+            return PromotionHttpResponseTruncated(
+                observation=new_observation,
+            )
+        if isinstance(typed_outcome, PromotionHttpRejected):
+            return PromotionHttpRejected(
+                observation=new_observation,
+                body_excerpt=typed_outcome.body_excerpt,
+            )
+        assert_never(typed_outcome)
+
     def _elapsed_ms(self, start: float) -> int:
         return int((self._clock() - start) * 1000)
 
@@ -582,15 +765,24 @@ class ScopedSchedulerClient:
                 )
             )
         if isinstance(body_result, ScopedBodyReadFailed):
-            # Read failure AFTER response headers were received.
-            # Without further bytes the request body may have been
-            # acknowledged by the backend; model as dispatch
-            # uncertainty. The body reader does not know whether
-            # the underlying failure was a read timeout or a
-            # connection reset; conservatively use
-            # ``TRANSMISSION_UNKNOWN`` so the dispatcher remains
-            # accurate about the missing evidence.
-            return ScopedPromotionHttpDispatchUncertain(
+            # Body read failed AFTER response headers were received.
+            # Map the typed body-read reason into the closed
+            # read-failure vocabulary so the mapper performs
+            # exhaustive matching. The body-read failure is a
+            # transport-level observation distinct from a
+            # dispatch connection reset.
+            body_reason = body_result.reason
+            if body_reason == ScopedBodyReadReason.TIMEOUT:
+                scoped_read_reason = ScopedReadFailureReason.TIMEOUT
+            elif body_reason == ScopedBodyReadReason.CONNECTION_LOST:
+                scoped_read_reason = (
+                    ScopedReadFailureReason.CONNECTION_LOST
+                )
+            else:
+                scoped_read_reason = (
+                    ScopedReadFailureReason.CONNECTION_LOST
+                )
+            return ScopedPromotionHttpReadFailed(
                 observation=self._build_observation(
                     context=context,
                     transmission=(
@@ -610,9 +802,7 @@ class ScopedSchedulerClient:
                         observation_meta.elapsed_milliseconds
                     ),
                 ),
-                reason_code=(
-                    ScopedDispatchUncertaintyReason.TRANSMISSION_UNKNOWN
-                ),
+                reason_code=scoped_read_reason,
             )
         # ``assert_never`` provably fails typing/tests when a new
         # body-read variant is added without an explicit handler.
@@ -625,4 +815,5 @@ __all__ = [
     "REQUEST_ID_HEADER",
     "ScopedSchedulerBackendConfigError",
     "ScopedSchedulerClient",
+    "ScopedSchedulerMissingTokenError",
 ]

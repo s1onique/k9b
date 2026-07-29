@@ -824,10 +824,22 @@ def promote_alert_signals_scoped_for_accumulator(
             snapshot_bundle_id=None,
         )
 
-    result_dict = promote_alert_signals_via_scoped_backend_api(
+    # Active scoped path consumes the typed dispatch result
+    # directly. The typed result is the single authority; this
+    # dispatcher does NOT derive truth from a legacy dict or
+    # fabricate per-signal ``promotion_records`` entries.
+    from .incident_promotion_backend import (
+        scoped_dispatch_result_to_promotion_result_dict,
+    )
+
+    typed_result = promote_alert_signals_via_scoped_backend_api(
         run_id=health_run_id,
         source_identity=source_identity,
         signal_ids=list(signal_ids),
+    )
+
+    result_dict = scoped_dispatch_result_to_promotion_result_dict(
+        typed_result, signal_ids=signal_ids
     )
 
     promotion_result = _result_from_dict(
