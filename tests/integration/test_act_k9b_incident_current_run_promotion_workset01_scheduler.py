@@ -218,6 +218,16 @@ def test_scheduler_ingestion_posts_one_signal_id_for_thirty_five_alerts(
             ),
         )
         bound = BoundScopedPromotionResult(request=request, result=result)
+        # ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION05-CI-SHARD-PORTABILITY-AND-PROMOTION-REGRESSION-CLOSURE01:
+        # Canonical request fingerprint MUST be derived from the typed
+        # request via ``scoped_promotion_request_fingerprint`` (a stable
+        # 64-char lowercase hex SHA-256). The previous hard-coded
+        # ``"x" * 64`` placeholder fails the bounded request-identity
+        # validator in ``ScopedPromotionAccumulatorCompleted.__post_init__``.
+        from k8s_diag_agent.collect.promotion_scoped_http_seam import (
+            scoped_promotion_request_fingerprint,
+        )
+        request_fingerprint = scoped_promotion_request_fingerprint(request)
         projection = ScopedPromotionCompletedProjection(
             promotion_outcome=PromotionSucceeded(
                 run_id=request.run_id,
@@ -229,7 +239,7 @@ def test_scheduler_ingestion_posts_one_signal_id_for_thirty_five_alerts(
             ),
             aggregate_receipt=ScopedPromotionReceipt(bound=bound),
             request_id="stubbed",
-            request_fingerprint="x" * 64,
+            request_fingerprint=request_fingerprint,
         )
         return ScopedPromotionDispatchCompleted(projection=projection)
 
@@ -327,11 +337,21 @@ class TestBackendLoggingCardinalities:
         from the explicit kwarg (5), proving the function no longer
         derives them from the category sum.
         """
-        from k8s_diag_agent.ui.server_incident_internal_handlers import (
+        # ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION05-CI-SHARD-PORTABILITY-AND-PROMOTION-REGRESSION-CLOSURE01
+        # (``PRIVATE_HELPER_PUBLIC_FACADE=false`` / ``TEST_IMPORTS_CANONICAL_OWNER=true``):
+        # ``_log_promotion_result`` lives in the canonical
+        # ``server_incident_internal_promotion_handlers`` module and uses
+        # ``logging.getLogger(__name__)`` to bind to that module's
+        # fully-qualified name. The historical facade
+        # ``server_incident_internal_handlers`` re-exports the function
+        # for backward compatibility, but the production logger is keyed
+        # to the canonical owner -- so the caplog fixture MUST also be
+        # pointed at the canonical logger name.
+        from k8s_diag_agent.ui.server_incident_internal_promotion_handlers import (
             _log_promotion_result,
         )
 
-        with caplog.at_level("INFO", logger="k8s_diag_agent.ui.server_incident_internal_handlers"):  # noqa: E501
+        with caplog.at_level("INFO", logger="k8s_diag_agent.ui.server_incident_internal_promotion_handlers"):  # noqa: E501
             _log_promotion_result(
                 event_name="alert-signals-promoted-via-backend",
                 run_id="run-r3-2",

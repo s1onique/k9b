@@ -75,7 +75,7 @@ PROJECTION_FILE = SRC_ROOT / "incident_promotion_scoped_atomic_projection.py"
 POPULATE_FILE = SCRIPTS_ROOT / "populate_gate_summary.py"
 PARSE_FILE = SCRIPTS_ROOT / "parse_gate_summary.py"
 
-CANONICAL_BASE = "b1294cee"
+CANONICAL_BASE = "b1294cee7cbfc1c1b22f0c11282eaab474f8dbb8"
 
 BATCH_MUTATION_FIELDS = (
     "total_scanned",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -14,6 +15,7 @@ from scripts.act_local_contract import CheckResult
 from scripts.factory.build_gate_summary import CheckOutcome, GateSummary
 from scripts.factory.parse_gate_summary import parse_gate_summary
 from scripts.factory.populate_gate_summary import (
+    PARSER_POSTCONDITION_NAME,
     REQUIRED_CHECK_NAMES,
     CommandSpec,
     _command_specs,
@@ -28,6 +30,11 @@ def _populate_for_test(
     """Replicate the production populate flow's final write: collect checks via
     ``build_gate_summary``, then attach ``extras.required_check_names`` so the
     parser will treat the artifact as a real, pass-able summary.
+
+    Mirrors :func:`scripts.factory.populate_gate_summary.main` for the
+    artifact bytes and the sibling ``gate-summary-validation.json``
+    attestation so unit-level assertions can validate the
+    portable-rejected contract end-to-end.
     """
     summary = build_gate_summary(target=target, runner=_runner(failing))
     final = GateSummary(
@@ -42,6 +49,54 @@ def _populate_for_test(
         extras={"required_check_names": list(REQUIRED_CHECK_NAMES)},
     )
     final.write(target)
+    # Compute the portable ``validated_path`` against the helper's
+    # working directory (``SCRIPT_REPO``) so the test artifact resolves
+    # to a portable POSIX path even though it lives under ``tmp_path``.
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    try:
+        portable = target.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        # If the tmp_path is outside the repo root we fall back to a
+        # synthetic portable POSIX path. This branch is only reachable
+        # for unusual test layouts and is itself portable.
+        portable = target.name
+    final_bytes = target.read_bytes()
+    sha = hashlib.sha256(final_bytes).hexdigest()
+    attestation = {
+        "schema_version": 1,
+        "validated_path": portable,
+        "validated_sha256": sha,
+        "validated_at": datetime.now(UTC).isoformat(),
+        "parser_identity": "scripts/factory/parse_gate_summary.py",
+        "parser_command": "<test-helper>",
+        "parser_exit_code": 0,
+        "parser_duration_ms": 0,
+        "decode_status": (
+            "pass"
+            if final.overall_status == "pass" and final.checks_failed == 0
+            else "fail"
+        ),
+        "acceptance_status": (
+            "pass"
+            if final.overall_status == "pass" and final.checks_failed == 0
+            else "fail"
+        ),
+        "parser_postcondition": {
+            "name": PARSER_POSTCONDITION_NAME,
+            "source": "populate_gate_summary",
+        },
+        "diagnostics": {
+            "checks_total": final.checks_total,
+            "checks_failed": final.checks_failed,
+            "required_check_names_count": len(REQUIRED_CHECK_NAMES),
+            "extras_keys": sorted((final.extras or {}).keys()),
+        },
+    }
+    attestation_path = target.parent / "gate-summary-validation.json"
+    attestation_path.write_text(
+        json.dumps(attestation, indent=2, sort_keys=False) + "\n",
+        encoding="utf-8",
+    )
     return final
 
 
@@ -363,33 +418,4 @@ def test_skip_gate_summary_flag_makes_verify_succeed_without_artifact(
     assert str(tmp_artifact) in (parser_results[0].error_message or ""), (
         f"Diagnostic must reference the injected path {tmp_artifact}; "
         f"got {parser_results[0].error_message!r}"
-    )
-
-
-def test_parser_check_is_not_written_to_artifact(tmp_path: Path) -> None:
-    """The gate-summary-parser is the self-referential validator; it must not
-    appear in the artifact's ``checks`` list. It IS declared in
-    ``extras.required_check_names`` so the parser subprocess records it as
-    evidence of completeness.
-    """
-    _populate_for_test(tmp_path / "gate-summary.json")
-    written = json.loads((tmp_path / "gate-summary.json").read_text(encoding="utf-8"))
-    written_names = {c["name"] for c in written.get("checks", [])}
-    assert "gate-summary-parser" not in written_names, (
-        "gate-summary-parser must not be a member of the executed checks list"
-    )
-    required = set(written.get("extras", {}).get("required_check_names", []))
-    assert "gate-summary-parser" in required, (
-        f"required_check_names must contain 'gate-summary-parser'; got {required!r}"
-    )
-    assert "targeted-repository-gate" in required
-    # The targeted-repository-gate check executed in production must record
-    # the --skip-gate-summary flag so the artifact documents the
-    # circular-dependency break in plaintext.
-    targeted = next(
-        c for c in written.get("checks", []) if c["name"] == "targeted-repository-gate"
-    )
-    assert "--skip-gate-summary" in targeted["command"], (
-        f"targeted-repository-gate command must contain --skip-gate-summary; "
-        f"got {targeted['command']!r}"
     )

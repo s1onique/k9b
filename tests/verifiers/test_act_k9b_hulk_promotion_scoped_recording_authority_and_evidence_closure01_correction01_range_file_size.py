@@ -37,7 +37,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CANONICAL_BASE = "b1294cee"
+CANONICAL_BASE = "b1294cee7cbfc1c1b22f0c11282eaab474f8dbb8"
 SCRIPTS = REPO_ROOT / "scripts"
 LLM_FRIENDLY = SCRIPTS / "check_llm_friendly_files.py"
 ALLOWLIST_FILE = SCRIPTS / "llm_friendly_allowlist.py"

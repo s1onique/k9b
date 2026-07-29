@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import shlex
 import subprocess
@@ -447,28 +446,32 @@ def main(argv: list[str] | None = None) -> int:
     # artifact. The attestation is NOT included in the bytes it
     # validates. A subsequent mutation of ``gate-summary.json``
     # is detectable as a SHA-256 mismatch.
-    attestation_path = target.parent / "gate-summary-validation.json"
-    attestation = {
-        "schema_version": 1,
-        "validated_path": str(target),
-        "validated_sha256": final_sha256,
-        "validated_at": datetime.now(UTC).isoformat(),
-        "parser_identity": "scripts/factory/parse_gate_summary.py",
-        "parser_command": parser_outcome.command,
-        "parser_exit_code": parser_outcome.exit_code,
-        "parser_duration_ms": parser_outcome.duration_ms,
-        "decode_status": decode_status,
-        "acceptance_status": acceptance_status,
-        "diagnostics": {
+    #
+    # ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION05:
+    # ``validated_path`` MUST be a portable repository-relative POSIX
+    # path so the committed attestation is byte-identical on every
+    # runner. The writer logic lives in
+    # :mod:`scripts.factory.gate_summary_validation_attestation` so the
+    # gate-summary producer stays under the 500-line cap.
+    from scripts.factory.gate_summary_validation_attestation import (
+        write_validation_attestation,
+    )
+
+    attestation_path = write_validation_attestation(
+        repo_root=repo_root,
+        target=target,
+        final_sha256=final_sha256,
+        parser_command=parser_outcome.command,
+        parser_exit_code=parser_outcome.exit_code,
+        parser_duration_ms=parser_outcome.duration_ms,
+        decode_status=decode_status,
+        acceptance_status=acceptance_status,
+        diagnostics={
             "checks_total": final.checks_total,
             "checks_failed": final.checks_failed,
             "required_check_names_count": len(REQUIRED_CHECK_NAMES),
             "extras_keys": sorted((final.extras or {}).keys()),
         },
-    }
-    attestation_path.write_text(
-        json.dumps(attestation, indent=2, sort_keys=False) + "\n",
-        encoding="utf-8",
     )
 
     print(f"wrote {target}")

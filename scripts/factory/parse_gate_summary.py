@@ -49,6 +49,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.factory.gate_summary_self_referential_guards import (  # noqa: E402
+    check_no_self_referential,
+)
+
 EXPECTED_SCHEMA_VERSION = 1
 # ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01-CORRECTION02:
 # ``gate-summary-parser`` is removed from the required check
@@ -321,6 +325,14 @@ def parse_gate_summary(target: Path) -> ParsedGateSummary:
             acceptance_errors.append(
                 f"unexpected_check_names: {unexpected}"
             )
+        # ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION05:
+        # Self-referential guards live in a focused module so this
+        # parser file stays under the 500-line cap.
+        check_no_self_referential(
+            actual_set=actual_set,
+            extras=extras,
+            acceptance_errors=acceptance_errors,
+        )
         expected_overall = "pass" if checks_failed == 0 else "fail"
         if overall_status != expected_overall:
             acceptance_errors.append(
