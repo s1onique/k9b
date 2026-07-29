@@ -37,19 +37,39 @@ def _observation(**overrides: object) -> PromotionHttpObservation:
         "elapsed_milliseconds": 12,
     }
     base.update(overrides)
-    return PromotionHttpObservation(**base)  # type: ignore[arg-type]
+    return PromotionHttpObservation(**base)
 
 
 class TestClosedEnums:
     def test_request_transmission_is_closed(self) -> None:
+        # The completed closed vocabulary replaces the legacy
+        # ``BODY_SENT`` bucket with the conservative
+        # ``DISPATCH_STARTED_TRANSMISSION_UNKNOWN`` discriminator
+        # the active scoped path emits when ``urllib`` cannot prove
+        # the body reached the backend. The legacy
+        # ``BODY_SENT`` was reserved for instrumented transport
+        # seams that prove flush; the active scoped path does NOT
+        # claim that proof and so the post-send state is bounded
+        # to the conservative unknown discriminator.
         members = set(RequestTransmissionState)
         assert members == {
             RequestTransmissionState.NOT_STARTED,
             RequestTransmissionState.HEADERS_SENT,
-            RequestTransmissionState.BODY_SENT,
+            RequestTransmissionState.DISPATCH_STARTED_TRANSMISSION_UNKNOWN,
             RequestTransmissionState.RESPONSE_STARTED,
             RequestTransmissionState.RESPONSE_COMPLETED,
         }
+
+    def test_request_transmission_rejects_legacy_body_sent(self) -> None:
+        # The legacy ``BODY_SENT`` discriminator was removed when
+        # the post-send state was bounded to the conservative
+        # unknown variant. The negative test proves the legacy
+        # name is no longer a member of the closed vocabulary.
+        assert not hasattr(RequestTransmissionState, "BODY_SENT")
+        assert hasattr(
+            RequestTransmissionState,
+            "DISPATCH_STARTED_TRANSMISSION_UNKNOWN",
+        )
 
     def test_decoding_stage_is_closed(self) -> None:
         members = set(PromotionResponseDecodingStage)
@@ -90,7 +110,7 @@ class TestObservationImmutability:
     def test_observation_is_frozen(self) -> None:
         observation = _observation()
         with pytest.raises(Exception):
-            observation.request_id = "tampered"  # type: ignore[misc]
+            observation.request_id = "tampered"
 
     def test_observation_to_event_dict_shape(self) -> None:
         observation = _observation()
