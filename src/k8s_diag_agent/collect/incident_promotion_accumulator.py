@@ -63,6 +63,7 @@ from .incident_promotion_accumulator_errors import (
     PromotionWorksetState,
 )
 from .incident_promotion_accumulator_mutation import (
+    _apply_batch_mutation,
     _local_skipped_duplicate_count_mutation,
     add_batch_mutation,
     add_record_mutation,
@@ -300,44 +301,19 @@ class RunPromotionAccumulator(
         add_batch_mutation(self, batch)
 
     def _apply_batch(self, batch: PromotionBatch) -> None:
-        """Internal: actually merge a batch (no rollback handling)."""
-        if (
-            self.last_incident_access_mode
-            and self.last_incident_access_mode != batch.incident_access_mode
-        ):
-            raise AccumulatorAccessModeError(
-                f"Conflicting access modes within one run: "
-                f"{self.last_incident_access_mode!r} vs "
-                f"{batch.incident_access_mode!r}",
-                running_mode=self.last_incident_access_mode,
-                rejected_mode=batch.incident_access_mode,
-            )
-        self.batches.append(batch)
-        for record in batch.promotion_records:
-            self.add_record(record)
-        self.total_scanned += batch.scanned
-        self.total_firing += batch.firing
-        self.total_opened_incidents += batch.opened_incidents
-        self.total_updated_incidents += batch.updated_incidents
-        # R5 (item 5): count ``skipped_duplicate`` outcomes from local
-        # records whenever the batch did not publish a dispatcher-side
-        # aggregate (e.g. ``local`` promotion). This guarantees the
-        # summary surfaces the same number whichever path produced the
-        # batch.
-        record_skipped = self._local_skipped_duplicate_count()
-        self.total_skipped_duplicates = max(
-            self.total_skipped_duplicates + batch.skipped_duplicates,
-            record_skipped,
-        )
-        # R5 (item 5): sum the per-batch ``unique_candidate_count`` so
-        # the structured log does NOT collapse this counter into
-        # ``total_scanned`` and lose per-source provenance.
-        self.total_unique_candidate_count += batch.unique_candidate_count
-        self.total_errors += batch.errors
-        self.last_promotion_mode = batch.promotion_mode
-        self.last_incident_access_mode = batch.incident_access_mode
-        self.last_source_kind = batch.source_kind
-        self.last_promotion_scan_scope = batch.promotion_scan_scope
+        """Delegate to the canonical ``_apply_batch_mutation`` owner.
+
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01-CORRECTION02-CLEAN-RANGE-AND-SINGLE-OWNER-TRUTH01:
+        the canonical implementation of every batch mutation lives
+        in :func:`incident_promotion_accumulator_mutation._apply_batch_mutation`.
+        This method is a pure compatibility delegate so the recorder
+        host :class:`Protocol` requirement (and the legacy
+        ``add_batch_mutation`` callers) reach the SAME helper. A
+        future second implementation is forbidden at the AST level
+        by
+        :mod:`tests.verifiers.test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction02_guards`.
+        """
+        _apply_batch_mutation(self, batch)
 
     # ---------------- R4 consume-accumulator-truth helpers --------------------
 

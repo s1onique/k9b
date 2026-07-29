@@ -28,6 +28,13 @@ from pathlib import Path
 from typing import Any
 
 EXPECTED_SCHEMA_VERSION = 1
+# ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01-CORRECTION02-CLEAN-RANGE-AND-SINGLE-OWNER-TRUTH01:
+# ``gate-summary-parser`` is no longer a member of the required
+# check inventory. The parser is the self-referential consumer of
+# the artifact; recording it in the ``checks`` array would force
+# a circular dependency between the artifact and the parser that
+# consumes it. The producer records the parser invocation as a
+# typed ``parser_postcondition`` field on the artifact instead.
 REQUIRED_R12_CHECK_NAMES = (
     "canonical-verifier-self-test",
     "standalone-production-verifier",
@@ -46,8 +53,8 @@ REQUIRED_R12_CHECK_NAMES = (
     "llm-friendly",
     "no-new-llm-allowlist",
     "targeted-repository-gate",
-    "gate-summary-parser",
 )
+PARSER_POSTCONDITION_NAME = "gate-summary-parser"
 
 
 @dataclass(frozen=True)

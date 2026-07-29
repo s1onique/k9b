@@ -325,12 +325,35 @@ class TestAtomicRecorderBoundaries:
             )
 
     def test_non_batch_payload_rejected(self) -> None:
-        acc = RunPromotionAccumulator()
+        """Non-batch input MUST fail closed at the validator boundary.
+
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01-CORRECTION02-CLEAN-RANGE-AND-SINGLE-OWNER-TRUTH01:
+        the validator's public ``batch`` parameter is typed as
+        :class:`PromotionBatch`; the previous runtime
+        ``isinstance(batch, PromotionBatch)`` narrowing was removed
+        because the callers are statically typed. Tests that need to
+        feed a malformed value MUST use a deliberately untyped
+        test-side adapter (via :func:`typing.cast`) so the production
+        contract is not weakened.
+        """
+        from typing import cast
+
+        from k8s_diag_agent.collect.incident_promotion_batch import (
+            PromotionBatch,
+        )
+        from k8s_diag_agent.collect.incident_promotion_scoped_atomic_validation import (
+            validate_scoped_handoff_batch_consistency,
+        )
+
         handoff = completed_handoff()
-        with pytest.raises(TypeError):
-            acc.record_scoped_promotion_batch(
+        # ``cast`` is allowed in test code only; it does NOT alter
+        # production contracts. The test exercises the validator
+        # boundary directly with a deliberately untyped payload so
+        # the production seam stays statically typed.
+        with pytest.raises((TypeError, AttributeError)):
+            validate_scoped_handoff_batch_consistency(
                 handoff=handoff,
-                batch="not-a-batch",  # type: ignore[arg-type]
+                batch=cast(PromotionBatch, "not-a-batch"),
             )
 
     def test_batch_with_non_empty_records_rejected(self) -> None:

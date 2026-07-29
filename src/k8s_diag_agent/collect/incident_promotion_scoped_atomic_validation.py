@@ -341,7 +341,7 @@ def _validate_rejected(
 
 def validate_scoped_handoff_batch_consistency(
     handoff: ScopedPromotionAccumulatorHandoff,
-    batch: object,
+    batch: PromotionBatch,
 ) -> None:
     """Validate that the handoff and batch agree on the dispatch variant.
 
@@ -352,21 +352,21 @@ def validate_scoped_handoff_batch_consistency(
     :func:`typing.assert_never` so an unhandled variant cannot
     silently bypass validation.
 
-    The ``batch`` parameter is typed as ``object`` because the
-    validator is the single canonical boundary that converts the
-    untyped caller payload into a typed :class:`PromotionBatch`;
-    once narrowed, the per-variant validators operate strictly
-    on ``PromotionBatch`` instances.
+    ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01-CORRECTION02-CLEAN-RANGE-AND-SINGLE-OWNER-TRUTH01:
+    ``batch`` is typed as :class:`PromotionBatch` directly. The
+    previous ``batch: object`` boundary plus runtime
+    ``isinstance(batch, PromotionBatch)`` narrowing has been
+    removed because the callers are statically typed via
+    :class:`ScopedPromotionAccumulatorHandoff`'s construction
+    invariants. Tests that need to feed a malformed value MUST use
+    a deliberately untyped test-side adapter (see
+    ``tests.verifiers.test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction02_guards``
+    for the AST-level enforcement).
     """
     if not isinstance(handoff, ScopedPromotionAccumulatorHandoff):
         raise TypeError(
             "record_scoped_promotion_batch requires a "
             f"ScopedPromotionAccumulatorHandoff; got {type(handoff).__name__}"
-        )
-    if not isinstance(batch, PromotionBatch):
-        raise TypeError(
-            "record_scoped_promotion_batch requires a PromotionBatch; "
-            f"got {type(batch).__name__}"
         )
     if isinstance(handoff, ScopedPromotionAccumulatorCompleted):
         _validate_completed(

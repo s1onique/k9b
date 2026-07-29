@@ -1,15 +1,36 @@
 # ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01
 
-Final progress at `4f86693a` (working commit; see status snapshot below
-for the actual final commit identity, captured against the
-explicit range `b1294cee..FINAL_HEAD`).
+> ## HISTORICAL CHECKPOINT
+> ## NOT CURRENT CLOSURE AUTHORITY
+>
+> **checkpoint commit:** `4f86693a` (parent of the CORRECTION01
+> commit `7bbe8250`)
+> **superseded by:** CORRECTION01
+> (`task_progress_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction01_accumulator_split_and_range_gate_truth01.md`)
+> and CORRECTION02
+> (`task_progress_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction02_clean_range_and_single_owner_truth01.md`)
+>
+> This file is preserved for audit purposes only. The earlier
+> ``Final progress at 4f86693a`` header and the
+> ``b1294cee..FINAL_HEAD`` language that this ACT originally used
+> described a working commit, NOT a closed commit range. The
+> actual closed range was
+> ``b1294cee..7bbe8250`` after CORRECTION01 and is further extended
+> by CORRECTION02. Subsequent ACTs MUST NOT treat this document
+> as the closure authority; the canonical status surface for the
+> closure lives in the CORRECTION01 / CORRECTION02 progress files
+> above. The status snapshot below is intentionally retained so
+> the historical contract is not lost -- but the snapshot values
+> ``EXACT_RANGE_EVIDENCE=PASS`` / ``PROGRESS_AUTHORITY_TRUTH=PASS``
+> / ``READY_FOR_REMAINING_HARD_GATE_SPLIT=true`` refer to the
+> 4f86693a checkpoint, NOT to the current closure.
 
 > The historical CORRECTION05 file
 > (`task_progress_act_k9b_hulk_promotion_typed_accumulator_and_local_closure01_correction05_strict_typing_and_rollback_closure01.md`)
 > retains its earlier checkpoint identity at `4f86693a` and is labelled
 > as an earlier checkpoint in its own header.
 
-## Status snapshot (final)
+## Status snapshot (HISTORICAL CHECKPOINT -- 4f86693a)
 
 ```text
 EXACT_RANGE_EVIDENCE=PASS
@@ -192,7 +213,7 @@ git diff --check
 .venv/bin/python -m scripts.factory.populate_gate_summary
 ```
 
-## Final report
+## Final report (HISTORICAL CHECKPOINT -- 4f86693a)
 
 ```text
 EXACT_RANGE_EVIDENCE=PASS

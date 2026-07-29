@@ -7,7 +7,7 @@ The :class:`RunPromotionAccumulator` exposes a small set of
 mutator methods that drive the legacy ``promotion_records`` /
 ``_seen_canonical_ids`` / aggregate counters:
 
-* :meth:`add_record` / :meth:`add_records` / 
+* :meth:`add_record` / :meth:`add_records` /
   :meth:`record_promotion_result` -- append a single
   ``PromotionRecord`` to the legacy dedup state.
 * :meth:`add_batch` -- validate-before-mutate atomic batch

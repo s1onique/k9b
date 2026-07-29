@@ -28,6 +28,14 @@ from scripts.incident_lifecycle_boundary.redaction_self_test_runner import (  # 
     run_self_tests as verifier_run_self_tests,
 )
 
+# ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01-CORRECTION02-CLEAN-RANGE-AND-SINGLE-OWNER-TRUTH01:
+# ``gate-summary-parser`` is removed from the required check
+# inventory. The parser is the self-referential consumer of the
+# artifact; including it in ``checks_total``/``checks_failed``
+# would create a circular dependency. The producer records the
+# parser invocation as a typed ``parser_postcondition`` field on
+# the artifact instead, so the canonical contract becomes
+# ``len(checks) == checks_total == len(required_check_names)``.
 REQUIRED_CHECK_NAMES = (
     "canonical-verifier-self-test",
     "standalone-production-verifier",
@@ -46,8 +54,8 @@ REQUIRED_CHECK_NAMES = (
     "llm-friendly",
     "no-new-llm-allowlist",
     "targeted-repository-gate",
-    "gate-summary-parser",
 )
+PARSER_POSTCONDITION_NAME = "gate-summary-parser"
 
 
 @dataclass(frozen=True)
@@ -356,15 +364,23 @@ def main(argv: list[str] | None = None) -> int:
     summary = build_gate_summary(repo_root=repo_root, target=target)
     target.parent.mkdir(parents=True, exist_ok=True)
 
-    parser_spec = next(spec for spec in _command_specs(repo_root, target) if spec.name == "gate-summary-parser")
-    _run(parser_spec)  # outcome is unused; run for its exit code effect
-    # The parser outcome is recorded ONLY for the exit code used to drive
-    # ``main``. It is NOT appended to the artifact's checks list because the
-    # parser subprocess already inspects the artifact that is on disk; if
-    # the parser outcome were written to the artifact, the next parser
-    # invocation would invalidate the previous record. The parser IS one of
-    # the canonical 18 required R12 check names but is not part of
-    # ``checks_total``/``checks_failed`` so the loop never becomes circular.
+    parser_spec = next(spec for spec in _command_specs(repo_root, target) if spec.name == PARSER_POSTCONDITION_NAME)
+    parser_outcome = _run(parser_spec)  # recorded for the parser_postcondition evidence field
+    # The parser outcome is recorded ONLY in the typed
+    # ``parser_postcondition`` field so the artifact stays
+    # self-consistent (``len(checks) == checks_total == len(required_check_names)``).
+    # Including the parser invocation in the ``checks`` array
+    # would create a circular dependency between the artifact and
+    # the parser that consumes it.
+    parser_postcondition = {
+        "name": PARSER_POSTCONDITION_NAME,
+        "invoked": True,
+        "exit_code": parser_outcome.exit_code,
+        "status": parser_outcome.status,
+        "duration_ms": parser_outcome.duration_ms,
+        "command": parser_outcome.command,
+        "kind": "producer_postcondition",
+    }
     final = GateSummary(
         schema_version=summary.schema_version,
         profile=summary.profile,
@@ -374,7 +390,10 @@ def main(argv: list[str] | None = None) -> int:
         checks=summary.checks,
         self_tests=summary.self_tests,
         r10_definition_of_done=summary.r10_definition_of_done,
-        extras={"required_check_names": list(REQUIRED_CHECK_NAMES)},
+        extras={
+            "required_check_names": list(REQUIRED_CHECK_NAMES),
+            "parser_postcondition": parser_postcondition,
+        },
     )
     final.write(target)
 
