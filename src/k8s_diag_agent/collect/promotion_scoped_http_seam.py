@@ -1,6 +1,6 @@
 """Typed HTTP seam for the canonical scoped current-run promotion path.
 
-ACT-K9B-HULK-PROMOTION-SCOPED-CLIENT-TYPED-HTTP-SEAM01.
+ACT-K9B-HULK-PROMOTION-SCOPED-DISPATCH-ACTIVATION-AND-CERTAINTY01.
 
 This module owns the typed request context, the typed success
 variant, and the bounded HTTP observation for the scoped path.
@@ -10,16 +10,13 @@ Identity ownership:
 * ``run_id`` -- domain promotion/run identity. Sent as ``runId``
   on the wire and copied into the bounded downstream outcome.
 * ``request_id`` -- one HTTP-attempt correlation identity. Carried
-  in transport logs and the ``PromotionHttpObservation`` only; it
-  MUST never be used as ``run_id`` or be promoted into a domain
-  identifier.
-* ``source_identity`` -- domain source-identity of the scoped
-  promotion request.
+  in transport logs, the ``X-K9B-Promotion-Request-ID`` header, and
+  the ``PromotionHttpObservation`` only; it MUST never be used as
+  ``runId`` or be promoted into a domain identifier.
 
-The transport observation retains the request id and the
-request-transmission state, plus the response byte count and the
-bounded body digest, so the scheduler can correlate the attempt
-without leaking the request body.
+The single canonical request authority is
+:class:`PromoteAlertSignalsRequest`. The HTTP context wraps it
+directly so the client never reconstructs a second request.
 
 The closed ``ScopedPromotionHttpTransportOutcome`` union is the
 bounded set of HTTP transport shapes the scoped client may return.
@@ -33,6 +30,7 @@ from dataclasses import dataclass
 
 from ..domain.identifiers import AlertSignalId, HealthRunId
 from ..incident_alert_promotion_binding import BoundScopedPromotionResult
+from ..incident_alert_promotion_contract import PromoteAlertSignalsRequest
 from .promotion_http_transport import (
     PromotionHttpAccepted,
     PromotionHttpInvalidJson,
@@ -48,6 +46,7 @@ from .promotion_http_transport import (
 MAX_REQUEST_ID_LENGTH = 128
 MAX_SOURCE_IDENTITY_LENGTH = 512
 MAX_SIGNAL_IDS = 200
+MAX_RESPONSE_BYTES = 1 * 1024 * 1024  # 1 MiB bounded body cap
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,25 +59,23 @@ class ScopedPromotionHttpRequestContext:
     * ``run_id`` -- domain promotion/run identity. Sent as ``runId``
       and copied into the downstream ``PromotionSucceeded.run_id``.
     * ``request_id`` -- one HTTP-attempt correlation identity. Only
-      ever appears on ``PromotionHttpObservation`` and structured
-      transport events; never on a domain outcome.
+      ever appears on the ``X-K9B-Promotion-Request-ID`` header, in
+      ``PromotionHttpObservation``, and in structured transport
+      events; never on a domain outcome.
+
+    The canonical :class:`PromoteAlertSignalsRequest` is the SINGLE
+    request authority. The client MUST NOT reconstruct a second
+    request from the convenience properties below.
     """
 
-    run_id: HealthRunId
+    request: PromoteAlertSignalsRequest
     request_id: str
-    source_identity: str
-    signal_ids: tuple[AlertSignalId, ...]
 
     def __post_init__(self) -> None:
-        # ``HealthRunId`` and ``AlertSignalId`` are ``typing.NewType``
-        # aliases over ``str``; runtime ``isinstance`` against a
-        # ``NewType`` is rejected on Python 3.14. Validate against
-        # the underlying ``str`` instead; the static type checker
-        # is the authority for the NewType contract.
-        if not isinstance(self.run_id, str):
+        if not isinstance(self.request, PromoteAlertSignalsRequest):
             raise TypeError(
-                "ScopedPromotionHttpRequestContext.run_id MUST be a "
-                "HealthRunId (str-typed)"
+                "ScopedPromotionHttpRequestContext.request MUST be a "
+                "PromoteAlertSignalsRequest"
             )
         if not isinstance(self.request_id, str) or not self.request_id:
             raise ValueError(
@@ -90,36 +87,18 @@ class ScopedPromotionHttpRequestContext:
                 "ScopedPromotionHttpRequestContext.request_id exceeds "
                 f"maximum length of {MAX_REQUEST_ID_LENGTH}"
             )
-        if (
-            not isinstance(self.source_identity, str)
-            or not self.source_identity
-            or len(self.source_identity) > MAX_SOURCE_IDENTITY_LENGTH
-        ):
-            raise ValueError(
-                "ScopedPromotionHttpRequestContext.source_identity MUST "
-                f"be a non-empty string bounded by {MAX_SOURCE_IDENTITY_LENGTH}"
-            )
-        if not self.signal_ids:
-            raise ValueError(
-                "ScopedPromotionHttpRequestContext.signal_ids MUST be "
-                "non-empty"
-            )
-        if len(self.signal_ids) > MAX_SIGNAL_IDS:
-            raise ValueError(
-                "ScopedPromotionHttpRequestContext.signal_ids exceeds "
-                f"maximum of {MAX_SIGNAL_IDS}"
-            )
-        if len(set(self.signal_ids)) != len(self.signal_ids):
-            raise ValueError(
-                "ScopedPromotionHttpRequestContext.signal_ids MUST be "
-                "unique"
-            )
-        for signal_id in self.signal_ids:
-            if not isinstance(signal_id, str):
-                raise TypeError(
-                    "ScopedPromotionHttpRequestContext.signal_ids entries "
-                    "MUST be AlertSignalId (str-typed) instances"
-                )
+
+    @property
+    def run_id(self) -> HealthRunId:
+        return self.request.run_id
+
+    @property
+    def source_identity(self) -> str:
+        return self.request.source_identity
+
+    @property
+    def signal_ids(self) -> tuple[AlertSignalId, ...]:
+        return self.request.signal_ids
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +133,7 @@ ScopedPromotionHttpTransportOutcome = (
 
 __all__ = [
     "MAX_REQUEST_ID_LENGTH",
+    "MAX_RESPONSE_BYTES",
     "MAX_SIGNAL_IDS",
     "MAX_SOURCE_IDENTITY_LENGTH",
     "ScopedPromotionHttpRequestContext",

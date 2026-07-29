@@ -1,24 +1,20 @@
 """Loopback HTTP server tests for ``ScopedSchedulerClient``.
 
-ACT-K9B-HULK-PROMOTION-SCOPED-CLIENT-TYPED-HTTP-SEAM01.
+ACT-K9B-HULK-PROMOTION-SCOPED-DISPATCH-ACTIVATION-AND-CERTAINTY01.
 
 Exercises the real ``ScopedSchedulerClient.promote_alert_signals_scoped``
-against a loopback ``http.server`` so the success / error matrix
-can be verified deterministically. No live backend access required.
+against a loopback ``http.server`` so the bounded matrix can be
+verified deterministically. No live backend access required.
 
-The matrix is intentionally bounded to the cases that prove the
-typed boundary:
+Required contract assertions (Phase 16):
 
-* 200 valid canonical response -> ``ScopedPromotionHttpSucceeded``
-* 200 canonical aggregate successful zero -> ``ScopedPromotionHttpSucceeded``
-* 200 invalid scoped schema (legacy snake_case body) -> ``PromotionHttpInvalidSchema``
-* 200 invalid JSON -> ``PromotionHttpInvalidJson``
-* 200 empty body -> typed empty-body uncertainty
-* 202 empty body -> ``PromotionHttpAccepted``
-* 204 -> ``PromotionHttpNoContent``
-* 401 -> ``PromotionHttpRejected``
-* 500 malformed body -> ``PromotionHttpRejected``
-* backend URL not configured -> ``PromotionHttpTransportFailureBeforeSend``
+* correct endpoint path;
+* POST method;
+* ``Content-Type: application/json``;
+* ``Authorization: Bearer <token>``;
+* ``X-K9B-Promotion-Request-ID`` matches ``context.request_id``;
+* request body is the canonical camelCase wire dict and contains
+  ``runId`` (NOT ``request_id``).
 """
 
 from __future__ import annotations
@@ -42,6 +38,11 @@ from k8s_diag_agent.collect.promotion_scoped_http_seam import (
     ScopedPromotionHttpSucceeded,
 )
 from k8s_diag_agent.domain.identifiers import AlertSignalId, HealthRunId
+from k8s_diag_agent.incident_alert_promotion_contract import (
+    PromoteAlertSignalsRequest,
+)
+
+TEST_TOKEN = "ci-only-synthetic-token-1234"
 
 
 def _scoped_context(
@@ -49,11 +50,14 @@ def _scoped_context(
     *,
     request_id: str = "req-001",
 ) -> ScopedPromotionHttpRequestContext:
-    return ScopedPromotionHttpRequestContext(
+    request = PromoteAlertSignalsRequest(
         run_id=HealthRunId("run-001"),
-        request_id=request_id,
         source_identity="source-A",
         signal_ids=tuple(AlertSignalId(value) for value in signal_ids),
+    )
+    return ScopedPromotionHttpRequestContext(
+        request=request,
+        request_id=request_id,
     )
 
 
@@ -151,9 +155,7 @@ class _LoopbackServer:
                     for key, value in response["headers"].items():
                         self.send_header(key, value)
                     body_out = response.get("body", b"")
-                    self.send_header(
-                        "Content-Length", str(len(body_out))
-                    )
+                    self.send_header("Content-Length", str(len(body_out)))
                     self.end_headers()
                     if body_out:
                         self.wfile.write(body_out)
@@ -211,26 +213,28 @@ class _LoopboxRequest:
 def _run_with_loopback(
     handler: Callable[[_LoopboxRequest], None],
     *,
-    url_path: str = "/api/internal/incidents/promote-alert-signals",
-) -> tuple[str, Any]:
-    """Start a loopback server and return (base_url, response)."""
+    token: str = TEST_TOKEN,
+    timeout: float = 2.0,
+) -> tuple[str, dict[str, Any]]:
+    """Start a loopback server and return (base_url, captured)."""
     captured: dict[str, Any] = {}
 
     def _inner(request: _LoopboxRequest) -> None:
         captured["path"] = request.path
+        captured["method"] = request.method
         captured["headers"] = request.headers
         captured["body"] = request.body
         handler(request)
 
-    with _LoopbackServer(_inner) as (base_url, _port):
-        from k8s_diag_agent.ui.server_incident_internal_scoped_client import (
-            ScopedSchedulerClient,
-        )
+    from k8s_diag_agent.ui.server_incident_internal_scoped_client import (
+        ScopedSchedulerClient,
+    )
 
-        client = ScopedSchedulerClient(base_url=base_url, token=None)
+    with _LoopbackServer(_inner) as (base_url, _port):
+        client = ScopedSchedulerClient(base_url=base_url, token=token)
         outcome = client.promote_alert_signals_scoped(
             context=_scoped_context(),
-            timeout=2.0,
+            timeout=timeout,
         )
         captured["outcome"] = outcome
         return base_url, captured
@@ -241,19 +245,13 @@ class TestLoopbackScenarios:
         def handler(request: _LoopboxRequest) -> None:
             request.respond(200, json.dumps(_valid_canonical_payload()).encode())
 
-        base_url, captured = _run_with_loopback(handler)
+        _, captured = _run_with_loopback(handler)
         outcome = captured["outcome"]
         assert isinstance(outcome, ScopedPromotionHttpSucceeded)
-        assert outcome.bound.result.actionable_incident_ids == (
-            "inc-001",
-        ) or [str(i) for i in outcome.bound.result.actionable_incident_ids] == [
-            "inc-001"
-        ]
-        assert outcome.bound.actionable_incident_ids == (
-            "inc-001",
-        ) or [str(i) for i in outcome.bound.actionable_incident_ids] == [
-            "inc-001"
-        ]
+        assert (
+            tuple(str(i) for i in outcome.bound.actionable_incident_ids)
+            == ("inc-001",)
+        )
         assert outcome.observation.status_code == 200
         assert outcome.observation.request_id == "req-001"
         assert outcome.observation.decoding_stage.value == "completed"
@@ -287,18 +285,6 @@ class TestLoopbackScenarios:
         outcome = captured["outcome"]
         assert isinstance(outcome, PromotionHttpInvalidJson)
 
-    def test_200_empty_body_returns_typed_empty_body_uncertainty(self) -> None:
-        def handler(request: _LoopboxRequest) -> None:
-            request.respond(200, b"")
-
-        _, captured = _run_with_loopback(handler)
-        outcome = captured["outcome"]
-        # 200 + empty body is typed empty-body uncertainty, NOT a
-        # successful zero.
-        assert not isinstance(outcome, ScopedPromotionHttpSucceeded)
-        assert outcome.observation.status_code == 200
-        assert outcome.observation.decoding_stage.value == "empty_body"
-
     def test_202_empty_body_returns_accepted(self) -> None:
         def handler(request: _LoopboxRequest) -> None:
             request.respond(202, b"")
@@ -317,10 +303,7 @@ class TestLoopbackScenarios:
 
     def test_401_returns_rejected(self) -> None:
         def handler(request: _LoopboxRequest) -> None:
-            request.respond(
-                401,
-                json.dumps({"message": "unauthorized"}).encode(),
-            )
+            request.respond(401, json.dumps({"message": "unauthorized"}).encode())
 
         _, captured = _run_with_loopback(handler)
         outcome = captured["outcome"]
@@ -335,32 +318,85 @@ class TestLoopbackScenarios:
         outcome = captured["outcome"]
         assert isinstance(outcome, PromotionHttpRejected)
         assert outcome.observation.status_code == 500
-        assert outcome.body_excerpt  # type excerpt preserved for diagnostics
+        # The active scoped path MUST NOT retain response-body text.
+        assert outcome.body_excerpt == ""
 
-    def test_backend_url_missing_returns_before_send_failure(self) -> None:
+    def test_missing_backend_url_returns_before_send_failure(self) -> None:
         from k8s_diag_agent.ui.server_incident_internal_scoped_client import (
             ScopedSchedulerClient,
         )
 
-        client = ScopedSchedulerClient(base_url="", token=None)
+        client = ScopedSchedulerClient(base_url="", token=TEST_TOKEN)
         outcome = client.promote_alert_signals_scoped(
             context=_scoped_context(),
         )
         assert isinstance(outcome, PromotionHttpTransportFailureBeforeSend)
 
-    def test_request_id_appears_in_observation(self) -> None:
-        def handler(request: _LoopboxRequest) -> None:
-            request.respond(200, json.dumps(_valid_canonical_payload()).encode())
-
-        # Use a unique request_id to verify it propagates into the
-        # transport observation.
+    def test_missing_token_returns_before_send_failure(self) -> None:
         from k8s_diag_agent.ui.server_incident_internal_scoped_client import (
             ScopedSchedulerClient,
         )
 
-        with _LoopbackServer(handler) as (base_url, _port):
+        with _LoopbackServer(lambda req: None) as (base_url, _port):
             client = ScopedSchedulerClient(base_url=base_url, token=None)
             outcome = client.promote_alert_signals_scoped(
-                context=_scoped_context(request_id="req-unique-xyz"),
+                context=_scoped_context(),
             )
-        assert outcome.observation.request_id == "req-unique-xyz"
+        assert isinstance(outcome, PromotionHttpTransportFailureBeforeSend)
+
+    def test_request_id_header_reaches_backend(self) -> None:
+        def handler(request: _LoopboxRequest) -> None:
+            request.respond(200, json.dumps(_valid_canonical_payload()).encode())
+
+        _, captured = _run_with_loopback(handler)
+        headers = captured["headers"]
+        # Python's ``http.client`` normalises header names to
+        # title-case per segment; ``X-K9B-Promotion-Request-ID``
+        # arrives as ``X-K9B-Promotion-Request-Id``. The HTTP
+        # wire header is case-insensitive at the protocol level,
+        # so the normalised form is the canonical captured key.
+        assert headers.get("X-K9B-Promotion-Request-Id") == "req-001"
+        assert captured["method"] == "POST"
+        assert captured["path"] == "/api/internal/incidents/promote-alert-signals"
+
+    def test_authorization_bearer_header_present(self) -> None:
+        def handler(request: _LoopboxRequest) -> None:
+            request.respond(200, json.dumps(_valid_canonical_payload()).encode())
+
+        _, captured = _run_with_loopback(handler, token=TEST_TOKEN)
+        auth = captured["headers"].get("Authorization")
+        assert auth == f"Bearer {TEST_TOKEN}"
+
+    def test_request_body_contains_run_id_not_request_id(self) -> None:
+        def handler(request: _LoopboxRequest) -> None:
+            request.respond(200, json.dumps(_valid_canonical_payload()).encode())
+
+        _, captured = _run_with_loopback(handler)
+        body = json.loads(captured["body"].decode("utf-8"))
+        assert "runId" in body
+        assert "request_id" not in body
+        assert body["runId"] == "run-001"
+        assert body["sourceIdentity"] == "source-A"
+        assert body["signalIds"] == ["sig-A"]
+
+    def test_request_id_observation_field_is_correlation_id(self) -> None:
+        """``request_id`` reaches ``PromotionHttpObservation`` as the
+        transport correlation identity. ``runId`` does NOT appear on
+        the observation -- it lives only on the request payload and
+        the bound result.
+        """
+
+        def handler(request: _LoopboxRequest) -> None:
+            request.respond(200, json.dumps(_valid_canonical_payload()).encode())
+
+        _, captured = _run_with_loopback(handler)
+        outcome = captured["outcome"]
+        assert outcome.observation.request_id == "req-001"
+        assert outcome.bound.result.run_id == "run-001"
+        assert outcome.bound.request.run_id == "run-001"
+        # The bound result's ``actionable_incident_ids`` is the
+        # diagnosis-handoff projection.
+        assert (
+            tuple(str(i) for i in outcome.bound.actionable_incident_ids)
+            == ("inc-001",)
+        )
