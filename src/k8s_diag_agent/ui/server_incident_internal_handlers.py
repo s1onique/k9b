@@ -5,26 +5,27 @@ The alert-signal implementation lives in
 lives in :mod:`server_incident_internal_promotion_candidates`. This module
 intentionally preserves the historical import path for both handlers.
 
-ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION05-CI-SHARD-PORTABILITY-AND-PROMOTION-REGRESSION-CLOSURE01
-: ``_log_promotion_result`` is re-exported here so production tests
-that import the canonical owner via the historical import path
-``k8s_diag_agent.ui.server_incident_internal_handlers`` see the same
-single implementation owner (``server_incident_internal_promotion_handlers``)
-as the production caller. The canonical owner remains
-``server_incident_internal_promotion_handlers`` -- this module is a
-shim, NOT a duplicate implementation, so a future second
-implementation is forbidden at AST level by the
-``PRIVATE_HELPER_PUBLIC_FACADE=false`` invariant.
+ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION06:
+
+``_log_promotion_result`` is intentionally NOT re-exported here.
+Tests MUST import it from the canonical owner
+``k8s_diag_agent.ui.server_incident_internal_promotion_handlers``.
+Re-exporting the private helper would create two public import
+paths for the same implementation and contradict the typed
+single-owner contract.
+
+The canonical owner remains
+``server_incident_internal_promotion_handlers``; this module is a
+strict shim that does NOT surface any private helpers, so the
+``PRIVATE_HELPER_PUBLIC_FACADE=false`` invariant is preserved.
 """
 
 from .server_incident_internal_promotion_candidates import handle_promote_candidates
 from .server_incident_internal_promotion_handlers import (
-    _log_promotion_result,
     handle_promote_alert_signals,
 )
 
 __all__ = [
-    "_log_promotion_result",
     "handle_promote_alert_signals",
     "handle_promote_candidates",
 ]

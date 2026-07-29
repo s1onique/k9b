@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import subprocess
 import sys
@@ -15,7 +13,6 @@ from scripts.act_local_contract import CheckResult
 from scripts.factory.build_gate_summary import CheckOutcome, GateSummary
 from scripts.factory.parse_gate_summary import parse_gate_summary
 from scripts.factory.populate_gate_summary import (
-    PARSER_POSTCONDITION_NAME,
     REQUIRED_CHECK_NAMES,
     CommandSpec,
     _command_specs,
@@ -27,14 +24,21 @@ from scripts.factory.populate_gate_summary import (
 def _populate_for_test(
     target: Path, failing: set[str] | None = None
 ) -> GateSummary:
-    """Replicate the production populate flow's final write: collect checks via
-    ``build_gate_summary``, then attach ``extras.required_check_names`` so the
-    parser will treat the artifact as a real, pass-able summary.
+    """Replicate the production populate flow's final write.
 
     Mirrors :func:`scripts.factory.populate_gate_summary.main` for the
     artifact bytes and the sibling ``gate-summary-validation.json``
-    attestation so unit-level assertions can validate the
-    portable-rejected contract end-to-end.
+    attestation by invoking the canonical
+    :func:`scripts.factory.gate_summary_validation_attestation.write_validation_attestation`
+    writer so the test surface exercises the exact same code path as
+    the producer. NO test-only serializer is allowed to drift.
+
+    The writer requires the target to resolve under ``repo_root``.
+    To stay hermetic the helper computes ``repo_root`` from
+    ``target`` itself (treating the deepest ``.factory`` parent as
+    the repo root). This means the test artifact MUST live under a
+    ``.factory/`` directory of the test's repo_root -- which is
+    exactly how the production writer treats real artefacts.
     """
     summary = build_gate_summary(target=target, runner=_runner(failing))
     final = GateSummary(
@@ -49,53 +53,44 @@ def _populate_for_test(
         extras={"required_check_names": list(REQUIRED_CHECK_NAMES)},
     )
     final.write(target)
-    # Compute the portable ``validated_path`` against the helper's
-    # working directory (``SCRIPT_REPO``) so the test artifact resolves
-    # to a portable POSIX path even though it lives under ``tmp_path``.
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    try:
-        portable = target.resolve().relative_to(repo_root.resolve()).as_posix()
-    except ValueError:
-        # If the tmp_path is outside the repo root we fall back to a
-        # synthetic portable POSIX path. This branch is only reachable
-        # for unusual test layouts and is itself portable.
-        portable = target.name
-    final_bytes = target.read_bytes()
-    sha = hashlib.sha256(final_bytes).hexdigest()
-    attestation = {
-        "schema_version": 1,
-        "validated_path": portable,
-        "validated_sha256": sha,
-        "validated_at": datetime.now(UTC).isoformat(),
-        "parser_identity": "scripts/factory/parse_gate_summary.py",
-        "parser_command": "<test-helper>",
-        "parser_exit_code": 0,
-        "parser_duration_ms": 0,
-        "decode_status": (
+    # Invoke the canonical writer with ``repo_root`` derived from
+    # the deepest ``.factory`` ancestor of ``target``. This keeps
+    # the writer's outside-repo guard observable to the test (the
+    # helper does NOT bypass the safety contract).
+    from scripts.factory.gate_summary_validation_attestation import (
+        write_validation_attestation,
+    )
+
+    ancestor = target.resolve().parent
+    while ancestor.parent != ancestor:
+        if ancestor.name == ".factory":
+            break
+        ancestor = ancestor.parent
+    else:
+        ancestor = target.resolve().parent
+    repo_root = ancestor.parent
+    write_validation_attestation(
+        repo_root=repo_root,
+        target=target,
+        parser_command="<test-helper>",
+        parser_exit_code=0,
+        parser_duration_ms=0,
+        decode_status=(
             "pass"
             if final.overall_status == "pass" and final.checks_failed == 0
             else "fail"
         ),
-        "acceptance_status": (
+        acceptance_status=(
             "pass"
             if final.overall_status == "pass" and final.checks_failed == 0
             else "fail"
         ),
-        "parser_postcondition": {
-            "name": PARSER_POSTCONDITION_NAME,
-            "source": "populate_gate_summary",
-        },
-        "diagnostics": {
+        diagnostics={
             "checks_total": final.checks_total,
             "checks_failed": final.checks_failed,
             "required_check_names_count": len(REQUIRED_CHECK_NAMES),
             "extras_keys": sorted((final.extras or {}).keys()),
         },
-    }
-    attestation_path = target.parent / "gate-summary-validation.json"
-    attestation_path.write_text(
-        json.dumps(attestation, indent=2, sort_keys=False) + "\n",
-        encoding="utf-8",
     )
     return final
 

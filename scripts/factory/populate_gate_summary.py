@@ -15,7 +15,6 @@ result lives in a sibling file so a subsequent mutation of
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import shlex
 import subprocess
@@ -402,11 +401,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     final.write(target)
 
-    # Step 2: capture the EXACT final bytes and their SHA-256 so
-    # the validation attestation can bind the validated content.
-    final_bytes = target.read_bytes()
-    final_sha256 = hashlib.sha256(final_bytes).hexdigest()
-
     # Step 3: run the canonical parser subprocess and capture its
     # output for the validation attestation. The exit code drives
     # the producer's overall return code.
@@ -447,12 +441,15 @@ def main(argv: list[str] | None = None) -> int:
     # validates. A subsequent mutation of ``gate-summary.json``
     # is detectable as a SHA-256 mismatch.
     #
-    # ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION05:
-    # ``validated_path`` MUST be a portable repository-relative POSIX
-    # path so the committed attestation is byte-identical on every
-    # runner. The writer logic lives in
-    # :mod:`scripts.factory.gate_summary_validation_attestation` so the
-    # gate-summary producer stays under the 500-line cap.
+    # ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION05 +
+    # CORRECTION06: ``validated_path`` MUST be a portable
+    # repository-relative POSIX path so the committed attestation
+    # is byte-identical on every runner. The writer computes the
+    # SHA from the artifact bytes itself (no caller-supplied
+    # authority) and rejects out-of-repository targets and
+    # non-regular files at the seam. The writer logic lives in
+    # :mod:`scripts.factory.gate_summary_validation_attestation`
+    # so the gate-summary producer stays under the 500-line cap.
     from scripts.factory.gate_summary_validation_attestation import (
         write_validation_attestation,
     )
@@ -460,7 +457,6 @@ def main(argv: list[str] | None = None) -> int:
     attestation_path = write_validation_attestation(
         repo_root=repo_root,
         target=target,
-        final_sha256=final_sha256,
         parser_command=parser_outcome.command,
         parser_exit_code=parser_outcome.exit_code,
         parser_duration_ms=parser_outcome.duration_ms,

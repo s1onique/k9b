@@ -40,7 +40,7 @@ env:
   # Python version - pinned to specific patch for reproducible toolcache hits
   PYTHON_VERSION: '3.13.14'
 
-  jobs:
+jobs:
   # Python lint/type/doctrine gates (excluding unit tests - handled by shards)
   lint:
     name: Lint & Type Check
