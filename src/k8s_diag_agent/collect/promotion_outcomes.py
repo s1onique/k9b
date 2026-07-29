@@ -60,6 +60,21 @@ class PromotionRejectionCode(StrEnum):
     EXTERNAL_RULE_FAILURE = "external_rule_failure"
     """Backend rule engine refused the promotion explicitly."""
 
+    CONFIGURATION_BLOCKED = "configuration_blocked"
+    """Missing or invalid scheduler / backend configuration."""
+
+    BACKEND_UNREACHABLE = "backend_unreachable"
+    """DNS failure, connection refused, or pre-connect TLS error."""
+
+    AUTHENTICATION_REJECTED = "authentication_rejected"
+    """The backend returned ``401`` or ``403`` before promotion
+    execution could begin."""
+
+    PROMOTION_HTTP_ERROR_UNCERTAIN = "promotion_http_error_uncertain"
+    """Generic untyped HTTP error (4xx / 5xx) whose commit status
+    cannot be inferred from the status code alone; reconciliation
+    is required before commit certainty is established."""
+
     UNKNOWN = "unknown"
     """Catch-all bucket. Use sparingly; prefer a specific code."""
 
@@ -106,6 +121,15 @@ class PromotionUncertaintyCode(StrEnum):
 
     HTTP_RESPONSE_TRUNCATED = "http_response_truncated"
     """The response body exceeded the bounded reader limit."""
+
+    HTTP_RESPONSE_BODY_LIMIT_EXCEEDED = "http_response_body_limit_exceeded"
+    """The response body exceeded the bounded reader cap; the body
+    is dropped to prevent silent truncation masquerading as
+    complete input."""
+
+    HTTP_RESPONSE_SHORT_READ = "http_response_short_read"
+    """The declared Content-Length exceeds the bytes actually
+    received from the response stream."""
 
     HTTP_READ_TIMEOUT_AFTER_SEND = "http_read_timeout_after_send"
     """Read timeout after the request body was transmitted."""

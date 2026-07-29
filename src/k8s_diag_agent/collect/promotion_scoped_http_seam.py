@@ -3,7 +3,9 @@
 ACT-K9B-HULK-PROMOTION-SCOPED-DISPATCH-ACTIVATION-AND-CERTAINTY01.
 
 This module owns the typed request context, the typed success
-variant, and the bounded HTTP observation for the scoped path.
+variant, the typed aggregate receipt, the bounded request
+fingerprint, and the bounded HTTP observation for the scoped
+path.
 
 Identity ownership:
 
@@ -22,10 +24,20 @@ The closed ``ScopedPromotionHttpTransportOutcome`` union is the
 bounded set of HTTP transport shapes the scoped client may return.
 ``typing.assert_never`` is used at the consumer boundary so a
 newly added variant cannot silently disappear from the dispatch.
+
+The deterministic :func:`scoped_promotion_request_fingerprint`
+computes a SHA-256 digest over the canonical request payload; two
+attempts of the same promotion scope produce the same fingerprint
+even when they carry different transport correlation ids. The
+fingerprint is the deterministic half of
+:class:`PromotionReconciliationToken` -- the request id is the
+transport half.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 
 from ..domain.identifiers import AlertSignalId, HealthRunId
@@ -47,6 +59,12 @@ MAX_REQUEST_ID_LENGTH = 128
 MAX_SOURCE_IDENTITY_LENGTH = 512
 MAX_SIGNAL_IDS = 200
 MAX_RESPONSE_BYTES = 1 * 1024 * 1024  # 1 MiB bounded body cap
+
+_WIRE_CONTRACT_VERSION = "k9b.scoped.promotion.v1"
+_REQUEST_FINGERPRINT_METHOD = "POST"
+_REQUEST_FINGERPRINT_ENDPOINT = (
+    "/api/internal/incidents/promote-alert-signals"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +90,11 @@ class ScopedPromotionHttpRequestContext:
     request_id: str
 
     def __post_init__(self) -> None:
+        # ``HealthRunId`` and ``AlertSignalId`` are ``typing.NewType``
+        # aliases over ``str``; runtime ``isinstance`` against a
+        # ``NewType`` is rejected on Python 3.14. Validate against
+        # the underlying ``str`` instead; the static type checker
+        # is the authority for the NewType contract.
         if not isinstance(self.request, PromoteAlertSignalsRequest):
             raise TypeError(
                 "ScopedPromotionHttpRequestContext.request MUST be a "
@@ -87,6 +110,36 @@ class ScopedPromotionHttpRequestContext:
                 "ScopedPromotionHttpRequestContext.request_id exceeds "
                 f"maximum length of {MAX_REQUEST_ID_LENGTH}"
             )
+        if (
+            not isinstance(self.request.source_identity, str)
+            or not self.request.source_identity
+            or len(self.request.source_identity) > MAX_SOURCE_IDENTITY_LENGTH
+        ):
+            raise ValueError(
+                "ScopedPromotionHttpRequestContext.source_identity MUST "
+                f"be a non-empty string bounded by {MAX_SOURCE_IDENTITY_LENGTH}"
+            )
+        if not self.request.signal_ids:
+            raise ValueError(
+                "ScopedPromotionHttpRequestContext.signal_ids MUST be "
+                "non-empty"
+            )
+        if len(self.request.signal_ids) > MAX_SIGNAL_IDS:
+            raise ValueError(
+                "ScopedPromotionHttpRequestContext.signal_ids exceeds "
+                f"maximum of {MAX_SIGNAL_IDS}"
+            )
+        if len(set(self.request.signal_ids)) != len(self.request.signal_ids):
+            raise ValueError(
+                "ScopedPromotionHttpRequestContext.signal_ids MUST be "
+                "unique"
+            )
+        for signal_id in self.request.signal_ids:
+            if not isinstance(signal_id, str):
+                raise TypeError(
+                    "ScopedPromotionHttpRequestContext.signal_ids entries "
+                    "MUST be AlertSignalId (str-typed) instances"
+                )
 
     @property
     def run_id(self) -> HealthRunId:
@@ -114,6 +167,54 @@ class ScopedPromotionHttpSucceeded:
     bound: BoundScopedPromotionResult
 
 
+@dataclass(frozen=True, slots=True)
+class ScopedPromotionReceipt:
+    """Aggregate scoped receipt carried alongside PromotionSucceeded.
+
+    The scoped canonical wire does NOT carry per-signal promotion
+    records. Downstream consumers MUST NOT derive
+    ``promotion_record_count=0`` / ``no_promotion_run`` from the
+    absence of records. The aggregate receipt proves that a
+    promotion was attempted and completed, even when every
+    category list is empty (aggregate successful zero).
+    """
+
+    requested_signal_ids: tuple[str, ...]
+    scanned_signal_ids: tuple[str, ...]
+    opened_incident_ids: tuple[str, ...]
+    materially_changed_incident_ids: tuple[str, ...]
+    observation_refreshed_incident_ids: tuple[str, ...]
+    unchanged_incident_ids: tuple[str, ...]
+    skipped_signal_ids: tuple[str, ...]
+    failure_count: int
+
+
+def scoped_promotion_request_fingerprint(
+    request: PromoteAlertSignalsRequest,
+) -> str:
+    """Stable SHA-256 fingerprint over the canonical request payload.
+
+    Two attempts for the same promotion scope produce the same
+    fingerprint even if they carry different transport correlation
+    ``request_id`` values. Used as the deterministic half of the
+    :class:`PromotionReconciliationToken`.
+    """
+    wire = {
+        "wire_contract_version": _WIRE_CONTRACT_VERSION,
+        "method": _REQUEST_FINGERPRINT_METHOD,
+        "endpoint": _REQUEST_FINGERPRINT_ENDPOINT,
+        "runId": str(request.run_id),
+        "sourceIdentity": request.source_identity,
+        "signalIds": tuple(
+            str(signal_id) for signal_id in request.signal_ids
+        ),
+    }
+    canonical = json.dumps(
+        wire, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 # Closed union for the scoped HTTP transport surface. The success
 # variant is endpoint-specific; the remaining variants are shared
 # with the generic transport module because the failure / bounded-
@@ -133,10 +234,11 @@ ScopedPromotionHttpTransportOutcome = (
 
 __all__ = [
     "MAX_REQUEST_ID_LENGTH",
-    "MAX_RESPONSE_BYTES",
     "MAX_SIGNAL_IDS",
     "MAX_SOURCE_IDENTITY_LENGTH",
     "ScopedPromotionHttpRequestContext",
     "ScopedPromotionHttpSucceeded",
     "ScopedPromotionHttpTransportOutcome",
+    "ScopedPromotionReceipt",
+    "scoped_promotion_request_fingerprint",
 ]
