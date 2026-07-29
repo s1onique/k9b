@@ -71,14 +71,13 @@ from .promotion_scoped_http_mapping import (
     ScopedPromotionUncertainProjection,
 )
 from .promotion_scoped_http_seam import (
+    MAX_REQUEST_ID_LENGTH,
     ScopedPromotionDispatchCompleted,
     ScopedPromotionDispatchRejected,
     ScopedPromotionDispatchResult,
     ScopedPromotionDispatchUncertain,
     ScopedPromotionReceipt,
-    MAX_REQUEST_ID_LENGTH,
 )
-
 
 # A canonical SHA-256 fingerprint is exactly 64 lower-case hex chars.
 _SHA256_HEX_LENGTH = 64

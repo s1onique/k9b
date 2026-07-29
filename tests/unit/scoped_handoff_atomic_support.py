@@ -62,8 +62,8 @@ _FP_REJECTED = "c" * 64
 def make_completed_projection(
     *,
     run_id: str = "run-correction03-atomic-completed",
-    requested_signal_ids: tuple[str, ...] = tuple(
-        f"sig-{i:02d}" for i in range(5)
+    requested_signal_ids: tuple[str, ...] = (
+        "sig-00", "sig-01", "sig-02", "sig-03", "sig-04",
     ),
     diagnosis_incident_ids: tuple[str, ...] = (),
 ) -> ScopedPromotionCompletedProjection:
@@ -96,8 +96,8 @@ def make_completed_projection(
 def make_uncertain_projection(
     *,
     run_id: str = "run-correction03-atomic-uncertain",
-    requested_signal_ids: tuple[str, ...] = tuple(
-        f"sig-{i:02d}" for i in range(5)
+    requested_signal_ids: tuple[str, ...] = (
+        "sig-00", "sig-01", "sig-02", "sig-03", "sig-04",
     ),
 ) -> ScopedPromotionUncertainProjection:
     """Build an uncertain projection with empty aggregate (records=())."""
@@ -122,8 +122,8 @@ def make_uncertain_projection(
 def make_rejected_projection(
     *,
     run_id: str = "run-correction03-atomic-rejected",
-    requested_signal_ids: tuple[str, ...] = tuple(
-        f"sig-{i:02d}" for i in range(5)
+    requested_signal_ids: tuple[str, ...] = (
+        "sig-00", "sig-01", "sig-02", "sig-03", "sig-04",
     ),
 ) -> ScopedPromotionRejectedProjection:
     """Build a rejected projection with empty aggregate (records=())."""
@@ -154,7 +154,7 @@ def completed_handoff(**kwargs: Any) -> ScopedPromotionAccumulatorCompleted:
     projection = make_completed_projection(**kwargs)
     return to_handoff(
         ScopedPromotionDispatchCompleted(projection=projection)
-    )  # type: ignore[return-value]
+    )
 
 
 def uncertain_handoff(**kwargs: Any) -> ScopedPromotionAccumulatorUncertain:
@@ -162,7 +162,7 @@ def uncertain_handoff(**kwargs: Any) -> ScopedPromotionAccumulatorUncertain:
     projection = make_uncertain_projection(**kwargs)
     return to_handoff(
         ScopedPromotionDispatchUncertain(projection=projection)
-    )  # type: ignore[return-value]
+    )
 
 
 def rejected_handoff(**kwargs: Any) -> ScopedPromotionAccumulatorRejected:
@@ -170,7 +170,7 @@ def rejected_handoff(**kwargs: Any) -> ScopedPromotionAccumulatorRejected:
     projection = make_rejected_projection(**kwargs)
     return to_handoff(
         ScopedPromotionDispatchRejected(projection=projection)
-    )  # type: ignore[return-value]
+    )
 
 
 def make_completed_batch(

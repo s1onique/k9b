@@ -27,9 +27,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .incident_promotion_dispatch import (
+from .incident_promotion_dispatch_constants import (
     INCIDENT_ACCESS_MODE_BACKEND,
     MODE_BACKEND_API,
+)
+from .incident_promotion_result_contract import (
+    SCAN_SCOPE_INTERNAL_API_ALERT_SIGNALS_SCOPED,
     IncidentPromotionResult,
 )
 from .promotion_scoped_accumulator_handoff import (
@@ -43,7 +46,7 @@ if TYPE_CHECKING:
     from .incident_promotion_batch import PromotionBatch
 
 
-_SCAN_SCOPE = "internal_api_alert_signals:scoped"
+_SCAN_SCOPE = SCAN_SCOPE_INTERNAL_API_ALERT_SIGNALS_SCOPED
 _SOURCE_KIND = "alertmanager"
 _EMPTY_RECORDS: tuple[object, ...] = ()
 

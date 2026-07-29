@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -45,6 +45,10 @@ from .incident_promotion_dispatch_constants import (
     MODE_AUTO,
     MODE_BACKEND_API,
     MODE_LOCAL,
+)
+from .incident_promotion_result_contract import (
+    SCAN_SCOPE_INTERNAL_API_ALERT_SIGNALS_SCOPED,
+    IncidentPromotionResult,
 )
 from .promotion_scoped_accumulator_handoff import (
     ScopedPromotionAccumulatorCompleted,
@@ -128,86 +132,10 @@ class IncidentPromotionDispatchConfig:
         return True, None
 
 
-@dataclass(frozen=True)
-class IncidentPromotionResult:
-    """Result of an incident promotion operation.
-
-    The result exposes per-canonical-incident ``opened_incident_ids`` /
-    ``updated_incident_ids`` plus a per-candidate ``promotion_records``
-    mapping so that downstream callers (notably automatic diagnosis) can
-    consume canonical ``incident_id`` values directly without
-    re-deriving them from candidate attributes.
-
-    Suggested by: ACT-K9B-AUTO-DIAGNOSIS-BACKEND-INCIDENT-IDENTITY01
-    """
-
-    ok: bool = True
-    scanned: int = 0
-    firing: int = 0
-    opened_incidents: int = 0
-    updated_incidents: int = 0
-    skipped_duplicates: int = 0
-    errors: int = 0
-    error_messages: tuple[str, ...] = field(default_factory=tuple)
-    # Track the mode used for correct event logging
-    promotion_mode: Literal["local", "backend-api"] = "local"
-    # Canonical identity propagation
-    opened_incident_ids: tuple[str, ...] = field(default_factory=tuple)
-    updated_incident_ids: tuple[str, ...] = field(default_factory=tuple)
-    # R1: typed categories from the scoped endpoint.
-    observation_refreshed_incident_ids: tuple[str, ...] = field(
-        default_factory=tuple
-    )
-    unchanged_incident_ids: tuple[str, ...] = field(default_factory=tuple)
-    promotion_records: tuple[dict[str, str | None], ...] = field(default_factory=tuple)
-    unique_candidate_count: int = 0
-    promotion_scan_scope: str = ""
-    incident_access_mode: str = "local"
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dict for logging/response."""
-        return {
-            "ok": self.ok,
-            "scanned": self.scanned,
-            "firing": self.firing,
-            "opened_incidents": self.opened_incidents,
-            "updated_incidents": self.updated_incidents,
-            "skipped_duplicates": self.skipped_duplicates,
-            "errors": self.errors,
-            "error_messages": list(self.error_messages),
-            "promotion_mode": self.promotion_mode,
-            "opened_incident_ids": list(self.opened_incident_ids),
-            "updated_incident_ids": list(self.updated_incident_ids),
-            "promotion_records": [dict(r) for r in self.promotion_records],
-            "unique_candidate_count": self.unique_candidate_count,
-            "promotion_scan_scope": self.promotion_scan_scope,
-            "incident_access_mode": self.incident_access_mode,
-        }
-
-    @property
-    def actionable_incident_ids(self) -> tuple[str, ...]:
-        """Return opened + materially-changed canonical incident IDs.
-
-        This is the stable first-occurrence union of actionable incidents
-        (newly opened + materially changed). Excludes unchanged and
-        observation-refreshed incidents.
-        """
-        seen: set[str] = set()
-        result: list[str] = []
-        for id_ in (*self.opened_incident_ids, *self.updated_incident_ids):
-            if id_ not in seen:
-                seen.add(id_)
-                result.append(id_)
-        return tuple(result)
-
-    # Deprecated: use actionable_incident_ids instead
-    def canonical_incident_ids(self) -> tuple[str, ...]:
-        """Return opened + updated canonical incident IDs as one tuple.
-
-        .. deprecated::
-            Use :attr:`actionable_incident_ids` instead.
-        """
-        return self.actionable_incident_ids
+# ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+# ``IncidentPromotionResult`` lives in the cycle-free contract module
+# below; the dispatcher re-exports it for backward compatibility.
+# No new callers may define a parallel dataclass here.
 
 
 def _get_dispatch_config() -> IncidentPromotionDispatchConfig:
@@ -970,7 +898,7 @@ def _build_empty_batch(
     snapshot_bundle_id: str | None,
 ) -> PromotionBatch:
     if resolved_mode == MODE_BACKEND_API:
-        scan_scope = "internal_api_alert_signals:scoped"
+        scan_scope: str = SCAN_SCOPE_INTERNAL_API_ALERT_SIGNALS_SCOPED
     else:
         scan_scope = f"alert_signal_artifacts:dir={runs_dir}"
     empty_result = IncidentPromotionResult(

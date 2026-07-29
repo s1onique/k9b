@@ -2,6 +2,7 @@
 
 ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
 CORRECTION05-STRICT-TYPING-AND-ROLLBACK-CLOSURE01.
+ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01.
 
 The split atomic recorder (:mod:`incident_promotion_scoped_atomic_recorder`)
 uses a :class:`Protocol` to type the host class without depending on
@@ -18,15 +19,14 @@ calls:
 * :meth:`_apply_batch` -- the legacy batch applier used inside the
   atomic transaction.
 
-The :class:`AccumulatorSnapshot` value object is a frozen dataclass
-that carries every authoritative mutable field of the accumulator.
-``_restore`` reconstructs each container in place so ``is``
-identity is preserved for ``batches``, ``promotion_records``, and
-``_seen_canonical_ids``.
-
-The host class also exposes the typed-outcome recorder
-(:meth:`record_promotion_outcome`) as a Protocol method so the
-recorder can call it through a typed boundary.
+ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+the protocol now also carries the single
+:class:`ScopedPromotionRecordedAuthority` field. The recorder
+stores ONE authority on the accumulator; ``scoped_promotion_handoff``
+and ``scoped_promotion_batch`` are derived projections of that
+authority. The general :attr:`batches` list is aggregate inventory
+only -- the recorder NEVER indexes ``batches[-1]`` for the scoped
+replay check.
 """
 
 from __future__ import annotations
@@ -35,12 +35,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from .incident_identity_hardening import PromotionRecord
+    from .incident_identity_hardening import PromotionRecord as _RecordType
     from .incident_promotion_batch import PromotionBatch
     from .incident_promotion_outcome_recorder import (
         PromotionOutcomeRecording,
     )
-    from .promotion_outcomes import PromotionOutcome
+    from .incident_promotion_scoped_atomic_recording_authority import (
+        ScopedPromotionRecordedAuthority,
+    )
+    from .promotion_outcomes import PromotionOutcome as _OutcomeType
     from .promotion_scoped_accumulator_handoff import (
         ScopedPromotionAccumulatorHandoff,
     )
@@ -55,12 +58,17 @@ class AccumulatorSnapshot:
     snapshot carries every authoritative field touched by the atomic
     recorder so a partial-batch rollback leaves no observable drift.
 
+    ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+    the snapshot also carries the single
+    :class:`ScopedPromotionRecordedAuthority` value so the
+    recording authority is part of the atomic transaction.
+
     The mutable containers are stored as their frozen copies; the
     restore method writes them back IN PLACE so observers retain
     the original Python objects.
     """
 
-    promotion_records: tuple[PromotionRecord, ...]
+    promotion_records: tuple[_RecordType, ...]
     seen_canonical_ids: frozenset[str]
     batches: tuple[PromotionBatch, ...]
     total_scanned: int
@@ -74,9 +82,10 @@ class AccumulatorSnapshot:
     last_incident_access_mode: str
     last_source_kind: str
     last_promotion_scan_scope: str
-    promotion_outcome: PromotionOutcome | None
+    promotion_outcome: _OutcomeType | None
     promotion_outcome_run_id: str
     scoped_promotion_handoff: ScopedPromotionAccumulatorHandoff | None
+    scoped_promotion_recording: ScopedPromotionRecordedAuthority | None
 
 
 @runtime_checkable
@@ -84,22 +93,28 @@ class ScopedPromotionAccumulatorHost(Protocol):
     """Structural type for the host class the atomic recorder mixes into.
 
     The protocol covers every field and method the recorder touches.
-    ``runtime_checkable`` lets the architecture guard
-    :func:`test_run_promotion_accumulator_conforms_to_host_protocol`
-    assert :class:`RunPromotionAccumulator` implements the protocol
-    so a future drift between the dataclass fields and the
-    recorder expectations fails the test suite.
+    ``runtime_checkable`` lets the architecture guard assert
+    :class:`RunPromotionAccumulator` implements the protocol so a
+    future drift between the dataclass fields and the recorder
+    expectations fails the test suite.
 
-    The protocol uses the same private field names
+    ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+    the host carries a single
+    :class:`ScopedPromotionRecordedAuthority` field; the recorder
+    derives ``scoped_promotion_handoff`` / ``scoped_promotion_batch``
+    from it. The protocol uses the same private field names
     (``_seen_canonical_ids``) as the concrete accumulator so
     :func:`isinstance(acc, ScopedPromotionAccumulatorHost)` resolves
     against the real attribute.
     """
 
-    promotion_outcome: PromotionOutcome | None
+    promotion_outcome: _OutcomeType | None
     promotion_outcome_run_id: str
-    scoped_promotion_handoff: ScopedPromotionAccumulatorHandoff | None
-    promotion_records: list[PromotionRecord]
+    # ``scoped_promotion_handoff`` is a derived property of the
+    # scoped recording authority. Only the authority is part of
+    # the structural Protocol here.
+    scoped_promotion_recording: ScopedPromotionRecordedAuthority | None
+    promotion_records: list[_RecordType]
     _seen_canonical_ids: set[str]
     batches: list[PromotionBatch]
 
@@ -123,7 +138,7 @@ class ScopedPromotionAccumulatorHost(Protocol):
 
     def record_promotion_outcome(
         self,
-        outcome: PromotionOutcome,
+        outcome: _OutcomeType,
     ) -> PromotionOutcomeRecording:
         """Record the typed outcome for the current run."""
         ...

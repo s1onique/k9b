@@ -72,6 +72,9 @@ from .incident_promotion_scoped_atomic_host_protocol import (
 from .incident_promotion_scoped_atomic_recorder import (
     ScopedPromotionAtomicRecorderMixin,
 )
+from .incident_promotion_scoped_atomic_recording_authority import (
+    ScopedPromotionRecordedAuthority,
+)
 from .promotion_scoped_accumulator_handoff import (
     ScopedPromotionAccumulatorHandoff,
 )
@@ -234,15 +237,19 @@ class RunPromotionAccumulator(
     promotion_outcome: PromotionOutcome | None = field(default=None, repr=False)
     promotion_outcome_run_id: str = ""
 
-    # ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION01-FINALIZATION01:
-    # The typed scoped promotion handoff. ``scoped_promotion_handoff`` is
-    # the closed authority carried directly from the active scoped
-    # dispatcher; downstream projections MUST derive from it (or from
-    # the typed ``promotion_outcome`` above) and MUST NOT infer
-    # commit authority from ``promotion_records``,
-    # ``promotion_record_count``, canonical incident counts, diagnosis
-    # incident counts, or ``ok``/``errors`` fields.
-    scoped_promotion_handoff: ScopedPromotionAccumulatorHandoff | None = (
+    # ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+    # The single scoped recording authority. The active scoped
+    # dispatcher carries the typed ``ScopedPromotionAccumulatorHandoff``
+    # together with its ``PromotionBatch``; downstream projections
+    # MUST derive from this authority (or from the typed
+    # ``promotion_outcome`` above) and MUST NOT infer commit
+    # authority from ``promotion_records``,
+    # ``promotion_record_count``, canonical incident counts,
+    # diagnosis incident counts, or ``ok``/``errors`` fields. The
+    # general ``batches`` list is aggregate inventory only -- the
+    # recorder never indexes ``batches[-1]`` for the scoped replay
+    # check.
+    scoped_promotion_recording: ScopedPromotionRecordedAuthority | None = (
         field(default=None, repr=False)
     )
     # Request identity (``request_id`` / ``request_fingerprint``)
@@ -289,7 +296,12 @@ class RunPromotionAccumulator(
             last_promotion_scan_scope=self.last_promotion_scan_scope,
             promotion_outcome=self.promotion_outcome,
             promotion_outcome_run_id=self.promotion_outcome_run_id,
-            scoped_promotion_handoff=self.scoped_promotion_handoff,
+            scoped_promotion_handoff=(
+                self.scoped_promotion_recording.handoff
+                if self.scoped_promotion_recording is not None
+                else None
+            ),
+            scoped_promotion_recording=self.scoped_promotion_recording,
         )
 
     def _restore(self, snap: AccumulatorSnapshot) -> None:
@@ -304,9 +316,12 @@ class RunPromotionAccumulator(
         rollback. Replacing the field with a new container would
         silently orphan externally retained references.
 
-        The restore path also resets
-        :attr:`scoped_promotion_handoff` so the rollback transaction
-        leaves the handoff slot in its pre-call state.
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        the restore path also resets
+        :attr:`scoped_promotion_recording` (and the derived
+        :attr:`scoped_promotion_handoff`) so the rollback
+        transaction leaves the scoped authority in its pre-call
+        state.
         """
         self.promotion_records.clear()
         self.promotion_records.extend(snap.promotion_records)
@@ -327,7 +342,10 @@ class RunPromotionAccumulator(
         self.last_promotion_scan_scope = snap.last_promotion_scan_scope
         self.promotion_outcome = snap.promotion_outcome
         self.promotion_outcome_run_id = snap.promotion_outcome_run_id
-        self.scoped_promotion_handoff = snap.scoped_promotion_handoff
+        self.scoped_promotion_recording = snap.scoped_promotion_recording
+        # ``scoped_promotion_handoff`` and ``scoped_promotion_batch``
+        # are derived properties of the authority; nothing to
+        # restore.
 
     def _local_skipped_duplicate_count(self) -> int:
         """Count ``skipped_duplicate`` outcomes from local records.
@@ -510,36 +528,74 @@ class RunPromotionAccumulator(
         return tuple(messages)
 
     @property
+    def scoped_promotion_handoff(
+        self,
+    ) -> ScopedPromotionAccumulatorHandoff | None:
+        """Derived projection of the single scoped recording authority.
+
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        the canonical stored authority is
+        :attr:`scoped_promotion_recording`; this property is a
+        backward-compatibility derived projection. External
+        callers MUST NOT assign to it; the authoritative write
+        path is the recorder's atomic commit.
+        """
+        authority = self.scoped_promotion_recording
+        if authority is None:
+            return None
+        return authority.handoff
+
+    @property
+    def scoped_promotion_batch(self) -> PromotionBatch | None:
+        """Return the recorded batch from the scoped authority.
+
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        derived projection of :attr:`scoped_promotion_recording`.
+        External callers MUST NOT assign to it; the recorder is
+        the authoritative write path.
+        """
+        authority = self.scoped_promotion_recording
+        if authority is None:
+            return None
+        return authority.batch
+
+    @property
     def scoped_promotion_request_id(self) -> str:
         """Return the recorded handoff's request id, or ``""`` when absent.
 
-        Derived projection of :attr:`scoped_promotion_handoff`. The
-        accumulator does NOT store a mutable copy of this value;
-        callers MUST NOT assign to the property.
+        Derived projection of the scoped recording authority's
+        handoff. The accumulator does NOT store a mutable copy of
+        this value; callers MUST NOT assign to the property.
         """
-        handoff = self.scoped_promotion_handoff
-        return "" if handoff is None else handoff.request_id
+        authority = self.scoped_promotion_recording
+        if authority is None:
+            return ""
+        return authority.handoff.request_id
 
     @property
     def scoped_promotion_request_fingerprint(self) -> str:
         """Return the recorded handoff's fingerprint, or ``""`` when absent.
 
-        Derived projection of :attr:`scoped_promotion_handoff`. The
-        accumulator does NOT store a mutable copy of this value;
-        callers MUST NOT assign to the property.
+        Derived projection of the scoped recording authority's
+        handoff. The accumulator does NOT store a mutable copy of
+        this value; callers MUST NOT assign to the property.
         """
-        handoff = self.scoped_promotion_handoff
-        return "" if handoff is None else handoff.request_fingerprint
+        authority = self.scoped_promotion_recording
+        if authority is None:
+            return ""
+        return authority.handoff.request_fingerprint
 
     def __setattr__(self, name: str, value: object) -> None:
-        """Reject writes to derived request-identity projections."""
+        """Reject writes to derived scoped-recording projections."""
         if name in {
             "scoped_promotion_request_id",
             "scoped_promotion_request_fingerprint",
+            "scoped_promotion_handoff",
+            "scoped_promotion_batch",
         }:
             raise AttributeError(
                 f"{name} is a derived projection of "
-                "scoped_promotion_handoff; assignment is forbidden."
+                "scoped_promotion_recording; assignment is forbidden."
             )
         super().__setattr__(name, value)
 
@@ -601,11 +657,15 @@ class RunPromotionAccumulator(
     ) -> ScopedPromotionAccumulatorHandoff | None:
         """Return the recorded scoped promotion handoff, if any.
 
-        The accessor returns the typed authority verbatim. It MUST
-        NOT be reconstructed from legacy counters or aggregate
-        incident IDs.
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        derived projection of the scoped recording authority. The
+        accessor MUST NOT be reconstructed from legacy counters or
+        aggregate incident IDs.
         """
-        return self.scoped_promotion_handoff
+        authority = self.scoped_promotion_recording
+        if authority is None:
+            return None
+        return authority.handoff
 
 
     def as_dict(self) -> dict[str, object]:

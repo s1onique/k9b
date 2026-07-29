@@ -278,11 +278,15 @@ def test_dataclass_equality_authority_for_replay_predicates() -> None:
         )
 
 
-def test_atomic_recorder_defensive_missing_batch() -> None:
-    """The recorder MUST fail closed on handoff present + batches empty.
+def test_atomic_recorder_defensive_corrupt_state() -> None:
+    """The recorder MUST fail closed when the outcome is missing.
 
-    The replay path guards ``self.batches[-1]`` with a bounded
-    :class:`PromotionOutcomeConflictError` (never an ``IndexError``).
+    ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+    the recorder compares against ``scoped_promotion_recording``,
+    NOT against ``batches[-1]``. The replay path fails closed
+    on a corrupt persisted-state shape -- e.g. when the recorded
+    authority is present but the typed outcome was wiped --
+    with a bounded :class:`PromotionOutcomeConflictError`.
     """
     from k8s_diag_agent.collect.incident_promotion_accumulator import (
         RunPromotionAccumulator,
@@ -303,13 +307,13 @@ def test_atomic_recorder_defensive_missing_batch() -> None:
         diagnosis_incident_ids=("canonical-corrupt",),
     )
     batch = build_compatibility_batch_from_handoff(handoff)
-    # First recording commits normally.
     recording = acc.record_scoped_promotion_batch(
         handoff=handoff, batch=batch
     )
     assert recording is PromotionOutcomeRecording.NEW
-    # Manually drop the accounting batch to simulate persisted-state drift.
-    acc.batches.clear()
+    # Wipe the outcome to simulate persisted-state drift; the
+    # recorded authority remains.
+    acc.promotion_outcome = None
     with pytest.raises(PromotionOutcomeConflictError, match="inconsistent"):
         acc.record_scoped_promotion_batch(handoff=handoff, batch=batch)
 

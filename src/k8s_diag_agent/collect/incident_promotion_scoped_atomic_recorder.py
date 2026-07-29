@@ -4,6 +4,7 @@ ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
 CORRECTION04-REPLAY-TRUTH-AND-ATOMIC-RECORDER-SPLIT01.
 ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
 CORRECTION05-STRICT-TYPING-AND-ROLLBACK-CLOSURE01.
+ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01.
 
 This module owns a single small mixin,
 :class:`ScopedPromotionAtomicRecorderMixin`, that the
@@ -28,10 +29,12 @@ The mixin enforces a strict two-phase atomic transaction:
 
 * **Phase 2 (rollback transaction).** If validation passes, the
   accumulator's mutable fields are snapshotted via the typed
-  :class:`AccumulatorSnapshot`. The handoff, outcome, and
-  aggregate batch accounting are committed in one transaction.
-  If any commit step raises, :meth:`_restore` is called and the
-  bounded ``PromotionOutcomeConflictError`` /
+  :class:`AccumulatorSnapshot`. The recorder constructs the single
+  :class:`ScopedPromotionRecordedAuthority` from the handoff and
+  batch, commits the typed outcome and the aggregate batch
+  accounting in one transaction. If any commit step raises,
+  :meth:`_restore` is called and the bounded
+  ``PromotionOutcomeConflictError`` /
   ``AccumulatorAccessModeError`` propagates. Replay of an
   identical handoff + batch takes the IDEMPOTENT shortcut and
   performs zero mutation.
@@ -41,11 +44,21 @@ validation, and compatibility-batch projection live in dedicated
 modules so this file is the only place that owns the atomic
 transaction.
 
+ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+the recorder writes the single
+:class:`ScopedPromotionRecordedAuthority` value to
+``self.scoped_promotion_recording`` and compares replay candidates
+against ``self.scoped_promotion_recording.batch``. The recorder
+NEVER indexes ``self.batches[-1]`` for the scoped replay check;
+the architecture guard
+:func:`test_atomic_recorder_uses_scoped_recording_batch_not_batches_minus_one`
+forbids that pattern.
+
 The recorder types the host through
 :class:`incident_promotion_scoped_atomic_host_protocol.ScopedPromotionAccumulatorHost`
 so the split module is cycle-free: it never imports
 :class:`RunPromotionAccumulator` directly. The protocol-driven
-design eliminates ``Any`` fields and the legacy untyped dict snapshots
+design eliminates ``Any`` fields and ``legacy untyped dict snapshots``
 snapshots, restoring strict mypy on this module.
 
 Request identity (request id, request fingerprint) is the
@@ -71,6 +84,9 @@ from .incident_promotion_scoped_atomic_equivalence import (
 from .incident_promotion_scoped_atomic_host_protocol import (
     ScopedPromotionAccumulatorHost,
 )
+from .incident_promotion_scoped_atomic_recording_authority import (
+    ScopedPromotionRecordedAuthority,
+)
 from .incident_promotion_scoped_atomic_validation import (
     validate_scoped_handoff_batch_consistency,
 )
@@ -82,9 +98,6 @@ from .promotion_scoped_accumulator_handoff import (
 if TYPE_CHECKING:
     from .incident_identity_hardening import PromotionRecord as _RecordType
     from .promotion_outcomes import PromotionOutcome as _OutcomeType
-    from .promotion_scoped_accumulator_handoff import (
-        ScopedPromotionAccumulatorHandoff as _HandoffType,
-    )
 
 
 class ScopedPromotionAtomicRecorderMixin(ScopedPromotionAccumulatorHost):
@@ -97,16 +110,20 @@ class ScopedPromotionAtomicRecorderMixin(ScopedPromotionAccumulatorHost):
 
     * ``promotion_outcome: PromotionOutcome | None``
     * ``promotion_outcome_run_id: str``
-    * ``scoped_promotion_handoff: ScopedPromotionAccumulatorHandoff | None``
+    * ``scoped_promotion_recording: ScopedPromotionRecordedAuthority | None``
+    * Aggregate-batch fields declared on
+      :class:`RunPromotionAccumulator`` (``batches``,
+      ``promotion_records``, ``_seen_canonical_ids``, ``total_*``,
+      ``last_*``, ``last_contract_error``, ``last_handoff_error``,
+      ``last_propagation_result``, ``workset_state``).
 
-    The ``Protocol`` super-class declares those attributes but
-    :mod:`mypy` does not propagate protocol attribute types through
-    :class:`typing.Protocol` access; the redundant declarations
-    below ensure the recorder's body type checks without
-    per-access casts. The concrete
-    :class:`RunPromotionAccumulator` provides the implementations
-    of :meth:`_snapshot`, :meth:`_restore`, :meth:`_apply_batch`,
-    and :meth:`record_promotion_outcome`.
+    It also expects the host class to expose:
+
+    * :meth:`record_promotion_outcome` -- delegated to
+      :class:`PromotionOutcomeRecorderMixin`.
+    * :meth:`_snapshot` / :meth:`_restore` -- the existing
+      snapshot / restore helpers.
+    * :meth:`_apply_batch` -- the internal batch applier.
 
     Failure injection is the responsibility of the test subclass
     (or ``monkeypatch`` of an instance method). The previous
@@ -121,7 +138,7 @@ class ScopedPromotionAtomicRecorderMixin(ScopedPromotionAccumulatorHost):
     # above are not propagated into method bodies.
     promotion_outcome: _OutcomeType | None
     promotion_outcome_run_id: str
-    scoped_promotion_handoff: _HandoffType | None
+    scoped_promotion_recording: ScopedPromotionRecordedAuthority | None
     promotion_records: list[_RecordType]
     _seen_canonical_ids: set[str]
     batches: list[PromotionBatch]
@@ -130,7 +147,7 @@ class ScopedPromotionAtomicRecorderMixin(ScopedPromotionAccumulatorHost):
         self,
         *,
         handoff: ScopedPromotionAccumulatorHandoff,
-        batch: object,  # validated by validate_scoped_handoff_batch_consistency
+        batch: PromotionBatch,
     ) -> PromotionOutcomeRecording:
         """Record a typed handoff + batch atomically with snapshot/restore.
 
@@ -148,15 +165,13 @@ class ScopedPromotionAtomicRecorderMixin(ScopedPromotionAccumulatorHost):
         """
         # Phase 1: handoff/batch consistency. The validator
         # raises ``TypeError`` / ``ValueError`` for any contract
-        # violation, and narrows ``batch`` to the typed
-        # :class:`PromotionBatch` after the call returns.
+        # violation.
         validate_scoped_handoff_batch_consistency(handoff, batch)
-        typed_batch = cast(PromotionBatch, batch)
 
-        running_handoff = self.scoped_promotion_handoff
-        if running_handoff is not None:
+        running_authority = self.scoped_promotion_recording
+        if running_authority is not None:
             return self._replay_path(
-                running_handoff, handoff, typed_batch
+                running_authority, handoff, batch
             )
 
         # Phase 2: first record -- snapshot then commit. The
@@ -166,7 +181,12 @@ class ScopedPromotionAtomicRecorderMixin(ScopedPromotionAccumulatorHost):
         # same Python object after a partial-batch rollback.
         snap = self._snapshot()
         try:
-            self.scoped_promotion_handoff = handoff
+            self.scoped_promotion_recording = (
+                ScopedPromotionRecordedAuthority(
+                    handoff=handoff,
+                    batch=batch,
+                )
+            )
             recording = self.record_promotion_outcome(handoff.outcome)
             if recording is not PromotionOutcomeRecording.NEW:
                 raise PromotionOutcomeConflictError(
@@ -178,7 +198,7 @@ class ScopedPromotionAtomicRecorderMixin(ScopedPromotionAccumulatorHost):
                     running_variant=type(handoff).__name__,
                     rejected_variant=type(handoff).__name__,
                 )
-            self._apply_batch(typed_batch)
+            self._apply_batch(batch)
         except Exception:
             # Every exception -- typed ``PromotionOutcomeConflictError``,
             # ``AccumulatorAccessModeError``, ``RuntimeError`` raised
@@ -193,64 +213,93 @@ class ScopedPromotionAtomicRecorderMixin(ScopedPromotionAccumulatorHost):
 
     def _replay_path(
         self,
-        running_handoff: ScopedPromotionAccumulatorHandoff,
+        running_authority: ScopedPromotionRecordedAuthority,
         candidate: ScopedPromotionAccumulatorHandoff,
-        candidate_batch: object,
+        candidate_batch: PromotionBatch,
     ) -> PromotionOutcomeRecording:
         """Return ``IDEMPOTENT`` only when the replay matches stored authority.
 
-        Fail-closed: if the running accumulator carries a handoff
-        but no aggregate batch -- whether caused by old persisted
-        state, manual reconstruction, or a future migration defect
-        -- the recorder raises a typed
+        ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01:
+        compares the candidate against
+        :attr:`ScopedPromotionRecordedAuthority.batch` and
+        :attr:`ScopedPromotionRecordedAuthority.handoff` so a
+        later, unrelated :meth:`RunPromotionAccumulator.add_batch`
+        call cannot be mistaken for the scoped replay batch.
+
+        Fail-closed: if the stored authority carries a handoff but
+        no ``PromotionOutcome`` (the legacy corrupted-state shape),
+        the recorder raises a typed
         :class:`PromotionOutcomeConflictError` with a bounded
-        inconsistent-state identity instead of leaking the raw
-        ``IndexError`` a ``self.batches[-1]`` access would
-        produce.
+        inconsistent-state identity instead of leaking an
+        incidental ``AttributeError``.
         """
-        if not self.batches:
+        # The stored authority MUST agree with the recorder-side
+        # outcome projection. If the outcome is missing or
+        # disagrees the state is structurally inconsistent and
+        # the candidate replay MUST fail closed.
+        running_outcome = self.promotion_outcome
+        if running_outcome is None:
             raise PromotionOutcomeConflictError(
                 "Scoped promotion replay encountered an inconsistent "
-                "accumulator state: a handoff is recorded but no "
-                "aggregate accounting batch exists. This shape should "
-                "be impossible after a successful first recording; "
-                "manual reconstruction or persisted-state drift is "
-                "the most likely cause.",
-                running_run_id=running_handoff.outcome.run_id,
+                "accumulator state: a recorded authority is present "
+                "but the promotion outcome is absent. The active "
+                "scoped recorder only writes the outcome alongside "
+                "the authority; manual reconstruction or "
+                "persisted-state drift is the most likely cause.",
+                running_run_id=running_authority.handoff.outcome.run_id,
                 rejected_run_id=candidate.outcome.run_id,
-                running_variant=type(running_handoff.outcome).__name__,
+                running_variant=type(
+                    running_authority.handoff.outcome
+                ).__name__,
                 rejected_variant=type(candidate.outcome).__name__,
             )
-        running_batch = self.batches[-1]
-        if self.promotion_outcome != candidate.outcome:
+        if running_outcome != candidate.outcome:
             raise PromotionOutcomeConflictError(
-                "Scoped promotion outcome mismatch: existing outcome "
+                "Scoped promotion outcome mismatch: stored outcome "
                 "differs from the candidate handoff outcome.",
-                running_run_id=running_handoff.outcome.run_id,
+                running_run_id=running_outcome.run_id,
                 rejected_run_id=candidate.outcome.run_id,
-                running_variant=type(running_handoff.outcome).__name__,
+                running_variant=type(running_outcome).__name__,
                 rejected_variant=type(candidate.outcome).__name__,
             )
-        if not _handoffs_match(running_handoff, candidate):
+        if (
+            self.promotion_outcome_run_id
+            != running_authority.handoff.outcome.run_id
+        ):
+            raise PromotionOutcomeConflictError(
+                "Scoped promotion outcome run id disagrees with "
+                "the recorded authority's outcome run id.",
+                running_run_id=running_outcome.run_id,
+                rejected_run_id=candidate.outcome.run_id,
+                running_variant=type(running_outcome).__name__,
+                rejected_variant=type(candidate.outcome).__name__,
+            )
+        if not _handoffs_match(
+            running_authority.handoff, candidate
+        ):
             raise PromotionOutcomeConflictError(
                 "Scoped promotion handoff mismatch: identity fields, "
                 "receipt, or commit disposition disagree with the "
                 "running handoff.",
-                running_run_id=running_handoff.outcome.run_id,
+                running_run_id=running_authority.handoff.outcome.run_id,
                 rejected_run_id=candidate.outcome.run_id,
-                running_variant=type(running_handoff.outcome).__name__,
+                running_variant=type(
+                    running_authority.handoff.outcome
+                ).__name__,
                 rejected_variant=type(candidate.outcome).__name__,
             )
         if not _batch_accounting_equivalent(
-            running_batch, cast(PromotionBatch, candidate_batch)
+            running_authority.batch, candidate_batch
         ):
             raise PromotionOutcomeConflictError(
                 "Scoped promotion batch accounting mismatch: candidate "
-                "batch disagrees with the most recently recorded "
-                "aggregate on every authoritative field.",
-                running_run_id=running_handoff.outcome.run_id,
+                "batch disagrees with the recorded authority's batch "
+                "on every authoritative field.",
+                running_run_id=running_authority.handoff.outcome.run_id,
                 rejected_run_id=candidate.outcome.run_id,
-                running_variant=type(running_handoff.outcome).__name__,
+                running_variant=type(
+                    running_authority.handoff.outcome
+                ).__name__,
                 rejected_variant=type(candidate.outcome).__name__,
             )
         return PromotionOutcomeRecording.IDEMPOTENT

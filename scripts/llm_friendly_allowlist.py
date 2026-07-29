@@ -241,6 +241,7 @@ ALLOWLIST: list[tuple[str, str]] = [
     # end (typed accumulator, typed dispatcher batch, SQLite durable
     # override). Narrowly justified pending staged extraction.
     ("src/k8s_diag_agent/collect/incident_promotion_dispatch.py", "[EXTRACTION] Dispatcher carries PromotionBatch + typed records - staged extraction"),
+    ("src/k8s_diag_agent/collect/incident_promotion_accumulator.py", "[EXTRACTION] Accumulator owns RunPromotionAccumulator + OutcomeRecorder + ScopedAtomicRecorder mixins - staged extraction"),
     ("src/k8s_diag_agent/collect/incident_identity_hardening.py", "[EXTRACTION] Identity hardening - bounded diagnostic shapes; staged extraction"),
     ("src/k8s_diag_agent/collect/incident_store.py", "[EXTRACTION] Incident store - typed promotion boundary; staged extraction"),
     ("src/k8s_diag_agent/collect/incident_store_sqlite.py", "[EXTRACTION] SQLite store - typed promotion override; staged extraction"),
