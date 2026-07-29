@@ -83,7 +83,41 @@ class PromotionUncertaintyCode(StrEnum):
     """The backend returned 5xx but did not acknowledge the request."""
 
     AMBIGUOUS_RESPONSE = "ambiguous_response"
-    """A response was received but could not be classified as success or rejection."""
+    """Invariant-violation fallback. NOT used for any known transport shape."""
+
+    # ACT-K9B-HULK-PROMOTION-AMBIGUOUS-RESPONSE-TRANSPORT-TRUTH01:
+    # bounded codes replacing the catch-all bucket. Each known HTTP
+    # shape maps to a specific code so the operator can correlate the
+    # selection handoff with the actual transport observation.
+    HTTP_ACCEPTED_WITHOUT_RESULT = "http_accepted_without_result"
+    """``202 Accepted`` without an authoritative completion result."""
+
+    HTTP_NO_CONTENT_AFTER_SEND = "http_no_content_after_send"
+    """``204 No Content`` after a mutating request."""
+
+    HTTP_EMPTY_SUCCESS_BODY = "http_empty_success_body"
+    """``2xx`` with an empty body (cannot be reinterpreted as successful zero)."""
+
+    HTTP_INVALID_JSON = "http_invalid_json"
+    """Response completed but the body failed to decode as JSON."""
+
+    HTTP_INVALID_SCHEMA = "http_invalid_schema"
+    """Response decoded as JSON but failed wire-schema validation."""
+
+    HTTP_RESPONSE_TRUNCATED = "http_response_truncated"
+    """The response body exceeded the bounded reader limit."""
+
+    HTTP_READ_TIMEOUT_AFTER_SEND = "http_read_timeout_after_send"
+    """Read timeout after the request body was transmitted."""
+
+    HTTP_CONNECTION_LOST_AFTER_SEND = "http_connection_lost_after_send"
+    """Connection lost after the request body was transmitted."""
+
+    HTTP_FAILURE_BEFORE_SEND = "http_failure_before_send"
+    """Transport failure before the request was transmitted."""
+
+    UNEXPECTED_CLIENT_RESULT = "unexpected_client_result"
+    """Final invariant-violation fallback. Production code MUST NOT raise this."""
 
 
 @dataclass(frozen=True, slots=True)
