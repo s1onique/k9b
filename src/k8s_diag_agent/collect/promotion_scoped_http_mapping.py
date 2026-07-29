@@ -257,11 +257,22 @@ def _map_before_send_reason(
 def _map_read_failure_reason(
     reason_code: ScopedReadFailureReason,
 ) -> PromotionUncertaintyCode:
-    """Exhaustive mapping of read-failure reasons to uncertainty codes."""
+    """Exhaustive mapping of read-failure reasons to uncertainty codes.
+
+    ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION01-FINALIZATION01:
+    The post-header unknown read failure (``TRANSMISSION_UNKNOWN``)
+    is its OWN distinct bounded code -- an unknown post-header read
+    failure MUST NOT be confused with a timeout or a connection
+    loss. The mapper routes it to
+    :attr:`PromotionUncertaintyCode.HTTP_TRANSMISSION_UNKNOWN`
+    only when no narrower code applies.
+    """
     if reason_code == ScopedReadFailureReason.TIMEOUT:
         return PromotionUncertaintyCode.HTTP_READ_TIMEOUT_AFTER_SEND
     if reason_code == ScopedReadFailureReason.CONNECTION_LOST:
         return PromotionUncertaintyCode.HTTP_CONNECTION_LOST_AFTER_SEND
+    if reason_code == ScopedReadFailureReason.TRANSMISSION_UNKNOWN:
+        return PromotionUncertaintyCode.HTTP_TRANSMISSION_UNKNOWN
     assert_never(reason_code)
 
 

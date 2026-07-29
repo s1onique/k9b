@@ -475,131 +475,17 @@ def promote_alert_signals_via_scoped_backend_api(
     return _projection_to_dispatch_result(projection)
 
 
-def scoped_dispatch_result_to_promotion_result_dict(
-    result: ScopedPromotionDispatchResult,
-    *,
-    signal_ids: tuple[str, ...],
-) -> dict[str, Any]:
-    """Convert a typed :class:`ScopedPromotionDispatchResult` to the
-    dispatcher dict shape.
-
-    The legacy dispatcher path consumes a flat dict. This is the
-    single conversion point: the typed authority is consumed
-    once and the dispatcher's stable flat shape is derived from
-    it. The conversion is the ONLY place that knows the legacy
-    shape; downstream consumers of the typed result do not
-    materialize it.
-    """
-    basis = {
-        "scanned": len(signal_ids),
-        "firing": len(signal_ids),
-        "skipped_duplicates": 0,
-        "promotion_scan_scope": "internal_api_alert_signals:scoped",
-        "incident_access_mode": "backend",
-        "unique_candidate_count": len(signal_ids),
-        "promotion_records": [],
-        "opened_incident_ids": [],
-        "updated_incident_ids": [],
-        "observation_refreshed_incident_ids": [],
-        "unchanged_incident_ids": [],
-        "canonical_incident_ids": [],
-        "errors": 0,
-        "error_messages": [],
-    }
-    if isinstance(result, ScopedPromotionDispatchCompleted):
-        projection = result.projection
-        outcome = projection.promotion_outcome
-        receipt = projection.aggregate_receipt
-        opened = list(receipt.opened_incident_ids)
-        updated = list(receipt.materially_changed_incident_ids)
-        observation = list(receipt.observation_refreshed_incident_ids)
-        unchanged = list(receipt.unchanged_incident_ids)
-        canonical = list(outcome.diagnosis_incident_ids)
-        return {
-            **basis,
-            "ok": True,
-            "opened_incidents": len(opened),
-            "updated_incidents": len(updated),
-            "opened_incident_ids": [str(value) for value in opened],
-            "updated_incident_ids": [str(value) for value in updated],
-            "observation_refreshed_incident_ids": [
-                str(value) for value in observation
-            ],
-            "unchanged_incident_ids": [str(value) for value in unchanged],
-            "canonical_incident_ids": [str(value) for value in canonical],
-        }
-    if isinstance(result, ScopedPromotionDispatchRejected):
-        rejected_projection = result.projection
-        outcome = rejected_projection.promotion_outcome
-        return {
-            **basis,
-            "ok": False,
-            "opened_incidents": 0,
-            "updated_incidents": 0,
-            "errors": 1,
-            "error_messages": [outcome.reason.value],
-            "incident_access_mode": "backend",
-        }
-    if isinstance(result, ScopedPromotionDispatchUncertain):
-        uncertain_projection = result.projection
-        outcome = uncertain_projection.promotion_outcome
-        return {
-            **basis,
-            "ok": False,
-            "opened_incidents": 0,
-            "updated_incidents": 0,
-            "errors": 0,
-            "error_messages": [outcome.reason.value],
-            "incident_access_mode": "reconciliation_required",
-        }
-    from typing import assert_never
-
-    assert_never(result)
-
-
 # ---------------------------------------------------------------------------
-# Compatibility shim for legacy callers (Phase 4 transition)
+# Legacy dict-shaped helpers were moved to
+# ``incident_promotion_scoped_legacy_adapter`` so the active
+# scoped backend façade stays free of any flat-dict derivation.
+# The active dispatcher path consumes the typed
+# :class:`ScopedPromotionDispatchResult` directly; legacy
+# callers consume the legacy adapter module.
 # ---------------------------------------------------------------------------
-#
-# The active dispatcher at ``incident_promotion_dispatch.py``
-# historically consumed a dict from this module. The new typed
-# dispatch result is the authority; the legacy dict shape is
-# derived only by the conversion helper above. This function
-# exists so callers that DO consume the dict (the legacy
-# dispatcher) continue to compile-and-run while the typed path
-# is migrated. Internal callers (Phase 12/14) consume the typed
-# result directly.
-
-
-def promote_alert_signals_via_scoped_backend_api_as_dict(
-    *,
-    run_id: str,
-    source_identity: str,
-    signal_ids: list[str],
-) -> dict[str, Any]:
-    """Return the legacy dispatcher dict shape for the typed
-    scoped promotion.
-
-    The active dispatcher can call this shim during the
-    transition. New callers consume
-    :func:`promote_alert_signals_via_scoped_backend_api` directly
-    and forward the typed result.
-    """
-    result = promote_alert_signals_via_scoped_backend_api(
-        run_id=run_id,
-        source_identity=source_identity,
-        signal_ids=signal_ids,
-    )
-    return scoped_dispatch_result_to_promotion_result_dict(
-        result, signal_ids=tuple(signal_ids)
-    )
-
-
 __all__ = [
     "MODE_BACKEND_API",
     "promote_alert_signals_via_backend_api",
     "promote_alert_signals_via_scoped_backend_api",
-    "promote_alert_signals_via_scoped_backend_api_as_dict",
     "promote_via_backend_api",
-    "scoped_dispatch_result_to_promotion_result_dict",
 ]

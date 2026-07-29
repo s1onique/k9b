@@ -65,6 +65,9 @@ from .incident_promotion_outcome_recorder import (
     PromotionOutcomeRecorderMixin,
     PromotionOutcomeRecording,
 )
+from .promotion_scoped_accumulator_handoff import (
+    ScopedPromotionAccumulatorHandoff,
+)
 
 if TYPE_CHECKING:
     from .incident_promotion_batch import PromotionBatch
@@ -223,6 +226,20 @@ class RunPromotionAccumulator(
     # fail closed on cross-run laundry.
     promotion_outcome: PromotionOutcome | None = field(default=None, repr=False)
     promotion_outcome_run_id: str = ""
+
+    # ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION01-FINALIZATION01:
+    # The typed scoped promotion handoff. ``scoped_promotion_handoff`` is
+    # the closed authority carried directly from the active scoped
+    # dispatcher; downstream projections MUST derive from it (or from
+    # the typed ``promotion_outcome`` above) and MUST NOT infer
+    # commit authority from ``promotion_records``,
+    # ``promotion_record_count``, canonical incident counts, diagnosis
+    # incident counts, or ``ok``/``errors`` fields.
+    scoped_promotion_handoff: ScopedPromotionAccumulatorHandoff | None = (
+        field(default=None, repr=False)
+    )
+    scoped_promotion_request_id: str = ""
+    scoped_promotion_request_fingerprint: str = ""
 
     # ---------------- R4 atomic insertion helpers (validate-before-mutate) ----
 
@@ -456,6 +473,60 @@ class RunPromotionAccumulator(
         for batch in self.batches:
             messages.extend(batch.error_messages)
         return tuple(messages)
+
+    def record_scoped_promotion(
+        self,
+        handoff: ScopedPromotionAccumulatorHandoff,
+    ) -> None:
+        """Record the typed scoped promotion handoff as the run authority.
+
+        ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION01-FINALIZATION01.
+
+        The handoff is the only authority for the active scoped
+        path. The original :class:`PromotionOutcome` reaches the
+        accumulator unchanged by identity. Receipt presence is
+        governed by the handoff variant: only the completed variant
+        carries a receipt; uncertain and rejected variants are
+        structurally incapable of carrying one. Commit authority
+        is derived from :attr:`commit_disposition`; the function
+        MUST NOT infer whether promotion ran from
+        ``promotion_records``, ``promotion_record_count``, canonical
+        incident counts, diagnosis incident counts, or
+        ``ok``/``errors`` fields.
+
+        Recording the handoff sets:
+
+        * ``scoped_promotion_handoff`` -- the closed handoff
+          variant.
+        * ``scoped_promotion_request_id`` -- the request id from
+          the dispatch side, preserved by identity.
+        * ``scoped_promotion_request_fingerprint`` -- the request
+          fingerprint, preserved by identity.
+        * ``promotion_outcome`` -- the original typed outcome
+          forwarded by identity.
+        * ``promotion_outcome_run_id`` -- the run_id taken from
+          the original outcome for the run-cross-check.
+        """
+        self.scoped_promotion_handoff = handoff
+        self.scoped_promotion_request_id = handoff.request_id
+        self.scoped_promotion_request_fingerprint = handoff.request_fingerprint
+        # Forward the typed outcome so the existing
+        # ``promotion_outcome``-based telemetry works unchanged.
+        # The outcome is preserved by identity. The recorder
+        # already mirrors the run_id into ``promotion_outcome_run_id``
+        # so no extra assignment is needed here.
+        self.record_promotion_outcome(outcome=handoff.outcome)
+
+    def scoped_promotion_handoff_value(
+        self,
+    ) -> ScopedPromotionAccumulatorHandoff | None:
+        """Return the recorded scoped promotion handoff, if any.
+
+        The accessor returns the typed authority verbatim. It MUST
+        NOT be reconstructed from legacy counters or aggregate
+        incident IDs.
+        """
+        return self.scoped_promotion_handoff
 
 
 

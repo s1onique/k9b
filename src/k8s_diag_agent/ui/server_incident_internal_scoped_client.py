@@ -196,25 +196,6 @@ def _classify_url_error_reason(
     return ScopedDispatchUncertaintyReason.TRANSMISSION_UNKNOWN
 
 
-def _body_read_failure_to_dispatch_reason(
-    reason: ScopedBodyReadReason,
-) -> ScopedDispatchUncertaintyReason:
-    """Map a typed body-read failure reason to a dispatch uncertainty reason.
-
-    The body-read failure happens AFTER response headers were
-    received, so the request MAY have been transmitted. The
-    dispatcher cannot prove whether the request reached the wire,
-    so the choice is a conservative commit-unknown via the
-    dispatch-uncertainty branch. The mapper is responsible for
-    the more specific ``ScopedPromotionHttpReadFailed`` projection.
-    """
-    if reason == ScopedBodyReadReason.TIMEOUT:
-        return ScopedDispatchUncertaintyReason.TIMEOUT
-    if reason == ScopedBodyReadReason.CONNECTION_LOST:
-        return ScopedDispatchUncertaintyReason.CONNECTION_LOST
-    return ScopedDispatchUncertaintyReason.TRANSMISSION_UNKNOWN
-
-
 class ScopedSchedulerClient:
     """Typed HTTP client for the canonical scoped current-run path.
 
@@ -771,6 +752,11 @@ class ScopedSchedulerClient:
             # exhaustive matching. The body-read failure is a
             # transport-level observation distinct from a
             # dispatch connection reset.
+            #
+            # ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION01-FINALIZATION01:
+            # ``TRANSMISSION_UNKNOWN`` is its own distinct bounded
+            # code; an unknown post-header read failure MUST NOT be
+            # collapsed into ``CONNECTION_LOST`` or ``TIMEOUT``.
             body_reason = body_result.reason
             if body_reason == ScopedBodyReadReason.TIMEOUT:
                 scoped_read_reason = ScopedReadFailureReason.TIMEOUT
@@ -780,7 +766,7 @@ class ScopedSchedulerClient:
                 )
             else:
                 scoped_read_reason = (
-                    ScopedReadFailureReason.CONNECTION_LOST
+                    ScopedReadFailureReason.TRANSMISSION_UNKNOWN
                 )
             return ScopedPromotionHttpReadFailed(
                 observation=self._build_observation(

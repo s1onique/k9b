@@ -168,10 +168,18 @@ class ScopedReadFailureReason(StrEnum):
 
     Excludes the unrestricted generic transport reason so the
     mapper can do exhaustive matching on a closed set.
+
+    ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION01-FINALIZATION01:
+    ``TRANSMISSION_UNKNOWN`` is the bounded code for an unknown
+    post-header body-read failure. It MUST NOT be confused with
+    :attr:`ScopedReadFailureReason.TIMEOUT` or
+    :attr:`ScopedReadFailureReason.CONNECTION_LOST`; an unknown
+    post-header read failure is its own distinct bounded code.
     """
 
     TIMEOUT = "timeout"
     CONNECTION_LOST = "connection_lost"
+    TRANSMISSION_UNKNOWN = "transmission_unknown"
 
 
 @dataclass(frozen=True, slots=True)

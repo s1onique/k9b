@@ -39,6 +39,12 @@ from .incident_candidates import (
 from .incident_identity_hardening import PromotionRecord
 from .incident_promotion_accumulator import RunPromotionAccumulator
 from .incident_promotion_batch import PromotionBatch
+from .promotion_scoped_accumulator_handoff import (
+    ScopedPromotionAccumulatorCompleted,
+    ScopedPromotionAccumulatorHandoff,
+    ScopedPromotionAccumulatorRejected,
+    ScopedPromotionAccumulatorUncertain,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -804,14 +810,27 @@ def promote_alert_signals_scoped_for_accumulator(
 ) -> PromotionBatch:
     """Current-run scoped promotion that NEVER scans the whole tree.
 
-    The dispatcher posts an explicit ``runId`` / ``sourceIdentity`` /
-    ``signalIds`` scope to the backend via the new
-    ``/api/internal/incidents/promote-alert-signals`` endpoint and
-    translates the typed response back into a ``PromotionBatch`` without
-    falling back to ``promote_alert_signals_for_accumulator``.
+    ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION01-FINALIZATION01:
+    The active scoped dispatcher consumes the typed
+    :class:`ScopedPromotionDispatchResult` directly, converts it
+    through :func:`scoped_dispatch_result_to_accumulator_handoff`,
+    and forwards the closed handoff to
+    :meth:`RunPromotionAccumulator.record_scoped_promotion`. The
+    function MUST NOT call
+    :func:`scoped_dispatch_result_to_promotion_result_dict`,
+    :func:`_result_from_dict`, or any of the legacy dispatch
+    helpers. The active scoped path returns a typed
+    ``PromotionBatch`` whose ``promotion_result`` carries the
+    bounded access mode (``backend`` for completed/uncertain and
+    ``reconciliation_required`` for uncertain), with
+    ``promotion_records`` deliberately empty for aggregate
+    results.
     """
     from .incident_promotion_backend import (
         promote_alert_signals_via_scoped_backend_api,
+    )
+    from .promotion_scoped_accumulator_handoff import (
+        scoped_dispatch_result_to_accumulator_handoff,
     )
 
     if not signal_ids:
@@ -824,40 +843,112 @@ def promote_alert_signals_scoped_for_accumulator(
             snapshot_bundle_id=None,
         )
 
-    # Active scoped path consumes the typed dispatch result
-    # directly. The typed result is the single authority; this
-    # dispatcher does NOT derive truth from a legacy dict or
-    # fabricate per-signal ``promotion_records`` entries.
-    from .incident_promotion_backend import (
-        scoped_dispatch_result_to_promotion_result_dict,
-    )
-
+    # Active scoped path: typed dispatch result is the only
+    # authority. The dispatcher does NOT call any legacy
+    # ``_result_from_dict``-based shim. The accumulator handoff
+    # preserves the original ``PromotionOutcome`` by identity.
     typed_result = promote_alert_signals_via_scoped_backend_api(
         run_id=health_run_id,
         source_identity=source_identity,
         signal_ids=list(signal_ids),
     )
 
-    result_dict = scoped_dispatch_result_to_promotion_result_dict(
-        typed_result, signal_ids=signal_ids
-    )
+    handoff = scoped_dispatch_result_to_accumulator_handoff(typed_result)
 
-    promotion_result = _result_from_dict(
-        result_dict,
-        promotion_mode=MODE_BACKEND_API,
+    # Forward the typed handoff to the accumulator. The batch's
+    # ``promotion_result`` is derived from the typed outcome so
+    # downstream projections stay consistent with the handoff.
+    promotion_result = _scoped_promotion_result_from_handoff(
+        handoff=handoff,
+        signal_ids=signal_ids,
     )
-
-    records = tuple(promotion_records_from_result(promotion_result))
     batch = PromotionBatch(
         promotion_result=promotion_result,
-        promotion_records=records,
+        promotion_records=(),  # aggregate scoped results have no per-signal records
         source_kind="alertmanager",
         cluster_context=cluster_context,
         snapshot_bundle_id=None,
     )
     if accumulator is not None:
-        accumulator.add_batch(batch)
+        accumulator.record_scoped_promotion(handoff)
     return batch
+
+
+def _scoped_promotion_result_from_handoff(
+    *,
+    handoff: ScopedPromotionAccumulatorHandoff,
+    signal_ids: tuple[str, ...],
+) -> IncidentPromotionResult:
+    """Project the closed handoff into a typed ``IncidentPromotionResult``.
+
+    The projection is the only authority. Legacy fields
+    (``ok``/``errors``/``promotion_records``) are populated
+    conservatively so they never contradict the handoff variant.
+    """
+
+    if isinstance(handoff, ScopedPromotionAccumulatorCompleted):
+        receipt = handoff.receipt
+        opened: list[str] = [str(value) for value in receipt.opened_incident_ids]
+        updated: list[str] = [
+            str(value) for value in receipt.materially_changed_incident_ids
+        ]
+        return IncidentPromotionResult(
+            ok=True,
+            scanned=len(signal_ids),
+            firing=len(signal_ids),
+            opened_incidents=len(opened),
+            updated_incidents=len(updated),
+            skipped_duplicates=0,
+            errors=0,
+            promotion_mode=MODE_BACKEND_API,
+            opened_incident_ids=tuple(opened),
+            updated_incident_ids=tuple(updated),
+            observation_refreshed_incident_ids=tuple(
+                str(value) for value in receipt.observation_refreshed_incident_ids
+            ),
+            unchanged_incident_ids=tuple(
+                str(value) for value in receipt.unchanged_incident_ids
+            ),
+            promotion_records=(),  # never synthesised for the active scoped path
+            unique_candidate_count=len(signal_ids),
+            promotion_scan_scope="internal_api_alert_signals:scoped",
+            incident_access_mode=INCIDENT_ACCESS_MODE_BACKEND,
+        )
+    if isinstance(handoff, ScopedPromotionAccumulatorUncertain):
+        return IncidentPromotionResult(
+            ok=False,
+            scanned=len(signal_ids),
+            firing=len(signal_ids),
+            opened_incidents=0,
+            updated_incidents=0,
+            skipped_duplicates=0,
+            errors=0,
+            promotion_mode=MODE_BACKEND_API,
+            promotion_records=(),
+            unique_candidate_count=len(signal_ids),
+            promotion_scan_scope="internal_api_alert_signals:scoped",
+            incident_access_mode="reconciliation_required",
+        )
+    if isinstance(handoff, ScopedPromotionAccumulatorRejected):
+        return IncidentPromotionResult(
+            ok=False,
+            scanned=len(signal_ids),
+            firing=len(signal_ids),
+            opened_incidents=0,
+            updated_incidents=0,
+            skipped_duplicates=0,
+            errors=1,
+            error_messages=(handoff.outcome.reason.value,),
+            promotion_mode=MODE_BACKEND_API,
+            promotion_records=(),
+            unique_candidate_count=len(signal_ids),
+            promotion_scan_scope="internal_api_alert_signals:scoped",
+            incident_access_mode=INCIDENT_ACCESS_MODE_BACKEND,
+        )
+    # Exhaustiveness: a new handoff variant MUST fail typing.
+    from typing import assert_never
+
+    assert_never(handoff)
 
 
 def _build_empty_batch(

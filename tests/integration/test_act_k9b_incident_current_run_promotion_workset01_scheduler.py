@@ -30,6 +30,9 @@ from k8s_diag_agent.collect.incident_promotion_dispatch import (
 from k8s_diag_agent.collect.incident_store import (
     IncidentStore,
 )
+from k8s_diag_agent.collect.promotion_outcomes import (
+    PromotionSucceeded,
+)
 from k8s_diag_agent.incident_alert_promotion_scoped import (
     promote_scoped_alert_signals,
 )
@@ -216,10 +219,7 @@ def test_scheduler_ingestion_posts_one_signal_id_for_thirty_five_alerts(
         )
         bound = BoundScopedPromotionResult(request=request, result=result)
         projection = ScopedPromotionCompletedProjection(
-            promotion_outcome=__import__(
-                "k8s_diag_agent.collect.promotion_outcomes",
-                fromlist=["PromotionSucceeded"],
-            ).PromotionSucceeded(
+            promotion_outcome=PromotionSucceeded(
                 run_id=request.run_id,
                 requested_signal_ids=tuple(
                     str(s) for s in request.signal_ids

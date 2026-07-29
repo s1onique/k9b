@@ -21,6 +21,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from ..collect.promotion_scoped_http_seam import (
+    MAX_REQUEST_ID_LENGTH as _MAX_REQUEST_ID_LENGTH,
+)
 from ..incident_alert_promotion_contract import (
     PromotionScopeError,
     parse_promote_alert_signals_request,
@@ -30,6 +33,9 @@ from .server_incident_internal_models import (
     PromoteCandidatesRequest,
     PromotionResponse,
 )
+from .server_incident_internal_scoped_client import (
+    REQUEST_ID_HEADER as _REQUEST_ID_HEADER,
+)
 
 if TYPE_CHECKING:
     pass
@@ -37,6 +43,24 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 MAX_PROMOTION_PAYLOAD_BYTES = 64 * 1024
+
+
+def _extract_request_id(handler: Any) -> str:
+    """Extract and validate the ``X-K9B-Promotion-Request-ID`` header.
+
+    The header is bounded by ``MAX_REQUEST_ID_LENGTH``; a missing or
+    over-long header is treated as an empty correlation identity so
+    downstream events still emit a stable, bounded marker. The
+    handler MUST NEVER raise on a missing header -- the request is
+    already authenticated at this point and we keep the contract
+    fail-soft for header-shape defects.
+    """
+    raw = handler.headers.get(_REQUEST_ID_HEADER, "") if handler else ""
+    if not raw:
+        return ""
+    if len(raw) > _MAX_REQUEST_ID_LENGTH:
+        return ""
+    return str(raw)
 
 
 def _runs_dir_for_request(handler: Any) -> Path:
@@ -208,8 +232,22 @@ def handle_promote_alert_signals(handler: Any) -> None:
       and no fallback to a previous run's batch.
     * A missing/malformed/cross-source artifact fails the request closed
       with a ``400 Bad Request`` error.
+    * The ``X-K9B-Promotion-Request-ID`` correlation header is consumed
+      so backend received/response events carry the same identity as
+      the scheduler observation.
     """
+    request_id = _extract_request_id(handler)
+
     if not _validate_internal_token(handler):
+        _logger.info(
+            "alert-signals-promoted-rejected",
+            extra={
+                "event": "alert-signals-promoted-rejected",
+                "request_id": request_id,
+                "status_code": 401,
+                "reason": "unauthorized",
+            },
+        )
         handler._send_json(
             {"error": "Unauthorized", "message": "Valid internal API token required"},
             401,
@@ -221,11 +259,32 @@ def handle_promote_alert_signals(handler: Any) -> None:
         request = parse_promote_alert_signals_request(data)
         runs_dir = _runs_dir_for_request(handler)
     except PromotionScopeError as exc:
+        _logger.info(
+            "alert-signals-promoted-rejected",
+            extra={
+                "event": "alert-signals-promoted-rejected",
+                "request_id": request_id,
+                "status_code": 400,
+                "reason": "bad_request",
+            },
+        )
         handler._send_json(
             {"error": "Bad Request", "message": str(exc)},
             400,
         )
         return
+
+    # Emit the bounded received event with NO request body / token.
+    _logger.info(
+        "alert-signals-promotion-received",
+        extra={
+            "event": "alert-signals-promotion-received",
+            "request_id": request_id,
+            "run_id": str(request.run_id),
+            "source_identity": request.source_identity,
+            "signal_count": len(request.signal_ids),
+        },
+    )
 
     try:
         from ..collect.incident_store_provider import get_incident_store
@@ -237,6 +296,15 @@ def handle_promote_alert_signals(handler: Any) -> None:
             runs_dir=runs_dir,
         )
     except PromotionScopeError as exc:
+        _logger.info(
+            "alert-signals-promoted-rejected",
+            extra={
+                "event": "alert-signals-promoted-rejected",
+                "request_id": request_id,
+                "status_code": 400,
+                "reason": "scope_error",
+            },
+        )
         handler._send_json(
             {"error": "Bad Request", "message": str(exc)},
             400,
@@ -244,6 +312,15 @@ def handle_promote_alert_signals(handler: Any) -> None:
         return
     except Exception as exc:  # pragma: no cover - defensive
         _logger.exception("Failed to promote scoped alert signals")
+        _logger.info(
+            "alert-signals-promoted-rejected",
+            extra={
+                "event": "alert-signals-promoted-rejected",
+                "request_id": request_id,
+                "status_code": 500,
+                "reason": "internal_error",
+            },
+        )
         handler._send_json(
             {"error": "Internal Server Error", "message": str(exc)},
             500,
@@ -252,6 +329,7 @@ def handle_promote_alert_signals(handler: Any) -> None:
 
     wire = result.to_wire_dict()
     wire_typed = cast("dict[str, Any]", wire)
+    response_byte_count = len(json.dumps(wire).encode("utf-8"))
     # Authoritative signal counts come from the request and the
     # dispatcher's ``scanned_signal_count`` view — never from the per-category
     # incident sizes, which would otherwise vanish every failure and skip.
@@ -269,6 +347,19 @@ def handle_promote_alert_signals(handler: Any) -> None:
         failure_count=len(wire_typed["failures"]),
         promotion_scope="explicit_current_run_signal_ids",
         promotion_actionable_count=len(wire_typed["actionableIncidentIds"]),
+    )
+    # Bounded response event: status + byte count, NO body content.
+    _logger.info(
+        "alert-signals-promotion-response",
+        extra={
+            "event": "alert-signals-promotion-response",
+            "request_id": request_id,
+            "run_id": str(wire_typed["runId"]),
+            "source_identity": str(wire_typed["sourceIdentity"]),
+            "signal_count": len(request.signal_ids),
+            "status_code": 200,
+            "response_byte_count": response_byte_count,
+        },
     )
     handler._send_json(wire, 200)
 
