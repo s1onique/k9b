@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import json
 import urllib.request
-from typing import Callable, cast
+from collections.abc import Callable
+from typing import cast
 
 from k8s_diag_agent.collect.promotion_scoped_http_seam import (
     ScopedPromotionHttpRequestContext,
