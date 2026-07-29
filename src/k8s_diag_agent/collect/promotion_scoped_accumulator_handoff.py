@@ -1,6 +1,6 @@
 """Typed accumulator handoff for the scoped promotion path.
 
-ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION01-FINALIZATION01.
+ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-CORRECTION02.
 
 This module is the single seam between the active scoped dispatcher
 (:class:`ScopedPromotionDispatchResult`) and the run-scoped
@@ -30,9 +30,28 @@ The handoff is closed and exhaustive:
   ``DEFINITELY_NOT_COMMITTED``.
 
 The adapter :func:`scoped_dispatch_result_to_accumulator_handoff`
-reuses every existing projection field by identity (``is``). No
+reuses every existing projection field by identity. No
 field is reconstructed and no second ``PromotionOutcome`` is
 synthesized.
+
+Construction invariants (enforced by ``__post_init__``):
+
+* :class:`ScopedPromotionAccumulatorCompleted` -- outcome's
+  ``run_id``, ``requested_signal_ids`` and ``diagnosis_incident_ids``
+  MUST agree with the receipt's ``bound``; the request id MUST be
+  non-empty and bounded; the request fingerprint MUST be a
+  canonical SHA-256 (64 hex chars).
+* :class:`ScopedPromotionAccumulatorUncertain` -- the request id
+  and fingerprint MUST agree with the outcome's reconciliation
+  token; the request id MUST be non-empty and bounded.
+* :class:`ScopedPromotionAccumulatorRejected` -- the request id
+  and fingerprint MUST be non-empty and bounded; the run id and
+  rejected signal ids MUST match the outcome.
+
+Request identity is a *derived* projection of the handoff
+(:attr:`ScopedPromotionAccumulatorHandoff.request_id`,
+:attr:`request_fingerprint`). There is one handoff object and one
+set of identity fields; no independently assignable copies exist.
 """
 
 from __future__ import annotations
@@ -57,7 +76,40 @@ from .promotion_scoped_http_seam import (
     ScopedPromotionDispatchResult,
     ScopedPromotionDispatchUncertain,
     ScopedPromotionReceipt,
+    MAX_REQUEST_ID_LENGTH,
 )
+
+
+# A canonical SHA-256 fingerprint is exactly 64 lower-case hex chars.
+_SHA256_HEX_LENGTH = 64
+_SHA256_HEX_CHARS = frozenset("0123456789abcdef")
+
+
+def _validate_request_identity(
+    *,
+    request_id: str,
+    request_fingerprint: str,
+    variant_name: str,
+) -> None:
+    """Validate bounded request identity shared by all three variants."""
+    if not isinstance(request_id, str) or not request_id:
+        raise ValueError(
+            f"{variant_name}.request_id MUST be a non-empty string"
+        )
+    if len(request_id) > MAX_REQUEST_ID_LENGTH:
+        raise ValueError(
+            f"{variant_name}.request_id exceeds "
+            f"{MAX_REQUEST_ID_LENGTH} chars"
+        )
+    if (
+        not isinstance(request_fingerprint, str)
+        or len(request_fingerprint) != _SHA256_HEX_LENGTH
+        or any(c not in _SHA256_HEX_CHARS for c in request_fingerprint)
+    ):
+        raise ValueError(
+            f"{variant_name}.request_fingerprint MUST be a canonical "
+            "SHA-256 (64 lower-case hex chars)"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +126,47 @@ class ScopedPromotionAccumulatorCompleted:
     receipt: ScopedPromotionReceipt
     request_id: str
     request_fingerprint: str
+
+    def __post_init__(self) -> None:
+        _validate_request_identity(
+            request_id=self.request_id,
+            request_fingerprint=self.request_fingerprint,
+            variant_name="ScopedPromotionAccumulatorCompleted",
+        )
+        if not isinstance(self.outcome, PromotionSucceeded):
+            raise TypeError(
+                "ScopedPromotionAccumulatorCompleted.outcome MUST be a "
+                f"PromotionSucceeded (got {type(self.outcome).__name__})"
+            )
+        if not isinstance(self.receipt, ScopedPromotionReceipt):
+            raise TypeError(
+                "ScopedPromotionAccumulatorCompleted.receipt MUST be a "
+                f"ScopedPromotionReceipt (got {type(self.receipt).__name__})"
+            )
+        bound = self.receipt.bound
+        if self.outcome.run_id != bound.request.run_id:
+            raise ValueError(
+                "ScopedPromotionAccumulatorCompleted.outcome.run_id MUST "
+                "equal receipt.bound.request.run_id"
+            )
+        if self.outcome.requested_signal_ids != bound.request.signal_ids:
+            raise ValueError(
+                "ScopedPromotionAccumulatorCompleted.outcome.requested_signal_ids "
+                "MUST equal receipt.bound.request.signal_ids"
+            )
+        outcome_actionable = tuple(
+            str(incident_id)
+            for incident_id in self.outcome.diagnosis_incident_ids
+        )
+        receipt_actionable = tuple(
+            str(incident_id)
+            for incident_id in bound.result.actionable_incident_ids
+        )
+        if outcome_actionable != receipt_actionable:
+            raise ValueError(
+                "ScopedPromotionAccumulatorCompleted.outcome.diagnosis_incident_ids "
+                "MUST equal receipt.bound.result.actionable_incident_ids"
+            )
 
     @property
     def commit_disposition(self) -> PromotionCommitDisposition:
@@ -94,6 +187,29 @@ class ScopedPromotionAccumulatorUncertain:
     request_id: str
     request_fingerprint: str
 
+    def __post_init__(self) -> None:
+        _validate_request_identity(
+            request_id=self.request_id,
+            request_fingerprint=self.request_fingerprint,
+            variant_name="ScopedPromotionAccumulatorUncertain",
+        )
+        if not isinstance(self.outcome, PromotionCommitUnknown):
+            raise TypeError(
+                "ScopedPromotionAccumulatorUncertain.outcome MUST be a "
+                f"PromotionCommitUnknown (got {type(self.outcome).__name__})"
+            )
+        token = self.outcome.reconciliation_token
+        if self.request_id != token.request_id:
+            raise ValueError(
+                "ScopedPromotionAccumulatorUncertain.request_id MUST equal "
+                "outcome.reconciliation_token.request_id"
+            )
+        if self.request_fingerprint != token.request_fingerprint:
+            raise ValueError(
+                "ScopedPromotionAccumulatorUncertain.request_fingerprint MUST "
+                "equal outcome.reconciliation_token.request_fingerprint"
+            )
+
     @property
     def commit_disposition(self) -> PromotionCommitDisposition:
         return PromotionCommitDisposition.MAY_HAVE_COMMITTED
@@ -112,6 +228,18 @@ class ScopedPromotionAccumulatorRejected:
     outcome: PromotionRejected
     request_id: str
     request_fingerprint: str
+
+    def __post_init__(self) -> None:
+        _validate_request_identity(
+            request_id=self.request_id,
+            request_fingerprint=self.request_fingerprint,
+            variant_name="ScopedPromotionAccumulatorRejected",
+        )
+        if not isinstance(self.outcome, PromotionRejected):
+            raise TypeError(
+                "ScopedPromotionAccumulatorRejected.outcome MUST be a "
+                f"PromotionRejected (got {type(self.outcome).__name__})"
+            )
 
     @property
     def commit_disposition(self) -> PromotionCommitDisposition:

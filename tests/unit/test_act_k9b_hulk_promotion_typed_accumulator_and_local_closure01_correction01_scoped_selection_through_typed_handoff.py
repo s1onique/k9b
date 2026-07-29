@@ -126,7 +126,7 @@ def _build_completed_projection(
         ),
         aggregate_receipt=ScopedPromotionReceipt(bound=bound_obj),
         request_id="promotion-request-completed-001",
-        request_fingerprint="sha256:completed-projection-001",
+        request_fingerprint="a" * 64,
     )
 
 
@@ -143,12 +143,12 @@ def _build_uncertain_projection(
             reason=PromotionUncertaintyCode.HTTP_RESPONSE_TRUNCATED,
             reconciliation_token=PromotionReconciliationToken(
                 request_id="promotion-request-uncertain-001",
-                request_fingerprint="sha256:uncertain-projection-001",
+                request_fingerprint="b" * 64,
             ),
             requested_signal_ids=requested_signal_ids,
         ),
         request_id="promotion-request-uncertain-001",
-        request_fingerprint="sha256:uncertain-projection-001",
+        request_fingerprint="b" * 64,
     )
 
 
@@ -166,7 +166,7 @@ def _build_rejected_projection(
             rejected_signal_ids=requested_signal_ids,
         ),
         request_id="promotion-request-rejected-001",
-        request_fingerprint="sha256:rejected-projection-001",
+        request_fingerprint="c" * 64,
     )
 
 
