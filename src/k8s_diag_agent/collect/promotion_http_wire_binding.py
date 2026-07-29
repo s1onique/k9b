@@ -1,6 +1,24 @@
-"""Request-relative binding for the strict wire result.
+"""Request-relative binding for the **legacy** snake_case wire result.
 
 ACT-K9B-HULK-PROMOTION-HTTP-TRANSPORT-PRODUCTION-WIRING01-PHASE-2B-CORRECTION01.
+ACT-K9B-HULK-PROMOTION-SCOPED-WIRE-DIALECT-CONVERGENCE01.
+
+DIALECT OWNERSHIP -- LEGACY/ADMIN
+----------------------------------
+
+This module binds the legacy snake_case
+``/api/internal/incidents/promote-candidates`` ``PromotionResponse``
+dialect. The active scoped endpoint
+``/api/internal/incidents/promote-alert-signals`` returns the
+canonical camelCase ``IncidentPromotionResult`` contract declared
+in :mod:`k8s_diag_agent.incident_alert_promotion_contract` and
+MUST be bound via
+:class:`k8s_diag_agent.incident_alert_promotion_binding.BoundScopedPromotionResult`.
+This legacy ``BoundPromotionHttpWireResult`` MUST NOT be wired
+into the scoped path; doing so would route valid live scoped
+backend responses through a bound type that requires the legacy
+``ok`` / ``scanned`` / ``promotion_records`` keys and reject every
+legitimate scoped response.
 
 :class:`BoundPromotionHttpWireResult` binds a validated
 :class:`PromotionHttpWireResult` to the request that produced it.

@@ -1,6 +1,23 @@
-"""Strict wire payload decoding.
+"""Strict wire payload decoding for the **legacy** snake_case dialect.
 
 ACT-K9B-HULK-PROMOTION-HTTP-TRANSPORT-PRODUCTION-WIRING01-PHASE-2B-CORRECTION01.
+ACT-K9B-HULK-PROMOTION-SCOPED-WIRE-DIALECT-CONVERGENCE01.
+
+DIALECT OWNERSHIP -- LEGACY/ADMIN
+----------------------------------
+
+This module decodes the legacy snake_case
+``/api/internal/incidents/promote-candidates`` ``PromotionResponse``
+dialect. The active scoped endpoint
+``/api/internal/incidents/promote-alert-signals`` returns the
+canonical camelCase ``IncidentPromotionResult`` contract declared
+in :mod:`k8s_diag_agent.incident_alert_promotion_contract`. The
+scoped response MUST be parsed by
+:meth:`IncidentPromotionResult.from_wire_dict`. Routing a scoped
+camelCase payload through ``PromotionHttpWireResult.from_payload``
+will fail closed because the legacy snake_case keys are missing
+from the response, turning every legitimate scoped response into a
+synthetic failure. Do not wire this decoder into the scoped path.
 
 The decode module owns the only legal path from a raw
 ``Mapping[str, Any]`` to a validated

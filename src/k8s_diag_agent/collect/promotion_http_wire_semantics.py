@@ -1,6 +1,21 @@
-"""Result-level invariant validation for the strict wire result.
+"""Result-level invariant validation for the **legacy** snake_case wire result.
 
 ACT-K9B-HULK-PROMOTION-HTTP-TRANSPORT-PRODUCTION-WIRING01-PHASE-2B-CORRECTION01.
+ACT-K9B-HULK-PROMOTION-SCOPED-WIRE-DIALECT-CONVERGENCE01.
+
+DIALECT OWNERSHIP -- LEGACY/ADMIN
+----------------------------------
+
+This module owns the invariant helpers and result validators for
+the legacy snake_case ``/api/internal/incidents/promote-candidates``
+``PromotionResponse`` dialect. The active scoped endpoint
+``/api/internal/incidents/promote-alert-signals`` returns the
+canonical camelCase ``IncidentPromotionResult`` contract declared
+in :mod:`k8s_diag_agent.incident_alert_promotion_contract`. The
+scoped response is decoded by
+:meth:`IncidentPromotionResult.from_wire_dict` and validated by
+:class:`k8s_diag_agent.incident_alert_promotion_binding.BoundScopedPromotionResult`;
+do not route it through the legacy helpers below.
 
 This module owns:
 

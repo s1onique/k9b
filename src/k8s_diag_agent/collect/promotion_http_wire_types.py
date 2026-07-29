@@ -1,6 +1,25 @@
-"""Enums and immutable dataclasses for the strict wire result.
+"""Enums and immutable dataclasses for the **legacy** snake_case wire dialect.
 
 ACT-K9B-HULK-PROMOTION-HTTP-TRANSPORT-PRODUCTION-WIRING01-PHASE-2B.
+ACT-K9B-HULK-PROMOTION-SCOPED-WIRE-DIALECT-CONVERGENCE01.
+
+DIALECT OWNERSHIP -- LEGACY/ADMIN
+----------------------------------
+
+This module models the legacy snake_case
+``/api/internal/incidents/promote-candidates`` ``PromotionResponse``
+dialect. The active scoped endpoint
+``/api/internal/incidents/promote-alert-signals`` returns the
+canonical camelCase ``IncidentPromotionResult`` contract declared
+in :mod:`k8s_diag_agent.incident_alert_promotion_contract`. The
+scoped response MUST be parsed by
+:meth:`IncidentPromotionResult.from_wire_dict` and bound by
+:class:`k8s_diag_agent.incident_alert_promotion_binding.BoundScopedPromotionResult`.
+These snake_case modules MUST NOT become a second response
+authority for the scoped endpoint; doing so would route valid
+live backend responses through a parser that expects the legacy
+dialect and turn every legitimate response into a synthetic
+failure.
 
 This module hosts the closed vocabulary and the immutable wire
 record / result types. Validation rules and decoding live in
