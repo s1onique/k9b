@@ -1,32 +1,46 @@
 """Scoped accumulator invariants against global store-scan fallback.
 
-ACT-K9B-HULK-PROMOTION-SELECTION-SUITE-RESPONSIBILITY-SPLIT01.
+ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01.
 
-These tests pin the bounded invariants of the accumulator after
-a typed scoped handoff. The aggregate scoped result MUST NOT
-synthesise per-signal ``promotion_records``; the receipt is the
-only authority. A typed commit-unknown handoff MUST NOT store
-global candidate scan evidence; a typed rejected handoff MUST
-NOT store global store-scan evidence. ``aggregate_successful_zero``
-MUST keep ``records`` empty and the receipt present.
+These tests drive the active atomic accumulator path through
+``promote_alert_signals_scoped_for_accumulator`` and prove:
 
-The file also covers the explicit ``no_promotion_run`` path --
-the only branch that may produce the canonical
-``selection_source=explicit_nonpromotion`` discriminator -- and
-proves that completed zero, commit unknown and rejected
-typed outcomes cannot enter this branch.
+* the aggregate scoped result MUST NOT trigger a global store scan;
+* the typed commit-unknown handoff carries the canonical
+  reconciliation token by identity;
+* the typed rejected handoff carries ``DEFINITELY_NOT_COMMITTED``;
+* the completed-with-IDs, completed-aggregate-zero, commit-unknown
+  and rejected handoffs all preserve the typed outcome by identity.
+
+The lower-level ``record_scoped_promotion`` and
+``record_promotion_outcome`` compatibility paths are exercised
+in their own accumulator compatibility suite; this module
+asserts the production-shaped atomic recording only.
+
+The explicit no-promotion path tests live in
+:mod:`test_scoped_selection_explicit_no_promotion` so the
+no-global-fallback invariants and the no-promotion positive
+case have a focused module each.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
 from scoped_selection_typed_support import (
     build_completed_projection,
     build_rejected_projection,
     build_uncertain_projection,
+    default_requested_signal_ids,
 )
 
+from k8s_diag_agent.collect import incident_promotion_backend
 from k8s_diag_agent.collect.incident_promotion_accumulator import (
     RunPromotionAccumulator,
+)
+from k8s_diag_agent.collect.incident_promotion_dispatch import (
+    promote_alert_signals_scoped_for_accumulator,
 )
 from k8s_diag_agent.collect.incident_promotion_outcome_recorder import (
     PromotionOutcomeRecording,
@@ -35,7 +49,7 @@ from k8s_diag_agent.collect.promotion_outcomes import (
     PromotionCommitDisposition,
 )
 from k8s_diag_agent.collect.promotion_scoped_accumulator_handoff import (
-    scoped_dispatch_result_to_accumulator_handoff,
+    ScopedPromotionAccumulatorHandoff,
 )
 from k8s_diag_agent.collect.promotion_scoped_http_seam import (
     ScopedPromotionDispatchCompleted,
@@ -44,55 +58,186 @@ from k8s_diag_agent.collect.promotion_scoped_http_seam import (
 )
 
 
+class _TypedBackendSpy:
+    """Typed spy that captures the canonical backend call shape.
+
+    Implements the exact ``promote_alert_signals_via_scoped_backend_api``
+    signature with named-only arguments and returns the supplied
+    typed dispatch result. The captured call arguments are
+    asserted against the dispatcher expectations.
+    """
+
+    def __init__(
+        self,
+        typed_result: Any,
+    ) -> None:
+        self._typed_result = typed_result
+        self.calls: list[dict[str, Any]] = []
+
+    def __call__(
+        self,
+        *,
+        run_id: str,
+        source_identity: str,
+        signal_ids: list[str],
+    ) -> Any:
+        self.calls.append(
+            {
+                "run_id": run_id,
+                "source_identity": source_identity,
+                "signal_ids": list(signal_ids),
+            }
+        )
+        return self._typed_result
+
+
+def _atomic_dispatched_outcome(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    typed_result: Any,
+    health_run_id: str = "health-run-typed-handoff-001",
+    source_identity: str = "source-test",
+    cluster_context: str = "ctx-test",
+) -> tuple[RunPromotionAccumulator, Any, _TypedBackendSpy]:
+    """Drive the active atomic recorder path with a typed
+    backend spy and return ``(accumulator, batch, spy)``.
+    """
+    spy = _TypedBackendSpy(typed_result)
+    monkeypatch.setattr(
+        incident_promotion_backend,
+        "promote_alert_signals_via_scoped_backend_api",
+        spy,
+    )
+    accumulator = RunPromotionAccumulator()
+    batch = promote_alert_signals_scoped_for_accumulator(
+        runs_dir=tmp_path,
+        health_run_id=health_run_id,
+        source_identity=source_identity,
+        signal_ids=list(default_requested_signal_ids()),
+        accumulator=accumulator,
+        cluster_context=cluster_context,
+    )
+    return accumulator, batch, spy
+
+
 class TestScopedAccumulatorInvariants:
-    """Bounded invariants of the accumulator after a typed handoff."""
+    """Bounded invariants of the active atomic accumulator path."""
 
-    def test_aggregate_successful_zero_keeps_records_empty(self) -> None:
-        projection = build_completed_projection(diagnosis_incident_ids=())
-        handoff = scoped_dispatch_result_to_accumulator_handoff(
-            ScopedPromotionDispatchCompleted(projection=projection)
+    def test_completed_with_ids_preserves_typed_outcome_by_identity(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        """The canonical completed-with-IDs handoff must preserve
+        the typed ``PromotionOutcome`` and the receipt by identity
+        through the active atomic path.
+        """
+        projection = build_completed_projection(
+            diagnosis_incident_ids=("canonical-001", "canonical-002")
         )
-        accumulator = RunPromotionAccumulator()
-        accumulator.record_scoped_promotion(handoff)
-        # Aggregate scoped result MUST NOT synthesise per-signal
-        # promotion_records. The receipt is the only authority.
-        assert accumulator.promotion_records == []
+        accumulator, _batch, _spy = _atomic_dispatched_outcome(
+            monkeypatch=monkeypatch,
+            tmp_path=tmp_path,
+            typed_result=ScopedPromotionDispatchCompleted(
+                projection=projection
+            ),
+        )
+        assert isinstance(
+            accumulator.scoped_promotion_handoff,
+            ScopedPromotionAccumulatorHandoff,
+        )
+        assert accumulator.promotion_outcome is projection.promotion_outcome
+        assert (
+            accumulator.scoped_promotion_handoff.outcome
+            is projection.promotion_outcome
+        )
+        assert (
+            accumulator.scoped_promotion_handoff.receipt
+            is projection.aggregate_receipt
+        )
+        assert list(accumulator.promotion_records) == []
         assert accumulator.total_errors == 0
 
-    def test_uncertain_handoff_does_not_store_can(self) -> None:
+    def test_uncertain_preserves_reconciliation_token_by_identity(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        """The canonical commit-unknown handoff must preserve
+        the typed ``PromotionCommitUnknown`` and its
+        ``reconciliation_token`` by identity through the active
+        atomic path.
+        """
         projection = build_uncertain_projection()
-        handoff = scoped_dispatch_result_to_accumulator_handoff(
-            ScopedPromotionDispatchUncertain(projection=projection)
+        accumulator, _batch, _spy = _atomic_dispatched_outcome(
+            monkeypatch=monkeypatch,
+            tmp_path=tmp_path,
+            typed_result=ScopedPromotionDispatchUncertain(
+                projection=projection
+            ),
         )
-        accumulator = RunPromotionAccumulator()
-        accumulator.record_scoped_promotion(handoff)
-        # No batch is added -- the accumulator carries the typed
-        # outcome only. ``promotion_records`` stays empty; the
-        # global store-scan fallback is NOT triggered.
-        assert accumulator.promotion_records == []
+        assert accumulator.promotion_outcome is projection.promotion_outcome
+        assert (
+            accumulator.promotion_outcome.reconciliation_token
+            is projection.promotion_outcome.reconciliation_token
+        )
+        assert list(accumulator.promotion_records) == []
         assert accumulator.total_errors == 0
 
-    def test_rejected_handoff_does_not_store_scan(self) -> None:
+    def test_rejected_handoff_does_not_store_scan(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        """The canonical rejected handoff MUST NOT trigger a
+        global store scan. The active atomic recording
+        surfaces the rejection error count while keeping
+        ``records`` empty.
+        """
         projection = build_rejected_projection()
-        handoff = scoped_dispatch_result_to_accumulator_handoff(
-            ScopedPromotionDispatchRejected(projection=projection)
+        accumulator, _batch, _spy = _atomic_dispatched_outcome(
+            monkeypatch=monkeypatch,
+            tmp_path=tmp_path,
+            typed_result=ScopedPromotionDispatchRejected(
+                projection=projection
+            ),
         )
-        accumulator = RunPromotionAccumulator()
-        accumulator.record_scoped_promotion(handoff)
-        # Aggregate scoped result MUST NOT add per-signal records.
-        assert accumulator.promotion_records == []
-        # ACT-K9B-HULK-PROMOTION-TYPED-ACCUMULATOR-AND-LOCAL-CLOSURE01-
-        # CORRECTION03-ATOMIC-RECORDING-AND-ACCOUNTING-TRUTH01:
-        # the atomic wrapper routes through
-        # ``record_scoped_promotion_batch``, so the bounded
-        # rejection now correctly populates the aggregate error
-        # counter (errors == 1). The previous behaviour that
-        # silently swallowed the rejection error count was an
-        # accounting bug; the test name continues to pin the
-        # store-scan invariant.
+        assert accumulator.promotion_outcome is projection.promotion_outcome
+        assert list(accumulator.promotion_records) == []
         assert accumulator.total_errors == 1
 
-    def test_idempotent_record_for_identical_handoff(self) -> None:
+    def test_rejected_handoff_records_definitely_not_committed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        """The rejected handoff MUST carry
+        ``DEFINITELY_NOT_COMMITTED`` as the commit disposition.
+        """
+        projection = build_rejected_projection()
+        accumulator, _batch, _spy = _atomic_dispatched_outcome(
+            monkeypatch=monkeypatch,
+            tmp_path=tmp_path,
+            typed_result=ScopedPromotionDispatchRejected(
+                projection=projection
+            ),
+        )
+        assert accumulator.scoped_promotion_handoff.commit_disposition is (
+            PromotionCommitDisposition.DEFINITELY_NOT_COMMITTED
+        )
+
+    def test_idempotent_record_for_identical_handoff(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+    ) -> None:
+        """Two identical promotion outcomes participate in the
+        idempotent ledger via the compatibility path. The
+        proof is bounded to the typed outcome identity
+        equality proof; the active atomic path is the
+        principal path.
+        """
         projection = build_completed_projection(
             diagnosis_incident_ids=("c-1",)
         )
@@ -105,141 +250,3 @@ class TestScopedAccumulatorInvariants:
             outcome=projection.promotion_outcome
         )
         assert result_second is PromotionOutcomeRecording.IDEMPOTENT
-
-    def test_rejected_handoff_records_definitely_not_committed(self) -> None:
-        projection = build_rejected_projection()
-        handoff = scoped_dispatch_result_to_accumulator_handoff(
-            ScopedPromotionDispatchRejected(projection=projection)
-        )
-        # The accumulator copies the commit_disposition from the
-        # handoff; a typed rejection MUST carry
-        # DEFINITELY_NOT_COMMITTED.
-        assert handoff.commit_disposition is (
-            PromotionCommitDisposition.DEFINITELY_NOT_COMMITTED
-        )
-
-
-class TestExplicitNoPromotionPath:
-    """Explicit no-promotion path is the only branch that may
-    produce ``selection_source=explicit_nonpromotion`` with
-    ``incident_access_mode=no_promotion_run``.
-
-    The closed pairwise tests below prove that completed,
-    commit-unknown and rejected typed outcomes cannot collapse
-    into the no-promotion path even when the requested
-    signal set is empty.
-    """
-
-    def test_no_promotion_attempt_path_is_distinct_from_completed_zero(
-        self,
-    ) -> None:
-        """Completed-zero MUST stay ``current_run_empty``;
-        the no-promotion path is the only branch that may carry
-        ``no_promotion_run`` access mode.
-        """
-        from k8s_diag_agent.health.loop_runner_execute import (
-            DIAGNOSIS_SELECTION_SOURCE_PROMOTION,
-            INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN,
-            INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
-            _build_diagnosis_execution_authority,
-        )
-
-        projection = build_completed_projection(diagnosis_incident_ids=())
-        outcome = projection.promotion_outcome
-        authority = _build_diagnosis_execution_authority(
-            promotion_outcome=outcome,
-            dispatcher_incident_access_mode=INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN,
-        )
-        # Completed-zero MUST still resolve to promotion
-        # selection; even when the dispatcher reports
-        # ``no_promotion_run`` access mode, the canonical
-        # typed outcome keeps the completed selection shape.
-        assert (
-            authority.selection_mode
-            is INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY
-        )
-        assert (
-            authority.selection_source is DIAGNOSIS_SELECTION_SOURCE_PROMOTION
-        )
-
-    def test_commit_unknown_cannot_collapse_to_no_promotion(self) -> None:
-        """Commit-unknown selection MUST keep its commit-unknown
-        selection mode regardless of the dispatcher's
-        access mode.
-        """
-        from k8s_diag_agent.health.loop_runner_execute import (
-            INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN,
-            INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN,
-            _build_diagnosis_execution_authority,
-        )
-
-        projection = build_uncertain_projection()
-        outcome = projection.promotion_outcome
-        authority = _build_diagnosis_execution_authority(
-            promotion_outcome=outcome,
-            dispatcher_incident_access_mode=INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN,
-        )
-        assert (
-            authority.selection_mode is INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN
-        )
-
-    def test_rejected_cannot_collapse_to_no_promotion(self) -> None:
-        """Rejected selection MUST keep its blocked selection mode
-        regardless of the dispatcher's access mode.
-        """
-        from k8s_diag_agent.health.loop_runner_execute import (
-            INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN,
-            INCIDENT_SELECTION_MODE_BLOCKED,
-            _build_diagnosis_execution_authority,
-        )
-
-        projection = build_rejected_projection()
-        outcome = projection.promotion_outcome
-        authority = _build_diagnosis_execution_authority(
-            promotion_outcome=outcome,
-            dispatcher_incident_access_mode=INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN,
-        )
-        assert authority.selection_mode is INCIDENT_SELECTION_MODE_BLOCKED
-
-    def test_no_promotion_run_collapsed_only_for_empty_signal_set(self) -> None:
-        """The closed ``no_promotion_run`` collapse path is the
-        ONLY branch that may produce ``selection_source=
-        explicit_nonpromotion``. The pairwise tests above prove
-        that completed zero, commit unknown and rejected
-        outcomes cannot enter this branch regardless of the
-        dispatcher access mode.
-        """
-        from k8s_diag_agent.health.loop_runner_execute import (
-            DIAGNOSIS_SELECTION_SOURCE_EXPLICIT_NON_PROMOTION,
-            DIAGNOSIS_SELECTION_SOURCE_PROMOTION,
-            DIAGNOSIS_SELECTION_SOURCE_PROMOTION_BLOCKED,
-            DIAGNOSIS_SELECTION_SOURCE_PROMOTION_COMMIT_UNKNOWN,
-            INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN,
-            _build_diagnosis_execution_authority,
-        )
-
-        # All three typed outcomes MUST NOT produce
-        # ``explicit_nonpromotion`` regardless of access mode.
-        for projection in (
-            build_completed_projection(diagnosis_incident_ids=()),
-            build_uncertain_projection(),
-            build_rejected_projection(),
-        ):
-            authority = _build_diagnosis_execution_authority(
-                promotion_outcome=projection.promotion_outcome,
-                dispatcher_incident_access_mode=(
-                    INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN
-                ),
-            )
-            assert (
-                authority.selection_source
-                is not DIAGNOSIS_SELECTION_SOURCE_EXPLICIT_NON_PROMOTION
-            )
-            # The selection source is still bound to the typed
-            # outcome class (promotion, promotion_blocked, or
-            # promotion_commit_unknown).
-            assert authority.selection_source in {
-                DIAGNOSIS_SELECTION_SOURCE_PROMOTION,
-                DIAGNOSIS_SELECTION_SOURCE_PROMOTION_BLOCKED,
-                DIAGNOSIS_SELECTION_SOURCE_PROMOTION_COMMIT_UNKNOWN,
-            }

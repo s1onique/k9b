@@ -1,15 +1,11 @@
-"""Scoped selection completed final-summary integration.
+"""Scoped selection unavailable final-summary integration.
 
 ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01.
 
-This integration test exercises the canonical completed paths
-through the active ``run_automatic_diagnosis_loop`` final-summary
-construction and asserts the bounded canonical fields.
-
-The unavailable paths (commit-unknown, rejected) live in
-:mod:`test_scoped_selection_final_summary_unavailable`, and the
-explicit no-promotion path lives in
-:mod:`test_scoped_selection_final_summary_no_promotion`.
+This integration test exercises the canonical unavailable paths
+(commit-unknown and rejected) through the active
+``run_automatic_diagnosis_loop`` final-summary construction and
+asserts the bounded canonical fields.
 """
 
 from __future__ import annotations
@@ -19,8 +15,8 @@ from unittest.mock import patch
 
 import pytest
 from scoped_selection_typed_support import (
-    DEFAULT_REQUEST_ID_COMPLETED,
-    build_completed_projection,
+    build_rejected_projection,
+    build_uncertain_projection,
     default_requested_signal_ids,
 )
 
@@ -32,8 +28,12 @@ from k8s_diag_agent.collect.incident_promotion_dispatch import (
     INCIDENT_ACCESS_MODE_BACKEND,
     promote_alert_signals_scoped_for_accumulator,
 )
+from k8s_diag_agent.collect.promotion_outcomes import (
+    PromotionRejectionCode,
+)
 from k8s_diag_agent.collect.promotion_scoped_http_seam import (
-    ScopedPromotionDispatchCompleted,
+    ScopedPromotionDispatchRejected,
+    ScopedPromotionDispatchUncertain,
 )
 from k8s_diag_agent.health.loop_automatic_diagnosis import (
     build_diagnosis_selection,
@@ -70,25 +70,24 @@ def _stub_collector() -> Any:
     )()
 
 
-class TestScopedSelectionCompletedFinalSummary:
-    """Production-shaped final-summary through the canonical completed paths."""
+class TestScopedSelectionUnavailableFinalSummary:
+    """Production-shaped final-summary through the unavailable paths."""
 
-    def test_completed_with_ids_emits_canonical_final_summary(
+    def test_commit_unknown_emits_canonical_final_summary(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Any,
     ) -> None:
-        """Completed-with-IDs drives the active atomic recorder
-        and the actual final-summary construction with the
-        bounded canonical fields.
+        """Commit-unknown drives the active atomic recorder and
+        the actual final-summary construction with the
+        ``commit_unknown`` selection mode and the reconciliation
+        token identity.
         """
-        projection = build_completed_projection(
-            diagnosis_incident_ids=("canonical-001", "canonical-002"),
-        )
-        spy_completed = monkeypatch.setattr(
+        projection = build_uncertain_projection()
+        monkeypatch.setattr(
             incident_promotion_backend,
             "promote_alert_signals_via_scoped_backend_api",
-            lambda **_: ScopedPromotionDispatchCompleted(
+            lambda **_: ScopedPromotionDispatchUncertain(
                 projection=projection
             ),
         )
@@ -103,8 +102,8 @@ class TestScopedSelectionCompletedFinalSummary:
         )
         assert accumulator.promotion_outcome is projection.promotion_outcome
         assert (
-            accumulator.scoped_promotion_request_id
-            == DEFAULT_REQUEST_ID_COMPLETED
+            accumulator.promotion_outcome.reconciliation_token
+            is projection.promotion_outcome.reconciliation_token
         )
 
         with patch(
@@ -127,37 +126,37 @@ class TestScopedSelectionCompletedFinalSummary:
                 diagnosis_selection=selection,
                 scheduler_run_id="health-run-typed-handoff-001",
                 backend_endpoint_identity={
-                    "incident_access_mode": INCIDENT_ACCESS_MODE_BACKEND,
+                    "incident_access_mode": "reconciliation_required",
                 },
             )
 
-        assert summary["selection_source"] == "promotion"
-        assert summary["selection_mode"] == "explicit_incident_ids"
+        assert (
+            summary["selection_source"]
+            == "unavailable_due_to_commit_unknown"
+        )
+        assert summary["selection_mode"] == "commit_unknown"
         assert summary["store_scan_performed"] is False
-        assert summary["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
-        assert summary["explicit_canonical_id_count"] == 2
-        assert summary["selected_incident_count"] == 2
-        assert summary["promotion_propagated_to_diagnosis"] is True
-        assert summary["reconciliation_required"] is False
-        assert summary["promotion_consistency_error_recorded"] is False
-        _ = spy_completed
+        assert summary["incident_access_mode"] == "reconciliation_required"
+        assert summary["reconciliation_required"] is True
+        assert summary["selected_incident_count"] == 0
+        assert summary["promotion_propagated_to_diagnosis"] is False
+        assert summary["blocked_reason"] == "promotion_commit_unknown"
 
-    def test_completed_aggregate_zero_emits_canonical_final_summary(
+    def test_rejected_emits_canonical_final_summary(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Any,
     ) -> None:
-        """Aggregate successful zero drives the active atomic
-        recorder and the actual final-summary construction with
-        the canonical ``current_run_empty`` selection mode.
+        """Rejected drives the active atomic recorder and the
+        actual final-summary construction with the bounded
+        ``unavailable_due_to_rejected_promotion`` selection source
+        and the ``promotion_consistency_error_recorded`` flag.
         """
-        projection = build_completed_projection(
-            diagnosis_incident_ids=()
-        )
+        projection = build_rejected_projection()
         monkeypatch.setattr(
             incident_promotion_backend,
             "promote_alert_signals_via_scoped_backend_api",
-            lambda **_: ScopedPromotionDispatchCompleted(
+            lambda **_: ScopedPromotionDispatchRejected(
                 projection=projection
             ),
         )
@@ -171,6 +170,9 @@ class TestScopedSelectionCompletedFinalSummary:
             cluster_context="ctx-test",
         )
         assert accumulator.promotion_outcome is projection.promotion_outcome
+        assert accumulator.promotion_outcome.reason is (
+            PromotionRejectionCode.BACKEND_UNREACHABLE
+        )
 
         with patch(
             "k8s_diag_agent.collect.incident_diagnosis_auto_loop."
@@ -196,10 +198,15 @@ class TestScopedSelectionCompletedFinalSummary:
                 },
             )
 
-        assert summary["selection_source"] == "promotion"
-        assert summary["selection_mode"] == "current_run_empty"
+        assert (
+            summary["selection_source"]
+            == "unavailable_due_to_rejected_promotion"
+        )
+        assert summary["selection_mode"] == "blocked"
         assert summary["store_scan_performed"] is False
         assert summary["incident_access_mode"] == INCIDENT_ACCESS_MODE_BACKEND
+        assert summary["promotion_consistency_error_recorded"] is True
         assert summary["selected_incident_count"] == 0
+        assert summary["reconciliation_required"] is False
+        assert summary["blocked_reason"] == "promotion_rejected"
         assert summary["promotion_propagated_to_diagnosis"] is False
-        assert list(accumulator.promotion_records) == []

@@ -1,14 +1,16 @@
-"""Scoped selection dispatcher integration tests.
+"""Scoped selection dispatcher integration.
 
-ACT-K9B-HULK-PROMOTION-SELECTION-SUITE-RESPONSIBILITY-SPLIT01.
+ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01.
 
-These tests exercise the active dispatcher path
-(``promote_alert_signals_scoped_for_accumulator``) end-to-end
-with the canonical closed-union projections for the
-completed, uncertain and rejected outcomes. The
-``ScopedPromotionAccumulator`` MUST receive the typed authority
-untouched by identity and the resulting batch MUST carry the
-bounded access mode.
+These tests drive the active atomic accumulator path through
+``promote_alert_signals_scoped_for_accumulator`` with a typed
+backend spy that records the exact request arguments and
+returns the supplied typed dispatch result.
+
+The active atomic accumulator path is the canonical recording
+route. The lower-level compatibility paths are exercised in
+their own accumulator compatibility suite; this module asserts
+the production-shaped atomic recording only.
 """
 
 from __future__ import annotations
@@ -48,18 +50,71 @@ from k8s_diag_agent.collect.promotion_scoped_http_seam import (
 )
 
 
-def _stub_promote_factory(projection: Any):
-    """Return a stub for ``promote_alert_signals_via_scoped_backend_api``
-    that emits the supplied projection as a typed dispatch result.
+class _TypedBackendSpy:
+    """Typed spy that captures the canonical backend call shape.
+
+    Implements the exact ``promote_alert_signals_via_scoped_backend_api``
+    signature with named-only arguments and returns the supplied
+    typed dispatch result. The captured call arguments are
+    asserted against the dispatcher expectations.
     """
 
-    def _stub(*, run_id: str, source_identity: str, signal_ids: list[str]) -> Any:
-        # The dispatcher variation is encoded on the projection
-        # itself; the stub returns the dispatch variant the
-        # production-shaped integration case requires.
-        return projection
+    def __init__(
+        self,
+        typed_result: Any,
+    ) -> None:
+        self._typed_result = typed_result
+        self.calls: list[dict[str, Any]] = []
 
-    return _stub
+    def __call__(
+        self,
+        *,
+        run_id: str,
+        source_identity: str,
+        signal_ids: list[str],
+    ) -> Any:
+        self.calls.append(
+            {
+                "run_id": run_id,
+                "source_identity": source_identity,
+                "signal_ids": list(signal_ids),
+            }
+        )
+        return self._typed_result
+
+
+def _drive_active_dispatch(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    typed_result: Any,
+    health_run_id: str = "health-run-typed-handoff-001",
+    source_identity: str = "source-test",
+    cluster_context: str = "ctx-test",
+) -> tuple[RunPromotionAccumulator, Any, _TypedBackendSpy]:
+    """Drive the active atomic recorder path with a typed
+    backend spy and return ``(accumulator, batch, spy)``.
+    """
+    spy = _TypedBackendSpy(typed_result)
+    monkeypatch.setattr(
+        incident_promotion_backend,
+        "promote_alert_signals_via_scoped_backend_api",
+        spy,
+    )
+    accumulator = RunPromotionAccumulator()
+    expected_signal_ids = list(default_requested_signal_ids())
+    batch = promote_alert_signals_scoped_for_accumulator(
+        runs_dir=tmp_path,
+        health_run_id=health_run_id,
+        source_identity=source_identity,
+        signal_ids=expected_signal_ids,
+        accumulator=accumulator,
+        cluster_context=cluster_context,
+    )
+    # The typed backend spy recorded exactly one call with the
+    # canonical request arguments.
+    assert len(spy.calls) == 1
+    return accumulator, batch, spy
 
 
 class TestScopedAccumulatorDispatchResultFingerprint:
@@ -70,26 +125,24 @@ class TestScopedAccumulatorDispatchResultFingerprint:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Any,
     ) -> None:
-        """The dispatcher must call the typed accumulator handoff path."""
+        """The dispatcher must call the typed backend exactly
+        once with the canonical request arguments and record
+        the typed handoff verbatim."""
         projection = build_completed_projection()
-
-        monkeypatch.setattr(
-            incident_promotion_backend,
-            "promote_alert_signals_via_scoped_backend_api",
-            _stub_promote_factory(
-                ScopedPromotionDispatchCompleted(projection=projection)
+        accumulator, batch, spy = _drive_active_dispatch(
+            monkeypatch=monkeypatch,
+            tmp_path=tmp_path,
+            typed_result=ScopedPromotionDispatchCompleted(
+                projection=projection
             ),
         )
-
-        accumulator = RunPromotionAccumulator()
-        batch = promote_alert_signals_scoped_for_accumulator(
-            runs_dir=tmp_path,
-            health_run_id="health-run-typed-handoff-001",
-            source_identity="source-test",
-            signal_ids=list(default_requested_signal_ids()),
-            accumulator=accumulator,
-            cluster_context="ctx-test",
-        )
+        # The typed backend spy recorded exactly one call with
+        # the canonical request arguments.
+        call = spy.calls[0]
+        assert call["run_id"] == "health-run-typed-handoff-001"
+        assert call["source_identity"] == "source-test"
+        assert call["signal_ids"] == list(default_requested_signal_ids())
+        assert len(call["signal_ids"]) == 34
 
         # The accumulator recorded the typed handoff verbatim.
         assert isinstance(
@@ -97,6 +150,14 @@ class TestScopedAccumulatorDispatchResultFingerprint:
             ScopedPromotionAccumulatorHandoff,
         )
         assert accumulator.promotion_outcome is projection.promotion_outcome
+        assert (
+            accumulator.scoped_promotion_handoff.outcome
+            is projection.promotion_outcome
+        )
+        assert (
+            accumulator.scoped_promotion_handoff.receipt
+            is projection.aggregate_receipt
+        )
         assert (
             accumulator.scoped_promotion_request_id
             == DEFAULT_REQUEST_ID_COMPLETED
@@ -113,33 +174,35 @@ class TestScopedAccumulatorDispatchResultFingerprint:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Any,
     ) -> None:
+        """Commit-unknown carries the typed outcome by identity
+        and the bounded ``reconciliation_required`` access mode.
+        """
         projection = build_uncertain_projection()
-
-        monkeypatch.setattr(
-            incident_promotion_backend,
-            "promote_alert_signals_via_scoped_backend_api",
-            _stub_promote_factory(
-                ScopedPromotionDispatchUncertain(projection=projection)
+        accumulator, batch, spy = _drive_active_dispatch(
+            monkeypatch=monkeypatch,
+            tmp_path=tmp_path,
+            typed_result=ScopedPromotionDispatchUncertain(
+                projection=projection
             ),
         )
-
-        accumulator = RunPromotionAccumulator()
-        batch = promote_alert_signals_scoped_for_accumulator(
-            runs_dir=tmp_path,
-            health_run_id="health-run-typed-handoff-001",
-            source_identity="source-test",
-            signal_ids=list(default_requested_signal_ids()),
-            accumulator=accumulator,
-            cluster_context="ctx-test",
-        )
+        # Typed backend spy recorded exactly one call.
+        call = spy.calls[0]
+        assert call["run_id"] == "health-run-typed-handoff-001"
+        assert call["source_identity"] == "source-test"
+        assert call["signal_ids"] == list(default_requested_signal_ids())
 
         # Identity preserved through the dispatcher.
+        assert accumulator.promotion_outcome is projection.promotion_outcome
         assert (
-            accumulator.scoped_promotion_request_id
-            == DEFAULT_REQUEST_ID_UNCERTAIN
+            accumulator.promotion_outcome.reconciliation_token
+            is projection.promotion_outcome.reconciliation_token
         )
         assert (
             accumulator.promotion_outcome.reconciliation_token.request_id
+            == DEFAULT_REQUEST_ID_UNCERTAIN
+        )
+        assert (
+            accumulator.scoped_promotion_request_id
             == DEFAULT_REQUEST_ID_UNCERTAIN
         )
         assert batch.promotion_result.incident_access_mode == (
@@ -151,26 +214,25 @@ class TestScopedAccumulatorDispatchResultFingerprint:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Any,
     ) -> None:
+        """Rejected carries the typed outcome by identity and the
+        bounded ``backend`` access mode with the atomic error
+        counter populated.
+        """
         projection = build_rejected_projection()
-
-        monkeypatch.setattr(
-            incident_promotion_backend,
-            "promote_alert_signals_via_scoped_backend_api",
-            _stub_promote_factory(
-                ScopedPromotionDispatchRejected(projection=projection)
+        accumulator, batch, spy = _drive_active_dispatch(
+            monkeypatch=monkeypatch,
+            tmp_path=tmp_path,
+            typed_result=ScopedPromotionDispatchRejected(
+                projection=projection
             ),
         )
+        # Typed backend spy recorded exactly one call.
+        call = spy.calls[0]
+        assert call["run_id"] == "health-run-typed-handoff-001"
+        assert call["source_identity"] == "source-test"
+        assert call["signal_ids"] == list(default_requested_signal_ids())
 
-        accumulator = RunPromotionAccumulator()
-        batch = promote_alert_signals_scoped_for_accumulator(
-            runs_dir=tmp_path,
-            health_run_id="health-run-typed-handoff-001",
-            source_identity="source-test",
-            signal_ids=list(default_requested_signal_ids()),
-            accumulator=accumulator,
-            cluster_context="ctx-test",
-        )
-
+        assert accumulator.promotion_outcome is projection.promotion_outcome
         assert (
             accumulator.scoped_promotion_request_id
             == DEFAULT_REQUEST_ID_REJECTED
