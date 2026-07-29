@@ -70,26 +70,37 @@ from k8s_diag_agent.collect.promotion_scoped_http_seam import (
 class ScopedTransportPromotionProjection:
     """Typed projection returned by the bounded mapper.
 
-    Carries the typed :class:`PromotionOutcome`, the bounded
-    aggregate receipt (when present), the transport correlation
-    identity, the deterministic request fingerprint, and the
-    closed commit disposition.
-
-    Tuple-shaped returns are forbidden; downstream consumers MUST
-    branch on the typed fields.
+    The aggregate receipt is the single authority for the
+    derived fields; consumers MUST branch on the typed fields
+    and MUST NOT reconstruct copy-state by hand.
     """
 
     promotion_outcome: PromotionOutcome
-    aggregate_receipt: ScopedPromotionReceipt | None
+    aggregate_receipt: ScopedPromotionReceipt
     request_id: str
     request_fingerprint: str
     commit_disposition: PromotionCommitDisposition
 
     @property
     def may_have_committed(self) -> bool:
-        """Compatibility property for the legacy boolean consumer."""
+        """Legacy compatibility property. New decision logic MUST
+        branch on :attr:`commit_disposition` instead.
+        """
         return self.commit_disposition is not (
             PromotionCommitDisposition.DEFINITELY_NOT_COMMITTED
+        )
+
+    @property
+    def requires_reconciliation(self) -> bool:
+        """``True`` only when commit status is MAY_HAVE_COMMITTED.
+
+        Both ``DEFINITELY_COMMITTED`` (success) and
+        ``DEFINITELY_NOT_COMMITTED`` (pre-send failure / auth
+        rejection) return ``False`` -- only the uncertain path
+        requires reconciliation.
+        """
+        return self.commit_disposition is (
+            PromotionCommitDisposition.MAY_HAVE_COMMITTED
         )
 
 
