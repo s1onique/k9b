@@ -57,6 +57,7 @@ regresses any of the closure invariants:
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 from pathlib import Path
 
@@ -557,61 +558,109 @@ def test_gate_summary_overall_status_reflects_checks() -> None:
         )
 
 
-def test_gate_summary_parser_postcondition_present() -> None:
-    """The producer must record a ``parser_postcondition`` typed field."""
+def test_gate_summary_no_self_referential_parser_postcondition() -> None:
+    """The artifact MUST NOT carry a self-referential parser result.
+
+    CORRECTION03: the parser invocation result lives in a
+    SEPARATE ``gate-summary-validation.json`` attestation, NOT
+    inside ``gate-summary.json``.  Embedding the result inside
+    the validated artifact would create a self-referential
+    contract: the result would change the bytes that were
+    supposedly validated.
+    """
     target = REPO_ROOT / ".factory" / "gate-summary.json"
     if not target.exists():
         pytest.skip(
-            ".factory/gate-summary.json is missing; the populate step "
-            "must run before this assertion can be evaluated."
+            ".factory/gate-summary.json is missing; the populate "
+            "step must run before this assertion can be evaluated."
         )
     data = json.loads(target.read_text(encoding="utf-8"))
-    extras = data.get("extras")
-    if not isinstance(extras, dict):
+    extras = data.get("extras", {})
+    if isinstance(extras, dict) and "parser_postcondition" in extras:
         pytest.fail(
-            f".factory/gate-summary.json extras MUST be a dict; got {extras!r}"
-        )
-    postcondition = extras.get("parser_postcondition")
-    if not isinstance(postcondition, dict):
-        pytest.fail(
-            "extras.parser_postcondition MUST be a typed dict; "
-            f"got {postcondition!r}"
-        )
-    if postcondition.get("invoked") is not True:
-        pytest.fail(
-            "extras.parser_postcondition.invoked MUST be True; "
-            f"got {postcondition!r}"
-        )
-    if postcondition.get("kind") != "producer_postcondition":
-        pytest.fail(
-            "extras.parser_postcondition.kind MUST be "
-            f"'producer_postcondition'; got {postcondition!r}"
+            ".factory/gate-summary.json MUST NOT carry "
+            "extras.parser_postcondition; the validation result "
+            "belongs in the separate gate-summary-validation.json "
+            "attestation so a subsequent SHA-256 mismatch is "
+            "detectable."
         )
 
 
-def test_populate_parser_invoke_outcome_drives_exit_code() -> None:
-    """The producer's parser invocation MUST influence the exit code.
+def test_populate_writes_separate_validation_attestation() -> None:
+    """The producer MUST write ``gate-summary-validation.json``.
 
-    The producer invokes the parser subprocess via
-    :func:`_run` and the producer's main entry point consults the
-    return code to fail closed on a parser error.
+    The validation attestation carries the canonical parser's
+    ``decode_status`` / ``acceptance_status`` verdict for the
+    final bytes of ``gate-summary.json`` and the SHA-256 of
+    those bytes.  The attestation is NOT included in the
+    bytes it validates.
     """
+    target = REPO_ROOT / ".factory" / "gate-summary.json"
+    if not target.exists():
+        pytest.skip(
+            ".factory/gate-summary.json is missing; the populate "
+            "step must run before this assertion can be evaluated."
+        )
+    attestation = (
+        REPO_ROOT / ".factory" / "gate-summary-validation.json"
+    )
+    if not attestation.exists():
+        pytest.fail(
+            "populate_gate_summary MUST write "
+            ".factory/gate-summary-validation.json alongside "
+            "gate-summary.json."
+        )
+    data = json.loads(attestation.read_text(encoding="utf-8"))
+    if data.get("validated_path") != str(target):
+        pytest.fail(
+            "gate-summary-validation.json.validated_path MUST "
+            f"match the gate-summary path; got {data.get('validated_path')!r}"
+        )
+    if not data.get("validated_sha256"):
+        pytest.fail(
+            "gate-summary-validation.json.validated_sha256 MUST "
+            "be populated."
+        )
+    if data.get("decode_status") not in {"pass", "fail"}:
+        pytest.fail(
+            "gate-summary-validation.json.decode_status MUST be "
+            f"pass|fail; got {data.get('decode_status')!r}"
+        )
+    if data.get("acceptance_status") not in {"pass", "fail"}:
+        pytest.fail(
+            "gate-summary-validation.json.acceptance_status MUST "
+            f"be pass|fail; got {data.get('acceptance_status')!r}"
+        )
+    # Verify the attested SHA-256 matches the actual file bytes.
+    expected_sha = data["validated_sha256"]
+    actual_sha = hashlib.sha256(target.read_bytes()).hexdigest()
+    if expected_sha != actual_sha:
+        pytest.fail(
+            "gate-summary-validation.json.validated_sha256 MUST "
+            f"equal the SHA-256 of gate-summary.json bytes "
+            f"({expected_sha} != {actual_sha})"
+        )
+
+
+def test_gate_summary_no_parser_postcondition_field_in_producer() -> None:
+    """The producer MUST NOT embed ``parser_postcondition`` in extras."""
     text = POPULATE_FILE.read_text()
-    if "parser_rc" not in text or "return parser_rc" not in text:
-        pytest.fail(
-            "populate_gate_summary.main MUST consult the parser's "
-            "return code to fail closed on parser errors."
-        )
-
-
-def test_parse_gate_summary_parser_postcondition_field_used() -> None:
-    """The parser MUST consult the typed ``parser_postcondition`` field."""
-    text = PARSE_FILE.read_text()
-    if "parser_postcondition" not in text:
-        pytest.fail(
-            "parse_gate_summary.py MUST reference the typed "
-            "``parser_postcondition`` field on the artifact."
-        )
+    # Allow the constant name (PARSER_POSTCONDITION_NAME) but
+    # forbid the embedded evidence field construction.
+    forbidden = [
+        '"parser_postcondition":',
+        "'parser_postcondition':",
+        '    "parser_postcondition":',
+        '    \'parser_postcondition\':',
+    ]
+    for needle in forbidden:
+        if needle in text:
+            pytest.fail(
+                f"populate_gate_summary.py MUST NOT embed "
+                f"``parser_postcondition`` in extras; found "
+                f"{needle!r}.  Validation evidence belongs in "
+                f"the separate validation attestation."
+            )
 
 
 # ---------------------------------------------------------------------------
