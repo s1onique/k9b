@@ -148,7 +148,7 @@ jobs:
           .venv/bin/python scripts/ci/promotion_runtime_static_gate_runner.py \
             --scope-record artifacts/static-scope.json \
             --expected-subject-sha "${{ steps.identity.outputs.subject_sha }}" \
-            --target-output artifacts/static-gate.json
+            --output artifacts/static-gate.json
           # Propagate exit code via the runner; the runner itself is the
           # blocking authority for both Ruff and mypy.
 
