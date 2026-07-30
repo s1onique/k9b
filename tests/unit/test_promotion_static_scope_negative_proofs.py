@@ -14,17 +14,11 @@ Key changes from CORRECTION07:
 from __future__ import annotations
 
 import hashlib
-import sys
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-
-# Import from the scripts.ci package (scripts/ci/__init__.py exists)
-from scripts.ci.promotion_runtime_static_scope_policy import validate_path_record
-from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
-from scripts.ci.promotion_runtime_static_scope import build_scope
 
 
 # ---------------------------------------------------------------------------
