@@ -28,6 +28,15 @@ _tests_unit = Path(__file__).parent
 if str(_tests_unit) not in sys.path:
     sys.path.insert(0, str(_tests_unit))
 
+# Add scripts/ci to sys.path so the runtime-gate scripts (which are not
+# packages) can be imported directly.  This is required for the promotion
+# runtime gate unit tests which import modules like
+# run_promotion_runtime_gate, promotion_runtime_static_scope, and
+# promotion_runtime_static_gate_runner from scripts/ci.
+_scripts_ci = _tests_unit.parent.parent / "scripts" / "ci"
+if str(_scripts_ci) not in sys.path:
+    sys.path.insert(0, str(_scripts_ci))
+
 
 # =============================================================================
 # Fixtures for automatic_diagnosis_review tests

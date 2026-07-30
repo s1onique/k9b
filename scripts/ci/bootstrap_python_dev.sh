@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Canonical Python development-environment bootstrap.
 #
-# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION04/05
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION04/05/06
 #
 # Contract:
 #   - create ./.venv when absent
@@ -16,6 +16,18 @@
 # dependencies in this repository.  Any workflow that needs pytest,
 # Ruff, or mypy MUST invoke this script rather than calling
 # ``pip install`` directly.
+#
+# Ordering doctrine (CORRECTION06):
+#   1. determine REPO_ROOT
+#   2. determine PYTHON_BIN and VENV_DIR
+#   3. export PATH="${VENV_DIR}/bin:${PATH}"        <-- FIRST PATH mutation
+#   4. resolve/prove host Python (command -v)
+#   5. create venv if absent
+#   6. append VENV_DIR/bin to GITHUB_PATH when present
+#   7. install .[dev]
+#   8. prove python/pytest/ruff/mypy resolve under VENV_DIR/bin
+#
+# No command-resolution or tool proof may precede the PATH export.
 
 set -euo pipefail
 
@@ -25,19 +37,10 @@ cd "${REPO_ROOT}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_DIR="${VENV_DIR:-${REPO_ROOT}/.venv}"
 
-if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
-  echo "FATAL: ${PYTHON_BIN} is not on PATH" >&2
-  exit 1
-fi
-
-if [ ! -d "${VENV_DIR}" ]; then
-  echo "Creating virtual environment at ${VENV_DIR}"
-  "${PYTHON_BIN}" -m venv "${VENV_DIR}"
-fi
-
-# Explicit PATH authority (P0-6): the runner must see the venv bin
-# directory BEFORE any proof command, before the source-activate that
-# only affects shell-local aliases.
+# CORRECTION06: PATH authority is established BEFORE any command-resolution
+# or tool proof.  This honours the production PATH doctrine enforced by
+# ``tests/test_github_actions_hermetic_toolcache_runtime_policy.py::test_wire_scripts_export_path_before_proof``
+# which treats ``"${PYTHON_BIN}" -m ...`` as a proof command.
 export PATH="${VENV_DIR}/bin:${PATH}"
 
 # When running under GitHub Actions, also append the venv directory to
@@ -46,6 +49,17 @@ export PATH="${VENV_DIR}/bin:${PATH}"
 # is still required.
 if [ -n "${GITHUB_PATH:-}" ]; then
   printf '%s\n' "${VENV_DIR}/bin" >> "${GITHUB_PATH}"
+fi
+
+# Now (and only now) resolve/prove the host Python binary.
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+  echo "FATAL: ${PYTHON_BIN} is not on PATH" >&2
+  exit 1
+fi
+
+if [ ! -d "${VENV_DIR}" ]; then
+  echo "Creating virtual environment at ${VENV_DIR}"
+  "${PYTHON_BIN}" -m venv "${VENV_DIR}"
 fi
 
 # shellcheck source=/dev/null
@@ -64,7 +78,7 @@ python -m pytest --version
 python -m ruff --version
 python -m mypy --version
 
-# PATH proof (P0-6): each tool MUST resolve to the venv bin directory.
+# PATH proof: each tool MUST resolve to the venv bin directory.
 for tool in python pytest ruff mypy; do
   resolved="$(command -v "${tool}" || true)"
   if [ -z "${resolved}" ]; then

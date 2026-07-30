@@ -1,6 +1,6 @@
 """Structural verifier for the experimental-lab build lane.
 
-ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION03
+ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION03/06
 
 P0-7 structural negative proofs (GitHub-valid + actionable):
 
@@ -23,6 +23,12 @@ CORRECTION03 also retains the corrected proofs from CORRECTION02:
   - mutable image references
   - deploy / live jobs absent in the build lane
 
+CORRECTION06 additionally:
+
+  - P0-9: marker recognition uses the SAME production helper
+    ``tests.helpers.github_actions_hermetic_policy_helpers.file_contains_marker``
+    as ``tests/test_github_actions_hermetic_doctrine_policy.py``.
+
 The verifier is also usable as a pytest module; see
 ``tests/unit/test_promotion_experimental_lab_build_lane_contract.py``.
 """
@@ -34,6 +40,16 @@ import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+
+# P0-9 (CORRECTION06): use the production marker-recognition helper
+# (the SAME one used by tests/test_github_actions_hermetic_doctrine_policy.py).
+# Importing through ``tests.helpers`` keeps the verifier and the
+# canonical hermetic policy test aligned: if the helper's marker
+# grammar or location ever changes, this verifier follows automatically.
+from tests.helpers.github_actions_hermetic_policy_helpers import (
+    HERMETIC_TOOLCACHE_MARKER,
+    file_contains_marker as _production_file_contains_marker,
+)
 
 from verify_promotion_experimental_lab_build_lane_schema import (
     CLASSIFY_WORKFLOW,
@@ -439,16 +455,19 @@ def verify_experimental_lab_build_lane() -> list[Finding]:
     findings.extend(check_bootstrap_contract(RUNTIME_WORKFLOW))
     findings.extend(check_bootstrap_script(BOOTSTRAP_SCRIPT))
 
-    # P0-7 (CORRECTION05): the experimental caller MUST carry the
-    # CI-HERMETIC-TOOLCACHE marker.
-    if "CI-HERMETIC-TOOLCACHE" not in EXPERIMENTAL_WORKFLOW.read_text(
-        encoding="utf-8"
+    # P0-7 (CORRECTION05) / P0-9 (CORRECTION06): the experimental caller
+    # MUST carry the CI-HERMETIC-TOOLCACHE marker.  Use the SAME
+    # production marker-recognition helper that
+    # ``tests/test_github_actions_hermetic_doctrine_policy.py`` uses
+    # (no raw substring check).
+    if not _production_file_contains_marker(
+        EXPERIMENTAL_WORKFLOW, HERMETIC_TOOLCACHE_MARKER
     ):
         findings.append(
             Finding(
                 "EXPERIMENTAL_CALLER_MISSING_HERMETIC_MARKER",
                 "promotion-experimental-lab-build.yml is missing the "
-                "CI-HERMETIC-TOOLCACHE marker",
+                f"{HERMETIC_TOOLCACHE_MARKER!r} marker",
             )
         )
 
