@@ -138,13 +138,7 @@ jobs:
                   fh.write(f"{img}_digest={digest}\n")
           PY
 
-      - name: upload image-reference artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: image-refs-${{ inputs.closure_sha }}
-          path: image-refs.json
-        env:
-          CLOSURE_SHA: ${{ inputs.closure_sha }}
+      - name: generate image-refs.json
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -154,10 +148,21 @@ jobs:
               "scheduler": os.environ.get("SCHEDULER_DIGEST", ""),
               "frontend": os.environ.get("FRONTEND_DIGEST", ""),
           }
-          registry = os.environ["REGISTRY"]
+          registry = os.environ.get("REGISTRY", "")
           data = {
               img: f"{registry}/{img}@{d}" for img, d in digests.items()
           }
           with open("image-refs.json", "w") as fh:
               json.dump(data, fh, indent=2)
           PY
+        env:
+          BACKEND_DIGEST: ${{ steps.digests.outputs.backend_digest }}
+          SCHEDULER_DIGEST: ${{ steps.digests.outputs.scheduler_digest }}
+          FRONTEND_DIGEST: ${{ steps.digests.outputs.frontend_digest }}
+          REGISTRY: ${{ secrets.REGISTRY }}
+
+      - name: upload image-reference artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-refs-${{ inputs.closure_sha }}
+          path: image-refs.json
