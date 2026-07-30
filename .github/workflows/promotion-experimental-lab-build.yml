@@ -1,0 +1,111 @@
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION05
+# Experimental lab build lane (thin caller)
+#
+# This is the thin orchestration caller for the experimental lab build.
+# Its ONLY responsibility is to wire the runtime-gate reusable workflow,
+# the two canonical Harbor callers, and the classify reusable workflow.
+#
+# Image topology (P0-1):
+#   backend workload   -> k9b-backend image
+#   scheduler workload -> the SAME k9b-backend image
+#   frontend workload  -> k9b-frontend image
+#
+# Hard boundaries:
+#   - Canonical verify.yml is NOT modified.
+#   - Thin caller MUST stay <= 150 lines.
+#   - All inputs are literals or job outputs (no env.*, no vars.*).
+#   - Reusable workflows are invoked only at jobs.<id>.uses.
+#   - No deployment, no live-qualification, no synthetic evidence.
+#
+# Graph:
+#   runtime-gate
+#        |
+#        +--> build-backend
+#        +--> build-frontend
+#                |
+#                v
+#             classify
+#
+# CI-HERMETIC-TOOLCACHE:
+#   The caller itself downloads no tools.  Runtime Python tooling
+#   (pytest, ruff, mypy) is installed inside reusable-promotion-experimental-
+#   runtime.yml via scripts/ci/bootstrap_python_dev.sh.  Harbor build
+#   tooling (docker, buildx, BuildKit) is installed inside harbor-build-
+#   image.yml via the existing canonical install steps.  This caller only
+#   composes those reusable workflows.
+
+name: k9b promotion experimental lab build
+
+on:
+  push:
+    branches:
+      - hotfix/incident-promotion-runtime-truth01
+    tags:
+      - "qualification/lab/*"
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+
+concurrency:
+  group: k9b-experimental-lab-build
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-gate:
+    name: runtime gate (reusable)
+    uses: ./.github/workflows/reusable-promotion-experimental-runtime.yml
+    with:
+      subject_sha: ${{ github.sha }}
+
+  build-backend:
+    name: canonical harbor build (backend)
+    needs: runtime-gate
+    uses: ./.github/workflows/harbor-build-image.yml
+    with:
+      registry: harbor-pve1.spbnix.local
+      harbor_project: k9b
+      image_name: k9b-backend
+      dockerfile: ./Dockerfile.python
+      build_args: |
+        KUBECTL_VERSION=v1.29.6
+        HELM_VERSION=3.20.1
+      image_push_enabled: true
+      registry_cache_read_enabled: true
+      registry_cache_write_enabled: true
+    secrets:
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+      HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+      HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
+
+  build-frontend:
+    name: canonical harbor build (frontend)
+    needs: runtime-gate
+    uses: ./.github/workflows/harbor-build-image.yml
+    with:
+      registry: harbor-pve1.spbnix.local
+      harbor_project: k9b
+      image_name: k9b-frontend
+      dockerfile: ./frontend/Dockerfile
+      build_args: ""
+      image_push_enabled: true
+      registry_cache_read_enabled: true
+      registry_cache_write_enabled: true
+    secrets:
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+      HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+      HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
+
+  classify:
+    name: classify image refs (reusable)
+    needs: [runtime-gate, build-backend, build-frontend]
+    uses: ./.github/workflows/reusable-promotion-experimental-classify.yml
+    with:
+      subject_sha: ${{ github.sha }}
+      runtime_gate: ${{ needs.runtime-gate.outputs.runtime_gate }}
+      backend_image_ref: ${{ needs.build-backend.outputs.image_ref }}
+      backend_image_digest: ${{ needs.build-backend.outputs.image_digest }}
+      frontend_image_ref: ${{ needs.build-frontend.outputs.image_ref }}
+      frontend_image_digest: ${{ needs.build-frontend.outputs.image_digest }}

@@ -1,0 +1,229 @@
+# ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
+# WAVE CORRECTION01 — reusable timing workflow
+#
+# P0-11 real pytest timing:
+#   This workflow runs an opt-in pytest plugin that uses the
+#   public pytest_runtest_logreport hook to record real
+#   setup/call/teardown durations per node.
+#
+#   The 12-cell matrix is:
+#     repetition in {1, 2, 3}
+#     shard      in {0, 1, 2, 3}
+#
+#   Each cell:
+#     - executes the canonical four CI shards (not collect-only);
+#     - preserves the real pytest exit status;
+#     - uploads one strict timing artifact;
+#     - records CLOSURE_SHA, SUBJECT_SHA, tree, run ID, attempt.
+#
+# Bijection is verified per repetition (NOT by union across reps).
+
+name: k9b promotion timing
+
+on:
+  workflow_call:
+    inputs:
+      closure_sha:
+        type: string
+        required: true
+      subject_sha:
+        type: string
+        required: true
+      subject_tree:
+        type: string
+        required: true
+    outputs:
+      timing_repetitions:
+        value: ${{ jobs.aggregate.outputs.timing_repetitions }}
+      canonical_collection_count:
+        value: ${{ jobs.aggregate.outputs.canonical_collection_count }}
+      shard_counts:
+        value: ${{ jobs.aggregate.outputs.shard_counts }}
+      collection_bijection:
+        value: ${{ jobs.aggregate.outputs.collection_bijection }}
+      nonzero_duration_count:
+        value: ${{ jobs.aggregate.outputs.nonzero_duration_count }}
+      median_max_seconds:
+        value: ${{ jobs.aggregate.outputs.median_max_seconds }}
+      median_spread_seconds:
+        value: ${{ jobs.aggregate.outputs.median_spread_seconds }}
+    secrets: {}
+
+permissions:
+  contents: read
+
+jobs:
+  shard-matrix:
+    name: shard ${{ matrix.shard }} repetition ${{ matrix.repetition }}
+    strategy:
+      fail-fast: false
+      matrix:
+        repetition: [1, 2, 3]
+        shard: [0, 1, 2, 3]
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout at CLOSURE_SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.closure_sha }}
+          persist-credentials: false
+
+      - name: assert HEAD == CLOSURE_SHA
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse HEAD)" != "${{ inputs.closure_sha }}" ]; then
+            echo "FATAL: HEAD drifted from CLOSURE_SHA"
+            exit 1
+          fi
+
+      - name: canonical Python bootstrap
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip wheel setuptools
+          .venv/bin/python -m pip install -e .
+          .venv/bin/python -m pytest --version
+
+      - name: load shard manifest
+        id: load-shard
+        run: |
+          set -euo pipefail
+          shard_index=${{ matrix.shard }}
+          manifest_path="tests/_qualification_shards/shard_${shard_index}.txt"
+          if [ ! -f "$manifest_path" ]; then
+            echo "FATAL: shard manifest $manifest_path missing"
+            exit 1
+          fi
+          echo "manifest=$manifest_path" >> "$GITHUB_OUTPUT"
+
+      - name: run real pytest shard with timing plugin
+        id: run
+        run: |
+          set -euo pipefail
+          shard_index=${{ matrix.shard }}
+          repetition=${{ matrix.repetition }}
+          cd "$(git rev-parse --show-toplevel)"
+          # Apply the timing plugin via PYTHONPATH
+          # The plugin uses pytest_runtest_logreport public hook.
+          .venv/bin/python -m pytest \
+            -p scripts.qualification_timing.pytest_plugin \
+            --qualification-timing-output "timing-${shard_index}-${repetition}.json" \
+            --qualification-run-index ${repetition} \
+            --qualification-e-sha "${{ inputs.closure_sha }}" \
+            --qualification-subject-sha "${{ inputs.subject_sha }}" \
+            --qualification-subject-tree "${{ inputs.subject_tree }}" \
+            --qualification-shard-index ${shard_index} \
+            --qualification-canonical-collection tests/_qualification_canonical_collection.json \
+            @tests/_qualification_shards/shard_${shard_index}.txt
+          # PRESERVE real exit status; do NOT swallow failures.
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+
+      - name: upload timing artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: timing-${{ matrix.repetition }}-${{ matrix.shard }}
+          path: timing-${{ matrix.shard }}-${{ matrix.repetition }}.json
+
+  aggregate:
+    name: aggregate 12-cell matrix
+    needs: shard-matrix
+    runs-on: ubuntu-latest
+    outputs:
+      timing_repetitions: ${{ steps.aggregate.outputs.timing_repetitions }}
+      canonical_collection_count: ${{ steps.aggregate.outputs.canonical_collection_count }}
+      shard_counts: ${{ steps.aggregate.outputs.shard_counts }}
+      collection_bijection: ${{ steps.aggregate.outputs.collection_bijection }}
+      nonzero_duration_count: ${{ steps.aggregate.outputs.nonzero_duration_count }}
+      median_max_seconds: ${{ steps.aggregate.outputs.median_max_seconds }}
+      median_spread_seconds: ${{ steps.aggregate.outputs.median_spread_seconds }}
+    steps:
+      - name: download all 12 timing artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: timing-*-*
+          path: timings/
+          merge-multiple: true
+
+      - name: aggregate + verify bijection per repetition
+        id: aggregate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import statistics
+          from collections import defaultdict
+          from pathlib import Path
+
+          timings = sorted(Path("timings").rglob("timing-*.json"))
+          per_rep = defaultdict(list)
+          for t in timings:
+              d = json.loads(t.read_text())
+              per_rep[d["run_index"]].append(d)
+          # Per-repetition bijection
+          for rep, ds in per_rep.items():
+              shards_for_rep = {nid for d in ds for nid in d["nodes"]}
+              assert len(shards_for_rep) == 4 * max((len(d["nodes"]) for d in ds), default=0), (
+                  f"rep {rep}: union != 4 * max"
+              )
+              # Each repetition's union equals the canonical collection
+              canonical = json.loads(
+                  Path("tests/_qualification_canonical_collection.json").read_text()
+              )
+              canonical_nodes = set(canonical["nodes"])
+              assert shards_for_rep == canonical_nodes, (
+                  f"rep {rep}: union={len(shards_for_rep)} != canonical={len(canonical_nodes)}"
+              )
+              # pairwise intersections empty
+              seen_sets = [set(d["nodes"]) for d in ds]
+              for i in range(len(seen_sets)):
+                  for j in range(i+1, len(seen_sets)):
+                      assert not (seen_sets[i] & seen_sets[j]), (
+                          f"rep {rep}: shards {i} and {j} overlap"
+                      )
+
+          # Median per node across three repetitions
+          per_node = defaultdict(list)
+          for ds in per_rep.values():
+              for d in ds:
+                  for nid, nd in d["nodes"].items():
+                      per_node[nid].append(nd["total_ms"] / 1000.0)
+
+          medians = {nid: statistics.median(v) for nid, v in per_node.items()}
+          nonzero = sum(1 for v in medians.values() if v > 0)
+          sorted_medians = sorted(medians.values(), reverse=True)
+          median_max = sorted_medians[0] if sorted_medians else 0.0
+          median_spread = sorted_medians[0] - sorted_medians[-1] if len(sorted_medians) >= 2 else 0.0
+
+          shard_counts = {shard: 0 for shard in range(4)}
+          for d in [x for rep in per_rep.values() for x in rep]:
+              for nid, nd in d["nodes"].items():
+                  shard_counts[nd["shard_index"]] += 1
+          shard_counts_str = ",".join(f"{k}={v}" for k, v in sorted(shard_counts.items()))
+
+          with open("/tmp/timing-aggregate.json", "w") as fh:
+              json.dump({
+                  "timing_repetitions": len(per_rep),
+                  "canonical_collection_count": len(canonical_nodes),
+                  "shard_counts": shard_counts_str,
+                  "collection_bijection": "ok",
+                  "nonzero_duration_count": nonzero,
+                  "median_max_seconds": median_max,
+                  "median_spread_seconds": median_spread,
+              }, fh)
+          print("OK: bijection + medians computed")
+          PY
+          python3 - <<'PY'
+          import json, os
+          d = json.load(open("/tmp/timing-aggregate.json"))
+          for k, v in d.items():
+              print(f"{k}={v}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              for k, v in d.items():
+                  fh.write(f"{k}={v}\n")
+          PY
+
+      - name: upload aggregate
+        uses: actions/upload-artifact@v4
+        with:
+          name: timing-aggregate-${{ inputs.closure_sha }}
+          path: /tmp/timing-aggregate.json

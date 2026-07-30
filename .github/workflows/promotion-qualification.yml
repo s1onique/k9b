@@ -1,0 +1,124 @@
+# ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
+# WAVE CORRECTION02 — thin caller
+#
+# This file MUST stay <= 200 lines.
+#
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+#
+# P0-3 trigger contract:
+#   Branch push and qualification tags are declared under on.push.
+#   Branch push is the canonical acceptance trigger.
+#   workflow_dispatch is a diagnostic trigger ONLY.
+#
+# P0-5 caller + verify chain:
+#   closure -> verify -> build -> deploy -> live -> evidence
+#   closure -> timing (independent)
+#   Build MUST depend on successful verify.
+#
+# P0-7 cluster access authority:
+#   Each reusable workflow re-bootstraps cluster access independently.
+
+name: k9b promotion qualification
+
+on:
+  push:
+    branches:
+      - hotfix/incident-promotion-runtime-truth01
+    tags:
+      - "qualification/lab/*"
+      - "qualification/staging/*"
+      - "qualification/production/*"
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        default: lab
+        options: [lab, staging, production]
+
+concurrency:
+  group: k9b-live-qualification-${{ inputs.environment || 'lab' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# P0-5: BASE_SHA is the IMMUTABLE canonical base of this qualification
+# cycle.  It is recorded as an immutable literal; reusable-workflow
+# inputs do NOT accept github / env expressions for `with:` values, so
+# the value must be a literal or a previous job output.
+jobs:
+  closure:
+    uses: ./.github/workflows/reusable-promotion-closure.yml
+    with:
+      closure_sha: ${{ github.sha }}
+      base_sha: f09348dc6f7dd8887c51278ee0a504c7e22d1417
+
+  verify:
+    needs: closure
+    uses: ./.github/workflows/reusable-promotion-verify.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      subject_sha: ${{ needs.closure.outputs.subject_sha }}
+      subject_tree: ${{ needs.closure.outputs.subject_tree }}
+
+  build:
+    needs: [closure, verify]
+    uses: ./.github/workflows/reusable-promotion-build.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      harbor_build_workflow: harbor-build-image.yml
+      environment: ${{ inputs.environment || 'lab' }}
+    secrets:
+      REGISTRY: ${{ secrets.REGISTRY }}
+      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+
+  deploy:
+    needs: [closure, verify, build]
+    uses: ./.github/workflows/reusable-promotion-deploy.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      backend_image_ref: ${{ needs.build.outputs.backend_image_ref }}
+      scheduler_image_ref: ${{ needs.build.outputs.scheduler_image_ref }}
+      frontend_image_ref: ${{ needs.build.outputs.frontend_image_ref }}
+      environment: ${{ inputs.environment || 'lab' }}
+    secrets:
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+      REGISTRY: ${{ secrets.REGISTRY }}
+
+  live:
+    needs: [closure, verify, build, deploy]
+    uses: ./.github/workflows/reusable-promotion-live.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      scheduler_image_ref: ${{ needs.build.outputs.scheduler_image_ref }}
+      qualification_run_id: qualification-${{ github.run_id }}
+      environment: ${{ inputs.environment || 'lab' }}
+    secrets:
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+      INTERNAL_TOKEN: ${{ secrets.INTERNAL_TOKEN }}
+      UI_TOKEN: ${{ secrets.UI_TOKEN }}
+
+  evidence:
+    needs: [closure, verify, live]
+    if: ${{ always() }}
+    uses: ./.github/workflows/reusable-promotion-evidence.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      qualification_run_id: qualification-${{ github.run_id }}
+    secrets:
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+
+  timing:
+    needs: [closure, verify]
+    uses: ./.github/workflows/reusable-promotion-timing.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      subject_sha: ${{ needs.closure.outputs.subject_sha }}
+      subject_tree: ${{ needs.closure.outputs.subject_tree }}

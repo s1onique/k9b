@@ -1,0 +1,163 @@
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+
+# ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
+# WAVE CORRECTION01 — reusable image build workflow
+#
+# P0-6 image build authority:
+#   This workflow reuses the repository's established Harbor build
+#   authority via workflow_call.  It returns full immutable image
+#   references (registry/repository@sha256:...) and digests.
+#
+# The HARBOR_BUILD_WORKFLOW input defaults to the repository's
+# canonical harbor-build-image.yml.  Callers MUST supply a value
+# that points at a tracked workflow path.
+
+name: k9b promotion build
+
+on:
+  workflow_call:
+    inputs:
+      closure_sha:
+        description: "The closure commit SHA"
+        type: string
+        required: true
+      harbor_build_workflow:
+        description: "Path of the canonical image-build workflow"
+        type: string
+        required: true
+      environment:
+        description: "Target environment"
+        type: string
+        required: true
+    outputs:
+      backend_image_ref:
+        description: "registry/repository@sha256:<digest>"
+        value: ${{ jobs.invoke.outputs.backend_image_ref }}
+      scheduler_image_ref:
+        description: "registry/repository@sha256:<digest>"
+        value: ${{ jobs.invoke.outputs.scheduler_image_ref }}
+      frontend_image_ref:
+        description: "registry/repository@sha256:<digest>"
+        value: ${{ jobs.invoke.outputs.frontend_image_ref }}
+      backend_digest:
+        value: ${{ jobs.invoke.outputs.backend_digest }}
+      scheduler_digest:
+        value: ${{ jobs.invoke.outputs.scheduler_digest }}
+      frontend_digest:
+        value: ${{ jobs.invoke.outputs.frontend_digest }}
+    secrets:
+      REGISTRY:
+        required: true
+      REGISTRY_USERNAME:
+        required: true
+      REGISTRY_PASSWORD:
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  invoke:
+    name: invoke canonical harbor build
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image_ref: ${{ steps.digests.outputs.backend_image_ref }}
+      scheduler_image_ref: ${{ steps.digests.outputs.scheduler_image_ref }}
+      frontend_image_ref: ${{ steps.digests.outputs.frontend_image_ref }}
+      backend_digest: ${{ steps.digests.outputs.backend_digest }}
+      scheduler_digest: ${{ steps.digests.outputs.scheduler_digest }}
+      frontend_digest: ${{ steps.digests.outputs.frontend_digest }}
+    steps:
+      - name: checkout at CLOSURE_SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.closure_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: assert HEAD == CLOSURE_SHA
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse HEAD)" != "${{ inputs.closure_sha }}" ]; then
+            echo "FATAL: HEAD drifted from CLOSURE_SHA"
+            exit 1
+          fi
+
+      # P0-6: reusable-workflow `uses:` MUST be a literal path; the
+      # canonical harbor workflow is referenced at a fixed path.
+      - name: invoke canonical image-build workflow
+        id: harbor
+        uses: ./.github/workflows/harbor-build-image.yml
+        with:
+          closure_sha: ${{ inputs.closure_sha }}
+          environment: ${{ inputs.environment }}
+        secrets: inherit
+
+      - name: collect immutable digests from harbor output
+        id: digests
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess, sys
+          from pathlib import Path
+
+          registry = os.environ["REGISTRY"]
+          run_id = os.environ["GITHUB_RUN_ID"]
+          # Read the published image digests via crane/manifest-tool
+          # These are recorded as workflow outputs from the canonical
+          # harbor build.  When the canonical workflow supports
+          # outputs, wire them through here.  This implementation
+          # fetches the digest for each image at the closure SHA tag.
+          digests = {}
+          for img in ("backend", "scheduler", "frontend"):
+              try:
+                  out = subprocess.check_output(
+                      [
+                          "crane", "digest",
+                          f"{registry}/{img}:{os.environ['CLOSURE_SHA']}",
+                      ],
+                      stderr=subprocess.STDOUT,
+                  )
+                  digest = out.decode().strip()
+                  digests[img] = digest
+              except Exception as exc:  # noqa: BLE001
+                  print(f"ERROR: crane digest failed for {img}: {exc}")
+                  sys.exit(1)
+          for img, digest in digests.items():
+              ref = f"{registry}/{img}@{digest}"
+              print(f"{img}_image_ref={ref}")
+              print(f"{img}_digest={digest}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              for img, digest in digests.items():
+                  fh.write(f"{img}_image_ref={registry}/{img}@{digest}\n")
+                  fh.write(f"{img}_digest={digest}\n")
+          PY
+
+      - name: upload image-reference artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-refs-${{ inputs.closure_sha }}
+          path: image-refs.json
+        env:
+          CLOSURE_SHA: ${{ inputs.closure_sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          digests = {
+              "backend":  os.environ.get("BACKEND_DIGEST", ""),
+              "scheduler": os.environ.get("SCHEDULER_DIGEST", ""),
+              "frontend": os.environ.get("FRONTEND_DIGEST", ""),
+          }
+          registry = os.environ["REGISTRY"]
+          data = {
+              img: f"{registry}/{img}@{d}" for img, d in digests.items()
+          }
+          with open("image-refs.json", "w") as fh:
+              json.dump(data, fh, indent=2)
+          PY

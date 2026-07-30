@@ -1,0 +1,202 @@
+# ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
+# WAVE CORRECTION01 — reusable deployment + readiness workflow
+#
+# P0-7 cluster access authority:
+#   This workflow independently invokes the canonical cluster
+#   bootstrap in every step that touches Kubernetes.  No state is
+#   shared between jobs.
+#
+# P0-8 deployment and readiness:
+#   Readiness probes use production endpoints, observedGeneration,
+#   replicas counts, image digest equality, backend health and
+#   promotion wire compatibility.  No imports of k9b_backend or
+#   k9b_scheduler are used (they are placeholders).
+
+name: k9b promotion deploy
+
+on:
+  workflow_call:
+    inputs:
+      closure_sha:
+        type: string
+        required: true
+      backend_image_ref:
+        type: string
+        required: true
+      scheduler_image_ref:
+        type: string
+        required: true
+      frontend_image_ref:
+        type: string
+        required: true
+      environment:
+        type: string
+        required: true
+    outputs:
+      backend_revision:
+        value: ${{ jobs.readiness.outputs.backend_revision }}
+      scheduler_revision:
+        value: ${{ jobs.readiness.outputs.scheduler_revision }}
+      readiness_status:
+        value: ${{ jobs.readiness.outputs.readiness_status }}
+      deployed_digest_equality:
+        value: ${{ jobs.readiness.outputs.deployed_digest_equality }}
+    secrets:
+      KUBECONFIG_B64:
+        required: true
+      REGISTRY:
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: render + policy-verify + apply immutable image refs
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout at CLOSURE_SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.closure_sha }}
+          persist-credentials: false
+
+      - name: assert HEAD == CLOSURE_SHA
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse HEAD)" != "${{ inputs.closure_sha }}" ]; then
+            echo "FATAL: HEAD drifted from CLOSURE_SHA"
+            exit 1
+          fi
+
+      - name: independent cluster bootstrap
+        run: |
+          set -euo pipefail
+          echo "$KUBECONFIG_B64" | base64 -d > /tmp/kubeconfig
+          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: render Helm with immutable image refs
+        run: |
+          set -euo pipefail
+          helm template ./charts/k9b \
+            --set backend.image.ref="${{ inputs.backend_image_ref }}" \
+            --set scheduler.image.ref="${{ inputs.scheduler_image_ref }}" \
+            --set frontend.image.ref="${{ inputs.frontend_image_ref }}" \
+            --set environment="${{ inputs.environment }}" \
+            > rendered.yaml
+          conftest test rendered.yaml
+
+      - name: apply rendered manifests (digest refs only)
+        run: |
+          set -euo pipefail
+          kubectl apply -f rendered.yaml
+
+  readiness:
+    name: bounded readiness proof
+    needs: deploy
+    runs-on: ubuntu-latest
+    outputs:
+      backend_revision: ${{ steps.probe.outputs.backend_revision }}
+      scheduler_revision: ${{ steps.probe.outputs.scheduler_revision }}
+      readiness_status: ${{ steps.probe.outputs.readiness_status }}
+      deployed_digest_equality: ${{ steps.probe.outputs.deployed_digest_equality }}
+    steps:
+      - name: independent cluster bootstrap
+        run: |
+          set -euo pipefail
+          echo "$KUBECONFIG_B64" | base64 -d > /tmp/kubeconfig
+          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: bounded rollout wait (abort on timeout)
+        run: |
+          set -euo pipefail
+          kubectl rollout status deployment/k9b-backend  --timeout=300s
+          kubectl rollout status deployment/k9b-scheduler --timeout=300s
+          kubectl rollout status deployment/k9b-frontend --timeout=300s
+
+      - name: readiness probes (no mutation, no placeholders)
+        id: probe
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import subprocess
+          import sys
+
+          def sh(cmd):
+              return subprocess.check_output(cmd, text=True).strip()
+
+          # expected rollout revisions
+          rev_backend = sh([
+              "kubectl", "get", "deploy/k9b-backend",
+              "-o", "jsonpath={.metadata.annotations.deployment\\.kubernetes\\.io/revision}",
+          ])
+          rev_scheduler = sh([
+              "kubectl", "get", "deploy/k9b-scheduler",
+              "-o", "jsonpath={.metadata.annotations.deployment\\.kubernetes\\.io/revision}",
+          ])
+
+          # observedGeneration convergence
+          for d in ("k9b-backend", "k9b-scheduler", "k9b-frontend"):
+              status = sh(["kubectl", "get", "deploy", d, "-o", "json"])
+              sj = json.loads(status)
+              spec_rev = sj["spec"]["template"]["metadata"].get(
+                  "annotations", {}
+              ).get("deployment.kubernetes.io/revision")
+              obs = sj["status"]["observedGeneration"]
+              cur = sj["metadata"]["generation"]
+              assert obs == cur, f"{d}: observed={obs} != current={cur}"
+              assert spec_rev is not None, f"{d}: no spec revision"
+
+          # replicas
+          for d in ("k9b-backend", "k9b-scheduler", "k9b-frontend"):
+              sj = json.loads(sh(["kubectl", "get", "deploy", d, "-o", "json"]))
+              desired = sj["spec"]["replicas"]
+              updated = sj["status"].get("updatedReplicas", 0)
+              available = sj["status"].get("availableReplicas", 0)
+              old = sj["status"].get("oldReplicas", 0)
+              unavail = sj["status"].get("unavailableReplicas", 0)
+              assert updated == desired, f"{d}: updated={updated} != desired={desired}"
+              assert available == desired, f"{d}: available={available} != desired={desired}"
+              assert old == 0, f"{d}: old={old}"
+              assert unavail == 0, f"{d}: unavailable={unavail}"
+
+          # deployed digest equality
+          backend_spec = json.loads(sh([
+              "kubectl", "get", "deploy/k9b-backend",
+              "-o", "jsonpath={.spec.template.spec.containers[0].image}",
+          ]))
+          expected = "${{ inputs.backend_image_ref }}"
+          assert backend_spec == expected, (
+              f"backend image={backend_spec!r} != expected={expected!r}"
+          )
+
+          # backend health endpoint (production endpoint, no imports)
+          sh(["kubectl", "exec", "deploy/k9b-backend", "--",
+              "wget", "-q", "-O-", "http://localhost:8000/healthz"])
+
+          # promotion wire compatibility: GET /api/wire_version
+          wire = sh(["kubectl", "exec", "deploy/k9b-backend", "--",
+                     "wget", "-q", "-O-",
+                     "http://localhost:8000/api/wire_version"])
+          assert "k9b-promotion-scoped-v1" in wire, f"wire={wire!r}"
+
+          # UI auth configured (token file present)
+          sh(["kubectl", "exec", "deploy/k9b-frontend", "--",
+              "test", "-f", "/etc/k9b/ui-token"])
+
+          with open("/tmp/k9b_readiness.json", "w") as fh:
+              json.dump({
+                  "backend_revision": rev_backend,
+                  "scheduler_revision": rev_scheduler,
+                  "readiness_status": "pass",
+                  "deployed_digest_equality": "match",
+              }, fh)
+          PY
+
+      - name: upload readiness artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: readiness-${{ inputs.closure_sha }}
+          path: /tmp/k9b_readiness.json

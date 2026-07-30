@@ -1,0 +1,63 @@
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION05
+# Canonical promotion runtime test manifest.
+#
+# This file is the SINGLE authority for the runtime-gate inventory.  Both
+# the experimental build workflow and the clean-environment proof read
+# from this file via scripts/ci/run_promotion_runtime_gate.py.
+#
+# Format rules (enforced by run_promotion_runtime_gate.py --verify-inventory):
+#   * one repository-relative pytest argument per line;
+#   * UTF-8; blank lines and ``#`` comments permitted;
+#   * no absolute paths; no backslashes; no traversal (``..``);
+#   * every file component stays under ``tests/``;
+#   * every referenced Python file is Git-tracked at SUBJECT_SHA;
+#   * no duplicate argument;
+#   * stable canonical order (lexicographic, Python str sort);
+#   * at least one entry.
+#
+# The reconciliation report (scripts/ci/promotion_runtime_tests_reconciliation.md)
+# records the old-to-current mapping for every entry that changed since
+# CORRECTION04.
+
+tests/unit/test_act_k9b_hulk_commit_unknown_selection_handoff01.py
+tests/unit/test_act_k9b_hulk_commit_unknown_selection_handoff01_witness.py
+tests/unit/test_act_k9b_hulk_promotion_dispatch_outcome01_classifier.py
+tests/unit/test_act_k9b_hulk_promotion_succeeded_record_validation.py
+tests/unit/test_api_incident_diagnosis_loop_run.py
+tests/unit/test_current_run_promotion_seam01_verifier.py
+tests/unit/test_incident_diagnosis_authority_run_summary.py
+tests/unit/test_make_targeted_digest.py
+tests/unit/test_make_targeted_digest_manifest.py
+tests/unit/test_make_targeted_digest_self_reference.py
+tests/unit/test_promotion_artifact_reading.py
+tests/unit/test_promotion_diagnosis_handoff.py
+tests/unit/test_promotion_diagnosis_handoff_regression.py
+tests/unit/test_promotion_http_observation.py
+tests/unit/test_promotion_http_transport_matrix.py
+tests/unit/test_promotion_http_wire_binding.py
+tests/unit/test_promotion_http_wire_binding_invariants.py
+tests/unit/test_promotion_http_wire_semantics.py
+tests/unit/test_promotion_http_wire_semantics_reconciliation.py
+tests/unit/test_promotion_http_wire_structure.py
+tests/unit/test_promotion_outcomes.py
+tests/unit/test_round10_run_identity_matrix.py
+tests/unit/test_scoped_accumulator_atomic_recording.py
+tests/unit/test_scoped_accumulator_rollback.py
+tests/unit/test_scoped_handoff_completed_invariants.py
+tests/unit/test_scoped_handoff_identity_shape.py
+tests/unit/test_scoped_handoff_rejected_invariants.py
+tests/unit/test_scoped_handoff_uncertain_invariants.py
+tests/unit/test_scoped_promotion_http_context.py
+tests/unit/test_scoped_promotion_http_loopback.py
+tests/unit/test_scoped_promotion_http_mapping.py
+tests/unit/test_scoped_recording_authority_first_replay.py
+tests/unit/test_scoped_recording_authority_interleaved_corrupt.py
+tests/unit/test_scoped_selection_commit_unknown.py
+tests/unit/test_scoped_selection_completed.py
+tests/unit/test_scoped_selection_dispatch_integration.py
+tests/unit/test_scoped_selection_explicit_no_promotion.py
+tests/unit/test_scoped_selection_identity.py
+tests/unit/test_scoped_selection_no_global_fallback.py
+tests/unit/test_scoped_selection_record_fabrication_guard.py
+tests/unit/test_scoped_selection_rejected.py
+tests/unit/test_seam01_handoff_ownership_fixtures.py

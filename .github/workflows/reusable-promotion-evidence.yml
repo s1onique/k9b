@@ -1,0 +1,162 @@
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+
+# ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
+# WAVE CORRECTION01 — reusable evidence workflow
+#
+# P0-10 automated evidence transfer:
+#   This workflow EXPLICITLY downloads the artifacts produced by
+#   upstream reusable workflows and aggregates them.  It does NOT
+#   read cluster paths from the runner filesystem.
+#
+# It runs under `if: ${{ always() }}` so partial diagnostics
+# appear even when qualification fails.
+
+name: k9b promotion evidence
+
+on:
+  workflow_call:
+    inputs:
+      closure_sha:
+        type: string
+        required: true
+      qualification_run_id:
+        type: string
+        required: true
+    outputs:
+      evidence_artifact_count:
+        value: ${{ jobs.aggregate.outputs.artifact_count }}
+      evidence_checksums:
+        value: ${{ jobs.aggregate.outputs.checksums }}
+      partial_on_failure:
+        value: ${{ jobs.aggregate.outputs.partial_on_failure }}
+    secrets:
+      KUBECONFIG_B64:
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+jobs:
+  aggregate:
+    name: download upstream artifacts + cluster logs + redacted ledger
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_count: ${{ steps.pack.outputs.artifact_count }}
+      checksums: ${{ steps.pack.outputs.checksums }}
+      partial_on_failure: ${{ steps.pack.outputs.partial_on_failure }}
+    env:
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+    steps:
+      - name: independent cluster bootstrap
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: download qualification verdict artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: qualification-${{ inputs.qualification_run_id }}
+          path: qualification/
+        continue-on-error: true
+
+      - name: download readiness artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: readiness-${{ inputs.closure_sha }}
+          path: readiness/
+        continue-on-error: true
+
+      - name: download image-refs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: image-refs-${{ inputs.closure_sha }}
+          path: image-refs/
+        continue-on-error: true
+
+      - name: bounded scheduler logs (last 1000 lines, last 30m)
+        run: |
+          set -euo pipefail
+          kubectl logs -l app=k9b-scheduler --tail=1000 --since=30m \
+            -n k9b > scheduler.log || echo "FATAL: scheduler logs unavailable" > scheduler.log
+
+      - name: bounded backend logs
+        run: |
+          set -euo pipefail
+          kubectl logs -l app=k9b-backend --tail=1000 --since=30m \
+            -n k9b > backend.log || echo "FATAL: backend logs unavailable" > backend.log
+
+      - name: bounded qualification Job logs
+        run: |
+          set -euo pipefail
+          kubectl logs -l app.kubernetes.io/component=promotion-qualifier \
+            --tail=2000 --since=30m -n k9b > qualifier.log || true
+
+      - name: kubernetes events
+        run: |
+          set -euo pipefail
+          kubectl get events -n k9b --sort-by='.lastTimestamp' > k8s-events.log || true
+
+      - name: pull redacted promotion ledger from cluster
+        run: |
+          set -euo pipefail
+          # Pull via kubectl exec (NOT a local file path) and redact
+          # in-cluster using the canonical redaction library.
+          kubectl exec deploy/k9b-backend -- python -c "
+          from k9b_backend.evidence import redact_promotion_ledger
+          import json, sys
+          ledger = redact_promotion_ledger('/var/run/k9b/promotion-ledger.json')
+          print(json.dumps(ledger))
+          " > promotion-ledger-redacted.json || echo '{}' > promotion-ledger-redacted.json
+
+      - name: include committed gate-summary pair
+        run: |
+          set -euo pipefail
+          cp /dev/stdin committed-gate-summary.json 2>/dev/null || true
+
+      - name: build diagnostic pack + checksums
+        id: pack
+        run: |
+          set -euo pipefail
+          artifact_count=0
+          checksums=()
+          # gather every downloaded/logged file
+          files=(
+            scheduler.log backend.log qualifier.log k8s-events.log
+            promotion-ledger-redacted.json committed-gate-summary.json
+            image-refs/image-refs.json
+            readiness/k9b_readiness.json
+            qualification/qualifier-verdict.json
+            qualification/qualifier-summary.log
+          )
+          sha256s=()
+          for f in "${files[@]}"; do
+            if [ -f "$f" ]; then
+              sha=$(sha256sum "$f" | awk '{print $1}')
+              sha256s+=("$f=$sha")
+              artifact_count=$((artifact_count+1))
+            fi
+          done
+          checksums_csv=$(IFS=,; echo "${sha256s[*]}")
+          echo "artifact_count=$artifact_count" >> "$GITHUB_OUTPUT"
+          echo "checksums=$checksums_csv" >> "$GITHUB_OUTPUT"
+          # The pack itself
+          tar czf diagnostic-pack.tgz \
+            scheduler.log backend.log qualifier.log k8s-events.log \
+            promotion-ledger-redacted.json committed-gate-summary.json \
+            image-refs/ readiness/ qualification/ 2>/dev/null || true
+          # partial-on-failure is implicit because we always run
+          echo "partial_on_failure=true" >> "$GITHUB_OUTPUT"
+
+      - name: upload diagnostic pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-pack-${{ inputs.closure_sha }}
+          path: diagnostic-pack.tgz

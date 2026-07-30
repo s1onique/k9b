@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
   "validated_path": ".factory/gate-summary.json",
-  "validated_sha256": "f4f72a1111d3d86c4ee57c01076294f19e66f80fb4b5f5728135d1dda131d79c",
-  "validated_at": "2026-07-30T01:55:41.740257+00:00",
+  "validated_sha256": "3b53960cd166fe227b3ace93dbb8b940af36c455358b94f260a2f67d3ff3e456",
+  "validated_at": "2026-07-30T16:09:12.663284+00:00",
   "parser_identity": "scripts/factory/parse_gate_summary.py",
   "parser_command": "python scripts/factory/parse_gate_summary.py --target .factory/gate-summary.json --quiet",
-  "parser_exit_code": 0,
-  "parser_duration_ms": 31,
+  "parser_exit_code": 1,
+  "parser_duration_ms": 44,
   "decode_status": "pass",
-  "acceptance_status": "pass",
+  "acceptance_status": "fail",
   "diagnostics": {
     "checks_total": 17,
-    "checks_failed": 0,
+    "checks_failed": 1,
     "required_check_names_count": 17,
     "extras_keys": [
       "required_check_names"

@@ -1,0 +1,190 @@
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION06
+# Reusable runtime gate for the experimental lab build lane.
+#
+# This workflow performs the focused promotion runtime gate at SUBJECT_SHA.
+# It is invoked at job level by the thin caller; never from a step.
+#
+# The runtime test inventory is owned exclusively by
+# ``scripts/ci/run_promotion_runtime_gate.py``.  This workflow MUST NOT
+# contain an inline TESTS=(...) array.
+#
+# CORRECTION06 changes:
+#   * --collect-only is now a true no-execution operation (P0-5).
+#   * Static analysis is routed through the static-scope authority
+#     (dual-range model) instead of a broad ``git diff | mypy``.
+#   * Transcript is owned exclusively by the Python runner (P0-8).
+#   * Marker recognition uses the production helper (P0-9).
+#
+# Outputs:
+#   subject_sha:  - the workflow SHA (github.sha) locked at runtime
+#   runtime_gate: - "pass" on success; the step fails closed otherwise
+
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+
+name: k9b promotion experimental runtime gate
+
+on:
+  workflow_call:
+    inputs:
+      subject_sha:
+        description: "Closure commit SHA (typically github.sha)"
+        required: true
+        type: string
+    outputs:
+      subject_sha:
+        description: "Subject SHA locked at runtime"
+        value: ${{ jobs.gate.outputs.subject_sha }}
+      runtime_gate:
+        description: "Runtime gate verdict: pass | fail"
+        value: ${{ jobs.gate.outputs.runtime_gate }}
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: promotion runtime gate at SUBJECT_SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      subject_sha: ${{ steps.identity.outputs.subject_sha }}
+      runtime_gate: ${{ steps.gate.outputs.runtime_gate }}
+    steps:
+      - name: checkout at SUBJECT_SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.subject_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: lock SUBJECT_SHA
+        id: identity
+        run: |
+          set -euo pipefail
+          subject_sha="$(git rev-parse HEAD)"
+          if [ "$subject_sha" != "${{ inputs.subject_sha }}" ]; then
+            echo "FATAL: checked-out HEAD != inputs.subject_sha"
+            exit 1
+          fi
+          echo "subject_sha=$subject_sha" >> "$GITHUB_OUTPUT"
+
+      - name: canonical Python dev bootstrap (single authority)
+        run: |
+          set -euo pipefail
+          bash scripts/ci/bootstrap_python_dev.sh
+          echo "Bootstrap_OK"
+          echo "subject_sha=${{ steps.identity.outputs.subject_sha }}" >> "$GITHUB_OUTPUT"
+          PYPROJECT_SHA="$(sha256sum pyproject.toml | awk '{print $1}')"
+          echo "pyproject_sha256=${PYPROJECT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: tool version preflight (P0-2)
+        run: |
+          set -euo pipefail
+          for tool in pytest ruff mypy; do
+            if ! .venv/bin/python -c "import ${tool}" >/dev/null 2>&1; then
+              echo "FATAL: required tool '${tool}' is not importable"
+              exit 1
+            fi
+          done
+          .venv/bin/python --version
+          .venv/bin/python -m pytest --version
+          .venv/bin/python -m ruff --version
+          .venv/bin/python -m mypy --version
+
+      - name: runtime gate transcript setup
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          : > artifacts/runtime-gate-transcript.log
+
+      - name: verify canonical inventory
+        id: verify-inventory
+        run: |
+          set -euo pipefail
+          .venv/bin/python scripts/ci/run_promotion_runtime_gate.py \
+            --verify-inventory \
+            --transcript artifacts/runtime-gate-transcript.log
+          echo "verify_inventory=pass" >> "$GITHUB_OUTPUT"
+
+      - name: focused promotion runtime gate (canonical runner)
+        id: gate
+        run: |
+          set -euo pipefail
+          # The Python runner owns the transcript exclusively (P0-8);
+          # no concurrent shell pipe is appended to the same file.
+          .venv/bin/python scripts/ci/run_promotion_runtime_gate.py \
+            --run \
+            --transcript artifacts/runtime-gate-transcript.log
+          echo "runtime_gate=pass" >> "$GITHUB_OUTPUT"
+
+      - name: static-scope classification (dual-range model)
+        id: static-scope
+        run: |
+          set -euo pipefail
+          RUNTIME_BASE_SHA="f09348dc6f7dd8887c51278ee0a504c7e22d1417"
+          LANE_BASE_SHA="9141f4699674353ac82a85e4fe543030ccfc1c42"
+          SUBJECT_SHA="${{ steps.identity.outputs.subject_sha }}"
+          .venv/bin/python scripts/ci/promotion_runtime_static_scope.py \
+            --runtime-base-sha "${RUNTIME_BASE_SHA}" \
+            --lane-base-sha "${LANE_BASE_SHA}" \
+            --subject-sha "${SUBJECT_SHA}" \
+            --output artifacts/static-scope.json
+          UNCLASSIFIED="$(.venv/bin/python -c \
+            'import json,sys; d=json.load(open("artifacts/static-scope.json")); print(d["unclassified_count"])')"
+          echo "static_unclassified_count=${UNCLASSIFIED}" >> "$GITHUB_OUTPUT"
+          if [ "${UNCLASSIFIED}" != "0" ]; then
+            # Dual-range model: unclassified paths are a gating violation.
+            echo "FATAL: static-scope authority (dual-range model) reports unclassified paths"
+            exit 1
+          fi
+
+      - name: runtime-scoped Ruff + mypy (P0-2)
+        run: |
+          set -euo pipefail
+          .venv/bin/python scripts/ci/promotion_runtime_static_gate_runner.py \
+            --scope-record artifacts/static-scope.json \
+            --expected-subject-sha "${{ steps.identity.outputs.subject_sha }}" \
+            --target-output artifacts/static-gate.json
+          # Propagate exit code via the runner; the runner itself is the
+          # blocking authority for both Ruff and mypy.
+
+      - name: workflow YAML validation
+        run: |
+          set -euo pipefail
+          .venv/bin/python - <<'PY'
+          import sys
+          from pathlib import Path
+          import yaml
+          for path in [
+              ".github/workflows/harbor-build-image.yml",
+              ".github/workflows/reusable-promotion-experimental-runtime.yml",
+              ".github/workflows/reusable-promotion-experimental-classify.yml",
+              ".github/workflows/promotion-experimental-lab-build.yml",
+          ]:
+              p = Path(path)
+              if not p.exists():
+                  print(f"FATAL: workflow not found: {path}")
+                  sys.exit(1)
+              with p.open() as f:
+                  doc = yaml.safe_load(f)
+              if not isinstance(doc, dict) or "jobs" not in doc:
+                  print(f"FATAL: malformed workflow: {path}")
+                  sys.exit(1)
+              print(f"OK: {path} parses, jobs={list(doc['jobs'].keys())}")
+          PY
+
+      - name: git diff --check
+        run: |
+          set -euo pipefail
+          git diff --check
+
+      - name: upload runtime gate transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-gate-${{ steps.identity.outputs.subject_sha }}
+          path: artifacts/runtime-gate-transcript.log

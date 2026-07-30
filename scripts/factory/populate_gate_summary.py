@@ -15,25 +15,43 @@ result lives in a sibling file so a subsequent mutation of
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
-import shlex
-import subprocess
 import sys
-import time
-from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-SCRIPT_REPO = Path(__file__).resolve().parent.parent.parent
-VENV_PYTHON = SCRIPT_REPO / ".venv" / "bin" / "python"
-
-sys.path.insert(0, str(SCRIPT_REPO))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from scripts.factory.build_gate_summary import (  # noqa: E402
-    CheckOutcome,
     GateSummary,
     SubsystemSelfTestCount,
     make_r10_defaults,
+)
+from scripts.factory.gate_summary_changed_paths import (  # noqa: E402
+    _changed_python_files,
+    _read_changed_paths_manifest,
+)
+from scripts.factory.gate_summary_command_env import (  # noqa: E402
+    SCRIPT_REPO,
+    VENV_PYTHON,
+    CommandSpec,
+    Runner,
+    build_child_env,
+    build_child_env_with_guard,
+    git_cwd,
+    run_subprocess,
+    source_root,
+)
+from scripts.factory.gate_summary_parser_runner import (  # noqa: E402
+    run_parser_and_capture_verdict,
+)
+from scripts.factory.gate_summary_ruff_target_verifier import (  # noqa: E402
+    RuffTargetSetError,
+    verify_recorded_ruff_targets,
+)
+from scripts.factory.gate_summary_validation_attestation import (  # noqa: E402
+    portable_parser_command,
+    write_validation_attestation,
 )
 from scripts.incident_lifecycle_boundary.redaction_self_test_runner import (  # noqa: E402
     run_self_tests as verifier_run_self_tests,
@@ -75,111 +93,6 @@ REQUIRED_CHECK_NAMES = (
 PARSER_POSTCONDITION_NAME = "gate-summary-parser"
 
 
-@dataclass(frozen=True)
-class CommandSpec:
-    """A named subprocess command in the populated gate."""
-
-    name: str
-    argv: list[str]
-    expect_zero: bool = True
-    cwd: Path | None = None
-    env: dict[str, str] | None = None
-
-
-Runner = Callable[[CommandSpec], CheckOutcome]
-
-
-def _source_root(repo_root: Path) -> Path:
-    """Return the verifier source root for a repository-root/worktree seam."""
-    if (repo_root / "src" / "k8s_diag_agent").exists():
-        return repo_root / "src"
-    return repo_root
-
-
-def _git_cwd(repo_root: Path) -> Path:
-    """Use repo_root for git commands only when it is a git worktree."""
-    return repo_root if (repo_root / ".git").exists() else SCRIPT_REPO
-
-
-def _env(repo_root: Path) -> dict[str, str]:
-    """Build the child-process environment used by populate's checks.
-
-    Note: ``K9B_GATE_POPULATION_CHILD=1`` is NOT propagated here; doing so
-    would prevent legitimate ``populate`` invocations launched from the
-    full-gate-negative-proofs and other test harnesses. The recursion guard
-    is propagated only to the ``targeted-repository-gate`` spec, since that
-    is the only command that can actually trigger a populate -> verify ->
-    populate cycle.
-    """
-    env = os.environ.copy()
-    source_root = _source_root(repo_root)
-    # Deduplicate PYTHONPATH entries (separated by os.pathsep) so mypy does
-    # not see the same module from two roots and emit "Duplicate module"
-    # errors.
-    existing_paths = env.get("PYTHONPATH", "").split(os.pathsep)
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for p in (
-        str(source_root),
-        str(SCRIPT_REPO),
-        str(SCRIPT_REPO / "src"),
-        *existing_paths,
-    ):
-        if not p or p in seen:
-            continue
-        seen.add(p)
-        ordered.append(p)
-    env["PYTHONPATH"] = os.pathsep.join(ordered)
-    # MYPYPATH is intentionally not set: the child mypy invocation uses
-    # explicit file paths relative to cwd (the repo root). Setting MYPYPATH
-    # to the same root causes "Duplicate module" errors.
-    env.pop("MYPYPATH", None)
-    env.setdefault("HOME", str(Path.home()))
-    return env
-
-
-def _env_with_guard(repo_root: Path) -> dict[str, str]:
-    """Like ``_env`` but propagates ``K9B_GATE_POPULATION_CHILD=1``.
-
-    Used only for the ``targeted-repository-gate`` command, which routes
-    through ``verify_all.sh --act-local`` and is the actual cycle path.
-    """
-    env = _env(repo_root)
-    env["K9B_GATE_POPULATION_CHILD"] = "1"
-    return env
-
-
-def _run(spec: CommandSpec) -> CheckOutcome:
-    """Run a child command and derive a CheckOutcome from the subprocess result."""
-    started = time.time()
-    try:
-        proc = subprocess.run(
-            spec.argv,
-            capture_output=True,
-            text=True,
-            cwd=str(spec.cwd or SCRIPT_REPO),
-            env=spec.env,
-            timeout=300,
-            check=False,
-        )
-        exit_code = proc.returncode
-        output = (proc.stderr or "") + (proc.stdout or "")
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        exit_code = 124 if isinstance(exc, subprocess.TimeoutExpired) else 127
-        output = str(exc)
-
-    duration_ms = int((time.time() - started) * 1000)
-    ok = (exit_code == 0) == spec.expect_zero
-    return CheckOutcome(
-        name=spec.name,
-        status="pass" if ok else "fail",
-        duration_ms=duration_ms,
-        error_message=None if ok else output[:1000],
-        command=shlex.join(spec.argv),
-        exit_code=exit_code,
-    )
-
-
 def _core01_mypy_manifest_complete(
     argv: list[str], expected_paths: tuple[str, ...]
 ) -> bool:
@@ -201,34 +114,59 @@ def _pytest_spec(repo_root: Path, name: str, *nodeids: str) -> CommandSpec:
         name=name,
         argv=[str(VENV_PYTHON), "-m", "pytest", "-q", *nodeids],
         cwd=SCRIPT_REPO,
-        env=_env(repo_root),
+        env=build_child_env(repo_root),
     )
 
 
-def _changed_python_files() -> list[str]:
-    proc = subprocess.run(
-        ["git", "diff", "--name-only", "--cached", "--diff-filter=ACMR"],
-        cwd=SCRIPT_REPO,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    staged = [line for line in proc.stdout.splitlines() if line.endswith(".py")]
-    proc = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR"],
-        cwd=SCRIPT_REPO,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    unstaged = [line for line in proc.stdout.splitlines() if line.endswith(".py")]
-    return sorted(set(staged + unstaged))
+def _authoritative_manifest_sha256(manifest_path: Path) -> str:
+    """Compute the SHA-256 of the authoritative changed-paths manifest.
+
+    The manifest is authoritative because the gate-summary producer
+    uses it as the canonical source of the Ruff command targets.  The
+    SHA-256 identity is persisted in the artifact so verifiers can
+    confirm the manifest was not silently mutated between the range
+    harvest and the artifact emission.
+    """
+    return hashlib.sha256(manifest_path.read_bytes()).hexdigest()
 
 
-def _command_specs(repo_root: Path, target: Path) -> list[CommandSpec]:
-    env = _env(repo_root)
-    source_root = _source_root(repo_root)
-    changed_py = _changed_python_files() or ["scripts/factory/populate_gate_summary.py"]
+def _self_test_ruff_recorded_targets(
+    *,
+    authoritative_paths: list[str],
+    recorded_argv: list[str],
+) -> None:
+    """Production verifier self-test.
+
+    The producer MUST validate that the recorded Ruff argv it just
+    generated equals the authoritative manifest before persisting the
+    artifact.  Failing closed here is the production equivalent of the
+    previous test-only "smaller than full" negation: the canonical
+    verifier is the single source of truth and the test surface
+    invokes the same function.
+    """
+    try:
+        verify_recorded_ruff_targets(
+            authoritative_paths=authoritative_paths,
+            recorded_argv=recorded_argv,
+        )
+    except RuffTargetSetError as exc:
+        raise AssertionError(
+            f"producer-ruff-self-test-failed: code={exc.code} message={exc}"
+        ) from exc
+
+
+def _command_specs(
+    repo_root: Path,
+    target: Path,
+    *,
+    changed_paths_manifest: Path | None = None,
+) -> list[CommandSpec]:
+    env = build_child_env(repo_root)
+    resolved_source_root = source_root(repo_root)
+    if changed_paths_manifest is not None:
+        changed_py = _read_changed_paths_manifest(changed_paths_manifest)
+    else:
+        changed_py = _changed_python_files() or ["scripts/factory/populate_gate_summary.py"]
     # CORRECTION05 R8: the canonical mypy command MUST visibly
     # include the complete CORE01 manifest:
     #   * the verifier_core package (covered by the package
@@ -271,7 +209,7 @@ def _command_specs(repo_root: Path, target: Path) -> list[CommandSpec]:
     # inherit the recursion guard so any nested populate launch under
     # verify_all.sh fails fast with exit code 2 rather than recursively
     # driving the gate.
-    targeted_env = _env_with_guard(repo_root)
+    targeted_env = build_child_env_with_guard(repo_root)
     return [
         CommandSpec(
             "canonical-verifier-self-test",
@@ -280,14 +218,14 @@ def _command_specs(repo_root: Path, target: Path) -> list[CommandSpec]:
         ),
         CommandSpec(
             "standalone-production-verifier",
-            [str(VENV_PYTHON), str(SCRIPT_REPO / "scripts/incident_lifecycle_boundary/redaction_types.py"), "--repo-root", str(source_root)],
+            [str(VENV_PYTHON), str(SCRIPT_REPO / "scripts/incident_lifecycle_boundary/redaction_types.py"), "--repo-root", str(resolved_source_root)],
             env=env,
         ),
         _pytest_spec(repo_root, "production-mypy-positive", "tests/unit/test_redaction_r9_mypy_fixtures.py::TestMypyPositiveFixture"),
         _pytest_spec(repo_root, "production-mypy-negative", "tests/unit/test_redaction_r9_mypy_fixtures.py::TestMypyNegativeFixture"),
         CommandSpec(
             "full-gate-negative-proofs",
-            [str(VENV_PYTHON), str(SCRIPT_REPO / "scripts/incident_lifecycle_boundary/redaction_types.py"), "--repo-root", str(source_root)]
+            [str(VENV_PYTHON), str(SCRIPT_REPO / "scripts/incident_lifecycle_boundary/redaction_types.py"), "--repo-root", str(resolved_source_root)]
             if os.environ.get("K9B_R12_FULL_GATE_PROOF_CHILD")
             else [
                 str(VENV_PYTHON),
@@ -302,8 +240,8 @@ def _command_specs(repo_root: Path, target: Path) -> list[CommandSpec]:
         _pytest_spec(repo_root, "serializer-multi-return", "tests/unit/test_redaction_r12_serializer_multi_return.py"),
         CommandSpec("ruff", [str(VENV_PYTHON), "-m", "ruff", "check", *changed_py], env=env),
         CommandSpec("mypy", [str(VENV_PYTHON), "-m", "mypy", *mypy_targets, "--ignore-missing-imports"], env=env),
-        CommandSpec("git-diff-check", ["git", "diff", "--check"], cwd=_git_cwd(repo_root), env=env),
-        CommandSpec("git-diff-cached-check", ["git", "diff", "--cached", "--check"], cwd=_git_cwd(repo_root), env=env),
+        CommandSpec("git-diff-check", ["git", "diff", "--check"], cwd=git_cwd(repo_root), env=env),
+        CommandSpec("git-diff-cached-check", ["git", "diff", "--cached", "--check"], cwd=git_cwd(repo_root), env=env),
         CommandSpec("llm-friendly", [str(VENV_PYTHON), str(SCRIPT_REPO / "scripts/check_llm_friendly_files.py"), "--changed-only"], env=env),
         CommandSpec("no-new-llm-allowlist", [str(VENV_PYTHON), str(SCRIPT_REPO / "scripts/verify_no_new_llm_allowlist.py")], env=env),
         CommandSpec(
@@ -318,7 +256,7 @@ def _command_specs(repo_root: Path, target: Path) -> list[CommandSpec]:
                 str(VENV_PYTHON),
                 str(SCRIPT_REPO / "scripts/incident_lifecycle_boundary/redaction_types.py"),
                 "--repo-root",
-                str(source_root),
+                str(resolved_source_root),
             ],
             cwd=SCRIPT_REPO,
             env=targeted_env,
@@ -331,7 +269,10 @@ def build_gate_summary(
     *,
     repo_root: Path = SCRIPT_REPO,
     target: Path | None = None,
-    runner: Runner = _run,
+    changed_paths_manifest: Path | None = None,
+    range_base: str | None = None,
+    range_head: str | None = None,
+    runner: Runner = run_subprocess,
 ) -> GateSummary:
     """Run every required check and return a populated summary.
 
@@ -340,11 +281,48 @@ def build_gate_summary(
     ``checks_total``/``checks_failed`` would create a circular dependency
     with the parser subprocess that the canonical ``parse_gate_summary``
     executable runs.
+
+    When ``changed_paths_manifest`` is supplied, the producer:
+
+    1. reads the manifest as the authoritative Ruff target set;
+    2. SHA-256s the manifest and records the identity in ``extras``;
+    3. calls the production verifier as a self-test so the recorded
+       Ruff argv cannot silently diverge from the manifest.
     """
     target = target or repo_root / ".factory" / "gate-summary.json"
+    specs = _command_specs(
+        repo_root,
+        target,
+        changed_paths_manifest=changed_paths_manifest,
+    )
     checks = [
-        runner(spec) for spec in _command_specs(repo_root, target) if spec.name != "gate-summary-parser"
+        runner(spec) for spec in specs if spec.name != "gate-summary-parser"
     ]
+
+    # Production self-test: the recorded Ruff argv MUST equal the
+    # authoritative manifest exactly.  When the manifest is supplied
+    # the self-test runs unconditionally; when no manifest is
+    # supplied (the legacy no-manifest path) the self-test is skipped
+    # because the legacy reflected unstaged/staged diffs.
+    extras: dict[str, object] = {
+        "required_check_names": list(REQUIRED_CHECK_NAMES),
+    }
+    if changed_paths_manifest is not None:
+        authoritative_paths = _read_changed_paths_manifest(changed_paths_manifest)
+        ruff_spec = next(spec for spec in specs if spec.name == "ruff")
+        _self_test_ruff_recorded_targets(
+            authoritative_paths=authoritative_paths,
+            recorded_argv=ruff_spec.argv,
+        )
+        extras["changed_paths_manifest_sha256"] = _authoritative_manifest_sha256(
+            changed_paths_manifest
+        )
+        extras["changed_paths_manifest_count"] = len(authoritative_paths)
+        extras["changed_paths_manifest_entries"] = sorted(authoritative_paths)
+    if range_base is not None:
+        extras["range_base"] = range_base
+    if range_head is not None:
+        extras["range_head"] = range_head
 
     accepted, rejected, failed = verifier_run_self_tests()[0:3]
     failed_total = sum(1 for check in checks if check.status == "fail")
@@ -357,6 +335,7 @@ def build_gate_summary(
         checks=checks,
         self_tests={"verifier_self_tests": SubsystemSelfTestCount(accepted, rejected, failed)},
         r10_definition_of_done=make_r10_defaults(),
+        extras=extras,
     )
     return summary
 
@@ -374,18 +353,57 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=SCRIPT_REPO)
     parser.add_argument("--target", type=Path, default=SCRIPT_REPO / ".factory" / "gate-summary.json")
+    parser.add_argument(
+        "--changed-paths-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Optional NUL-delimited changed-paths manifest (output of "
+            "'git diff --name-only -z <base>..<head>'). When supplied, the "
+            "manifest is the authoritative source for the Ruff check; the "
+            "producer fails closed on an empty, missing, non-Python, or "
+            "non-repository-relative manifest."
+        ),
+    )
+    parser.add_argument(
+        "--range-base",
+        default=None,
+        help=(
+            "Optional base SHA recorded in the artifact for verifier "
+            "consumers. When supplied, the SHA is persisted verbatim in "
+            "extras.range_base."
+        ),
+    )
+    parser.add_argument(
+        "--range-head",
+        default=None,
+        help=(
+            "Optional head SHA recorded in the artifact for verifier "
+            "consumers. When supplied, the SHA is persisted verbatim in "
+            "extras.range_head."
+        ),
+    )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
     repo_root = args.repo_root.resolve()
     target = args.target.resolve()
-    summary = build_gate_summary(repo_root=repo_root, target=target)
+    summary = build_gate_summary(
+        repo_root=repo_root,
+        target=target,
+        changed_paths_manifest=args.changed_paths_manifest,
+        range_base=args.range_base,
+        range_head=args.range_head,
+    )
     target.parent.mkdir(parents=True, exist_ok=True)
 
     # Step 1: write the canonical gate-summary artifact WITHOUT
     # any parser validation result. The artifact bytes must be
     # final before validation runs -- embedding the validation
     # outcome inside the validated artifact is a self-referential
-    # contract that the parser cannot decode.
+    # contract that the parser cannot decode.  The ``extras``
+    # payload built by :func:`build_gate_summary` carries the
+    # authoritative manifest identity, SHA-256, and entry list,
+    # so we preserve it verbatim instead of overwriting it.
     final = GateSummary(
         schema_version=summary.schema_version,
         profile=summary.profile,
@@ -395,46 +413,22 @@ def main(argv: list[str] | None = None) -> int:
         checks=summary.checks,
         self_tests=summary.self_tests,
         r10_definition_of_done=summary.r10_definition_of_done,
-        extras={
-            "required_check_names": list(REQUIRED_CHECK_NAMES),
-        },
+        extras=summary.extras,
     )
     final.write(target)
 
     # Step 3: run the canonical parser subprocess and capture its
     # output for the validation attestation. The exit code drives
-    # the producer's overall return code.
+    # the producer's overall return code.  The verifier-extraction
+    # helper handles the subprocess so the producer never crashes
+    # on a transient parser failure.
     parser_spec = next(
         spec for spec in _command_specs(repo_root, target)
         if spec.name == PARSER_POSTCONDITION_NAME
     )
-    parser_outcome = _run(parser_spec)
-
-    # Step 4: parse the validator's stdout for ``decode_status`` /
-    # ``acceptance_status`` so the attestation carries the
-    # typed verdict.
-    decode_status = "fail"
-    acceptance_status = "fail"
-    stdout_text = ""
-    try:
-        parser_proc = subprocess.run(
-            parser_spec.argv,
-            capture_output=True,
-            text=True,
-            cwd=str(parser_spec.cwd or SCRIPT_REPO),
-            env=parser_spec.env,
-            timeout=120,
-            check=False,
-        )
-        stdout_text = parser_proc.stdout or ""
-        for line in stdout_text.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("decode_status="):
-                decode_status = stripped.split("=", 1)[1].strip()
-            elif stripped.startswith("acceptance_status="):
-                acceptance_status = stripped.split("=", 1)[1].strip()
-    except (OSError, subprocess.TimeoutExpired):
-        pass
+    parser_outcome, decode_status, acceptance_status = (
+        run_parser_and_capture_verdict(parser_spec)
+    )
 
     # Step 5: write the validation attestation to a SIBLING
     # artifact. The attestation is NOT included in the bytes it
@@ -450,12 +444,11 @@ def main(argv: list[str] | None = None) -> int:
     # non-regular files at the seam. The writer logic lives in
     # :mod:`scripts.factory.gate_summary_validation_attestation`
     # so the gate-summary producer stays under the 500-line cap.
-    from scripts.factory.gate_summary_validation_attestation import (
-        portable_parser_command,
-        write_validation_attestation,
-    )
 
     portable_target = target.resolve().relative_to(repo_root.resolve()).as_posix()
+    # The writer reads from its own (imported) namespace; we re-bind
+    # the names here for clarity at the call site.
+
     attestation_path = write_validation_attestation(
         repo_root=repo_root,
         target=target,
