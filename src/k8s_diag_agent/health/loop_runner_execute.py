@@ -426,7 +426,15 @@ def _resolve_accumulator_truth(
         from typing import assert_never
 
         outcome = accumulator.promotion_outcome
-        # outcome is guaranteed non-None here (implied by has_promotion_activity() == True above)
+
+        # Explicit None handling: a consistency contract violation.
+        # has_promotion_activity() is True but neither batches nor outcome exist.
+        if outcome is None:
+            return (
+                BLOCKED_REASON_PROMOTION_CONSISTENCY_CONTRACT_ERROR,
+                BLOCKED_REASON_PROMOTION_CONSISTENCY_CONTRACT_ERROR,
+                BLOCKED_REASON_PROMOTION_CONSISTENCY_CONTRACT_ERROR,
+            )
 
         if isinstance(outcome, PromotionCommitUnknown):
             return (
