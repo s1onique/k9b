@@ -52,6 +52,25 @@ on:
         description: "Whether to write to registry cache (cache-to, write operation)"
         required: true
         type: boolean
+    # =============================================================================
+    # Image-reference outputs - see ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION02
+    # Required grammar: ^[^@]+@sha256:[0-9a-f]{64}$
+    # Callers MUST consume these declared outputs via `needs.<job>.outputs.*`
+    # (no second registry lookup; no assumed registry path reconstruction).
+    # =============================================================================
+    outputs:
+      image_repository:
+        description: "Image repository (registry/project/name) without tag or digest"
+        value: ${{ jobs.build.outputs.image_repository }}
+      image_tag:
+        description: "Image tag (short SHA)"
+        value: ${{ jobs.build.outputs.image_tag }}
+      image_digest:
+        description: "Image digest (sha256:<64hex>)"
+        value: ${{ jobs.build.outputs.image_digest }}
+      image_ref:
+        description: "Immutable image reference (registry/project/name@sha256:<64hex>)"
+        value: ${{ jobs.build.outputs.image_ref }}
     secrets:
       HARBOR_USERNAME:
         required: false
@@ -70,6 +89,11 @@ jobs:
     runs-on: spbnix-k8s-docker
     permissions:
       contents: read
+    outputs:
+      image_repository: ${{ steps.emit-image-ref.outputs.image_repository }}
+      image_tag: ${{ steps.emit-image-ref.outputs.image_tag }}
+      image_digest: ${{ steps.emit-image-ref.outputs.image_digest }}
+      image_ref: ${{ steps.emit-image-ref.outputs.image_ref }}
 
     steps:
       - name: Checkout repository
@@ -365,6 +389,78 @@ jobs:
           cache-to: ${{ inputs.registry_cache_write_enabled && format('type=registry,ref={0}/{1}/cache/{2}:buildcache,mode=max', inputs.registry, inputs.harbor_project, inputs.image_name) || '' }}
           build-args: ${{ inputs.build_args }}
           builder: ${{ steps.buildx.outputs.name }}
+
+      # =============================================================================
+      # Emit image-reference outputs (P0-4)
+      #
+      # Combines the docker/metadata-action outputs (image_repository, image_tag)
+      # with the docker/build-push-action output (digest) into the canonical
+      # immutable reference grammar: registry/project/name@sha256:<64hex>.
+      #
+      # These outputs are the SOLE source of truth for callers; no second
+      # registry lookup is permitted.  Grammar is validated before emit.
+      # =============================================================================
+      - name: Emit image-reference outputs
+        id: emit-image-ref
+        env:
+          REGISTRY: ${{ inputs.registry }}
+          HARBOR_PROJECT: ${{ inputs.harbor_project }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_PUSH_ENABLED: ${{ inputs.image_push_enabled }}
+          META_IMAGE_REPOSITORY: ${{ steps.meta.outputs.image_repository }}
+          META_IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          BUILD_DIGEST: ${{ steps.build-image.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          # image_repository from metadata-action is "registry/project/name".
+          image_repository="${META_IMAGE_REPOSITORY}"
+          if [ -z "${image_repository}" ]; then
+            image_repository="${REGISTRY}/${HARBOR_PROJECT}/${IMAGE_NAME}"
+          fi
+
+          # image_tag from metadata-action is the short SHA.
+          image_tag="${META_IMAGE_TAG}"
+          if [ -z "${image_tag}" ]; then
+            echo "FATAL: metadata-action produced no image_tag"
+            exit 1
+          fi
+
+          # For read-only (non-push) builds there is no pushed digest; the
+          # tag itself is the only available reference.  For push builds the
+          # digest MUST be present and MUST be sha256:<64hex>.
+          image_digest="${BUILD_DIGEST}"
+          if [ "${IMAGE_PUSH_ENABLED}" = "true" ]; then
+            if [ -z "${image_digest}" ]; then
+              echo "FATAL: docker/build-push-action did not return digest"
+              exit 1
+            fi
+            case "${image_digest}" in
+              sha256:[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+                ;;
+              *)
+                echo "FATAL: digest is not sha256:<64hex>: ${image_digest}"
+                exit 1
+                ;;
+            esac
+            image_ref="${image_repository}@${image_digest}"
+          else
+            image_digest=""
+            image_ref="${image_repository}:${image_tag}"
+          fi
+
+          {
+            echo "image_repository=${image_repository}"
+            echo "image_tag=${image_tag}"
+            echo "image_digest=${image_digest}"
+            echo "image_ref=${image_ref}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "=== Image Reference ==="
+          echo "  repository: ${image_repository}"
+          echo "  tag:        ${image_tag}"
+          echo "  digest:     ${image_digest}"
+          echo "  ref:        ${image_ref}"
 
       # =============================================================================
       # Post-build summary with authority details

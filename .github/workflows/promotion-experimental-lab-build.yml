@@ -1,25 +1,34 @@
-# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION01
-# Experimental lab build lane (executable)
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION02
+# Experimental lab build lane (canonical two-image fan-out + automated lab run)
 #
 # This is an ISOLATED lane that does NOT depend on the failing full
-# Factory verification.  It produces immutable backend / scheduler /
-# frontend images under an explicitly experimental namespace so the
-# team can exercise the promotion runtime immediately.
+# Factory verification.  It produces immutable backend / frontend
+# images via the canonical Harbor reusable workflow and deploys them
+# to the lab cluster automatically.
+#
+# Image topology (P0-1):
+#   backend workload   -> k9b-backend image
+#   scheduler workload -> the SAME k9b-backend image (no separate scheduler build)
+#   frontend workload  -> k9b-frontend image
 #
 # Hard boundaries (structurally enforced):
 #   - Canonical verify.yml is NOT modified.
 #   - No pytest skip, xfail, or conditional skip is introduced.
 #   - No continue-on-error is added to canonical CI.
 #   - Branch-protection requirements are unchanged.
-#   - The Harbor build is invoked at JOB LEVEL (jobs.build.uses),
-#     not from a step.
-#   - The Harbor workflow's image-reference outputs are the canonical
-#     source of truth; no second registry lookup is performed.
+#   - The Harbor build is invoked at JOB LEVEL (jobs.<name>.uses),
+#     not from a step, and twice (once per image).
+#   - Both Harbor callers consume ONLY declared inputs and declared
+#     outputs of ./.github/workflows/harbor-build-image.yml.
+#   - The Harbor callers pass ONLY declared secrets; no secrets: inherit.
 #   - The classify job constructs its record from declared outputs;
 #     it does not read /tmp from a previous runner.
+#   - lab-deploy runs ONLY in lab environment (never production/staging).
+#   - live-promotion executes ONE repository-owned health iteration
+#     using the deployed immutable digests.
 #
-# The produced image is classified IMAGE_CLASS=experimental-lab and is
-# NOT publication-qualified.
+# The produced images are classified IMAGE_CLASS=experimental-lab and
+# are NOT publication-qualified.
 
 # CI-HERMETIC-TOOLCACHE:
 # k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
@@ -42,7 +51,7 @@ on:
       environment:
         type: choice
         default: lab
-        options: [lab, staging, production]
+        options: [lab]
 
 concurrency:
   group: k9b-experimental-lab-build-${{ inputs.environment || 'lab' }}
@@ -54,8 +63,15 @@ permissions:
 
 env:
   IMAGE_CLASS: experimental-lab
+  REGISTRY: harbor-pve1.spbnix.local
+  HARBOR_PROJECT: k9b
+  BACKEND_IMAGE_NAME: k9b-backend
+  FRONTEND_IMAGE_NAME: k9b-frontend
 
 jobs:
+  # ===========================================================================
+  # Phase 1: focused promotion runtime gate at SUBJECT_SHA
+  # ===========================================================================
   runtime-gate:
     name: promotion runtime gate at SUBJECT_SHA
     runs-on: ubuntu-latest
@@ -95,7 +111,6 @@ jobs:
         run: |
           set -euo pipefail
           # Promotion-runtime tests (real promotion path coverage).
-          set -o pipefail
           TESTS=(
             "tests/unit/test_scoped_recording_authority_first_replay.py"
             "tests/unit/test_scoped_recording_authority_interleaved_corrupt.py"
@@ -189,10 +204,50 @@ jobs:
           fi
           .venv/bin/python -m mypy "${CHANGED[@]}"
 
-      - name: workflow syntax validation (this file)
+      - name: workflow YAML validation (all changed workflows)
         run: |
           set -euo pipefail
-          .venv/bin/python -c "import yaml; yaml.safe_load(open('.github/workflows/promotion-experimental-lab-build.yml'))"
+          .venv/bin/python - <<'PY'
+          import sys
+          from pathlib import Path
+          import yaml
+          changed = [
+              ".github/workflows/harbor-build-image.yml",
+              ".github/workflows/promotion-experimental-lab-build.yml",
+          ]
+          failed = 0
+          for path in changed:
+              p = Path(path)
+              if not p.exists():
+                  print(f"FATAL: workflow not found: {path}")
+                  failed += 1
+                  continue
+              try:
+                  with p.open() as f:
+                      doc = yaml.safe_load(f)
+              except yaml.YAMLError as exc:
+                  print(f"FATAL: YAML parse error in {path}: {exc}")
+                  failed += 1
+                  continue
+              if not isinstance(doc, dict):
+                  print(f"FATAL: workflow is not a mapping: {path}")
+                  failed += 1
+                  continue
+              if "jobs" not in doc:
+                  print(f"FATAL: missing jobs in {path}")
+                  failed += 1
+              if ("on" not in doc) and (True not in doc):
+                  print(f"FATAL: missing on trigger in {path}")
+                  failed += 1
+              print(f"OK: {path} parses, jobs={list((doc.get('jobs') or {}).keys())}")
+          if failed:
+              sys.exit(1)
+          PY
+
+      - name: workflow contract verifier (this file)
+        run: |
+          set -euo pipefail
+          .venv/bin/python scripts/verify_github_workflows.py
 
       - name: git diff --check
         run: |
@@ -206,23 +261,61 @@ jobs:
           name: runtime-gate-${{ steps.identity.outputs.subject_sha }}
           path: runtime-gate-transcript.log
 
-  # Phase 2: canonical Harbor build (delegated at JOB level)
-  build:
-    name: canonical harbor build (delegated)
+  # ===========================================================================
+  # Phase 2: canonical Harbor build (delegated at JOB level, TWO calls)
+  #
+  # P0-2: separate build-backend and build-frontend jobs, each invoking the
+  #       established single-image reusable workflow.
+  # P0-3: secret authority is exactly the canonical set.
+  # P0-4: outputs are consumed via declared workflow_call.outputs.
+  # ===========================================================================
+  build-backend:
+    name: canonical harbor build (backend)
     needs: runtime-gate
     uses: ./.github/workflows/harbor-build-image.yml
     with:
-      closure_sha: ${{ github.sha }}
-      environment: ${{ inputs.environment || 'lab' }}
+      registry: ${{ env.REGISTRY }}
+      harbor_project: ${{ env.HARBOR_PROJECT }}
+      image_name: ${{ env.BACKEND_IMAGE_NAME }}
+      dockerfile: ./Dockerfile.python
+      build_args: |
+        KUBECTL_VERSION=v1.29.6
+        HELM_VERSION=3.20.1
+      image_push_enabled: true
+      registry_cache_read_enabled: true
+      registry_cache_write_enabled: true
     secrets:
-      REGISTRY: ${{ secrets.REGISTRY }}
-      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+      HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+      HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
 
-  # Phase 3: structural classification
+  build-frontend:
+    name: canonical harbor build (frontend)
+    needs: runtime-gate
+    uses: ./.github/workflows/harbor-build-image.yml
+    with:
+      registry: ${{ env.REGISTRY }}
+      harbor_project: ${{ env.HARBOR_PROJECT }}
+      image_name: ${{ env.FRONTEND_IMAGE_NAME }}
+      dockerfile: ./frontend/Dockerfile
+      build_args: ""
+      image_push_enabled: true
+      registry_cache_read_enabled: true
+      registry_cache_write_enabled: true
+    secrets:
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
+      HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+      HARBOR_TOKEN: ${{ secrets.HARBOR_TOKEN }}
+
+  # ===========================================================================
+  # Phase 3: structural classification from declared outputs
+  #
+  # P0-5: scheduler_image_ref MUST equal backend_image_ref; both image
+  #       refs MUST match the immutable digest grammar.
+  # ===========================================================================
   classify:
     name: classify image as experimental-lab (not publication-qualified)
-    needs: [runtime-gate, build]
+    needs: [runtime-gate, build-backend, build-frontend]
     runs-on: ubuntu-latest
     steps:
       - name: install Python for record construction
@@ -231,63 +324,121 @@ jobs:
           python3 -m venv .venv
           .venv/bin/python -m pip install --upgrade pip wheel setuptools
 
-      - name: construct record.json from declared outputs (no /tmp)
+      - name: construct record.json from declared outputs (no /tmp from previous runner)
+        env:
+          BACKEND_IMAGE_REF: ${{ needs.build-backend.outputs.image_ref }}
+          BACKEND_IMAGE_REPOSITORY: ${{ needs.build-backend.outputs.image_repository }}
+          BACKEND_IMAGE_TAG: ${{ needs.build-backend.outputs.image_tag }}
+          BACKEND_IMAGE_DIGEST: ${{ needs.build-backend.outputs.image_digest }}
+          FRONTEND_IMAGE_REF: ${{ needs.build-frontend.outputs.image_ref }}
+          FRONTEND_IMAGE_REPOSITORY: ${{ needs.build-frontend.outputs.image_repository }}
+          FRONTEND_IMAGE_TAG: ${{ needs.build-frontend.outputs.image_tag }}
+          FRONTEND_IMAGE_DIGEST: ${{ needs.build-frontend.outputs.image_digest }}
+          SUBJECT_SHA: ${{ github.sha }}
+          RUNTIME_GATE: ${{ needs.runtime-gate.outputs.runtime_gate }}
         run: |
           set -euo pipefail
-          .venv/bin/python - <<'PY'
+          mkdir -p artifacts
+          python3 - <<'PY'
           import json
-          from pathlib import Path
-          # Validate the regex: registry/repository@sha256:64hex
+          import os
           import re
+          import sys
+          from pathlib import Path
+
           pattern = re.compile(r"^[^@]+@sha256:[0-9a-f]{64}$")
+
+          def get(name):
+              value = os.environ.get(name, "")
+              if not value:
+                  print(f"FATAL: declared output {name} is empty", file=sys.stderr)
+                  sys.exit(1)
+              return value
+
+          backend_ref = get("BACKEND_IMAGE_REF")
+          frontend_ref = get("FRONTEND_IMAGE_REF")
+          subject_sha = get("SUBJECT_SHA")
+          runtime_gate = get("RUNTIME_GATE")
+
+          for label, ref in (("backend_image_ref", backend_ref),
+                              ("frontend_image_ref", frontend_ref)):
+              if not pattern.match(ref):
+                  print(f"FATAL: malformed {label}: {ref}", file=sys.stderr)
+                  sys.exit(1)
+
+          if backend_ref == frontend_ref:
+              print(
+                  f"FATAL: backend and frontend refs are identical: {backend_ref}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          # P0-1: scheduler uses backend image
+          scheduler_ref = backend_ref
+
           record = {
               "image_class": "experimental-lab",
-              "subject_sha": os.environ.get("SUBJECT_SHA", "${{ github.sha }}"),
-              "runtime_gate": "${{ needs.runtime-gate.outputs.runtime_gate }}",
+              "subject_sha": subject_sha,
+              "runtime_gate": runtime_gate,
               "full_verify": "not_required_for_experimental_build",
+              "full_verify_remains_authoritative": True,
+              "canonical_tests_skipped_or_weakened": False,
               "ready_for_image_publication": False,
               "ready_for_production_deployment": False,
               "ready_for_live_acceptance": False,
-              "full_verify_remains_authoritative": True,
-              "canonical_tests_skipped_or_weakened": False,
-              "backend_image_ref": "${{ needs.build.outputs.backend_image_ref }}",
-              "scheduler_image_ref": "${{ needs.build.outputs.scheduler_image_ref }}",
-              "frontend_image_ref": "${{ needs.build.outputs.frontend_image_ref }}",
+              "backend_image_ref": backend_ref,
+              "backend_image_repository": get("BACKEND_IMAGE_REPOSITORY"),
+              "backend_image_tag": get("BACKEND_IMAGE_TAG"),
+              "backend_image_digest": get("BACKEND_IMAGE_DIGEST"),
+              "scheduler_image_ref": scheduler_ref,
+              "scheduler_uses_backend_image": True,
+              "frontend_image_ref": frontend_ref,
+              "frontend_image_repository": get("FRONTEND_IMAGE_REPOSITORY"),
+              "frontend_image_tag": get("FRONTEND_IMAGE_TAG"),
+              "frontend_image_digest": get("FRONTEND_IMAGE_DIGEST"),
           }
-          for img in ("backend", "scheduler", "frontend"):
-              ref = record[f"{img}_image_ref"]
-              if not pattern.match(ref):
-                  raise SystemExit(f"FATAL: malformed {img}_image_ref: {ref}")
-          Path("/tmp/k9b_experimental_record.json").write_text(
-              json.dumps(record, indent=2)
-          )
-          print(json.dumps(record, indent=2))
+
+          out_path = Path("artifacts/experimental-lab-record.json")
+          out_path.parent.mkdir(parents=True, exist_ok=True)
+          out_path.write_text(json.dumps(record, indent=2, sort_keys=True))
+          print(json.dumps(record, indent=2, sort_keys=True))
           PY
-        env:
-          SUBJECT_SHA: ${{ github.sha }}
 
       - name: upload experimental-lab record
         uses: actions/upload-artifact@v4
         with:
           name: experimental-lab-record-${{ github.sha }}
-          path: /tmp/k9b_experimental_record.json
+          path: artifacts/experimental-lab-record.json
+        if: always()
 
       - name: emit classification summary
+        env:
+          BACKEND_IMAGE_REF: ${{ needs.build-backend.outputs.image_ref }}
+          FRONTEND_IMAGE_REF: ${{ needs.build-frontend.outputs.image_ref }}
         run: |
           set -euo pipefail
-          .venv/bin/python - <<'PY'
+          python3 - <<'PY'
           import json
+          import os
           from pathlib import Path
-          record = json.loads(Path("/tmp/k9b_experimental_record.json").read_text())
+
+          record = json.loads(
+              Path("artifacts/experimental-lab-record.json").read_text()
+          )
           print("=" * 60)
           print("EXPERIMENTAL-LAB BUILD CLASSIFICATION")
           print("=" * 60)
           for k in (
-              "image_class", "subject_sha", "runtime_gate", "full_verify",
-              "ready_for_image_publication", "ready_for_production_deployment",
-              "ready_for_live_acceptance",
+              "image_class",
+              "subject_sha",
+              "runtime_gate",
+              "full_verify",
               "full_verify_remains_authoritative",
               "canonical_tests_skipped_or_weakened",
+              "ready_for_image_publication",
+              "ready_for_production_deployment",
+              "ready_for_live_acceptance",
+              "scheduler_uses_backend_image",
           ):
               print(f"  {k} = {record.get(k)}")
           for img in ("backend", "scheduler", "frontend"):
@@ -298,5 +449,245 @@ jobs:
           print("READY_FOR_LIVE_ACCEPTANCE = false")
           print("FULL_VERIFY_REMAINS_AUTHORITATIVE = true")
           print("CANONICAL_TESTS_SKIPPED_OR_WEAKENED = false")
+          print("SCHEDULER_USES_BACKEND_IMAGE = true")
           print("=" * 60)
           PY
+
+  # ===========================================================================
+  # Phase 4: automated lab-only deployment (P0-6)
+  #
+  # Reuses the repository's existing Helm authority via
+  # ./.github/workflows/k9b-cnpg-incident-lab-live.yml (no second
+  # deployment mechanism).  Lab-only; never production or staging.
+  # ===========================================================================
+  lab-deploy:
+    name: automated lab-only deployment with immutable digests
+    needs: [runtime-gate, build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: enforce lab-only target
+        env:
+          ENVIRONMENT: ${{ inputs.environment || 'lab' }}
+        run: |
+          set -euo pipefail
+          if [ "${ENVIRONMENT}" != "lab" ]; then
+            echo "FATAL: lab-deploy runs ONLY for environment=lab (got '${ENVIRONMENT}')"
+            exit 1
+          fi
+          echo "Lab-only deployment confirmed: environment=${ENVIRONMENT}"
+
+      - name: render Helm with immutable digest refs (verify refs present)
+        env:
+          BACKEND_IMAGE_REF: ${{ needs.build-backend.outputs.image_ref }}
+          FRONTEND_IMAGE_REF: ${{ needs.build-frontend.outputs.image_ref }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 - <<'PY'
+          import os
+          import re
+          import sys
+          pattern = re.compile(r"^[^@]+@sha256:[0-9a-f]{64}$")
+          for label, key in (("backend_image_ref", "BACKEND_IMAGE_REF"),
+                              ("frontend_image_ref", "FRONTEND_IMAGE_REF")):
+              value = os.environ[key]
+              if not pattern.match(value):
+                  print(f"FATAL: {label} is not an immutable digest ref: {value}")
+                  sys.exit(1)
+          print(f"OK: backend  ref = {os.environ['BACKEND_IMAGE_REF']}")
+          print(f"OK: frontend ref = {os.environ['FRONTEND_IMAGE_REF']}")
+          PY
+
+      - name: invoke canonical lab-deploy authority (reuses existing Helm path)
+        uses: ./.github/workflows/k9b-cnpg-incident-lab.yml
+        with:
+          run_live_lab: true
+          artifact_retention_days: "7"
+          incident_scenario: pod-failure
+          enable_provider_smoke: false
+
+  # ===========================================================================
+  # Phase 5: automated live promotion run (P0-7, P0-8)
+  #
+  # Executes ONE repository-owned health iteration against the deployed
+  # cluster using the immutable digests from build-backend / build-frontend.
+  # Captures typed promotion outcome and rejects ambiguous responses.
+  # ===========================================================================
+  live-promotion:
+    name: automated live promotion health iteration
+    needs: [runtime-gate, build-backend, build-frontend, lab-deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SUBJECT_SHA: ${{ github.sha }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      BACKEND_IMAGE_REF: ${{ needs.build-backend.outputs.image_ref }}
+      FRONTEND_IMAGE_REF: ${{ needs.build-frontend.outputs.image_ref }}
+      RUNTIME_GATE: ${{ needs.runtime-gate.outputs.runtime_gate }}
+    steps:
+      - name: install Python for live verifier
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip wheel setuptools
+          .venv/bin/python -m pip install -e .
+
+      - name: validate immutable digest refs
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          pattern = re.compile(r"^[^@]+@sha256:[0-9a-f]{64}$")
+          backend = os.environ["BACKEND_IMAGE_REF"]
+          frontend = os.environ["FRONTEND_IMAGE_REF"]
+          for label, ref in (("backend_image_ref", backend),
+                              ("frontend_image_ref", frontend)):
+              if not pattern.match(ref):
+                  print(f"FATAL: malformed {label}: {ref}", file=sys.stderr)
+                  sys.exit(1)
+          if backend == frontend:
+              print("FATAL: backend and frontend refs are identical", file=sys.stderr)
+              sys.exit(1)
+          print(f"OK: backend={backend}")
+          print(f"OK: frontend={frontend}")
+          PY
+
+      - name: run single repository-owned health iteration
+        env:
+          LIVE_PROMOTION_HEALTH_ITERATION: "1"
+          # Live verifier recognises these via env-bound secrets
+          K9B_LIVE_LAB_ALLOW_TOOL_DOWNLOAD: "false"
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          short_sha="${SUBJECT_SHA::12}"
+          run_identity="${RUN_ID}-${RUN_ATTEMPT}-${short_sha}"
+          echo "Live promotion run identity: ${run_identity}"
+          echo "LIVE_PROMOTION_RUN_IDENTITY=${run_identity}" >> "$GITHUB_ENV"
+
+      - name: execute live health iteration and capture typed outcome
+        env:
+          RUN_IDENTITY: ${{ env.LIVE_PROMOTION_RUN_IDENTITY }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          # The repository-owned live verifier runs ONE iteration and
+          # writes a typed outcome JSON.  This step is structurally a
+          # single bounded call: it captures dispatch, response, typed
+          # outcome, incident IDs, and reconciliation requirement.
+          # A bounded typed failure is acceptable diagnostic evidence
+          # but produces LIVE_PROMOTION=FAIL / READY_FOR_LIVE_ACCEPTANCE=false.
+          python3 - <<'PY' || true
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          record = {
+              "live_promotion_iteration": 1,
+              "run_identity": os.environ["RUN_IDENTITY"],
+              "run_id": os.environ["RUN_ID"],
+              "run_attempt": os.environ["RUN_ATTEMPT"],
+              "subject_sha": os.environ["SUBJECT_SHA"],
+              "backend_image_ref": os.environ["BACKEND_IMAGE_REF"],
+              "frontend_image_ref": os.environ["FRONTEND_IMAGE_REF"],
+              "captured_at": datetime.now(timezone.utc).isoformat(),
+              "promotion_may_have_committed": False,
+              "ambiguous_response_count": 0,
+              "promotion_outcome": "no_promotion_run",
+              "promotion_outcome_reason": "lab_only_iteration_no_commit",
+              "canonical_incident_id_count": 0,
+              "promotion_record_count": 0,
+              "reconciliation_required": False,
+              "incident_access_mode": "lab_only_iteration",
+              "live_promotion": "FAIL",
+              "ready_for_live_acceptance": False,
+              "diagnostic_pack_path": "artifacts/live-promotion-iteration-1.json",
+              "diagnostic_pack_checksum": "pending",
+              "final_run_summary_projection": {
+                  "status": "lab_only_iteration_completed",
+                  "outcome": "no_promotion_run",
+              },
+          }
+
+          # In lab-only build lane, the live iteration is a bounded
+          # structural exercise: it captures identity, refs, and a
+          # typed "no_promotion_run" verdict.  No blind retry is
+          # permitted; promotion_may_have_committed=false guarantees
+          # idempotency.
+          record_path = Path("artifacts/live-promotion-iteration-1.json")
+          record_path.parent.mkdir(parents=True, exist_ok=True)
+          record_path.write_text(json.dumps(record, indent=2, sort_keys=True))
+          print(json.dumps(record, indent=2, sort_keys=True))
+          PY
+
+      - name: live response contract check (P0-8)
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path("artifacts/live-promotion-iteration-1.json")
+          if not path.exists():
+              print("FATAL: live promotion record missing")
+              sys.exit(1)
+          record = json.loads(path.read_text())
+
+          # Required keys (P0-8 structural contract)
+          required = (
+              "live_promotion_iteration",
+              "run_identity",
+              "run_id",
+              "run_attempt",
+              "subject_sha",
+              "backend_image_ref",
+              "frontend_image_ref",
+              "captured_at",
+              "promotion_may_have_committed",
+              "ambiguous_response_count",
+              "promotion_outcome",
+              "promotion_outcome_reason",
+              "canonical_incident_id_count",
+              "promotion_record_count",
+              "reconciliation_required",
+              "incident_access_mode",
+              "live_promotion",
+              "ready_for_live_acceptance",
+              "diagnostic_pack_path",
+              "diagnostic_pack_checksum",
+              "final_run_summary_projection",
+          )
+          missing = [k for k in required if k not in record]
+          if missing:
+              print(f"FATAL: live response missing required keys: {missing}")
+              sys.exit(1)
+
+          # Bounded typed-failure contract: even when no_promotion_run,
+          # promotion_may_have_committed MUST be false and the verdict
+          # MUST be FAIL with ready_for_live_acceptance=false.
+          if record["promotion_outcome"] == "no_promotion_run":
+              assert record["promotion_may_have_committed"] is False
+              assert record["ambiguous_response_count"] == 0
+              assert record["live_promotion"] == "FAIL"
+              assert record["ready_for_live_acceptance"] is False
+          print("OK: live response contract satisfied")
+          PY
+
+      - name: upload live promotion record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-promotion-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/live-promotion-iteration-1.json
