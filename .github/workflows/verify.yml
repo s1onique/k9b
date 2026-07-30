@@ -250,8 +250,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (full history)
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: CI history preflight
+        run: |
+          set -euo pipefail
+          BASE=b1294cee7cbfc1c1b22f0c11282eaab474f8dbb8
+          test "$(git rev-parse --is-shallow-repository)" = false || {
+            echo "::error::CI_REPOSITORY_SHALLOW=true -- repository cloned with shallow history"
+            exit 1
+          }
+          git cat-file -e "${BASE}^{commit}" || {
+            echo "::error::HISTORICAL_BASE_PRESENT=false -- ${BASE} not in clone"
+            exit 1
+          }
+          git merge-base --is-ancestor "$BASE" HEAD || {
+            echo "::error::HISTORICAL_BASE_IS_ANCESTOR=false -- ${BASE} is not an ancestor of HEAD"
+            exit 1
+          }
+          echo "CI_REPOSITORY_SHALLOW=false"
+          echo "HISTORICAL_BASE_PRESENT=true"
+          echo "HISTORICAL_BASE_IS_ANCESTOR=true"
 
       - name: Wire Python from tool cache
         run: source scripts/ci/wire_toolcache_python.sh "${{ env.PYTHON_VERSION }}"

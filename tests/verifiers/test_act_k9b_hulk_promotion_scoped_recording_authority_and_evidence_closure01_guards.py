@@ -201,11 +201,23 @@ def test_recording_authority_constructor_runs_validator() -> None:
 
 
 def test_mypy_ini_no_op_diff_against_base() -> None:
-    """``mypy.ini`` MUST match its base content unless functionally changed."""
+    """``mypy.ini`` MUST match its base content unless functionally changed.
+
+    The historical base identity is sourced from the canonical
+    :data:`CANONICAL_HISTORICAL_BASE_FULL` constant so this test
+    cannot drift with abbreviated SHA resolution across runners.
+    """
     import subprocess
 
+    from tests.verifiers.historical_commit_availability_support import (
+        CANONICAL_HISTORICAL_BASE_FULL,
+        require_commit_available,
+    )
+
+    require_commit_available(REPO_ROOT, commit=CANONICAL_HISTORICAL_BASE_FULL)
+
     base_proc = subprocess.run(
-        ["git", "show", "b1294cee:mypy.ini"],
+        ["git", "show", f"{CANONICAL_HISTORICAL_BASE_FULL}:mypy.ini"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

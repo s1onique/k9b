@@ -193,8 +193,19 @@ def test_populate_writes_separate_validation_attestation() -> None:
     if not attestation.exists():
         pytest.fail("populate_gate_summary MUST write .factory/gate-summary-validation.json alongside gate-summary.json.")
     data = json.loads(attestation.read_text(encoding="utf-8"))
-    if data.get("validated_path") != str(target):
-        pytest.fail(f"gate-summary-validation.json.validated_path MUST match the gate-summary path; got {data.get('validated_path')!r}")
+    # The producer persists a portable POSIX path (CORRECTION05+)
+    # so the test compares against the target's portable form
+    # rather than the host-specific ``str(target)``.
+    try:
+        target_portable = target.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
+    except ValueError:
+        target_portable = str(target)
+    if data.get("validated_path") != target_portable:
+        pytest.fail(
+            f"gate-summary-validation.json.validated_path MUST match "
+            f"the portable gate-summary path; got {data.get('validated_path')!r}, "
+            f"expected {target_portable!r}"
+        )
     if not data.get("validated_sha256"):
         pytest.fail("gate-summary-validation.json.validated_sha256 MUST be populated.")
     if data.get("decode_status") not in {"pass", "fail"}:

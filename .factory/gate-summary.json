@@ -3,14 +3,14 @@
   "profile": "act-local",
   "source_status": "present",
   "overall_status": "fail",
-  "generated_at": "2026-07-29T18:06:00.932611+00:00",
+  "generated_at": "2026-07-30T00:08:07.164284+00:00",
   "checks_total": 17,
   "checks_failed": 3,
   "checks": [
     {
       "name": "canonical-verifier-self-test",
       "status": "pass",
-      "duration_ms": 105,
+      "duration_ms": 47,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/incident_lifecycle_boundary/redaction_types.py --self-test",
       "exit_code": 0
@@ -18,7 +18,7 @@
     {
       "name": "standalone-production-verifier",
       "status": "pass",
-      "duration_ms": 1554,
+      "duration_ms": 1155,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/incident_lifecycle_boundary/redaction_types.py --repo-root /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/src",
       "exit_code": 0
@@ -26,7 +26,7 @@
     {
       "name": "production-mypy-positive",
       "status": "pass",
-      "duration_ms": 2371,
+      "duration_ms": 1642,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_mypy_fixtures.py::TestMypyPositiveFixture",
       "exit_code": 0
@@ -34,7 +34,7 @@
     {
       "name": "production-mypy-negative",
       "status": "pass",
-      "duration_ms": 1667,
+      "duration_ms": 1269,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_mypy_fixtures.py::TestMypyNegativeFixture",
       "exit_code": 0
@@ -42,7 +42,7 @@
     {
       "name": "full-gate-negative-proofs",
       "status": "fail",
-      "duration_ms": 92172,
+      "duration_ms": 56687,
       "error_message": "FAIL: illegal facade-qualified trusted constructor: clean temp tree rerun failed: ======================================================================\nREDUCTION TYPES VERIFIER SUBSYSTEM SELF-TESTS\n======================================================================\n\n[1] Aliases + hierarchy subsystem (production checkers):\n  [PASS] accepted: valid privacy module passes alias+hierarchy\n  [PASS] rejected: missing SafeEvidenceExcerpt surfaces diagnostic\n\n[2] Type/factory/exception/omission subsystem (production checkers):\n  [PASS] accepted: factory + exception + omission all present\n  [PASS] rejected: missing factory diagnostic\n  [PASS] rejected: missing exception diagnostic\n  [PASS] rejected: missing SAFE_OMISSION_MARKER diagnostic\n\n[3] Projector + serializer subsystem (production checkers):\n  [PASS] accepted: projector keyword-only LLMSafeEvidenceText\n  [PASS] rejected: projector missing summary parameter\n  [PASS] rejected: projector summary typed as RedactedEvidenceText\n  [PASS] acc",
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/incident_lifecycle_boundary/redaction_full_gate_negative_proofs.py",
       "exit_code": 1
@@ -50,7 +50,7 @@
     {
       "name": "opaque-bearer-regression",
       "status": "pass",
-      "duration_ms": 532,
+      "duration_ms": 420,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r11_sanitizer_opaque_bearer.py",
       "exit_code": 0
@@ -58,7 +58,7 @@
     {
       "name": "sanitizer-regression-matrix",
       "status": "pass",
-      "duration_ms": 533,
+      "duration_ms": 429,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_sanitizer_credential.py::test_sentinel_secret_is_absent_from_every_sanitizer_path",
       "exit_code": 0
@@ -66,7 +66,7 @@
     {
       "name": "credential-matrix",
       "status": "pass",
-      "duration_ms": 701,
+      "duration_ms": 414,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r9_sanitizer_credential.py::TestCredentialMatrix",
       "exit_code": 0
@@ -74,7 +74,7 @@
     {
       "name": "omission-boundary",
       "status": "pass",
-      "duration_ms": 711,
+      "duration_ms": 432,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r8_omission_branch.py",
       "exit_code": 0
@@ -82,23 +82,23 @@
     {
       "name": "serializer-multi-return",
       "status": "pass",
-      "duration_ms": 897,
+      "duration_ms": 455,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m pytest -q tests/unit/test_redaction_r12_serializer_multi_return.py",
       "exit_code": 0
     },
     {
       "name": "ruff",
-      "status": "pass",
-      "duration_ms": 67,
-      "error_message": null,
-      "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m ruff check scripts/factory/parse_gate_summary.py scripts/factory/populate_gate_summary.py tests/verifiers/test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction02_guards.py",
-      "exit_code": 0
+      "status": "fail",
+      "duration_ms": 28,
+      "error_message": "invalid-syntax: Expected `]`, found `)`\n   --> tests/verifiers/test_act_k9b_hulk_promotion_workflow_schema_guards.py:184:1\n    |\n182 | def test_every_python_shard_job_has_history_preflight(\n183 |     all_python_shard_jobs: dict[str, list[tuple[str, dict[str, Any]]],\n184 | ) -> None:\n    | ^\n185 |     \"\"\"Every Python shard job MUST include a CI history preflight\n186 |     step that fails closed when the historical base is missing.\"\"\"\n    |\n\nFound 1 error.\n",
+      "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m ruff check tests/verifiers/test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_guards.py tests/verifiers/test_act_k9b_hulk_promotion_workflow_schema_guards.py",
+      "exit_code": 1
     },
     {
       "name": "mypy",
       "status": "pass",
-      "duration_ms": 3040,
+      "duration_ms": 1710,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m mypy src/k8s_diag_agent/collect/incident_evidence_redaction.py src/k8s_diag_agent/collect/incident_evidence_llm_safe.py src/k8s_diag_agent/security/redaction_policy.py src/k8s_diag_agent/security/sanitizer.py scripts/verifiers/verifier_core/ scripts/verifiers/incident_current_run_promotion_workset01.py tests/verifiers/test_verifier_core.py tests/verifiers/test_canonical_doctrine_matches_production.py tests/verifiers/test_verifier_core_mypy_fixture.py --ignore-missing-imports",
       "exit_code": 0
@@ -106,7 +106,7 @@
     {
       "name": "git-diff-check",
       "status": "pass",
-      "duration_ms": 15,
+      "duration_ms": 9,
       "error_message": null,
       "command": "git diff --check",
       "exit_code": 0
@@ -114,23 +114,23 @@
     {
       "name": "git-diff-cached-check",
       "status": "pass",
-      "duration_ms": 8,
+      "duration_ms": 6,
       "error_message": null,
       "command": "git diff --cached --check",
       "exit_code": 0
     },
     {
       "name": "llm-friendly",
-      "status": "fail",
-      "duration_ms": 155,
-      "error_message": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.factory/gate-summary.json: 183 lines (OK)\n/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/factory/parse_gate_summary.py: 458 lines (warn > 300)\n  Action: Consider splitting if related code can be extracted\n/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/factory/populate_gate_summary.py: 491 lines (warn > 300)\n  Action: Consider splitting if related code can be extracted\n/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/tests/verifiers/test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction02_guards.py: 725 lines (exceeds 500)\n  Action: Split this file by responsibility. Consider:\n    - Extract related functions/classes into focused modules\n    - Move type definitions to contract module\n    - Separate UI rendering from business logic\n/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runt",
+      "status": "pass",
+      "duration_ms": 95,
+      "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/check_llm_friendly_files.py --changed-only",
-      "exit_code": 1
+      "exit_code": 0
     },
     {
       "name": "no-new-llm-allowlist",
       "status": "pass",
-      "duration_ms": 155,
+      "duration_ms": 172,
       "error_message": null,
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/verify_no_new_llm_allowlist.py",
       "exit_code": 0
@@ -138,8 +138,8 @@
     {
       "name": "targeted-repository-gate",
       "status": "fail",
-      "duration_ms": 8163,
-      "error_message": "\n============================================================\nACT-local verification result: FAIL\n============================================================\n\nChanged files checked:\n  - .factory/gate-summary.json\n  - .venv\n  - scripts/factory/parse_gate_summary.py\n  - scripts/factory/populate_gate_summary.py\n  - tests/verifiers/test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction02_guards.py\n  - tests/verifiers/test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction03_guards.py\n\nChecks run:\n  [\u2713] ruff-changed\n      command: /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m ruff check scripts/factory/parse_gate_summary.py scripts/factory/populate_gate_summary.py tests/verifiers/test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correction02_guards.py tests/verifiers/test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_correc",
+      "duration_ms": 6301,
+      "error_message": "\n============================================================\nACT-local verification result: FAIL\n============================================================\n\nChanged files checked:\n  - .github/workflows/harbor.yml\n  - tests/verifiers/test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_guards.py\n  - tests/verifiers/test_act_k9b_hulk_promotion_workflow_schema_guards.py\n\nChecks run:\n  [\u2717] ruff-changed\n      command: /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m ruff check tests/verifiers/test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_guards.py tests/verifiers/test_act_k9b_hulk_promotion_workflow_schema_guards.py\n      duration: 26ms\n      exit code: 1\n  [\u2717] mypy-changed\n      command: /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python -m mypy tests/verifiers/test_act_k9b_hulk_promotion_scoped_recording_authority_and_evidence_closure01_guards.py t",
       "command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/verify_all.sh --act-local --skip-gate-summary",
       "exit_code": 1
     }
