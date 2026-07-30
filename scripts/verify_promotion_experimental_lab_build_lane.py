@@ -41,16 +41,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-# P0-9 (CORRECTION06): use the production marker-recognition helper
-# (the SAME one used by tests/test_github_actions_hermetic_doctrine_policy.py).
-# Importing through ``tests.helpers`` keeps the verifier and the
-# canonical hermetic policy test aligned: if the helper's marker
-# grammar or location ever changes, this verifier follows automatically.
-from tests.helpers.github_actions_hermetic_policy_helpers import (
-    HERMETIC_TOOLCACHE_MARKER,
-    file_contains_marker as _production_file_contains_marker,
-)
-
 from verify_promotion_experimental_lab_build_lane_schema import (
     CLASSIFY_WORKFLOW,
     EXPERIMENTAL_WORKFLOW,
@@ -67,6 +57,18 @@ from verify_promotion_experimental_lab_build_lane_schema import (
 # path from the same constant so verifier and tests agree.
 from verify_promotion_experimental_lab_build_lane_schema import (  # noqa: E402,F401
     REPO_ROOT as _REPO_ROOT,
+)
+
+# P0-9 (CORRECTION06): use the production marker-recognition helper
+# (the SAME one used by tests/test_github_actions_hermetic_doctrine_policy.py).
+# Importing through ``tests.helpers`` keeps the verifier and the
+# canonical hermetic policy test aligned: if the helper's marker
+# grammar or location ever changes, this verifier follows automatically.
+from tests.helpers.github_actions_hermetic_policy_helpers import (
+    HERMETIC_TOOLCACHE_MARKER,
+)
+from tests.helpers.github_actions_hermetic_policy_helpers import (
+    file_contains_marker as _production_file_contains_marker,
 )
 
 BOOTSTRAP_SCRIPT = _REPO_ROOT / "scripts" / "ci" / "bootstrap_python_dev.sh"
