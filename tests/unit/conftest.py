@@ -185,15 +185,13 @@ def pytest_configure(config) -> None:
             pass
 
 
+# scripts/ci is a proper package (scripts/ci/__init__.py exists).
+# Add scripts/ci to sys.path so tests can import promotion_runtime_*
+# modules by their package name.
+_scripts_ci_pkg = Path(__file__).resolve().parents[2] / "scripts" / "ci"
+if str(_scripts_ci_pkg) not in sys.path:
+    sys.path.insert(0, str(_scripts_ci_pkg))
 
-# Add scripts/ci to sys.path so the runtime-gate scripts (which are not
-# packages) can be imported directly.  This is required for the promotion
-# runtime gate unit tests which import modules like
-# run_promotion_runtime_gate, promotion_runtime_static_scope, and
-# promotion_runtime_static_gate_runner from scripts/ci.
-_scripts_ci = Path(__file__).resolve().parents[2] / "scripts" / "ci"
-if str(_scripts_ci) not in sys.path:
-    sys.path.insert(0, str(_scripts_ci))
 
 # NOTE: The autouse kubectl mock was removed.
 # 

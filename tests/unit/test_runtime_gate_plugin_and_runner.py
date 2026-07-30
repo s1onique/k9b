@@ -319,29 +319,29 @@ class TestMalformedSchema:
 
 
 class TestPluginLaneAuthorityScope:
-    """P0-6: plugin and its test are in EXPERIMENTAL_LANE_AUTHORITY_PATHS."""
+    """P0-7: plugin and its test are classified as lane authority via policy."""
 
     def test_plugin_in_lane_authority_paths(self) -> None:
-        """pytest_runtime_gate_plugin.py must be in lane authority paths."""
+        """pytest_runtime_gate_plugin.py is classified as lane authority."""
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        import promotion_runtime_static_scope as scope
+        from promotion_runtime_static_scope_policy import is_lane_authority_path
 
         plugin_rel = "scripts/ci/pytest_runtime_gate_plugin.py"
-        assert plugin_rel in scope.EXPERIMENTAL_LANE_AUTHORITY_PATHS, (
-            f"{plugin_rel} must be in EXPERIMENTAL_LANE_AUTHORITY_PATHS"
+        assert is_lane_authority_path(plugin_rel), (
+            f"{plugin_rel} must be classified as lane authority"
         )
 
     def test_plugin_not_deferred(self) -> None:
-        """pytest_runtime_gate_plugin.py is in lane authority paths (not deferred).
+        """pytest_runtime_gate_plugin.py is in lane authority (not deferred).
 
-        DEFERRED_PATHS was removed in the dual-range model. The plugin is in
-        EXPERIMENTAL_LANE_AUTHORITY_PATHS which IS lane_authority (not deferred).
+        DEFERRED_PATHS was removed in the dual-range model. The plugin is
+        classified via prefix-based policy, not a growable exact-path allowlist.
         """
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        import promotion_runtime_static_scope as scope
+        from promotion_runtime_static_scope_policy import is_lane_authority_path
 
         plugin_rel = "scripts/ci/pytest_runtime_gate_plugin.py"
-        # Verify it's in lane authority paths (not deferred)
-        assert plugin_rel in scope.EXPERIMENTAL_LANE_AUTHORITY_PATHS, (
-            "pytest_runtime_gate_plugin.py must be in EXPERIMENTAL_LANE_AUTHORITY_PATHS"
+        assert is_lane_authority_path(plugin_rel), (
+            "pytest_runtime_gate_plugin.py must be classified as lane authority"
         )
+
