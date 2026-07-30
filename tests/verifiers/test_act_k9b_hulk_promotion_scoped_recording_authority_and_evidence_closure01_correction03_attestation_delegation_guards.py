@@ -248,17 +248,21 @@ def test_parser_runs_after_final_write_in_producer() -> None:
     _assert_architecture(POPULATE_FILE.read_text(), ATTESTATION_FILE.read_text())
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def _canonical_artifact_fence() -> Iterator[None]:
-    """Snapshot the committed gate-summary pair and fail if any test mutates it.
+    """Suite-wide artifact fence (autouse, function scope).
 
-    The committed ``.factory/gate-summary.json`` and
-    ``.factory/gate-summary-validation.json`` are the canonical evidence
-    this suite reasons about.  A test that accidentally rewrites the
-    repository's canonical target (instead of an isolated ``tmp_path``)
-    invalidates the freshness contract.  This fixture installs a
-    byte-level fence: any change to either committed artifact raises
-    :class:`AssertionError` on teardown.
+    Snapshots the committed ``.factory/gate-summary.json`` and
+    ``.factory/gate-summary-validation.json`` before EVERY test in this
+    module and asserts the bytes are unchanged on teardown.  Autouse +
+    function scope means any test in the module that accidentally
+    rewrites the committed artifact is caught with a clear
+    ``AssertionError`` on teardown, regardless of whether the test
+    opted in to the fence.
+
+    The scope is intentionally ``function`` (not ``module``) so the
+    byte diff is precise to a single test, which makes the writer
+    attribution unambiguous in failure output.
     """
     before = (
         GATE_SUMMARY_PATH.read_bytes() if GATE_SUMMARY_PATH.exists() else b"",
@@ -281,13 +285,29 @@ def _canonical_artifact_fence() -> Iterator[None]:
     )
 
 
-def test_committed_artifacts_are_byte_identical_across_the_correction03_suite(
-    _canonical_artifact_fence: object,
-) -> None:
-    """A trivial sentinel under the fence exercises every test in this module.
+def test_canonical_artifact_fence_is_autouse_function_scope() -> None:
+    """Structural guard: the fence MUST be ``autouse`` and function-scope.
 
-    The fence fixture runs the byte comparison on teardown.  If a single
-    test in this suite mutates the committed artifact, the fence fails
-    the suite with a clear diagnostic.
+    Reads the fence's source text and asserts the canonical
+    ``@pytest.fixture(autouse=True)`` form is present.  This is
+    a source-text guard rather than a runtime probe (the autouse
+    property is otherwise exercised by the fact that EVERY test
+    in this module currently passes the fence).
     """
-    assert GATE_SUMMARY_PATH.exists() or not GATE_SUMMARY_PATH.exists()
+    import inspect
+
+    source = inspect.getsource(_canonical_artifact_fence)
+    assert "@pytest.fixture(autouse=True)" in source, (
+        "_canonical_artifact_fence MUST declare autouse=True; a "
+        "request-only fence misses tests that fail to opt in and "
+        "therefore cannot protect the committed gate-summary pair."
+    )
+    # Scope: pytest fixture defaults to ``function``; we only need
+    # to ensure the body did not opt out of the default.  A future
+    # refactor that adds ``scope="module"`` (or larger) MUST also
+    # add an explicit test that catches the weakening.
+    assert "scope=" not in source, (
+        "_canonical_artifact_fence MUST stay at the default "
+        "function scope; an explicit scope= weakens the byte-level "
+        "precision of the per-test snapshot diff."
+    )

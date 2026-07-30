@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
-import subprocess
+import subprocess  # noqa: F401  (used by CommandSpec subprocess.run through _run)
 import sys
 import time
 from collections.abc import Callable
@@ -34,6 +34,14 @@ from scripts.factory.build_gate_summary import (  # noqa: E402
     GateSummary,
     SubsystemSelfTestCount,
     make_r10_defaults,
+)
+from scripts.factory.gate_summary_changed_paths import (  # noqa: E402
+    _changed_python_files,
+    _read_changed_paths_manifest,
+)
+from scripts.factory.gate_summary_validation_attestation import (  # noqa: E402
+    portable_parser_command,
+    write_validation_attestation,
 )
 from scripts.incident_lifecycle_boundary.redaction_self_test_runner import (  # noqa: E402
     run_self_tests as verifier_run_self_tests,
@@ -205,30 +213,18 @@ def _pytest_spec(repo_root: Path, name: str, *nodeids: str) -> CommandSpec:
     )
 
 
-def _changed_python_files() -> list[str]:
-    proc = subprocess.run(
-        ["git", "diff", "--name-only", "--cached", "--diff-filter=ACMR"],
-        cwd=SCRIPT_REPO,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    staged = [line for line in proc.stdout.splitlines() if line.endswith(".py")]
-    proc = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR"],
-        cwd=SCRIPT_REPO,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    unstaged = [line for line in proc.stdout.splitlines() if line.endswith(".py")]
-    return sorted(set(staged + unstaged))
-
-
-def _command_specs(repo_root: Path, target: Path) -> list[CommandSpec]:
+def _command_specs(
+    repo_root: Path,
+    target: Path,
+    *,
+    changed_paths_manifest: Path | None = None,
+) -> list[CommandSpec]:
     env = _env(repo_root)
     source_root = _source_root(repo_root)
-    changed_py = _changed_python_files() or ["scripts/factory/populate_gate_summary.py"]
+    if changed_paths_manifest is not None:
+        changed_py = _read_changed_paths_manifest(changed_paths_manifest)
+    else:
+        changed_py = _changed_python_files() or ["scripts/factory/populate_gate_summary.py"]
     # CORRECTION05 R8: the canonical mypy command MUST visibly
     # include the complete CORE01 manifest:
     #   * the verifier_core package (covered by the package
@@ -331,6 +327,7 @@ def build_gate_summary(
     *,
     repo_root: Path = SCRIPT_REPO,
     target: Path | None = None,
+    changed_paths_manifest: Path | None = None,
     runner: Runner = _run,
 ) -> GateSummary:
     """Run every required check and return a populated summary.
@@ -342,8 +339,13 @@ def build_gate_summary(
     executable runs.
     """
     target = target or repo_root / ".factory" / "gate-summary.json"
+    specs = _command_specs(
+        repo_root,
+        target,
+        changed_paths_manifest=changed_paths_manifest,
+    )
     checks = [
-        runner(spec) for spec in _command_specs(repo_root, target) if spec.name != "gate-summary-parser"
+        runner(spec) for spec in specs if spec.name != "gate-summary-parser"
     ]
 
     accepted, rejected, failed = verifier_run_self_tests()[0:3]
@@ -374,11 +376,27 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=SCRIPT_REPO)
     parser.add_argument("--target", type=Path, default=SCRIPT_REPO / ".factory" / "gate-summary.json")
+    parser.add_argument(
+        "--changed-paths-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Optional NUL-delimited changed-paths manifest (output of "
+            "'git diff --name-only -z <base>..<head>'). When supplied, the "
+            "manifest is the authoritative source for the Ruff check; the "
+            "producer fails closed on an empty, missing, non-Python, or "
+            "non-repository-relative manifest."
+        ),
+    )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
     repo_root = args.repo_root.resolve()
     target = args.target.resolve()
-    summary = build_gate_summary(repo_root=repo_root, target=target)
+    summary = build_gate_summary(
+        repo_root=repo_root,
+        target=target,
+        changed_paths_manifest=args.changed_paths_manifest,
+    )
     target.parent.mkdir(parents=True, exist_ok=True)
 
     # Step 1: write the canonical gate-summary artifact WITHOUT
@@ -450,12 +468,11 @@ def main(argv: list[str] | None = None) -> int:
     # non-regular files at the seam. The writer logic lives in
     # :mod:`scripts.factory.gate_summary_validation_attestation`
     # so the gate-summary producer stays under the 500-line cap.
-    from scripts.factory.gate_summary_validation_attestation import (
-        portable_parser_command,
-        write_validation_attestation,
-    )
 
     portable_target = target.resolve().relative_to(repo_root.resolve()).as_posix()
+    # The writer reads from its own (imported) namespace; we re-bind
+    # the names here for clarity at the call site.
+
     attestation_path = write_validation_attestation(
         repo_root=repo_root,
         target=target,
