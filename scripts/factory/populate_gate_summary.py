@@ -451,13 +451,15 @@ def main(argv: list[str] | None = None) -> int:
     # :mod:`scripts.factory.gate_summary_validation_attestation`
     # so the gate-summary producer stays under the 500-line cap.
     from scripts.factory.gate_summary_validation_attestation import (
+        portable_parser_command,
         write_validation_attestation,
     )
 
+    portable_target = target.resolve().relative_to(repo_root.resolve()).as_posix()
     attestation_path = write_validation_attestation(
         repo_root=repo_root,
         target=target,
-        parser_command=parser_outcome.command,
+        parser_command=portable_parser_command(validated_path=portable_target),
         parser_exit_code=parser_outcome.exit_code,
         parser_duration_ms=parser_outcome.duration_ms,
         decode_status=decode_status,

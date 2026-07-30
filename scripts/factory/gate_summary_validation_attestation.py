@@ -44,6 +44,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -174,6 +175,26 @@ def _validate_portable_posix_path(value: str) -> None:
         )
 
 
+def portable_parser_command(*, validated_path: str) -> str:
+    """Return the stable parser command persisted in an attestation.
+
+    The executed subprocess command may contain absolute interpreter and
+    script paths, but committed evidence must remain portable across
+    workstations and CI runners.  Validate the repository-relative target
+    before rendering it as a shell-safe, POSIX command representation.
+    """
+    _validate_portable_posix_path(validated_path)
+    return shlex.join(
+        (
+            "python",
+            "scripts/factory/parse_gate_summary.py",
+            "--target",
+            validated_path,
+            "--quiet",
+        )
+    )
+
+
 def _portable_validated_path(
     *,
     repo_root: Path,
@@ -268,6 +289,11 @@ def write_validation_attestation(
     )
     artifact_bytes = _read_and_hash_target(target)
     computed_sha = hashlib.sha256(artifact_bytes).hexdigest()
+    canonical_parser_command = portable_parser_command(
+        validated_path=portable_path
+    )
+    # ``parser_command`` remains a compatibility input for existing callers,
+    # but it is never persisted: portable evidence has one canonical command.
     if final_sha256 is not None and final_sha256 != computed_sha:
         raise _AttestationError(
             f"caller-supplied final_sha256 does not match the actual "
@@ -282,7 +308,7 @@ def write_validation_attestation(
         "validated_sha256": computed_sha,
         "validated_at": datetime.now(UTC).isoformat(),
         "parser_identity": "scripts/factory/parse_gate_summary.py",
-        "parser_command": parser_command or "<unknown>",
+        "parser_command": canonical_parser_command,
         "parser_exit_code": parser_exit_code
         if parser_exit_code is not None
         else -1,
@@ -433,6 +459,14 @@ def verify_validation_attestation(
             f"expected {validated_sha}, got {actual_sha}"
         )
     parser_identity = _require_str(payload, "parser_identity")
+    parser_command = _require_str(payload, "parser_command")
+    if "\\" in parser_command or any(
+        prefix in parser_command for prefix in FORBIDDEN_ABSOLUTE_PREFIXES
+    ):
+        raise _AttestationError(
+            "validation attestation parser_command MUST be portable; "
+            f"got {parser_command!r}"
+        )
     decode_status = _require_typed_status(payload, "decode_status")
     acceptance_status = _require_typed_status(payload, "acceptance_status")
 
@@ -450,6 +484,7 @@ def verify_validation_attestation(
 __all__ = [
     "FORBIDDEN_ABSOLUTE_PREFIXES",
     "ValidationAttestationResult",
+    "portable_parser_command",
     "resolve_validated_path",
     "verify_validation_attestation",
     "write_validation_attestation",

@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
   "validated_path": ".factory/gate-summary.json",
-  "validated_sha256": "a5c6e1835c1b2c6774cc63242575b15b331cd52c5a360e0e11a61932784c70ef",
-  "validated_at": "2026-07-30T00:08:07.263533+00:00",
+  "validated_sha256": "d09ea0a5bd4fa9b5065e43f1de82df94f119b035b7a8a867248271a29e22d989",
+  "validated_at": "2026-07-30T00:38:12.499706+00:00",
   "parser_identity": "scripts/factory/parse_gate_summary.py",
-  "parser_command": "/Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.venv/bin/python /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/scripts/factory/parse_gate_summary.py --target /Users/chistyakov/Projects/SPbNIX/k9b-incident-promotion-runtime-truth01/.factory/gate-summary.json --quiet",
-  "parser_exit_code": 1,
-  "parser_duration_ms": 38,
+  "parser_command": "python scripts/factory/parse_gate_summary.py --target .factory/gate-summary.json --quiet",
+  "parser_exit_code": 0,
+  "parser_duration_ms": 42,
   "decode_status": "pass",
-  "acceptance_status": "fail",
+  "acceptance_status": "pass",
   "diagnostics": {
     "checks_total": 17,
-    "checks_failed": 3,
+    "checks_failed": 0,
     "required_check_names_count": 17,
     "extras_keys": [
       "required_check_names"
