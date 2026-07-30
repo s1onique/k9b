@@ -14,6 +14,7 @@ import json
 import sys
 from pathlib import Path
 
+from scripts.ci.promotion_runtime_gate_manifest import load_manifest
 from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
 from scripts.ci.promotion_runtime_static_scope_git import (
     GitError,
@@ -140,6 +141,15 @@ def build_scope(
             "checkout SUBJECT before running static scope"
         )
 
+    # --- CORRECTION10: Load manifest from subject object -----------------
+    # This is subject-bound - reads from the Git object, not working tree
+    manifest_report = load_manifest(
+        repo_root=repo_root,
+        subject_sha=subject_full,
+        manifest_path="scripts/ci/promotion_runtime_tests.txt",
+    )
+    runtime_test_paths = manifest_report.runtime_test_paths
+
     # --- P0-5: Cumulative changed Python ----------------------------------
     cumulative_raw = changed_python(repo_root, runtime_full, subject_full)
     cumulative_paths = parse_nul_records(cumulative_raw)
@@ -165,11 +175,12 @@ def build_scope(
     lane_candidates_after_subtract = lane_candidates_set - frozenset(runtime_paths)
 
     # Classify remaining as lane or unclassified
-    # CORRECTION09: Also classify manifest-listed runtime-test paths as lane authority.
+    # CORRECTION10: Also classify manifest-listed runtime-test paths as lane authority.
+    # Pass runtime_test_paths explicitly - no global cache.
     lane_paths: list[str] = []
     unclassified_paths: list[str] = []
     for p in sorted(lane_candidates_after_subtract):
-        if is_lane_authority_path(p) or is_runtime_test_path(p):
+        if is_lane_authority_path(p) or is_runtime_test_path(p, runtime_test_paths):
             lane_paths.append(p)
         else:
             unclassified_paths.append(p)

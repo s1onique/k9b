@@ -8,11 +8,10 @@ ScopeRecord schema lives in promotion_runtime_static_scope_contract.py.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
-from scripts.ci.promotion_runtime_gate_manifest import (
-    InventoryReport,
-    load_manifest,
-)
+if TYPE_CHECKING:
+    pass
 
 # ---------------------------------------------------------------------------
 # Runtime source prefix (P0-6).
@@ -23,36 +22,25 @@ RUNTIME_SOURCE_PREFIXES: tuple[str, ...] = (
     "src/k8s_diag_agent/",
 )
 
-# ---------------------------------------------------------------------------
-# Runtime-test manifest authority (CORRECTION09).
-# ---------------------------------------------------------------------------
 
-# Cached manifest report. Lazily loaded by is_runtime_test_path().
-_manifest_report: InventoryReport | None = None
+def is_runtime_test_path(
+    path: str,
+    runtime_test_paths: frozenset[str],
+) -> bool:
+    """Return True if path is in the runtime-test manifest paths.
 
+    CORRECTION10: The policy accepts the manifest paths explicitly as a
+    frozenset parameter. No global cache or hidden I/O - the caller
+    provides the authority.
 
-def _get_manifest_report() -> InventoryReport:
-    """Load and cache the canonical runtime-test manifest."""
-    global _manifest_report  # noqa: PLW0603
-    if _manifest_report is None:
-        _manifest_report = load_manifest()
-    return _manifest_report
+    Args:
+        path: The path to classify.
+        runtime_test_paths: Frozenset of manifest paths from load_manifest().
 
-
-def is_runtime_test_path(path: str) -> bool:
-    """Return True if path is in the canonical runtime-test manifest.
-
-    CORRECTION09: Files listed in scripts/ci/promotion_runtime_tests.txt are
-    classified as runtime-test authority. This closes the seam between the
-    manifest and the static classifier.
+    Returns:
+        True if the path is in the manifest.
     """
-    report = _get_manifest_report()
-    return path in report.per_entry_sha256
-
-
-def get_runtime_test_manifest_sha256() -> str:
-    """Return the SHA-256 of the canonical runtime-test manifest."""
-    return _get_manifest_report().manifest_sha256
+    return path in runtime_test_paths
 
 # ---------------------------------------------------------------------------
 # Lane-authority policy (P0-7).
