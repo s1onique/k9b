@@ -11,12 +11,12 @@ from pathlib import Path
 
 from scripts.act_local_contract import CheckResult
 from scripts.factory.build_gate_summary import CheckOutcome, GateSummary
+from scripts.factory.gate_summary_command_env import build_child_env as _env
 from scripts.factory.parse_gate_summary import parse_gate_summary
 from scripts.factory.populate_gate_summary import (
     REQUIRED_CHECK_NAMES,
     CommandSpec,
     _command_specs,
-    _env,
     build_gate_summary,
 )
 
