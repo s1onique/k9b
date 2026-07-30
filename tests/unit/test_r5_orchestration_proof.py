@@ -44,8 +44,8 @@ from k8s_diag_agent.collect.incident_promotion_dispatch import (
 )
 from k8s_diag_agent.collect.promotion_outcomes import (
     PromotionCommitUnknown,
-    PromotionRejected,
     PromotionReconciliationToken,
+    PromotionRejected,
     PromotionRejectionCode,
     PromotionSucceeded,
     PromotionUncertaintyCode,

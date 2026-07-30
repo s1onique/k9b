@@ -434,14 +434,47 @@ class TestHasPromotionActivity:
 
     def test_batch_provides_activity(self) -> None:
         """A recorded batch provides promotion activity."""
+        from k8s_diag_agent.collect.incident_identity_hardening import (
+            PROMOTION_OUTCOME_OPENED,
+            PromotionRecord,
+        )
+        from k8s_diag_agent.collect.incident_promotion_batch import PromotionBatch
+        from k8s_diag_agent.collect.incident_promotion_dispatch import (
+            IncidentPromotionResult,
+        )
+
         accumulator = RunPromotionAccumulator()
-        # Manually add a batch-like record to simulate accepted batch.
-        # has_promotion_activity checks batches, so a non-empty batches list
-        # should return True.
-        # Note: This tests the batch branch; outcome branch is tested below.
-        # The actual implementation detail is that bool(acc.batches) is checked.
-        # We verify the delegation works by checking the method is callable.
-        assert callable(accumulator.has_promotion_activity)
+        record = PromotionRecord(
+            source_candidate_id="cand-1",
+            canonical_incident_id="inc-1",
+            promotion_outcome=PROMOTION_OUTCOME_OPENED,
+        )
+        batch = PromotionBatch(
+            promotion_result=IncidentPromotionResult(
+                ok=True,
+                scanned=1,
+                firing=1,
+                opened_incidents=1,
+                updated_incidents=0,
+                skipped_duplicates=0,
+                errors=0,
+                error_messages=(),
+                promotion_mode="backend-api",
+                opened_incident_ids=("inc-1",),
+                updated_incident_ids=(),
+                promotion_records=[record.to_dict()],
+                unique_candidate_count=1,
+                promotion_scan_scope="test",
+                incident_access_mode="backend",
+            ),
+            promotion_records=(record,),
+            source_kind="alertmanager",
+            cluster_context="test",
+            snapshot_bundle_id=None,
+        )
+        accumulator.add_batch(batch)
+        assert accumulator.has_promotion_activity() is True
+        assert len(accumulator.batches) == 1
 
     def test_rejected_outcome_without_batch_has_activity(self) -> None:
         """Rejection outcome without batch proves dispatch occurred."""
