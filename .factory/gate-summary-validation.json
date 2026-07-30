@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "validated_path": ".factory/gate-summary.json",
-  "validated_sha256": "128421a95ee19375b3528a8ede3d7a508dd888c39dc25b9b3f3453dc775f0836",
-  "validated_at": "2026-07-30T10:07:46.344710+00:00",
+  "validated_sha256": "7ba0946866b29b2ee01f6cf157963ff3f14fe24a08aad295318174a8cd1a53de",
+  "validated_at": "2026-07-30T10:58:17.802278+00:00",
   "parser_identity": "scripts/factory/parse_gate_summary.py",
   "parser_command": "python scripts/factory/parse_gate_summary.py --target .factory/gate-summary.json --quiet",
   "parser_exit_code": 1,
