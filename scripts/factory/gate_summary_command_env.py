@@ -36,6 +36,20 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+# ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION11:
+# ``CheckOutcome`` is now single-owner.  Re-exported from the canonical
+# ``scripts.factory.build_gate_summary`` module so the producer cannot
+# silently drift to a duplicate shape.  The dataclass identity MUST
+# be ``scripts.factory.build_gate_summary.CheckOutcome``; downstream
+# loaders use ``isinstance`` against that exact class.
+#
+# We use a direct relative import within the ``scripts.factory``
+# package so the module is imported under its canonical identity
+# without altering ``sys.path``.  ``build_gate_summary`` is a sibling
+# module in the same package and is always importable via a normal
+# package-relative import.
+from scripts.factory.build_gate_summary import CheckOutcome
+
 SCRIPT_REPO = Path(__file__).resolve().parent.parent.parent
 VENV_PYTHON = SCRIPT_REPO / ".venv" / "bin" / "python"
 
@@ -49,27 +63,6 @@ class CommandSpec:
     expect_zero: bool = True
     cwd: Path | None = None
     env: dict[str, str] | None = None
-
-
-@dataclass(frozen=True)
-class CheckOutcome:
-    """Per-check outcome derived from an executed command (re-export).
-
-    The shape is the same as :class:`scripts.factory.build_gate_summary.CheckOutcome`
-    so the canonical gate-summary loader can dereference either class.
-    """
-
-    name: str
-    status: str  # "pass" | "fail" | "skip"
-    duration_ms: int = 0
-    error_message: str | None = None
-    command: str | None = None
-    exit_code: int | None = None
-
-    def to_dict(self) -> dict[str, object]:
-        """Serialize the check outcome to a plain dict."""
-        from dataclasses import asdict
-        return asdict(self)
 
 
 Runner = Callable[[CommandSpec], CheckOutcome]
