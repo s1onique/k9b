@@ -67,17 +67,19 @@ jobs:
       subject_sha: ${{ needs.closure.outputs.subject_sha }}
       subject_tree: ${{ needs.closure.outputs.subject_tree }}
 
+  # CORRECTION05: Migrate to two-image build interface
+  # P0-2: Provide exactly registry + harbor_project inputs
+  # P0-3: Pass SPBNIX_CA_CERT_PEM, REGISTRY_USERNAME, REGISTRY_PASSWORD
   build:
     needs: [closure, verify]
     uses: ./.github/workflows/reusable-promotion-build.yml
     with:
-      closure_sha: ${{ needs.closure.outputs.closure_sha }}
-      harbor_build_workflow: harbor-build-image.yml
-      environment: ${{ inputs.environment || 'lab' }}
+      registry: harbor-pve1.spbnix.local
+      harbor_project: k9b
     secrets:
-      REGISTRY: ${{ secrets.REGISTRY }}
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+      SPBNIX_CA_CERT_PEM: ${{ secrets.SPBNIX_CA_CERT_PEM }}
 
   deploy:
     needs: [closure, verify, build]
