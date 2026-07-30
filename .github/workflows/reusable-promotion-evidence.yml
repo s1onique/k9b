@@ -1,3 +1,9 @@
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+
 # ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
 # WAVE CORRECTION01 — reusable evidence workflow
 #
@@ -44,12 +50,15 @@ jobs:
       artifact_count: ${{ steps.pack.outputs.artifact_count }}
       checksums: ${{ steps.pack.outputs.checksums }}
       partial_on_failure: ${{ steps.pack.outputs.partial_on_failure }}
+    env:
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
     steps:
       - name: independent cluster bootstrap
         run: |
           set -euo pipefail
-          echo "$KUBECONFIG_B64" | base64 -d > /tmp/kubeconfig
-          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+          umask 077
+          printf '%s' "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
       - name: download qualification verdict artifact
         uses: actions/download-artifact@v4

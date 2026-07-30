@@ -1,18 +1,23 @@
 # ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
-# WAVE CORRECTION01 — thin caller
+# WAVE CORRECTION02 — thin caller
 #
 # This file MUST stay <= 200 lines.
+#
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
 #
 # P0-3 trigger contract:
 #   Branch push and qualification tags are declared under on.push.
 #   Branch push is the canonical acceptance trigger.
 #   workflow_dispatch is a diagnostic trigger ONLY.
 #
-# P0-4 Python bootstrap:
-#   The canonical Python bootstrap step is invoked here before any
-#   job that uses `.venv/bin/python`.  Downstream reusable workflows
-#   use setup-python OR the venv-created-by-caller (depending on
-#   the job's needs).
+# P0-5 caller + verify chain:
+#   closure -> verify -> build -> deploy -> live -> evidence
+#   closure -> timing (independent)
+#   Build MUST depend on successful verify.
 #
 # P0-7 cluster access authority:
 #   Each reusable workflow re-bootstraps cluster access independently.
@@ -43,18 +48,27 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  BASE_SHA: f09348dc6f7dd8887c51278ee0a504c7e22d1417
-
+# P0-5: BASE_SHA is the IMMUTABLE canonical base of this qualification
+# cycle.  It is recorded as an immutable literal; reusable-workflow
+# inputs do NOT accept github / env expressions for `with:` values, so
+# the value must be a literal or a previous job output.
 jobs:
   closure:
     uses: ./.github/workflows/reusable-promotion-closure.yml
     with:
       closure_sha: ${{ github.sha }}
-      base_sha: ${{ env.BASE_SHA }}
+      base_sha: f09348dc6f7dd8887c51278ee0a504c7e22d1417
+
+  verify:
+    needs: closure
+    uses: ./.github/workflows/reusable-promotion-verify.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      subject_sha: ${{ needs.closure.outputs.subject_sha }}
+      subject_tree: ${{ needs.closure.outputs.subject_tree }}
 
   build:
-    needs: closure
+    needs: [closure, verify]
     uses: ./.github/workflows/reusable-promotion-build.yml
     with:
       closure_sha: ${{ needs.closure.outputs.closure_sha }}
@@ -66,7 +80,7 @@ jobs:
       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
 
   deploy:
-    needs: [closure, build]
+    needs: [closure, verify, build]
     uses: ./.github/workflows/reusable-promotion-deploy.yml
     with:
       closure_sha: ${{ needs.closure.outputs.closure_sha }}
@@ -79,7 +93,7 @@ jobs:
       REGISTRY: ${{ secrets.REGISTRY }}
 
   live:
-    needs: [closure, build, deploy]
+    needs: [closure, verify, build, deploy]
     uses: ./.github/workflows/reusable-promotion-live.yml
     with:
       closure_sha: ${{ needs.closure.outputs.closure_sha }}
@@ -92,7 +106,7 @@ jobs:
       UI_TOKEN: ${{ secrets.UI_TOKEN }}
 
   evidence:
-    needs: [closure, live]
+    needs: [closure, verify, live]
     if: ${{ always() }}
     uses: ./.github/workflows/reusable-promotion-evidence.yml
     with:
@@ -102,7 +116,7 @@ jobs:
       KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
 
   timing:
-    needs: [closure]
+    needs: [closure, verify]
     uses: ./.github/workflows/reusable-promotion-timing.yml
     with:
       closure_sha: ${{ needs.closure.outputs.closure_sha }}

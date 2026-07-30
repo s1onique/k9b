@@ -1,15 +1,21 @@
 # ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
-# WAVE CORRECTION01 — reusable live qualification workflow
+# WAVE CORRECTION02 — reusable live qualification workflow
 #
-# P0-9 real qualification Job:
-#   The Job is launched with explicit labels and an explicit
-#   qualifier command (NOT the scheduler default entry point).
-#   Five canonical scenarios are exercised.  A strict JSON verdict
-#   is uploaded as an artifact.
+# P0-9 Lease and qualifier execution:
+#   Order is now: acquire -> launch -> renew/collect -> cleanup (always).
+#   The Lease is held for the entire qualifier execution.  Cleanup runs
+#   ONLY when this run acquired the Lease and verifies holderIdentity
+#   before release.
 #
-# Lease semantics:
-#   acquire with holder identity, bounded duration, and resourceVersion
-#   control; release in an always-run cleanup step.
+# P0-7 secret binding:
+#   KUBECONFIG_B64, INTERNAL_TOKEN, UI_TOKEN are bound as env vars
+#   rather than echoed to stdout.
+
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
 
 name: k9b promotion live
 
@@ -59,8 +65,14 @@ jobs:
       qualification_run_id: ${{ inputs.qualification_run_id }}
       verdict: ${{ steps.verdict.outputs.verdict }}
       scenarios_passed: ${{ steps.verdict.outputs.scenarios_passed }}
-      lease_acquired: ${{ steps.lease.outputs.acquired }}
-      lease_released: ${{ steps.lease.outputs.released }}
+      lease_acquired: ${{ steps.acquire.outputs.acquired }}
+      lease_released: ${{ steps.cleanup.outputs.released }}
+    env:
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+      INTERNAL_TOKEN: ${{ secrets.INTERNAL_TOKEN }}
+      UI_TOKEN: ${{ secrets.UI_TOKEN }}
+      CLOSURE_SHA: ${{ inputs.closure_sha }}
+      QUAL_RUN_ID: ${{ inputs.qualification_run_id }}
     steps:
       - name: checkout at CLOSURE_SHA
         uses: actions/checkout@v4
@@ -79,19 +91,19 @@ jobs:
       - name: independent cluster bootstrap
         run: |
           set -euo pipefail
-          echo "$KUBECONFIG_B64" | base64 -d > /tmp/kubeconfig
-          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+          umask 077
+          printf '%s' "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
-      - name: acquire qualification Lease
-        id: lease
+      - name: acquire qualification Lease (resourceVersion CAS)
+        id: acquire
         run: |
           set -euo pipefail
-          # Acquire Lease transactionally by listing current holders.
           holder_id="qualification-${{ inputs.qualification_run_id }}"
-          existing=$(kubectl get lease k9b-qualification -n k9b \
-            -o jsonpath='{.spec.holderIdentity}' 2>/dev/null || echo "")
-          if [ -n "$existing" ] && [ "$existing" != "$holder_id" ]; then
-            echo "FATAL: Lease held by $existing; cannot acquire"
+          current_holder="$(kubectl get lease k9b-qualification -n k9b \
+            -o jsonpath='{.spec.holderIdentity}' 2>/dev/null || echo "")"
+          if [ -n "$current_holder" ] && [ "$current_holder" != "$holder_id" ]; then
+            echo "FATAL: Lease held by $current_holder; cannot acquire"
             exit 1
           fi
           kubectl apply -f - <<EOF
@@ -107,14 +119,6 @@ jobs:
             renewTime: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           EOF
           echo "acquired=true" >> "$GITHUB_OUTPUT"
-
-      - name: release qualification Lease (always run)
-        if: always()
-        id: release
-        run: |
-          set -euo pipefail
-          kubectl delete lease k9b-qualification -n k9b --ignore-not-found
-          echo "released=true" >> "$GITHUB_OUTPUT"
 
       - name: launch qualification Job (explicit command + labels)
         run: |
@@ -189,15 +193,10 @@ jobs:
         run: |
           set -euo pipefail
           run_id="${{ inputs.qualification_run_id }}"
-          # The Job's container logs are the single-line summary;
-          # the structured JSON verdict is mounted from /tmp/qualifier-verdict.json.
           pod=$(kubectl get pod -n k9b \
             -l job-name=$run_id,k9b.dev/qualification-run-id=$run_id \
             -o jsonpath='{.items[0].metadata.name}')
           kubectl logs $pod -n k9b > /tmp/qualifier-summary.log
-          # The structured JSON verdict file is uploaded via the
-          # artifacts system by the live cluster; here we capture
-          # the bounded summary.
           kubectl cp $pod:/tmp/qualifier-verdict.json /tmp/qualifier-verdict.json -n k9b \
             || echo '{"scenarios":{},"verdict":"unknown"}' > /tmp/qualifier-verdict.json
           python3 - <<'PY'
@@ -221,8 +220,17 @@ jobs:
             /tmp/qualifier-verdict.json
             /tmp/qualifier-summary.log
 
-      - name: release Lease (final, after verdict)
+      - name: release Lease (always, only by this holder)
+        id: cleanup
         if: always()
         run: |
           set -euo pipefail
-          kubectl delete lease k9b-qualification -n k9b --ignore-not-found
+          holder_id="qualification-${{ inputs.qualification_run_id }}"
+          current_holder="$(kubectl get lease k9b-qualification -n k9b \
+            -o jsonpath='{.spec.holderIdentity}' 2>/dev/null || echo "")"
+          if [ "$current_holder" = "$holder_id" ]; then
+            kubectl delete lease k9b-qualification -n k9b --ignore-not-found
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false (lease not owned by this run)" >> "$GITHUB_OUTPUT"
+          fi

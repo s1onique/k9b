@@ -232,6 +232,10 @@ def verify_supplied_verdict(values: Mapping[str, Any]) -> None:
     This is the P0-12 negative-proof hook: a contradictory verdict
     is rejected BEFORE atomic write so the canonical record cannot
     carry an inconsistent claim.
+
+    The verdict MUST be derivable from the flags.  A supplied verdict
+    is permitted only as an equality assertion against the derived
+    verdict.
     """
     supplied = values.get("VERDICT")
     if supplied is None:
@@ -247,6 +251,33 @@ def verify_supplied_verdict(values: Mapping[str, Any]) -> None:
         raise VerdictInconsistentError(
             f"VERDICT=PARTIAL but derived={derived!r} from flags"
         )
+
+
+def derive_and_record(
+    values: Mapping[str, Any], *,
+    parent_closure_sha: str | None = None,
+    subject_sha: str | None = None,
+    subject_tree: str | None = None,
+    workflow_head_sha: str | None = None,
+) -> str:
+    """Derive the verdict from ``values`` and inject the CLOSED_PASS
+    closure invariants automatically.
+
+    The verdict is ALWAYS derived from the per-section flags; the
+    caller MUST NOT supply a contradictory verdict.
+    """
+    out = dict(values)
+    derived = derive_verdict(out)
+    out["VERDICT"] = derived
+    if parent_closure_sha is not None:
+        out["F"] = parent_closure_sha
+    if subject_sha is not None:
+        out["SUBJECT_SHA"] = subject_sha
+    if subject_tree is not None:
+        out["F_TREE"] = subject_tree
+    if workflow_head_sha is not None:
+        out["E"] = workflow_head_sha
+    return derived
 
 
 # ---------------------------------------------------------------------------
