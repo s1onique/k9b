@@ -410,6 +410,7 @@ class TestMissingRuntimePath:
     def test_missing_runtime_path_raises_scope_error(self, tmp_path: Path) -> None:
         """A runtime path that doesn't exist on disk raises ScopeError."""
         import subprocess
+
         import promotion_runtime_static_scope as scope_mod
         from promotion_runtime_static_scope import build_scope
         from promotion_runtime_static_scope_contract import ScopeError
@@ -453,6 +454,7 @@ class TestRepoRootEvidence:
     def test_repo_root_is_dot(self, tmp_path: Path) -> None:
         """ScopeRecord.repo_root is '.' not an absolute host path."""
         import subprocess
+
         import promotion_runtime_static_scope as scope_mod
         from promotion_runtime_static_scope import build_scope
 
