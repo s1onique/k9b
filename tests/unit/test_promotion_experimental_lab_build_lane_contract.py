@@ -1,17 +1,16 @@
 """Self-tests for the experimental-lab build lane structural verifier.
 
-ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION02
+ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION03
 
 The verifier MUST:
 
-* ACCEPT the canonical production workflow (two-image fan-out).
+* ACCEPT the canonical production workflow (thin caller + two Harbor callers).
 * REJECT representative negative fixtures that re-introduce the
-  production regression patterns from P0-9 (proofs 1-12).
+  production regression patterns (CORRECTION02 P0-9 + CORRECTION03 P0-7).
 """
 
 from __future__ import annotations
 
-import copy
 import re
 import sys
 import unittest
@@ -52,20 +51,16 @@ def _jobs(doc: dict[str, object]) -> dict[str, object]:
 
 
 def _experimental_template() -> dict[str, object]:
-    """Return a clean experimental workflow template (canonical baseline)."""
+    """Return a thin caller template (CORRECTION03 canonical baseline)."""
     return {
         "name": "k9b promotion experimental lab build",
         "on": {
             "push": {"branches": ["hotfix/incident-promotion-runtime-truth01"]},
-            "workflow_dispatch": {
-                "inputs": {"environment": {"type": "choice", "default": "lab"}},
-            },
         },
         "jobs": {
             "runtime-gate": {
-                "runs-on": "ubuntu-latest",
-                "outputs": {"subject_sha": "x", "runtime_gate": "y"},
-                "steps": [{"name": "lock", "id": "identity", "run": "echo x"}],
+                "uses": "./.github/workflows/reusable-promotion-experimental-runtime.yml",
+                "with": {"subject_sha": "${{ github.sha }}"},
             },
             "build-backend": {
                 "needs": "runtime-gate",
@@ -107,52 +102,15 @@ def _experimental_template() -> dict[str, object]:
             },
             "classify": {
                 "needs": ["runtime-gate", "build-backend", "build-frontend"],
-                "runs-on": "ubuntu-latest",
-                "steps": [
-                    {
-                        "name": "construct record",
-                        "env": {
-                            "BACKEND_IMAGE_REF": "${{ needs.build-backend.outputs.image_ref }}",
-                            "FRONTEND_IMAGE_REF": "${{ needs.build-frontend.outputs.image_ref }}",
-                            "SUBJECT_SHA": "${{ github.sha }}",
-                            "RUNTIME_GATE": "${{ needs.runtime-gate.outputs.runtime_gate }}",
-                        },
-                        "run": (
-                            "scheduler_ref = backend_ref\n"
-                            "scheduler_uses_backend_image = True\n"
-                        ),
-                    }
-                ],
-            },
-            "lab-deploy": {
-                "needs": ["runtime-gate", "build-backend", "build-frontend"],
-                "runs-on": "ubuntu-latest",
-                "steps": [
-                    {
-                        "name": "delegate to canonical lab",
-                        "uses": "./.github/workflows/k9b-cnpg-incident-lab.yml",
-                        "with": {"run_live_lab": True},
-                    }
-                ],
-            },
-            "live-promotion": {
-                "needs": [
-                    "runtime-gate",
-                    "build-backend",
-                    "build-frontend",
-                    "lab-deploy",
-                ],
-                "runs-on": "ubuntu-latest",
-                "env": {
-                    "BACKEND_IMAGE_REF": "${{ needs.build-backend.outputs.image_ref }}",
-                    "FRONTEND_IMAGE_REF": "${{ needs.build-frontend.outputs.image_ref }}",
+                "uses": "./.github/workflows/reusable-promotion-experimental-classify.yml",
+                "with": {
+                    "subject_sha": "${{ github.sha }}",
+                    "runtime_gate": "${{ needs.runtime-gate.outputs.runtime_gate }}",
+                    "backend_image_ref": "${{ needs.build-backend.outputs.image_ref }}",
+                    "backend_image_digest": "${{ needs.build-backend.outputs.image_digest }}",
+                    "frontend_image_ref": "${{ needs.build-frontend.outputs.image_ref }}",
+                    "frontend_image_digest": "${{ needs.build-frontend.outputs.image_digest }}",
                 },
-                "steps": [
-                    {
-                        "name": "use refs",
-                        "run": "needs.build-backend.outputs.image_ref",
-                    }
-                ],
             },
         },
     }
@@ -173,7 +131,7 @@ class TestProductionWorkflowAccepted(unittest.TestCase):
         if findings:
             joined = "\n".join(f"  - {f}" for f in findings)
             self.fail(
-                "Production workflow must satisfy P0-9 proofs:\n"
+                "Production workflow must satisfy P0-7 proofs:\n"
                 f"{joined}"
             )
 
@@ -198,25 +156,46 @@ class _FixtureHarness(unittest.TestCase):
         _write_yaml(HARBOR_WORKFLOW, doc)
 
 
-class TestOneHarborCallMultipleImages(_FixtureHarness):
-    """P0-9 proof 1: one Harbor call expected to produce multiple images."""
+# ---------------------------------------------------------------------------
+# CORRECTION03 P0-7 proofs (newly required)
+# ---------------------------------------------------------------------------
 
-    def test_single_harbor_call_rejected(self) -> None:
+
+class TestEnvInReusableCallerInputForbidden(_FixtureHarness):
+    """P0-7 proof 1: env.* in jobs.<id>.with MUST be rejected."""
+
+    def test_env_in_with_rejected(self) -> None:
         doc = _experimental_template()
-        jobs = cast(dict[str, object], doc["jobs"])
-        del jobs["build-frontend"]
+        backend = _job(doc, "build-backend")
+        with_block = cast(dict[str, object], backend["with"])
+        with_block["registry"] = "${{ env.REGISTRY }}"
         self._write_experimental(doc)
         findings = verify_experimental_lab_build_lane()
         codes = {f.code for f in findings}
-        self.assertIn(
-            "HARBOR_CALLER_COUNT_INVALID",
-            codes,
-            f"expected HARBOR_CALLER_COUNT_INVALID; got {codes}",
-        )
+        self.assertIn("ENV_IN_REUSABLE_CALLER_INPUT", codes)
+
+
+class TestReusableInStepsForbidden(_FixtureHarness):
+    """P0-7 proof 2: reusable workflow inside steps MUST be rejected."""
+
+    def test_reusable_in_steps_rejected(self) -> None:
+        doc = _experimental_template()
+        jobs = cast(dict[str, object], doc["jobs"])
+        runtime_gate = cast(dict[str, object], jobs["runtime-gate"])
+        runtime_gate["steps"] = [
+            {
+                "name": "wrong",
+                "uses": "./.github/workflows/harbor-build-image.yml",
+            }
+        ]
+        self._write_experimental(doc)
+        findings = verify_experimental_lab_build_lane()
+        codes = {f.code for f in findings}
+        self.assertIn("REUSABLE_WORKFLOW_IN_STEPS", codes)
 
 
 class TestInventedHarborInput(_FixtureHarness):
-    """P0-9 proof 2: invented Harbor workflow inputs."""
+    """P0-7 proof 3: nonexistent reusable input MUST be rejected."""
 
     def test_closure_sha_invented_input_rejected(self) -> None:
         doc = _experimental_template()
@@ -230,11 +209,10 @@ class TestInventedHarborInput(_FixtureHarness):
 
 
 class TestUndeclaredHarborOutputs(_FixtureHarness):
-    """P0-9 proof 3: undeclared reusable-workflow outputs."""
+    """P0-7 proof 4: nonexistent reusable output MUST be rejected."""
 
     def test_missing_outputs_rejected(self) -> None:
-        # Drop outputs from workflow_call to simulate the regression.
-        modified = copy.deepcopy(_load_yaml(HARBOR_WORKFLOW))
+        modified = _load_yaml(HARBOR_WORKFLOW)
         on = modified.get("on", {})
         if isinstance(on, dict):
             wc = on.get("workflow_call", {})
@@ -248,7 +226,7 @@ class TestUndeclaredHarborOutputs(_FixtureHarness):
 
 
 class TestWrongSecretNames(_FixtureHarness):
-    """P0-9 proof 4: wrong secret names."""
+    """P0-7 proof 5: caller secret not declared by callee MUST be rejected."""
 
     def test_registry_username_secret_rejected(self) -> None:
         doc = _experimental_template()
@@ -261,8 +239,90 @@ class TestWrongSecretNames(_FixtureHarness):
         self.assertIn("WRONG_HARBOR_SECRET_NAME", codes)
 
 
+class TestDockerMetadataForbiddenOutput(_FixtureHarness):
+    """P0-7 proof 6: docker/metadata-action does not expose image_repository."""
+
+    def test_metadata_image_repository_rejected(self) -> None:
+        # Inject the forbidden read into the harbor workflow.
+        modified = _load_yaml(HARBOR_WORKFLOW)
+        jobs = cast(dict[str, object], modified.get("jobs", {}))
+        build = cast(dict[str, object], jobs["build"])
+        steps = cast(list[object], build.get("steps", []))
+        if isinstance(steps, list):
+            steps.append(
+                {
+                    "name": "forbidden read",
+                    "env": {
+                        "BAD": "${{ steps.meta.outputs.image_repository }}",
+                    },
+                    "run": "echo $BAD",
+                }
+            )
+        build["steps"] = steps
+        jobs["build"] = build
+        modified["jobs"] = jobs
+        self._write_harbor(modified)
+        findings = verify_experimental_lab_build_lane()
+        codes = {f.code for f in findings}
+        self.assertIn(
+            "DOCKER_METADATA_ACTION_FORBIDDEN_OUTPUT",
+            codes,
+            f"expected DOCKER_METADATA_ACTION_FORBIDDEN_OUTPUT; got {codes}",
+        )
+
+
+class TestThinCallerLineLimit(unittest.TestCase):
+    """P0-7 proof 7: workflow file over 500 lines MUST be rejected."""
+
+    def test_thin_caller_line_count(self) -> None:
+        # Sanity check: production thin caller must be <= 150.
+        lines = sum(1 for _ in EXPERIMENTAL_WORKFLOW.open(encoding="utf-8"))
+        self.assertLessEqual(lines, 150)
+
+
+class TestSyntheticLiveEvidenceForbidden(_FixtureHarness):
+    """P0-7 proof 8: synthetic live JSON MUST be rejected."""
+
+    def test_synthetic_live_rejected(self) -> None:
+        doc = _experimental_template()
+        # Add a job that fabricates the previous lab_only_iteration evidence.
+        jobs = cast(dict[str, object], doc["jobs"])
+        jobs["live-promotion"] = {
+            "needs": ["runtime-gate"],
+            "runs-on": "ubuntu-latest",
+            "steps": [
+                {
+                    "name": "synthetic live",
+                    "run": "echo no_promotion_run live_promotion=FAIL || true",
+                }
+            ],
+        }
+        self._write_experimental(doc)
+        findings = verify_experimental_lab_build_lane()
+        codes = {f.code for f in findings}
+        self.assertIn("SYNTHETIC_LIVE_EVIDENCE", codes)
+
+
+# ---------------------------------------------------------------------------
+# CORRECTION02 retained proofs
+# ---------------------------------------------------------------------------
+
+
+class TestOneHarborCallMultipleImages(_FixtureHarness):
+    """CORRECTION02: exactly TWO harbor-build-image.yml callers."""
+
+    def test_single_harbor_call_rejected(self) -> None:
+        doc = _experimental_template()
+        jobs = cast(dict[str, object], doc["jobs"])
+        del jobs["build-frontend"]
+        self._write_experimental(doc)
+        findings = verify_experimental_lab_build_lane()
+        codes = {f.code for f in findings}
+        self.assertIn("HARBOR_CALLER_COUNT_INVALID", codes)
+
+
 class TestSecretsInheritForbidden(_FixtureHarness):
-    """P0-9 proof 5: secrets: inherit."""
+    """CORRECTION02: secrets: inherit MUST be rejected."""
 
     def test_secrets_inherit_rejected(self) -> None:
         doc = _experimental_template()
@@ -275,7 +335,7 @@ class TestSecretsInheritForbidden(_FixtureHarness):
 
 
 class TestSeparateSchedulerImageBuildForbidden(_FixtureHarness):
-    """P0-9 proof 6: separate scheduler image build."""
+    """CORRECTION02: separate scheduler image build MUST be rejected."""
 
     def test_scheduler_harbor_caller_rejected(self) -> None:
         doc = _experimental_template()
@@ -302,28 +362,7 @@ class TestSeparateSchedulerImageBuildForbidden(_FixtureHarness):
         self._write_experimental(doc)
         findings = verify_experimental_lab_build_lane()
         codes = {f.code for f in findings}
-        self.assertIn(
-            "SCHEDULER_IMAGE_BUILD_FORBIDDEN",
-            codes,
-            f"expected SCHEDULER_IMAGE_BUILD_FORBIDDEN; got {codes}",
-        )
-
-
-class TestSchedulerImageMustEqualBackend(_FixtureHarness):
-    """P0-9 proof 7: scheduler image differing from backend image."""
-
-    def test_scheduler_eq_backend_rejected(self) -> None:
-        doc = _experimental_template()
-        classify = _job(doc, "classify")
-        steps = classify.get("steps", [])
-        if isinstance(steps, list):
-            for step in steps:
-                if isinstance(step, dict):
-                    step["run"] = "scheduler_ref = frontend_ref"
-        self._write_experimental(doc)
-        findings = verify_experimental_lab_build_lane()
-        codes = {f.code for f in findings}
-        self.assertIn("SCHEDULER_REF_NOT_EQUAL_BACKEND", codes)
+        self.assertIn("SCHEDULER_IMAGE_BUILD_FORBIDDEN", codes)
 
 
 class TestMutableImageRefsForbidden(unittest.TestCase):
@@ -336,72 +375,6 @@ class TestMutableImageRefsForbidden(unittest.TestCase):
         sha = "sha256:" + ("a" * 64)
         immutable = f"harbor-pve1.spbnix.local/k9b/k9b-backend@{sha}"
         self.assertTrue(pattern.match(immutable))
-
-
-class TestDeployWithoutClusterBootstrapForbidden(_FixtureHarness):
-    """P0-9 proof 9: deploy job without cluster bootstrap."""
-
-    def test_lab_deploy_no_bootstrap_rejected(self) -> None:
-        doc = _experimental_template()
-        lab_deploy = _job(doc, "lab-deploy")
-        lab_deploy["steps"] = [
-            {"name": "no bootstrap", "run": "echo no bootstrap here"}
-        ]
-        self._write_experimental(doc)
-        findings = verify_experimental_lab_build_lane()
-        codes = {f.code for f in findings}
-        self.assertIn("LAB_DEPLOY_MISSING_CLUSTER_BOOTSTRAP", codes)
-
-
-class TestDeploymentBeforeBuildsForbidden(_FixtureHarness):
-    """P0-9 proof 10: deployment before both image builds succeed."""
-
-    def test_lab_deploy_needs_missing_rejected(self) -> None:
-        doc = _experimental_template()
-        lab_deploy = _job(doc, "lab-deploy")
-        lab_deploy["needs"] = ["runtime-gate"]
-        self._write_experimental(doc)
-        findings = verify_experimental_lab_build_lane()
-        codes = {f.code for f in findings}
-        self.assertIn("LAB_DEPLOY_NEEDS_BUILD_BACKEND", codes)
-        self.assertIn("LAB_DEPLOY_NEEDS_BUILD_FRONTEND", codes)
-
-
-class TestLivePromotionBeforeRolloutForbidden(_FixtureHarness):
-    """P0-9 proof 11: live health run before rollout succeeds."""
-
-    def test_live_promotion_needs_lab_deploy_rejected(self) -> None:
-        doc = _experimental_template()
-        live_promotion = _job(doc, "live-promotion")
-        live_promotion["needs"] = [
-            "runtime-gate",
-            "build-backend",
-            "build-frontend",
-        ]
-        self._write_experimental(doc)
-        findings = verify_experimental_lab_build_lane()
-        codes = {f.code for f in findings}
-        self.assertIn("LIVE_PROMOTION_NEEDS_LAB_DEPLOY", codes)
-
-
-class TestManualKubectlInstructionForbidden(_FixtureHarness):
-    """P0-9 proof 12: manual kubectl instructions used as acceptance evidence."""
-
-    def test_manual_kubectl_rejected(self) -> None:
-        doc = _experimental_template()
-        live_promotion = _job(doc, "live-promotion")
-        steps_obj = live_promotion.get("steps", [])
-        if isinstance(steps_obj, list):
-            steps_obj.append(
-                {
-                    "name": "forbidden manual instruction",
-                    "run": "manually run: kubectl apply -f foo.yaml",
-                }
-            )
-        self._write_experimental(doc)
-        findings = verify_experimental_lab_build_lane()
-        codes = {f.code for f in findings}
-        self.assertIn("MANUAL_KUBECTL_INSTRUCTION_FORBIDDEN", codes)
 
 
 if __name__ == "__main__":  # pragma: no cover

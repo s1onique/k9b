@@ -393,12 +393,22 @@ jobs:
       # =============================================================================
       # Emit image-reference outputs (P0-4)
       #
-      # Combines the docker/metadata-action outputs (image_repository, image_tag)
-      # with the docker/build-push-action output (digest) into the canonical
-      # immutable reference grammar: registry/project/name@sha256:<64hex>.
+      # Combines caller inputs with the docker/metadata-action output
+      # ``version`` and the docker/build-push-action output ``digest`` into
+      # the canonical immutable reference grammar:
+      #   registry/project/name@sha256:<64hex>
+      #
+      # ``docker/metadata-action`` outputs are ``version``, ``tags``,
+      # ``tag-names``, ``labels``, ``annotations``, ``json``.  It does NOT
+      # expose ``image_repository`` or ``image_tag``; those names are not
+      # recognised by the action.  We derive ``image_repository`` from the
+      # caller inputs (``inputs.registry``, ``inputs.harbor_project``,
+      # ``inputs.image_name``) and use ``steps.meta.outputs.version`` for
+      # the tag.
       #
       # These outputs are the SOLE source of truth for callers; no second
-      # registry lookup is permitted.  Grammar is validated before emit.
+      # registry lookup is permitted.  The digest is validated against
+      # ``sha256:<64-lowercase-hex>`` before emit.
       # =============================================================================
       - name: Emit image-reference outputs
         id: emit-image-ref
@@ -407,36 +417,27 @@ jobs:
           HARBOR_PROJECT: ${{ inputs.harbor_project }}
           IMAGE_NAME: ${{ inputs.image_name }}
           IMAGE_PUSH_ENABLED: ${{ inputs.image_push_enabled }}
-          META_IMAGE_REPOSITORY: ${{ steps.meta.outputs.image_repository }}
-          META_IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          META_VERSION: ${{ steps.meta.outputs.version }}
           BUILD_DIGEST: ${{ steps.build-image.outputs.digest }}
         run: |
           set -euo pipefail
 
-          # image_repository from metadata-action is "registry/project/name".
-          image_repository="${META_IMAGE_REPOSITORY}"
-          if [ -z "${image_repository}" ]; then
-            image_repository="${REGISTRY}/${HARBOR_PROJECT}/${IMAGE_NAME}"
-          fi
-
-          # image_tag from metadata-action is the short SHA.
-          image_tag="${META_IMAGE_TAG}"
+          image_repository="${REGISTRY}/${HARBOR_PROJECT}/${IMAGE_NAME}"
+          image_tag="${META_VERSION}"
           if [ -z "${image_tag}" ]; then
-            echo "FATAL: metadata-action produced no image_tag"
+            echo "FATAL: metadata-action produced no version output"
             exit 1
           fi
 
-          # For read-only (non-push) builds there is no pushed digest; the
-          # tag itself is the only available reference.  For push builds the
-          # digest MUST be present and MUST be sha256:<64hex>.
           image_digest="${BUILD_DIGEST}"
           if [ "${IMAGE_PUSH_ENABLED}" = "true" ]; then
             if [ -z "${image_digest}" ]; then
               echo "FATAL: docker/build-push-action did not return digest"
               exit 1
             fi
+            # Validate exactly ``sha256:`` + 64 lowercase hex characters.
             case "${image_digest}" in
-              sha256:[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+              sha256:????????????????????????????????????????????????????????????????)
                 ;;
               *)
                 echo "FATAL: digest is not sha256:<64hex>: ${image_digest}"

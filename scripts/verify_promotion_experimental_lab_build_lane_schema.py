@@ -12,6 +12,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXPERIMENTAL_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "promotion-experimental-lab-build.yml"
 HARBOR_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "harbor-build-image.yml"
+RUNTIME_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "reusable-promotion-experimental-runtime.yml"
+CLASSIFY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "reusable-promotion-experimental-classify.yml"
 
 
 def load_workflow(path: Path) -> dict[str, object]:

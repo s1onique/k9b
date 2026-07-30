@@ -1,0 +1,204 @@
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION03
+# Reusable classification workflow for the experimental lab build lane.
+#
+# This workflow consumes declared build outputs from the thin caller and
+# emits a classification record with explicit verifier assertions:
+#   - scheduler_image_ref == backend_image_ref
+#   - scheduler_uses_backend_image == true
+#   - frontend_image_ref != backend_image_ref
+#   - all references match ^[^@]+@sha256:[0-9a-f]{64}$
+#   - subject_sha == caller.subject_sha
+#   - all READY_* flags explicitly false
+#
+# It is invoked at job level by the thin caller; never from a step.
+
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+
+name: k9b promotion experimental classify
+
+on:
+  workflow_call:
+    inputs:
+      subject_sha:
+        description: "Closure commit SHA (caller passes github.sha)"
+        required: true
+        type: string
+      runtime_gate:
+        description: "Runtime gate verdict from the runtime gate job"
+        required: true
+        type: string
+      backend_image_ref:
+        description: "Backend image ref (registry/repository@sha256:<64hex>)"
+        required: true
+        type: string
+      backend_image_digest:
+        description: "Backend image digest (sha256:<64hex>)"
+        required: true
+        type: string
+      frontend_image_ref:
+        description: "Frontend image ref (registry/repository@sha256:<64hex>)"
+        required: true
+        type: string
+      frontend_image_digest:
+        description: "Frontend image digest (sha256:<64hex>)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    name: classify image refs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: checkout at SUBJECT_SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.subject_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: lock SUBJECT_SHA
+        run: |
+          set -euo pipefail
+          subject_sha="$(git rev-parse HEAD)"
+          if [ "$subject_sha" != "${{ inputs.subject_sha }}" ]; then
+            echo "FATAL: checked-out HEAD != inputs.subject_sha"
+            exit 1
+          fi
+
+      - name: canonical Python bootstrap
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip wheel setuptools
+
+      - name: construct record.json from declared inputs
+        env:
+          SUBJECT_SHA: ${{ inputs.subject_sha }}
+          RUNTIME_GATE: ${{ inputs.runtime_gate }}
+          BACKEND_IMAGE_REF: ${{ inputs.backend_image_ref }}
+          BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          FRONTEND_IMAGE_REF: ${{ inputs.frontend_image_ref }}
+          FRONTEND_IMAGE_DIGEST: ${{ inputs.frontend_image_digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          .venv/bin/python - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          pattern = re.compile(r"^[^@]+@sha256:[0-9a-f]{64}$")
+
+          def required(name):
+              value = os.environ.get(name, "")
+              if not value:
+                  print(f"FATAL: declared input {name} is empty", file=sys.stderr)
+                  sys.exit(1)
+              return value
+
+          backend_ref = required("BACKEND_IMAGE_REF")
+          frontend_ref = required("FRONTEND_IMAGE_REF")
+          backend_digest = required("BACKEND_IMAGE_DIGEST")
+          frontend_digest = required("FRONTEND_IMAGE_DIGEST")
+          subject_sha = required("SUBJECT_SHA")
+          runtime_gate = required("RUNTIME_GATE")
+
+          for label, ref in (("backend_image_ref", backend_ref),
+                              ("frontend_image_ref", frontend_ref)):
+              if not pattern.match(ref):
+                  print(f"FATAL: malformed {label}: {ref}", file=sys.stderr)
+                  sys.exit(1)
+
+          for label, digest in (("backend_image_digest", backend_digest),
+                                 ("frontend_image_digest", frontend_digest)):
+              if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+                  print(f"FATAL: malformed {label}: {digest}", file=sys.stderr)
+                  sys.exit(1)
+
+          if backend_ref == frontend_ref:
+              print(
+                  f"FATAL: backend and frontend refs are identical: {backend_ref}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          # P0-1: scheduler uses backend image.
+          scheduler_ref = backend_ref
+
+          record = {
+              "image_class": "experimental-lab",
+              "subject_sha": subject_sha,
+              "runtime_gate": runtime_gate,
+              "full_verify": "not_required_for_experimental_build",
+              "full_verify_remains_authoritative": True,
+              "canonical_tests_skipped_or_weakened": False,
+              "ready_for_image_publication": False,
+              "ready_for_production_deployment": False,
+              "ready_for_live_acceptance": False,
+              "backend_image_ref": backend_ref,
+              "backend_image_digest": backend_digest,
+              "scheduler_image_ref": scheduler_ref,
+              "scheduler_uses_backend_image": True,
+              "frontend_image_ref": frontend_ref,
+              "frontend_image_digest": frontend_digest,
+          }
+
+          out_path = Path("artifacts/experimental-lab-record.json")
+          out_path.parent.mkdir(parents=True, exist_ok=True)
+          out_path.write_text(json.dumps(record, indent=2, sort_keys=True))
+          print(json.dumps(record, indent=2, sort_keys=True))
+          PY
+
+      - name: upload experimental-lab record
+        uses: actions/upload-artifact@v4
+        with:
+          name: experimental-lab-record-${{ inputs.subject_sha }}
+          path: artifacts/experimental-lab-record.json
+        if: always()
+
+      - name: emit classification summary
+        run: |
+          set -euo pipefail
+          .venv/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+          record = json.loads(
+              Path("artifacts/experimental-lab-record.json").read_text()
+          )
+          print("=" * 60)
+          print("EXPERIMENTAL-LAB BUILD CLASSIFICATION")
+          print("=" * 60)
+          for k in (
+              "image_class",
+              "subject_sha",
+              "runtime_gate",
+              "full_verify",
+              "full_verify_remains_authoritative",
+              "canonical_tests_skipped_or_weakened",
+              "ready_for_image_publication",
+              "ready_for_production_deployment",
+              "ready_for_live_acceptance",
+              "scheduler_uses_backend_image",
+          ):
+              print(f"  {k} = {record.get(k)}")
+          for img in ("backend", "scheduler", "frontend"):
+              print(f"  {img}_image_ref = {record.get(f'{img}_image_ref')}")
+          print("=" * 60)
+          print("READY_FOR_IMAGE_PUBLICATION = false")
+          print("READY_FOR_PRODUCTION_DEPLOYMENT = false")
+          print("READY_FOR_LIVE_ACCEPTANCE = false")
+          print("FULL_VERIFY_REMAINS_AUTHORITATIVE = true")
+          print("CANONICAL_TESTS_SKIPPED_OR_WEAKENED = false")
+          print("SCHEDULER_USES_BACKEND_IMAGE = true")
+          print("=" * 60)
+          PY

@@ -1,0 +1,204 @@
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION03
+# Reusable runtime gate for the experimental lab build lane.
+#
+# This workflow performs the focused promotion runtime gate at SUBJECT_SHA.
+# It is invoked at job level by the thin caller; never from a step.
+#
+# Outputs:
+#   subject_sha:  - the workflow SHA (github.sha) locked at runtime
+#   runtime_gate: - "pass" on success; the step fails closed otherwise
+#
+# Inputs:
+#   subject_sha: - the closure commit SHA supplied by the caller
+
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+
+name: k9b promotion experimental runtime gate
+
+on:
+  workflow_call:
+    inputs:
+      subject_sha:
+        description: "Closure commit SHA (typically github.sha)"
+        required: true
+        type: string
+    outputs:
+      subject_sha:
+        description: "Subject SHA locked at runtime"
+        value: ${{ jobs.gate.outputs.subject_sha }}
+      runtime_gate:
+        description: "Runtime gate verdict: pass | fail"
+        value: ${{ jobs.gate.outputs.runtime_gate }}
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: promotion runtime gate at SUBJECT_SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      subject_sha: ${{ steps.identity.outputs.subject_sha }}
+      runtime_gate: ${{ steps.gate.outputs.runtime_gate }}
+    steps:
+      - name: checkout at SUBJECT_SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.subject_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: lock SUBJECT_SHA
+        id: identity
+        run: |
+          set -euo pipefail
+          subject_sha="$(git rev-parse HEAD)"
+          if [ "$subject_sha" != "${{ inputs.subject_sha }}" ]; then
+            echo "FATAL: checked-out HEAD != inputs.subject_sha"
+            exit 1
+          fi
+          echo "subject_sha=$subject_sha" >> "$GITHUB_OUTPUT"
+
+      - name: canonical Python bootstrap
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip wheel setuptools
+          .venv/bin/python -m pip install -e .
+          .venv/bin/python --version
+          .venv/bin/python -m pytest --version
+
+      - name: focused promotion runtime gate
+        id: gate
+        run: |
+          set -euo pipefail
+          TESTS=(
+            "tests/unit/test_scoped_recording_authority_first_replay.py"
+            "tests/unit/test_scoped_recording_authority_interleaved_corrupt.py"
+            "tests/unit/test_scoped_selection_identity.py"
+            "tests/unit/test_scoped_selection_record_fabrication_guard.py"
+            "tests/unit/test_promotion_dispatch_outcome01_classifier.py"
+            "tests/unit/test_promotion_diagnosis_handoff.py"
+            "tests/unit/test_promotion_diagnosis_handoff_regression.py"
+            "tests/unit/test_promotion_http_wire_semantics.py"
+            "tests/unit/test_promotion_http_wire_semantics_reconciliation.py"
+            "tests/unit/test_promotion_http_wire_binding.py"
+            "tests/unit/test_promotion_http_wire_binding_invariants.py"
+            "tests/unit/test_promotion_http_wire_structure.py"
+            "tests/unit/test_promotion_http_observation.py"
+            "tests/unit/test_promotion_http_loopback.py"
+            "tests/unit/test_promotion_http_mapping.py"
+            "tests/unit/test_promotion_http_context.py"
+            "tests/unit/test_promotion_http_transport_matrix.py"
+            "tests/unit/test_promotion_artifact_reading.py"
+            "tests/unit/test_promotion_outcomes.py"
+            "tests/unit/test_promotion_http_test_server_support.py"
+            "tests/unit/test_run_summary_derivation.py"
+            "tests/unit/test_run_identity_reconciliation.py"
+            "tests/unit/test_round10_run_identity_matrix.py"
+            "tests/unit/test_make_targeted_digest_manifest.py"
+            "tests/unit/test_make_targeted_digest.py"
+            "tests/unit/test_make_targeted_digest_self_reference.py"
+            "tests/unit/test_targeted_digest_manifest.py"
+            "tests/unit/test_diagnosis_loop_trajectory.py"
+            "tests/unit/test_commit_unknown_selection_handoff01_witness.py"
+            "tests/unit/test_act_k9b_hulk_commit_unknown_selection_handoff01.py"
+            "tests/unit/test_act_k9b_hulk_current_run_promotion_dispatch_outcome01_wrapper.py"
+            "tests/unit/test_act_k9b_hulk_promotion_succeeded_record_validation.py"
+            "tests/unit/test_act_k9b_hulk_current_run_promotion_seam01_verifier.py"
+            "tests/unit/test_scoped_accumulator_atomic_recording.py"
+            "tests/unit/test_scoped_accumulator_rollback.py"
+            "tests/unit/test_scoped_handoff_completed_invariants.py"
+            "tests/unit/test_scoped_handoff_identity_shape.py"
+            "tests/unit/test_scoped_handoff_ownership_fixtures.py"
+            "tests/unit/test_scoped_handoff_rejected_invariants.py"
+            "tests/unit/test_scoped_handoff_uncertain_invariants.py"
+            "tests/unit/test_scoped_selection_commit_unknown.py"
+            "tests/unit/test_scoped_selection_completed.py"
+            "tests/unit/test_scoped_selection_dispatch_integration.py"
+            "tests/unit/test_scoped_selection_explicit_no_promotion.py"
+            "tests/unit/test_scoped_selection_no_global_fallback.py"
+            "tests/unit/test_scoped_selection_rejected.py"
+          )
+          MISSING=0
+          for t in "${TESTS[@]}"; do
+            if [ ! -f "$t" ]; then
+              echo "FATAL: required promotion-runtime test missing: $t"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          if [ $MISSING -gt 0 ]; then
+            echo "FATAL: $MISSING required test file(s) missing"
+            exit 1
+          fi
+          set -o pipefail
+          .venv/bin/python -m pytest -q "${TESTS[@]}" 2>&1 \
+            | tee runtime-gate-transcript.log
+          echo "runtime_gate=pass" >> "$GITHUB_OUTPUT"
+
+      - name: ruff on changed runtime Python (blocking)
+        run: |
+          set -euo pipefail
+          BASE_SHA="f09348dc6f7dd8887c51278ee0a504c7e22d1417"
+          SUBJECT_SHA="${{ steps.identity.outputs.subject_sha }}"
+          mapfile -t CHANGED < <(git diff --name-only -z --diff-filter=ACMRT \
+            "$BASE_SHA".."$SUBJECT_SHA" -- '*.py' | tr '\0' '\n' | grep -v '^$')
+          if [ ${#CHANGED[@]} -eq 0 ]; then
+            echo "No runtime Python changed in BASE..SUBJECT"
+            exit 0
+          fi
+          .venv/bin/python -m ruff check "${CHANGED[@]}"
+
+      - name: mypy on changed runtime Python (blocking)
+        run: |
+          set -euo pipefail
+          BASE_SHA="f09348dc6f7dd8887c51278ee0a504c7e22d1417"
+          SUBJECT_SHA="${{ steps.identity.outputs.subject_sha }}"
+          mapfile -t CHANGED < <(git diff --name-only -z --diff-filter=ACMRT \
+            "$BASE_SHA".."$SUBJECT_SHA" -- '*.py' | tr '\0' '\n' | grep -v '^$')
+          if [ ${#CHANGED[@]} -eq 0 ]; then
+            exit 0
+          fi
+          .venv/bin/python -m mypy "${CHANGED[@]}"
+
+      - name: workflow YAML validation
+        run: |
+          set -euo pipefail
+          .venv/bin/python - <<'PY'
+          import sys
+          from pathlib import Path
+          import yaml
+          for path in [
+              ".github/workflows/harbor-build-image.yml",
+              ".github/workflows/reusable-promotion-experimental-runtime.yml",
+              ".github/workflows/reusable-promotion-experimental-classify.yml",
+              ".github/workflows/promotion-experimental-lab-build.yml",
+          ]:
+              p = Path(path)
+              if not p.exists():
+                  print(f"FATAL: workflow not found: {path}")
+                  sys.exit(1)
+              with p.open() as f:
+                  doc = yaml.safe_load(f)
+              if not isinstance(doc, dict) or "jobs" not in doc:
+                  print(f"FATAL: malformed workflow: {path}")
+                  sys.exit(1)
+              print(f"OK: {path} parses, jobs={list(doc['jobs'].keys())}")
+          PY
+
+      - name: git diff --check
+        run: |
+          set -euo pipefail
+          git diff --check
+
+      - name: upload runtime gate transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-gate-${{ steps.identity.outputs.subject_sha }}
+          path: runtime-gate-transcript.log
