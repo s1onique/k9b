@@ -1,3 +1,9 @@
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+
 # ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
 # WAVE CORRECTION01 — reusable image build workflow
 #
@@ -82,9 +88,11 @@ jobs:
             exit 1
           fi
 
+      # P0-6: reusable-workflow `uses:` MUST be a literal path; the
+      # canonical harbor workflow is referenced at a fixed path.
       - name: invoke canonical image-build workflow
         id: harbor
-        uses: ./.github/workflows/${{ inputs.harbor_build_workflow }}
+        uses: ./.github/workflows/harbor-build-image.yml
         with:
           closure_sha: ${{ inputs.closure_sha }}
           environment: ${{ inputs.environment }}

@@ -64,13 +64,72 @@ def _qualification_workflow_paths() -> list[Path]:
     return [WORKFLOWS / n for n in sorted(ALL_QUALIFICATION_WORKFLOWS)]
 
 
+def _discover_qualification_workflow_paths() -> set[Path]:
+    """Dynamically discover the complete caller/reusable-workflow graph.
+
+    Starts from the canonical caller and recursively reaches every
+    ``workflow_call`` workflow.  The set MUST equal the hand-written
+    inventory; divergence fails the structural test.
+    """
+    _load_yaml(WORKFLOWS / CALLER)
+    discovered: set[Path] = {WORKFLOWS / CALLER}
+    queue: list[Path] = list(discovered)
+    while queue:
+        current = queue.pop()
+        text = current.read_text(encoding="utf-8")
+        for m in re.finditer(r"\./\.github/workflows/([\w\-]+\.yml)", text):
+            sub = WORKFLOWS / m.group(1)
+            if sub.exists() and sub not in discovered:
+                discovered.add(sub)
+                queue.append(sub)
+    return discovered
+
+
 # ---------------------------------------------------------------------------
 # 1. every file <= 500 lines
 # 2. caller <= 200 lines
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", _qualification_workflow_paths())
+def _expected_qualification_inventory() -> set[Path]:
+    """Hand-written canonical inventory for cross-checking with the
+    dynamic discovery result.  New reachable workflows MUST be added
+    here explicitly so a missing test signals the gap.
+    """
+    return {
+        WORKFLOWS / "promotion-qualification.yml",
+        WORKFLOWS / "reusable-promotion-closure.yml",
+        WORKFLOWS / "reusable-promotion-verify.yml",
+        WORKFLOWS / "reusable-promotion-build.yml",
+        WORKFLOWS / "reusable-promotion-deploy.yml",
+        WORKFLOWS / "reusable-promotion-live.yml",
+        WORKFLOWS / "reusable-promotion-evidence.yml",
+        WORKFLOWS / "reusable-promotion-timing.yml",
+    }
+
+
+# Workflows referenced by the qualification graph but NOT themselves
+# in the qualification inventory.  These are transitive dependencies
+# that are invoked through ``jobs.<job_id>.uses`` from a reusable
+# workflow's step (the canonical Harbor build).
+_TRANSITIVE_DEPS = {
+    WORKFLOWS / "harbor-build-image.yml",
+}
+
+
+def test_dynamic_discovery_matches_inventory() -> None:
+    """The discovered caller/reusable graph MUST equal the union of
+    the qualification inventory plus the explicit transitive deps.
+    """
+    discovered = _discover_qualification_workflow_paths()
+    expected = _expected_qualification_inventory() | _TRANSITIVE_DEPS
+    missing = expected - discovered
+    extra = discovered - expected
+    assert not missing, f"discovered graph missed: {sorted(missing)}"
+    assert not extra, f"discovered graph added: {sorted(extra)}"
+
+
+@pytest.mark.parametrize("path", sorted(_expected_qualification_inventory()))
 def test_workflow_file_under_500_lines(path: Path) -> None:
     lines = len(path.read_text(encoding="utf-8").splitlines())
     assert lines <= 500, f"{path.name}: {lines} lines (limit 500)"
