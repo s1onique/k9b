@@ -5,14 +5,13 @@
 # It is invoked at job level by the thin caller; never from a step.
 #
 # The runtime test inventory is owned exclusively by
-# ``scripts/ci/promotion_runtime_tests.txt`` and executed by
 # ``scripts/ci/run_promotion_runtime_gate.py``.  This workflow MUST NOT
 # contain an inline TESTS=(...) array.
 #
 # CORRECTION06 changes:
 #   * --collect-only is now a true no-execution operation (P0-5).
 #   * Static analysis is routed through the static-scope authority
-#     (P0-1 + P0-2 + P0-3) instead of a broad ``git diff | mypy``.
+#     (dual-range model) instead of a broad ``git diff | mypy``.
 #   * Transcript is owned exclusively by the Python runner (P0-8).
 #   * Marker recognition uses the production helper (P0-9).
 #
@@ -122,33 +121,34 @@ jobs:
             --transcript artifacts/runtime-gate-transcript.log
           echo "runtime_gate=pass" >> "$GITHUB_OUTPUT"
 
-      - name: static-scope classification
+      - name: static-scope classification (dual-range model)
         id: static-scope
         run: |
           set -euo pipefail
-          BASE_SHA="f09348dc6f7dd8887c51278ee0a504c7e22d1417"
+          RUNTIME_BASE_SHA="f09348dc6f7dd8887c51278ee0a504c7e22d1417"
+          LANE_BASE_SHA="9141f4699674353ac82a85e4fe543030ccfc1c42"
           SUBJECT_SHA="${{ steps.identity.outputs.subject_sha }}"
           .venv/bin/python scripts/ci/promotion_runtime_static_scope.py \
-            --base-sha "${BASE_SHA}" \
+            --runtime-base-sha "${RUNTIME_BASE_SHA}" \
+            --lane-base-sha "${LANE_BASE_SHA}" \
             --subject-sha "${SUBJECT_SHA}" \
             --output artifacts/static-scope.json
           UNCLASSIFIED="$(.venv/bin/python -c \
             'import json,sys; d=json.load(open("artifacts/static-scope.json")); print(d["unclassified_count"])')"
           echo "static_unclassified_count=${UNCLASSIFIED}" >> "$GITHUB_OUTPUT"
           if [ "${UNCLASSIFIED}" != "0" ]; then
-            echo "FATAL: static-scope authority reports unclassified paths"
+            # Dual-range model: unclassified paths are a gating violation.
+            echo "FATAL: static-scope authority (dual-range model) reports unclassified paths"
             exit 1
           fi
 
       - name: runtime-scoped Ruff + mypy (P0-2)
         run: |
           set -euo pipefail
-          BASE_SHA="f09348dc6f7dd8887c51278ee0a504c7e22d1417"
-          SUBJECT_SHA="${{ steps.identity.outputs.subject_sha }}"
           .venv/bin/python scripts/ci/promotion_runtime_static_gate_runner.py \
-            --base-sha "${BASE_SHA}" \
-            --subject-sha "${SUBJECT_SHA}" \
-            --output artifacts/static-gate.json
+            --scope-record artifacts/static-scope.json \
+            --expected-subject-sha "${{ steps.identity.outputs.subject_sha }}" \
+            --target-output artifacts/static-gate.json
           # Propagate exit code via the runner; the runner itself is the
           # blocking authority for both Ruff and mypy.
 

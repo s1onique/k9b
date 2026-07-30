@@ -17,7 +17,7 @@ Contract:
 * mypy follows imported runtime modules under the repository's normal
   ``mypy.ini`` configuration.
 * Output record is emitted as a single structured JSON line to
-  ``--output`` (if given) and a human-readable summary on stdout.
+  ``--target-output`` (if given) and a human-readable summary on stdout.
 
 Required output fields:
 
@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
 import json
 import subprocess
 import sys
@@ -42,7 +43,6 @@ from pathlib import Path
 from promotion_runtime_static_scope import (
     ScopeError,
     ScopeRecord,
-    build_scope,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -78,7 +78,11 @@ def run_gate(
     Raises:
         ScopeError: if the scope record has zero included paths.
     """
-    included = list(scope.included_paths)
+    # Run on runtime_paths + lane_paths (the dual-range model target set).
+    runtime_paths = list(getattr(scope, "runtime_paths", ()))
+    lane_paths = list(getattr(scope, "lane_paths", ()))
+    included = runtime_paths + lane_paths
+
     if not included:
         raise ScopeError(
             "scope authority returned zero included paths; refusing to "
@@ -100,23 +104,24 @@ def run_gate(
         ruff_exit_code=ruff_rc,
         mypy_target_count=len(included),
         mypy_exit_code=mypy_rc,
-        deferred_path_count=len(scope.deferred_paths_with_reasons),
+        deferred_path_count=0,
         unclassified_count=scope.unclassified_count,
     )
 
 
-def _verify_scope_checksum(scope: ScopeRecord) -> None:
-    """Verify the scope record's checksum by re-hashing included paths.
+def _verify_scope_record_checksum(scope: ScopeRecord) -> None:
+    """Verify the full scope record checksum (P0-5).
 
-    P0-5 contract: the static gate must consume and verify the
-    checksummed scope record, not independently recompute it.
+    The scope record's inventory_sha256 is the canonical checksum of
+    the included paths.  Re-hash and compare to fail closed on tampering.
     """
-    import hashlib
+    runtime_paths = sorted(getattr(scope, "runtime_paths", ()))
+    lane_paths = sorted(getattr(scope, "lane_paths", ()))
+    all_included = runtime_paths + lane_paths
 
-    included = sorted(scope.included_paths)
     # NUL-delimited canonical hash matching build_scope().
     inventory_bytes = b"\x00".join(
-        p.encode("utf-8") for p in included
+        p.encode("utf-8") for p in all_included
     ) + b"\x00"
     computed = hashlib.sha256(inventory_bytes).hexdigest()
     if computed != scope.inventory_sha256:
@@ -136,62 +141,71 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--scope-record",
         type=Path,
+        required=True,
+        help="Path to a pre-produced scope authority JSON record (required)",
+    )
+    parser.add_argument(
+        "--expected-subject-sha",
+        type=str,
         default=None,
-        help="Path to a pre-produced scope authority JSON record",
+        help="Optional subject SHA for workflow verification; "
+        "gate fails closed if the record's subject_sha does not match",
     )
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
-    parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument(
-        "--scope-output",
-        type=Path,
-        default=None,
-        help="Optional path to write the scope authority JSON record to "
-        "(used when --scope-record is not given)",
-    )
+    parser.add_argument("--target-output", type=Path, default=None)
     args = parser.parse_args(argv)
 
     # P0-5: consume pre-produced scope record, verify its checksum.
-    if args.scope_record is not None:
-        scope_data = json.loads(args.scope_record.read_text(encoding="utf-8"))
-        # Reconstruct ScopeRecord from JSON.
-        included_paths_raw = scope_data.get("included_paths", [])
-        deferred_paths_raw = scope_data.get("deferred_paths_with_reasons", [])
-        deferred_paths: list[tuple[str, str]] = [
-            (d["path"], d["reason"]) for d in deferred_paths_raw
-        ]
-        scope = ScopeRecord(
-            base_sha=scope_data["base_sha"],
-            subject_sha=scope_data["subject_sha"],
-            repo_root=scope_data.get("repo_root", "."),
-            changed_python_count=scope_data.get("changed_python_count", 0),
-            runtime_source_count=scope_data.get("runtime_source_count", 0),
-            lane_authority_count=scope_data.get("lane_authority_count", 0),
-            deferred_count=scope_data.get("deferred_count", 0),
-            unclassified_count=scope_data.get("unclassified_count", 0),
-            included_paths=tuple(included_paths_raw),
-            deferred_paths_with_reasons=tuple(deferred_paths),
-            inventory_sha256=scope_data["inventory_sha256"],
-            raw_inventory_sha256=scope_data.get("raw_inventory_sha256", ""),
-        )
-        # P0-5: verify checksum — fail closed on mismatch.
-        try:
-            _verify_scope_checksum(scope)
-        except ScopeError as exc:
-            print(f"FAIL: {exc}", file=sys.stderr)
-            return 2
-    else:
-        # Fallback: produce scope record (used by tests/CI that chain the two).
-        try:
-            scope = build_scope(args.repo_root, "HEAD~1", "HEAD")
-        except ScopeError as exc:
-            print(f"FAIL: scope authority rejected inventory: {exc}", file=sys.stderr)
-            return 2
-        if args.scope_output is not None:
-            args.scope_output.parent.mkdir(parents=True, exist_ok=True)
-            args.scope_output.write_text(
-                json.dumps(scope.to_dict(), indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
+    scope_data = json.loads(args.scope_record.read_text(encoding="utf-8"))
+
+    # Reconstruct ScopeRecord from JSON.
+    included_paths_raw = scope_data.get("included_paths", [])
+    deferred_paths_raw = scope_data.get("deferred_paths_with_reasons", [])
+    deferred_paths: list[tuple[str, str]] = [
+        (d["path"], d["reason"]) for d in deferred_paths_raw
+    ]
+
+    # Handle runtime_paths and lane_paths if present (dual-range model).
+    runtime_paths_raw = scope_data.get("runtime_paths", [])
+    lane_paths_raw = scope_data.get("lane_paths", [])
+
+    scope = ScopeRecord(
+        base_sha=scope_data["base_sha"],
+        subject_sha=scope_data["subject_sha"],
+        repo_root=scope_data.get("repo_root", "."),
+        changed_python_count=scope_data.get("changed_python_count", 0),
+        runtime_source_count=scope_data.get("runtime_source_count", 0),
+        lane_authority_count=scope_data.get("lane_authority_count", 0),
+        deferred_count=scope_data.get("deferred_count", 0),
+        unclassified_count=scope_data.get("unclassified_count", 0),
+        included_paths=tuple(included_paths_raw),
+        deferred_paths_with_reasons=tuple(deferred_paths),
+        inventory_sha256=scope_data["inventory_sha256"],
+        raw_inventory_sha256=scope_data.get("raw_inventory_sha256", ""),
+    )
+
+    # Attach runtime_paths and lane_paths if present in the record.
+    if runtime_paths_raw:
+        object.__setattr__(scope, "runtime_paths", tuple(runtime_paths_raw))
+    if lane_paths_raw:
+        object.__setattr__(scope, "lane_paths", tuple(lane_paths_raw))
+
+    # P0-5: verify subject SHA if expected value is provided.
+    if args.expected_subject_sha is not None:
+        if scope.subject_sha != args.expected_subject_sha:
+            print(
+                f"FAIL: subject_sha mismatch: expected "
+                f"{args.expected_subject_sha}, got {scope.subject_sha}",
+                file=sys.stderr,
             )
+            return 2
+
+    # P0-5: verify checksum — fail closed on mismatch.
+    try:
+        _verify_scope_record_checksum(scope)
+    except ScopeError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 2
 
     try:
         record = run_gate(args.repo_root, scope)
@@ -201,9 +215,9 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = record.to_dict()
     serialised = json.dumps(payload, indent=2, sort_keys=True)
-    if args.output is not None:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(serialised + "\n", encoding="utf-8")
+    if args.target_output is not None:
+        args.target_output.parent.mkdir(parents=True, exist_ok=True)
+        args.target_output.write_text(serialised + "\n", encoding="utf-8")
 
     print(
         "OK: runtime static gate\n"

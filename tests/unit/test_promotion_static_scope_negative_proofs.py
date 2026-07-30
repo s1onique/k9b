@@ -129,15 +129,19 @@ class TestMissingPathFailClosed:
     def test_missing_path_raises_scope_error(self, tmp_path: Path) -> None:
         """A path that appears in git diff but does not exist on disk raises ScopeError.
 
-        Uses an untracked-but-modified file: git records it in the diff, but it
-        doesn't exist on disk at HEAD (git show returns nothing).  This exercises
-        the exist-on-disk check without needing to fake a git repo from scratch.
+        Uses build_scope with a constructed _git_changed_python output: the
+        git-diff equivalent returns a path, but the file doesn't exist on disk.
         """
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
+
+        # Init a minimal repo.
         import os
         import subprocess
 
-
+        from promotion_runtime_static_scope import (
+            ScopeError,
+            build_scope,
+        )
         env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t"}
         subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
@@ -145,25 +149,49 @@ class TestMissingPathFailClosed:
         subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
         subprocess.run(["git", "commit", "-m", "init"],
                       cwd=tmp_path, capture_output=True, env=env)
+        head_sha = subprocess.run(["git", "rev-parse", "HEAD"],
+            cwd=tmp_path, capture_output=True, text=True).stdout.strip()
 
-        # Create and commit a runtime file (will be in git diff).
-        runtime_dir = tmp_path / "src" / "k8s_diag_agent"
-        runtime_dir.mkdir(parents=True)
-        runtime_file = runtime_dir / "foo.py"
-        runtime_file.write_text("pass\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "add"],
-                      cwd=tmp_path, capture_output=True, env=env)
+        # Use different SHAs for runtime and lane so we can mock them differently
+        runtime_base = head_sha + "0"  # Make different from head_sha
+        lane_base = head_sha + "1"  # Make different from both
+        fake_lane_path = "scripts/ci/pytest_runtime_gate_plugin.py"  # In lane authority paths
 
-        # Delete the file from disk but leave it in git history.
-        runtime_file.unlink()
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "delete"],
-                      cwd=tmp_path, capture_output=True, env=env)
+        # Monkeypatch all git functions
+        def fake_git_changed(repo, base, subject):
+            # Return lane path only for lane range, empty for runtime range
+            if base == runtime_base:
+                return b""
+            return fake_lane_path.encode() + b"\x00"
 
-        # git diff now shows the deleted file.  The exist-on-disk check must fail.
-        # Note: --diff-filter=ACMRT includes D (deleted), so the file IS in the diff.
-        pytest.skip("git filter=D on deletion requires multi-commit context; test_missing_path_direct_record covers this contract")
+        def fake_resolve_revision(repo, rev):
+            if rev in (runtime_base, lane_base):
+                return rev
+            return head_sha
+
+        def fake_ls_tree(*args):
+            return b""  # No historical Python files
+
+        def fake_is_ancestor(repo, ancestor, descendant):
+            return True  # Always pass the ancestor check in tests
+
+        import promotion_runtime_static_scope
+        _original_git_changed = promotion_runtime_static_scope._git_changed_python
+        _original_resolve = promotion_runtime_static_scope._resolve_revision
+        _original_ls_tree = promotion_runtime_static_scope._git_ls_tree_python
+        _original_is_ancestor = promotion_runtime_static_scope._git_is_ancestor
+        promotion_runtime_static_scope._git_changed_python = fake_git_changed
+        promotion_runtime_static_scope._resolve_revision = fake_resolve_revision
+        promotion_runtime_static_scope._git_ls_tree_python = fake_ls_tree
+        promotion_runtime_static_scope._git_is_ancestor = fake_is_ancestor
+        try:
+            with pytest.raises(ScopeError, match="does not exist on disk"):
+                build_scope(tmp_path, runtime_base, lane_base, "HEAD")
+        finally:
+            promotion_runtime_static_scope._git_changed_python = _original_git_changed
+            promotion_runtime_static_scope._resolve_revision = _original_resolve
+            promotion_runtime_static_scope._git_ls_tree_python = _original_ls_tree
+            promotion_runtime_static_scope._git_is_ancestor = _original_is_ancestor
 
     def test_missing_path_direct_record(self, tmp_path: Path) -> None:
         """Missing path raises ScopeError even when the record exists in isolation.
@@ -188,20 +216,49 @@ class TestMissingPathFailClosed:
         subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
         subprocess.run(["git", "commit", "-m", "init"],
                       cwd=tmp_path, capture_output=True, env=env)
+        head_sha = subprocess.run(["git", "rev-parse", "HEAD"],
+            cwd=tmp_path, capture_output=True, text=True).stdout.strip()
 
-        # Monkeypatch _git_changed_python to return a path that doesn't exist.
-        def fake_git_changed(*args):
-            # Return a NUL-delimited path that doesn't exist on disk.
-            return b"nonexistent_file_12345.py\x00"
+        # Use different SHAs for runtime and lane so we can mock them differently
+        runtime_base = head_sha + "0"  # Make different from head_sha
+        lane_base = head_sha + "1"  # Make different from both
+        fake_lane_path = "scripts/ci/pytest_runtime_gate_plugin.py"  # In lane authority paths
+
+        # Monkeypatch all git functions
+        def fake_git_changed(repo, base, subject):
+            # Return lane path only for lane range, empty for runtime range
+            if base == runtime_base:
+                return b""
+            return fake_lane_path.encode() + b"\x00"
+
+        def fake_resolve_revision(repo, rev):
+            if rev in (runtime_base, lane_base):
+                return rev
+            return head_sha
+
+        def fake_ls_tree(*args):
+            return b""  # No historical Python files
+
+        def fake_is_ancestor(repo, ancestor, descendant):
+            return True  # Always pass the ancestor check in tests
 
         import promotion_runtime_static_scope
-        _original = promotion_runtime_static_scope._git_changed_python
+        _original_git_changed = promotion_runtime_static_scope._git_changed_python
+        _original_resolve = promotion_runtime_static_scope._resolve_revision
+        _original_ls_tree = promotion_runtime_static_scope._git_ls_tree_python
+        _original_is_ancestor = promotion_runtime_static_scope._git_is_ancestor
         promotion_runtime_static_scope._git_changed_python = fake_git_changed
+        promotion_runtime_static_scope._resolve_revision = fake_resolve_revision
+        promotion_runtime_static_scope._git_ls_tree_python = fake_ls_tree
+        promotion_runtime_static_scope._git_is_ancestor = fake_is_ancestor
         try:
             with pytest.raises(ScopeError, match="does not exist on disk"):
-                build_scope(tmp_path, "HEAD", "HEAD")
+                build_scope(tmp_path, runtime_base, lane_base, "HEAD")
         finally:
-            promotion_runtime_static_scope._git_changed_python = _original
+            promotion_runtime_static_scope._git_changed_python = _original_git_changed
+            promotion_runtime_static_scope._resolve_revision = _original_resolve
+            promotion_runtime_static_scope._git_ls_tree_python = _original_ls_tree
+            promotion_runtime_static_scope._git_is_ancestor = _original_is_ancestor
 
 
 # ---------------------------------------------------------------------------
@@ -228,14 +285,59 @@ class TestRepoRootEvidence:
         (tmp_path / "README").write_text("x")
         subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
         subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, env=env)
+        head_minus_1 = subprocess.run(["git", "rev-parse", "HEAD"],
+            cwd=tmp_path, capture_output=True, text=True).stdout.strip()
         # Add a runtime file to create a changed path.
         runtime_file = tmp_path / "src" / "k8s_diag_agent" / "test.py"
         runtime_file.parent.mkdir(parents=True)
         runtime_file.write_text("pass\n")
         subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
         subprocess.run(["git", "commit", "-m", "add"], cwd=tmp_path, capture_output=True, env=env)
+        head = subprocess.run(["git", "rev-parse", "HEAD"],
+            cwd=tmp_path, capture_output=True, text=True).stdout.strip()
 
-        record = build_scope(tmp_path, "HEAD~1", "HEAD")
+        # Use different SHAs for runtime and lane
+        runtime_base = head_minus_1 + "0"
+        lane_base = head_minus_1 + "1"
+
+        # Mock _resolve_revision and _git_ls_tree_python
+        def fake_resolve_revision(repo, rev):
+            if rev in (runtime_base, lane_base):
+                return rev
+            if rev in ("HEAD", head):
+                return head
+            elif rev in ("HEAD~1", head_minus_1):
+                return head_minus_1
+            return rev
+
+        def fake_git_changed(repo, base, subject):
+            # Return runtime changed path only for runtime range
+            if base == runtime_base:
+                return b"src/k8s_diag_agent/test.py\x00"
+            return b""  # lane range empty
+
+        def fake_ls_tree(*args):
+            return b""  # No historical Python files needed for this test
+
+        def fake_is_ancestor(repo, ancestor, descendant):
+            return True  # Always pass the ancestor check in tests
+
+        import promotion_runtime_static_scope
+        _original_resolve = promotion_runtime_static_scope._resolve_revision
+        _original_ls_tree = promotion_runtime_static_scope._git_ls_tree_python
+        _original_git_changed = promotion_runtime_static_scope._git_changed_python
+        _original_is_ancestor = promotion_runtime_static_scope._git_is_ancestor
+        promotion_runtime_static_scope._resolve_revision = fake_resolve_revision
+        promotion_runtime_static_scope._git_ls_tree_python = fake_ls_tree
+        promotion_runtime_static_scope._git_changed_python = fake_git_changed
+        promotion_runtime_static_scope._git_is_ancestor = fake_is_ancestor
+        try:
+            record = build_scope(tmp_path, runtime_base, lane_base, "HEAD")
+        finally:
+            promotion_runtime_static_scope._resolve_revision = _original_resolve
+            promotion_runtime_static_scope._git_ls_tree_python = _original_ls_tree
+            promotion_runtime_static_scope._git_changed_python = _original_git_changed
+            promotion_runtime_static_scope._git_is_ancestor = _original_is_ancestor
         assert record.repo_root == ".", (
             f"ScopeRecord.repo_root must be '.', got: {record.repo_root!r}"
         )
@@ -255,21 +357,23 @@ class TestStaticGateChecksumVerification:
         from promotion_runtime_static_scope import ScopeRecord
 
         scope = ScopeRecord(
-            base_sha="a" * 40,
-            subject_sha="b" * 40,
+            runtime_base_sha="a" * 40,
+            lane_base_sha="b" * 40,
+            subject_sha="c" * 40,
+            subject_tree="d" * 40,
             repo_root=".",
-            changed_python_count=1,
-            runtime_source_count=1,
-            lane_authority_count=0,
-            deferred_count=0,
+            runtime_paths=("src/k8s_diag_agent/foo.py",),
+            lane_paths=(),
+            historical_nonruntime_paths=(),
+            runtime_count=1,
+            lane_count=0,
+            historical_nonruntime_count=0,
             unclassified_count=0,
             included_paths=("src/k8s_diag_agent/foo.py",),
-            deferred_paths_with_reasons=(),
             inventory_sha256="deadbeef" * 8,  # Wrong checksum.
-            raw_inventory_sha256="cafebabe" * 8,
         )
         with pytest.raises(gate.ScopeError, match="checksum mismatch"):
-            gate._verify_scope_checksum(scope)
+            gate._verify_scope_record_checksum(scope)
 
     def test_valid_checksum_accepted(self, tmp_path: Path) -> None:
         """Scope record with correct checksum passes verification."""
@@ -282,18 +386,20 @@ class TestStaticGateChecksumVerification:
         correct_hash = hashlib.sha256(inventory_bytes).hexdigest()
 
         scope = ScopeRecord(
-            base_sha="a" * 40,
-            subject_sha="b" * 40,
+            runtime_base_sha="a" * 40,
+            lane_base_sha="b" * 40,
+            subject_sha="c" * 40,
+            subject_tree="d" * 40,
             repo_root=".",
-            changed_python_count=1,
-            runtime_source_count=1,
-            lane_authority_count=0,
-            deferred_count=0,
+            runtime_paths=tuple(paths),
+            lane_paths=(),
+            historical_nonruntime_paths=(),
+            runtime_count=1,
+            lane_count=0,
+            historical_nonruntime_count=0,
             unclassified_count=0,
             included_paths=tuple(paths),
-            deferred_paths_with_reasons=(),
             inventory_sha256=correct_hash,
-            raw_inventory_sha256="cafebabe" * 8,
         )
         # Must not raise.
-        gate._verify_scope_checksum(scope)
+        gate._verify_scope_record_checksum(scope)

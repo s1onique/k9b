@@ -332,11 +332,16 @@ class TestPluginLaneAuthorityScope:
         )
 
     def test_plugin_not_deferred(self) -> None:
-        """pytest_runtime_gate_plugin.py must NOT be in deferred paths."""
+        """pytest_runtime_gate_plugin.py is in lane authority paths (not deferred).
+
+        DEFERRED_PATHS was removed in the dual-range model. The plugin is in
+        EXPERIMENTAL_LANE_AUTHORITY_PATHS which IS lane_authority (not deferred).
+        """
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
         import promotion_runtime_static_scope as scope
 
         plugin_rel = "scripts/ci/pytest_runtime_gate_plugin.py"
-        assert plugin_rel not in scope.DEFERRED_PATHS, (
-            "pytest_runtime_gate_plugin.py must not be deferred"
+        # Verify it's in lane authority paths (not deferred)
+        assert plugin_rel in scope.EXPERIMENTAL_LANE_AUTHORITY_PATHS, (
+            "pytest_runtime_gate_plugin.py must be in EXPERIMENTAL_LANE_AUTHORITY_PATHS"
         )
