@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import re
 
-from promotion_runtime_static_scope_contract import ScopeError
-
 # ---------------------------------------------------------------------------
 # Runtime source prefix (P0-6).
 # ---------------------------------------------------------------------------
