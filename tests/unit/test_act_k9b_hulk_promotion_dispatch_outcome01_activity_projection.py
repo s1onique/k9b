@@ -35,14 +35,27 @@ from k8s_diag_agent.collect.promotion_outcomes import (
 
 RUN_ID = "run-2026-07-15T0350Z"
 
+# Production-shaped signal IDs: "sha256:" + 64 lowercase hex chars
+_SIGNAL_ID_A = "sha256:" + ("a" * 64)
+_SIGNAL_ID_B = "sha256:" + ("b" * 64)
+
+# Production-shaped canonical fingerprint (matches real contract)
+_CANONICAL_FINGERPRINT = "c" * 64
+
+# Validate fixture grammar
+assert len(_SIGNAL_ID_A.split(":")[1]) == 64, f"signal ID hash must be 64 chars, got {len(_SIGNAL_ID_A.split(':')[1])}"
+assert _SIGNAL_ID_A.startswith("sha256:"), "signal ID must start with sha256:"
+assert len(_CANONICAL_FINGERPRINT) == 64, f"fingerprint must be 64 chars, got {len(_CANONICAL_FINGERPRINT)}"
+assert _CANONICAL_FINGERPRINT == _CANONICAL_FINGERPRINT.lower(), "fingerprint must be lowercase hex"
+
 
 def _token(
     request_id: str = "req-abc",
-    fingerprint: str = "sha256:abc",
 ) -> PromotionReconciliationToken:
+    """Create a production-shaped reconciliation token with valid fingerprint."""
     return PromotionReconciliationToken(
         request_id=request_id,
-        request_fingerprint=fingerprint,
+        request_fingerprint=_CANONICAL_FINGERPRINT,
     )
 
 
@@ -106,7 +119,7 @@ class TestHasPromotionActivity:
             PromotionRejected(
                 run_id=RUN_ID,
                 reason=PromotionRejectionCode.MALFORMED_SIGNAL_IDS,
-                rejected_signal_ids=("sha256:a",),
+                rejected_signal_ids=(_SIGNAL_ID_A,),
             )
         )
         assert accumulator.has_promotion_activity() is True
@@ -126,7 +139,7 @@ class TestHasPromotionActivity:
                 run_id=RUN_ID,
                 reason=PromotionUncertaintyCode.TRANSPORT_TIMEOUT,
                 reconciliation_token=_token(),
-                requested_signal_ids=("sha256:a",),
+                requested_signal_ids=(_SIGNAL_ID_A,),
             )
         )
         assert accumulator.has_promotion_activity() is True
@@ -138,7 +151,7 @@ class TestHasPromotionActivity:
         accumulator.record_promotion_outcome(
             PromotionSucceeded(
                 run_id=RUN_ID,
-                requested_signal_ids=("sha256:a",),
+                requested_signal_ids=(_SIGNAL_ID_A,),
                 records=(),
                 diagnosis_incident_ids=(),
             )

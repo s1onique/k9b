@@ -405,10 +405,3 @@ class TestTelemetryProjectionInvariants:
         with pytest.raises(TypeError):
             promotion_outcome_event_fields("not a PromotionOutcome")
 
-
-# ---------------------------------------------------------------------------
-# has_promotion_activity regression tests
-# ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION01
-# ---------------------------------------------------------------------------
-
-
