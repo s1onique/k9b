@@ -433,9 +433,24 @@ def verify_experimental_lab_build_lane() -> list[Finding]:
     # P0-8 (CORRECTION04): bootstrap contract on the runtime workflow.
     from verify_promotion_experimental_lab_build_lane_bootstrap import (
         check_bootstrap_contract,
+        check_bootstrap_script,
     )
 
     findings.extend(check_bootstrap_contract(RUNTIME_WORKFLOW))
+    findings.extend(check_bootstrap_script(BOOTSTRAP_SCRIPT))
+
+    # P0-7 (CORRECTION05): the experimental caller MUST carry the
+    # CI-HERMETIC-TOOLCACHE marker.
+    if "CI-HERMETIC-TOOLCACHE" not in EXPERIMENTAL_WORKFLOW.read_text(
+        encoding="utf-8"
+    ):
+        findings.append(
+            Finding(
+                "EXPERIMENTAL_CALLER_MISSING_HERMETIC_MARKER",
+                "promotion-experimental-lab-build.yml is missing the "
+                "CI-HERMETIC-TOOLCACHE marker",
+            )
+        )
 
     return findings
 

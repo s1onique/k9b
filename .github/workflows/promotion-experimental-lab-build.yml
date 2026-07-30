@@ -1,4 +1,4 @@
-# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION03
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION05
 # Experimental lab build lane (thin caller)
 #
 # This is the thin orchestration caller for the experimental lab build.
@@ -25,6 +25,14 @@
 #                |
 #                v
 #             classify
+#
+# CI-HERMETIC-TOOLCACHE:
+#   The caller itself downloads no tools.  Runtime Python tooling
+#   (pytest, ruff, mypy) is installed inside reusable-promotion-experimental-
+#   runtime.yml via scripts/ci/bootstrap_python_dev.sh.  Harbor build
+#   tooling (docker, buildx, BuildKit) is installed inside harbor-build-
+#   image.yml via the existing canonical install steps.  This caller only
+#   composes those reusable workflows.
 
 name: k9b promotion experimental lab build
 

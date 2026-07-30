@@ -1,8 +1,13 @@
-# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION03
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION05
 # Reusable runtime gate for the experimental lab build lane.
 #
 # This workflow performs the focused promotion runtime gate at SUBJECT_SHA.
 # It is invoked at job level by the thin caller; never from a step.
+#
+# The runtime test inventory is owned exclusively by
+# ``scripts/ci/promotion_runtime_tests.txt`` and executed by
+# ``scripts/ci/run_promotion_runtime_gate.py``.  This workflow MUST NOT
+# contain an inline TESTS=(...) array.
 #
 # Outputs:
 #   subject_sha:  - the workflow SHA (github.sha) locked at runtime
@@ -41,7 +46,7 @@ jobs:
   gate:
     name: promotion runtime gate at SUBJECT_SHA
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     outputs:
       subject_sha: ${{ steps.identity.outputs.subject_sha }}
       runtime_gate: ${{ steps.gate.outputs.runtime_gate }}
@@ -76,7 +81,6 @@ jobs:
       - name: tool version preflight (P0-2)
         run: |
           set -euo pipefail
-          # Fail closed if any required tool is missing.
           for tool in pytest ruff mypy; do
             if ! .venv/bin/python -c "import ${tool}" >/dev/null 2>&1; then
               echo "FATAL: required tool '${tool}' is not importable"
@@ -88,72 +92,30 @@ jobs:
           .venv/bin/python -m ruff --version
           .venv/bin/python -m mypy --version
 
-      - name: focused promotion runtime gate
+      - name: runtime gate transcript setup
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          : > artifacts/runtime-gate-transcript.log
+
+      - name: verify canonical inventory
+        id: verify-inventory
+        run: |
+          set -euo pipefail
+          .venv/bin/python scripts/ci/run_promotion_runtime_gate.py \
+            --verify-inventory \
+            --transcript artifacts/runtime-gate-transcript.log
+          echo "verify_inventory=pass" >> "$GITHUB_OUTPUT"
+
+      - name: focused promotion runtime gate (canonical runner)
         id: gate
         run: |
           set -euo pipefail
-          TESTS=(
-            "tests/unit/test_scoped_recording_authority_first_replay.py"
-            "tests/unit/test_scoped_recording_authority_interleaved_corrupt.py"
-            "tests/unit/test_scoped_selection_identity.py"
-            "tests/unit/test_scoped_selection_record_fabrication_guard.py"
-            "tests/unit/test_promotion_dispatch_outcome01_classifier.py"
-            "tests/unit/test_promotion_diagnosis_handoff.py"
-            "tests/unit/test_promotion_diagnosis_handoff_regression.py"
-            "tests/unit/test_promotion_http_wire_semantics.py"
-            "tests/unit/test_promotion_http_wire_semantics_reconciliation.py"
-            "tests/unit/test_promotion_http_wire_binding.py"
-            "tests/unit/test_promotion_http_wire_binding_invariants.py"
-            "tests/unit/test_promotion_http_wire_structure.py"
-            "tests/unit/test_promotion_http_observation.py"
-            "tests/unit/test_promotion_http_loopback.py"
-            "tests/unit/test_promotion_http_mapping.py"
-            "tests/unit/test_promotion_http_context.py"
-            "tests/unit/test_promotion_http_transport_matrix.py"
-            "tests/unit/test_promotion_artifact_reading.py"
-            "tests/unit/test_promotion_outcomes.py"
-            "tests/unit/test_promotion_http_test_server_support.py"
-            "tests/unit/test_run_summary_derivation.py"
-            "tests/unit/test_run_identity_reconciliation.py"
-            "tests/unit/test_round10_run_identity_matrix.py"
-            "tests/unit/test_make_targeted_digest_manifest.py"
-            "tests/unit/test_make_targeted_digest.py"
-            "tests/unit/test_make_targeted_digest_self_reference.py"
-            "tests/unit/test_targeted_digest_manifest.py"
-            "tests/unit/test_diagnosis_loop_trajectory.py"
-            "tests/unit/test_commit_unknown_selection_handoff01_witness.py"
-            "tests/unit/test_act_k9b_hulk_commit_unknown_selection_handoff01.py"
-            "tests/unit/test_act_k9b_hulk_current_run_promotion_dispatch_outcome01_wrapper.py"
-            "tests/unit/test_act_k9b_hulk_promotion_succeeded_record_validation.py"
-            "tests/unit/test_act_k9b_hulk_current_run_promotion_seam01_verifier.py"
-            "tests/unit/test_scoped_accumulator_atomic_recording.py"
-            "tests/unit/test_scoped_accumulator_rollback.py"
-            "tests/unit/test_scoped_handoff_completed_invariants.py"
-            "tests/unit/test_scoped_handoff_identity_shape.py"
-            "tests/unit/test_scoped_handoff_ownership_fixtures.py"
-            "tests/unit/test_scoped_handoff_rejected_invariants.py"
-            "tests/unit/test_scoped_handoff_uncertain_invariants.py"
-            "tests/unit/test_scoped_selection_commit_unknown.py"
-            "tests/unit/test_scoped_selection_completed.py"
-            "tests/unit/test_scoped_selection_dispatch_integration.py"
-            "tests/unit/test_scoped_selection_explicit_no_promotion.py"
-            "tests/unit/test_scoped_selection_no_global_fallback.py"
-            "tests/unit/test_scoped_selection_rejected.py"
-          )
-          MISSING=0
-          for t in "${TESTS[@]}"; do
-            if [ ! -f "$t" ]; then
-              echo "FATAL: required promotion-runtime test missing: $t"
-              MISSING=$((MISSING + 1))
-            fi
-          done
-          if [ $MISSING -gt 0 ]; then
-            echo "FATAL: $MISSING required test file(s) missing"
-            exit 1
-          fi
           set -o pipefail
-          .venv/bin/python -m pytest -q "${TESTS[@]}" 2>&1 \
-            | tee runtime-gate-transcript.log
+          .venv/bin/python scripts/ci/run_promotion_runtime_gate.py \
+            --run \
+            --transcript artifacts/runtime-gate-transcript.log 2>&1 \
+            | tee -a artifacts/runtime-gate-transcript.log
           echo "runtime_gate=pass" >> "$GITHUB_OUTPUT"
 
       - name: ruff on changed runtime Python (blocking)
@@ -216,4 +178,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runtime-gate-${{ steps.identity.outputs.subject_sha }}
-          path: runtime-gate-transcript.log
+          path: artifacts/runtime-gate-transcript.log
