@@ -1,4 +1,4 @@
-# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION05
+# ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION06
 # Canonical promotion runtime test manifest.
 #
 # This file is the SINGLE authority for the runtime-gate inventory.  Both
@@ -21,6 +21,7 @@
 
 tests/unit/test_act_k9b_hulk_commit_unknown_selection_handoff01.py
 tests/unit/test_act_k9b_hulk_commit_unknown_selection_handoff01_witness.py
+tests/unit/test_act_k9b_hulk_promotion_dispatch_outcome01_activity_projection.py
 tests/unit/test_act_k9b_hulk_promotion_dispatch_outcome01_classifier.py
 tests/unit/test_act_k9b_hulk_promotion_succeeded_record_validation.py
 tests/unit/test_api_incident_diagnosis_loop_run.py
@@ -40,6 +41,8 @@ tests/unit/test_promotion_http_wire_semantics.py
 tests/unit/test_promotion_http_wire_semantics_reconciliation.py
 tests/unit/test_promotion_http_wire_structure.py
 tests/unit/test_promotion_outcomes.py
+tests/unit/test_r5_orchestration_proof.py
+tests/unit/test_r5_promotion_outcome_projection.py
 tests/unit/test_round10_run_identity_matrix.py
 tests/unit/test_scoped_accumulator_atomic_recording.py
 tests/unit/test_scoped_accumulator_rollback.py
