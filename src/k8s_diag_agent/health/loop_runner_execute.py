@@ -400,6 +400,11 @@ def _resolve_accumulator_truth(
     to render a neutral / not-attempted state; the previous empty
     string silently matched the legacy ``"backend"`` default in
     :func:`_build_backend_endpoint_identity`.
+
+    ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION01:
+    When has_promotion_activity() is True but batches is empty (typed
+    outcome recorded without successful batch append), return
+    reconciliation_required sentinel values.
     """
     if not accumulator.has_promotion_activity():
         return (
@@ -408,6 +413,49 @@ def _resolve_accumulator_truth(
             NO_PROMOTION_SCAN_SCOPE,
         )
 
+    # ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION02-FINALIZATION01:
+    # Outcome without batch: exhaustive typed projection.
+    # Only PromotionCommitUnknown requires reconciliation.
+    # PromotionRejected remains blocked (not reconciliation).
+    # PromotionSucceeded without batch is a consistency contract error.
+    #
+    # Note: has_promotion_activity() is bool(batches) or (promotion_outcome is not None).
+    # Reaching this block means batches is empty and has_promotion_activity() is True,
+    # so promotion_outcome MUST exist (otherwise activity would be False).
+    if not accumulator.batches:
+        from typing import assert_never
+
+        outcome = accumulator.promotion_outcome
+        # outcome is guaranteed non-None here (implied by has_promotion_activity() == True above)
+
+        if isinstance(outcome, PromotionCommitUnknown):
+            return (
+                "commit_unknown",
+                INCIDENT_ACCESS_MODE_RECONCILIATION_REQUIRED,
+                "reconciliation_required",
+            )
+
+        if isinstance(outcome, PromotionRejected):
+            return (
+                "rejected",
+                "blocked",
+                "promotion_rejected",
+            )
+
+        if isinstance(outcome, PromotionSucceeded):
+            # PromotionSucceeded without a batch is a consistency contract violation.
+            # A successful active-scoped promotion must have its atomic batch/receipt.
+            return (
+                "promotion_consistency_contract_error",
+                "promotion_consistency_contract_error",
+                "promotion_consistency_contract_error",
+            )
+
+        # Exhaustive over the closed PromotionOutcome union.
+        assert_never(outcome)
+
+    # Batches exist: use batch mode (canonical authority for promotion mode).
+    # The outcome may also be recorded but batches take precedence.
     observed: list[tuple[str, str]] = []
     for batch in accumulator.batches:
         observed.append((batch.promotion_mode, batch.incident_access_mode))

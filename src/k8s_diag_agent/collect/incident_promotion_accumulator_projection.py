@@ -114,12 +114,26 @@ def scoped_promotion_request_fingerprint_projection(
 
 
 def has_promotion_activity(acc: RunPromotionAccumulator) -> bool:
-    """Return True if at least one batch has been accepted.
+    """Return True if at least one batch has been accepted or a typed outcome is recorded.
 
-    The orchestrator uses this to distinguish a deliberate
+    ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION01:
+    A typed promotion outcome (success, rejection, or commit-unknown) proves
+    that a promotion dispatch occurred, even when no successful batch was
+    appended. The orchestrator uses this to distinguish a deliberate
     empty promotion run from one that never reached promotion.
+
+    Required invariant:
+        has_promotion_activity = bool(batches) OR promotion_outcome is not None
+
+    Cases:
+        - empty accumulator -> False
+        - successful batch -> True
+        - rejected outcome without batch -> True
+        - commit-unknown outcome without batch -> True
+        - dispatch absent -> final no_promotion_run
+        - dispatch commit-unknown -> final reconciliation_required
     """
-    return bool(acc.batches)
+    return bool(acc.batches) or acc.promotion_outcome is not None
 
 
 def aggregated_error_messages(acc: RunPromotionAccumulator) -> tuple[str, ...]:

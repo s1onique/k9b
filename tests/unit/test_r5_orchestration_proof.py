@@ -42,6 +42,14 @@ from k8s_diag_agent.collect.incident_promotion_dispatch import (
     MODE_LOCAL,
     IncidentPromotionResult,
 )
+from k8s_diag_agent.collect.promotion_outcomes import (
+    PromotionCommitUnknown,
+    PromotionRejected,
+    PromotionReconciliationToken,
+    PromotionRejectionCode,
+    PromotionSucceeded,
+    PromotionUncertaintyCode,
+)
 from k8s_diag_agent.health.loop_runner_execute import (
     NO_PROMOTION_MODE,
     _derive_automatic_diagnosis_inputs,
@@ -289,6 +297,253 @@ class OrchestrationContractTests(unittest.TestCase):
                 "consumers no longer race the diagnostic collector."
             ),
         )
+
+
+# ---------------------------------------------------------------------------
+# ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION01:
+# Production projection regression tests for outcome-without-batch scenario.
+#
+# CORRECTION02: Exhaustive typed projection - only PromotionCommitUnknown
+# requires reconciliation. PromotionRejected remains blocked (not reconciliation).
+# PromotionSucceeded without batch is a consistency contract error.
+# ---------------------------------------------------------------------------
+
+
+# Production-shaped canonical 64-char hex fingerprint (matches real contract)
+_CANONICAL_FINGERPRINT = "a" * 64
+
+# Production-shaped signal IDs: "sha256:" + 64 lowercase hex chars
+_SIGNAL_ID_A = "sha256:" + ("a" * 64)
+_SIGNAL_ID_B = "sha256:" + ("b" * 64)
+
+# Validate fixture grammar
+assert len(_CANONICAL_FINGERPRINT) == 64, f"fingerprint must be 64 chars, got {len(_CANONICAL_FINGERPRINT)}"
+assert _CANONICAL_FINGERPRINT == _CANONICAL_FINGERPRINT.lower(), "fingerprint must be lowercase hex"
+assert _SIGNAL_ID_A.startswith("sha256:"), "signal ID must start with sha256:"
+assert len(_SIGNAL_ID_A.split(":")[1]) == 64, f"signal ID hash must be 64 chars, got {len(_SIGNAL_ID_A.split(':')[1])}"
+
+
+def _make_canonical_token(
+    request_id: str = "req-test",
+) -> PromotionReconciliationToken:
+    """Create a production-shaped reconciliation token with valid fingerprint."""
+    return PromotionReconciliationToken(
+        request_id=request_id,
+        request_fingerprint=_CANONICAL_FINGERPRINT,
+    )
+
+
+class TestResolveAccumulatorTruthWithOutcome(unittest.TestCase):
+    """Regression tests for _resolve_accumulator_truth with outcome but no batch.
+
+    ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION02:
+    Exhaustive typed projection - only PromotionCommitUnknown requires reconciliation.
+    PromotionRejected remains blocked (not reconciliation).
+    PromotionSucceeded without batch is a consistency contract error.
+    """
+
+    def test_empty_accumulator_returns_no_promotion_run(self) -> None:
+        """Empty accumulator with no batches and no outcome -> no_promotion_run."""
+        acc = RunPromotionAccumulator()
+        self.assertFalse(acc.has_promotion_activity())
+        mode, access, scope = _resolve_accumulator_truth(acc)
+        self.assertEqual(mode, NO_PROMOTION_MODE)
+        self.assertEqual(access, NO_PROMOTION_MODE)
+        self.assertEqual(scope, NO_PROMOTION_MODE)
+
+    def test_batch_provides_activity(self) -> None:
+        """Real batch -> activity true and batch mode returned."""
+        acc = RunPromotionAccumulator()
+        acc.add_batch(
+            _make_batch(
+                promotion_mode=MODE_BACKEND_API,
+                incident_access_mode=INCIDENT_ACCESS_MODE_BACKEND,
+                opened_ids=("inc-1",),
+            )
+        )
+        self.assertTrue(acc.has_promotion_activity())
+        mode, access, scope = _resolve_accumulator_truth(acc)
+        self.assertEqual(mode, MODE_BACKEND_API)
+        self.assertEqual(access, INCIDENT_ACCESS_MODE_BACKEND)
+
+    def test_commit_unknown_without_batch_returns_reconciliation(self) -> None:
+        """Commit-unknown outcome without batch -> commit_unknown mode.
+
+        Only PromotionCommitUnknown requires reconciliation.
+        Uses typed enum reason (production-shaped).
+        """
+        acc = RunPromotionAccumulator()
+        acc.record_promotion_outcome(
+            PromotionCommitUnknown(
+                run_id="run-test",
+                reason=PromotionUncertaintyCode.AMBIGUOUS_RESPONSE,
+                reconciliation_token=_make_canonical_token(),
+                requested_signal_ids=(_SIGNAL_ID_A, _SIGNAL_ID_B),
+            )
+        )
+        self.assertTrue(acc.has_promotion_activity())
+        self.assertEqual(len(acc.batches), 0)
+
+        mode, access, scope = _resolve_accumulator_truth(acc)
+        self.assertEqual(mode, "commit_unknown")
+        self.assertEqual(access, "reconciliation_required")
+        self.assertEqual(scope, "reconciliation_required")
+
+    def test_rejected_without_batch_returns_rejected_not_reconciliation(self) -> None:
+        """Rejection outcome without batch -> rejected mode (NOT reconciliation).
+
+        PromotionRejected does NOT require reconciliation - it definitely did not commit.
+        """
+        acc = RunPromotionAccumulator()
+        acc.record_promotion_outcome(
+            PromotionRejected(
+                run_id="run-test",
+                reason=PromotionRejectionCode.MALFORMED_SIGNAL_IDS,
+                rejected_signal_ids=(_SIGNAL_ID_A,),
+            )
+        )
+        self.assertTrue(acc.has_promotion_activity())
+        self.assertEqual(len(acc.batches), 0)
+
+        mode, access, scope = _resolve_accumulator_truth(acc)
+        self.assertEqual(mode, "rejected")
+        self.assertEqual(access, "blocked")
+        self.assertEqual(scope, "promotion_rejected")
+
+    def test_succeeded_without_batch_returns_consistency_error(self) -> None:
+        """Success outcome without batch -> consistency contract error.
+
+        A successful active-scoped promotion must have its atomic batch/receipt.
+        Without a batch, this is a consistency violation.
+        """
+        acc = RunPromotionAccumulator()
+        acc.record_promotion_outcome(
+            PromotionSucceeded(
+                run_id="run-test",
+                requested_signal_ids=(_SIGNAL_ID_A,),
+                records=(),
+                diagnosis_incident_ids=(),
+            )
+        )
+        self.assertTrue(acc.has_promotion_activity())
+        self.assertEqual(len(acc.batches), 0)
+
+        mode, access, scope = _resolve_accumulator_truth(acc)
+        self.assertEqual(mode, "promotion_consistency_contract_error")
+        self.assertEqual(access, "promotion_consistency_contract_error")
+        self.assertEqual(scope, "promotion_consistency_contract_error")
+
+    def test_batch_with_outcome_returns_batch_mode(self) -> None:
+        """Outcome with batch -> returns batch mode (existing behavior preserved)."""
+        acc = RunPromotionAccumulator()
+        acc.add_batch(
+            _make_batch(
+                promotion_mode=MODE_BACKEND_API,
+                incident_access_mode=INCIDENT_ACCESS_MODE_BACKEND,
+                opened_ids=("inc-1",),
+            )
+        )
+        acc.record_promotion_outcome(
+            PromotionSucceeded(
+                run_id="run-test",
+                requested_signal_ids=(_SIGNAL_ID_A,),
+                records=(),
+                diagnosis_incident_ids=("inc-1",),
+            )
+        )
+        self.assertTrue(acc.has_promotion_activity())
+        self.assertEqual(len(acc.batches), 1)
+
+        mode, access, scope = _resolve_accumulator_truth(acc)
+        self.assertEqual(mode, MODE_BACKEND_API)
+        self.assertEqual(access, INCIDENT_ACCESS_MODE_BACKEND)
+
+
+class TestDeriveAutomaticDiagnosisInputsWithOutcome(unittest.TestCase):
+    """Test _derive_automatic_diagnosis_inputs with outcome but no batch."""
+
+    def test_commit_unknown_projection_consistency(self) -> None:
+        """Commit-unknown without batch produces correct typed projections.
+
+        Required final projection:
+            selection_mode=commit_unknown
+            incident_access_mode=reconciliation_required
+            should_run=false
+            is_blocked=false (commit_unknown is not "blocked")
+
+        Forbidden:
+            incident_access_mode=no_promotion_run
+            selection_mode=blocked
+        """
+        acc = RunPromotionAccumulator()
+        acc.record_promotion_outcome(
+            PromotionCommitUnknown(
+                run_id="run-test",
+                reason=PromotionUncertaintyCode.AMBIGUOUS_RESPONSE,
+                reconciliation_token=_make_canonical_token(),
+                requested_signal_ids=(_SIGNAL_ID_A,),
+            )
+        )
+
+        inputs = _derive_automatic_diagnosis_inputs(acc)
+        summary = inputs.promotion_result_summary
+
+        # has_promotion_activity must be True
+        self.assertTrue(summary["has_promotion_activity"])
+
+        # incident_access_mode must be reconciliation_required, NOT no_promotion_run
+        self.assertEqual(summary["incident_access_mode"], "reconciliation_required")
+        self.assertEqual(inputs.execution.incident_access_mode, "reconciliation_required")
+        self.assertEqual(inputs.execution.selection_mode, "commit_unknown")
+
+        # Diagnosis must NOT be invoked for commit_unknown
+        self.assertFalse(inputs.execution.should_run)
+        # commit_unknown is NOT blocked - it's "unavailable pending reconciliation"
+        self.assertFalse(inputs.execution.is_blocked)
+
+    def test_rejected_projection_blocks_diagnosis(self) -> None:
+        """Rejection outcome blocks diagnosis - NOT reconciliation required."""
+        acc = RunPromotionAccumulator()
+        acc.record_promotion_outcome(
+            PromotionRejected(
+                run_id="run-test",
+                reason=PromotionRejectionCode.MALFORMED_SIGNAL_IDS,
+                rejected_signal_ids=(_SIGNAL_ID_A,),
+            )
+        )
+
+        inputs = _derive_automatic_diagnosis_inputs(acc)
+        summary = inputs.promotion_result_summary
+
+        self.assertTrue(summary["has_promotion_activity"])
+        # incident_access_mode must NOT be reconciliation_required for rejection
+        self.assertNotEqual(summary["incident_access_mode"], "reconciliation_required")
+
+        # Diagnosis must NOT be invoked for rejection
+        self.assertFalse(inputs.execution.should_run)
+        self.assertTrue(inputs.execution.is_blocked)
+
+    def test_succeeded_without_batch_projection(self) -> None:
+        """Success without batch -> consistency contract error projection."""
+        acc = RunPromotionAccumulator()
+        acc.record_promotion_outcome(
+            PromotionSucceeded(
+                run_id="run-test",
+                requested_signal_ids=(_SIGNAL_ID_A,),
+                records=(),
+                diagnosis_incident_ids=(),
+            )
+        )
+
+        inputs = _derive_automatic_diagnosis_inputs(acc)
+        summary = inputs.promotion_result_summary
+
+        self.assertTrue(summary["has_promotion_activity"])
+        # Must NOT be reconciliation_required - this is a consistency error, not unknown
+        self.assertNotEqual(summary["incident_access_mode"], "reconciliation_required")
+
+        # Diagnosis must NOT be invoked
+        self.assertFalse(inputs.execution.should_run)
 
 
 if __name__ == "__main__":
