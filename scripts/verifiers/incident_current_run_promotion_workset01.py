@@ -48,7 +48,7 @@ SCOPED_PROMOTION_PATH: Final[Path] = (
     SRC_ROOT / "incident_alert_promotion_scoped.py"
 )
 HANDLER_PATH: Final[Path] = (
-    SRC_ROOT / "ui" / "server_incident_internal_handlers.py"
+    SRC_ROOT / "ui" / "server_incident_internal_promotion_handlers.py"
 )
 BACKEND_ADAPTER_PATH: Final[Path] = (
     SRC_ROOT / "collect" / "incident_promotion_backend.py"

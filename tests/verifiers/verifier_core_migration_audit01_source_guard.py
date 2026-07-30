@@ -22,6 +22,7 @@ threshold.
 from __future__ import annotations
 
 import ast
+from typing import cast
 
 from scripts.verifiers_audit.discovery import REPO_ROOT
 
@@ -105,9 +106,13 @@ def _is_obfuscated_fixed_tmp(
         func_name = node.func.id
     elif isinstance(node.func, ast.Attribute):
         func_name = node.func.attr
-    fixed_call_tokens = helpers["_fixed_tmp_call_tokens"]
-    absolute_path_segments = helpers["_absolute_path_segments"]
-    tempfile_dir_names = helpers["_tempfile_fixed_dir_names"]
+    fixed_call_tokens = cast(tuple[str, ...], helpers["_fixed_tmp_call_tokens"])
+    absolute_path_segments = cast(
+        frozenset[str], helpers["_absolute_path_segments"]
+    )
+    tempfile_dir_names = cast(
+        frozenset[str], helpers["_tempfile_fixed_dir_names"]
+    )
     if func_name in {"fsdecode", "fsencode"}:
         if node.args:
             inner = node.args[0]
@@ -159,7 +164,7 @@ def detect_fixed_shared_tmp(
             violations.append(f"{relative_path}: {token!r}")
     for node in ast.walk(tree):
         if _is_absolute_path_with_segment(
-            node, helpers["_absolute_path_segments"]
+            node, cast(frozenset[str], helpers["_absolute_path_segments"])
         ):
             violations.append(
                 f"{relative_path}:{node.lineno}: AST "

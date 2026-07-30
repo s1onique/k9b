@@ -1,28 +1,77 @@
 """Backend API incident promotion implementation.
 
-This module provides the backend API promotion path for incident candidates,
-used when the scheduler runs separately from the incident store (SQLite mode).
+This module provides the backend API promotion path for incident
+candidates, used when the scheduler runs separately from the
+incident store (SQLite mode).
+
+The active production dispatcher path is
+:func:`promote_alert_signals_via_scoped_backend_api`, which
+constructs exactly one canonical
+:class:`PromoteAlertSignalsRequest`, invokes
+:class:`ScopedSchedulerClient`, and routes the typed transport
+outcome through
+:func:`map_scoped_http_transport_to_promotion_outcome`. The
+return type is a bounded closed
+:class:`ScopedPromotionDispatchResult`; the legacy
+snake_case dispatch helpers and the
+``_coerce_promotion_response`` ambiguity helper are kept for
+the legacy endpoints only.
+
+The active scoped path NEVER fabricates a ``promotion_records``
+array. The canonical scoped endpoint carries aggregate evidence,
+not per-signal records.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import uuid
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from ..domain.identifiers import AlertSignalId, HealthRunId
 from ..incident_alert_promotion_contract import (
     IncidentPromotionResult as _TypedPromotionResult,
 )
+from ..incident_alert_promotion_contract import (
+    PromoteAlertSignalsRequest,
+)
 from ..ui.server_incident_internal_client import SchedulerClient
 from ..ui.server_incident_internal_models import PromotionResponse
+from ..ui.server_incident_internal_scoped_client import (
+    ScopedSchedulerClient,
+)
 from .incident_candidate_serialization import incident_candidates_to_dict_list
 from .incident_candidates import IncidentCandidate
+from .promotion_scoped_http_mapping import (
+    ScopedPromotionCompletedProjection,
+    ScopedPromotionRejectedProjection,
+    ScopedPromotionUncertainProjection,
+    ScopedTransportPromotionProjection,
+    map_scoped_http_transport_to_promotion_outcome,
+)
+from .promotion_scoped_http_seam import (
+    ScopedPromotionDispatchCompleted,
+    ScopedPromotionDispatchRejected,
+    ScopedPromotionDispatchResult,
+    ScopedPromotionDispatchUncertain,
+    ScopedPromotionHttpRequestContext,
+)
 
 _logger = logging.getLogger(__name__)
 
 # Backend API mode
 MODE_BACKEND_API = "backend-api"
+
+# Request ID factory: injectable so tests can use deterministic IDs.
+RequestIdFactory = Callable[[], str]
+
+
+def _default_request_id_factory() -> str:
+    """Default request ID factory: UUID4 hex."""
+    return f"promotion-request-{uuid.uuid4().hex}"
 
 
 def _extract_canonical_ids(response: PromotionResponse | object) -> dict[str, Any]:
@@ -55,13 +104,15 @@ def _extract_canonical_ids(response: PromotionResponse | object) -> dict[str, An
 
 
 def _coerce_promotion_response(value: Any) -> PromotionResponse:
-    """Coerce either a dict or a ``PromotionResponse`` to ``PromotionResponse``."""
+    """Coerce either a dict or a ``PromotionResponse`` to ``PromotionResponse``.
+
+    Used only by the legacy endpoints; the active scoped path
+    does NOT call this helper.
+    """
     if isinstance(value, PromotionResponse):
         return value
     if isinstance(value, dict):
         return PromotionResponse(**value)
-    # Fallback: bounded error result so the dispatcher can still
-    # project the canonical totals without raising.
     return PromotionResponse(ok=False, errors=1, error_messages=[str(value)])
 
 
@@ -70,9 +121,8 @@ def _typed_result_to_dispatch_dict(
 ) -> dict[str, Any]:
     """Translate the typed wire result into the dispatcher's legacy dict shape.
 
-    The dict still carries the new ``observation_refreshed`` and
-    ``unchanged`` categories so the scheduler log line (and the
-    accumulator) preserve the typed projection end-to-end.
+    Used only by the legacy endpoint. The active scoped path
+    does NOT call this helper.
     """
     canonical_ids = list(typed.actionable_incident_ids)
     opened_ids = list(typed.opened_incident_ids)
@@ -143,25 +193,10 @@ def _typed_result_to_dispatch_dict(
 def _response_to_promotion_result(response: Any) -> dict[str, Any]:
     """Translate a backend response into a result dict for the dispatcher.
 
-    Accepts:
-
-    * the typed ``IncidentPromotionResult`` instance (camelCase
-      projection already decoded by the contract)
-    * a raw camelCase ``dict`` from the scoped
-      ``/promote-alert-signals`` endpoint (parsed via
-      :meth:`IncidentPromotionResult.from_wire_dict`)
-    * the legacy ``PromotionResponse`` (returned by
-      ``/promote-candidates``) so existing call sites keep working.
-
-    The new typed contract is parsed by
-    :meth:`IncidentPromotionResult.from_wire_dict` so a malformed
-    payload cannot masquerade as a successful promotion.
+    Used only by the legacy endpoints.
     """
-    # Typed projection already decoded.
     if isinstance(response, _TypedPromotionResult):
         return _typed_result_to_dispatch_dict(response)
-
-    # Raw camelCase wire payload from the new scoped endpoint.
     if isinstance(response, dict):
         try:
             typed = _TypedPromotionResult.from_wire_dict(response)
@@ -194,8 +229,6 @@ def _response_to_promotion_result(response: Any) -> dict[str, Any]:
                 "incident_access_mode": "backend",
             }
         return _typed_result_to_dispatch_dict(typed)
-
-    # Legacy / typed-result-from-other-paths fallback.
     coerced = _coerce_promotion_response(response)
     canonical = _extract_canonical_ids(coerced)
     return {
@@ -344,78 +377,112 @@ def promote_alert_signals_via_backend_api(
         }
 
 
+def _projection_to_dispatch_result(
+    projection: ScopedTransportPromotionProjection,
+) -> ScopedPromotionDispatchResult:
+    """Convert a closed projection into the typed dispatch result.
+
+    The dispatch result is a closed union whose variants carry
+    the closed projection algebra; downstream consumers MUST
+    narrow on the concrete variant.
+    """
+    if isinstance(projection, ScopedPromotionCompletedProjection):
+        return ScopedPromotionDispatchCompleted(projection=projection)
+    if isinstance(projection, ScopedPromotionUncertainProjection):
+        return ScopedPromotionDispatchUncertain(projection=projection)
+    if isinstance(projection, ScopedPromotionRejectedProjection):
+        return ScopedPromotionDispatchRejected(projection=projection)
+    # Exhaustiveness: a new projection variant MUST fail typing.
+    from typing import assert_never
+
+    assert_never(projection)
+
+
 def promote_alert_signals_via_scoped_backend_api(
     *,
     run_id: str,
     source_identity: str,
     signal_ids: list[str],
-) -> dict[str, Any]:
+    request_id_factory: RequestIdFactory | None = None,
+) -> ScopedPromotionDispatchResult:
     """Promote the explicit current-run alert-signal scope via backend API.
 
-    The backend endpoint is the new
-    ``/api/internal/incidents/promote-alert-signals`` contract that
-    consumes the typed ``PromoteAlertSignalsRequest`` shape. The
-    returned canonical actionable IDs are surfaced as
-    ``canonical_incident_ids`` so the dispatcher feeds only the
-    opened / materially-changed incidents into automatic diagnosis.
+    Active dispatcher path. Returns a typed
+    :class:`ScopedPromotionDispatchResult`. The function:
+
+    1. constructs exactly one :class:`PromoteAlertSignalsRequest`;
+    2. constructs one :class:`ScopedPromotionHttpRequestContext`;
+    3. invokes :class:`ScopedSchedulerClient`;
+    4. maps the typed transport outcome through
+       :func:`map_scoped_http_transport_to_promotion_outcome`;
+    5. returns the typed :class:`ScopedPromotionDispatchResult`.
+
+    The function MUST NOT call ``_coerce_promotion_response``, the
+    legacy ``SchedulerClient.promote_alert_signals_scoped`` path,
+    or any global store scan. Configuration defects raise a
+    typed :class:`ScopedPromotionHttpBeforeSendFailed` with the
+    specific reason (MISSING_BACKEND_URL or MISSING_INTERNAL_TOKEN).
+    Unexpected programming defects propagate; they are NOT
+    converted to a legacy failure dict.
     """
     backend_url = os.environ.get("K9B_BACKEND_INTERNAL_URL")
     internal_api_token = os.environ.get("K9B_INTERNAL_API_TOKEN")
 
     if not backend_url or not internal_api_token:
-        return {
-            "ok": False,
-            "scanned": len(signal_ids),
-            "firing": len(signal_ids),
-            "opened_incidents": 0,
-            "updated_incidents": 0,
-            "skipped_duplicates": 0,
-            "errors": 1,
-            "error_messages": [
-                "Backend API configuration incomplete: missing backend_url or internal_api_token"
-            ],
-            "opened_incident_ids": [],
-            "updated_incident_ids": [],
-            "canonical_incident_ids": [],
-            "promotion_records": [],
-            "unique_candidate_count": 0,
-            "promotion_scan_scope": "internal_api_alert_signals:scoped",
-            "incident_access_mode": "backend",
-        }
-
-    client = SchedulerClient(base_url=backend_url, token=internal_api_token)
-    try:
-        response = client.promote_alert_signals_scoped(
-            run_id=run_id,
+        # Missing-config is a typed before-send failure surfaced
+        # via the typed client+mapper. We do NOT catch both
+        # through one undifferentiated exception and select the
+        # URL reason -- the client distinguishes each case.
+        factory = request_id_factory or _default_request_id_factory
+        request = PromoteAlertSignalsRequest(
+            run_id=HealthRunId(run_id),
             source_identity=source_identity,
-            signal_ids=list(signal_ids),
+            signal_ids=tuple(
+                AlertSignalId(value) for value in signal_ids
+            ),
         )
-        if isinstance(response, PromotionResponse):
-            return _response_to_promotion_result(response)
-        if isinstance(response, dict):
-            return _response_to_promotion_result(response)
-        return _response_to_promotion_result(_coerce_promotion_response(response))
-    except Exception as exc:
-        _logger.exception("Backend API scoped alert signal promotion failed")
-        return {
-            "ok": False,
-            "scanned": len(signal_ids),
-            "firing": len(signal_ids),
-            "opened_incidents": 0,
-            "updated_incidents": 0,
-            "skipped_duplicates": 0,
-            "errors": 1,
-            "error_messages": [str(exc)],
-            "opened_incident_ids": [],
-            "updated_incident_ids": [],
-            "canonical_incident_ids": [],
-            "promotion_records": [],
-            "unique_candidate_count": 0,
-            "promotion_scan_scope": "internal_api_alert_signals:scoped",
-            "incident_access_mode": "backend",
-        }
+        context = ScopedPromotionHttpRequestContext(
+            request=request,
+            request_id=factory(),
+        )
+        client = ScopedSchedulerClient(
+            base_url=backend_url or "",
+            token=internal_api_token,
+        )
+        transport = client.promote_alert_signals_scoped(context=context)
+        projection = map_scoped_http_transport_to_promotion_outcome(
+            transport, context=context
+        )
+        return _projection_to_dispatch_result(projection)
+
+    factory = request_id_factory or _default_request_id_factory
+    request = PromoteAlertSignalsRequest(
+        run_id=HealthRunId(run_id),
+        source_identity=source_identity,
+        signal_ids=tuple(AlertSignalId(value) for value in signal_ids),
+    )
+    context = ScopedPromotionHttpRequestContext(
+        request=request,
+        request_id=factory(),
+    )
+    client = ScopedSchedulerClient(
+        base_url=backend_url, token=internal_api_token
+    )
+    transport = client.promote_alert_signals_scoped(context=context)
+    projection = map_scoped_http_transport_to_promotion_outcome(
+        transport, context=context
+    )
+    return _projection_to_dispatch_result(projection)
 
 
+# ---------------------------------------------------------------------------
+# Legacy dict-shaped helpers were moved to
+# ``incident_promotion_scoped_legacy_adapter`` so the active
+# scoped backend façade stays free of any flat-dict derivation.
+# The active dispatcher path consumes the typed
+# :class:`ScopedPromotionDispatchResult` directly; legacy
+# callers consume the legacy adapter module.
+# ---------------------------------------------------------------------------
 __all__ = [
     "MODE_BACKEND_API",
     "promote_alert_signals_via_backend_api",

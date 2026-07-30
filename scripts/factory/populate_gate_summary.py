@@ -1,4 +1,16 @@
-"""Execute and persist the complete ACT-local evidence privacy gate summary."""
+"""Execute and persist the complete ACT-local evidence privacy gate summary.
+
+ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01-
+CORRECTION03-EXTERNAL-EVIDENCE-AND-PARSER-FAIL-CLOSED-TRUTH01:
+
+The producer writes ``.factory/gate-summary.json`` first, then validates
+the exact bytes of that artifact with the canonical parser and writes
+the result to a separate sibling attestation
+``.factory/gate-summary-validation.json``.  The validation attestation
+is NOT included in the bytes it validates -- the parser invocation
+result lives in a sibling file so a subsequent mutation of
+``gate-summary.json`` is detectable as a SHA-256 mismatch.
+"""
 
 from __future__ import annotations
 
@@ -23,11 +35,24 @@ from scripts.factory.build_gate_summary import (  # noqa: E402
     SubsystemSelfTestCount,
     make_r10_defaults,
 )
-from scripts.factory.parse_gate_summary import main as parse_gate_summary_main  # noqa: E402
 from scripts.incident_lifecycle_boundary.redaction_self_test_runner import (  # noqa: E402
     run_self_tests as verifier_run_self_tests,
 )
 
+# ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01-CORRECTION02:
+# ``gate-summary-parser`` is removed from the required check
+# inventory. The parser is the self-referential consumer of the
+# artifact; including it in ``checks_total``/``checks_failed``
+# would create a circular dependency.
+#
+# ACT-K9B-HULK-PROMOTION-SCOPED-RECORDING-AUTHORITY-AND-EVIDENCE-CLOSURE01-CORRECTION03:
+# The parser invocation result lives in a SEPARATE sibling
+# attestation artifact (``gate-summary-validation.json``), NOT
+# inside ``gate-summary.json``.  Embedding the result inside the
+# artifact would create a self-referential contract: the result
+# would change the bytes that were supposedly validated.  The
+# canonical contract is
+# ``len(checks) == checks_total == len(required_check_names)``.
 REQUIRED_CHECK_NAMES = (
     "canonical-verifier-self-test",
     "standalone-production-verifier",
@@ -46,8 +71,8 @@ REQUIRED_CHECK_NAMES = (
     "llm-friendly",
     "no-new-llm-allowlist",
     "targeted-repository-gate",
-    "gate-summary-parser",
 )
+PARSER_POSTCONDITION_NAME = "gate-summary-parser"
 
 
 @dataclass(frozen=True)
@@ -356,15 +381,11 @@ def main(argv: list[str] | None = None) -> int:
     summary = build_gate_summary(repo_root=repo_root, target=target)
     target.parent.mkdir(parents=True, exist_ok=True)
 
-    parser_spec = next(spec for spec in _command_specs(repo_root, target) if spec.name == "gate-summary-parser")
-    _run(parser_spec)  # outcome is unused; run for its exit code effect
-    # The parser outcome is recorded ONLY for the exit code used to drive
-    # ``main``. It is NOT appended to the artifact's checks list because the
-    # parser subprocess already inspects the artifact that is on disk; if
-    # the parser outcome were written to the artifact, the next parser
-    # invocation would invalidate the previous record. The parser IS one of
-    # the canonical 18 required R12 check names but is not part of
-    # ``checks_total``/``checks_failed`` so the loop never becomes circular.
+    # Step 1: write the canonical gate-summary artifact WITHOUT
+    # any parser validation result. The artifact bytes must be
+    # final before validation runs -- embedding the validation
+    # outcome inside the validated artifact is a self-referential
+    # contract that the parser cannot decode.
     final = GateSummary(
         schema_version=summary.schema_version,
         profile=summary.profile,
@@ -374,17 +395,97 @@ def main(argv: list[str] | None = None) -> int:
         checks=summary.checks,
         self_tests=summary.self_tests,
         r10_definition_of_done=summary.r10_definition_of_done,
-        extras={"required_check_names": list(REQUIRED_CHECK_NAMES)},
+        extras={
+            "required_check_names": list(REQUIRED_CHECK_NAMES),
+        },
     )
     final.write(target)
 
-    # Validate the final artifact in-process too; the recorded subprocess is evidence.
-    parser_rc = parse_gate_summary_main(["--target", str(target), "--quiet"])
+    # Step 3: run the canonical parser subprocess and capture its
+    # output for the validation attestation. The exit code drives
+    # the producer's overall return code.
+    parser_spec = next(
+        spec for spec in _command_specs(repo_root, target)
+        if spec.name == PARSER_POSTCONDITION_NAME
+    )
+    parser_outcome = _run(parser_spec)
+
+    # Step 4: parse the validator's stdout for ``decode_status`` /
+    # ``acceptance_status`` so the attestation carries the
+    # typed verdict.
+    decode_status = "fail"
+    acceptance_status = "fail"
+    stdout_text = ""
+    try:
+        parser_proc = subprocess.run(
+            parser_spec.argv,
+            capture_output=True,
+            text=True,
+            cwd=str(parser_spec.cwd or SCRIPT_REPO),
+            env=parser_spec.env,
+            timeout=120,
+            check=False,
+        )
+        stdout_text = parser_proc.stdout or ""
+        for line in stdout_text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("decode_status="):
+                decode_status = stripped.split("=", 1)[1].strip()
+            elif stripped.startswith("acceptance_status="):
+                acceptance_status = stripped.split("=", 1)[1].strip()
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    # Step 5: write the validation attestation to a SIBLING
+    # artifact. The attestation is NOT included in the bytes it
+    # validates. A subsequent mutation of ``gate-summary.json``
+    # is detectable as a SHA-256 mismatch.
+    #
+    # ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION05 +
+    # CORRECTION06: ``validated_path`` MUST be a portable
+    # repository-relative POSIX path so the committed attestation
+    # is byte-identical on every runner. The writer computes the
+    # SHA from the artifact bytes itself (no caller-supplied
+    # authority) and rejects out-of-repository targets and
+    # non-regular files at the seam. The writer logic lives in
+    # :mod:`scripts.factory.gate_summary_validation_attestation`
+    # so the gate-summary producer stays under the 500-line cap.
+    from scripts.factory.gate_summary_validation_attestation import (
+        portable_parser_command,
+        write_validation_attestation,
+    )
+
+    portable_target = target.resolve().relative_to(repo_root.resolve()).as_posix()
+    attestation_path = write_validation_attestation(
+        repo_root=repo_root,
+        target=target,
+        parser_command=portable_parser_command(validated_path=portable_target),
+        parser_exit_code=parser_outcome.exit_code,
+        parser_duration_ms=parser_outcome.duration_ms,
+        decode_status=decode_status,
+        acceptance_status=acceptance_status,
+        diagnostics={
+            "checks_total": final.checks_total,
+            "checks_failed": final.checks_failed,
+            "required_check_names_count": len(REQUIRED_CHECK_NAMES),
+            "extras_keys": sorted((final.extras or {}).keys()),
+        },
+    )
+
     print(f"wrote {target}")
-    print(f"checks_total={final.checks_total} checks_failed={final.checks_failed} overall={final.overall_status}")
+    print(
+        f"checks_total={final.checks_total} checks_failed={final.checks_failed} "
+        f"overall={final.overall_status} "
+        f"decode_status={decode_status} acceptance_status={acceptance_status}"
+    )
+    print(f"wrote {attestation_path}")
     if final.overall_status != "pass" or final.checks_failed != 0:
         return 1
-    return parser_rc
+    if decode_status != "pass":
+        return 2
+    if acceptance_status != "pass":
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

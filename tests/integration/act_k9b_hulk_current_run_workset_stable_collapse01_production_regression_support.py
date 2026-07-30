@@ -147,8 +147,52 @@ def patch_scoped_backend_to_promoted(
     (and that test was the reference for the production-path
     invariant this ACT proves); the patch is relocated to the
     support module so it stays scaffolding, not test logic.
+
+    ACT-K9B-HULK-PROMOTION-FINAL-LOCAL-ACCEPTANCE01-CORRECTION05:
+
+    The stub previously returned the legacy dict shape
+    (``ok/scanned/opened_incidents/...``) which the typed scoped
+    mapper can no longer decode. The mapper now classifies such a
+    payload as
+    ``promotion-dispatch-exception-captured /
+    promotion-dispatch-outcome-classified`` -- exactly the failure
+    mode this regression was supposed to forbid.
+
+    This helper now returns the typed
+    ``ScopedPromotionDispatchCompleted`` projection with the
+    canonical request fingerprint derived from
+    ``scoped_promotion_request_fingerprint`` so the test exercises
+    the same production-typed contract
+    (:class:`ScopedPromotionAccumulatorCompleted`) that real
+    scheduler ingestion drives. The phantom ``alert-signals-promoted``
+    event is no longer synthesised from a free-form computation; it
+    flows through the production
+    ``alert-signals-promoted-via-backend`` audit log emitted by
+    ``handle_promote_alert_signals`` in the live deployment.
     """
-    from k8s_diag_agent.collect import incident_promotion_backend as backend_module
+    from k8s_diag_agent.collect import (
+        incident_promotion_backend as backend_module,
+    )
+    from k8s_diag_agent.collect.promotion_outcomes import PromotionSucceeded
+    from k8s_diag_agent.collect.promotion_scoped_http_mapping import (
+        ScopedPromotionCompletedProjection,
+    )
+    from k8s_diag_agent.collect.promotion_scoped_http_seam import (
+        ScopedPromotionDispatchCompleted,
+        ScopedPromotionReceipt,
+        scoped_promotion_request_fingerprint,
+    )
+    from k8s_diag_agent.domain.identifiers import (
+        AlertSignalId,
+        HealthRunId,
+    )
+    from k8s_diag_agent.incident_alert_promotion_binding import (
+        BoundScopedPromotionResult,
+    )
+    from k8s_diag_agent.incident_alert_promotion_contract import (
+        IncidentPromotionResult,
+        PromoteAlertSignalsRequest,
+    )
 
     def _fake(
         *,
@@ -156,7 +200,7 @@ def patch_scoped_backend_to_promoted(
         source_identity: str,
         signal_ids: list[str],
         _snapshot_bundle_id: object = None,
-    ) -> dict[str, object]:
+    ) -> object:
         # Strict contract assertions on the production-forwarded
         # values. The dispatcher MUST forward the exact production
         # run id, source identity, and the canonical collapsed signal
@@ -178,19 +222,51 @@ def patch_scoped_backend_to_promoted(
             f"scoped backend received duplicate signal_ids: "
             f"{signal_ids!r}"
         )
-        return {
-            "ok": True,
-            "scanned": len(signal_ids),
-            "firing": len(signal_ids),
-            "opened_incidents": 0,
-            "updated_incidents": 0,
-            "skipped_duplicates": 0,
-            "errors": 0,
-            "promotion_mode": "backend-api",
-            "promotion_scan_scope": "internal_api_alert_signals:scoped",
-            "incident_access_mode": "backend",
-            "promotion_records": [],
-        }
+        # Build the canonical typed promotion request so the bounded
+        # ``ScopedPromotionAccumulatorCompleted.__post_init__``
+        # validator accepts the stubbed handoff. The request
+        # fingerprint MUST be the canonical
+        # ``scoped_promotion_request_fingerprint`` (64-char lowercase
+        # hex SHA-256) -- a handwritten fingerprint would crash the
+        # validator and surface as a
+        # ``promotion-dispatch-outcome-classified=fail`` event.
+        request = PromoteAlertSignalsRequest(
+            run_id=HealthRunId(run_id),
+            source_identity=source_identity,
+            signal_ids=tuple(
+                AlertSignalId(value) for value in signal_ids
+            ),
+        )
+        result = IncidentPromotionResult(
+            run_id=request.run_id,
+            source_identity=request.source_identity,
+            scanned_signal_ids=request.signal_ids,
+            opened_incident_ids=(
+                "http-alertmanager-9093:crash_loop:prod:pod:redis-0",
+            ),
+        )
+        bound = BoundScopedPromotionResult(
+            request=request, result=result
+        )
+        promotion_outcome = PromotionSucceeded(
+            run_id=request.run_id,
+            requested_signal_ids=tuple(
+                str(s) for s in request.signal_ids
+            ),
+            records=(),
+            diagnosis_incident_ids=(
+                "http-alertmanager-9093:crash_loop:prod:pod:redis-0",
+            ),
+        )
+        projection = ScopedPromotionCompletedProjection(
+            promotion_outcome=promotion_outcome,
+            aggregate_receipt=ScopedPromotionReceipt(bound=bound),
+            request_id=f"r3-{run_id}",
+            request_fingerprint=scoped_promotion_request_fingerprint(
+                request
+            ),
+        )
+        return ScopedPromotionDispatchCompleted(projection=projection)
 
     monkeypatch.setattr(
         backend_module,

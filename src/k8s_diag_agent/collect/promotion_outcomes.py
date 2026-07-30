@@ -60,8 +60,45 @@ class PromotionRejectionCode(StrEnum):
     EXTERNAL_RULE_FAILURE = "external_rule_failure"
     """Backend rule engine refused the promotion explicitly."""
 
+    CONFIGURATION_BLOCKED = "configuration_blocked"
+    """Missing or invalid scheduler / backend configuration."""
+
+    BACKEND_UNREACHABLE = "backend_unreachable"
+    """DNS failure, connection refused, or pre-connect TLS error."""
+
+    AUTHENTICATION_REJECTED = "authentication_rejected"
+    """The backend returned ``401`` or ``403`` before promotion
+    execution could begin."""
+
+    PROMOTION_HTTP_ERROR_UNCERTAIN = "promotion_http_error_uncertain"
+    """Generic untyped HTTP error (4xx / 5xx) whose commit status
+    cannot be inferred from the status code alone; reconciliation
+    is required before commit certainty is established."""
+
     UNKNOWN = "unknown"
     """Catch-all bucket. Use sparingly; prefer a specific code."""
+
+
+class PromotionCommitDisposition(StrEnum):
+    """Closed commit-certainty disposition for any promotion outcome.
+
+    Three values exhaust the possible states:
+    ``DEFINITELY_COMMITTED``, ``DEFINITELY_NOT_COMMITTED``, and
+    ``MAY_HAVE_COMMITTED``. A compatibility property exposes the
+    legacy ``may_have_committed`` boolean where required.
+    """
+
+    DEFINITELY_COMMITTED = "definitely_committed"
+    """The backend acknowledged a completed commit."""
+
+    DEFINITELY_NOT_COMMITTED = "definitely_not_committed"
+    """The backend rejected before promotion execution could begin,
+    OR no request body was transmitted."""
+
+    MAY_HAVE_COMMITTED = "may_have_committed"
+    """Transport returned without proving whether the request body
+    was processed; reconciliation is required before commit
+    certainty is established."""
 
 
 class PromotionUncertaintyCode(StrEnum):
@@ -83,7 +120,61 @@ class PromotionUncertaintyCode(StrEnum):
     """The backend returned 5xx but did not acknowledge the request."""
 
     AMBIGUOUS_RESPONSE = "ambiguous_response"
-    """A response was received but could not be classified as success or rejection."""
+    """Invariant-violation fallback. NOT used for any known transport shape."""
+
+    # ACT-K9B-HULK-PROMOTION-AMBIGUOUS-RESPONSE-TRANSPORT-TRUTH01:
+    # bounded codes replacing the catch-all bucket. Each known HTTP
+    # shape maps to a specific code so the operator can correlate the
+    # selection handoff with the actual transport observation.
+    HTTP_ACCEPTED_WITHOUT_RESULT = "http_accepted_without_result"
+    """``202 Accepted`` without an authoritative completion result."""
+
+    HTTP_NO_CONTENT_AFTER_SEND = "http_no_content_after_send"
+    """``204 No Content`` after a mutating request."""
+
+    HTTP_EMPTY_SUCCESS_BODY = "http_empty_success_body"
+    """``2xx`` with an empty body (cannot be reinterpreted as successful zero)."""
+
+    HTTP_INVALID_JSON = "http_invalid_json"
+    """Response completed but the body failed to decode as JSON."""
+
+    HTTP_INVALID_SCHEMA = "http_invalid_schema"
+    """Response decoded as JSON but failed wire-schema validation."""
+
+    HTTP_RESPONSE_TRUNCATED = "http_response_truncated"
+    """The response body exceeded the bounded reader limit."""
+
+    HTTP_RESPONSE_BODY_LIMIT_EXCEEDED = "http_response_body_limit_exceeded"
+    """The response body exceeded the bounded reader cap; the body
+    is dropped to prevent silent truncation masquerading as
+    complete input."""
+
+    HTTP_RESPONSE_SHORT_READ = "http_response_short_read"
+    """The declared Content-Length exceeds the bytes actually
+    received from the response stream."""
+
+    HTTP_READ_TIMEOUT_AFTER_SEND = "http_read_timeout_after_send"
+    """Read timeout after the request body was transmitted."""
+
+    HTTP_CONNECTION_LOST_AFTER_SEND = "http_connection_lost_after_send"
+    """Connection lost after the request body was transmitted."""
+
+    HTTP_TRANSMISSION_UNKNOWN = "http_transmission_unknown"
+    """Transport failure after dispatch where the boundary cannot
+    prove whether the request bytes reached the wire. The active
+    scoped path emits this only after the dispatcher exhausts the
+    closed :class:`ScopedDispatchUncertaintyReason` vocabulary."""
+
+    PROMOTION_HTTP_ERROR_UNCERTAIN = "promotion_http_error_uncertain"
+    """Generic untyped HTTP error (4xx / 5xx) whose commit status
+    cannot be inferred from the status code alone; reconciliation
+    is required before commit certainty is established."""
+
+    HTTP_FAILURE_BEFORE_SEND = "http_failure_before_send"
+    """Transport failure before the request was transmitted."""
+
+    UNEXPECTED_CLIENT_RESULT = "unexpected_client_result"
+    """Final invariant-violation fallback. Production code MUST NOT raise this."""
 
 
 @dataclass(frozen=True, slots=True)

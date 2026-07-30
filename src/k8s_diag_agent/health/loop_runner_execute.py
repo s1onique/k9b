@@ -33,7 +33,6 @@ from ..collect.incident_identity_hardening import (
     verify_promotion_consistency,
 )
 from ..collect.incident_promotion_accumulator import (
-    PromotionWorksetState,
     RunPromotionAccumulator,
 )
 from ..collect.promotion_outcomes import (
@@ -330,6 +329,23 @@ BLOCKED_REASON_PROMOTION_CONSISTENCY_CONTRACT_ERROR = "promotion_consistency_con
 BLOCKED_REASON_PROMOTION_REJECTED = "promotion_rejected"
 BLOCKED_REASON_PROMOTION_COMMIT_UNKNOWN = "promotion_commit_unknown"
 BLOCKED_REASON_PROMOTION_WORKSET_CONTRACT_FAILURE = "promotion_workset_contract_failure"
+
+# ACT-K9B-HULK-PROMOTION-COMMIT-UNKNOWN-SELECTION-HANDOFF01:
+# Incident access modes for the typed ``DiagnosisExecutionAuthority``.
+# The values are derived from the typed ``PromotionOutcome`` and are
+# never reconstructed from canonical-id cardinality.
+INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN = "no_promotion_run"
+INCIDENT_ACCESS_MODE_RECONCILIATION_REQUIRED = "reconciliation_required"
+
+# ACT-K9B-HULK-PROMOTION-COMMIT-UNKNOWN-SELECTION-HANDOFF01:
+# Selection source strings for the ``diagnosis-selection-derived`` event.
+# These are the literal low-cardinality values the structured event
+# carries, matched exhaustively to the typed
+# :class:`DiagnosisSelectionSource` variants.
+DIAGNOSIS_SELECTION_SOURCE_PROMOTION = "promotion"
+DIAGNOSIS_SELECTION_SOURCE_EXPLICIT_NON_PROMOTION = "explicit_nonpromotion"
+DIAGNOSIS_SELECTION_SOURCE_PROMOTION_COMMIT_UNKNOWN = "promotion_commit_unknown"
+DIAGNOSIS_SELECTION_SOURCE_PROMOTION_BLOCKED = "promotion_blocked"
 
 
 @dataclass(frozen=True)
@@ -658,57 +674,51 @@ def _derive_automatic_diagnosis_inputs(
         "has_promotion_activity": accumulator.has_promotion_activity(),
     }
 
-    # SEAM01 R2: the explicit decision now uses the workset state from the
-    # accumulator. The workset state is set by propagate_promotion_result_to_run()
-    # and encodes:
-    # - VALID: Workset is valid for diagnosis propagation
-    # - INVALID: Workset is invalid; diagnosis must be blocked
-    # - NOT_APPLICABLE: Workset not applicable; store scan may be used if configured
-    #
-    # State matrix:
-    # - VALID + IDs: explicit current-run diagnosis
-    # - VALID + empty: successful stop; zero store operations
-    # - INVALID: blocked diagnosis; zero store operations
-    # - NOT_APPLICABLE: store scan only when explicitly configured
+    # ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION06: Extract typed
+    # promotion_outcome from accumulator. This is the real typed outcome,
+    # not fabricated from mode strings. It is the SOLE authority for the
+    # diagnosis selection mode.
+    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None = accumulator.promotion_outcome
+
+    # ACT-K9B-HULK-PROMOTION-COMMIT-UNKNOWN-SELECTION-HANDOFF01:
+    # The selection_mode, selection_source, incident_access_mode, and
+    # reconciliation_required fields are derived EXHAUSTIVELY from
+    # ``promotion_outcome | None`` via :func:`_build_diagnosis_execution_authority`.
+    # The legacy workset-state fallback is removed: a recorded
+    # ``PromotionCommitUnknown`` MUST map to ``commit_unknown`` (and
+    # never to ``store_scan``). The workset state is preserved on the
+    # accumulator but no longer participates in selection derivation.
+    authority = _build_diagnosis_execution_authority(
+        promotion_outcome=promotion_outcome,
+        dispatcher_incident_access_mode=incident_access_mode,
+    )
+
+    # Auto-loop gate: SEAM01 R2 / R4 (terminal-empty / blocked states).
+    # The gate is consumed only after the authority is fully derived so
+    # the ``diagnosis-selection-derived`` event below reports the same
+    # selection mode the collector observes.
     from ..collect.incident_diagnosis_auto_loop_config import (
         is_automatic_diagnosis_loop_enabled,
     )
 
-    should_run = is_automatic_diagnosis_loop_enabled()
-
-    # SEAM01 R2: Use workset state for explicit decision
-    workset_state = getattr(accumulator, "workset_state", PromotionWorksetState.NOT_APPLICABLE)
-
-    if workset_state == PromotionWorksetState.INVALID:
-        # Block diagnosis when workset is invalid
-        selection_mode = INCIDENT_SELECTION_MODE_BLOCKED
-        blocked_reason = "promotion_workset_contract_failure"
-        should_run = False  # R4: Must not run when INVALID
-    elif workset_state == PromotionWorksetState.VALID:
-        # VALID workset: use explicit IDs if available, otherwise successful stop
-        if canonical_ids:
-            selection_mode = INCIDENT_SELECTION_MODE_EXPLICIT_IDS
-        else:
-            # SEAM01 R3/R4: VALID + empty = terminal stop, NOT store scan
-            # Store scan after a valid empty promotion would violate SEAM01
-            selection_mode = INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY
-            should_run = False  # R4: Terminal empty execution
-    else:
-        # NOT_APPLICABLE: only permit store scan when explicitly configured
-        # This is the default when no handoff has occurred
-        selection_mode = INCIDENT_SELECTION_MODE_STORE_SCAN
+    auto_loop_enabled = is_automatic_diagnosis_loop_enabled()
+    should_run = (
+        auto_loop_enabled
+        and not authority.is_blocked
+        and not authority.is_commit_unknown
+        and not authority.is_current_run_empty
+    )
 
     execution = AutomaticDiagnosisExecution(
         should_run=should_run,
-        selection_mode=selection_mode,
-        incident_access_mode=incident_access_mode,
-        blocked_reason="promotion_workset_contract_failure" if selection_mode == INCIDENT_SELECTION_MODE_BLOCKED else None,
+        selection_mode=authority.selection_mode,
+        incident_access_mode=authority.incident_access_mode,
+        blocked_reason=(
+            BLOCKED_REASON_PROMOTION_REJECTED
+            if authority.is_blocked
+            else None
+        ),
     )
-
-    # ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION06: Extract typed
-    # promotion_outcome from accumulator. This is the real typed outcome,
-    # not fabricated from mode strings.
-    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None = accumulator.promotion_outcome
 
     return AutomaticDiagnosisInputs(
         canonical_incident_ids=tuple(canonical_ids),
@@ -752,6 +762,286 @@ def _build_contract_error_summary(
         "errors": accumulator.total_errors,
         "unique_candidate_count": accumulator.total_unique_candidate_count,
     }
+
+
+# ACT-K9B-HULK-PROMOTION-COMMIT-UNKNOWN-SELECTION-HANDOFF01:
+# Typed diagnosis-execution authority derived exclusively from
+# ``PromotionOutcome | None``. The authority encapsulates the
+# selection mode, selection source, incident access mode, and
+# reconciliation flag so downstream execution cannot independently
+# select the mode and the outcome.
+@dataclass(frozen=True, slots=True)
+class DiagnosisExecutionAuthority:
+    """Authoritative diagnosis-execution decision.
+
+    Constructed once via :func:`_build_diagnosis_execution_authority`
+    using exhaustive pattern matching over
+    ``PromotionOutcome | None``. Downstream consumers MUST consume
+    this authority object rather than separately supplied mode /
+    outcome fields so the selection mode and the typed outcome cannot
+    be selected independently.
+
+    Attributes:
+        promotion_outcome: The typed outcome the decision was derived
+            from (``None`` when no promotion was attempted).
+        selection_mode: Closed selection mode string.
+        selection_source: Low-cardinality selection source string.
+        incident_access_mode: Access mode the collector must use.
+        reconciliation_required: True only for ``PromotionCommitUnknown``.
+    """
+
+    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None
+    selection_mode: str
+    selection_source: str
+    incident_access_mode: str
+    reconciliation_required: bool
+
+    @property
+    def is_blocked(self) -> bool:
+        """Return True when the authority blocks diagnosis."""
+        return self.selection_mode == INCIDENT_SELECTION_MODE_BLOCKED
+
+    @property
+    def is_commit_unknown(self) -> bool:
+        """Return True when the authority reports commit unknown."""
+        return self.selection_mode == INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN
+
+    @property
+    def is_current_run_empty(self) -> bool:
+        """Return True when the authority reports current-run-empty."""
+        return self.selection_mode == INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY
+
+    @property
+    def is_store_scan(self) -> bool:
+        """Return True when the authority permits a global store scan."""
+        return self.selection_mode == INCIDENT_SELECTION_MODE_STORE_SCAN
+
+    @property
+    def diagnosis_invoked(self) -> bool:
+        """Return True when diagnosis is invoked under this authority.
+
+        Diagnosis MUST NOT be invoked when:
+        * the selection mode is ``commit_unknown`` (reconciliation required)
+        * the selection mode is ``blocked`` (typed rejection / failure)
+        * the selection mode is ``current_run_empty`` (zero-work success)
+        * the selection mode is ``store_scan`` without a promotion outcome
+          (handled by the collector's own policy path; the orchestrator
+          does not invoke the collector directly here).
+        """
+        return (
+            self.selection_mode
+            in (
+                INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
+                INCIDENT_SELECTION_MODE_STORE_SCAN,
+            )
+        )
+
+
+def _build_diagnosis_execution_authority(
+    *,
+    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None,
+    dispatcher_incident_access_mode: str,
+) -> DiagnosisExecutionAuthority:
+    """Derive the typed diagnosis-execution authority from the outcome.
+
+    ACT-K9B-HULK-PROMOTION-COMMIT-UNKNOWN-SELECTION-HANDOFF01:
+
+    This helper is the SOLE authority for ``selection_mode`` and
+    ``incident_access_mode``. It performs exhaustive pattern matching
+    over the closed ``PromotionOutcome | None`` union so a recorded
+    ``PromotionCommitUnknown`` is mapped to ``commit_unknown`` (and
+    never to ``store_scan``). The legacy workset-state fallback is
+    removed; the ``selection_mode`` is no longer derived from
+    ``canonical_ids`` cardinality.
+
+    Required projection:
+
+    * ``promotion_outcome is None`` ->
+      ``selection_mode=store_scan``,
+      ``selection_source=explicit_nonpromotion``,
+      ``incident_access_mode=no_promotion_run``.
+    * ``PromotionSucceeded`` with non-empty ``diagnosis_incident_ids`` ->
+      ``selection_mode=explicit_incident_ids``,
+      ``selection_source=promotion``,
+      ``incident_access_mode=dispatcher_incident_access_mode``.
+    * ``PromotionSucceeded`` with empty ``diagnosis_incident_ids`` ->
+      ``selection_mode=current_run_empty``,
+      ``selection_source=promotion``,
+      ``incident_access_mode=dispatcher_incident_access_mode``.
+    * ``PromotionCommitUnknown`` ->
+      ``selection_mode=commit_unknown``,
+      ``selection_source=promotion_commit_unknown``,
+      ``incident_access_mode=reconciliation_required``.
+    * ``PromotionRejected`` (or any future terminal blocked variant) ->
+      ``selection_mode=blocked``,
+      ``selection_source=promotion_blocked``,
+      ``incident_access_mode=dispatcher_incident_access_mode``.
+
+    The helper uses :func:`typing.assert_never` for unhandled variants
+    so a future closed-union expansion cannot silently fall through.
+    """
+    from typing import assert_never
+
+    if promotion_outcome is None:
+        # ACT-K9B-HULK-PROMOTION-SUCCESSFUL-ZERO-ACCESS-MODE01:
+        # ``no_promotion_run`` is reserved exclusively for runs that
+        # NEVER reached promotion (no batch, no outcome). When the
+        # accumulator accepted a batch whose dispatcher actually
+        # consumed backend/local, the access mode must reflect that
+        # transport even though the typed outcome has not yet been
+        # recorded -- the ``dispatcher_incident_access_mode`` carries
+        # the truth the orchestrator already derived from the
+        # accepted batch. ``no_promotion_run`` would otherwise collapse
+        # a real backend or local run onto the no-attempt sentinel,
+        # hiding the transport authority behind cardinality.
+        access_mode = (
+            dispatcher_incident_access_mode
+            if dispatcher_incident_access_mode
+            != INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN
+            else INCIDENT_ACCESS_MODE_NO_PROMOTION_RUN
+        )
+        return DiagnosisExecutionAuthority(
+            promotion_outcome=None,
+            selection_mode=INCIDENT_SELECTION_MODE_STORE_SCAN,
+            selection_source=DIAGNOSIS_SELECTION_SOURCE_EXPLICIT_NON_PROMOTION,
+            incident_access_mode=access_mode,
+            reconciliation_required=False,
+        )
+
+    if isinstance(promotion_outcome, PromotionCommitUnknown):
+        return DiagnosisExecutionAuthority(
+            promotion_outcome=promotion_outcome,
+            selection_mode=INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN,
+            selection_source=DIAGNOSIS_SELECTION_SOURCE_PROMOTION_COMMIT_UNKNOWN,
+            incident_access_mode=INCIDENT_ACCESS_MODE_RECONCILIATION_REQUIRED,
+            reconciliation_required=True,
+        )
+
+    if isinstance(promotion_outcome, PromotionRejected):
+        return DiagnosisExecutionAuthority(
+            promotion_outcome=promotion_outcome,
+            selection_mode=INCIDENT_SELECTION_MODE_BLOCKED,
+            selection_source=DIAGNOSIS_SELECTION_SOURCE_PROMOTION_BLOCKED,
+            incident_access_mode=dispatcher_incident_access_mode,
+            reconciliation_required=False,
+        )
+
+    if isinstance(promotion_outcome, PromotionSucceeded):
+        if promotion_outcome.diagnosis_incident_ids:
+            return DiagnosisExecutionAuthority(
+                promotion_outcome=promotion_outcome,
+                selection_mode=INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
+                selection_source=DIAGNOSIS_SELECTION_SOURCE_PROMOTION,
+                incident_access_mode=dispatcher_incident_access_mode,
+                reconciliation_required=False,
+            )
+        return DiagnosisExecutionAuthority(
+            promotion_outcome=promotion_outcome,
+            selection_mode=INCIDENT_SELECTION_MODE_CURRENT_RUN_EMPTY,
+            selection_source=DIAGNOSIS_SELECTION_SOURCE_PROMOTION,
+            incident_access_mode=dispatcher_incident_access_mode,
+            reconciliation_required=False,
+        )
+
+    # Exhaustive over the closed PromotionOutcome union.
+    assert_never(promotion_outcome)
+
+
+def _requested_signal_count(
+    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None,
+) -> int:
+    """Project ``requested_signal_count`` from the typed outcome.
+
+    ACT-K9B-HULK-PROMOTION-COMMIT-UNKNOWN-SELECTION-HANDOFF01:
+    The :class:`PromotionSucceeded` outcome carries the requested
+    signal IDs as a tuple; :class:`PromotionRejected` carries
+    ``rejected_signal_ids``; :class:`PromotionCommitUnknown` carries
+    ``requested_signal_ids``. ``None`` yields ``0``.
+    """
+    if promotion_outcome is None:
+        return 0
+    if isinstance(promotion_outcome, PromotionSucceeded):
+        return len(promotion_outcome.requested_signal_ids)
+    if isinstance(promotion_outcome, PromotionRejected):
+        return len(promotion_outcome.rejected_signal_ids)
+    if isinstance(promotion_outcome, PromotionCommitUnknown):
+        return len(promotion_outcome.requested_signal_ids)
+    raise TypeError(
+        "_requested_signal_count received a non-PromotionOutcome value: "
+        f"{type(promotion_outcome).__name__!r}"
+    )
+
+
+def _promotion_outcome_event_fields_for_selection(
+    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None,
+) -> tuple[str, str, bool]:
+    """Return ``(outcome_kind, reason, may_have_committed)`` for the event.
+
+    ACT-K9B-HULK-PROMOTION-COMMIT-UNKNOWN-SELECTION-HANDOFF01:
+    The three projections are sourced from the typed outcome so the
+    ``diagnosis-selection-derived`` event reflects the same authority
+    the selection builder consumes.
+    """
+    from ..collect.promotion_outcomes import may_have_committed
+
+    if promotion_outcome is None:
+        return ("none", "", False)
+    if isinstance(promotion_outcome, PromotionSucceeded):
+        return ("succeeded", "", bool(may_have_committed(promotion_outcome)))
+    if isinstance(promotion_outcome, PromotionRejected):
+        return ("rejected", promotion_outcome.reason.value, False)
+    if isinstance(promotion_outcome, PromotionCommitUnknown):
+        return (
+            "commit_unknown",
+            promotion_outcome.reason.value,
+            bool(may_have_committed(promotion_outcome)),
+        )
+    raise TypeError(
+        "_promotion_outcome_event_fields_for_selection received a "
+        f"non-PromotionOutcome value: {type(promotion_outcome).__name__!r}"
+    )
+
+
+def _emit_diagnosis_selection_derived_event(
+    *,
+    runner: HealthLoopRunner,
+    authority: DiagnosisExecutionAuthority,
+    promotion_outcome: PromotionSucceeded | PromotionRejected | PromotionCommitUnknown | None,
+    requested_signal_count: int,
+) -> None:
+    """Emit the canonical ``diagnosis-selection-derived`` event.
+
+    ACT-K9B-HULK-PROMOTION-COMMIT-UNKNOWN-SELECTION-HANDOFF01:
+    The event is emitted BEFORE automatic diagnosis begins so
+    downstream health-run consumers see the same selection the
+    collector observes. The event MUST carry the typed outcome
+    projection (``promotion_outcome_kind`` /
+    ``promotion_outcome_reason`` / ``promotion_may_have_committed``),
+    the requested signal count, and the selection fields
+    (``selection_mode`` / ``selection_source`` /
+    ``incident_access_mode`` / ``reconciliation_required`` /
+    ``diagnosis_invoked``).
+    """
+    outcome_kind, reason, may_have = _promotion_outcome_event_fields_for_selection(
+        promotion_outcome
+    )
+    runner._log_event(
+        "automatic-diagnosis",
+        "DEBUG",
+        "Diagnosis selection derived",
+        event="diagnosis-selection-derived",
+        run_id=runner.run_id,
+        run_label=runner.run_label,
+        promotion_outcome_kind=outcome_kind,
+        promotion_outcome_reason=reason,
+        promotion_may_have_committed=may_have,
+        requested_signal_count=requested_signal_count,
+        selection_mode=authority.selection_mode,
+        selection_source=authority.selection_source,
+        incident_access_mode=authority.incident_access_mode,
+        reconciliation_required=authority.reconciliation_required,
+        diagnosis_invoked=authority.diagnosis_invoked,
+    )
 
 
 def _build_diagnosis_selection_for_execution(
@@ -1094,6 +1384,24 @@ def execute_health_loop_run(
             diagnostics=promotion_consistency_error.to_dict(),
         )
 
+    # ACT-K9B-HULK-PROMOTION-COMMIT-UNKNOWN-SELECTION-HANDOFF01:
+    # Rebuild the typed authority from the just-derived promotion
+    # outcome so the ``diagnosis-selection-derived`` event below and
+    # the dispatch decision below consume the SAME authority. The
+    # helper is deterministic; rebuilding it costs one extra branch
+    # but guarantees the event field, the dispatch decision, and the
+    # selection builder all read the same value.
+    authority = _build_diagnosis_execution_authority(
+        promotion_outcome=promotion_outcome,
+        dispatcher_incident_access_mode=automatic_diagnosis_execution.incident_access_mode,
+    )
+    _emit_diagnosis_selection_derived_event(
+        runner=runner,
+        authority=authority,
+        promotion_outcome=promotion_outcome,
+        requested_signal_count=_requested_signal_count(promotion_outcome),
+    )
+
     if automatic_diagnosis_execution.is_blocked:
         # R7 (item 1): the diagnosis loop is intentionally NOT
         # invoked. Emit a typed ``automatic_diagnosis_blocked`` event so
@@ -1103,11 +1411,43 @@ def execute_health_loop_run(
         runner._log_event(
             "automatic-diagnosis",
             "INFO",
-            "Automatic diagnosis blocked: promotion_consistency_contract_error",
+            "Automatic diagnosis blocked: promotion_rejected",
             event="automatic_diagnosis_blocked",
-            blocked_reason=automatic_diagnosis_execution.blocked_reason or "promotion_consistency_contract_error",
+            blocked_reason=automatic_diagnosis_execution.blocked_reason or "promotion_rejected",
             incident_access_mode=(automatic_diagnosis_execution.incident_access_mode),
             selection_mode=automatic_diagnosis_execution.selection_mode,
+        )
+    elif authority.is_commit_unknown:
+        # ACT-K9B-HULK-PROMOTION-COMMIT-UNKNOWN-SELECTION-HANDOFF01:
+        # Commit-unknown MUST NOT invoke diagnosis. The collector is
+        # skipped, the requested signal IDs are preserved on the
+        # accumulator for later reconciliation, and the orchestrator
+        # emits a typed commit-unknown event so downstream consumers
+        # see the diagnostic-block reason without an uncaught exception.
+        runner._log_event(
+            "automatic-diagnosis",
+            "INFO",
+            "Automatic diagnosis blocked: promotion_commit_unknown",
+            event="automatic_diagnosis_commit_unknown",
+            blocked_reason=BLOCKED_REASON_PROMOTION_COMMIT_UNKNOWN,
+            incident_access_mode=authority.incident_access_mode,
+            selection_mode=authority.selection_mode,
+            selection_source=authority.selection_source,
+            reconciliation_required=True,
+            stop_reason="promotion_commit_unknown",
+        )
+    elif authority.is_current_run_empty:
+        # SEAM01 R3/R4: VALID + empty PromotionSucceeded is a
+        # terminal zero-work stop. Diagnosis MUST NOT be invoked.
+        runner._log_event(
+            "automatic-diagnosis",
+            "INFO",
+            "Automatic diagnosis skipped: current_run_empty",
+            event="automatic_diagnosis_current_run_empty",
+            incident_access_mode=authority.incident_access_mode,
+            selection_mode=authority.selection_mode,
+            selection_source=authority.selection_source,
+            stop_reason="promotion_current_run_empty",
         )
     else:
         # ACT-K9B-INCIDENT-PROMOTION-CI-RECOVERY01-CORRECTION06:
@@ -1115,6 +1455,9 @@ def execute_health_loop_run(
         # consumes the real promotion_outcome from the accumulator.
         # This replaces the legacy _legacy_build_selection() which
         # fabricated outcomes from strings and lost authoritative data.
+        # The selection is consumed via the typed authority to ensure
+        # the selection mode and the typed outcome cannot be
+        # independently selected.
         diagnosis_selection = _build_diagnosis_selection_for_execution(
             automatic_diagnosis_execution=automatic_diagnosis_execution,
             promotion_outcome=promotion_outcome,

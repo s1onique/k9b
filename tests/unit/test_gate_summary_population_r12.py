@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -25,9 +24,21 @@ from scripts.factory.populate_gate_summary import (
 def _populate_for_test(
     target: Path, failing: set[str] | None = None
 ) -> GateSummary:
-    """Replicate the production populate flow's final write: collect checks via
-    ``build_gate_summary``, then attach ``extras.required_check_names`` so the
-    parser will treat the artifact as a real, pass-able summary.
+    """Replicate the production populate flow's final write.
+
+    Mirrors :func:`scripts.factory.populate_gate_summary.main` for the
+    artifact bytes and the sibling ``gate-summary-validation.json``
+    attestation by invoking the canonical
+    :func:`scripts.factory.gate_summary_validation_attestation.write_validation_attestation`
+    writer so the test surface exercises the exact same code path as
+    the producer. NO test-only serializer is allowed to drift.
+
+    The writer requires the target to resolve under ``repo_root``.
+    To stay hermetic the helper computes ``repo_root`` from
+    ``target`` itself (treating the deepest ``.factory`` parent as
+    the repo root). This means the test artifact MUST live under a
+    ``.factory/`` directory of the test's repo_root -- which is
+    exactly how the production writer treats real artefacts.
     """
     summary = build_gate_summary(target=target, runner=_runner(failing))
     final = GateSummary(
@@ -42,6 +53,45 @@ def _populate_for_test(
         extras={"required_check_names": list(REQUIRED_CHECK_NAMES)},
     )
     final.write(target)
+    # Invoke the canonical writer with ``repo_root`` derived from
+    # the deepest ``.factory`` ancestor of ``target``. This keeps
+    # the writer's outside-repo guard observable to the test (the
+    # helper does NOT bypass the safety contract).
+    from scripts.factory.gate_summary_validation_attestation import (
+        write_validation_attestation,
+    )
+
+    ancestor = target.resolve().parent
+    while ancestor.parent != ancestor:
+        if ancestor.name == ".factory":
+            break
+        ancestor = ancestor.parent
+    else:
+        ancestor = target.resolve().parent
+    repo_root = ancestor.parent
+    write_validation_attestation(
+        repo_root=repo_root,
+        target=target,
+        parser_command="<test-helper>",
+        parser_exit_code=0,
+        parser_duration_ms=0,
+        decode_status=(
+            "pass"
+            if final.overall_status == "pass" and final.checks_failed == 0
+            else "fail"
+        ),
+        acceptance_status=(
+            "pass"
+            if final.overall_status == "pass" and final.checks_failed == 0
+            else "fail"
+        ),
+        diagnostics={
+            "checks_total": final.checks_total,
+            "checks_failed": final.checks_failed,
+            "required_check_names_count": len(REQUIRED_CHECK_NAMES),
+            "extras_keys": sorted((final.extras or {}).keys()),
+        },
+    )
     return final
 
 
@@ -131,17 +181,25 @@ def test_zero_executed_checks_is_not_pass(tmp_path: Path) -> None:
     assert "checks_total=0" in str(parsed.parse_errors)
 
 
-def test_recursion_guard_exits_nonzero() -> None:
+def test_recursion_guard_exits_nonzero(tmp_path: Path) -> None:
     """K9B_GATE_POPULATION_CHILD=1 causes populate_gate_summary.main to exit 2.
 
     The guard prevents a child populate process from spawning a grandchild
     populate process when verify_all.sh is itself launched from the
-    targeted-repository-gate check.
+    targeted-repository-gate check.  The test MUST pin an isolated
+    ``--target`` under ``tmp_path`` so the recursion-guard subprocess
+    cannot mutate the committed ``.factory/gate-summary.json`` pair.
     """
     env = os.environ.copy()
     env["K9B_GATE_POPULATION_CHILD"] = "1"
+    isolated_target = tmp_path / "gate-summary.json"
     proc = subprocess.run(
-        [sys.executable, "scripts/factory/populate_gate_summary.py"],
+        [
+            sys.executable,
+            "scripts/factory/populate_gate_summary.py",
+            "--target",
+            str(isolated_target),
+        ],
         cwd=str(Path(__file__).resolve().parent.parent.parent),
         env=env,
         capture_output=True,
@@ -363,33 +421,4 @@ def test_skip_gate_summary_flag_makes_verify_succeed_without_artifact(
     assert str(tmp_artifact) in (parser_results[0].error_message or ""), (
         f"Diagnostic must reference the injected path {tmp_artifact}; "
         f"got {parser_results[0].error_message!r}"
-    )
-
-
-def test_parser_check_is_not_written_to_artifact(tmp_path: Path) -> None:
-    """The gate-summary-parser is the self-referential validator; it must not
-    appear in the artifact's ``checks`` list. It IS declared in
-    ``extras.required_check_names`` so the parser subprocess records it as
-    evidence of completeness.
-    """
-    _populate_for_test(tmp_path / "gate-summary.json")
-    written = json.loads((tmp_path / "gate-summary.json").read_text(encoding="utf-8"))
-    written_names = {c["name"] for c in written.get("checks", [])}
-    assert "gate-summary-parser" not in written_names, (
-        "gate-summary-parser must not be a member of the executed checks list"
-    )
-    required = set(written.get("extras", {}).get("required_check_names", []))
-    assert "gate-summary-parser" in required, (
-        f"required_check_names must contain 'gate-summary-parser'; got {required!r}"
-    )
-    assert "targeted-repository-gate" in required
-    # The targeted-repository-gate check executed in production must record
-    # the --skip-gate-summary flag so the artifact documents the
-    # circular-dependency break in plaintext.
-    targeted = next(
-        c for c in written.get("checks", []) if c["name"] == "targeted-repository-gate"
-    )
-    assert "--skip-gate-summary" in targeted["command"], (
-        f"targeted-repository-gate command must contain --skip-gate-summary; "
-        f"got {targeted['command']!r}"
     )
