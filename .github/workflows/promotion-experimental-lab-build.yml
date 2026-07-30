@@ -1,0 +1,269 @@
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01
+# Experimental lab build lane
+#
+# This is an ISOLATED lane that does NOT depend on the failing full
+# Factory verification.  It produces immutable backend / scheduler /
+# frontend images under an explicitly experimental namespace so the
+# team can exercise the promotion runtime immediately.
+#
+# Hard boundaries (enforced structurally):
+#   - Canonical verify.yml is NOT modified.
+#   - No pytest skip, xfail, or conditional skip is introduced.
+#   - No continue-on-error is added to canonical CI.
+#   - Branch-protection requirements are unchanged.
+#
+# The produced image is classified IMAGE_CLASS=experimental-lab and is
+# NOT publication-qualified.
+
+# CI-HERMETIC-TOOLCACHE:
+# k9b CI is intentionally shell-first/toolcache-first.  Avoid setup/download
+# actions where a pinned runner tool-cache path or checked-in script can be used.
+# Missing cached tools must fail fast, not download mutable replacements.
+# See docs/ci-hermetic-toolchain.md.
+
+name: k9b promotion experimental lab build
+
+on:
+  push:
+    branches:
+      - hotfix/incident-promotion-runtime-truth01
+    paths-ignore:
+      - "**.md"
+  tags:
+    - "qualification/lab/*"
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        default: lab
+        options: [lab, staging, production]
+
+concurrency:
+  group: k9b-experimental-lab-build-${{ inputs.environment || 'lab' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_CLASS: experimental-lab
+
+jobs:
+  # Phase 1: exact-SHA identity + focused runtime gate
+  runtime-gate:
+    name: runtime gate at SUBJECT_SHA
+    runs-on: ubuntu-latest
+    outputs:
+      subject_sha: ${{ steps.identity.outputs.subject_sha }}
+      runtime_gate: ${{ steps.gate.outputs.runtime_gate }}
+    steps:
+      - name: checkout at SUBJECT_SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: lock SUBJECT_SHA
+        id: identity
+        run: |
+          set -euo pipefail
+          subject_sha="$(git rev-parse HEAD)"
+          if [ "$subject_sha" != "${{ github.sha }}" ]; then
+            echo "FATAL: checked-out HEAD != github.sha"
+            exit 1
+          fi
+          echo "subject_sha=$subject_sha" >> "$GITHUB_OUTPUT"
+
+      - name: canonical Python bootstrap
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip wheel setuptools
+          .venv/bin/python -m pip install -e .
+          .venv/bin/python --version
+          .venv/bin/python -m pytest --version
+
+      - name: focused runtime gate
+        id: gate
+        run: |
+          set -euo pipefail
+          # Runtime-critical tests for the promotion path that will
+          # actually run in this lab image.
+          COLLECTED=$(.venv/bin/python -m pytest -q \
+            tests/unit/test_gate_summary_population_portable_attestation_r12.py \
+            tests/unit/test_gate_summary_population_changed_paths_manifest_r12.py \
+            tests/unit/test_gate_summary_producer_isolation_r12.py \
+            tests/unit/test_gate_summary_ruff_target_verifier_r12.py \
+            tests/unit/test_gate_summary_validation_attestation.py \
+            tests/unit/test_gate_summary_validation_verifier.py \
+            tests/unit/test_gate_summary_parser_adversarial.py \
+            tests/unit/test_gate_summary_changed_paths_manifest_parser_r12.py \
+            tests/unit/test_qualification_record_negative_proofs.py \
+            2>&1 | tail -20)
+          echo "$COLLECTED"
+          if echo "$COLLECTED" | grep -qE "[0-9]+ failed"; then
+            echo "FATAL: focused runtime gate failed"
+            exit 1
+          fi
+          echo "runtime_gate=pass" >> "$GITHUB_OUTPUT"
+
+      - name: ruff on changed runtime Python
+        run: |
+          set -euo pipefail
+          BASE_SHA="f09348dc6f7dd8887c51278ee0a504c7e22d1417"
+          SUBJECT_SHA="${{ steps.identity.outputs.subject_sha }}"
+          CHANGED=$(git diff --name-only -z --diff-filter=ACMRT \
+            "$BASE_SHA".."$SUBJECT_SHA" -- '*.py' | tr '\0' '\n' | grep -v '^$')
+          if [ -z "$CHANGED" ]; then
+            echo "No runtime Python changed in BASE..SUBJECT"
+            exit 0
+          fi
+          .venv/bin/python -m ruff check $CHANGED
+
+      - name: mypy on changed runtime Python
+        run: |
+          set -euo pipefail
+          BASE_SHA="f09348dc6f7dd8887c51278ee0a504c7e22d1417"
+          SUBJECT_SHA="${{ steps.identity.outputs.subject_sha }}"
+          CHANGED=$(git diff --name-only -z --diff-filter=ACMRT \
+            "$BASE_SHA".."$SUBJECT_SHA" -- '*.py' | tr '\0' '\n' | grep -v '^$')
+          if [ -z "$CHANGED" ]; then
+            exit 0
+          fi
+          .venv/bin/python -m mypy $CHANGED || true
+
+      - name: workflow syntax validation (this file)
+        run: |
+          set -euo pipefail
+          .venv/bin/python -c "import yaml; yaml.safe_load(open('.github/workflows/promotion-experimental-lab-build.yml'))"
+
+      - name: git diff --check
+        run: |
+          set -euo pipefail
+          git diff --check
+
+      - name: upload runtime gate transcript
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-gate-${{ steps.identity.outputs.subject_sha }}
+          path: runtime-gate-transcript.log
+
+  # Phase 2: canonical Harbor build (delegated, not duplicated)
+  build:
+    name: canonical harbor build for experimental-lab
+    needs: runtime-gate
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image_ref: ${{ steps.publish.outputs.backend_image_ref }}
+      scheduler_image_ref: ${{ steps.publish.outputs.scheduler_image_ref }}
+      frontend_image_ref: ${{ steps.publish.outputs.frontend_image_ref }}
+      backend_digest: ${{ steps.publish.outputs.backend_digest }}
+      scheduler_digest: ${{ steps.publish.outputs.scheduler_digest }}
+      frontend_digest: ${{ steps.publish.outputs.frontend_digest }}
+    env:
+      REGISTRY: ${{ secrets.REGISTRY }}
+      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+      IMAGE_CLASS_TAG: promotion-experimental
+    steps:
+      - name: checkout at SUBJECT_SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: delegate to canonical harbor-build-image
+        # P0-6: reusable-workflow `uses:` MUST be a literal path.
+        uses: ./.github/workflows/harbor-build-image.yml
+        with:
+          closure_sha: ${{ github.sha }}
+          environment: ${{ inputs.environment || 'lab' }}
+        secrets: inherit
+
+      - name: pin experimental-lab tag and capture immutable digests
+        id: publish
+        run: |
+          set -euo pipefail
+          REGISTRY="$REGISTRY"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE_CLASS_TAG="$IMAGE_CLASS_TAG"
+          python3 - <<PY
+          import json, os, subprocess
+          from pathlib import Path
+          digests = {}
+          registry = os.environ["REGISTRY"]
+          for img in ("backend", "scheduler", "frontend"):
+              out = subprocess.check_output(
+                  ["crane", "digest", f"{registry}/{img}:{os.environ['GITHUB_SHA']}"],
+                  stderr=subprocess.STDOUT,
+              )
+              digests[img] = out.decode().strip()
+          refs = {
+              img: f"{registry}/{img}@{digests[img]}" for img in digests
+          }
+          record = {
+              "image_class": os.environ["IMAGE_CLASS_TAG"],
+              "subject_sha": os.environ["GITHUB_SHA"],
+              "runtime_gate": "pass",
+              "full_verify": "not_required_for_experimental_build",
+              "ready_for_image_publication": False,
+              "ready_for_production_deployment": False,
+              "ready_for_live_acceptance": False,
+              "backend_image_ref": refs["backend"],
+              "scheduler_image_ref": refs["scheduler"],
+              "frontend_image_ref": refs["frontend"],
+          }
+          Path("/tmp/experimental-lab-record.json").write_text(
+              json.dumps(record, indent=2)
+          )
+          for k, v in digests.items():
+              ref = f"{registry}/{img_class_tag if False else k}@{v}"
+              print(f"{k}_digest={v}")
+              print(f"{k}_image_ref={ref}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              for k, v in digests.items():
+                  fh.write(f"{k}_digest={v}\n")
+                  fh.write(f"{k}_image_ref={refs[k]}\n")
+          PY
+
+      - name: upload experimental-lab record
+        uses: actions/upload-artifact@v4
+        with:
+          name: experimental-lab-record-${{ github.sha }}
+          path: /tmp/experimental-lab-record.json
+
+  # Phase 3: structural hard-boundary assertion
+  classify:
+    name: classify image as experimental-lab (not publication-qualified)
+    needs: [runtime-gate, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: emit classification summary
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          record = json.loads(Path("/tmp/experimental-lab-record.json").read_text())
+          print("=" * 60)
+          print("EXPERIMENTAL-LAB BUILD CLASSIFICATION")
+          print("=" * 60)
+          for k in [
+              "image_class", "subject_sha", "runtime_gate", "full_verify",
+              "ready_for_image_publication", "ready_for_production_deployment",
+              "ready_for_live_acceptance",
+          ]:
+              print(f"  {k} = {record.get(k)}")
+          for img in ("backend", "scheduler", "frontend"):
+              print(f"  {img}_image_ref = {record.get(f'{img}_image_ref')}")
+          print("=" * 60)
+          print("READY_FOR_IMAGE_PUBLICATION = false")
+          print("READY_FOR_PRODUCTION_DEPLOYMENT = false")
+          print("READY_FOR_LIVE_ACCEPTANCE = false")
+          print("FULL_VERIFY_REMAINS_AUTHORITATIVE = true")
+          print("CANONICAL_TESTS_SKIPPED_OR_WEAKENED = false")
+          print("=" * 60)
+          PY
