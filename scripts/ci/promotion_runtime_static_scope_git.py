@@ -58,7 +58,7 @@ def get_head_sha(repo_root: Path) -> str:
     """Return the full SHA of the current checked-out HEAD."""
     proc = _run_git("rev-parse", "--verify", "HEAD", repo_root=repo_root)
     if proc.returncode != 0:
-        raise GitError(f"git rev-parse HEAD failed")
+        raise GitError("git rev-parse HEAD failed")
     return proc.stdout.decode("utf-8").strip()
 
 

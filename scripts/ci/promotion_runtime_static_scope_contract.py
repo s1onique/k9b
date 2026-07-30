@@ -21,66 +21,12 @@ class ScopeError(RuntimeError):
 
 
 class ScopeRecord:
-    """Complete scope record for the dual-range model.
+    """Complete scope record for the dual-range static-scope model.
 
-    Attributes
-    ----------
-    schema_version : str
-        Always "1".
-    runtime_base_sha : str
-        Full SHA of the runtime base (deployed runtime range).
-    lane_base_sha : str
-        Full SHA of the lane base (experimental lane range).
-    subject_sha : str
-        Full SHA of the subject commit.
-    subject_tree : str
-        Full SHA of the subject commit tree (``git rev-parse SUBJECT^{tree}``).
-    repo_root : str
-        Always "." — repository-relative paths only.
-    cumulative_changed_python : tuple[str, ...]
-        All Python files changed from RUNTIME_BASE..SUBJECT (sorted, unique).
-    runtime_paths : tuple[str, ...]
-        runtime_changed filtered to src/k8s_diag_agent/ (sorted, unique).
-    lane_changed_python : tuple[str, ...]
-        All Python files changed from LANE_BASE..SUBJECT (sorted, unique).
-    lane_paths : tuple[str, ...]
-        lane_changed_python minus runtime_paths (sorted, unique).
-    historical_nonruntime_paths : tuple[str, ...]
-        In cumulative_changed_python, not in runtime_paths, not in lane_changed_python.
-    unclassified_paths : tuple[str, ...]
-        In lane_changed_python minus runtime_paths, not in lane_authority_policy.
-        MUST be empty (hard fail).
-    cumulative_changed_count : int
-    runtime_count : int
-    lane_changed_count : int
-    lane_count : int
-    historical_nonruntime_count : int
-    unclassified_count : int
-    cumulative_changed_sha256 : str
-    runtime_paths_sha256 : str
-    lane_changed_sha256 : str
-    lane_paths_sha256 : str
-    historical_nonruntime_sha256 : str
-    unclassified_sha256 : str
-    included_paths_sha256 : str
-    scope_record_sha256 : str
-
-    Invariants (enforced by validate()):
-        - schema_version == "1"
-        - runtime_base_sha, lane_base_sha, subject_sha, subject_tree are
-          exactly 40-hex characters
-        - lane_paths ∩ runtime_paths == empty
-        - lane_paths ∩ historical_nonruntime_paths == empty
-        - runtime_paths ∩ historical_nonruntime_paths == empty
-        - unclassified_paths ∩ every bucket == empty
-        - len(cumulative_changed_python) == cumulative_changed_count
-        - len(runtime_paths) == runtime_count
-        - len(lane_changed_python) == lane_changed_count
-        - len(lane_paths) == lane_count
-        - len(historical_nonruntime_paths) == historical_nonruntime_count
-        - len(unclassified_paths) == unclassified_count
-        - sorted(paths) == paths (each tuple is sorted)
-        - scope_record_sha256 binds canonical JSON of all authoritative fields
+    schema_version is always "1".  repo_root is always ".".
+    All path tuples are sorted and unique.
+    validate() enforces all structural invariants.
+    with_checksums() computes SHA-256 fields; verify_checksums() checks them.
     """
 
     __slots__ = (
@@ -257,6 +203,22 @@ class ScopeRecord:
         if unknown:
             raise ScopeError(f"unknown field(s): {sorted(unknown)!r}")
 
+        # Require all known fields present (strict decode)
+        missing = cls._KNOWN_FIELDS - set(d.keys())
+        if missing:
+            raise ScopeError(f"missing required field(s): {sorted(missing)!r}")
+
+        # Validate schema_version
+        schema_version = _str(d.get("schema_version"), "schema_version")
+        if schema_version != "1":
+            raise ScopeError(f"schema_version must be '1', got {schema_version!r}")
+
+        # Validate non-empty Git identities
+        for name in ("runtime_base_sha", "lane_base_sha", "subject_sha", "subject_tree"):
+            val = _hex40(d.get(name), name)
+            if not val:
+                raise ScopeError(f"{name} must be non-empty")
+
         return cls(
             runtime_base_sha=_hex40(d.get("runtime_base_sha"), "runtime_base_sha"),
             lane_base_sha=_hex40(d.get("lane_base_sha"), "lane_base_sha"),
@@ -336,7 +298,7 @@ class ScopeRecord:
             if len(val) != len(set(val)):
                 raise ScopeError(f"{attr} contains duplicates")
 
-        # Absolute path scan — must run on ALL path fields regardless of bucket
+        # Path safety scan — must run on ALL path fields regardless of bucket
         # completeness, so it fires before union/disjointness checks.
         for attr in (
             "cumulative_changed_python",
@@ -347,12 +309,17 @@ class ScopeRecord:
             "unclassified_paths",
         ):
             for path in getattr(self, attr):
+                if not path:
+                    raise ScopeError(f"empty path in {attr}")
                 if path.startswith("/") or (len(path) > 1 and path[1] == ":"):
                     raise ScopeError(f"absolute path in {attr}: {path!r}")
                 if "\\" in path:
                     raise ScopeError(f"backslash in {attr}: {path!r}")
                 if "/./" in path or path.startswith("./") or path.endswith("/."):
                     raise ScopeError(f"dot-segment in {attr}: {path!r}")
+                parts = path.split("/")
+                if ".." in parts:
+                    raise ScopeError(f"traversal in {attr}: {path!r}")
 
         # Bucket disjointness
         s_runtime = set(self.runtime_paths)

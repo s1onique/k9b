@@ -14,7 +14,7 @@ import json
 import sys
 from pathlib import Path
 
-from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
 from promotion_runtime_static_scope_git import (
     GitError,
     changed_python,

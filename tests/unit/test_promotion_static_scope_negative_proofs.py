@@ -154,7 +154,7 @@ class TestScopeRecordSchema:
 
     def test_unknown_field_rejected(self) -> None:
         """Unknown field in dict raises ScopeError on from_dict."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope()
         d["unknown_field"] = "bad"
         with pytest.raises(ScopeError, match="unknown_field"):
@@ -162,7 +162,7 @@ class TestScopeRecordSchema:
 
     def test_wrong_type_rejected(self) -> None:
         """Wrong field type raises ScopeError on from_dict."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope()
         d["runtime_count"] = "not_an_int"
         with pytest.raises(ScopeError, match="runtime_count"):
@@ -170,7 +170,7 @@ class TestScopeRecordSchema:
 
     def test_bool_count_rejected(self) -> None:
         """Bool used as count raises ScopeError on from_dict."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope()
         d["unclassified_count"] = False
         with pytest.raises(ScopeError, match="unclassified_count"):
@@ -178,14 +178,14 @@ class TestScopeRecordSchema:
 
     def test_invalid_sha_rejected(self) -> None:
         """Non-40-hex SHA raises ScopeError on from_dict."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(subject_sha="not_a_sha")
         with pytest.raises(ScopeError, match="subject_sha"):
             ScopeRecord.from_dict(d)
 
     def test_absolute_path_in_record_rejected(self) -> None:
         """Absolute path in runtime_paths raises ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             runtime_paths=["/etc/evil.py"],
             runtime_count=1,
@@ -196,7 +196,7 @@ class TestScopeRecordSchema:
 
     def test_backslash_in_record_rejected(self) -> None:
         """Backslash in lane path raises ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             lane_paths=["foo\\bar.py"],
             lane_count=1,
@@ -207,7 +207,7 @@ class TestScopeRecordSchema:
 
     def test_unsorted_paths_rejected(self) -> None:
         """Unsorted path tuple raises ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             cumulative_changed_python=["z.py", "a.py"],
             cumulative_changed_count=2,
@@ -219,7 +219,7 @@ class TestScopeRecordSchema:
 
     def test_duplicate_paths_rejected(self) -> None:
         """Duplicate paths raise ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             cumulative_changed_python=["a.py", "a.py"],
             cumulative_changed_count=2,
@@ -231,7 +231,7 @@ class TestScopeRecordSchema:
 
     def test_unclassified_count_nonzero_rejected(self) -> None:
         """unclassified_count > 0 raises ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             lane_paths=["scripts/ci/evil.py"],
             lane_count=1,
@@ -244,7 +244,7 @@ class TestScopeRecordSchema:
 
     def test_bucket_overlap_rejected(self) -> None:
         """Runtime/lane bucket overlap raises ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             runtime_paths=["src/k8s_diag_agent/shared.py"],
             runtime_count=1,
@@ -267,9 +267,10 @@ class TestScopeRecordChecksums:
 
     def test_checksum_mutation_rejected(self) -> None:
         """Mutating any field causes checksum mismatch on verify_checksums()."""
-        from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
         import hashlib
         import json
+
+        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
 
         def make_valid(**overrides) -> ScopeRecord:
             paths = ["src/k8s_diag_agent/foo.py"]
@@ -372,98 +373,74 @@ class TestGitCommandContract:
 
 
 # ---------------------------------------------------------------------------
-# Missing path fail-closed (integration-style with monkeypatch).
+# Shared git integration helpers.
 # ---------------------------------------------------------------------------
 
-class TestMissingPathFailClosed:
+def _git_env() -> dict[str, str]:
+    import os
+    return {
+        **{k: v for k, v in os.environ.items() if k.startswith("GIT_")},
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t",
+    }
+
+
+def _init_git_repo(tmp_path: Path) -> tuple[Path, str]:
+    """Init git repo with one README commit; return (tmp_path, head_sha)."""
+    import subprocess
+    env = _git_env()
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+    (tmp_path / "README").write_text("x")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, env=env)
+    return tmp_path, subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=tmp_path, capture_output=True, text=True,
+    ).stdout.strip()
+
+
+# ---------------------------------------------------------------------------
+# Missing runtime path is a hard error.
+# ---------------------------------------------------------------------------
+
+class TestMissingRuntimePath:
     """P0-5: missing path with ACMRT filter is a hard error."""
 
     def test_missing_runtime_path_raises_scope_error(self, tmp_path: Path) -> None:
         """A runtime path that doesn't exist on disk raises ScopeError."""
-        import os
         import subprocess
-
-        import promotion_runtime_static_scope_git as git_git
-
-        from promotion_runtime_static_scope import build_scope
-        from promotion_runtime_static_scope_git import (
-            resolve_revision,
-            is_ancestor,
-            get_head_sha,
-            get_subject_tree,
-            changed_python,
-        )
         import promotion_runtime_static_scope as scope_mod
+        from promotion_runtime_static_scope import build_scope
         from promotion_runtime_static_scope_contract import ScopeError
 
-        env = {
-            **{k: v for k, v in os.environ.items() if k.startswith("GIT_")},
-            "GIT_AUTHOR_NAME": "t",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "t",
-            "GIT_COMMITTER_EMAIL": "t",
-        }
-
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
-        (tmp_path / "README").write_text("x")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "-m", "init"],
-            cwd=tmp_path, capture_output=True, env=env,
-        )
+        _init_git_repo(tmp_path)
         head_sha = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=tmp_path, capture_output=True, text=True,
+            ["git", "rev-parse", "HEAD"], cwd=tmp_path, capture_output=True, text=True,
         ).stdout.strip()
-
         runtime_base = head_sha + "0"
         lane_base = head_sha + "1"
 
-        orig_resolve = scope_mod.resolve_revision
-        orig_ancestor = scope_mod.is_ancestor
-        orig_get_head = scope_mod.get_head_sha
-        orig_get_tree = scope_mod.get_subject_tree
-        orig_changed = scope_mod.changed_python
-
-        def fake_resolve(repo, rev):
-            if rev in (runtime_base, lane_base):
-                return rev
-            if rev in ("HEAD", head_sha):
-                return head_sha
-            return rev
-
-        def fake_ancestor(repo, a, d):
-            return True
-
-        def fake_head(repo):
-            return head_sha
-
-        def fake_tree(repo, sha):
-            return subprocess.run(
-                ["git", "rev-parse", f"{sha}^{{tree}}"],
-                cwd=repo, capture_output=True, text=True,
-            ).stdout.strip()
-
-        def fake_changed(repo, base, subject):
-            if base == runtime_base:
-                return b"src/k8s_diag_agent/ghost.py\x00"  # Doesn't exist on disk
-            return b""
-
-        scope_mod.resolve_revision = fake_resolve
-        scope_mod.is_ancestor = fake_ancestor
-        scope_mod.get_head_sha = fake_head
-        scope_mod.get_subject_tree = fake_tree
-        scope_mod.changed_python = fake_changed
-
+        orig = (scope_mod.resolve_revision, scope_mod.is_ancestor,
+                scope_mod.get_head_sha, scope_mod.get_subject_tree, scope_mod.changed_python)
+        scope_mod.resolve_revision = lambda r, rev: (
+            rev if rev in (runtime_base, lane_base, head_sha) else rev
+        )
+        scope_mod.is_ancestor = lambda r, a, d: True
+        scope_mod.get_head_sha = lambda r: head_sha
+        scope_mod.get_subject_tree = lambda r, sha: subprocess.run(
+            ["git", "rev-parse", sha + "^{tree}"], cwd=r, capture_output=True, text=True,
+        ).stdout.strip()
+        scope_mod.changed_python = lambda r, base, sub: (
+            b"src/k8s_diag_agent/ghost.py\x00" if base == runtime_base else b""
+        )
         try:
             with pytest.raises(ScopeError, match="does not exist on disk"):
                 build_scope(tmp_path, runtime_base, lane_base, head_sha)
         finally:
-            scope_mod.resolve_revision = orig_resolve
-            scope_mod.is_ancestor = orig_ancestor
-            scope_mod.get_head_sha = orig_get_head
-            scope_mod.get_subject_tree = orig_get_tree
-            scope_mod.changed_python = orig_changed
+            (scope_mod.resolve_revision, scope_mod.is_ancestor,
+             scope_mod.get_head_sha, scope_mod.get_subject_tree,
+             scope_mod.changed_python) = orig
 
 
 # ---------------------------------------------------------------------------
@@ -475,95 +452,43 @@ class TestRepoRootEvidence:
 
     def test_repo_root_is_dot(self, tmp_path: Path) -> None:
         """ScopeRecord.repo_root is '.' not an absolute host path."""
-        import os
         import subprocess
-
-        import promotion_runtime_static_scope_git as git_git
         import promotion_runtime_static_scope as scope_mod
         from promotion_runtime_static_scope import build_scope
 
-        env = {
-            **{k: v for k, v in os.environ.items() if k.startswith("GIT_")},
-            "GIT_AUTHOR_NAME": "t",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "t",
-            "GIT_COMMITTER_EMAIL": "t",
-        }
-
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
-        (tmp_path / "README").write_text("x")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "-m", "init"],
-            cwd=tmp_path, capture_output=True, env=env,
-        )
-        head_minus_1 = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=tmp_path, capture_output=True, text=True,
-        ).stdout.strip()
-
+        # First commit
+        _, head_minus_1 = _init_git_repo(tmp_path)
+        # Second commit with a runtime file
         runtime_file = tmp_path / "src" / "k8s_diag_agent" / "test.py"
         runtime_file.parent.mkdir(parents=True)
         runtime_file.write_text("pass\n")
         subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "-m", "add"],
-            cwd=tmp_path, capture_output=True, env=env,
-        )
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=tmp_path, capture_output=True, text=True,
-        ).stdout.strip()
-
+        subprocess.run(["git", "commit", "-m", "add"], cwd=tmp_path,
+                       capture_output=True, env=_git_env())
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path,
+                             capture_output=True, text=True).stdout.strip()
         runtime_base = head_minus_1 + "0"
         lane_base = head_minus_1 + "1"
 
-        orig_resolve = scope_mod.resolve_revision
-        orig_ancestor = scope_mod.is_ancestor
-        orig_head = scope_mod.get_head_sha
-        orig_tree = scope_mod.get_subject_tree
-        orig_changed = scope_mod.changed_python
-
-        def fake_resolve(repo, rev):
-            if rev in (runtime_base, lane_base):
-                return rev
-            if rev in ("HEAD", head):
-                return head
-            if rev in ("HEAD~1", head_minus_1):
-                return head_minus_1
-            return rev
-
-        def fake_ancestor(repo, a, d):
-            return True
-
-        def fake_head(repo):
-            return head
-
-        def fake_tree(repo, sha):
-            return subprocess.run(
-                ["git", "rev-parse", f"{sha}^{{tree}}"],
-                cwd=repo, capture_output=True, text=True,
-            ).stdout.strip()
-
-        def fake_changed(repo, base, subject):
-            if base == runtime_base:
-                return b"src/k8s_diag_agent/test.py\x00"
-            return b""
-
-        scope_mod.resolve_revision = fake_resolve
-        scope_mod.is_ancestor = fake_ancestor
-        scope_mod.get_head_sha = fake_head
-        scope_mod.get_subject_tree = fake_tree
-        scope_mod.changed_python = fake_changed
-
+        orig = (scope_mod.resolve_revision, scope_mod.is_ancestor,
+                scope_mod.get_head_sha, scope_mod.get_subject_tree, scope_mod.changed_python)
+        scope_mod.resolve_revision = lambda r, rev: rev if rev in (
+            runtime_base, lane_base, head, head_minus_1
+        ) else rev
+        scope_mod.is_ancestor = lambda r, a, d: True
+        scope_mod.get_head_sha = lambda r: head
+        scope_mod.get_subject_tree = lambda r, sha: subprocess.run(
+            ["git", "rev-parse", sha + "^{tree}"], cwd=r, capture_output=True, text=True,
+        ).stdout.strip()
+        scope_mod.changed_python = lambda r, base, sub: (
+            b"src/k8s_diag_agent/test.py\x00" if base == runtime_base else b""
+        )
         try:
             record = build_scope(tmp_path, runtime_base, lane_base, head)
         finally:
-            scope_mod.resolve_revision = orig_resolve
-            scope_mod.is_ancestor = orig_ancestor
-            scope_mod.get_head_sha = orig_head
-            scope_mod.get_subject_tree = orig_tree
-            scope_mod.changed_python = orig_changed
+            (scope_mod.resolve_revision, scope_mod.is_ancestor,
+             scope_mod.get_head_sha, scope_mod.get_subject_tree,
+             scope_mod.changed_python) = orig
 
         assert record.repo_root == ".", (
             f"ScopeRecord.repo_root must be '.', got: {record.repo_root!r}"
