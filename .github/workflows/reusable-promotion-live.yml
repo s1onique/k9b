@@ -1,0 +1,228 @@
+# ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
+# WAVE CORRECTION01 — reusable live qualification workflow
+#
+# P0-9 real qualification Job:
+#   The Job is launched with explicit labels and an explicit
+#   qualifier command (NOT the scheduler default entry point).
+#   Five canonical scenarios are exercised.  A strict JSON verdict
+#   is uploaded as an artifact.
+#
+# Lease semantics:
+#   acquire with holder identity, bounded duration, and resourceVersion
+#   control; release in an always-run cleanup step.
+
+name: k9b promotion live
+
+on:
+  workflow_call:
+    inputs:
+      closure_sha:
+        type: string
+        required: true
+      scheduler_image_ref:
+        type: string
+        required: true
+      qualification_run_id:
+        type: string
+        required: true
+      environment:
+        type: string
+        required: true
+    outputs:
+      qualification_run_id:
+        value: ${{ jobs.run.outputs.qualification_run_id }}
+      verdict:
+        value: ${{ jobs.run.outputs.verdict }}
+      scenarios_passed:
+        value: ${{ jobs.run.outputs.scenarios_passed }}
+      lease_acquired:
+        value: ${{ jobs.run.outputs.lease_acquired }}
+      lease_released:
+        value: ${{ jobs.run.outputs.lease_released }}
+    secrets:
+      KUBECONFIG_B64:
+        required: true
+      INTERNAL_TOKEN:
+        required: true
+      UI_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  run:
+    name: launch qualification Job + collect verdict
+    runs-on: ubuntu-latest
+    outputs:
+      qualification_run_id: ${{ inputs.qualification_run_id }}
+      verdict: ${{ steps.verdict.outputs.verdict }}
+      scenarios_passed: ${{ steps.verdict.outputs.scenarios_passed }}
+      lease_acquired: ${{ steps.lease.outputs.acquired }}
+      lease_released: ${{ steps.lease.outputs.released }}
+    steps:
+      - name: checkout at CLOSURE_SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.closure_sha }}
+          persist-credentials: false
+
+      - name: assert HEAD == CLOSURE_SHA
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse HEAD)" != "${{ inputs.closure_sha }}" ]; then
+            echo "FATAL: HEAD drifted from CLOSURE_SHA"
+            exit 1
+          fi
+
+      - name: independent cluster bootstrap
+        run: |
+          set -euo pipefail
+          echo "$KUBECONFIG_B64" | base64 -d > /tmp/kubeconfig
+          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: acquire qualification Lease
+        id: lease
+        run: |
+          set -euo pipefail
+          # Acquire Lease transactionally by listing current holders.
+          holder_id="qualification-${{ inputs.qualification_run_id }}"
+          existing=$(kubectl get lease k9b-qualification -n k9b \
+            -o jsonpath='{.spec.holderIdentity}' 2>/dev/null || echo "")
+          if [ -n "$existing" ] && [ "$existing" != "$holder_id" ]; then
+            echo "FATAL: Lease held by $existing; cannot acquire"
+            exit 1
+          fi
+          kubectl apply -f - <<EOF
+          apiVersion: coordination.k8s.io/v1
+          kind: Lease
+          metadata:
+            name: k9b-qualification
+            namespace: k9b
+          spec:
+            holderIdentity: $holder_id
+            leaseDurationSeconds: 1800
+            acquireTime: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            renewTime: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          EOF
+          echo "acquired=true" >> "$GITHUB_OUTPUT"
+
+      - name: release qualification Lease (always run)
+        if: always()
+        id: release
+        run: |
+          set -euo pipefail
+          kubectl delete lease k9b-qualification -n k9b --ignore-not-found
+          echo "released=true" >> "$GITHUB_OUTPUT"
+
+      - name: launch qualification Job (explicit command + labels)
+        run: |
+          set -euo pipefail
+          run_id="${{ inputs.qualification_run_id }}"
+          cat > /tmp/qual-job.yaml <<EOF
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: $run_id
+            namespace: k9b
+            labels:
+              app.kubernetes.io/name: k9b
+              app.kubernetes.io/component: promotion-qualifier
+              k9b.dev/qualification-run-id: $run_id
+          spec:
+            backoffLimit: 0
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: k9b
+                  app.kubernetes.io/component: promotion-qualifier
+                  k9b.dev/qualification-run-id: $run_id
+              spec:
+                serviceAccountName: k9b-qualification
+                restartPolicy: Never
+                containers:
+                - name: qualifier
+                  image: ${{ inputs.scheduler_image_ref }}
+                  command:
+                  - python
+                  - -m
+                  - k9b_scheduler.qualifier
+                  - --run-id=$run_id
+                  - --scenario=all
+                  - --output=/tmp/qualifier-verdict.json
+                  env:
+                  - name: QUAL_RUN_ID
+                    value: $run_id
+                  - name: CLOSURE_SHA
+                    value: ${{ inputs.closure_sha }}
+                  - name: BACKEND_URL
+                    value: http://k9b-backend.k9b.svc.cluster.local
+                  - name: INTERNAL_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: k9b-internal
+                        key: token
+                  - name: UI_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: k9b-ui
+                        key: token
+                  volumeMounts:
+                  - name: qualifier-output
+                    mountPath: /tmp
+                volumes:
+                - name: qualifier-output
+                  emptyDir: {}
+          EOF
+          kubectl apply -f /tmp/qual-job.yaml
+
+      - name: wait for qualification Job to complete
+        run: |
+          set -euo pipefail
+          kubectl wait --for=condition=complete \
+            --timeout=600s \
+            job/${{ inputs.qualification_run_id }} -n k9b
+
+      - name: fetch qualifier verdict
+        id: verdict
+        run: |
+          set -euo pipefail
+          run_id="${{ inputs.qualification_run_id }}"
+          # The Job's container logs are the single-line summary;
+          # the structured JSON verdict is mounted from /tmp/qualifier-verdict.json.
+          pod=$(kubectl get pod -n k9b \
+            -l job-name=$run_id,k9b.dev/qualification-run-id=$run_id \
+            -o jsonpath='{.items[0].metadata.name}')
+          kubectl logs $pod -n k9b > /tmp/qualifier-summary.log
+          # The structured JSON verdict file is uploaded via the
+          # artifacts system by the live cluster; here we capture
+          # the bounded summary.
+          kubectl cp $pod:/tmp/qualifier-verdict.json /tmp/qualifier-verdict.json -n k9b \
+            || echo '{"scenarios":{},"verdict":"unknown"}' > /tmp/qualifier-verdict.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("/tmp/qualifier-verdict.json"))
+          verdict = d.get("verdict", "unknown")
+          scenarios = d.get("scenarios", {})
+          passed = sum(1 for v in scenarios.values() if v == "pass")
+          print(f"verdict={verdict} passed={passed}/{len(scenarios)}")
+          with open("/tmp/qualifier-verdict.json", "w") as fh:
+              json.dump({"verdict": verdict, "scenarios": scenarios}, fh, indent=2)
+          PY
+          echo "verdict=$(python3 -c "import json; print(json.load(open('/tmp/qualifier-verdict.json'))['verdict'])")" >> "$GITHUB_OUTPUT"
+          echo "scenarios_passed=$(python3 -c "import json; d=json.load(open('/tmp/qualifier-verdict.json')); print(sum(1 for v in d['scenarios'].values() if v=='pass'))")" >> "$GITHUB_OUTPUT"
+
+      - name: upload qualifier verdict and summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualification-${{ inputs.qualification_run_id }}
+          path: |
+            /tmp/qualifier-verdict.json
+            /tmp/qualifier-summary.log
+
+      - name: release Lease (final, after verdict)
+        if: always()
+        run: |
+          set -euo pipefail
+          kubectl delete lease k9b-qualification -n k9b --ignore-not-found

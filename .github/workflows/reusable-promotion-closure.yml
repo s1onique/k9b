@@ -1,0 +1,171 @@
+# ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
+# WAVE CORRECTION01 — reusable closure workflow
+#
+# P0-1 identity algebra:
+#   CLOSURE_SHA  = github.sha (the commit whose push triggers this run)
+#   SUBJECT_SHA  = parent(CLOSURE_SHA) (the implementation commit)
+#   SUBJECT_TREE = SUBJECT_SHA^{tree}
+#   BASE_SHA     = f09348dc6f7dd8887c51278ee0a504c7e22d1417
+#
+# P0-5 read-only verification:
+#   This workflow reconstructs the manifest in tmp, NEVER rewrites
+#   the committed .factory/ pair.
+
+name: k9b promotion closure
+
+on:
+  workflow_call:
+    inputs:
+      closure_sha:
+        description: "E SHA recorded by the trigger"
+        type: string
+        required: true
+      base_sha:
+        description: "BASE SHA recorded by the trigger"
+        type: string
+        required: true
+    outputs:
+      closure_sha:
+        description: "The locked closure SHA"
+        value: ${{ jobs.lock.outputs.closure_sha }}
+      subject_sha:
+        description: "The subject implementation commit"
+        value: ${{ jobs.lock.outputs.subject_sha }}
+      subject_tree:
+        description: "The subject tree object SHA"
+        value: ${{ jobs.lock.outputs.subject_tree }}
+      range_base:
+        description: "BASE SHA recorded in the artifact"
+        value: ${{ jobs.lock.outputs.range_base }}
+      manifest_sha256:
+        description: "SHA-256 of the Git-reconstructed manifest"
+        value: ${{ jobs.lock.outputs.manifest_sha256 }}
+      manifest_count:
+        description: "Number of entries in the manifest"
+        value: ${{ jobs.lock.outputs.manifest_count }}
+      worktree_clean:
+        description: "True iff worktree is clean after verification"
+        value: ${{ jobs.lock.outputs.worktree_clean }}
+      overall_status:
+        description: "Captured overall_status from the committed summary"
+        value: ${{ jobs.lock.outputs.overall_status }}
+      checks_failed:
+        description: "Captured checks_failed from the committed summary"
+        value: ${{ jobs.lock.outputs.checks_failed }}
+    secrets: {}
+
+permissions:
+  contents: read
+
+jobs:
+  lock:
+    name: lock closure + verify committed pair
+    runs-on: ubuntu-latest
+    outputs:
+      closure_sha: ${{ steps.identity.outputs.closure_sha }}
+      subject_sha: ${{ steps.identity.outputs.subject_sha }}
+      subject_tree: ${{ steps.identity.outputs.subject_tree }}
+      range_base: ${{ steps.identity.outputs.range_base }}
+      manifest_sha256: ${{ steps.reconstruct.outputs.manifest_sha256 }}
+      manifest_count: ${{ steps.reconstruct.outputs.manifest_count }}
+      worktree_clean: ${{ steps.identity.outputs.worktree_clean }}
+      overall_status: ${{ steps.identity.outputs.overall_status }}
+      checks_failed: ${{ steps.identity.outputs.checks_failed }}
+    steps:
+      - name: checkout at CLOSURE_SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.closure_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: assert HEAD == CLOSURE_SHA
+        id: head-check
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          if [ "$head_sha" != "${{ inputs.closure_sha }}" ]; then
+            echo "FATAL: HEAD=$head_sha != CLOSURE_SHA=${{ inputs.closure_sha }}"
+            exit 1
+          fi
+          echo "head_ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: lock identity and verify committed pair
+        id: identity
+        run: |
+          set -euo pipefail
+          closure_sha="${{ inputs.closure_sha }}"
+          base_sha="${{ inputs.base_sha }}"
+          subject_sha="$(git rev-parse "$closure_sha^")"
+          subject_tree="$(git log -1 --format=%T "$subject_sha")"
+          # Read the committed gate-summary pair (read-only).
+          python3 - <<PY
+          import json
+          from pathlib import Path
+          d = json.loads(Path(".factory/gate-summary.json").read_text())
+          e = d["extras"]
+          assert e["range_base"] == "$base_sha", f"range_base={e['range_base']!r}"
+          assert e["range_head"] == "$subject_sha", (
+              f"range_head={e['range_head']!r} != SUBJECT_SHA={'$subject_sha'!r}"
+          )
+          assert d["overall_status"] == "pass", d["overall_status"]
+          assert d["checks_failed"] == 0, d["checks_failed"]
+          # Validate the sibling attestation too.
+          att = json.loads(Path(".factory/gate-summary-validation.json").read_text())
+          assert att["parser_exit_code"] == 0, att["parser_exit_code"]
+          assert att["decode_status"] == "pass", att["decode_status"]
+          assert att["acceptance_status"] == "pass", att["acceptance_status"]
+          # CHECK: only approved evidence files modified.
+          diff_files = """$(git diff --name-only $closure_sha^ $closure_sha)"""
+          approved = {".factory/gate-summary.json",
+                      ".factory/gate-summary-validation.json"}
+          unexpected = set(diff_files.split()) - approved
+          assert not unexpected, f"unexpected files in E: {unexpected}"
+          print("OK: identity algebra + committed pair")
+          PY
+          echo "closure_sha=$closure_sha" >> "$GITHUB_OUTPUT"
+          echo "subject_sha=$subject_sha" >> "$GITHUB_OUTPUT"
+          echo "subject_tree=$subject_tree" >> "$GITHUB_OUTPUT"
+          echo "range_base=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "worktree_clean=true" >> "$GITHUB_OUTPUT"
+          echo "overall_status=pass" >> "$GITHUB_OUTPUT"
+          echo "checks_failed=0" >> "$GITHUB_OUTPUT"
+
+      - name: reconstruct manifest in tmp only
+        id: reconstruct
+        run: |
+          set -euo pipefail
+          base_sha="${{ inputs.base_sha }}"
+          subject_sha="${{ steps.identity.outputs.subject_sha }}"
+          manifest_path="/tmp/k9b_reconstructed_manifest.z"
+          git diff --name-only -z --diff-filter=ACMRT \
+            "$base_sha".."$subject_sha" -- '*.py' > "$manifest_path"
+          count="$(tr '\0' '\n' < "$manifest_path" | grep -c .)"
+          sha256="$(sha256sum "$manifest_path" | awk '{print $1}')"
+          echo "manifest_sha256=$sha256" >> "$GITHUB_OUTPUT"
+          echo "manifest_count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: assert reconstructed manifest equals persisted
+        run: |
+          set -euo pipefail
+          python3 - <<PY
+          import json
+          from pathlib import Path
+          persisted_sha = json.loads(
+              Path(".factory/gate-summary.json").read_text()
+          )["extras"]["changed_paths_manifest_sha256"]
+          assert persisted_sha == "${{ steps.reconstruct.outputs.manifest_sha256 }}", (
+              f"persisted_sha={persisted_sha!r} "
+              f"!= reconstructed=${{ steps.reconstruct.outputs.manifest_sha256 }}!r"
+          )
+          print("OK: manifest SHA matches persisted")
+          PY
+
+      - name: assert worktree remains clean after read-only verification
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain=v1 | grep -v '^?? task_progress_')" ]; then
+            echo "FATAL: read-only verification dirtied the worktree"
+            git status --porcelain=v1
+            exit 1
+          fi

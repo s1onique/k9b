@@ -1,37 +1,21 @@
 # ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
-# WAVE 2: automated exact-SHA qualification workflow
+# WAVE CORRECTION01 — thin caller
 #
-# This is the canonical orchestrator.  It binds every downstream job to
-# the immutable E SHA recorded in the gate-summary.json of the closure
-# commit.  The dependency graph is:
+# This file MUST stay <= 200 lines.
 #
-#   closure
-#     -> verify
-#     -> build-images
-#     -> deploy
-#     -> rollout-readiness
-#     -> live-health-qualification
-#     -> evidence-aggregate
-#     -> timing-aggregate
+# P0-3 trigger contract:
+#   Branch push and qualification tags are declared under on.push.
+#   Branch push is the canonical acceptance trigger.
+#   workflow_dispatch is a diagnostic trigger ONLY.
 #
-# Every job asserts `github.sha == E` and `checked_out_HEAD == E` so a
-# promotion cannot silently drift away from the recorded SHA.
+# P0-4 Python bootstrap:
+#   The canonical Python bootstrap step is invoked here before any
+#   job that uses `.venv/bin/python`.  Downstream reusable workflows
+#   use setup-python OR the venv-created-by-caller (depending on
+#   the job's needs).
 #
-# Triggers:
-#   - push to hotfix/incident-promotion-runtime-truth01 (only when the
-#     gate-summary.json at HEAD reports overall_status=pass), OR
-#   - an annotated qualification tag matching 'qualification/<env>/*'
-#
-# Concurrency group: k9b-live-qualification-<environment> -- overlapping
-# deployments are forbidden.
-#
-# Failure behaviour:
-#   verify failure            blocks build
-#   build failure             blocks deploy
-#   rollout failure           blocks live promotion
-#   security preflight failure blocks live promotion
-#   live qualification failure still runs evidence aggregation
-#   failed qualification      never reports publication readiness
+# P0-7 cluster access authority:
+#   Each reusable workflow re-bootstraps cluster access independently.
 
 name: k9b promotion qualification
 
@@ -39,554 +23,88 @@ on:
   push:
     branches:
       - hotfix/incident-promotion-runtime-truth01
+    tags:
+      - "qualification/lab/*"
+      - "qualification/staging/*"
+      - "qualification/production/*"
     paths-ignore:
       - "**.md"
-  tags:
-    - "qualification/**"
   workflow_dispatch:
     inputs:
       environment:
-        description: "target environment"
-        required: true
-        default: "lab"
         type: choice
-        options:
-          - lab
-          - staging
-          - production
+        default: lab
+        options: [lab, staging, production]
 
 concurrency:
-  group: k9b-live-qualification-${{ inputs.environment || github.event.inputs.environment || 'lab' }}
+  group: k9b-live-qualification-${{ inputs.environment || 'lab' }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 env:
-  E_SHA: ${{ github.sha }}
-  ENVIRONMENT: ${{ inputs.environment || github.event.inputs.environment || 'lab' }}
+  BASE_SHA: f09348dc6f7dd8887c51278ee0a504c7e22d1417
 
 jobs:
-  # -----------------------------------------------------------------------
-  # CLOSURE: lock the immutable E SHA and verify the gate-summary pair
-  # -----------------------------------------------------------------------
   closure:
-    name: closure (lock E SHA + verify gate-summary pair)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      e_sha: ${{ steps.lock.outputs.e_sha }}
-      subject_tree: ${{ steps.lock.outputs.subject_tree }}
-      range_base: ${{ steps.lock.outputs.range_base }}
-      range_head: ${{ steps.lock.outputs.range_head }}
-      manifest_sha256: ${{ steps.lock.outputs.manifest_sha256 }}
-      manifest_count: ${{ steps.lock.outputs.manifest_count }}
-      overall_status: ${{ steps.lock.outputs.overall_status }}
-      checks_failed: ${{ steps.lock.outputs.checks_failed }}
-    steps:
-      - name: checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
+    uses: ./.github/workflows/reusable-promotion-closure.yml
+    with:
+      closure_sha: ${{ github.sha }}
+      base_sha: ${{ env.BASE_SHA }}
 
-      - name: assert github.sha == E
-        run: |
-          set -euo pipefail
-          if [ "$(git rev-parse HEAD)" != "${E_SHA}" ]; then
-            echo "FATAL: github.sha does not match checked-out HEAD"
-            echo "github.sha=${E_SHA} HEAD=$(git rev-parse HEAD)"
-            exit 1
-          fi
-
-      - name: assert worktree clean
-        run: |
-          set -euo pipefail
-          if [ -n "$(git status --porcelain=v1)" ]; then
-            echo "FATAL: worktree dirty at E"
-            git status --porcelain=v1
-            exit 1
-          fi
-
-      - name: assert gate-summary.json records correct range and tree
-        id: lock
-        run: |
-          set -euo pipefail
-          .venv/bin/python - <<'PY'
-          import json, os, subprocess, sys
-          from pathlib import Path
-
-          e_sha = os.environ["E_SHA"]
-          gate = json.loads(Path(".factory/gate-summary.json").read_text())
-          extras = gate.get("extras", {})
-
-          required = {
-              "range_base": "f09348dc6f7dd8887c51278ee0a504c7e22d1417",
-              "range_head": e_sha,
-          }
-          for key, expected in required.items():
-              observed = extras.get(key)
-              if observed != expected:
-                  print(f"FATAL: extras.{key}={observed!r} != {expected!r}")
-                  sys.exit(1)
-
-          if gate.get("overall_status") != "pass":
-              print(f"FATAL: overall_status={gate.get('overall_status')!r} != 'pass'")
-              sys.exit(1)
-          if gate.get("checks_failed", 0) != 0:
-              print(f"FATAL: checks_failed={gate.get('checks_failed')}")
-              sys.exit(1)
-
-          # subject_tree
-          subject_tree = subprocess.check_output(
-              ["git", "log", "-1", "--format=%T", e_sha]
-          ).decode().strip()
-          print(f"subject_tree={subject_tree}")
-
-          # manifest SHA matches the persisted value
-          persisted_sha = extras.get("changed_paths_manifest_sha256")
-          manifest_count = extras.get("changed_paths_manifest_count")
-          print(f"persisted_manifest_sha256={persisted_sha}")
-          print(f"persisted_manifest_count={manifest_count}")
-
-          # Set GitHub Actions outputs
-          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
-              fh.write(f"e_sha={e_sha}\n")
-              fh.write(f"subject_tree={subject_tree}\n")
-              fh.write(f"range_base={required['range_base']}\n")
-              fh.write(f"range_head={e_sha}\n")
-              fh.write(f"manifest_sha256={persisted_sha}\n")
-              fh.write(f"manifest_count={manifest_count}\n")
-              fh.write(f"overall_status={gate['overall_status']}\n")
-              fh.write(f"checks_failed={gate['checks_failed']}\n")
-          PY
-
-  # -----------------------------------------------------------------------
-  # VERIFY: re-run the local gate at the locked E SHA
-  # -----------------------------------------------------------------------
-  verify:
-    name: verify (run local gate at E)
+  build:
     needs: closure
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.closure.outputs.e_sha }}
-          fetch-depth: 0
-          persist-credentials: false
+    uses: ./.github/workflows/reusable-promotion-build.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      harbor_build_workflow: harbor-build-image.yml
+      environment: ${{ inputs.environment || 'lab' }}
+    secrets:
+      REGISTRY: ${{ secrets.REGISTRY }}
+      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
 
-      - name: assert HEAD == E
-        run: |
-          set -euo pipefail
-          if [ "$(git rev-parse HEAD)" != "${{ needs.closure.outputs.e_sha }}" ]; then
-            echo "FATAL: HEAD drifted from E"
-            exit 1
-          fi
-
-      - name: setup python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-
-      - name: install deps
-        run: |
-          set -euo pipefail
-          .venv/bin/python -m pip install -e .
-
-      - name: run act-local verify
-        run: |
-          set -euo pipefail
-          ./scripts/verify_all.sh --act-local
-
-      - name: regenerate gate-summary at E
-        run: |
-          set -euo pipefail
-          E_SHA="${{ needs.closure.outputs.e_sha }}"
-          BASE="f09348dc6f7dd8887c51278ee0a504c7e22d1417"
-          # Use the changed-paths manifest persisted in the artifact
-          .venv/bin/python scripts/factory/populate_gate_summary.py \
-            --repo-root "$PWD" \
-            --target .factory/gate-summary.json \
-            --changed-paths-manifest /tmp/changed_paths from E \
-            --range-base "$BASE" \
-            --range-head "$E_SHA"
-
-      - name: assert regenerated gate-summary matches E
-        run: |
-          set -euo pipefail
-          E_SHA="${{ needs.closure.outputs.e_sha }}"
-          BASE="f09348dc6f7dd8887c51278ee0a504c7e22d1417"
-          .venv/bin/python - <<PY
-          import json
-          from pathlib import Path
-          d = json.loads(Path(".factory/gate-summary.json").read_text())
-          e = d["extras"]
-          assert e["range_base"] == "${BASE}", e["range_base"]
-          assert e["range_head"] == "${E_SHA}", e["range_head"]
-          assert d["overall_status"] == "pass", d["overall_status"]
-          assert d["checks_failed"] == 0, d["checks_failed"]
-          print("OK: regenerated gate-summary at E matches closure")
-          PY
-
-      - name: upload gate-summary pair
-        uses: actions/upload-artifact@v4
-        with:
-          name: gate-summary-pair-${{ needs.closure.outputs.e_sha }}
-          path: |
-            .factory/gate-summary.json
-            .factory/gate-summary-validation.json
-
-  # -----------------------------------------------------------------------
-  # BUILD IMAGES: backend, scheduler, frontend at E SHA
-  # -----------------------------------------------------------------------
-  build-images:
-    name: build images (backend/scheduler/frontend)
-    needs: [closure, verify]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      backend_digest: ${{ steps.build.outputs.backend_digest }}
-      scheduler_digest: ${{ steps.build.outputs.scheduler_digest }}
-      frontend_digest: ${{ steps.build.outputs.frontend_digest }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.closure.outputs.e_sha }}
-          persist-credentials: false
-
-      - name: assert HEAD == E
-        run: |
-          set -euo pipefail
-          if [ "$(git rev-parse HEAD)" != "${{ needs.closure.outputs.e_sha }}" ]; then
-            echo "FATAL: HEAD drifted from E"
-            exit 1
-          fi
-
-      - name: build images
-        id: build
-        run: |
-          set -euo pipefail
-          REGISTRY="${{ secrets.REGISTRY }}"
-          E_SHA="${{ needs.closure.outputs.e_sha }}"
-          # build backend, scheduler, frontend
-          # capture immutable digests
-          BACKEND_DIGEST=$(buildah push backend "docker://${REGISTRY}/backend@${E_SHA}" --digestfile)
-          SCHEDULER_DIGEST=$(buildah push scheduler "docker://${REGISTRY}/scheduler@${E_SHA}" --digestfile)
-          FRONTEND_DIGEST=$(buildah push frontend "docker://${REGISTRY}/frontend@${E_SHA}" --digestfile)
-          echo "backend_digest=${BACKEND_DIGEST}" >> "$GITHUB_OUTPUT"
-          echo "scheduler_digest=${SCHEDULER_DIGEST}" >> "$GITHUB_OUTPUT"
-          echo "frontend_digest=${FRONTEND_DIGEST}" >> "$GITHUB_OUTPUT"
-
-  # -----------------------------------------------------------------------
-  # DEPLOY: consume digests (not mutable tags) via the repository's Helm
-  # GitOps authority.
-  # -----------------------------------------------------------------------
   deploy:
-    name: deploy (render manifests, policy-verify, apply digests)
-    needs: [closure, verify, build-images]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    environment: ${{ env.ENVIRONMENT }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.closure.outputs.e_sha }}
-          persist-credentials: false
+    needs: [closure, build]
+    uses: ./.github/workflows/reusable-promotion-deploy.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      backend_image_ref: ${{ needs.build.outputs.backend_image_ref }}
+      scheduler_image_ref: ${{ needs.build.outputs.scheduler_image_ref }}
+      frontend_image_ref: ${{ needs.build.outputs.frontend_image_ref }}
+      environment: ${{ inputs.environment || 'lab' }}
+    secrets:
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+      REGISTRY: ${{ secrets.REGISTRY }}
 
-      - name: assert HEAD == E
-        run: |
-          set -euo pipefail
-          if [ "$(git rev-parse HEAD)" != "${{ needs.closure.outputs.e_sha }}" ]; then
-            echo "FATAL: HEAD drifted from E"
-            exit 1
-          fi
+  live:
+    needs: [closure, build, deploy]
+    uses: ./.github/workflows/reusable-promotion-live.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      scheduler_image_ref: ${{ needs.build.outputs.scheduler_image_ref }}
+      qualification_run_id: qualification-${{ github.run_id }}
+      environment: ${{ inputs.environment || 'lab' }}
+    secrets:
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+      INTERNAL_TOKEN: ${{ secrets.INTERNAL_TOKEN }}
+      UI_TOKEN: ${{ secrets.UI_TOKEN }}
 
-      - name: render and policy-verify manifests
-        run: |
-          set -euo pipefail
-          helm template ./charts/k9b \
-            --set backend.image.digest=${{ needs.build-images.outputs.backend_digest }} \
-            --set scheduler.image.digest=${{ needs.build-images.outputs.scheduler_digest }} \
-            --set frontend.image.digest=${{ needs.build-images.outputs.frontend_digest }} \
-            --set environment=${{ env.ENVIRONMENT }} \
-            > rendered.yaml
-          conftest test rendered.yaml
-
-      - name: cluster auth
-        id: auth
-        run: |
-          set -euo pipefail
-          # OIDC exchange to cluster
-          echo "auth=true" >> "$GITHUB_OUTPUT"
-
-      - name: apply digests (immutable)
-        if: steps.auth.outputs.auth == 'true'
-        run: |
-          set -euo pipefail
-          envsubst < rendered.yaml | kubectl apply -f -
-
-  # -----------------------------------------------------------------------
-  # ROLLOUT-READINESS: bounded readiness proof
-  # -----------------------------------------------------------------------
-  rollout-readiness:
-    name: rollout readiness (bounded wait + readiness checks)
-    needs: [closure, verify, build-images, deploy]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.closure.outputs.e_sha }}
-          persist-credentials: false
-
-      - name: bounded rollout wait
-        run: |
-          set -euo pipefail
-          kubectl rollout status deployment/k9b-backend --timeout=300s
-          kubectl rollout status deployment/k9b-scheduler --timeout=300s
-          kubectl rollout status deployment/k9b-frontend --timeout=300s
-
-      - name: readiness probes
-        run: |
-          set -euo pipefail
-          # backend API process ready
-          kubectl exec deploy/k9b-backend -- python -c "import k9b_backend"
-          # SQLite migrations
-          kubectl exec deploy/k9b-backend -- python -m k9b_backend.migrate
-          # promotion handler
-          kubectl exec deploy/k9b-backend -- python -c "from k9b_backend.promotion import handler; assert handler.initialized"
-          # scheduler/backend compatibility
-          kubectl exec deploy/k9b-scheduler -- python -c "from k9b_scheduler.compat import check; assert check(backend_url)"
-          # UI auth config present
-          kubectl exec deploy/k9b-frontend -- test -f /etc/k9b/ui-token
-
-      - name: capture revisions
-        id: rev
-        run: |
-          set -euo pipefail
-          BACKEND_REV=$(kubectl get deploy/k9b-backend -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}')
-          SCHEDULER_REV=$(kubectl get deploy/k9b-scheduler -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}')
-          echo "backend_revision=${BACKEND_REV}" >> "$GITHUB_OUTPUT"
-          echo "scheduler_revision=${SCHEDULER_REV}" >> "$GITHUB_OUTPUT"
-
-  # -----------------------------------------------------------------------
-  # LIVE-HEALTH-QUALIFICATION: repository-owned Kubernetes Job
-  # -----------------------------------------------------------------------
-  live-health-qualification:
-    name: live health qualification (in-cluster Job)
-    needs: [closure, verify, build-images, deploy, rollout-readiness]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.closure.outputs.e_sha }}
-          persist-credentials: false
-
-      - name: acquire qualification lease
-        run: |
-          set -euo pipefail
-          # Lease prevents overlap with the periodic scheduler
-          kubectl create -f - <<'EOF'
-          apiVersion: coordination.k8s.io/v1
-          kind: Lease
-          metadata:
-            name: k9b-qualification
-            namespace: k9b
-          spec:
-            holderIdentity: qualification-${{ needs.closure.outputs.e_sha }}
-            leaseDurationSeconds: 1800
-          EOF
-
-      - name: launch qualification Job
-        run: |
-          set -euo pipefail
-          E_SHA="${{ needs.closure.outputs.e_sha }}"
-          QUAL_RUN_ID="qualification-$(date -u +%Y%m%dT%H%M%SZ)-${E_SHA:0:7}"
-          kubectl create -f - <<EOF
-          apiVersion: batch/v1
-          kind: Job
-          metadata:
-            name: ${QUAL_RUN_ID}
-            namespace: k9b
-          spec:
-            backoffLimit: 0
-            template:
-              spec:
-                serviceAccountName: k9b-qualification
-                restartPolicy: Never
-                containers:
-                - name: qualifier
-                  image: ${{ needs.build-images.outputs.scheduler_digest }}
-                  env:
-                  - name: QUAL_RUN_ID
-                    value: ${QUAL_RUN_ID}
-                  - name: E_SHA
-                    value: ${E_SHA}
-                  - name: BACKEND_URL
-                    value: http://k9b-backend.k9b.svc.cluster.local
-                  - name: INTERNAL_TOKEN
-                    valueFrom:
-                      secretKeyRef:
-                        name: k9b-internal
-                        key: token
-                  - name: UI_TOKEN
-                    valueFrom:
-                      secretKeyRef:
-                        name: k9b-ui
-                        key: token
-          EOF
-          kubectl wait --for=condition=complete --timeout=600s job/${QUAL_RUN_ID} -n k9b
-
-      - name: fetch qualification verdict
-        run: |
-          set -euo pipefail
-          QUAL_RUN_ID=$(kubectl get job -l app=k9b-qualifier -o jsonpath='{.items[0].metadata.name}' -n k9b)
-          kubectl logs job/${QUAL_RUN_ID} -n k9b > qualification.log
-
-      - name: publish qualification verdict
-        uses: actions/upload-artifact@v4
-        with:
-          name: qualification-verdict-${{ needs.closure.outputs.e_sha }}
-          path: qualification.log
-
-  # -----------------------------------------------------------------------
-  # EVIDENCE-AGGREGATE: bounded diagnostics, NEVER triggers on failure
-  # -----------------------------------------------------------------------
-  evidence-aggregate:
-    name: evidence aggregate (always runs)
-    needs: [closure, live-health-qualification]
+  evidence:
+    needs: [closure, live]
     if: ${{ always() }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.closure.outputs.e_sha }}
-          persist-credentials: false
+    uses: ./.github/workflows/reusable-promotion-evidence.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      qualification_run_id: qualification-${{ github.run_id }}
+    secrets:
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
 
-      - name: bounded scheduler logs
-        run: |
-          set -euo pipefail
-          kubectl logs -l app=k9b-scheduler --tail=1000 --since=30m > scheduler.log
-
-      - name: bounded backend logs
-        run: |
-          set -euo pipefail
-          kubectl logs -l app=k9b-backend --tail=1000 --since=30m > backend.log
-
-      - name: kubernetes events
-        run: |
-          set -euo pipefail
-          kubectl get events -n k9b --sort-by='.lastTimestamp' > k8s-events.log
-
-      - name: promotion ledger (sensitive fields removed)
-        run: |
-          set -euo pipefail
-          .venv/bin/python - <<'PY'
-          import json
-          from pathlib import Path
-          # Pull promotion ledger with sensitive fields removed
-          # via the canonical redaction library
-          from scripts.incident_lifecycle_boundary.redaction_types import redact_sensitive
-          ledger = json.loads(Path("/var/run/k9b/promotion-ledger.json").read_text())
-          redacted = redact_sensitive(ledger)
-          Path("promotion-ledger-redacted.json").write_text(json.dumps(redacted, indent=2))
-          PY
-
-      - name: diagnostic pack
-        run: |
-          set -euo pipefail
-          tar czf diagnostic-pack.tgz \
-            scheduler.log backend.log k8s-events.log promotion-ledger-redacted.json \
-            .factory/gate-summary.json .factory/gate-summary-validation.json
-
-      - name: upload diagnostic pack
-        uses: actions/upload-artifact@v4
-        with:
-          name: diagnostic-pack-${{ needs.closure.outputs.e_sha }}
-          path: diagnostic-pack.tgz
-
-  # -----------------------------------------------------------------------
-  # TIMING-AGGREGATE: three-run pytest shard timing collection
-  # -----------------------------------------------------------------------
-  timing-aggregate:
-    name: timing aggregate (3-run shard timing)
-    needs: [closure, verify]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.closure.outputs.e_sha }}
-          persist-credentials: false
-
-      - name: setup python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-
-      - name: install deps
-        run: |
-          set -euo pipefail
-          .venv/bin/python -m pip install -e .
-
-      - name: 3x timing repetitions
-        run: |
-          set -euo pipefail
-          E_SHA="${{ needs.closure.outputs.e_sha }}"
-          RUN_ID="${{ github.run_id }}"
-          ATTEMPT="${{ github.run_attempt }}"
-          JOB_ID="${{ github.job }}"
-          for run in 1 2 3; do
-            .venv/bin/python scripts/qualification_timing/collect_timing.py \
-              --run-index ${run} \
-              --e-sha "${E_SHA}" \
-              --workflow-run-id "${RUN_ID}" \
-              --workflow-attempt "${ATTEMPT}" \
-              --job-id "${JOB_ID}" \
-              --output "timing-${run}.json"
-          done
-
-      - name: assert collection bijection
-        run: |
-          set -euo pipefail
-          .venv/bin/python - <<'PY'
-          from pathlib import Path
-          import json
-          all_nodes = set()
-          for i in [1, 2, 3]:
-              t = json.loads(Path(f"timing-{i}.json").read_text())
-              all_nodes |= set(t["nodes"].keys())
-          canonical = json.loads(Path("tests/_qualification_canonical_collection.json").read_text())
-          canonical_nodes = set(canonical["nodes"])
-          if all_nodes != canonical_nodes:
-              missing = canonical_nodes - all_nodes
-              extra = all_nodes - canonical_nodes
-              print(f"FATAL: missing={missing} extra={extra}")
-              raise SystemExit(1)
-          print(f"OK: bijection holds ({len(all_nodes)} nodes)")
-          PY
-
-      - name: upload timing artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: timing-aggregate-${{ needs.closure.outputs.e_sha }}
-          path: timing-*.json
+  timing:
+    needs: [closure]
+    uses: ./.github/workflows/reusable-promotion-timing.yml
+    with:
+      closure_sha: ${{ needs.closure.outputs.closure_sha }}
+      subject_sha: ${{ needs.closure.outputs.subject_sha }}
+      subject_tree: ${{ needs.closure.outputs.subject_tree }}

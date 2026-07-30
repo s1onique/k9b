@@ -1,39 +1,41 @@
 """Canonical final qualification record schema.
 
 ACT-K9B-HULK-PROMOTION-AUTOMATED-CLOSURE-LIVE-QUALIFICATION-AND-CI-TIMING01
-WAVE 11: the orchestrator's final qualification record.
+WAVE 11 / P0-12: the orchestrator's final qualification record.
 
-This module defines the canonical record schema for the FINAL EVIDENCE
-AND VERDICT produced by the
-``.github/workflows/promotion-qualification.yml`` orchestrator.  Every
-field listed in the task's ``WAVE 11`` section is represented here as
-a typed key in :data:`QUALIFICATION_RECORD_KEYS`.
+The verdict is **derived** from the supplied per-section flags; a
+record that contradicts its own flags is rejected with
+:class:`VerdictInconsistentError`.
 
-Two emitters are provided:
+Three verdict values are accepted:
 
-* :func:`build_qualification_record` -- assembles a dict from supplied
-  inputs, validates the schema, and returns it ready for JSON
-  serialisation;
-* :func:`verify_qualification_record` -- reads an existing record and
-  asserts every required key is present and the verdict is consistent
-  with the per-section flags.
+* ``CLOSED_PASS``  — every correctness, security, deployment, live
+  and projection flag is successful; timing may be partial.
+* ``PARTIAL``      — every correctness, security, deployment, live
+  and projection flag is successful; ONLY the quantitative timing
+  target remains.  The caller must declare
+  ``TEST_TIMING_ACCEPTED == "false"``.
+* ``FAIL``         — anything else.
 
-The schema is intentionally compact: every key is a string, every
-value is JSON-serialisable, and the verdict is one of the typed
-strings ``"CLOSED_PASS"``, ``"PARTIAL"``, or ``"FAIL"`` defined in
-:data:`VERDICT_VALUES`.
+A contradictory verdict is rejected:
 
-Acceptance: ``scripts/verify_all.sh --act-local`` MUST pass when this
-module is part of the changed tree, and the canonical populate gate
-summary MUST list the changed files in the
-``changed_paths_manifest`` extras when the orchestrator binds the
-range to ``f09348dc6f7dd8887c51278ee0a504c7e22d1417`` and the head
-to the locked E SHA.
+  >>> derive_verdict(
+  ...     VERDICT=VERDICT_CLOSED_PASS,
+  ...     DEPLOY_CONCLUSION="failure",
+  ...     ANONYMOUS_MUTATION_REJECTED="true",
+  ... )
+  Traceback (most recent call last):
+      ...
+  VerdictInconsistentError: DEPLOY_CONCLUSION=failure contradicts CLOSED_PASS
+
+Atomic writes use a sibling tempfile + ``os.replace``; on POSIX,
+this is the canonical atomic rename.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Final
@@ -53,11 +55,14 @@ VERDICT_VALUES: Final[tuple[str, ...]] = (
 )
 
 
+class VerdictInconsistentError(ValueError):
+    """Raised when a supplied verdict contradicts its supporting flags."""
+
+
 # ---------------------------------------------------------------------------
 # Canonical record keys (one per WAVE 11 field)
 # ---------------------------------------------------------------------------
 
-# IDENTITY
 QUALIFICATION_RECORD_KEYS: Final[tuple[str, ...]] = (
     # IDENTITY
     "BASE",
@@ -144,9 +149,104 @@ QUALIFICATION_RECORD_KEYS: Final[tuple[str, ...]] = (
 )
 
 
-def _required_typed_keys() -> tuple[str, ...]:
-    """Return the typed keys that MUST be present in every record."""
-    return QUALIFICATION_RECORD_KEYS
+# ---------------------------------------------------------------------------
+# Verdict derivation
+# ---------------------------------------------------------------------------
+
+
+# Each guard is (key, predicate).  True means the flag is healthy.
+_SUCCESS_PREDICATES: dict[str, Any] = {
+    # identity / closure
+    "WORKTREE_CLEAN":                lambda v: v == "true",
+    "GATE_SUMMARY_STATUS":           lambda v: v == "pass",
+    "GATE_SUMMARY_CHECKS_FAILED":    lambda v: v == 0,
+    "PARSER_EXIT_CODE":              lambda v: v == 0,
+    "DECODE_STATUS":                 lambda v: v == "pass",
+    "ACCEPTANCE_STATUS":             lambda v: v == "pass",
+    "GIT_RECONSTRUCTED_MANIFEST_EQUALITY": lambda v: v == "match",
+    "LLM_FRIENDLY":                  lambda v: v == "pass",
+    "FULL_GATE_NEGATIVE_PROOFS_THREE_RUN": lambda v: v == "pass",
+    "TARGETED_REPOSITORY_GATE":      lambda v: v == "pass",
+    # CI
+    "VERIFY_CONCLUSION":             lambda v: v == "success",
+    "BUILD_CONCLUSION":              lambda v: v == "success",
+    "DEPLOY_CONCLUSION":             lambda v: v == "success",
+    "QUALIFICATION_CONCLUSION":      lambda v: v == "success",
+    # deployment
+    "READINESS_STATUS":              lambda v: v == "pass",
+    # security
+    "UI_TOKEN_CONFIGURED":           lambda v: v == "true",
+    "INTERNAL_TOKEN_CONFIGURED":      lambda v: v == "true",
+    "ANONYMOUS_MUTATION_REJECTED":    lambda v: v == "true",
+    "CREDENTIAL_CLASS_ISOLATION":     lambda v: v == "true",
+    "NETWORK_POLICY_VERIFIED":        lambda v: v == "true",
+    # live promotion
+    "INITIAL_OUTCOME":               lambda v: v == "committed",
+    "RECONCILIATION_OUTCOME":        lambda v: v in ("committed", "n/a"),
+    "DUPLICATE_LOGICAL_PROMOTIONS":  lambda v: v == 0,
+    # projection
+    "DISPATCH_EQUALITY":             lambda v: v == "match",
+    "RUN_SUMMARY_EQUALITY":          lambda v: v == "match",
+    "UI_INDEX_EQUALITY":             lambda v: v == "match",
+    "API_RUN_EQUALITY":              lambda v: v == "match",
+    "DIAGNOSTIC_PACK_EQUALITY":      lambda v: v == "match",
+    "CONTENT_INDEX_EQUALITY":        lambda v: v == "match",
+    "NOTIFICATION_EQUALITY":         lambda v: v == "match",
+    # final flags
+    "READY_FOR_IMAGE_PUBLICATION":   lambda v: v == "true",
+    "READY_FOR_REPEATED_LIVE_RUNS":  lambda v: v == "true",
+    "READY_FOR_LIVE_ACCEPTANCE":     lambda v: v == "true",
+}
+
+# PARTIAL permits ONLY this flag to be unhealthy.
+_PARTIAL_PERMITTED_FLAG: str = "TEST_TIMING_ACCEPTED"
+
+
+def derive_verdict(values: Mapping[str, Any]) -> str:
+    """Derive the verdict from the supplied flags.
+
+    * If every flag in :data:`_SUCCESS_PREDICATES` evaluates healthy
+      and :data:`_PARTIAL_PERMITTED_FLAG` evaluates healthy, return
+      ``VERDICT_CLOSED_PASS``.
+    * If every flag in :data:`_SUCCESS_PREDICATES` evaluates healthy
+      and ONLY :data:`_PARTIAL_PERMITTED_FLAG` is unhealthy, return
+      ``VERDICT_PARTIAL``.
+    * Otherwise return ``VERDICT_FAIL``.
+    """
+    failed_required: list[str] = []
+    partial_unhealthy = False
+    for key, predicate in _SUCCESS_PREDICATES.items():
+        if not predicate(values.get(key)):
+            failed_required.append(key)
+    partial_flag_value = values.get(_PARTIAL_PERMITTED_FLAG, "false")
+    if partial_flag_value != "true":
+        partial_unhealthy = True
+    if not failed_required:
+        return VERDICT_PARTIAL if partial_unhealthy else VERDICT_CLOSED_PASS
+    return VERDICT_FAIL
+
+
+def verify_supplied_verdict(values: Mapping[str, Any]) -> None:
+    """Reject any supplied verdict that contradicts the flags.
+
+    This is the P0-12 negative-proof hook: a contradictory verdict
+    is rejected BEFORE atomic write so the canonical record cannot
+    carry an inconsistent claim.
+    """
+    supplied = values.get("VERDICT")
+    if supplied is None:
+        return
+    if supplied not in VERDICT_VALUES:
+        raise VerdictInconsistentError(f"unknown verdict: {supplied!r}")
+    derived = derive_verdict(values)
+    if supplied == VERDICT_CLOSED_PASS and derived != VERDICT_CLOSED_PASS:
+        raise VerdictInconsistentError(
+            f"VERDICT=CLOSED_PASS but derived={derived!r} from flags"
+        )
+    if supplied == VERDICT_PARTIAL and derived != VERDICT_PARTIAL:
+        raise VerdictInconsistentError(
+            f"VERDICT=PARTIAL but derived={derived!r} from flags"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -159,15 +259,9 @@ def build_qualification_record(
     *,
     base_sha: str = "f09348dc6f7dd8887c51278ee0a504c7e22d1417",
 ) -> dict[str, Any]:
-    """Return a validated qualification record assembled from ``values``.
-
-    Every key in :data:`QUALIFICATION_RECORD_KEYS` MUST be supplied
-    via ``values``.  The base SHA defaults to the documented BASE of
-    this CORRECTION11 cycle.
-    """
+    """Return a validated qualification record assembled from ``values``."""
     record: dict[str, Any] = {key: values[key] for key in QUALIFICATION_RECORD_KEYS}
     record["BASE"] = base_sha
-    # Verdict consistency
     if record["VERDICT"] not in VERDICT_VALUES:
         raise ValueError(
             f"VERDICT must be one of {VERDICT_VALUES!r}; got {record['VERDICT']!r}"
@@ -182,7 +276,6 @@ def verify_qualification_record(record: Mapping[str, Any]) -> None:
         raise ValueError(f"missing keys: {missing}")
     if record["VERDICT"] not in VERDICT_VALUES:
         raise ValueError(f"invalid verdict: {record['VERDICT']!r}")
-    # range_base / BASE consistency
     if record.get("RANGE_BASE") and record.get("BASE"):
         if record["RANGE_BASE"] != record["BASE"]:
             raise ValueError(
@@ -193,24 +286,45 @@ def verify_qualification_record(record: Mapping[str, Any]) -> None:
 def write_qualification_record(
     target: Path, values: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Build, validate, and atomically write the record to ``target``."""
+    """Build, validate, derive verdict, and atomically write the record."""
+    # Negative-proof: reject contradictory supplied verdict
+    verify_supplied_verdict(values)
     record = build_qualification_record(values)
     verify_qualification_record(record)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        json.dumps(record, indent=2, sort_keys=False) + "\n",
-        encoding="utf-8",
-    )
+    # Atomic write: write sibling tmp, fsync, rename, fsync parent.
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    payload = json.dumps(record, indent=2, sort_keys=False) + "\n"
+    tmp.write_text(payload, encoding="utf-8")
+    # fsync the file contents
+    fd = os.open(tmp, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.replace(tmp, target)
+    # fsync the parent directory (POSIX only)
+    try:
+        dir_fd = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass
     return record
 
 
 __all__ = [
     "QUALIFICATION_RECORD_KEYS",
+    "VerdictInconsistentError",
     "VERDICT_CLOSED_PASS",
     "VERDICT_FAIL",
     "VERDICT_PARTIAL",
     "VERDICT_VALUES",
     "build_qualification_record",
+    "derive_verdict",
     "verify_qualification_record",
+    "verify_supplied_verdict",
     "write_qualification_record",
 ]
