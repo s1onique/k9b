@@ -9,6 +9,11 @@ from __future__ import annotations
 
 import re
 
+from scripts.ci.promotion_runtime_gate_manifest import (
+    InventoryReport,
+    load_manifest,
+)
+
 # ---------------------------------------------------------------------------
 # Runtime source prefix (P0-6).
 # ---------------------------------------------------------------------------
@@ -17,6 +22,37 @@ import re
 RUNTIME_SOURCE_PREFIXES: tuple[str, ...] = (
     "src/k8s_diag_agent/",
 )
+
+# ---------------------------------------------------------------------------
+# Runtime-test manifest authority (CORRECTION09).
+# ---------------------------------------------------------------------------
+
+# Cached manifest report. Lazily loaded by is_runtime_test_path().
+_manifest_report: InventoryReport | None = None
+
+
+def _get_manifest_report() -> InventoryReport:
+    """Load and cache the canonical runtime-test manifest."""
+    global _manifest_report  # noqa: PLW0603
+    if _manifest_report is None:
+        _manifest_report = load_manifest()
+    return _manifest_report
+
+
+def is_runtime_test_path(path: str) -> bool:
+    """Return True if path is in the canonical runtime-test manifest.
+
+    CORRECTION09: Files listed in scripts/ci/promotion_runtime_tests.txt are
+    classified as runtime-test authority. This closes the seam between the
+    manifest and the static classifier.
+    """
+    report = _get_manifest_report()
+    return path in report.per_entry_sha256
+
+
+def get_runtime_test_manifest_sha256() -> str:
+    """Return the SHA-256 of the canonical runtime-test manifest."""
+    return _get_manifest_report().manifest_sha256
 
 # ---------------------------------------------------------------------------
 # Lane-authority policy (P0-7).

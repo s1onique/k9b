@@ -160,3 +160,25 @@ def _git_ls_files(repo_root: Path, paths: list[str]) -> set[str]:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def load_manifest(manifest_path: Path | str | None = None) -> InventoryReport:
+    """Load and verify the promotion runtime test manifest.
+
+    Args:
+        manifest_path: Path to manifest file. Defaults to the canonical
+            scripts/ci/promotion_runtime_tests.txt.
+
+    Returns:
+        InventoryReport with manifest_sha256, paths, and entry count.
+
+    Raises:
+        InventoryError: If the manifest is missing, malformed, or references
+            non-existent files.
+    """
+    if manifest_path is None:
+        manifest_path = REPO_ROOT / "scripts" / "ci" / "promotion_runtime_tests.txt"
+    elif isinstance(manifest_path, str):
+        manifest_path = Path(manifest_path)
+    entries = _load_manifest(manifest_path)
+    return _verify_inventory(entries, REPO_ROOT, manifest_path)

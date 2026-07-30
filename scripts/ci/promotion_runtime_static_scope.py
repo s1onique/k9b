@@ -26,6 +26,7 @@ from scripts.ci.promotion_runtime_static_scope_git import (
 from scripts.ci.promotion_runtime_static_scope_policy import (
     is_lane_authority_path,
     is_runtime_path,
+    is_runtime_test_path,
     parse_nul_records,
 )
 
@@ -164,10 +165,11 @@ def build_scope(
     lane_candidates_after_subtract = lane_candidates_set - frozenset(runtime_paths)
 
     # Classify remaining as lane or unclassified
+    # CORRECTION09: Also classify manifest-listed runtime-test paths as lane authority.
     lane_paths: list[str] = []
     unclassified_paths: list[str] = []
     for p in sorted(lane_candidates_after_subtract):
-        if is_lane_authority_path(p):
+        if is_lane_authority_path(p) or is_runtime_test_path(p):
             lane_paths.append(p)
         else:
             unclassified_paths.append(p)
