@@ -47,6 +47,14 @@ from verify_promotion_experimental_lab_build_lane_schema import (
     load_workflow,
 )
 
+# REPO_ROOT is defined in the schema module; derive the bootstrap script
+# path from the same constant so verifier and tests agree.
+from verify_promotion_experimental_lab_build_lane_schema import (  # noqa: E402,F401
+    REPO_ROOT as _REPO_ROOT,
+)
+
+BOOTSTRAP_SCRIPT = _REPO_ROOT / "scripts" / "ci" / "bootstrap_python_dev.sh"
+
 DECLARED_HARBOR_OUTPUTS = {"image_ref", "image_digest", "image_repository", "image_tag"}
 DECLARED_HARBOR_INPUTS = {
     "registry",
@@ -421,6 +429,13 @@ def verify_experimental_lab_build_lane() -> list[Finding]:
             RUNTIME_WORKFLOW,
         )
     )
+
+    # P0-8 (CORRECTION04): bootstrap contract on the runtime workflow.
+    from verify_promotion_experimental_lab_build_lane_bootstrap import (
+        check_bootstrap_contract,
+    )
+
+    findings.extend(check_bootstrap_contract(RUNTIME_WORKFLOW))
 
     return findings
 

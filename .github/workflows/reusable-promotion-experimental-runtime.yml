@@ -64,14 +64,29 @@ jobs:
           fi
           echo "subject_sha=$subject_sha" >> "$GITHUB_OUTPUT"
 
-      - name: canonical Python bootstrap
+      - name: canonical Python dev bootstrap (single authority)
         run: |
           set -euo pipefail
-          python3 -m venv .venv
-          .venv/bin/python -m pip install --upgrade pip wheel setuptools
-          .venv/bin/python -m pip install -e .
+          bash scripts/ci/bootstrap_python_dev.sh
+          echo "Bootstrap_OK"
+          echo "subject_sha=${{ steps.identity.outputs.subject_sha }}" >> "$GITHUB_OUTPUT"
+          PYPROJECT_SHA="$(sha256sum pyproject.toml | awk '{print $1}')"
+          echo "pyproject_sha256=${PYPROJECT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: tool version preflight (P0-2)
+        run: |
+          set -euo pipefail
+          # Fail closed if any required tool is missing.
+          for tool in pytest ruff mypy; do
+            if ! .venv/bin/python -c "import ${tool}" >/dev/null 2>&1; then
+              echo "FATAL: required tool '${tool}' is not importable"
+              exit 1
+            fi
+          done
           .venv/bin/python --version
           .venv/bin/python -m pytest --version
+          .venv/bin/python -m ruff --version
+          .venv/bin/python -m mypy --version
 
       - name: focused promotion runtime gate
         id: gate
