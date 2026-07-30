@@ -92,7 +92,7 @@ class PromotionDispatchError(RuntimeError):
     An internal dispatcher error does NOT prove that no side effect
     committed. The classifier therefore maps this exception to
     :class:`PromotionCommitUnknown` (with the
-    :attr:`PromotionUncertaintyCode.AMBIGUOUS_RESPONSE` reason) so
+    :attr:`PromotionUncertaintyCode.DISPATCH_INTERNAL_ERROR` reason) so
     reconciliation is required.
     """
 
@@ -169,12 +169,15 @@ _REJECTION_TYPE_TO_CODE: tuple[tuple[type[Exception], PromotionRejectionCode], .
 # dispatcher could not satisfy the request, but cannot prove that no
 # side effect committed. The classifier therefore maps it to
 # ``PromotionCommitUnknown`` with the bounded
-# ``AMBIGUOUS_RESPONSE`` uncertainty code so reconciliation is
+# ``DISPATCH_INTERNAL_ERROR`` uncertainty code so reconciliation is
 # required. The constant is intentionally a tuple of (type, code)
 # pairs to keep the table shape consistent with the rejection /
 # uncertainty tables below.
+#
+# ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11:
+# ``AMBIGUOUS_RESPONSE`` is no longer used for this case.
 _DISPATCH_ERROR_TO_CODE: tuple[tuple[type[Exception], PromotionUncertaintyCode], ...] = (
-    (PromotionDispatchError, PromotionUncertaintyCode.AMBIGUOUS_RESPONSE),
+    (PromotionDispatchError, PromotionUncertaintyCode.DISPATCH_INTERNAL_ERROR),
 )
 
 # Map typed transport-exception classes to bounded uncertainty codes.
@@ -258,9 +261,11 @@ def classify_promotion_dispatch_result(
     )
 
     if outcome is None:
+        # ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11:
+        # None means the dispatcher returned nothing - a distinct bounded reason.
         return PromotionCommitUnknown(
             run_id=run_id,
-            reason=PromotionUncertaintyCode.AMBIGUOUS_RESPONSE,
+            reason=PromotionUncertaintyCode.DISPATCH_RETURNED_NONE,
             reconciliation_token=token,
             requested_signal_ids=tuple(requested_signal_ids),
         )
@@ -283,15 +288,11 @@ def classify_promotion_dispatch_result(
                 reconciliation_token=token,
                 requested_signal_ids=tuple(requested_signal_ids),
             )
-        # Any other typed application exception is treated as
-        # commit-unknown. We do NOT match on message text; the
-        # dispatcher's typed class is the only authority. The
-        # bounded reason list is the closed enum; we map a free-form
-        # application exception to ``AMBIGUOUS_RESPONSE`` to keep the
-        # enum closed.
+        # ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11:
+        # Any other typed application exception is a distinct bounded reason.
         return PromotionCommitUnknown(
             run_id=run_id,
-            reason=PromotionUncertaintyCode.AMBIGUOUS_RESPONSE,
+            reason=PromotionUncertaintyCode.DISPATCH_UNTYPED_EXCEPTION,
             reconciliation_token=token,
             requested_signal_ids=tuple(requested_signal_ids),
         )

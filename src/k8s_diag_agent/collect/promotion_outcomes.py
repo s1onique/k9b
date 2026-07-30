@@ -122,6 +122,19 @@ class PromotionUncertaintyCode(StrEnum):
     AMBIGUOUS_RESPONSE = "ambiguous_response"
     """Invariant-violation fallback. NOT used for any known transport shape."""
 
+    # ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11:
+    # Bounded codes replacing AMBIGUOUS_RESPONSE for known classifier inputs.
+    # Each known shape maps to a specific code so the operator can correlate
+    # the selection handoff with the actual transport observation.
+    DISPATCH_RETURNED_NONE = "dispatch_returned_none"
+    """Dispatcher returned None without a transport observation."""
+
+    DISPATCH_INTERNAL_ERROR = "dispatch_internal_error"
+    """Dispatcher raised PromotionDispatchError (internal dispatch failure)."""
+
+    DISPATCH_UNTYPED_EXCEPTION = "dispatch_untyped_exception"
+    """Dispatcher raised an unexpected exception type."""
+
     # ACT-K9B-HULK-PROMOTION-AMBIGUOUS-RESPONSE-TRANSPORT-TRUTH01:
     # bounded codes replacing the catch-all bucket. Each known HTTP
     # shape maps to a specific code so the operator can correlate the

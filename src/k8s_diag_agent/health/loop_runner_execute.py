@@ -39,6 +39,7 @@ from ..collect.promotion_outcomes import (
     PromotionCommitUnknown,
     PromotionRejected,
     PromotionSucceeded,
+    consistency_error_recorded,
 )
 from ..external_analysis.alertmanager_durable_learning import scan_and_propose
 from ..external_analysis.artifact import ExternalAnalysisArtifact, ExternalAnalysisPurpose
@@ -1547,7 +1548,20 @@ def execute_health_loop_run(
         automatic_diagnosis_synchronous=True,
         canonical_incident_id_count=len(canonical_ids),
         promotion_record_count=len(promotion_summary.get("promotion_records") or []),
-        promotion_consistency_error_recorded=(promotion_consistency_error is not None),
+        # ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11-FINALIZATION02:
+        # Preserve both explicit consistency errors AND typed-outcome-derived errors.
+        # Required matrix:
+        #   explicit error + no outcome -> true
+        #   commit_unknown + no explicit error -> true
+        #   rejected/succeeded + no explicit error -> false
+        #   genuinely empty run -> false
+        promotion_consistency_error_recorded=(
+            promotion_consistency_error is not None
+            or (
+                promotion_outcome is not None
+                and consistency_error_recorded(promotion_outcome)
+            )
+        ),
         backend_endpoint_identity=backend_endpoint_identity,
     )
 

@@ -109,25 +109,38 @@ def select_eligible_source(
 def determine_port_forward_need(
     endpoint: str,
     selected_source: AlertmanagerSource,
+    cluster_context: str | None = None,
 ) -> tuple[bool, str | None]:
     """Determine if port-forward is needed for the given endpoint.
+
+    ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11:
+    When running in-cluster, Kubernetes Service DNS names are directly
+    reachable without port-forward, regardless of hostname format.
 
     Args:
         endpoint: The Alertmanager endpoint URL.
         selected_source: The source object for fallback name extraction.
+        cluster_context: The cluster context ("in-cluster" for in-cluster mode).
 
     Returns:
         Tuple of (needs_port_forward, service_name_for_pf) or (False, None) if not needed.
     """
     from urllib.parse import urlparse
 
-    # Check if endpoint looks like a cluster-internal DNS name (contains '.' for FQDN)
-    # Skip localhost and 127.0.0.1 which are directly reachable
+    # ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11:
+    # In-cluster mode: Kubernetes workloads resolve Service DNS directly.
+    # This applies to single-label (alertmanager-operated),
+    # namespace-qualified (alertmanager-operated.monitoring), and
+    # fully-qualified (alertmanager-operated.monitoring.svc.cluster.local) names.
+    if cluster_context == "in-cluster":
+        return False, None
+
+    # Out-of-cluster: check if endpoint requires port-forward
+    # (cluster-internal FQDN that won't resolve from outside the cluster)
     if endpoint and "://" in endpoint:
         parsed = urlparse(endpoint)
         host = parsed.hostname or ""
         # If host contains a dot and is not localhost, it's likely a cluster-internal FQDN
-        # that won't resolve from outside the cluster
         if "." in host and host not in ("localhost", "127.0.0.1", "::1"):
             needs_port_forward = True
         else:

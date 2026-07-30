@@ -109,9 +109,36 @@ def run_alertmanager_snapshot_collection(
     endpoint = selected_source.endpoint
 
     # Determine port-forward need and extract service name
+    # ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11:
+    # Pass cluster_context to skip port-forward when in-cluster.
     needs_port_forward, service_name_for_pf = determine_port_forward_need(
         endpoint=endpoint,
         selected_source=selected_source,
+        cluster_context=effective_cluster_context,
+    )
+
+    # ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11:
+    # Emit routing decision event for observability.
+    routing_mode = "direct" if effective_cluster_context == "in-cluster" else (
+        "port-forward" if needs_port_forward else "direct"
+    )
+    log_event(
+        "alertmanager-snapshot",
+        "DEBUG",
+        "Alertmanager routing decision",
+        event="alertmanager-routing-decision",
+        run_id=run_id,
+        run_label=run_label,
+        source_identity=selected_source.source_id,
+        source_endpoint=selected_source.endpoint,
+        cluster_context=effective_cluster_context,
+        routing_mode=routing_mode,
+        # CORRECTION11-FINALIZATION02: port_forward_required is the decision;
+        # port_forward_attempted=false because actual attempt happens after
+        # this event is emitted.
+        port_forward_required=needs_port_forward,
+        port_forward_attempted=False,
+        service_name_for_pf=service_name_for_pf,
     )
 
     # Validate service name extraction
