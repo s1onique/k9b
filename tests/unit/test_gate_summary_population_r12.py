@@ -181,17 +181,25 @@ def test_zero_executed_checks_is_not_pass(tmp_path: Path) -> None:
     assert "checks_total=0" in str(parsed.parse_errors)
 
 
-def test_recursion_guard_exits_nonzero() -> None:
+def test_recursion_guard_exits_nonzero(tmp_path: Path) -> None:
     """K9B_GATE_POPULATION_CHILD=1 causes populate_gate_summary.main to exit 2.
 
     The guard prevents a child populate process from spawning a grandchild
     populate process when verify_all.sh is itself launched from the
-    targeted-repository-gate check.
+    targeted-repository-gate check.  The test MUST pin an isolated
+    ``--target`` under ``tmp_path`` so the recursion-guard subprocess
+    cannot mutate the committed ``.factory/gate-summary.json`` pair.
     """
     env = os.environ.copy()
     env["K9B_GATE_POPULATION_CHILD"] = "1"
+    isolated_target = tmp_path / "gate-summary.json"
     proc = subprocess.run(
-        [sys.executable, "scripts/factory/populate_gate_summary.py"],
+        [
+            sys.executable,
+            "scripts/factory/populate_gate_summary.py",
+            "--target",
+            str(isolated_target),
+        ],
         cwd=str(Path(__file__).resolve().parent.parent.parent),
         env=env,
         capture_output=True,
