@@ -22,9 +22,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 
 # Import from the scripts.ci package (scripts/ci/__init__.py exists)
-_scripts_ci_pkg = ROOT / "scripts" / "ci"
-if str(_scripts_ci_pkg) not in sys.path:
-    sys.path.insert(0, str(_scripts_ci_pkg))
+from scripts.ci.promotion_runtime_static_scope_policy import validate_path_record
+from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+from scripts.ci.promotion_runtime_static_scope import build_scope
 
 
 # ---------------------------------------------------------------------------
@@ -71,19 +71,19 @@ class TestPathRecordValidation:
 
     def test_absolute_path_rejected(self) -> None:
         """Absolute path in changed-path record raises ValueError."""
-        from promotion_runtime_static_scope_policy import validate_path_record
+        from scripts.ci.promotion_runtime_static_scope_policy import validate_path_record
         with pytest.raises(ValueError, match="absolute"):
             validate_path_record(b"/etc/passwd")
 
     def test_absolute_path_windows_rejected(self) -> None:
         """Windows absolute path in record raises ValueError."""
-        from promotion_runtime_static_scope_policy import validate_path_record
+        from scripts.ci.promotion_runtime_static_scope_policy import validate_path_record
         with pytest.raises(ValueError, match="backslash"):
             validate_path_record(b"C:\\Users\\attacker\\evil.py")
 
     def test_traversal_rejected(self) -> None:
         """Traversal in changed-path record raises ValueError."""
-        from promotion_runtime_static_scope_policy import validate_path_record
+        from scripts.ci.promotion_runtime_static_scope_policy import validate_path_record
         with pytest.raises(ValueError, match="traversal"):
             validate_path_record(b"../etc/passwd")
         with pytest.raises(ValueError, match="traversal"):
@@ -91,13 +91,13 @@ class TestPathRecordValidation:
 
     def test_embedded_nul_rejected(self) -> None:
         """Embedded NUL in changed-path record raises ValueError."""
-        from promotion_runtime_static_scope_policy import validate_path_record
+        from scripts.ci.promotion_runtime_static_scope_policy import validate_path_record
         with pytest.raises(ValueError, match="embedded NUL"):
             validate_path_record(b"foo\x00bar.py")
 
     def test_leading_slash_rejected(self) -> None:
         """Leading slash (absolute POSIX without drive) raises ValueError."""
-        from promotion_runtime_static_scope_policy import validate_path_record
+        from scripts.ci.promotion_runtime_static_scope_policy import validate_path_record
         with pytest.raises(ValueError, match="absolute"):
             validate_path_record(b"/foo/bar.py")
 
@@ -154,7 +154,7 @@ class TestScopeRecordSchema:
 
     def test_unknown_field_rejected(self) -> None:
         """Unknown field in dict raises ScopeError on from_dict."""
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope()
         d["unknown_field"] = "bad"
         with pytest.raises(ScopeError, match="unknown_field"):
@@ -162,7 +162,7 @@ class TestScopeRecordSchema:
 
     def test_wrong_type_rejected(self) -> None:
         """Wrong field type raises ScopeError on from_dict."""
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope()
         d["runtime_count"] = "not_an_int"
         with pytest.raises(ScopeError, match="runtime_count"):
@@ -170,7 +170,7 @@ class TestScopeRecordSchema:
 
     def test_bool_count_rejected(self) -> None:
         """Bool used as count raises ScopeError on from_dict."""
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope()
         d["unclassified_count"] = False
         with pytest.raises(ScopeError, match="unclassified_count"):
@@ -178,14 +178,14 @@ class TestScopeRecordSchema:
 
     def test_invalid_sha_rejected(self) -> None:
         """Non-40-hex SHA raises ScopeError on from_dict."""
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(subject_sha="not_a_sha")
         with pytest.raises(ScopeError, match="subject_sha"):
             ScopeRecord.from_dict(d)
 
     def test_absolute_path_in_record_rejected(self) -> None:
         """Absolute path in runtime_paths raises ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             runtime_paths=["/etc/evil.py"],
             runtime_count=1,
@@ -196,7 +196,7 @@ class TestScopeRecordSchema:
 
     def test_backslash_in_record_rejected(self) -> None:
         """Backslash in lane path raises ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             lane_paths=["foo\\bar.py"],
             lane_count=1,
@@ -207,7 +207,7 @@ class TestScopeRecordSchema:
 
     def test_unsorted_paths_rejected(self) -> None:
         """Unsorted path tuple raises ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             cumulative_changed_python=["z.py", "a.py"],
             cumulative_changed_count=2,
@@ -219,7 +219,7 @@ class TestScopeRecordSchema:
 
     def test_duplicate_paths_rejected(self) -> None:
         """Duplicate paths raise ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             cumulative_changed_python=["a.py", "a.py"],
             cumulative_changed_count=2,
@@ -231,7 +231,7 @@ class TestScopeRecordSchema:
 
     def test_unclassified_count_nonzero_rejected(self) -> None:
         """unclassified_count > 0 raises ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             lane_paths=["scripts/ci/evil.py"],
             lane_count=1,
@@ -244,7 +244,7 @@ class TestScopeRecordSchema:
 
     def test_bucket_overlap_rejected(self) -> None:
         """Runtime/lane bucket overlap raises ScopeError on validate()."""
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
         d = self._make_scope(
             runtime_paths=["src/k8s_diag_agent/shared.py"],
             runtime_count=1,
@@ -270,7 +270,7 @@ class TestScopeRecordChecksums:
         import hashlib
         import json
 
-        from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
 
         def make_valid(**overrides) -> ScopeRecord:
             paths = ["src/k8s_diag_agent/foo.py"]
@@ -319,7 +319,7 @@ class TestScopeRecordChecksums:
 
     def test_checksum_verification_passes_for_valid_record(self) -> None:
         """Valid record with_checksums() + verify_checksums() succeeds."""
-        from promotion_runtime_static_scope_contract import ScopeRecord
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeRecord
         rec = ScopeRecord(
             runtime_base_sha="a" * 40,
             lane_base_sha="b" * 40,
@@ -360,14 +360,14 @@ class TestGitCommandContract:
 
     def test_no_ls_tree_in_scope_git_module(self) -> None:
         """promotion_runtime_static_scope_git must NOT define ls-tree functions."""
-        import promotion_runtime_static_scope_git as git_mod
+        import scripts.ci.promotion_runtime_static_scope_git as git_mod
         attrs = dir(git_mod)
         forbidden = [a for a in attrs if "ls_tree" in a.lower() or "lstree" in a.lower()]
         assert not forbidden, f"forbidden ls-tree function(s) found: {forbidden}"
 
     def test_no_ls_files_in_scope_git_module(self) -> None:
         """promotion_runtime_static_scope_git must NOT use git ls-files for scope."""
-        import promotion_runtime_static_scope_git as git_mod
+        import scripts.ci.promotion_runtime_static_scope_git as git_mod
         source = open(git_mod.__file__, encoding="utf-8").read()
         assert "ls-files" not in source, "git index/working-tree listing found in scope git module"
 
@@ -411,9 +411,9 @@ class TestMissingRuntimePath:
         """A runtime path that doesn't exist on disk raises ScopeError."""
         import subprocess
 
-        import promotion_runtime_static_scope as scope_mod
-        from promotion_runtime_static_scope import build_scope
-        from promotion_runtime_static_scope_contract import ScopeError
+        import scripts.ci.promotion_runtime_static_scope as scope_mod
+        from scripts.ci.promotion_runtime_static_scope import build_scope
+        from scripts.ci.promotion_runtime_static_scope_contract import ScopeError
 
         _init_git_repo(tmp_path)
         head_sha = subprocess.run(
@@ -455,8 +455,8 @@ class TestRepoRootEvidence:
         """ScopeRecord.repo_root is '.' not an absolute host path."""
         import subprocess
 
-        import promotion_runtime_static_scope as scope_mod
-        from promotion_runtime_static_scope import build_scope
+        import scripts.ci.promotion_runtime_static_scope as scope_mod
+        from scripts.ci.promotion_runtime_static_scope import build_scope
 
         # First commit
         _, head_minus_1 = _init_git_repo(tmp_path)

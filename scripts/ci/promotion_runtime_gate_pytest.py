@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from promotion_runtime_gate_manifest import (
+from scripts.ci.promotion_runtime_gate_manifest import (
     REPO_ROOT,
     InventoryError,
     InventoryReport,

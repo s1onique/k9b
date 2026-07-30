@@ -60,7 +60,7 @@ class TestCollectOnlyDoesNotExecuteBodies:
         sys.path.insert(0, str(ROOT))
         # Import the runner module (not raw pytest).
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        import run_promotion_runtime_gate
+        from scripts.ci import run_promotion_runtime_gate
 
         env = os.environ.copy()
         env["WITNESS_PATH"] = str(witness)
@@ -104,7 +104,7 @@ class TestRunnerRunExecutesBodies:
         test_file.write_text("def test_body(): pass\n")
 
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        import run_promotion_runtime_gate
+        from scripts.ci import run_promotion_runtime_gate
 
         result = run_promotion_runtime_gate._run_pytest_subprocess(
             args=[str(test_file) + "::test_body"],
@@ -133,7 +133,7 @@ class TestProcessPluginConsistency:
     def test_mismatch_rejected_by_runner(self) -> None:
         """Wrong plugin exit code is rejected by the single authority."""
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        from run_promotion_runtime_gate import (
+        from scripts.ci.run_promotion_runtime_gate import (
             InventoryError,
             _validate_result_payload,
         )
@@ -175,7 +175,7 @@ class TestMalformedSchema:
     def test_unknown_outcome_key(self) -> None:
         """Unknown outcome key raises InventoryError."""
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        from run_promotion_runtime_gate import (
+        from scripts.ci.run_promotion_runtime_gate import (
             InventoryError,
             _validate_result_payload,
         )
@@ -199,7 +199,7 @@ class TestMalformedSchema:
     def test_wrong_field_type_rejected(self) -> None:
         """Non-int outcome count raises InventoryError."""
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        from run_promotion_runtime_gate import (
+        from scripts.ci.run_promotion_runtime_gate import (
             InventoryError,
             _validate_result_payload,
         )
@@ -223,7 +223,7 @@ class TestMalformedSchema:
     def test_wrong_top_level_type_rejected(self) -> None:
         """Non-dict outcome_counts raises InventoryError."""
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        from run_promotion_runtime_gate import (
+        from scripts.ci.run_promotion_runtime_gate import (
             InventoryError,
             _validate_result_payload,
         )
@@ -243,7 +243,7 @@ class TestMalformedSchema:
     def test_bool_count_rejected(self) -> None:
         """bool (subclass of int) is rejected as not an int."""
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        from run_promotion_runtime_gate import (
+        from scripts.ci.run_promotion_runtime_gate import (
             InventoryError,
             _validate_result_payload,
         )
@@ -267,7 +267,7 @@ class TestMalformedSchema:
     def test_exact_outcome_key_set_required(self) -> None:
         """Outcome counts must have exactly the six known keys."""
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        from run_promotion_runtime_gate import (
+        from scripts.ci.run_promotion_runtime_gate import (
             InventoryError,
             _validate_result_payload,
         )
@@ -291,7 +291,7 @@ class TestMalformedSchema:
     def test_count_sum_mismatch_rejected(self) -> None:
         """Outcome-count sum must equal len(executed_nodeids)."""
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        from run_promotion_runtime_gate import (
+        from scripts.ci.run_promotion_runtime_gate import (
             InventoryError,
             _validate_result_payload,
         )
@@ -324,7 +324,7 @@ class TestPluginLaneAuthorityScope:
     def test_plugin_in_lane_authority_paths(self) -> None:
         """pytest_runtime_gate_plugin.py is classified as lane authority."""
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        from promotion_runtime_static_scope_policy import is_lane_authority_path
+        from scripts.ci.promotion_runtime_static_scope_policy import is_lane_authority_path
 
         plugin_rel = "scripts/ci/pytest_runtime_gate_plugin.py"
         assert is_lane_authority_path(plugin_rel), (
@@ -338,7 +338,7 @@ class TestPluginLaneAuthorityScope:
         classified via prefix-based policy, not a growable exact-path allowlist.
         """
         sys.path.insert(0, str(ROOT / "scripts" / "ci"))
-        from promotion_runtime_static_scope_policy import is_lane_authority_path
+        from scripts.ci.promotion_runtime_static_scope_policy import is_lane_authority_path
 
         plugin_rel = "scripts/ci/pytest_runtime_gate_plugin.py"
         assert is_lane_authority_path(plugin_rel), (

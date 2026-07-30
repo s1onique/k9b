@@ -20,8 +20,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
-from promotion_runtime_static_scope_git import get_head_sha, get_subject_tree
+from scripts.ci.promotion_runtime_static_scope_contract import ScopeRecord, ScopeError
+from scripts.ci.promotion_runtime_static_scope_git import get_head_sha, get_subject_tree
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

@@ -185,14 +185,6 @@ def pytest_configure(config) -> None:
             pass
 
 
-# scripts/ci is a proper package (scripts/ci/__init__.py exists).
-# Add scripts/ci to sys.path so tests can import promotion_runtime_*
-# modules by their package name.
-_scripts_ci_pkg = Path(__file__).resolve().parents[2] / "scripts" / "ci"
-if str(_scripts_ci_pkg) not in sys.path:
-    sys.path.insert(0, str(_scripts_ci_pkg))
-
-
 # NOTE: The autouse kubectl mock was removed.
 # 
 # The kubectl-boundary guard in conftest_kubectl_guard.py blocks real kubectl

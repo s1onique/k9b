@@ -14,8 +14,8 @@ import json
 import sys
 from pathlib import Path
 
-from promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
-from promotion_runtime_static_scope_git import (
+from scripts.ci.promotion_runtime_static_scope_contract import ScopeError, ScopeRecord
+from scripts.ci.promotion_runtime_static_scope_git import (
     GitError,
     changed_python,
     get_head_sha,
@@ -23,7 +23,7 @@ from promotion_runtime_static_scope_git import (
     is_ancestor,
     resolve_revision,
 )
-from promotion_runtime_static_scope_policy import (
+from scripts.ci.promotion_runtime_static_scope_policy import (
     is_lane_authority_path,
     is_runtime_path,
     parse_nul_records,

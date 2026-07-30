@@ -43,20 +43,20 @@ import sys
 from pathlib import Path
 
 # Import and re-export everything needed by tests and the CLI
-from promotion_runtime_gate_manifest import (
+from scripts.ci.promotion_runtime_gate_manifest import (
     REPO_ROOT,
     InventoryError,
     _load_manifest,
     _verify_inventory,
 )
-from promotion_runtime_gate_pytest import (  # noqa: F401
+from scripts.ci.promotion_runtime_gate_pytest import (  # noqa: F401
     GatePluginResult,
     _run_pytest_subprocess,
     _validate_result_payload,
     collect_inventory,
     execute_inventory,
 )
-from promotion_runtime_gate_transcript import (
+from scripts.ci.promotion_runtime_gate_transcript import (
     _append_transcript_section,
     _emit_runtime_gate_record,
 )

@@ -10,8 +10,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from promotion_runtime_gate_manifest import InventoryReport
-from promotion_runtime_gate_pytest import (
+from scripts.ci.promotion_runtime_gate_manifest import InventoryReport
+from scripts.ci.promotion_runtime_gate_pytest import (
     _PytestSubprocessResult,
 )
 

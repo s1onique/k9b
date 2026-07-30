@@ -44,9 +44,20 @@ _LANE_PREFIXES: tuple[str, ...] = (
     "tests/unit/test_promotion_runtime_gate_static_scope_integration_r12.py",
 )
 
+# Package-marker policy: __init__.py files under scripts/ci/ are lane authority.
+# This makes the scripts/ci directory a proper Python package without requiring
+# individual __init__.py entries.
+_LANE_PACKAGE_MARKERS: tuple[str, ...] = (
+    "scripts/ci/__init__.py",
+)
+
 
 def is_lane_authority_path(path: str) -> bool:
     """Return True if path is governed by the experimental lane authority."""
+    # Check exact package markers first
+    if path in _LANE_PACKAGE_MARKERS:
+        return True
+    # Check prefix-based policy
     for prefix in _LANE_PREFIXES:
         if path.startswith(prefix):
             return True
