@@ -418,16 +418,16 @@ class TestMissingRuntimePath:
 
         orig = (scope_mod.resolve_revision, scope_mod.is_ancestor,
                 scope_mod.get_head_sha, scope_mod.get_subject_tree, scope_mod.changed_python)
-        scope_mod.resolve_revision = lambda r, rev: (
-            rev if rev in (runtime_base, lane_base, head_sha) else rev
+        scope_mod.resolve_revision = lambda repo_root, revision: (
+            revision if revision in (runtime_base, lane_base, head_sha) else revision
         )
-        scope_mod.is_ancestor = lambda r, a, d: True
-        scope_mod.get_head_sha = lambda r: head_sha
-        scope_mod.get_subject_tree = lambda r, sha: subprocess.run(
-            ["git", "rev-parse", sha + "^{tree}"], cwd=r, capture_output=True, text=True,
+        scope_mod.is_ancestor = lambda repo_root, ancestor, descendant: True
+        scope_mod.get_head_sha = lambda repo_root: head_sha
+        scope_mod.get_subject_tree = lambda repo_root, subject_sha: subprocess.run(
+            ["git", "rev-parse", subject_sha + "^{tree}"], cwd=repo_root, capture_output=True, text=True,
         ).stdout.strip()
-        scope_mod.changed_python = lambda r, base, sub: (
-            b"src/k8s_diag_agent/ghost.py\x00" if base == runtime_base else b""
+        scope_mod.changed_python = lambda repo_root, base_sha, subject_sha: (
+            b"src/k8s_diag_agent/ghost.py\x00" if base_sha == runtime_base else b""
         )
         try:
             with pytest.raises(ScopeError, match="does not exist on disk"):
@@ -468,16 +468,16 @@ class TestRepoRootEvidence:
 
         orig = (scope_mod.resolve_revision, scope_mod.is_ancestor,
                 scope_mod.get_head_sha, scope_mod.get_subject_tree, scope_mod.changed_python)
-        scope_mod.resolve_revision = lambda r, rev: rev if rev in (
+        scope_mod.resolve_revision = lambda repo_root, revision: revision if revision in (
             runtime_base, lane_base, head, head_minus_1
-        ) else rev
-        scope_mod.is_ancestor = lambda r, a, d: True
-        scope_mod.get_head_sha = lambda r: head
-        scope_mod.get_subject_tree = lambda r, sha: subprocess.run(
-            ["git", "rev-parse", sha + "^{tree}"], cwd=r, capture_output=True, text=True,
+        ) else revision
+        scope_mod.is_ancestor = lambda repo_root, ancestor, descendant: True
+        scope_mod.get_head_sha = lambda repo_root: head
+        scope_mod.get_subject_tree = lambda repo_root, subject_sha: subprocess.run(
+            ["git", "rev-parse", subject_sha + "^{tree}"], cwd=repo_root, capture_output=True, text=True,
         ).stdout.strip()
-        scope_mod.changed_python = lambda r, base, sub: (
-            b"src/k8s_diag_agent/test.py\x00" if base == runtime_base else b""
+        scope_mod.changed_python = lambda repo_root, base_sha, subject_sha: (
+            b"src/k8s_diag_agent/test.py\x00" if base_sha == runtime_base else b""
         )
         try:
             record = build_scope(tmp_path, runtime_base, lane_base, head)
