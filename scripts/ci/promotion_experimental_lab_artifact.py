@@ -11,7 +11,6 @@ from typing import Any
 
 IMAGE_PATTERN = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
-SHA256_HEX = re.compile(r"^[0-9a-f]{40}$")
 
 CANONICAL_REGISTRY = "harbor-pve1.spbnix.local"
 CANONICAL_PROJECT = "k9b"
@@ -35,46 +34,63 @@ class ArtifactError(Exception):
     """Raised on validation failure."""
 
 
+def parse_artifact_envelope(content: str) -> list[dict[str, Any]]:
+    """Parse GitHub REST artifact list response envelope."""
+    data = json.loads(content)
+    if not isinstance(data, dict):
+        raise ArtifactError("Artifact response must be object")
+    if "total_count" not in data:
+        raise ArtifactError("Missing total_count in artifact response")
+    if "artifacts" not in data:
+        raise ArtifactError("Missing artifacts in artifact response")
+    artifacts = data["artifacts"]
+    if not isinstance(artifacts, list):
+        raise ArtifactError("artifacts must be array")
+    total = data["total_count"]
+    if len(artifacts) != total:
+        raise ArtifactError(f"total_count mismatch: {total} vs {len(artifacts)}")
+    return artifacts
+
+
 def validate_artifact_metadata(
     artifacts_data: list[dict[str, Any]],
     expected_run_id: int,
-    expected_run_attempt: int,
     expected_subject_sha: str,
     expected_repository_id: str,
 ) -> dict[str, Any]:
-    """Select exactly one artifact and validate all metadata."""
+    """Select exactly one artifact and validate documented metadata fields."""
     matching = [a for a in artifacts_data if a.get("name") == "experimental-lab-record"]
     if len(matching) != 1:
         raise ArtifactError(f"Expected exactly 1 artifact, found {len(matching)}")
-    
+
     artifact = matching[0]
     if artifact.get("expired", False):
         raise ArtifactError("Artifact is expired")
-    
+
     wr = artifact.get("workflow_run", {})
     if wr.get("id") != expected_run_id:
         raise ArtifactError(f"Run ID mismatch: expected {expected_run_id}, got {wr.get('id')}")
-    if wr.get("run_attempt") != expected_run_attempt:
-        raise ArtifactError(f"Run attempt mismatch: expected {expected_run_attempt}, got {wr.get('run_attempt')}")
     if wr.get("head_sha") != expected_subject_sha:
         raise ArtifactError(f"Head SHA mismatch: expected {expected_subject_sha}, got {wr.get('head_sha')}")
-    
+
     repo_id = str(wr.get("repository_id", ""))
     if repo_id != expected_repository_id:
         raise ArtifactError(f"Repository ID mismatch: expected {expected_repository_id}, got {repo_id}")
-    
+
     head_repo_id = str(wr.get("head_repository_id", ""))
     if head_repo_id != expected_repository_id:
         raise ArtifactError(f"Head repository ID mismatch: expected {expected_repository_id}, got {head_repo_id}")
-    
+
     head_branch = wr.get("head_branch", "")
     if head_branch != "main":
         raise ArtifactError(f"Head branch mismatch: expected main, got {head_branch}")
-    
+
     digest = artifact.get("digest", "")
+    if not digest:
+        raise ArtifactError("Missing digest")
     if not DIGEST_PATTERN.match(digest):
         raise ArtifactError(f"Malformed digest: {digest}")
-    
+
     return artifact
 
 
@@ -86,7 +102,7 @@ def compute_sha256(path: Path) -> str:
 def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
     """Parse JSON with strict validation including duplicate-key rejection."""
     seen_keys: dict[str, None] = {}
-    
+
     def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, value in pairs:
@@ -95,7 +111,7 @@ def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
             seen_keys[key] = None
             result[key] = value
         return result
-    
+
     try:
         data = json.loads(content, object_pairs_hook=reject_duplicates)
     except json.JSONDecodeError as e:
@@ -162,35 +178,32 @@ def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
 def validate(
     metadata_json: Path,
     expected_run_id: int,
-    expected_run_attempt: int,
     expected_subject_sha: str,
     expected_repository_id: str,
     output: Path,
 ) -> dict[str, Any]:
     """Validate artifact metadata and record."""
-    artifacts_data = json.loads(metadata_json.read_text())
-    if not isinstance(artifacts_data, list):
-        raise ArtifactError("Artifacts data must be a list")
-    
+    content = metadata_json.read_text()
+    artifacts_data = parse_artifact_envelope(content)
+
     artifact = validate_artifact_metadata(
         artifacts_data,
         expected_run_id,
-        expected_run_attempt,
         expected_subject_sha,
         expected_repository_id,
     )
-    
+
     record_path = Path("artifacts/record_extracted")
-    paths = list(record_path.glob("*.json"))
+    paths = sorted(record_path.glob("*.json"))
     if len(paths) == 0:
         raise ArtifactError("No JSON in artifact")
     if len(paths) > 1:
         raise ArtifactError("Multiple JSON files in artifact")
-    
+
     record_json = paths[0]
     record_data = parse_strict_record(record_json.read_text(), expected_subject_sha)
     record_sha = compute_sha256(record_json)
-    
+
     result = {
         "artifact_id": str(artifact["id"]),
         "artifact_name": artifact["name"],
@@ -201,12 +214,11 @@ def validate(
         "record_sha256": record_sha,
         "subject_sha": record_data["subject_sha"],
         "upstream_run_id": str(expected_run_id),
-        "upstream_run_attempt": str(expected_run_attempt),
     }
-    
+
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2) + "\n")
-    
+
     return result
 
 
@@ -217,7 +229,6 @@ def main() -> None:
     validate_parser = subparsers.add_parser("validate", help="Validate artifact and record")
     validate_parser.add_argument("--metadata-json", type=Path, required=True)
     validate_parser.add_argument("--expected-run-id", type=int, required=True)
-    validate_parser.add_argument("--expected-run-attempt", type=int, required=True)
     validate_parser.add_argument("--expected-subject-sha", required=True)
     validate_parser.add_argument("--expected-repository-id", required=True)
     validate_parser.add_argument("--output", type=Path, required=True)
@@ -228,7 +239,6 @@ def main() -> None:
         result = validate(
             Path(args.metadata_json),
             args.expected_run_id,
-            args.expected_run_attempt,
             args.expected_subject_sha,
             args.expected_repository_id,
             Path(args.output),

@@ -7,19 +7,18 @@ import hashlib
 import json
 import os
 import tempfile
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import datetime, UTC
 from pathlib import Path
 
 
 @dataclass
 class AuthorizationRecord:
     """Typed authorization record."""
-    schema_version: str = "1.0"
+    schema_version: str = ""
     authorization_status: str = ""
     subject_sha: str = ""
     upstream_run_id: str = ""
-    upstream_run_attempt: str = ""
     current_main_sha: str = ""
     backend_image_ref: str = ""
     scheduler_image_ref: str = ""
@@ -32,7 +31,6 @@ class AuthorizationRecord:
     bridge_run_id: str = ""
     bridge_run_attempt: str = ""
     authorization_time: str = ""
-    extra_fields: dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -40,7 +38,6 @@ class AuthorizationRecord:
             "authorization_status": self.authorization_status,
             "subject_sha": self.subject_sha,
             "upstream_run_id": self.upstream_run_id,
-            "upstream_run_attempt": self.upstream_run_attempt,
             "current_main_sha": self.current_main_sha,
             "backend_image_ref": self.backend_image_ref,
             "scheduler_image_ref": self.scheduler_image_ref,
@@ -55,6 +52,14 @@ class AuthorizationRecord:
             "authorization_time": self.authorization_time,
         }
 
+    REQUIRED_FIELDS: tuple[str, ...] = (
+        "schema_version", "authorization_status", "subject_sha", "upstream_run_id",
+        "current_main_sha", "backend_image_ref", "scheduler_image_ref",
+        "frontend_image_ref", "record_sha256", "artifact_id", "artifact_name",
+        "artifact_metadata_digest", "bridge_sha", "bridge_run_id",
+        "bridge_run_attempt", "authorization_time",
+    )
+
 
 def compute_sha256(path: Path) -> str:
     """Compute SHA-256 of file contents."""
@@ -62,16 +67,56 @@ def compute_sha256(path: Path) -> str:
 
 
 def atomic_write(path: Path, content: str) -> None:
-    """Atomically write content to path using temp file + replace."""
+    """Atomically write content to path using temp file + fsync + replace."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         mode="w", dir=path.parent, delete=False, encoding="utf-8"
     ) as f:
         f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
         temp_path = Path(f.name)
-    # Flush and sync before replace
-    temp_path.stat()
-    os.replace(temp_path, path)
+    try:
+        os.replace(temp_path, path)
+        # Sync parent directory
+        parent_fd = os.open(path.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(parent_fd)
+        finally:
+            os.close(parent_fd)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def parse_strict_auth(content: str) -> dict[str, str]:
+    """Parse authorization JSON with duplicate-key rejection and strict schema."""
+    seen_keys: dict[str, None] = {}
+
+    def reject_duplicates(pairs: list[tuple[str, object]]) -> dict[str, str]:
+        result: dict[str, str] = {}
+        for key, value in pairs:
+            if key in seen_keys:
+                raise ValueError(f"Duplicate key: {key}")
+            seen_keys[key] = None
+            if not isinstance(value, str):
+                raise ValueError(f"{key} must be string")
+            result[key] = value
+        return result
+
+    data = json.loads(content, object_pairs_hook=reject_duplicates)
+    if not isinstance(data, dict):
+        raise ValueError("Authorization record must be object")
+
+    unknown = set(data.keys()) - set(AuthorizationRecord.REQUIRED_FIELDS)
+    if unknown:
+        raise ValueError(f"Unknown fields: {', '.join(sorted(unknown))}")
+
+    missing = set(AuthorizationRecord.REQUIRED_FIELDS) - set(data.keys())
+    if missing:
+        raise ValueError(f"Missing fields: {', '.join(sorted(missing))}")
+
+    return data
 
 
 def write_authorization_record(
@@ -86,20 +131,23 @@ def write_authorization_record(
 ) -> None:
     """Write authorization record and checksum sidecar atomically."""
     result = json.loads(artifact_result_path.read_text())
-    
+    digest = result.get("artifact_metadata_digest", "")
+    if not digest:
+        raise ValueError("Missing artifact_metadata_digest in artifact result")
+
     record = AuthorizationRecord(
+        schema_version="1.0",
         authorization_status=authorization_status,
-        subject_sha=result.get("subject_sha", ""),
-        upstream_run_id=result.get("upstream_run_id", ""),
-        upstream_run_attempt=result.get("upstream_run_attempt", ""),
+        subject_sha=result["subject_sha"],
+        upstream_run_id=result["upstream_run_id"],
         current_main_sha=current_main_sha,
-        backend_image_ref=result.get("backend_image_ref", ""),
-        scheduler_image_ref=result.get("scheduler_image_ref", ""),
-        frontend_image_ref=result.get("frontend_image_ref", ""),
-        record_sha256=result.get("record_sha256", ""),
-        artifact_id=result.get("artifact_id", ""),
-        artifact_name=result.get("artifact_name", ""),
-        artifact_metadata_digest=result.get("artifact_digest", ""),
+        backend_image_ref=result["backend_image_ref"],
+        scheduler_image_ref=result["scheduler_image_ref"],
+        frontend_image_ref=result["frontend_image_ref"],
+        record_sha256=result["record_sha256"],
+        artifact_id=result["artifact_id"],
+        artifact_name=result["artifact_name"],
+        artifact_metadata_digest=digest,
         bridge_sha=bridge_sha,
         bridge_run_id=bridge_run_id,
         bridge_run_attempt=bridge_run_attempt,
@@ -141,26 +189,25 @@ def verify_authorization_record(
         raise ValueError(f"Checksum mismatch: expected {expected_sha}, got {actual_sha}")
 
     content = json_path.read_text()
-    data = json.loads(content)
+    data = parse_strict_auth(content)
 
     record = AuthorizationRecord(
-        schema_version=data.get("schema_version", ""),
-        authorization_status=data.get("authorization_status", ""),
-        subject_sha=data.get("subject_sha", ""),
-        upstream_run_id=data.get("upstream_run_id", ""),
-        upstream_run_attempt=data.get("upstream_run_attempt", ""),
-        current_main_sha=data.get("current_main_sha", ""),
-        backend_image_ref=data.get("backend_image_ref", ""),
-        scheduler_image_ref=data.get("scheduler_image_ref", ""),
-        frontend_image_ref=data.get("frontend_image_ref", ""),
-        record_sha256=data.get("record_sha256", ""),
-        artifact_id=data.get("artifact_id", ""),
-        artifact_name=data.get("artifact_name", ""),
-        artifact_metadata_digest=data.get("artifact_metadata_digest", ""),
-        bridge_sha=data.get("bridge_sha", ""),
-        bridge_run_id=data.get("bridge_run_id", ""),
-        bridge_run_attempt=data.get("bridge_run_attempt", ""),
-        authorization_time=data.get("authorization_time", ""),
+        schema_version=data["schema_version"],
+        authorization_status=data["authorization_status"],
+        subject_sha=data["subject_sha"],
+        upstream_run_id=data["upstream_run_id"],
+        current_main_sha=data["current_main_sha"],
+        backend_image_ref=data["backend_image_ref"],
+        scheduler_image_ref=data["scheduler_image_ref"],
+        frontend_image_ref=data["frontend_image_ref"],
+        record_sha256=data["record_sha256"],
+        artifact_id=data["artifact_id"],
+        artifact_name=data["artifact_name"],
+        artifact_metadata_digest=data["artifact_metadata_digest"],
+        bridge_sha=data["bridge_sha"],
+        bridge_run_id=data["bridge_run_id"],
+        bridge_run_attempt=data["bridge_run_attempt"],
+        authorization_time=data["authorization_time"],
     )
 
     if record.authorization_status != "authorized":
@@ -177,14 +224,16 @@ def verify_authorization_record(
             f"Subject SHA {record.subject_sha} != current main {current_main_sha}"
         )
 
+    if not record.artifact_metadata_digest:
+        raise ValueError("Empty artifact_metadata_digest")
+
     with open(github_output, "a", encoding="utf-8") as f:
         f.write(f"subject_sha={record.subject_sha}\n")
         f.write(f"backend_image_ref={record.backend_image_ref}\n")
         f.write(f"scheduler_image_ref={record.scheduler_image_ref}\n")
         f.write(f"frontend_image_ref={record.frontend_image_ref}\n")
-        f.write(f"artifact_digest={record.artifact_metadata_digest}\n")
+        f.write(f"artifact_metadata_digest={record.artifact_metadata_digest}\n")
         f.write(f"upstream_run_id={record.upstream_run_id}\n")
-        f.write(f"upstream_run_attempt={record.upstream_run_attempt}\n")
 
     return record
 
