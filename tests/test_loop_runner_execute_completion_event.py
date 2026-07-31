@@ -1,27 +1,33 @@
 """Regression tests for health loop completion event projections.
 
-ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11-FINALIZATION02
+ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11-FINALIZATION03
 
 Verifies the terminal completion event emits correct projections for:
 - PromotionCommitUnknown: consistency_error_recorded=true, reconciliation_required=true
-- PromotionRejected: consistency_error_recorded=false, diagnosis_invoked=false
+- PromotionRejected: consistency_error_recorded=true (consistency_error_recorded returns True)
 - PromotionSucceeded: consistency_error_recorded=false, diagnosis_invoked=true
 - Explicit consistency error without outcome: consistency_error_recorded=true
+
+CORRECTION11-FINALIZATION03:
+- Uses the single production authority helper
+  `_completion_promotion_consistency_error_recorded` for all projections
+- No manually duplicated expression in the test
 """
 
 from __future__ import annotations
 
 from k8s_diag_agent.health.loop_runner_execute import (
+    DiagnosisExecutionAuthority,
     INCIDENT_ACCESS_MODE_RECONCILIATION_REQUIRED,
     INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN,
     INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
-    DiagnosisExecutionAuthority,
     _build_diagnosis_execution_authority,
+    _completion_promotion_consistency_error_recorded,
 )
 
 
 class TestCompletionEventProjections:
-    """CORRECTION11-FINALIZATION02: Completion event regression tests."""
+    """CORRECTION11-FINALIZATION03: Completion event regression tests."""
 
     # Production-shaped signal identities
     _SIGNAL_A = "sha256:" + ("a" * 64)
@@ -51,7 +57,7 @@ class TestCompletionEventProjections:
         )
 
     def test_commit_unknown_completeness_error_true(self) -> None:
-        """CORRECTION11-FINALIZATION02: commit_unknown reports consistency_error=true."""
+        """CORRECTION11-FINALIZATION03: commit_unknown reports consistency_error=true."""
         authority = self._build_commit_unknown_authority()
 
         # Verify the authority reflects commit_unknown
@@ -69,12 +75,9 @@ class TestCompletionEventProjections:
         assert consistency_error_recorded(authority.promotion_outcome) is True
 
     def test_explicit_error_without_outcome_preserved(self) -> None:
-        """CORRECTION11-FINALIZATION02: Explicit error + no outcome preserves consistency_error=true."""
+        """CORRECTION11-FINALIZATION03: Explicit error + no outcome preserves consistency_error=true."""
         from k8s_diag_agent.collect.incident_identity_hardening import (
             IncidentStoreConsistencyError,
-        )
-        from k8s_diag_agent.collect.promotion_outcomes import (
-            consistency_error_recorded,
         )
 
         # Simulate explicit consistency error without typed outcome
@@ -84,25 +87,18 @@ class TestCompletionEventProjections:
             promotion_outcomes=("opened", "opened"),
         )
 
-        # Verify explicit_error is truthy
-        assert explicit_error is not None
-
-        # Verify consistency_error_recorded with no typed outcome is False
-        assert consistency_error_recorded(None) is False
-
-        # Combined: explicit_error OR typed_outcome_consistency
-        combined_projection = (
-            explicit_error is not None
-            or (None is not None and consistency_error_recorded(None))
+        # Use the production authority helper
+        result = _completion_promotion_consistency_error_recorded(
+            explicit_error=explicit_error,
+            promotion_outcome=None,
         )
-        assert combined_projection is True
+        assert result is True
 
     def test_rejected_completeness_error_true(self) -> None:
-        """PromotionRejected reports consistency_error=true (matches function contract)."""
+        """CORRECTION11-FINALIZATION03: PromotionRejected reports consistency_error=true via helper."""
         from k8s_diag_agent.collect.promotion_outcomes import (
             PromotionRejected,
             PromotionRejectionCode,
-            consistency_error_recorded,
         )
 
         outcome = PromotionRejected(
@@ -117,15 +113,18 @@ class TestCompletionEventProjections:
 
         assert authority.is_blocked is True
         assert authority.diagnosis_invoked is False
+
+        # Use the production authority helper
+        result = _completion_promotion_consistency_error_recorded(
+            explicit_error=None,
+            promotion_outcome=outcome,
+        )
         # Note: consistency_error_recorded returns True for both Rejected and CommitUnknown
-        assert consistency_error_recorded(outcome) is True
+        assert result is True
 
     def test_succeeded_completeness_error_false(self) -> None:
-        """PromotionSucceeded reports consistency_error=false."""
-        from k8s_diag_agent.collect.promotion_outcomes import (
-            PromotionSucceeded,
-            consistency_error_recorded,
-        )
+        """CORRECTION11-FINALIZATION03: PromotionSucceeded reports consistency_error=false via helper."""
+        from k8s_diag_agent.collect.promotion_outcomes import PromotionSucceeded
 
         outcome = PromotionSucceeded(
             run_id=self.RUN_ID,
@@ -140,10 +139,16 @@ class TestCompletionEventProjections:
 
         assert authority.selection_mode == INCIDENT_SELECTION_MODE_EXPLICIT_IDS
         assert authority.diagnosis_invoked is True
-        assert consistency_error_recorded(outcome) is False
 
-    def test_combined_projection_matrix(self) -> None:
-        """CORRECTION11-FINALIZATION02: Required matrix for combined projection."""
+        # Use the production authority helper
+        result = _completion_promotion_consistency_error_recorded(
+            explicit_error=None,
+            promotion_outcome=outcome,
+        )
+        assert result is False
+
+    def test_production_helper_completion_projection_matrix(self) -> None:
+        """CORRECTION11-FINALIZATION03: Required matrix through the production helper."""
         from k8s_diag_agent.collect.incident_identity_hardening import (
             IncidentStoreConsistencyError,
         )
@@ -154,14 +159,7 @@ class TestCompletionEventProjections:
             PromotionRejectionCode,
             PromotionSucceeded,
             PromotionUncertaintyCode,
-            consistency_error_recorded,
         )
-
-        # Matrix: (explicit_error, typed_outcome) -> expected
-        def combined(explicit, outcome) -> bool:
-            return explicit is not None or (
-                outcome is not None and consistency_error_recorded(outcome)
-            )
 
         # explicit error + no outcome -> true
         explicit_err = IncidentStoreConsistencyError(
@@ -169,7 +167,9 @@ class TestCompletionEventProjections:
             canonical_incident_ids=(),
             promotion_outcomes=("opened",),
         )
-        assert combined(explicit_err, None) is True
+        assert _completion_promotion_consistency_error_recorded(
+            explicit_error=explicit_err, promotion_outcome=None
+        ) is True
 
         # commit_unknown + no explicit error -> true
         commit_unknown = PromotionCommitUnknown(
@@ -181,16 +181,19 @@ class TestCompletionEventProjections:
             ),
             requested_signal_ids=(self._SIGNAL_A,),
         )
-        assert combined(None, commit_unknown) is True
+        assert _completion_promotion_consistency_error_recorded(
+            explicit_error=None, promotion_outcome=commit_unknown
+        ) is True
 
-        # rejected + no explicit error -> consistency_error_recorded returns True for rejected
-        # (function returns True for both Rejected and CommitUnknown)
+        # rejected + no explicit error -> true (consistency_error_recorded returns True)
         rejected = PromotionRejected(
             run_id=self.RUN_ID,
             reason=PromotionRejectionCode.CURRENT_RUN_SCOPE_VIOLATION,
             rejected_signal_ids=(self._SIGNAL_A,),
         )
-        assert combined(None, rejected) is True  # consistency_error_recorded(Rejected) is True
+        assert _completion_promotion_consistency_error_recorded(
+            explicit_error=None, promotion_outcome=rejected
+        ) is True
 
         # succeeded + no explicit error -> false
         succeeded = PromotionSucceeded(
@@ -199,12 +202,22 @@ class TestCompletionEventProjections:
             records=(),
             diagnosis_incident_ids=(self._SIGNAL_A,),
         )
-        assert combined(None, succeeded) is False
+        assert _completion_promotion_consistency_error_recorded(
+            explicit_error=None, promotion_outcome=succeeded
+        ) is False
 
         # genuinely empty run -> false
-        assert combined(None, None) is False
+        assert _completion_promotion_consistency_error_recorded(
+            explicit_error=None, promotion_outcome=None
+        ) is False
 
         # explicit error + any outcome -> true
-        assert combined(explicit_err, commit_unknown) is True
-        assert combined(explicit_err, rejected) is True
-        assert combined(explicit_err, succeeded) is True
+        assert _completion_promotion_consistency_error_recorded(
+            explicit_error=explicit_err, promotion_outcome=commit_unknown
+        ) is True
+        assert _completion_promotion_consistency_error_recorded(
+            explicit_error=explicit_err, promotion_outcome=rejected
+        ) is True
+        assert _completion_promotion_consistency_error_recorded(
+            explicit_error=explicit_err, promotion_outcome=succeeded
+        ) is True

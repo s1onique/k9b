@@ -60,6 +60,30 @@ if TYPE_CHECKING:
     from ..collect.incident_identity_hardening import (
         IncidentStoreConsistencyError,
     )
+    from ..collect.promotion_outcomes import PromotionOutcome
+
+
+def _completion_promotion_consistency_error_recorded(
+    *,
+    explicit_error: IncidentStoreConsistencyError | None,
+    promotion_outcome: PromotionOutcome | None,
+) -> bool:
+    """Project completion promotion_consistency_error_recorded from both sources.
+
+    ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11-FINALIZATION03:
+    This is the single authority for the completion event field.
+
+    Required matrix:
+        explicit error + no outcome -> true
+        commit_unknown + no explicit error -> true
+        rejected + no explicit error -> true (consistency_error_recorded(Rejected) is True)
+        succeeded + no explicit error -> false
+        genuinely empty run -> false
+    """
+    return explicit_error is not None or (
+        promotion_outcome is not None
+        and consistency_error_recorded(promotion_outcome)
+    )
 
 
 # CORRECTION10: Typed result for _derive_automatic_diagnosis_inputs().
@@ -1555,12 +1579,11 @@ def execute_health_loop_run(
         #   commit_unknown + no explicit error -> true
         #   rejected/succeeded + no explicit error -> false
         #   genuinely empty run -> false
-        promotion_consistency_error_recorded=(
-            promotion_consistency_error is not None
-            or (
-                promotion_outcome is not None
-                and consistency_error_recorded(promotion_outcome)
-            )
+        # ACT-K9B-HULK-PROMOTION-LIVE-WIRE-AND-PROJECTION-TRUTH01-CORRECTION11-FINALIZATION03:
+        # Use the single authority helper for the completion event field.
+        promotion_consistency_error_recorded=_completion_promotion_consistency_error_recorded(
+            explicit_error=promotion_consistency_error,
+            promotion_outcome=promotion_outcome,
         ),
         backend_endpoint_identity=backend_endpoint_identity,
     )
