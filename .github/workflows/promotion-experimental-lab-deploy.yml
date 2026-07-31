@@ -23,7 +23,7 @@ jobs:
       artifact_id: ${{ steps.artifact_valid.outputs.artifact_id }}
       artifact_metadata_digest: ${{ steps.artifact_valid.outputs.artifact_metadata_digest }}
     steps:
-      - uses: actions/checkout@11bd71901b5f382813f14e7b5c326d36e24b6a31
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
 
@@ -73,7 +73,7 @@ jobs:
           gh api "repos/${{ github.repository }}/actions/runs/${run_id}/artifacts" > artifacts/metadata.json
           echo "metadata_path=artifacts/metadata.json" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@9bb530cc8e5c31e7400f7ea4c3dc7f8f2cf87c09
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
         with:
           name: experimental-lab-record
@@ -112,7 +112,7 @@ jobs:
 
       - id: upload_auth
         if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
-        uses: actions/upload-artifact@ee3b4c27c5b19f2f7bae34ea5b8e3a6f7b4d7e0a
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: experimental-lab-deploy-authorization-${{ github.run_id }}
           path: |
@@ -134,11 +134,11 @@ jobs:
       upstream_run_attempt: ${{ steps.confirm.outputs.upstream_run_attempt }}
     if: ${{ needs.validate-upstream.outputs.authorization_status == 'authorized' }}
     steps:
-      - uses: actions/checkout@11bd71901b5f382813f14e7b5c326d36e24b6a31
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
 
-      - uses: actions/download-artifact@9bb530cc8e5c31e7400f7ea4c3dc7f8f2cf87c09
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: experimental-lab-deploy-authorization-${{ github.run_id }}
           path: artifacts/auth_extracted
