@@ -1,4 +1,4 @@
-# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION03
+# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-BUILD-LANE01-CORRECTION09
 # Reusable classification workflow for the experimental lab build lane.
 #
 # This workflow consumes declared build outputs from the thin caller and
@@ -136,6 +136,7 @@ jobs:
           scheduler_ref = backend_ref
 
           record = {
+              "schema_version": "1.0",
               "image_class": "experimental-lab",
               "subject_sha": subject_sha,
               "runtime_gate": runtime_gate,
@@ -151,6 +152,8 @@ jobs:
               "scheduler_uses_backend_image": True,
               "frontend_image_ref": frontend_ref,
               "frontend_image_digest": frontend_digest,
+              "upstream_run_id": os.environ.get("GITHUB_RUN_ID", ""),
+              "upstream_run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
           }
 
           out_path = Path("artifacts/experimental-lab-record.json")
@@ -160,11 +163,11 @@ jobs:
           PY
 
       - name: upload experimental-lab record
+        id: upload_record
         uses: actions/upload-artifact@v4
         with:
-          name: experimental-lab-record-${{ inputs.subject_sha }}
+          name: experimental-lab-record
           path: artifacts/experimental-lab-record.json
-        if: always()
 
       - name: emit classification summary
         run: |
@@ -189,6 +192,8 @@ jobs:
               "ready_for_production_deployment",
               "ready_for_live_acceptance",
               "scheduler_uses_backend_image",
+              "upstream_run_id",
+              "upstream_run_attempt",
           ):
               print(f"  {k} = {record.get(k)}")
           for img in ("backend", "scheduler", "frontend"):

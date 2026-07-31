@@ -29,6 +29,9 @@ IMAGE_REPOSITORIES: dict[str, str] = {
     "frontend": f"{CANONICAL_REGISTRY}/{CANONICAL_PROJECT}/k9b-frontend",
 }
 
+CANONICAL_ARTIFACT_NAME = "experimental-lab-record"
+CANONICAL_RECORD_FILENAME = "experimental-lab-record.json"
+
 
 class ArtifactError(Exception):
     """Raised on validation failure."""
@@ -87,9 +90,9 @@ def validate_artifact_metadata(
     expected_repository_id: str,
 ) -> dict[str, Any]:
     """Select exactly one artifact and validate documented metadata fields."""
-    matching = [a for a in artifacts_data if a.get("name") == "experimental-lab-record"]
+    matching = [a for a in artifacts_data if a.get("name") == CANONICAL_ARTIFACT_NAME]
     if len(matching) != 1:
-        raise ArtifactError(f"Expected exactly 1 artifact, found {len(matching)}")
+        raise ArtifactError(f"Expected exactly 1 artifact named '{CANONICAL_ARTIFACT_NAME}', found {len(matching)}")
 
     artifact = matching[0]
     if artifact.get("expired", False):
@@ -224,14 +227,21 @@ def validate(
         expected_repository_id,
     )
 
-    record_path = Path("artifacts/record_extracted")
-    exact_record = record_path / "experimental-lab-record.json"
-    if not exact_record.exists():
-        raise ArtifactError("Missing experimental-lab-record.json")
-    if not exact_record.is_file():
-        raise ArtifactError("experimental-lab-record.json is not a file")
+    record_path = Path("artifacts/record_extracted") / CANONICAL_RECORD_FILENAME
+    if not record_path.exists():
+        raise ArtifactError(f"Missing {CANONICAL_RECORD_FILENAME}")
+    if not record_path.is_file():
+        raise ArtifactError(f"{CANONICAL_RECORD_FILENAME} is not a regular file")
+    if record_path.is_symlink():
+        raise ArtifactError(f"{CANONICAL_RECORD_FILENAME} is a symlink")
+    
+    # Check for any other files in the directory
+    parent = record_path.parent
+    other_files = [p for p in parent.iterdir() if p != record_path]
+    if other_files:
+        raise ArtifactError(f"Unexpected files in artifact: {[str(p) for p in other_files]}")
 
-    record_data = parse_strict_record(exact_record.read_text(), expected_subject_sha)
+    record_data = parse_strict_record(record_path.read_text(), expected_subject_sha)
 
     if record_data.get("upstream_run_id") != str(expected_run_id):
         raise ArtifactError(
@@ -244,7 +254,7 @@ def validate(
             f"got {record_data.get('upstream_run_attempt')}"
         )
 
-    record_sha = compute_sha256(exact_record)
+    record_sha = compute_sha256(record_path)
 
     result = {
         "artifact_id": str(artifact["id"]),
