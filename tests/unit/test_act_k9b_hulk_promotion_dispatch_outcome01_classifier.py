@@ -142,7 +142,8 @@ class TestClassifierFailureMatrix:
             outcome=PromotionDispatchError("internal failure"),
         )
         assert is_commit_unknown(outcome)
-        assert outcome.reason is PromotionUncertaintyCode.AMBIGUOUS_RESPONSE
+        # CORRECTION11: PromotionDispatchError maps to DISPATCH_INTERNAL_ERROR
+        assert outcome.reason is PromotionUncertaintyCode.DISPATCH_INTERNAL_ERROR
         assert outcome.requested_signal_ids == ("sha256:a",)
 
     def test_transport_timeout(self) -> None:
@@ -195,7 +196,8 @@ class TestClassifierFailureMatrix:
             outcome=WeirdError("oops"),
         )
         assert is_commit_unknown(outcome)
-        assert outcome.reason is PromotionUncertaintyCode.AMBIGUOUS_RESPONSE
+        # CORRECTION11: Untyped exception maps to DISPATCH_UNTYPED_EXCEPTION
+        assert outcome.reason is PromotionUncertaintyCode.DISPATCH_UNTYPED_EXCEPTION
 
     def test_none_outcome_is_commit_unknown(self) -> None:
         outcome = classify_promotion_dispatch_result(
@@ -205,7 +207,8 @@ class TestClassifierFailureMatrix:
             outcome=None,
         )
         assert is_commit_unknown(outcome)
-        assert outcome.reason is PromotionUncertaintyCode.AMBIGUOUS_RESPONSE
+        # CORRECTION11: None maps to DISPATCH_RETURNED_NONE
+        assert outcome.reason is PromotionUncertaintyCode.DISPATCH_RETURNED_NONE
 
     def test_non_incident_promotion_result_is_protocol_error(self) -> None:
         outcome = classify_promotion_dispatch_result(
