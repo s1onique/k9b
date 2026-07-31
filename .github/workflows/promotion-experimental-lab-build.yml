@@ -39,6 +39,7 @@ name: k9b promotion experimental lab build
 on:
   push:
     branches:
+      - main
       - hotfix/incident-promotion-runtime-truth01
     tags:
       - "qualification/lab/*"

@@ -44,7 +44,12 @@ jobs:
           if [ "$repo_id" != "${{ github.repository_id }}" ]; then exit 1; fi
           if [ "$head_repo_id" != "${{ github.repository_id }}" ]; then exit 1; fi
           if [ "$head_repo_name" != "${{ github.repository }}" ]; then exit 1; fi
-          echo "upstream_run_id=${{ github.event.workflow_run.run_id }}" >> "$GITHUB_OUTPUT"
+          run_id="${{ github.event.workflow_run.id }}"
+          if ! [[ "$run_id" =~ ^[1-9][0-9]*$ ]]; then
+            echo "FATAL: workflow_run.id is missing or invalid"
+            exit 1
+          fi
+          echo "upstream_run_id=$run_id" >> "$GITHUB_OUTPUT"
           echo "upstream_run_attempt=${{ github.event.workflow_run.run_attempt }}" >> "$GITHUB_OUTPUT"
           echo "upstream_head_sha=$run_sha" >> "$GITHUB_OUTPUT"
 
