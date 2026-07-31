@@ -20,9 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       subject_sha: ${{ steps.upstream.outputs.upstream_head_sha }}
-      backend_image_ref: ${{ steps.validate_record.outputs.backend_image_ref }}
-      scheduler_image_ref: ${{ steps.validate_record.outputs.scheduler_image_ref }}
-      frontend_image_ref: ${{ steps.validate_record.outputs.frontend_image_ref }}
+      backend_image_ref: ${{ steps.artifact.outputs.backend_image_ref }}
+      scheduler_image_ref: ${{ steps.artifact.outputs.scheduler_image_ref }}
+      frontend_image_ref: ${{ steps.artifact.outputs.frontend_image_ref }}
       artifact_digest: ${{ steps.artifact.outputs.artifact_digest }}
       upstream_run_id: ${{ steps.upstream.outputs.upstream_run_id }}
       upstream_run_attempt: ${{ steps.upstream.outputs.upstream_run_attempt }}
@@ -57,7 +57,10 @@ jobs:
         run: |
           set -euo pipefail
           upstream_sha="${{ steps.upstream.outputs.upstream_head_sha }}"
-          current_main=$(curl -s -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/${{ github.repository }}/git/ref/heads/main" | python3 -c "import sys,json; print(json.load(sys.stdin)['object']['sha'])")
+          current_main=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/git/ref/heads/main" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['object']['sha'])")
           echo "current_main_sha=$current_main" >> "$GITHUB_OUTPUT"
           if [ "$upstream_sha" != "$current_main" ]; then
             echo "authorization_status=stale_upstream" >> "$GITHUB_OUTPUT"
@@ -76,8 +79,9 @@ jobs:
           count=$(echo "$artifacts_json" | python3 -c "import sys,json; print(len([a for a in json.load(sys.stdin)['artifacts'] if a['name'] == 'experimental-lab-record']))")
           if [ "$count" != "1" ]; then echo "FATAL: expected 1 artifact, found $count"; exit 1; fi
           artifact_id=$(echo "$artifacts_json" | python3 -c "import sys,json; print(next(a['id'] for a in json.load(sys.stdin)['artifacts'] if a['name'] == 'experimental-lab-record'))")
+          artifact_digest=$(echo "$artifacts_json" | python3 -c "import sys,json; print(next(a.get('digest', '') for a in json.load(sys.stdin)['artifacts'] if a['name'] == 'experimental-lab-record'))")
           echo "artifact_id=$artifact_id" >> "$GITHUB_OUTPUT"
-          echo "artifact_digest=sha256:verified" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$artifact_digest" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v4
         with:
@@ -87,30 +91,34 @@ jobs:
           token: ${{ github.token }}
           path: artifacts/record_extracted
 
-      - id: validate_record
+      - id: record
         run: |
           set -euo pipefail
-          python3 .github/scripts/validate-record.py "${{ steps.upstream.outputs.upstream_head_sha }}"
+          record_sha=$(sha256sum artifacts/record_extracted/*.json | awk '{print $1}')
+          python3 scripts/ci/promotion_experimental_lab_artifact.py \
+            "${{ steps.upstream.outputs.upstream_run_id }}" \
+            "${{ steps.upstream.outputs.upstream_head_sha }}" \
+            "${{ steps.artifact.outputs.artifact_digest }}"
 
       - id: authorize
         run: |
           set -euo pipefail
-          record_file=$(ls artifacts/record_extracted/*.json | head -1)
-          record_sha=$(sha256sum "$record_file" | awk '{print $1}')
-          python3 .github/scripts/write-auth-record.py \
-            "$record_sha" \
+          python3 scripts/ci/promotion_experimental_lab_authorization.py write \
+            "$(cat artifacts/artifact_result.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["record_sha256"])')" \
             "${{ steps.stale_main.outputs.current_main_sha }}" \
             "${{ steps.stale_main.outputs.authorization_status }}" \
-            "${{ steps.validate_record.outputs.backend_image_ref }}" \
-            "${{ steps.validate_record.outputs.scheduler_image_ref }}" \
-            "${{ steps.validate_record.outputs.frontend_image_ref }}" \
+            "$(cat artifacts/artifact_result.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["backend_image_ref"])')" \
+            "$(cat artifacts/artifact_result.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["scheduler_image_ref"])')" \
+            "$(cat artifacts/artifact_result.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["frontend_image_ref"])')" \
             "${{ steps.upstream.outputs.upstream_head_sha }}" \
             "${{ steps.upstream.outputs.upstream_run_id }}" \
             "${{ steps.upstream.outputs.upstream_run_attempt }}" \
             "${{ github.sha }}" \
             "${{ github.run_id }}" \
-            "${{ github.run_attempt }}"
-          sha256sum artifacts/experimental-lab-deploy-authorization.json | awk '{print $1}' > artifacts/experimental-lab-deploy-authorization.json.sha256
+            "${{ github.run_attempt }}" \
+            "${{ steps.artifact.outputs.artifact_id }}" \
+            "experimental-lab-record" \
+            "${{ steps.artifact.outputs.artifact_digest }}"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -146,14 +154,11 @@ jobs:
       - id: confirm
         run: |
           set -euo pipefail
-          auth_file=$(ls artifacts/auth_extracted/experimental-lab-deploy-authorization.json 2>/dev/null | head -1)
-          sha_file=$(ls artifacts/auth_extracted/experimental-lab-deploy-authorization.json.sha256 2>/dev/null | head -1)
-          if [ -z "$auth_file" ] || [ -z "$sha_file" ]; then echo "FATAL: missing auth files"; exit 1; fi
-          expected_sha=$(cat "$sha_file")
-          actual_sha=$(sha256sum "$auth_file" | awk '{print $1}')
-          if [ "$expected_sha" != "$actual_sha" ]; then echo "FATAL: checksum mismatch"; exit 1; fi
-          current_main=$(curl -s -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/${{ github.repository }}/git/ref/heads/main" | python3 -c "import sys,json; print(json.load(sys.stdin)['object']['sha'])")
-          python3 .github/scripts/confirm-auth-output.py "$current_main"
+          current_main=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/git/ref/heads/main" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['object']['sha'])")
+          python3 scripts/ci/promotion_experimental_lab_authorization.py verify "$current_main"
 
   deploy:
     name: deploy to experimental lab
