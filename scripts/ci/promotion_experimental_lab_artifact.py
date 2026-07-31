@@ -2,15 +2,17 @@
 """Artifact authority: upstream identity, exact artifact selection, strict record parsing."""
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
-import os
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
 IMAGE_PATTERN = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
+DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+SHA256_HEX = re.compile(r"^[0-9a-f]{40}$")
+
 CANONICAL_REGISTRY = "harbor-pve1.spbnix.local"
 CANONICAL_PROJECT = "k9b"
 
@@ -33,24 +35,46 @@ class ArtifactError(Exception):
     """Raised on validation failure."""
 
 
-def validate_artifacts_json(data: list[dict[str, Any]], run_id: int, run_sha: str) -> dict[str, Any]:
-    """Select exactly one artifact by exact name and validate metadata."""
-    matching = [a for a in data if a.get("name") == "experimental-lab-record"]
+def validate_artifact_metadata(
+    artifacts_data: list[dict[str, Any]],
+    expected_run_id: int,
+    expected_run_attempt: int,
+    expected_subject_sha: str,
+    expected_repository_id: str,
+) -> dict[str, Any]:
+    """Select exactly one artifact and validate all metadata."""
+    matching = [a for a in artifacts_data if a.get("name") == "experimental-lab-record"]
     if len(matching) != 1:
         raise ArtifactError(f"Expected exactly 1 artifact, found {len(matching)}")
+    
     artifact = matching[0]
     if artifact.get("expired", False):
         raise ArtifactError("Artifact is expired")
+    
     wr = artifact.get("workflow_run", {})
-    if wr.get("id") != run_id:
-        raise ArtifactError(f"Run ID mismatch: expected {run_id}, got {wr.get('id')}")
-    if wr.get("head_sha") != run_sha:
-        raise ArtifactError(f"Run SHA mismatch: expected {run_sha}, got {wr.get('head_sha')}")
-    if wr.get("repository", {}).get("id") != os.environ.get("GITHUB_REPOSITORY_ID", ""):
-        raise ArtifactError("Repository ID mismatch")
+    if wr.get("id") != expected_run_id:
+        raise ArtifactError(f"Run ID mismatch: expected {expected_run_id}, got {wr.get('id')}")
+    if wr.get("run_attempt") != expected_run_attempt:
+        raise ArtifactError(f"Run attempt mismatch: expected {expected_run_attempt}, got {wr.get('run_attempt')}")
+    if wr.get("head_sha") != expected_subject_sha:
+        raise ArtifactError(f"Head SHA mismatch: expected {expected_subject_sha}, got {wr.get('head_sha')}")
+    
+    repo_id = str(wr.get("repository_id", ""))
+    if repo_id != expected_repository_id:
+        raise ArtifactError(f"Repository ID mismatch: expected {expected_repository_id}, got {repo_id}")
+    
+    head_repo_id = str(wr.get("head_repository_id", ""))
+    if head_repo_id != expected_repository_id:
+        raise ArtifactError(f"Head repository ID mismatch: expected {expected_repository_id}, got {head_repo_id}")
+    
+    head_branch = wr.get("head_branch", "")
+    if head_branch != "main":
+        raise ArtifactError(f"Head branch mismatch: expected main, got {head_branch}")
+    
     digest = artifact.get("digest", "")
-    if not digest.startswith("sha256:"):
-        raise ArtifactError(f"Missing digest: {digest}")
+    if not DIGEST_PATTERN.match(digest):
+        raise ArtifactError(f"Malformed digest: {digest}")
+    
     return artifact
 
 
@@ -60,11 +84,24 @@ def compute_sha256(path: Path) -> str:
 
 
 def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
-    """Parse JSON with strict validation."""
+    """Parse JSON with strict validation including duplicate-key rejection."""
+    seen_keys: dict[str, None] = {}
+    
+    def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in seen_keys:
+                raise ArtifactError(f"Duplicate key: {key}")
+            seen_keys[key] = None
+            result[key] = value
+        return result
+    
     try:
-        data = json.loads(content)
+        data = json.loads(content, object_pairs_hook=reject_duplicates)
     except json.JSONDecodeError as e:
         raise ArtifactError(f"Invalid JSON: {e}")
+    except TypeError as e:
+        raise ArtifactError(f"JSON structure error: {e}")
 
     if not isinstance(data, dict):
         raise ArtifactError("Root must be object")
@@ -83,10 +120,10 @@ def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
         ("ready_for_image_publication", bool), ("ready_for_production_deployment", bool),
         ("ready_for_live_acceptance", bool),
     ]
-    for field, expected_type in type_checks:
-        val = data.get(field)
+    for field_name, expected_type in type_checks:
+        val = data.get(field_name)
         if not isinstance(val, expected_type):
-            raise ArtifactError(f"{field} must be {expected_type.__name__}")
+            raise ArtifactError(f"{field_name} must be {expected_type.__name__}")
 
     if data.get("image_class") != "experimental-lab":
         raise ArtifactError("image_class must be experimental-lab")
@@ -122,49 +159,81 @@ def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
     return data
 
 
-def validate_upstream_and_record(upstream_run_id: int, upstream_run_sha: str) -> dict[str, Any]:
-    """Validate upstream artifact and parse record."""
-    if not IMAGE_PATTERN:
-        raise ArtifactError("Invalid environment")
-
-    artifacts_path = Path("artifacts/record_extracted")
-    paths = list(artifacts_path.glob("*.json"))
-
+def validate(
+    metadata_json: Path,
+    expected_run_id: int,
+    expected_run_attempt: int,
+    expected_subject_sha: str,
+    expected_repository_id: str,
+    output: Path,
+) -> dict[str, Any]:
+    """Validate artifact metadata and record."""
+    artifacts_data = json.loads(metadata_json.read_text())
+    if not isinstance(artifacts_data, list):
+        raise ArtifactError("Artifacts data must be a list")
+    
+    artifact = validate_artifact_metadata(
+        artifacts_data,
+        expected_run_id,
+        expected_run_attempt,
+        expected_subject_sha,
+        expected_repository_id,
+    )
+    
+    record_path = Path("artifacts/record_extracted")
+    paths = list(record_path.glob("*.json"))
     if len(paths) == 0:
         raise ArtifactError("No JSON in artifact")
     if len(paths) > 1:
         raise ArtifactError("Multiple JSON files in artifact")
-
-    data = parse_strict_record(paths[0].read_text(), upstream_run_sha)
-    return data
+    
+    record_json = paths[0]
+    record_data = parse_strict_record(record_json.read_text(), expected_subject_sha)
+    record_sha = compute_sha256(record_json)
+    
+    result = {
+        "artifact_id": str(artifact["id"]),
+        "artifact_name": artifact["name"],
+        "artifact_metadata_digest": artifact["digest"],
+        "backend_image_ref": record_data["backend_image_ref"],
+        "scheduler_image_ref": record_data["scheduler_image_ref"],
+        "frontend_image_ref": record_data["frontend_image_ref"],
+        "record_sha256": record_sha,
+        "subject_sha": record_data["subject_sha"],
+        "upstream_run_id": str(expected_run_id),
+        "upstream_run_attempt": str(expected_run_attempt),
+    }
+    
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(result, indent=2) + "\n")
+    
+    return result
 
 
 def main() -> None:
-    if len(sys.argv) != 4:
-        print(f"FATAL: expected 3 args, got {len(sys.argv) - 1}", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Artifact authority CLI")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    upstream_run_id = int(sys.argv[1])
-    upstream_run_sha = sys.argv[2]
-    artifact_digest = sys.argv[3]
+    validate_parser = subparsers.add_parser("validate", help="Validate artifact and record")
+    validate_parser.add_argument("--metadata-json", type=Path, required=True)
+    validate_parser.add_argument("--expected-run-id", type=int, required=True)
+    validate_parser.add_argument("--expected-run-attempt", type=int, required=True)
+    validate_parser.add_argument("--expected-subject-sha", required=True)
+    validate_parser.add_argument("--expected-repository-id", required=True)
+    validate_parser.add_argument("--output", type=Path, required=True)
 
-    data = validate_upstream_and_record(upstream_run_id, upstream_run_sha)
-    record_sha = compute_sha256(list(Path("artifacts/record_extracted").glob("*.json"))[0])
+    args = parser.parse_args()
 
-    output_file = Path("artifacts/artifact_result.json")
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    output_file.write_text(json.dumps({
-        "backend_image_ref": data["backend_image_ref"],
-        "scheduler_image_ref": data["scheduler_image_ref"],
-        "frontend_image_ref": data["frontend_image_ref"],
-        "record_sha256": record_sha,
-        "artifact_digest": artifact_digest,
-        "subject_sha": data["subject_sha"],
-        "upstream_run_id": upstream_run_id,
-        "upstream_run_sha": upstream_run_sha,
-    }, indent=2) + "\n")
-
-    print(f"ARTIFACT_VALIDATION=PASS record_sha={record_sha[:16]}...")
+    if args.command == "validate":
+        result = validate(
+            Path(args.metadata_json),
+            args.expected_run_id,
+            args.expected_run_attempt,
+            args.expected_subject_sha,
+            args.expected_repository_id,
+            Path(args.output),
+        )
+        print(f"ARTIFACT_VALIDATION=PASS artifact_id={result['artifact_id']}")
 
 
 if __name__ == "__main__":

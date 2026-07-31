@@ -58,6 +58,10 @@ _LANE_PREFIXES: tuple[str, ...] = (
     "tests/unit/test_runtime_gate_plugin_and_runner",
     "tests/unit/test_promotion_static_scope_",
     "tests/unit/test_promotion_static_gate_",
+    # CORRECTION03: Experimental lab deploy bridge authorities
+    "scripts/ci/promotion_experimental_lab_",
+    "scripts/ci/verify_promotion_experimental_lab_",
+    "tests/unit/test_promotion_experimental_lab_",
     # Legacy R12 tests (still exist in repo)
     "tests/unit/test_promotion_static_scope_authority_r12.py",
     "tests/unit/test_promotion_static_gate_runner_r12.py",

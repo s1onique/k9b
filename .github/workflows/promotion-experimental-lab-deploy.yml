@@ -19,14 +19,9 @@ jobs:
     name: validate upstream and authorize deployment
     runs-on: ubuntu-latest
     outputs:
-      subject_sha: ${{ steps.upstream.outputs.upstream_head_sha }}
-      backend_image_ref: ${{ steps.artifact.outputs.backend_image_ref }}
-      scheduler_image_ref: ${{ steps.artifact.outputs.scheduler_image_ref }}
-      frontend_image_ref: ${{ steps.artifact.outputs.frontend_image_ref }}
-      artifact_digest: ${{ steps.artifact.outputs.artifact_digest }}
-      upstream_run_id: ${{ steps.upstream.outputs.upstream_run_id }}
-      upstream_run_attempt: ${{ steps.upstream.outputs.upstream_run_attempt }}
       authorization_status: ${{ steps.stale_main.outputs.authorization_status }}
+      artifact_id: ${{ steps.artifact_valid.outputs.artifact_id }}
+      artifact_digest: ${{ steps.artifact_valid.outputs.artifact_digest }}
     steps:
       - uses: actions/checkout@11c719be6d81d26f4e1e34f15c0d3a2da1661f36b
         with:
@@ -74,53 +69,46 @@ jobs:
         run: |
           set -euo pipefail
           run_id="${{ steps.upstream.outputs.upstream_run_id }}"
-          upstream_sha="${{ steps.upstream.outputs.upstream_head_sha }}"
-          artifacts_json=$(gh api "repos/${{ github.repository }}/actions/runs/${run_id}/artifacts")
-          count=$(echo "$artifacts_json" | python3 -c "import sys,json; print(len([a for a in json.load(sys.stdin)['artifacts'] if a['name'] == 'experimental-lab-record']))")
-          if [ "$count" != "1" ]; then echo "FATAL: expected 1 artifact, found $count"; exit 1; fi
-          artifact_id=$(echo "$artifacts_json" | python3 -c "import sys,json; print(next(a['id'] for a in json.load(sys.stdin)['artifacts'] if a['name'] == 'experimental-lab-record'))")
-          artifact_digest=$(echo "$artifacts_json" | python3 -c "import sys,json; print(next(a.get('digest', '') for a in json.load(sys.stdin)['artifacts'] if a['name'] == 'experimental-lab-record'))")
-          echo "artifact_id=$artifact_id" >> "$GITHUB_OUTPUT"
-          echo "artifact_digest=$artifact_digest" >> "$GITHUB_OUTPUT"
+          gh api "repos/${{ github.repository }}/actions/runs/${run_id}/artifacts" > artifacts/metadata.json
+          echo "metadata_path=artifacts/metadata.json" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v4
         with:
           name: experimental-lab-record
           run-id: ${{ steps.upstream.outputs.upstream_run_id }}
           repository: ${{ github.repository }}
-          token: ${{ github.token }}
+          github-token: ${{ github.token }}
           path: artifacts/record_extracted
 
-      - id: record
+      - id: artifact_valid
         run: |
           set -euo pipefail
-          record_sha=$(sha256sum artifacts/record_extracted/*.json | awk '{print $1}')
-          python3 scripts/ci/promotion_experimental_lab_artifact.py \
-            "${{ steps.upstream.outputs.upstream_run_id }}" \
-            "${{ steps.upstream.outputs.upstream_head_sha }}" \
-            "${{ steps.artifact.outputs.artifact_digest }}"
+          python3 scripts/ci/promotion_experimental_lab_artifact.py validate \
+            --metadata-json "${{ steps.artifact.outputs.metadata_path }}" \
+            --expected-run-id "${{ steps.upstream.outputs.upstream_run_id }}" \
+            --expected-run-attempt "${{ steps.upstream.outputs.upstream_run_attempt }}" \
+            --expected-subject-sha "${{ steps.upstream.outputs.upstream_head_sha }}" \
+            --expected-repository-id "${{ github.repository_id }}" \
+            --output artifacts/artifact_result.json
+          echo "artifact_id=$(python3 -c 'import json; print(json.load(open(\"artifacts/artifact_result.json\"))[\"artifact_id\"])')" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$(python3 -c 'import json; print(json.load(open(\"artifacts/artifact_result.json\"))[\"artifact_metadata_digest\"])')" >> "$GITHUB_OUTPUT"
 
       - id: authorize
+        if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
         run: |
           set -euo pipefail
           python3 scripts/ci/promotion_experimental_lab_authorization.py write \
-            "$(cat artifacts/artifact_result.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["record_sha256"])')" \
-            "${{ steps.stale_main.outputs.current_main_sha }}" \
-            "${{ steps.stale_main.outputs.authorization_status }}" \
-            "$(cat artifacts/artifact_result.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["backend_image_ref"])')" \
-            "$(cat artifacts/artifact_result.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["scheduler_image_ref"])')" \
-            "$(cat artifacts/artifact_result.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["frontend_image_ref"])')" \
-            "${{ steps.upstream.outputs.upstream_head_sha }}" \
-            "${{ steps.upstream.outputs.upstream_run_id }}" \
-            "${{ steps.upstream.outputs.upstream_run_attempt }}" \
-            "${{ github.sha }}" \
-            "${{ github.run_id }}" \
-            "${{ github.run_attempt }}" \
-            "${{ steps.artifact.outputs.artifact_id }}" \
-            "experimental-lab-record" \
-            "${{ steps.artifact.outputs.artifact_digest }}"
+            --artifact-result artifacts/artifact_result.json \
+            --current-main-sha "${{ steps.stale_main.outputs.current_main_sha }}" \
+            --bridge-sha "${{ github.sha }}" \
+            --bridge-run-id "${{ github.run_id }}" \
+            --bridge-run-attempt "${{ github.run_attempt }}" \
+            --authorization-status "${{ steps.stale_main.outputs.authorization_status }}" \
+            --output-dir artifacts \
+            --github-output "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
+        if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
         with:
           name: experimental-lab-deploy-authorization-${{ github.run_id }}
           path: |
@@ -158,7 +146,10 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/git/ref/heads/main" \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['object']['sha'])")
-          python3 scripts/ci/promotion_experimental_lab_authorization.py verify "$current_main"
+          python3 scripts/ci/promotion_experimental_lab_authorization.py verify \
+            --auth-dir artifacts/auth_extracted \
+            --current-main-sha "$current_main" \
+            --github-output "$GITHUB_OUTPUT"
 
   deploy:
     name: deploy to experimental lab
