@@ -21,7 +21,7 @@ jobs:
     outputs:
       authorization_status: ${{ steps.stale_main.outputs.authorization_status }}
       artifact_id: ${{ steps.artifact_valid.outputs.artifact_id }}
-      artifact_digest: ${{ steps.artifact_valid.outputs.artifact_digest }}
+      artifact_metadata_digest: ${{ steps.artifact_valid.outputs.artifact_metadata_digest }}
     steps:
       - uses: actions/checkout@11bd71901b5f382813f14e7b5c326d36e24b6a31
         with:
@@ -64,6 +64,7 @@ jobs:
           fi
 
       - id: artifact
+        if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -73,6 +74,7 @@ jobs:
           echo "metadata_path=artifacts/metadata.json" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@9bb530cc8e5c31e7400f7ea4c3dc7f8f2cf87c09
+        if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
         with:
           name: experimental-lab-record
           run-id: ${{ steps.upstream.outputs.upstream_run_id }}
@@ -81,16 +83,18 @@ jobs:
           path: artifacts/record_extracted
 
       - id: artifact_valid
+        if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
         run: |
           set -euo pipefail
           python3 scripts/ci/promotion_experimental_lab_artifact.py validate \
             --metadata-json "${{ steps.artifact.outputs.metadata_path }}" \
             --expected-run-id "${{ steps.upstream.outputs.upstream_run_id }}" \
+            --expected-run-attempt "${{ steps.upstream.outputs.upstream_run_attempt }}" \
             --expected-subject-sha "${{ steps.upstream.outputs.upstream_head_sha }}" \
             --expected-repository-id "${{ github.repository_id }}" \
             --output artifacts/artifact_result.json
           echo "artifact_id=$(python3 -c 'import json; print(json.load(open(\"artifacts/artifact_result.json\"))[\"artifact_id\"])')" >> "$GITHUB_OUTPUT"
-          echo "artifact_digest=$(python3 -c 'import json; print(json.load(open(\"artifacts/artifact_result.json\"))[\"artifact_metadata_digest\"])')" >> "$GITHUB_OUTPUT"
+          echo "artifact_metadata_digest=$(python3 -c 'import json; print(json.load(open(\"artifacts/artifact_result.json\"))[\"artifact_metadata_digest\"])')" >> "$GITHUB_OUTPUT"
 
       - id: authorize
         if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
@@ -106,8 +110,9 @@ jobs:
             --output-dir artifacts \
             --github-output "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@ee3b4c27c5b19f2f7bae34ea5b8e3a6f7b4d7e0a
+      - id: upload_auth
         if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
+        uses: actions/upload-artifact@ee3b4c27c5b19f2f7bae34ea5b8e3a6f7b4d7e0a
         with:
           name: experimental-lab-deploy-authorization-${{ github.run_id }}
           path: |
@@ -124,8 +129,9 @@ jobs:
       backend_image_ref: ${{ steps.confirm.outputs.backend_image_ref }}
       scheduler_image_ref: ${{ steps.confirm.outputs.scheduler_image_ref }}
       frontend_image_ref: ${{ steps.confirm.outputs.frontend_image_ref }}
-      artifact_digest: ${{ steps.confirm.outputs.artifact_digest }}
+      artifact_metadata_digest: ${{ steps.confirm.outputs.artifact_metadata_digest }}
       upstream_run_id: ${{ steps.confirm.outputs.upstream_run_id }}
+      upstream_run_attempt: ${{ steps.confirm.outputs.upstream_run_attempt }}
     if: ${{ needs.validate-upstream.outputs.authorization_status == 'authorized' }}
     steps:
       - uses: actions/checkout@11bd71901b5f382813f14e7b5c326d36e24b6a31

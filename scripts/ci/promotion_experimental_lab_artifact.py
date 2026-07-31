@@ -20,7 +20,7 @@ REQUIRED_RECORD_FIELDS = frozenset((
     "backend_image_ref", "scheduler_image_ref", "frontend_image_ref",
     "scheduler_uses_backend_image", "full_verify_remains_authoritative",
     "ready_for_image_publication", "ready_for_production_deployment",
-    "ready_for_live_acceptance",
+    "ready_for_live_acceptance", "upstream_run_id", "upstream_run_attempt",
 ))
 
 IMAGE_REPOSITORIES: dict[str, str] = {
@@ -34,27 +34,55 @@ class ArtifactError(Exception):
     """Raised on validation failure."""
 
 
-def parse_artifact_envelope(content: str) -> list[dict[str, Any]]:
-    """Parse GitHub REST artifact list response envelope."""
-    data = json.loads(content)
+def parse_artifact_envelope_strict(content: str) -> list[dict[str, Any]]:
+    """Parse GitHub REST artifact list response with strict duplicate-key rejection."""
+    seen_keys: dict[str, None] = {}
+
+    def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in seen_keys:
+                raise ArtifactError(f"Duplicate key in envelope: {key}")
+            seen_keys[key] = None
+            result[key] = value
+        return result
+
+    try:
+        data = json.loads(content, object_pairs_hook=reject_duplicates)
+    except json.JSONDecodeError as e:
+        raise ArtifactError(f"Invalid JSON: {e}")
+
     if not isinstance(data, dict):
         raise ArtifactError("Artifact response must be object")
+
     if "total_count" not in data:
         raise ArtifactError("Missing total_count in artifact response")
+    if not isinstance(data["total_count"], int):
+        raise ArtifactError(f"total_count must be int, got {type(data['total_count']).__name__}")
+    if isinstance(data["total_count"], bool):
+        raise ArtifactError("total_count cannot be boolean")
+
     if "artifacts" not in data:
         raise ArtifactError("Missing artifacts in artifact response")
     artifacts = data["artifacts"]
     if not isinstance(artifacts, list):
         raise ArtifactError("artifacts must be array")
+
+    for i, art in enumerate(artifacts):
+        if not isinstance(art, dict):
+            raise ArtifactError(f"Artifact[{i}] must be object")
+
     total = data["total_count"]
     if len(artifacts) != total:
         raise ArtifactError(f"total_count mismatch: {total} vs {len(artifacts)}")
+
     return artifacts
 
 
 def validate_artifact_metadata(
     artifacts_data: list[dict[str, Any]],
     expected_run_id: int,
+    expected_run_attempt: int,
     expected_subject_sha: str,
     expected_repository_id: str,
 ) -> dict[str, Any]:
@@ -135,6 +163,7 @@ def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
         ("scheduler_uses_backend_image", bool), ("full_verify_remains_authoritative", bool),
         ("ready_for_image_publication", bool), ("ready_for_production_deployment", bool),
         ("ready_for_live_acceptance", bool),
+        ("upstream_run_id", str), ("upstream_run_attempt", str),
     ]
     for field_name, expected_type in type_checks:
         val = data.get(field_name)
@@ -178,31 +207,44 @@ def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
 def validate(
     metadata_json: Path,
     expected_run_id: int,
+    expected_run_attempt: int,
     expected_subject_sha: str,
     expected_repository_id: str,
     output: Path,
 ) -> dict[str, Any]:
     """Validate artifact metadata and record."""
     content = metadata_json.read_text()
-    artifacts_data = parse_artifact_envelope(content)
+    artifacts_data = parse_artifact_envelope_strict(content)
 
     artifact = validate_artifact_metadata(
         artifacts_data,
         expected_run_id,
+        expected_run_attempt,
         expected_subject_sha,
         expected_repository_id,
     )
 
     record_path = Path("artifacts/record_extracted")
-    paths = sorted(record_path.glob("*.json"))
-    if len(paths) == 0:
-        raise ArtifactError("No JSON in artifact")
-    if len(paths) > 1:
-        raise ArtifactError("Multiple JSON files in artifact")
+    exact_record = record_path / "experimental-lab-record.json"
+    if not exact_record.exists():
+        raise ArtifactError("Missing experimental-lab-record.json")
+    if not exact_record.is_file():
+        raise ArtifactError("experimental-lab-record.json is not a file")
 
-    record_json = paths[0]
-    record_data = parse_strict_record(record_json.read_text(), expected_subject_sha)
-    record_sha = compute_sha256(record_json)
+    record_data = parse_strict_record(exact_record.read_text(), expected_subject_sha)
+
+    if record_data.get("upstream_run_id") != str(expected_run_id):
+        raise ArtifactError(
+            f"Record run ID mismatch: expected {expected_run_id}, "
+            f"got {record_data.get('upstream_run_id')}"
+        )
+    if record_data.get("upstream_run_attempt") != str(expected_run_attempt):
+        raise ArtifactError(
+            f"Record run attempt mismatch: expected {expected_run_attempt}, "
+            f"got {record_data.get('upstream_run_attempt')}"
+        )
+
+    record_sha = compute_sha256(exact_record)
 
     result = {
         "artifact_id": str(artifact["id"]),
@@ -214,6 +256,7 @@ def validate(
         "record_sha256": record_sha,
         "subject_sha": record_data["subject_sha"],
         "upstream_run_id": str(expected_run_id),
+        "upstream_run_attempt": str(expected_run_attempt),
     }
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -229,6 +272,7 @@ def main() -> None:
     validate_parser = subparsers.add_parser("validate", help="Validate artifact and record")
     validate_parser.add_argument("--metadata-json", type=Path, required=True)
     validate_parser.add_argument("--expected-run-id", type=int, required=True)
+    validate_parser.add_argument("--expected-run-attempt", type=int, required=True)
     validate_parser.add_argument("--expected-subject-sha", required=True)
     validate_parser.add_argument("--expected-repository-id", required=True)
     validate_parser.add_argument("--output", type=Path, required=True)
@@ -239,6 +283,7 @@ def main() -> None:
         result = validate(
             Path(args.metadata_json),
             args.expected_run_id,
+            args.expected_run_attempt,
             args.expected_subject_sha,
             args.expected_repository_id,
             Path(args.output),
