@@ -58,7 +58,6 @@ def _strict_json_loads(content: str, *, context: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ArtifactError(f"Root must be object in {context}")
 
-    # Reject NaN and Infinity
     def check_numbers(obj: Any) -> None:
         if isinstance(obj, float):
             if math.isnan(obj) or math.isinf(obj):
@@ -72,6 +71,19 @@ def _strict_json_loads(content: str, *, context: str) -> dict[str, Any]:
 
     check_numbers(data)
     return data
+
+
+def _write_github_output(github_output: Path, values: dict[str, str]) -> None:
+    """Append name=value pairs to the runner's GITHUB_OUTPUT file."""
+    with github_output.open("a", encoding="utf-8", newline="\n") as stream:
+        for name, value in values.items():
+            if not name or not value:
+                raise ArtifactError("GitHub output name and value must be nonempty")
+            if "\n" in name or "\r" in name:
+                raise ArtifactError("GitHub output name contains newline")
+            if "\n" in value or "\r" in value:
+                raise ArtifactError("GitHub output value contains newline")
+            stream.write(f"{name}={value}\n")
 
 
 def parse_artifact_envelope_strict(content: str) -> list[dict[str, Any]]:
@@ -170,20 +182,20 @@ def select_metadata(
         expected_repository_id,
     )
 
+    artifact_id_str = str(artifact["id"])
+    artifact_name = artifact["name"]
+    artifact_digest = artifact["digest"]
+
     result = {
-        "artifact_id": str(artifact["id"]),
-        "artifact_name": artifact["name"],
-        "artifact_metadata_digest": artifact["digest"],
+        "artifact_id": artifact_id_str,
+        "artifact_name": artifact_name,
+        "artifact_metadata_digest": artifact_digest,
     }
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2) + "\n")
 
-    github_output.write_text(
-        f"artifact_id={result['artifact_id']}\n"
-        f"artifact_name={result['artifact_name']}\n"
-        f"artifact_metadata_digest={result['artifact_metadata_digest']}\n"
-    )
+    _write_github_output(github_output, result)
 
     return result
 
@@ -323,14 +335,7 @@ def validate_record(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2) + "\n")
 
-    github_output.write_text(
-        f"artifact_id={result['artifact_id']}\n"
-        f"backend_image_ref={result['backend_image_ref']}\n"
-        f"scheduler_image_ref={result['scheduler_image_ref']}\n"
-        f"frontend_image_ref={result['frontend_image_ref']}\n"
-        f"artifact_metadata_digest={result['artifact_metadata_digest']}\n"
-        f"subject_sha={result['subject_sha']}\n"
-    )
+    _write_github_output(github_output, result)
 
     return result
 

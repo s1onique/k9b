@@ -102,7 +102,33 @@ jobs:
             --expected-subject-sha "${{ steps.upstream.outputs.upstream_head_sha }}" \
             --expected-repository-id "${{ github.repository_id }}" \
             --output artifacts/artifact_metadata.json \
-            --github-output artifacts/artifact_metadata.env
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: prove validated artifact outputs
+        if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
+        env:
+          ARTIFACT_ID: ${{ steps.artifact_metadata.outputs.artifact_id }}
+          ARTIFACT_NAME: ${{ steps.artifact_metadata.outputs.artifact_name }}
+          ARTIFACT_DIGEST: ${{ steps.artifact_metadata.outputs.artifact_metadata_digest }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "FATAL: artifact_id is empty"
+            exit 1
+          fi
+          if ! [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "FATAL: artifact_id is not a positive integer"
+            exit 1
+          fi
+          if [ "$ARTIFACT_NAME" != "experimental-lab-record" ]; then
+            echo "FATAL: artifact_name is not experimental-lab-record"
+            exit 1
+          fi
+          if ! [[ "$ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "FATAL: artifact_metadata_digest is not canonical"
+            exit 1
+          fi
+          echo "Validated outputs: id=$ARTIFACT_ID name=$ARTIFACT_NAME digest=$ARTIFACT_DIGEST"
 
       - name: download validated experimental record
         if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
@@ -126,9 +152,7 @@ jobs:
             --artifact-id "${{ steps.artifact_metadata.outputs.artifact_id }}" \
             --artifact-metadata-digest "${{ steps.artifact_metadata.outputs.artifact_metadata_digest }}" \
             --output artifacts/artifact_result.json \
-            --github-output artifacts/artifact_result.env
-          echo "artifact_id=$(python3 -c 'import json; print(json.load(open(\"artifacts/artifact_result.json\"))[\"artifact_id\"])')" >> "$GITHUB_OUTPUT"
-          echo "artifact_metadata_digest=$(python3 -c 'import json; print(json.load(open(\"artifacts/artifact_result.json\"))[\"artifact_metadata_digest\"])')" >> "$GITHUB_OUTPUT"
+            --github-output "$GITHUB_OUTPUT"
 
       - id: authorize
         if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
