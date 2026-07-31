@@ -27,6 +27,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: initialize bridge artifact workspace
+        run: |
+          set -euo pipefail
+          install -d -m 0700 \
+            artifacts \
+            artifacts/record_extracted
+
       - id: upstream
         run: |
           set -euo pipefail
@@ -75,7 +82,13 @@ jobs:
         run: |
           set -euo pipefail
           run_id="${{ steps.upstream.outputs.upstream_run_id }}"
-          gh api "repos/${{ github.repository }}/actions/runs/${run_id}/artifacts" > artifacts/metadata.json
+          test -d artifacts
+          test -w artifacts
+          gh api \
+            "repos/${{ github.repository }}/actions/runs/${run_id}/artifacts" \
+            > artifacts/metadata.json
+          test -f artifacts/metadata.json
+          test -s artifacts/metadata.json
           echo "metadata_path=artifacts/metadata.json" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -142,6 +155,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+
+      - name: initialize bridge authorization workspace
+        run: |
+          set -euo pipefail
+          install -d -m 0700 \
+            artifacts \
+            artifacts/auth_extracted
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
