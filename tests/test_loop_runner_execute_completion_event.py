@@ -17,10 +17,10 @@ CORRECTION11-FINALIZATION03:
 from __future__ import annotations
 
 from k8s_diag_agent.health.loop_runner_execute import (
-    DiagnosisExecutionAuthority,
     INCIDENT_ACCESS_MODE_RECONCILIATION_REQUIRED,
     INCIDENT_SELECTION_MODE_COMMIT_UNKNOWN,
     INCIDENT_SELECTION_MODE_EXPLICIT_IDS,
+    DiagnosisExecutionAuthority,
     _build_diagnosis_execution_authority,
     _completion_promotion_consistency_error_recorded,
 )
