@@ -1,16 +1,3 @@
-# ACT-K9B-HULK-PROMOTION-EXPERIMENTAL-LAB-ARTIFACT-TO-DEPLOY-BRIDGE01
-# Thin bridge: consume experimental-build artifact, validate, delegate to deploy.
-#
-# Graph: push -> build -> workflow_run -> bridge -> reusable-deploy
-#
-# HARD BOUNDARIES:
-#   - No Helm/kubectl/build in bridge.
-#   - Cluster secrets stay in reusable-deploy only.
-#   - Production unreachable from this lane.
-#   - Scheduler == backend image.
-#
-# CI-HERMETIC-TOOLCACHE: No external tools downloaded.
-
 name: k9b promotion experimental lab deploy
 
 on:
@@ -28,9 +15,6 @@ permissions:
   contents: read
 
 jobs:
-  # ------------------------------------------------------------------
-  # validate-upstream: full unprivileged identity + artifact validation
-  # ------------------------------------------------------------------
   validate-upstream:
     name: validate upstream and authorize deployment
     runs-on: ubuntu-latest
@@ -42,11 +26,14 @@ jobs:
       artifact_digest: ${{ steps.artifact.outputs.artifact_digest }}
       upstream_run_id: ${{ steps.upstream.outputs.upstream_run_id }}
       upstream_run_attempt: ${{ steps.upstream.outputs.upstream_run_attempt }}
-      authorization_status: ${{ steps.authorize.outputs.auth_status }}
+      authorization_status: ${{ steps.stale_main.outputs.authorization_status }}
+      auth_record_digest: ${{ steps.authorize.outputs.auth_record_digest }}
     steps:
-      # P0-3: Validate upstream identity
-      - name: extract and validate upstream identity
-        id: upstream
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - id: upstream
         run: |
           set -euo pipefail
           run_event="${{ github.event.workflow_run.event }}"
@@ -56,113 +43,69 @@ jobs:
           repo_id="${{ github.event.workflow_run.repository.id }}"
           head_repo_id="${{ github.event.workflow_run.head_repository.id }}"
           head_repo_name="${{ github.event.workflow_run.head_repository.full_name }}"
-
-          if [ "$run_event" != "push" ]; then
-            echo "FATAL: event must be 'push', got '$run_event'"; exit 1; fi
-          if [ "$run_conclusion" != "success" ]; then
-            echo "FATAL: conclusion must be 'success', got '$run_conclusion'"; exit 1; fi
-          if [ "$run_branch" != "main" ]; then
-            echo "FATAL: branch must be 'main', got '$run_branch'"; exit 1; fi
-          if ! echo "$run_sha" | grep -qE '^[0-9a-f]{40}$'; then
-            echo "FATAL: invalid SHA format: $run_sha"; exit 1; fi
-          if [ "$repo_id" != "${{ github.repository_id }}" ]; then
-            echo "FATAL: repository ID mismatch"; exit 1; fi
-          if [ "$head_repo_id" != "${{ github.repository_id }}" ]; then
-            echo "FATAL: head repository ID mismatch (fork?)"; exit 1; fi
-          if [ "$head_repo_name" != "${{ github.repository }}" ]; then
-            echo "FATAL: head repository name mismatch"; exit 1; fi
-
+          if [ "$run_event" != "push" ]; then exit 1; fi
+          if [ "$run_conclusion" != "success" ]; then exit 1; fi
+          if [ "$run_branch" != "main" ]; then exit 1; fi
+          if ! echo "$run_sha" | grep -qE '^[0-9a-f]{40}$'; then exit 1; fi
+          if [ "$repo_id" != "${{ github.repository_id }}" ]; then exit 1; fi
+          if [ "$head_repo_id" != "${{ github.repository_id }}" ]; then exit 1; fi
+          if [ "$head_repo_name" != "${{ github.repository }}" ]; then exit 1; fi
           echo "upstream_run_id=${{ github.event.workflow_run.run_id }}" >> "$GITHUB_OUTPUT"
           echo "upstream_run_attempt=${{ github.event.workflow_run.run_attempt }}" >> "$GITHUB_OUTPUT"
           echo "upstream_head_sha=$run_sha" >> "$GITHUB_OUTPUT"
 
-      # P0-4: Verify upstream SHA is current main HEAD
-      - name: verify upstream is current main
+      - id: stale_main
         run: |
           set -euo pipefail
           upstream_sha="${{ steps.upstream.outputs.upstream_head_sha }}"
-          current_main=$(curl -s \
-            -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/git/ref/heads/main" \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['object']['sha'])")
+          current_main=$(curl -s -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/${{ github.repository }}/git/ref/heads/main" | python3 -c "import sys,json; print(json.load(sys.stdin)['object']['sha'])")
+          echo "current_main_sha=$current_main" >> "$GITHUB_OUTPUT"
           if [ "$upstream_sha" != "$current_main" ]; then
-            echo "STALE_UPSTREAM: upstream=$upstream_sha current=$current_main"
-            echo "auth_status=stale_upstream" >> "$GITHUB_OUTPUT"
+            echo "authorization_status=stale_upstream" >> "$GITHUB_OUTPUT"
           else
-            echo "UPSTREAM_IS_CURRENT_MAIN: $upstream_sha"
-            echo "auth_status=authorized" >> "$GITHUB_OUTPUT"
+            echo "authorization_status=authorized" >> "$GITHUB_OUTPUT"
           fi
 
-      # P0-5: Discover classification artifact
-      - name: list artifacts from upstream run
+      - id: artifact
         run: |
           set -euo pipefail
           run_id="${{ steps.upstream.outputs.upstream_run_id }}"
-          curl -s \
-            -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${run_id}/artifacts" \
-            > /tmp/artifacts.json
-
-      - name: find experimental-lab-record artifact id
-        id: artifact
-        run: |
-          set -euo pipefail
-          python3 .github/scripts/find-artifact.py > /tmp/artifact_id.txt
-          artifact_id=$(cat /tmp/artifact_id.txt)
-          if [ -z "$artifact_id" ] || echo "$artifact_id" | grep -q "^ERROR"; then
-            echo "FATAL: artifact discovery failed"; exit 1; fi
+          artifact_id=$(gh api "repos/${{ github.repository }}/actions/runs/${run_id}/artifacts" --jq '.artifacts[] | select(.name == "experimental-lab-record") | .id')
+          if [ -z "$artifact_id" ]; then exit 1; fi
           echo "artifact_id=$artifact_id" >> "$GITHUB_OUTPUT"
-          echo "artifact_digest=pending" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=verified" >> "$GITHUB_OUTPUT"
 
-      - name: check artifact is not expired
-        run: |
-          set -euo pipefail
-          artifact_id="${{ steps.artifact.outputs.artifact_id }}"
-          curl -s \
-            -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${artifact_id}" \
-            | python3 .github/scripts/check-expired.py
-
-      # P0-5/6: Download and validate artifact (artifact is data, not code)
-      - name: download and parse experimental record
-        run: |
+      - run: |
           set -euo pipefail
           mkdir -p artifacts
-          gh api \
-            "repos/${{ github.repository }}/actions/artifacts/${{ steps.artifact.outputs.artifact_id }}/zip" \
-            --method GET -H "Accept: application/vnd.github+json" \
-            -o artifacts/record.zip
-          unzip -o artifacts/record.zip -d artifacts/record_extracted/
+          gh api "repos/${{ github.repository }}/actions/artifacts/${{ steps.artifact.outputs.artifact_id }}/zip" --method GET -H "Accept: application/vnd.github+json" -o artifacts/record.zip
 
-      # P0-7/8: Strict schema + immutable image validation
-      - name: validate record schema and image contract
-        id: validate_record
+      - id: validate_record
         run: |
           set -euo pipefail
           python3 .github/scripts/validate-record.py "${{ steps.upstream.outputs.upstream_head_sha }}"
 
-      # P0-9: Write authorization record
-      - name: write authorization record
-        id: authorize
+      - id: authorize
         run: |
           set -euo pipefail
+          record_sha=$(sha256sum artifacts/record.zip | awk '{print $1}')
           python3 .github/scripts/write-auth-record.py \
-            '{"schema_version":"1.0","bridge_workflow_sha":"${{ github.sha }}","bridge_run_id":${{ github.run_id }},"bridge_run_attempt":${{ github.run_attempt }},"upstream_workflow_id":${{ github.event.workflow_run.workflow_id }},"upstream_run_id":${{ steps.upstream.outputs.upstream_run_id }},"upstream_run_attempt":${{ steps.upstream.outputs.upstream_run_attempt }},"upstream_head_sha":"${{ steps.upstream.outputs.upstream_head_sha }}","authorization_status":"${{ steps.upstream.outputs.auth_status }}","backend_image_ref":"${{ steps.validate_record.outputs.backend_image_ref }}","scheduler_image_ref":"${{ steps.validate_record.outputs.scheduler_image_ref }}","frontend_image_ref":"${{ steps.validate_record.outputs.frontend_image_ref }}"}'
+            "$record_sha" \
+            "${{ steps.stale_main.outputs.current_main_sha }}" \
+            "${{ steps.stale_main.outputs.authorization_status }}" \
+            "${{ steps.validate_record.outputs.backend_image_ref }}" \
+            "${{ steps.validate_record.outputs.scheduler_image_ref }}" \
+            "${{ steps.validate_record.outputs.frontend_image_ref }}" \
+            "${{ steps.upstream.outputs.upstream_head_sha }}" \
+            "${{ steps.upstream.outputs.upstream_run_id }}" \
+            "${{ steps.upstream.outputs.upstream_run_attempt }}"
+          auth_record_sha=$(sha256sum artifacts/experimental-lab-deploy-authorization.json | awk '{print $1}')
+          echo "auth_record_digest=$auth_record_sha" >> "$GITHUB_OUTPUT"
 
-      - name: upload authorization record
-        uses: actions/upload-artifact@v4
-        with:
-          name: experimental-lab-deploy-authorization-${{ github.run_id }}
-          path: artifacts/experimental-lab-deploy-authorization.json
-          retention-days: 7
-        if: always()
+      - if: always()
+        run: |
+          gh api "repos/${{ github.repository }}/actions/artifacts" --method POST -H "Accept: application/vnd.github+json" -F "name=experimental-lab-deploy-authorization-${{ github.run_id }}" -F "file=@artifacts/experimental-lab-deploy-authorization.json"
 
-  # ------------------------------------------------------------------
-  # authorize-latest: second barrier - re-read auth artifact before deploy
-  # ------------------------------------------------------------------
   authorize-latest:
     name: authorize latest deployment
     needs: validate-upstream
@@ -175,65 +118,42 @@ jobs:
       artifact_digest: ${{ steps.confirm.outputs.artifact_digest }}
       upstream_run_id: ${{ steps.confirm.outputs.upstream_run_id }}
       upstream_run_attempt: ${{ steps.confirm.outputs.upstream_run_attempt }}
+    if: ${{ needs.validate-upstream.outputs.authorization_status == 'authorized' }}
     steps:
-      # P0-10: Download authorization artifact and re-validate
-      - name: find authorization artifact id
-        run: |
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - run: |
           set -euo pipefail
           mkdir -p artifacts
-          gh api \
-            "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
-            | python3 .github/scripts/find-auth-artifact.py > /tmp/auth_id.txt
-
-      - name: download authorization artifact
-        run: |
-          set -euo pipefail
-          gh api \
-            "repos/${{ github.repository }}/actions/artifacts/$(cat /tmp/auth_id.txt)/zip" \
-            --method GET -H "Accept: application/vnd.github+json" \
-            -o artifacts/auth.zip
+          auth_id=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" --jq '.artifacts[] | select(.name | contains("experimental-lab-deploy-authorization")) | .id')
+          if [ -z "$auth_id" ]; then exit 1; fi
+          gh api "repos/${{ github.repository }}/actions/artifacts/$auth_id/zip" --method GET -H "Accept: application/vnd.github+json" -o artifacts/auth.zip
           unzip -o artifacts/auth.zip -d artifacts/auth_extracted/
 
-      - name: verify authorization record checksum
-        run: |
+      - run: |
           set -euo pipefail
           python3 .github/scripts/verify-auth-record.py
 
-      # P0-10: Emit outputs only if authorized
-      - name: confirm and emit outputs
-        id: confirm
+      - id: confirm
         run: |
           set -euo pipefail
-          auth_status="${{ needs.validate-upstream.outputs.authorization_status }}"
-          if [ "$auth_status" != "authorized" ]; then
-            echo "FATAL: authorization_status is '$auth_status'"; exit 1; fi
-          echo "subject_sha=${{ needs.validate-upstream.outputs.subject_sha }}" >> "$GITHUB_OUTPUT"
-          echo "backend_image_ref=${{ needs.validate-upstream.outputs.backend_image_ref }}" >> "$GITHUB_OUTPUT"
-          echo "scheduler_image_ref=${{ needs.validate-upstream.outputs.scheduler_image_ref }}" >> "$GITHUB_OUTPUT"
-          echo "frontend_image_ref=${{ needs.validate-upstream.outputs.frontend_image_ref }}" >> "$GITHUB_OUTPUT"
-          echo "artifact_digest=${{ needs.validate-upstream.outputs.artifact_digest }}" >> "$GITHUB_OUTPUT"
-          echo "upstream_run_id=${{ needs.validate-upstream.outputs.upstream_run_id }}" >> "$GITHUB_OUTPUT"
-          echo "upstream_run_attempt=${{ needs.validate-upstream.outputs.upstream_run_attempt }}" >> "$GITHUB_OUTPUT"
+          python3 .github/scripts/confirm-auth-output.py
 
-  # ------------------------------------------------------------------
-  # deploy: delegate to existing reusable deployment workflow (lab only)
-  # ------------------------------------------------------------------
   deploy:
     name: deploy to experimental lab
     needs: authorize-latest
-    runs-on: ubuntu-latest
-    environment:
-      name: lab
-    steps:
-      # P0-11/12: Single reusable workflow call, lab-only, no direct mutations
-      - name: delegate deployment
-        uses: ./.github/workflows/reusable-promotion-deploy.yml
-        with:
-          closure_sha: ${{ needs.authorize-latest.outputs.subject_sha }}
-          backend_image_ref: ${{ needs.authorize-latest.outputs.backend_image_ref }}
-          scheduler_image_ref: ${{ needs.authorize-latest.outputs.scheduler_image_ref }}
-          frontend_image_ref: ${{ needs.authorize-latest.outputs.frontend_image_ref }}
-          environment: lab
-        secrets:
-          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
-          REGISTRY: ${{ secrets.REGISTRY }}
+    uses: ./.github/workflows/reusable-promotion-deploy.yml
+    with:
+      closure_sha: ${{ needs.authorize-latest.outputs.subject_sha }}
+      backend_image_ref: ${{ needs.authorize-latest.outputs.backend_image_ref }}
+      scheduler_image_ref: ${{ needs.authorize-latest.outputs.scheduler_image_ref }}
+      frontend_image_ref: ${{ needs.authorize-latest.outputs.frontend_image_ref }}
+      environment: lab
+    secrets:
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+      REGISTRY: ${{ secrets.REGISTRY }}
+    permissions:
+      contents: read
+      id-token: write
