@@ -20,8 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       authorization_status: ${{ steps.stale_main.outputs.authorization_status }}
-      artifact_id: ${{ steps.artifact_valid.outputs.artifact_id }}
-      artifact_metadata_digest: ${{ steps.artifact_valid.outputs.artifact_metadata_digest }}
+      artifact_id: ${{ steps.artifact_metadata.outputs.artifact_id }}
+      artifact_name: ${{ steps.artifact_metadata.outputs.artifact_name }}
+      artifact_metadata_digest: ${{ steps.artifact_metadata.outputs.artifact_metadata_digest }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -75,7 +76,7 @@ jobs:
             echo "authorization_status=authorized" >> "$GITHUB_OUTPUT"
           fi
 
-      - id: artifact
+      - id: artifact_query
         if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -91,26 +92,41 @@ jobs:
           test -s artifacts/metadata.json
           echo "metadata_path=artifacts/metadata.json" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - id: artifact_metadata
         if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/promotion_experimental_lab_artifact.py select-metadata \
+            --metadata-json "${{ steps.artifact_query.outputs.metadata_path }}" \
+            --expected-run-id "${{ steps.upstream.outputs.upstream_run_id }}" \
+            --expected-subject-sha "${{ steps.upstream.outputs.upstream_head_sha }}" \
+            --expected-repository-id "${{ github.repository_id }}" \
+            --output artifacts/artifact_metadata.json \
+            --github-output artifacts/artifact_metadata.env
+
+      - name: download validated experimental record
+        if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: experimental-lab-record
+          name: ${{ steps.artifact_metadata.outputs.artifact_name }}
           run-id: ${{ steps.upstream.outputs.upstream_run_id }}
           repository: ${{ github.repository }}
           github-token: ${{ github.token }}
           path: artifacts/record_extracted
 
-      - id: artifact_valid
+      - id: record_valid
         if: ${{ steps.stale_main.outputs.authorization_status == 'authorized' }}
         run: |
           set -euo pipefail
-          python3 scripts/ci/promotion_experimental_lab_artifact.py validate \
-            --metadata-json "${{ steps.artifact.outputs.metadata_path }}" \
+          python3 scripts/ci/promotion_experimental_lab_artifact.py validate-record \
+            --record-path artifacts/record_extracted/experimental-lab-record.json \
             --expected-run-id "${{ steps.upstream.outputs.upstream_run_id }}" \
             --expected-run-attempt "${{ steps.upstream.outputs.upstream_run_attempt }}" \
             --expected-subject-sha "${{ steps.upstream.outputs.upstream_head_sha }}" \
-            --expected-repository-id "${{ github.repository_id }}" \
-            --output artifacts/artifact_result.json
+            --artifact-id "${{ steps.artifact_metadata.outputs.artifact_id }}" \
+            --artifact-metadata-digest "${{ steps.artifact_metadata.outputs.artifact_metadata_digest }}" \
+            --output artifacts/artifact_result.json \
+            --github-output artifacts/artifact_result.env
           echo "artifact_id=$(python3 -c 'import json; print(json.load(open(\"artifacts/artifact_result.json\"))[\"artifact_id\"])')" >> "$GITHUB_OUTPUT"
           echo "artifact_metadata_digest=$(python3 -c 'import json; print(json.load(open(\"artifacts/artifact_result.json\"))[\"artifact_metadata_digest\"])')" >> "$GITHUB_OUTPUT"
 

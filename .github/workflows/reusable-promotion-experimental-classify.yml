@@ -152,8 +152,8 @@ jobs:
               "scheduler_uses_backend_image": True,
               "frontend_image_ref": frontend_ref,
               "frontend_image_digest": frontend_digest,
-              "upstream_run_id": os.environ.get("GITHUB_RUN_ID", ""),
-              "upstream_run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+              "upstream_run_id": int(os.environ.get("GITHUB_RUN_ID", "0") or 0),
+              "upstream_run_attempt": int(os.environ.get("GITHUB_RUN_ATTEMPT", "0") or 0),
           }
 
           out_path = Path("artifacts/experimental-lab-record.json")
@@ -164,7 +164,7 @@ jobs:
 
       - name: upload experimental-lab record
         id: upload_record
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: experimental-lab-record
           path: artifacts/experimental-lab-record.json

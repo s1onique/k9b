@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -37,26 +38,45 @@ class ArtifactError(Exception):
     """Raised on validation failure."""
 
 
-def parse_artifact_envelope_strict(content: str) -> list[dict[str, Any]]:
-    """Parse GitHub REST artifact list response with strict duplicate-key rejection."""
-    seen_keys: dict[str, None] = {}
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate keys within a single JSON object."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ArtifactError(f"Duplicate key in JSON object: {key}")
+        result[key] = value
+    return result
 
-    def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in seen_keys:
-                raise ArtifactError(f"Duplicate key in envelope: {key}")
-            seen_keys[key] = None
-            result[key] = value
-        return result
 
+def _strict_json_loads(content: str, *, context: str) -> dict[str, Any]:
+    """Parse JSON with object-local strict duplicate-key rejection."""
     try:
-        data = json.loads(content, object_pairs_hook=reject_duplicates)
+        data = json.loads(content, object_pairs_hook=_reject_duplicate_keys)
     except json.JSONDecodeError as e:
-        raise ArtifactError(f"Invalid JSON: {e}")
+        raise ArtifactError(f"Invalid JSON in {context}: {e}")
 
     if not isinstance(data, dict):
-        raise ArtifactError("Artifact response must be object")
+        raise ArtifactError(f"Root must be object in {context}")
+
+    # Reject NaN and Infinity
+    def check_numbers(obj: Any) -> None:
+        if isinstance(obj, float):
+            if math.isnan(obj) or math.isinf(obj):
+                raise ArtifactError(f"NaN/Infinity not allowed in {context}")
+        elif isinstance(obj, dict):
+            for v in obj.values():
+                check_numbers(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                check_numbers(item)
+
+    check_numbers(data)
+    return data
+
+
+def parse_artifact_envelope_strict(content: str) -> list[dict[str, Any]]:
+    """Parse GitHub REST artifact list response with object-local duplicate-key rejection."""
+    data = _strict_json_loads(content, context="artifact_metadata")
 
     if "total_count" not in data:
         raise ArtifactError("Missing total_count in artifact response")
@@ -85,7 +105,6 @@ def parse_artifact_envelope_strict(content: str) -> list[dict[str, Any]]:
 def validate_artifact_metadata(
     artifacts_data: list[dict[str, Any]],
     expected_run_id: int,
-    expected_run_attempt: int,
     expected_subject_sha: str,
     expected_repository_id: str,
 ) -> dict[str, Any]:
@@ -98,7 +117,14 @@ def validate_artifact_metadata(
     if artifact.get("expired", False):
         raise ArtifactError("Artifact is expired")
 
+    artifact_id = artifact.get("id")
+    if not isinstance(artifact_id, int) or artifact_id <= 0:
+        raise ArtifactError(f"artifact_id must be positive integer, got {artifact_id}")
+
     wr = artifact.get("workflow_run", {})
+    if not isinstance(wr, dict):
+        raise ArtifactError("workflow_run must be object")
+
     if wr.get("id") != expected_run_id:
         raise ArtifactError(f"Run ID mismatch: expected {expected_run_id}, got {wr.get('id')}")
     if wr.get("head_sha") != expected_subject_sha:
@@ -125,33 +151,51 @@ def validate_artifact_metadata(
     return artifact
 
 
+def select_metadata(
+    metadata_json: Path,
+    expected_run_id: int,
+    expected_subject_sha: str,
+    expected_repository_id: str,
+    output: Path,
+    github_output: Path,
+) -> dict[str, Any]:
+    """Validate artifact metadata only - no file access."""
+    content = metadata_json.read_text()
+    artifacts_data = parse_artifact_envelope_strict(content)
+
+    artifact = validate_artifact_metadata(
+        artifacts_data,
+        expected_run_id,
+        expected_subject_sha,
+        expected_repository_id,
+    )
+
+    result = {
+        "artifact_id": str(artifact["id"]),
+        "artifact_name": artifact["name"],
+        "artifact_metadata_digest": artifact["digest"],
+    }
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(result, indent=2) + "\n")
+
+    github_output.write_text(
+        f"artifact_id={result['artifact_id']}\n"
+        f"artifact_name={result['artifact_name']}\n"
+        f"artifact_metadata_digest={result['artifact_metadata_digest']}\n"
+    )
+
+    return result
+
+
 def compute_sha256(path: Path) -> str:
     """Compute SHA-256 of file contents."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
-    """Parse JSON with strict validation including duplicate-key rejection."""
-    seen_keys: dict[str, None] = {}
-
-    def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in seen_keys:
-                raise ArtifactError(f"Duplicate key: {key}")
-            seen_keys[key] = None
-            result[key] = value
-        return result
-
-    try:
-        data = json.loads(content, object_pairs_hook=reject_duplicates)
-    except json.JSONDecodeError as e:
-        raise ArtifactError(f"Invalid JSON: {e}")
-    except TypeError as e:
-        raise ArtifactError(f"JSON structure error: {e}")
-
-    if not isinstance(data, dict):
-        raise ArtifactError("Root must be object")
+    """Parse JSON with object-local strict duplicate-key rejection."""
+    data = _strict_json_loads(content, context="experimental_record")
 
     unknown = set(data.keys()) - REQUIRED_RECORD_FIELDS
     if unknown:
@@ -162,16 +206,22 @@ def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
         raise ArtifactError(f"Missing fields: {', '.join(sorted(missing))}")
 
     type_checks: list[tuple[str, type]] = [
-        ("image_class", str), ("subject_sha", str), ("runtime_gate", str),
-        ("scheduler_uses_backend_image", bool), ("full_verify_remains_authoritative", bool),
-        ("ready_for_image_publication", bool), ("ready_for_production_deployment", bool),
+        ("schema_version", str),
+        ("image_class", str),
+        ("subject_sha", str),
+        ("runtime_gate", str),
+        ("scheduler_uses_backend_image", bool),
+        ("full_verify_remains_authoritative", bool),
+        ("ready_for_image_publication", bool),
+        ("ready_for_production_deployment", bool),
         ("ready_for_live_acceptance", bool),
-        ("upstream_run_id", str), ("upstream_run_attempt", str),
+        ("upstream_run_id", int),
+        ("upstream_run_attempt", int),
     ]
     for field_name, expected_type in type_checks:
         val = data.get(field_name)
         if not isinstance(val, expected_type):
-            raise ArtifactError(f"{field_name} must be {expected_type.__name__}")
+            raise ArtifactError(f"{field_name} must be {expected_type.__name__}, got {type(val).__name__}")
 
     if data.get("image_class") != "experimental-lab":
         raise ArtifactError("image_class must be experimental-lab")
@@ -187,6 +237,14 @@ def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
         raise ArtifactError("ready_for_production_deployment must be false")
     if data.get("ready_for_live_acceptance") is not False:
         raise ArtifactError("ready_for_live_acceptance must be false")
+
+    run_id = data.get("upstream_run_id", 0)
+    if not isinstance(run_id, int) or run_id <= 0:
+        raise ArtifactError(f"upstream_run_id must be positive integer, got {run_id}")
+
+    run_attempt = data.get("upstream_run_attempt", 0)
+    if not isinstance(run_attempt, int) or run_attempt <= 0:
+        raise ArtifactError(f"upstream_run_attempt must be positive integer, got {run_attempt}")
 
     if data.get("subject_sha") != expected_sha:
         raise ArtifactError(f"subject_sha mismatch: expected {expected_sha}")
@@ -207,48 +265,42 @@ def parse_strict_record(content: str, expected_sha: str) -> dict[str, Any]:
     return data
 
 
-def validate(
-    metadata_json: Path,
+def validate_record(
+    record_path: Path,
     expected_run_id: int,
     expected_run_attempt: int,
     expected_subject_sha: str,
-    expected_repository_id: str,
+    artifact_id: str,
+    artifact_metadata_digest: str,
     output: Path,
+    github_output: Path,
 ) -> dict[str, Any]:
-    """Validate artifact metadata and record."""
-    content = metadata_json.read_text()
-    artifacts_data = parse_artifact_envelope_strict(content)
-
-    artifact = validate_artifact_metadata(
-        artifacts_data,
-        expected_run_id,
-        expected_run_attempt,
-        expected_subject_sha,
-        expected_repository_id,
-    )
-
-    record_path = Path("artifacts/record_extracted") / CANONICAL_RECORD_FILENAME
+    """Validate downloaded record file - no network access."""
     if not record_path.exists():
         raise ArtifactError(f"Missing {CANONICAL_RECORD_FILENAME}")
     if not record_path.is_file():
         raise ArtifactError(f"{CANONICAL_RECORD_FILENAME} is not a regular file")
     if record_path.is_symlink():
         raise ArtifactError(f"{CANONICAL_RECORD_FILENAME} is a symlink")
-    
-    # Check for any other files in the directory
+
     parent = record_path.parent
-    other_files = [p for p in parent.iterdir() if p != record_path]
+    if parent.name != "record_extracted":
+        raise ArtifactError("Record must be in record_extracted directory")
+    if record_path.name != CANONICAL_RECORD_FILENAME:
+        raise ArtifactError(f"Record filename must be {CANONICAL_RECORD_FILENAME}")
+
+    other_files = [p for p in parent.iterdir() if p != record_path and p.name != ".gitkeep"]
     if other_files:
         raise ArtifactError(f"Unexpected files in artifact: {[str(p) for p in other_files]}")
 
     record_data = parse_strict_record(record_path.read_text(), expected_subject_sha)
 
-    if record_data.get("upstream_run_id") != str(expected_run_id):
+    if record_data.get("upstream_run_id") != expected_run_id:
         raise ArtifactError(
             f"Record run ID mismatch: expected {expected_run_id}, "
             f"got {record_data.get('upstream_run_id')}"
         )
-    if record_data.get("upstream_run_attempt") != str(expected_run_attempt):
+    if record_data.get("upstream_run_attempt") != expected_run_attempt:
         raise ArtifactError(
             f"Record run attempt mismatch: expected {expected_run_attempt}, "
             f"got {record_data.get('upstream_run_attempt')}"
@@ -257,9 +309,8 @@ def validate(
     record_sha = compute_sha256(record_path)
 
     result = {
-        "artifact_id": str(artifact["id"]),
-        "artifact_name": artifact["name"],
-        "artifact_metadata_digest": artifact["digest"],
+        "artifact_id": artifact_id,
+        "artifact_metadata_digest": artifact_metadata_digest,
         "backend_image_ref": record_data["backend_image_ref"],
         "scheduler_image_ref": record_data["scheduler_image_ref"],
         "frontend_image_ref": record_data["frontend_image_ref"],
@@ -272,6 +323,15 @@ def validate(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2) + "\n")
 
+    github_output.write_text(
+        f"artifact_id={result['artifact_id']}\n"
+        f"backend_image_ref={result['backend_image_ref']}\n"
+        f"scheduler_image_ref={result['scheduler_image_ref']}\n"
+        f"frontend_image_ref={result['frontend_image_ref']}\n"
+        f"artifact_metadata_digest={result['artifact_metadata_digest']}\n"
+        f"subject_sha={result['subject_sha']}\n"
+    )
+
     return result
 
 
@@ -279,26 +339,49 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Artifact authority CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    validate_parser = subparsers.add_parser("validate", help="Validate artifact and record")
-    validate_parser.add_argument("--metadata-json", type=Path, required=True)
-    validate_parser.add_argument("--expected-run-id", type=int, required=True)
-    validate_parser.add_argument("--expected-run-attempt", type=int, required=True)
-    validate_parser.add_argument("--expected-subject-sha", required=True)
-    validate_parser.add_argument("--expected-repository-id", required=True)
-    validate_parser.add_argument("--output", type=Path, required=True)
+    select_parser = subparsers.add_parser("select-metadata", help="Validate artifact metadata only")
+    select_parser.add_argument("--metadata-json", type=Path, required=True)
+    select_parser.add_argument("--expected-run-id", type=int, required=True)
+    select_parser.add_argument("--expected-subject-sha", required=True)
+    select_parser.add_argument("--expected-repository-id", required=True)
+    select_parser.add_argument("--output", type=Path, required=True)
+    select_parser.add_argument("--github-output", type=Path, required=True)
+
+    record_parser = subparsers.add_parser("validate-record", help="Validate downloaded record")
+    record_parser.add_argument("--record-path", type=Path, required=True)
+    record_parser.add_argument("--expected-run-id", type=int, required=True)
+    record_parser.add_argument("--expected-run-attempt", type=int, required=True)
+    record_parser.add_argument("--expected-subject-sha", required=True)
+    record_parser.add_argument("--artifact-id", required=True)
+    record_parser.add_argument("--artifact-metadata-digest", required=True)
+    record_parser.add_argument("--output", type=Path, required=True)
+    record_parser.add_argument("--github-output", type=Path, required=True)
 
     args = parser.parse_args()
 
-    if args.command == "validate":
-        result = validate(
+    if args.command == "select-metadata":
+        result = select_metadata(
             Path(args.metadata_json),
             args.expected_run_id,
-            args.expected_run_attempt,
             args.expected_subject_sha,
             args.expected_repository_id,
             Path(args.output),
+            Path(args.github_output),
         )
-        print(f"ARTIFACT_VALIDATION=PASS artifact_id={result['artifact_id']}")
+        print(f"METADATA_SELECTION=PASS artifact_id={result['artifact_id']}")
+
+    elif args.command == "validate-record":
+        result = validate_record(
+            Path(args.record_path),
+            args.expected_run_id,
+            args.expected_run_attempt,
+            args.expected_subject_sha,
+            args.artifact_id,
+            args.artifact_metadata_digest,
+            Path(args.output),
+            Path(args.github_output),
+        )
+        print(f"RECORD_VALIDATION=PASS artifact_id={result['artifact_id']}")
 
 
 if __name__ == "__main__":
